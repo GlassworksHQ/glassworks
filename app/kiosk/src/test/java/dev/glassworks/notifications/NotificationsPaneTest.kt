@@ -330,7 +330,7 @@ class NotificationsPaneTest {
         assertEquals(listOf("wake", "hold"), screen)
     }
 
-    /** Root decision on #228: DND turned on with a high one up lets the screen go; a critical one keeps it. */
+    /** Root decision on #228: DND turned on with a high one up lets its hold on the screen go; a critical one keeps it. */
     @Test
     fun doNotDisturbOnReleasesAHighOnesHoldButNotACriticalOnes() {
         pane.start()

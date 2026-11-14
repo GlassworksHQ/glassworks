@@ -64,7 +64,7 @@ class CriticalOrb(
     private var attached = false
     /**
      * The window was last reported visible. Changed only by onWindowVisibilityChanged: on the panel the
-     * window goes GONE when the activity stops (the screen off) and VISIBLE again on resume.
+     * window goes INVISIBLE when the activity stops (the screen off) and VISIBLE again on resume.
      * (getWindowVisibility() isn't used: it stays GONE in Robolectric even in a resumed activity.)
      */
     private var windowShown = true

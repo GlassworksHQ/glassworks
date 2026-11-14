@@ -150,8 +150,8 @@ The panel's `Do not disturb` switch in Home Assistant (`switch.glassworks_panel_
 `switch.s1_panel_do_not_disturb` on a panel added before #63: [Names](esphome.md#names)), the same
 switch in the panel's list, and on the settings page. While it is on, every notification but a critical one goes to the list without a
 sound or a card, and the screen stays as it is. Turning it on also does that to the ones already up:
-a high one's card goes to the list and lets the screen go dark again; a critical one stays, and keeps
-the screen on. A pill at the top right says how many are held. When it turns off, the held ones stay
+a high one's card goes to the list and lets its hold on the screen go, so the screen goes dark at the
+idle timeout; a critical one stays, and keeps the screen on. A pill at the top right says how many are held. When it turns off, the held ones stay
 in the list. Bedtime is one automation:
 
 ```yaml

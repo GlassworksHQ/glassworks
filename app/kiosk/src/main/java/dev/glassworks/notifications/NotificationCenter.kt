@@ -125,7 +125,8 @@ class NotificationCenter(
 
     /**
      * Do not disturb changed. Turned on, it holds what is up now as it would have held it arriving: a
-     * high one's card goes to the list and lets the screen go; a critical one stays.
+     * high one's card goes to the list and lets its hold on the screen go (it darkens at the idle
+     * timeout); a critical one stays.
      */
     fun doNotDisturbChanged(on: Boolean): Unit = synchronized(lock) {
         if (closed || !on) return
