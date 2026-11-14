@@ -14,6 +14,7 @@ import dev.glassworks.frame.Frame
 import dev.glassworks.manage.PanelCode
 import dev.glassworks.notifications.NotificationsDefinition
 import dev.glassworks.notifications.NotificationsHub
+import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SetupStep
@@ -38,11 +39,14 @@ import java.util.concurrent.Executors
  * instance; Android entry points get it with [glassworks], everything else is given it.
  */
 class GlassworksRuntime(
-    /** The device this app runs on, made once with the runtime. */
-    val frame: AqaraS1Plus,
+    /** The device this app runs on, made once with the runtime: the S1's, or the generic one (KioskApp). */
+    val frame: Frame,
     /** The frame whose panes join the core's ([paneDefinitions]): [frame] in the app. Tests pass a fake one. */
     private val paneFrame: Frame = frame,
 ) {
+    /** [frame] when it is the S1's, for its parts no other frame has (root updates, the screen-off Wi-Fi scan). */
+    val s1: AqaraS1Plus? get() = frame as? AqaraS1Plus
+
     /** The screen's on/off and brightness, from the frame's sensors. MainActivity and KioskService start it. */
     val screen = ScreenPolicy(
         frame.presence, frame.light, AdminReceiver::class.java, settings = ::KioskPrefs,
@@ -95,8 +99,9 @@ class GlassworksRuntime(
                 now = android.os.SystemClock::elapsedRealtime,
             )
             val bluetoothProxy = BluetoothProxyDefinition(prefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(app), ::BluetoothProxyPage)
-            listOf(AssistDefinition(prefs.paneFile("assist")), SendspinDefinition(prefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
-                paneFrame.paneDefinitions(app) + DiagnosticsDefinition(prefs.paneFile("diagnostics"))
+            (listOf(AssistDefinition(prefs.paneFile("assist")), SendspinDefinition(prefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
+                paneFrame.paneDefinitions(app) + DiagnosticsDefinition(prefs.paneFile("diagnostics")))
+                .map { CantRun.unless(it, frame.provides) }
         }.also { definitions = it }
     }
 

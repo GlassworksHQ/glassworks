@@ -10,6 +10,7 @@ import dev.glassworks.frame.nodeName
 import dev.glassworks.notifications.NotificationScreen
 import dev.glassworks.notifications.NotificationSounds
 import dev.glassworks.notifications.NotificationsPane
+import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.EntityRegistry
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
@@ -218,8 +219,8 @@ class PanelDevice internal constructor(
             macAddress = mac,
             esphomeVersion = ESPHOME_VERSION,
             compilationTime = "S1 Kiosk ${BuildConfig.VERSION_NAME}",
-            manufacturer = "Aqara",
-            model = "Panel Hub S1 Plus (S1 Kiosk)",
+            manufacturer = frame.hardware.manufacturer,
+            model = "${frame.hardware.model} (S1 Kiosk)",
             voiceFeatures = voiceFeatures(),
             // Home Assistant's "Visit" link on the device page opens the Manage page (#33).
             webserverPort = OAuth.SIGNIN_PORT,
@@ -306,6 +307,14 @@ class PanelDevice internal constructor(
         ) + frame.panes(paneContext, exec) + RadioPane(paneContext, runtime, panelIp = ::ipAddress) +
             runtime.paneDefinitions(ctx).filterIsInstance<BluetoothProxyDefinition>().map { it.pane(paneContext, exec) } +
             DiagnosticsPane(paneContext, frame.cpuThermalZone, runtime.engine::isContentProcess, exec)
+        // A pane the frame lacks the hardware for (CantRun) isn't built: no entities, nothing started.
+        val cantRun = runtime.paneDefinitions(ctx).filterIsInstance<CantRun>().map { it.id }.toSet()
+        panes = panes.filter { it.id !in cantRun }
+        // Timers ride with Assist (their pane.json requires the same): without it they go too.
+        if (assistPane !in panes) {
+            assist = null
+            panes = panes.filter { it !is TimersPane }
+        }
         runtime.panes = panes
         // Every pane's on/off, also while the pane is off.
         coreEntities = buildEntities() + switches.values.map { it.entity() }
@@ -443,8 +452,8 @@ class PanelDevice internal constructor(
 
     private fun isOn(pane: Pane) = switches[pane.id]?.on != false
 
-    /** The voice assistant's features for Home Assistant: none while its pane ([PaneSwitch.voiceAssistant]) is off. */
-    private fun voiceFeatures() = if (switches.values.firstOrNull { it.voiceAssistant }?.on != false) VOICE_FEATURES else 0
+    /** The voice assistant's features for Home Assistant: none while its pane ([PaneSwitch.voiceAssistant]) is off, or has no switch because it can't run here. */
+    private fun voiceFeatures() = if (switches.values.firstOrNull { it.voiceAssistant }?.on == true) VOICE_FEATURES else 0
 
     /**
      * esphome-main: starts each pane that was turned on and stops each that was turned off (#67), and
