@@ -188,12 +188,31 @@ drives it (`tools/camera/onvif-lab.sh`, `tools/camera/onvif-ha-client.py`):
 | The server's sign-in changes at 20 s; the client keeps the old one | Every pull answers "Sender not authorized". HA renews and re-creates: 34 Renews and 35 Creates in 25 s. The server's log shows only those two calls, as on the tablet |
 
 **What it rules out:** the timestamps. Our `CurrentTime` and `TerminationTime` are in UTC with a `Z`,
-last the interval asked for, and a Renew moves the end on; `OnvifServerTest` pins all three. **What it
-shows (likely on the tablet, matching the lab):** HA's entry still holds the old app's sign-in, and
-every request after `GetServices` is refused. The fix is in HA: reconfigure the tablet's ONVIF entry
-with the stream's username and password. The panel now logs a refused sign-in, once a minute per
-client and never with the sign-in, so this shows at once:
+last the interval asked for, and a Renew moves the end on; `OnvifServerTest` pins all three.
+
+**Confirmed on the tablet (verified, 2026-11-14, root and maintainer):** HA's old entry held the old
+app's sign-in. About 110 Creates in a few minutes; once the maintainer re-added it with the new
+sign-in (11:13), one CreatePullPointSubscription, then normal pulls. UniFi Protect, also holding an
+old sign-in, polled `GetProfiles` about 59 times until it was adopted again. Both PASS after.
+
+**How the panel answers a refused sign-in now (verified in the lab, 2026-11-14):**
+
+| Call | Answer | What HA 2026.11.1 does with it |
+|---|---|---|
+| Device and media (`GetDeviceInformation`, `GetProfiles`, …) | HTTP 400, SOAP 1.2 fault `env:Sender` / `ter:NotAuthorized` | `is_auth_error()` is true: "auth failed" in the config flow, a reauth flow at setup |
+| Events (`PullMessages`, `Renew`, `CreatePullPointSubscription`, …) | HTTP 401 with the Digest and Basic challenge, no body | a `TransportError` 401: the pull loop waits 60 s instead of 0.75 s; reauth at setup |
+| RTSP (`DESCRIBE`, `SETUP`) | `RTSP/1.0 401` with the challenge | |
+| Digest with the right password on a nonce the panel forgot | HTTP 401, challenge with `stale=true` | the client signs in again once |
+
+A wrong sign-in in the events now costs one request a minute, not one every 0.75 s (the second lab
+case again: no Renew or Create after the change, only refused pulls). HA has no reauth path in its pull
+loop; a loaded entry with a stale sign-in asks to reauth the next time it is set up (an HA restart or
+a reload). The panel logs a refused sign-in once a minute per client, never with the sign-in:
 `ONVIF PullMessages from <address> refused: the sign-in doesn't match the stream's`.
+
+`tools/camera/onvif-lab.sh` reruns the pull loop; the setup and config-flow answers were read with the
+same client (`ONVIFCamera(...).create_devicemgmt_service().GetDeviceInformation()` and the media and
+events services, with a wrong password).
 
 To run the lab again: `tools/camera/onvif-lab.sh 45 ONVIF_LAB_CREDS_CHANGE_AT=20` (or
 `ONVIF_LAB_RESTART_AT=30`). It serves on 127.0.0.1:18000 only.

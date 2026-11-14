@@ -192,6 +192,17 @@ class RtspServerTest {
         c.sock.close()
     }
 
+    @Test fun aWrongSignInGets401AndNoStream() {
+        // UniFi Protect on the tablet kept an older app's sign-in: refused, with a challenge, never the stream.
+        startServer()
+        val c = Client(port, auth = USER.first to "an-old-apps-password")
+        val url = "rtsp://127.0.0.1:$port/live"
+        assertTrue(c.request("DESCRIBE", url).first.startsWith("RTSP/1.0 401"))
+        assertTrue(c.request("SETUP", "$url/trackID=0", listOf("Transport: RTP/AVP/TCP;unicast;interleaved=0-1")).first.startsWith("RTSP/1.0 401"))
+        assertEquals(false, server.hasClients())
+        c.sock.close()
+    }
+
     @Test fun withNoSignInSetNobodyGetsTheStream() {
         startServer(null)
         val c = Client(port, auth = "admin" to "")
