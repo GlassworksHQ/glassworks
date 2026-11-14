@@ -91,7 +91,7 @@ class GlassworksRuntime(
             )
             val notify = NotificationsDefinition(
                 prefs.paneFile("notifications"), notifications,
-                actionName = "esphome.${sh.edm.s1kiosk.esphome.PanelDevice.NAME.replace('-', '_')}_notify",
+                nodeName = { device?.nodeName },
                 now = android.os.SystemClock::elapsedRealtime,
             )
             val bluetoothProxy = BluetoothProxyDefinition(prefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(app), ::BluetoothProxyPage)

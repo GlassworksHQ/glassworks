@@ -13,12 +13,13 @@ import dev.glassworks.pane.SettingsSection
 /**
  * The notifications pane ([NotificationsPane]) for the whole process: its on/off, its card on setup's
  * Panes step and its settings page (#118, the approved design). [file] is its settings file, [hub] the
- * running pane's state, [actionName] what Home Assistant calls the action (`esphome.s1_panel_notify`).
+ * running pane's state, [nodeName] this device's ESPHome node name once it has announced itself (#260):
+ * Home Assistant names the action after it ([action]).
  */
 class NotificationsDefinition(
     file: SharedPreferences,
     private val hub: NotificationsHub,
-    private val actionName: String,
+    private val nodeName: () -> String?,
     private val now: () -> Long,
 ) : PaneDefinition {
     override val id = NotificationsPane.ID
@@ -29,7 +30,7 @@ class NotificationsDefinition(
         file, NotificationsPrefs.KEY_ENABLED, default = false, title = "Notifications", detail = "On-screen alerts",
         objectId = "notifications", entityName = "Notifications", icon = "mdi:bell-outline", inSetup = true,
         // The core shows this on the page while the pane is off (#212), then the pane's entities.
-        offNote = offNote(actionName),
+        offNote = OFF_NOTE,
     )
 
     override fun settings(): List<SettingsSection> = listOf(
@@ -53,11 +54,11 @@ class NotificationsDefinition(
         )
     }
 
-    private fun offItems(): List<SettingsItem> = listOf(SettingsItem.Note { offNote(actionName) }, inHomeAssistant())
+    private fun offItems(): List<SettingsItem> = listOf(SettingsItem.Note { OFF_NOTE }, inHomeAssistant())
 
     private fun inHomeAssistant() = SettingsItem.Group("In Home Assistant", listOf(
         SettingsItem.Info({ "Do not disturb" }, { if (prefs.doNotDisturb) "On" else "Off" }),
-        SettingsItem.Info({ "Action" }, { actionName }),
+        SettingsItem.Info({ "Action" }, { nodeName()?.let(::action) ?: "esphome.<this panel>_notify" }),
         SettingsItem.Info({ "Button taps" }, { "event ${ActionReport.EVENT}" }),
         SettingsItem.Note {
             "Send one from any script or automation. The fields are the Companion app's: title, message, " +
@@ -78,8 +79,14 @@ class NotificationsDefinition(
 
     companion object {
         /** What being off means: the action stays, and says so (#67 keeps an off pane's entities). */
-        fun offNote(actionName: String) =
-            "Notifications are off. $actionName stays in Home Assistant and answers “Notifications are off on this panel” until you turn them on."
+        const val OFF_NOTE =
+            "Notifications are off. The panel's notify action stays in Home Assistant and answers “Notifications are off on this panel” until you turn them on."
+
+        /**
+         * What Home Assistant calls the action of the device named [nodeName]: `esphome.`, the node name
+         * with `-` as `_`, then `_notify` (the esphome integration's `device_info.name` and the service).
+         */
+        fun action(nodeName: String) = "esphome.${nodeName.replace('-', '_')}_notify"
 
         /** "now", "2 min ago", "3 h ago". */
         fun ago(ms: Long): String = when {

@@ -21,7 +21,8 @@ import org.robolectric.annotation.Config
 class NotificationsDefinitionTest {
     private val file = RuntimeEnvironment.getApplication().getSharedPreferences("notifications-def-test", Context.MODE_PRIVATE)
     private val hub = NotificationsHub()
-    private val d = NotificationsDefinition(file, hub, "esphome.s1_panel_notify", now = { 600_000L })
+    private var node: String? = "aqara-s1-plus-a1b2c3"
+    private val d = NotificationsDefinition(file, hub, { node }, now = { 600_000L })
 
     private fun texts(items: List<SettingsItem>): List<String> = items.flatMap { i ->
         when (i) {
@@ -39,8 +40,19 @@ class NotificationsDefinitionTest {
         assertFalse(d.switch.on)
         assertEquals("Notifications" to "On-screen alerts", d.setupChoice!!.let { it.title to it.detail })
         val t = texts(d.settings().single().items)
-        assertTrue(t.first(), t.first().contains("esphome.s1_panel_notify stays in Home Assistant"))
-        assertTrue("its state from HA", "Action: esphome.s1_panel_notify" in t)
+        assertTrue(t.first(), t.first().contains("notify action stays in Home Assistant"))
+        assertTrue("its state from HA", "Action: esphome.aqara_s1_plus_a1b2c3_notify" in t)
+    }
+
+    /** #260: the action is named after the node name the device announced, which ends in its MAC. */
+    @Test
+    fun theActionFollowsTheNodeName() {
+        assertEquals("esphome.aqara_s1_plus_a1b2c3_notify", NotificationsDefinition.action("aqara-s1-plus-a1b2c3"))
+        assertEquals("esphome.pixel_tablet_a1b2c3_notify", NotificationsDefinition.action("pixel-tablet-a1b2c3"))
+        node = "pixel-tablet-a1b2c3"
+        assertTrue("read when shown", "Action: esphome.pixel_tablet_a1b2c3_notify" in texts(d.settings().single().items))
+        node = null
+        assertTrue("not announced yet", "Action: esphome.<this panel>_notify" in texts(d.settings().single().items))
     }
 
     @Test

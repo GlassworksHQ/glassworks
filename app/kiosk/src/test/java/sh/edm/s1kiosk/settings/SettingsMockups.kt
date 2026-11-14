@@ -46,7 +46,7 @@ class SettingsMockups {
             MenuFixture.cardOnly("voice", "Voice", "Assist and timers"),
             MenuFixture.cardOnly("sendspin", "Music", "A Sendspin speaker"),
             dev.glassworks.notifications.NotificationsDefinition(
-                KioskPrefs(app).paneFile("notifications"), dev.glassworks.notifications.NotificationsHub(), "esphome.s1_panel_notify", now = { 0L },
+                KioskPrefs(app).paneFile("notifications"), dev.glassworks.notifications.NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L },
             ),
             radio,
         ) + MenuFixture.switchOnly(app) + extra

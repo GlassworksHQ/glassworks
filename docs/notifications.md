@@ -23,9 +23,11 @@ The settings page shows what is on the panel, has **Do not disturb**, and **Send
 
 ## Send one
 
-The panel adds one action to Home Assistant: `esphome.<panel>_notify`. For a panel named `s1-panel`
-(the default) it is `esphome.s1_panel_notify`. *Developer tools → Actions* lists it: search for
-`_notify`.
+The panel adds one action to Home Assistant: `esphome.<node name>_notify`, with the panel's ESPHome
+node name, `-` as `_`. The node name ends in the panel's MAC ([Names](esphome.md#names)), so an S1's
+action looks like `esphome.aqara_s1_plus_a1b2c3_notify`. The panel's settings show its exact name
+(**Panes → Notifications → Action**), and *Developer tools → Actions* lists it: search for `_notify`.
+The examples below use `a1b2c3`; put your panel's in.
 
 **Who can call it.** On a panel without an API key, anyone on your network can call `notify`, so
 anyone there could raise a critical alert or open a view of your Home Assistant on the panel. The
@@ -36,7 +38,7 @@ makes every ESPHome action field required, so all three are always there. `title
 `data` is a JSON object, or `{}` for none.
 
 ```yaml
-action: esphome.s1_panel_notify
+action: esphome.aqara_s1_plus_a1b2c3_notify
 data:
   title: Washing machine
   message: Done. 1 h 32 min.
@@ -60,7 +62,7 @@ data:
 Write `data` as a JSON string. A block string is the easiest to read:
 
 ```yaml
-action: esphome.s1_panel_notify
+action: esphome.aqara_s1_plus_a1b2c3_notify
 data:
   title: Parcel at the door
   message: The porch camera saw a delivery.
@@ -98,7 +100,7 @@ which is what a doorbell wants. Use an action's `uri` for "open it when I tap".
 ### Clear one
 
 ```yaml
-action: esphome.s1_panel_notify
+action: esphome.aqara_s1_plus_a1b2c3_notify
 data:
   message: clear_notification
   title: ""
@@ -146,8 +148,8 @@ answers doesn't keep a room lit all night. A sound pauses the music, as the voic
 
 ## Do not disturb
 
-The panel's `Do not disturb` switch in Home Assistant (`switch.glassworks_panel_do_not_disturb`, or
-`switch.s1_panel_do_not_disturb` on a panel added before #63: [Names](esphome.md#names)), the same
+The panel's `Do not disturb` switch in Home Assistant (`switch.aqara_s1_plus_do_not_disturb` on a new
+S1; `glassworks_panel_*` or `s1_panel_*` on one added earlier: [Names](esphome.md#names)), the same
 switch in the panel's list, and on the settings page. While it is on, every notification but a critical one goes to the list without a
 sound or a card, and the screen stays as it is. Turning it on also does that to the ones already up:
 a high one's card goes to the list and lets its hold on the screen go, so the screen goes dark at the
@@ -161,7 +163,7 @@ triggers:
 actions:
   - action: switch.turn_on
     target:
-      entity_id: switch.glassworks_panel_do_not_disturb
+      entity_id: switch.aqara_s1_plus_do_not_disturb
 ```
 
 ## The list
@@ -179,8 +181,8 @@ No doorbell pane: your doorbell is in Home Assistant already, and a dashboard do
    [`blueprints/automation/glassworks/doorbell-panels.yaml`](../blueprints/automation/glassworks/doorbell-panels.yaml)
    (*Settings → Automations & scenes → Blueprints → Import*, with the file's GitHub address). Pick the
    doorbell, the camera and the view, and type each panel's notify action: `esphome.` plus the
-   panel's ESPHome name with `-` as `_`, plus `_notify`. The S1's name is `s1-panel`, so it is
-   `esphome.s1_panel_notify`; a second panel you named `hall-panel` is `esphome.hall_panel_notify`.
+   panel's ESPHome node name with `-` as `_`, plus `_notify`, like `esphome.aqara_s1_plus_a1b2c3_notify`.
+   Each panel's settings show its own (**Panes → Notifications → Action**).
    Home Assistant has no selector that picks one action, so they are typed. When it rings, every panel rings,
    shows the camera's picture and opens the view; each goes back to its dashboard after the timeout.
 3. Make *Done* run a script that clears `doorbell` on every panel, so the others stop too. The
