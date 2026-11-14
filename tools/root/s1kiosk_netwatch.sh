@@ -35,6 +35,7 @@ last_kick=0
 am_bad=0
 am_last=-$AM_COOLDOWN
 am_count=0
+am_pid=
 loops=0
 log() { echo "s1kiosk_netwatch: $*" > /dev/kmsg; }
 
@@ -45,11 +46,15 @@ lru_starts() {
     head -n 1 | { read -r n a s && echo "$n $((n - a)) $((n - s))"; }
 }
 
+# The reads count only for one system_server: its pid is taken before each read, a new pid starts the
+# count again, and the kill goes only to the pid that was read (a replacement is a healthy framework).
 am_check() {
+  pid=$(pidof system_server)
   set -- $(lru_starts)
   if [ $# != 3 ]; then am_bad=0; setprop sys.s1kiosk.am.status "no answer from dumpsys"; return; fi
   if [ "$2" -ge 0 ] && [ "$3" -ge 0 ]; then am_bad=0; setprop sys.s1kiosk.am.status "ok $2 $3 of $1"; return; fi
-  am_bad=$((am_bad + 1))
+  [ "$pid" = "$am_pid" ] || am_bad=0
+  am_pid=$pid; am_bad=$((am_bad + 1))
   setprop sys.s1kiosk.am.status "broken: LRU starts $2 $3 of $1 ($am_bad/$AM_NEEDED)"
   [ "$am_bad" -ge "$AM_NEEDED" ] || return
   now=$(cut -d. -f1 /proc/uptime)
@@ -63,8 +68,11 @@ am_check() {
     setprop sys.s1kiosk.am.status "would restart the framework at uptime ${now}s (dry run; LRU starts $2 $3 of $1)"
     return
   fi
-  pid=$(pidof system_server)
   case "$pid" in ''|*[!0-9]*) log "LRU start below 0, but no single system_server pid ('$pid')"; return ;; esac
+  if [ "$(pidof system_server)" != "$pid" ]; then
+    am_bad=0; setprop sys.s1kiosk.am.status "broken reads were of system_server $pid, which is gone: not killing"
+    return
+  fi
   log "LRU start below 0 (starts $2 $3 of $1) on $am_bad reads: restarting the framework (kill system_server $pid)"
   am_last=$now; am_bad=0; am_count=$((am_count + 1))
   setprop sys.s1kiosk.am.restarts "$am_count ${now}s"

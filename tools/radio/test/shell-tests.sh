@@ -616,6 +616,8 @@ w "$T/bin/dumpsys" <<'EOF2'
 [ "$1 $2" = "activity processes" ] || exit 1
 if [ -f /t/lru-seq ]; then
   l=$(head -n 1 /t/lru-seq); sed -i 1d /t/lru-seq
+  # "RESTART <line>": the framework restarts by itself while dumpsys runs, then <line> is printed
+  case "$l" in "RESTART "*) l=${l#RESTART }; pkill -x system_server; (system_server 2000 >/dev/null 2>&1 &); sleep 0.2 ;; esac
   [ "$l" = - ] || printf '%s\n' "$l"; exit 0
 fi
 [ -s /t/lru ] || exit 1
@@ -677,6 +679,15 @@ check "broken, truncated, broken: the count starts again, nothing killed" alive
 check "...one broken read counted" has "$(prop sys.s1kiosk.am.status)" "(1/2)"
 dseq "$H 18 total, non-act at 19, non-svc at 19):" "$H 18 total, non-act at 19, non-svc at 19):"
 check "...and the same header printed as is, twice: killed (the seq mock itself works)" sh -c '! kill -0 "$(cat /t/ss-pid)" 2>/dev/null'
+# The broken framework restarts by itself between (or during) the reads: its healthy replacement is
+# never killed, and the count starts again with it.
+B="$H 18 total, non-act at 19, non-svc at 19):"
+dseq "$B" "RESTART $B"
+check "system_server replaced during the second read: the replacement is not killed" test -n "$(pidof system_server)" -a "$(pidof system_server)" != "$(cat "$T/ss-pid")"
+check "...no restart counted" test -z "$(prop sys.s1kiosk.am.restarts)"
+dseq "$B" "RESTART $B" "$B"
+check "...a broken read of the new one counts from 1 again" has "$(prop sys.s1kiosk.am.status)" "(1/2)"
+check "...and nothing was killed" test -z "$(prop sys.s1kiosk.am.restarts)"
 pkill -x system_server; rm -f "$T/lru" "$T/lru-seq" "$T/bin/dumpsys"
 
 # ---------------------------------------------------------------------------------- time zone
