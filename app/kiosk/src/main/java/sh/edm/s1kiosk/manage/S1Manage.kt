@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import dev.glassworks.frame.friendlyName
 import dev.glassworks.manage.HaGateway
 import dev.glassworks.manage.HaSignIn
 import dev.glassworks.manage.HaUser
@@ -113,7 +114,7 @@ class S1Manage(
             val sections = settingsOrder(core.sections(), panes)
             return PanelStatus(
                 name = name,
-                frame = "S1 Plus",
+                frame = if (runtime.s1 != null) "S1 Plus" else runtime.frame.friendlyName(),
                 version = version,
                 // The app's, as the line it sits on is the app's: the device's is in the diagnostics (#263).
                 uptimeMs = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime(),
@@ -123,7 +124,7 @@ class S1Manage(
                 sections = sections.filter { it.id != "about" },
                 about = listOf(
                     "Glassworks Panel" to "S1 Kiosk $version",
-                    "Frame" to "Aqara Panel Hub S1 Plus",
+                    "Frame" to runtime.frame.hardware.let { "${it.manufacturer} ${it.model}" },
                     "Android" to Build.VERSION.RELEASE,
                     "Engine" to runtime.engine.name.ifEmpty { "Unknown" },
                     "Licence" to "MIT, with the Glassworks core under MPL-2.0",
