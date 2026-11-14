@@ -162,6 +162,31 @@ class OnvifServerTest {
         assertTrue("a stale nonce isn't logged as refused", logged.none { "refused" in it && "GetProfiles" in it && "match" !in it })
     }
 
+    @Test fun `a refused event call is a bare 401, so Home Assistant's pull loop waits instead of looping`() {
+        // HA 2026.11.1 answers a SOAP fault on PullMessages by renewing and re-creating every 0.75 s; a 401
+        // without a body is a TransportError, after which it waits 60 s (docs/research/onvif-rtsp.md).
+        val s = newServer()
+        val wrong = usernameToken(password = "an-old-apps-password")
+        for ((body, path) in listOf(
+            "<tev:PullMessages><tev:Timeout>PT0S</tev:Timeout></tev:PullMessages>" to "/onvif/pullpoint/x",
+            "<tev:CreatePullPointSubscription/>" to "/onvif/events_service",
+            "<wsnt:Renew><wsnt:TerminationTime>PT600S</wsnt:TerminationTime></wsnt:Renew>" to "/onvif/pullpoint/x",
+        )) {
+            for (header in listOf(wrong, "")) {
+                val r = call(s, body, path, header = header)
+                assertEquals("$body: refused with 401", 401, r.status)
+                assertEquals("$body: no SOAP body, so the client sees no fault", 0, r.body.size)
+                assertTrue("$body: with the challenge", r.headers.any { it.first == "WWW-Authenticate" && it.second.startsWith("Digest") })
+            }
+        }
+        // The device and media services keep the SOAP fault: HA's config flow says "auth failed", its setup asks to reauth.
+        for ((body, path) in listOf("<tds:GetDeviceInformation/>" to "/onvif/device_service", "<trt:GetProfiles/>" to "/onvif/media_service")) {
+            val r = call(s, body, path, header = wrong)
+            assertEquals(400, r.status)
+            assertTrue(r.text, r.text.contains("ter:NotAuthorized"))
+        }
+    }
+
     @Test fun `device information and network interface carry identity`() {
         val s = newServer()
         val di = parseOk(call(s, "<tds:GetDeviceInformation/>")).documentElement
@@ -277,7 +302,7 @@ class OnvifServerTest {
     @Test fun `a refused sign-in is logged once a minute per client, without the sign-in`() {
         val s = newServer()
         val pull = "<tev:PullMessages><tev:Timeout>PT0S</tev:Timeout></tev:PullMessages>"
-        repeat(5) { assertEquals(400, call(s, pull, "/onvif/pullpoint/x", header = usernameToken(password = "an-old-apps-password")).status) }
+        repeat(5) { assertEquals(401, call(s, pull, "/onvif/pullpoint/x", header = usernameToken(password = "an-old-apps-password")).status) }
         val lines = logged.filter { "refused" in it }
         assertEquals(lines.toString(), 1, lines.size)
         assertTrue(lines.single(), lines.single().contains("PullMessages") && lines.single().contains("doesn't match"))

@@ -291,6 +291,14 @@ class OnvifServer(
         if (action !in UNAUTHENTICATED) {
             val auth = checkAuth(header, method, rawPath, headers)
             if (auth == AuthResult.BAD || auth == AuthResult.MISSING) refused(who, action, auth)
+            // Events (PullMessages, Renew, CreatePullPointSubscription…): any refusal is a bare HTTP 401 with the
+            // challenge and no SOAP body. Home Assistant's pull loop (2026.11.1, onvif-zeep-async 4.3.0) answers
+            // a SOAP fault there by renewing and re-creating at once, every 0.75 s; a 401 without a body is a
+            // TransportError to it, after which it waits 60 s. Its setup and config flow call the device and
+            // media services first, which keep the SOAP fault: "auth failed" in the config flow, a reauth at setup.
+            if (auth != AuthResult.OK && (ns == OnvifNs.TEV || ns == OnvifNs.WSNT)) {
+                return unauthorized("text/plain; charset=utf-8", ByteArray(0), stale = auth == AuthResult.STALE)
+            }
             when (auth) {
                 AuthResult.OK -> {}
                 AuthResult.MISSING -> return unauthorized(

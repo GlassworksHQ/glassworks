@@ -414,8 +414,10 @@ digits without the ones that read alike, from `SecureRandom`). It is never a def
 panels, and it never changes by itself; clear it and turn the stream on again for a new one. The
 stream never runs without a sign-in. The password is never logged, and no entity or diagnostic
 carries it. Use this sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate
-or UniFi Protect. A client that signs in wrong gets a SOAP `NotAuthorized` fault, and the panel logs
-the refusal once a minute per client.
+or UniFi Protect. A client that signs in wrong is refused: the device and media services answer with a
+SOAP `NotAuthorized` fault (Home Assistant then asks you to sign in again), the event service with a
+bare HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. The panel logs the
+refusal once a minute per client.
 
 The camera's settings are set from adb until the Manage page edits settings (#178), through an
 activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
