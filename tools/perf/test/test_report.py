@@ -685,12 +685,27 @@ class ReceiverSpanShort(unittest.TestCase):
         self.assertIsNone(G.camera_level(edge))
         heavy = {"inp_ms": None, "scroll_bands": [], "updates_runs": [], "load_ms": None, "camera_runs": [edge, run(0)]}
         reasons = R.coverage_reasons({"graded_runs": 2, "tiers": {"heavy": heavy}}, 2)
-        self.assertTrue(any("could reach the fluid bar" in x for x in reasons), reasons)
+        self.assertTrue(any("could reach fluid's 1000 ms in all: fluid couldn't be confirmed" in x for x in reasons), reasons)
+        self.assertFalse(any("good's" in x for x in reasons), reasons)
         self.assertIn("the level not measured in 1 of 2 run(s)", R.camera_cell(heavy, {"camera": None}))
 
     def test_a_rubric_without_a_good_camera_gap_fails_clearly(self):
         with mock.patch.object(G, "CAMERA_LEVELS", [lv for lv in G.CAMERA_LEVELS if lv["level"] != "good"]):
             self.assertRaisesRegex(RuntimeError, "'good' level with max_gap_max_ms", R._good_max_gap_ms)
+
+    def test_the_note_names_good_s_gap_when_that_is_what_is_open(self):
+        """#265's CodeRabbit: a 450 ms gap, no stalls and 100 ms left out leaves good's gap unsettled,
+        not fluid's total; the note says which."""
+        line = self.line([30043 - 100] * 4)
+        for st in line["streams"]:
+            st.update(stall_total_ms=0.0, max_gap_ms=450.0)
+        run = R.camera_run(line, "heavy")
+        self.assertEqual(G.camera_level_why(run), (None, G.OPEN_GOOD_GAP))
+        heavy = {"inp_ms": None, "scroll_bands": [], "updates_runs": [], "load_ms": None, "camera_runs": [run]}
+        reasons = R.coverage_reasons({"graded_runs": 1, "tiers": {"heavy": heavy}}, 1)
+        self.assertEqual([x for x in reasons if "camera" in x],
+                         ["heavy: 1 camera run(s) whose longest gap, with the part of the window their receiver counts left out, "
+                          "could pass good's 500 ms: good couldn't be confirmed, not measured"])
 
     def test_report_md_says_when_stalls_are_na_in_some_runs(self):
         """#265's verifier: s1rtc9's typical read "stalls 0 ms, n=2" with run 3 n/a."""

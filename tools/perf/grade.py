@@ -127,19 +127,30 @@ def camera_level(run):
     """One run's camera level from its worst stream (#174): first frame, frames shown, the longest gap
     and the gaps over 500 ms added up; "slow" when a stream showed no frame; None when the run has no
     camera record."""
+    return camera_level_why(run)[0]
+
+
+# Why camera_level_why left a level open (report.py's words for them).
+OPEN_STALLS_NA, OPEN_GOOD_GAP, OPEN_FLUID_TOTAL = "stalls n/a", "good's gap", "fluid's total"
+
+
+def camera_level_why(run):
+    """(level, why): camera_level, and when the level is open (None, measured), which bar couldn't be
+    settled: OPEN_STALLS_NA, OPEN_GOOD_GAP or OPEN_FLUID_TOTAL. why is None otherwise. grade.ts gives
+    the same levels; the reasons are the report's."""
     if not run:
-        return None
+        return None, None
     if run.get("timed_out"):
-        return BELOW
+        return BELOW, None
     if run.get("first_frame_ms") is None or run.get("shown_pct") is None:
-        return BELOW
+        return BELOW, None
     if run.get("stalls_reported") is False:
         # Stalls n/a (no freeze counts, or counts that left part of the window out): not measured,
         # unless the first frame and frames shown already fail every level, as no stalls could lift.
         if not any(run["first_frame_ms"] <= lv["first_frame_max_ms"] and run["shown_pct"] >= lv["shown_min_pct"]
                    for lv in CAMERA_LEVELS):
-            return BELOW
-        return None
+            return BELOW, None
+        return None, OPEN_STALLS_NA
     for lv in CAMERA_LEVELS:
         if run["first_frame_ms"] > lv["first_frame_max_ms"] or run["shown_pct"] < lv["shown_min_pct"]:
             continue
@@ -147,14 +158,14 @@ def camera_level(run):
             if run.get("max_gap_ms") is None or run["max_gap_ms"] > lv["max_gap_max_ms"]:
                 continue
             if run["max_gap_ms"] + (run.get("uncovered_ms") or 0) > lv["max_gap_max_ms"]:
-                return None             # a gap open at the counts' end could run on into what they left out (#265): open
+                return None, OPEN_GOOD_GAP      # a gap open at the counts' end could run on into what they left out (#265)
         if "stall_total_max_ms" in lv:
             if run.get("stall_total_ms") is None or run["stall_total_ms"] >= lv["stall_total_max_ms"]:
                 continue
             if run["stall_total_ms"] + (run.get("uncovered_ms") or 0) >= lv["stall_total_max_ms"]:
-                return None             # under the bar as counted, maybe not in what the counts left out (#265): open
-        return lv["level"]
-    return BELOW
+                return None, OPEN_FLUID_TOTAL   # under the bar as counted, maybe not in what the counts left out (#265)
+        return lv["level"], None
+    return BELOW, None
 
 
 def median_level(levels):

@@ -305,6 +305,8 @@ def _good_max_gap_ms():
 # The most of a camera's window its receiver counts may leave out: the longest gap "good" allows
 # (500 ms). A longer stretch could hold a stall the counts never saw.
 CAMERA_UNCOVERED_MAX_MS = _good_max_gap_ms()
+# Fluid's bar on the stalls added up (1000 ms), for the report's words.
+FLUID_STALL_TOTAL_MS = next(lv["stall_total_max_ms"] for lv in G.CAMERA_LEVELS if "stall_total_max_ms" in lv)
 
 
 def camera_run(line, tier):
@@ -1350,16 +1352,21 @@ def coverage_reasons(ref, attempted):
         short = [f"{task} {n} of {attempted}" for task, n in got.items() if 0 < n < attempted]
         if short:
             out.append(f"{t}: measured in fewer runs than attempted ({', '.join(short)})")
-        # Camera runs whose level is left open (grade.camera_level): stalls n/a, or a stalls total that
-        # what the counts left out could take over the fluid bar. A first frame or frames shown that
-        # already fail every level decide it, and those aren't open.
-        open_ = [c for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out") and G.camera_level(c) is None]
-        short = [c for c in open_ if c.get("stalls_reported") is False and (c.get("uncovered_ms") or 0) > CAMERA_UNCOVERED_MAX_MS]
-        na = sum(1 for c in open_ if c.get("stalls_reported") is False) - len(short)
-        edge = len(open_) - len(short) - na
-        if edge:
-            out.append(f"{t}: {edge} camera run(s) whose stalls, with the part of the window their receiver counts left "
-                       "out, could reach the fluid bar: not measured")
+        # Camera runs whose level is left open, and which bar couldn't be settled (grade.camera_level_why):
+        # stalls n/a; good's gap, which with what the counts left out could pass 500 ms; or fluid's
+        # total, which could reach 1 s. A first frame or frames shown that already fail every level
+        # decide it, and those aren't open.
+        whys = [G.camera_level_why(c)[1] for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out")]
+        open_ = [c for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out") and G.camera_level_why(c)[1] == G.OPEN_STALLS_NA]
+        short = [c for c in open_ if (c.get("uncovered_ms") or 0) > CAMERA_UNCOVERED_MAX_MS]
+        na = len(open_) - len(short)
+        gap, total = whys.count(G.OPEN_GOOD_GAP), whys.count(G.OPEN_FLUID_TOTAL)
+        if gap:
+            out.append(f"{t}: {gap} camera run(s) whose longest gap, with the part of the window their receiver counts "
+                       f"left out, could pass good's {CAMERA_UNCOVERED_MAX_MS} ms: good couldn't be confirmed, not measured")
+        if total:
+            out.append(f"{t}: {total} camera run(s) whose stalls, with the part of the window their receiver counts left "
+                       f"out, could reach fluid's {FLUID_STALL_TOTAL_MS} ms in all: fluid couldn't be confirmed, not measured")
         if short:
             worst = max(c["uncovered_ms"] for c in short)
             out.append(f"{t}: {len(short)} camera run(s) whose receiver counts left up to {worst / 1000:.1f} s of the "
