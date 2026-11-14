@@ -21,9 +21,11 @@ class TestBuildLabelTest {
      * A merge that brings `BuildConfig.VERSION_NAME` back into a page fails here.
      */
     @Test fun pagesShowTheLabelNotTheRawVersion() {
-        val main = File(repo, "app/kiosk/src/main/java/sh/edm/s1kiosk")
+        // The S1 app and the Glassworks core both: a core page must not read the raw version either.
+        val main = File(repo, "app/kiosk/src/main/java")
         val raw = setOf("update/AppVersion.kt", "update/UpdateManager.kt", "esphome/PanelDevice.kt", "sendspin/SendspinPlayer.kt",
             "improv/ImprovController.kt", "improv/ImprovSerialServer.kt", "improv/ImprovIdentity.kt", "radio/RadioPane.kt")
+            .map { "sh/edm/s1kiosk/$it" }.toSet()
         val found = main.walkTopDown().filter { it.isFile && it.extension == "kt" && "BuildConfig.VERSION_NAME" in it.readText() }
             .map { it.relativeTo(main).path }.filter { it !in raw }.toList()
         assertTrue("show AppVersion.shown, not BuildConfig.VERSION_NAME, in: $found", found.isEmpty())

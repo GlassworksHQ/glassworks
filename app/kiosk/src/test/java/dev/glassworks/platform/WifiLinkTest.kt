@@ -14,6 +14,7 @@ import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -136,6 +137,26 @@ class WifiLinkTest {
         cm.setLinkProperties(physical, address("192.0.2.40", 24))
         assertEquals("the VPN is the active network", vpn, app.getSystemService(ConnectivityManager::class.java).activeNetwork)
         assertEquals(WifiLink(ssid = "Example-WiFi", rssi = -58, linkSpeedMbps = 200, ipv4 = "192.0.2.40"), WifiLink.of(app))
+    }
+
+    /** A link read that throws leaves Home Assistant's Wi-Fi sensors unknown, logged, and the rest of the sample taken. */
+    @Config(sdk = [34])
+    @Test fun aFailedReadLeavesTheHomeAssistantSensorsUnknown() {
+        val broken = object : android.content.ContextWrapper(app) {
+            override fun getSystemService(name: String): Any? =
+                if (name == android.content.Context.CONNECTIVITY_SERVICE) throw SecurityException("no access") else super.getSystemService(name)
+        }
+        val logged = ArrayList<String>()
+        val original = sh.edm.esphome.EspHomeLog.sink
+        sh.edm.esphome.EspHomeLog.sink = sh.edm.esphome.EspHomeLog.Sink { _, _, msg, t -> logged += "$msg ${t?.javaClass?.simpleName}" }
+        try {
+            val sample = dev.glassworks.diagnostics.AndroidProbe(broken, null, { false }).sample()
+            assertNull(sample.wifiRssi)
+            assertNull(sample.wifiLinkSpeed)
+            assertTrue(logged.toString(), logged.any { it.startsWith("diagnostics: can't read the Wi-Fi link") && it.endsWith("SecurityException") })
+        } finally {
+            sh.edm.esphome.EspHomeLog.sink = original
+        }
     }
 
     @Config(sdk = [34])
