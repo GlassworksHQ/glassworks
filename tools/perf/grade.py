@@ -143,8 +143,11 @@ def camera_level(run):
     for lv in CAMERA_LEVELS:
         if run["first_frame_ms"] > lv["first_frame_max_ms"] or run["shown_pct"] < lv["shown_min_pct"]:
             continue
-        if "max_gap_max_ms" in lv and (run.get("max_gap_ms") is None or run["max_gap_ms"] > lv["max_gap_max_ms"]):
-            continue
+        if "max_gap_max_ms" in lv:
+            if run.get("max_gap_ms") is None or run["max_gap_ms"] > lv["max_gap_max_ms"]:
+                continue
+            if run["max_gap_ms"] + (run.get("uncovered_ms") or 0) > lv["max_gap_max_ms"]:
+                return None             # a gap open at the counts' end could run on into what they left out (#265): open
         if "stall_total_max_ms" in lv:
             if run.get("stall_total_ms") is None or run["stall_total_ms"] >= lv["stall_total_max_ms"]:
                 continue

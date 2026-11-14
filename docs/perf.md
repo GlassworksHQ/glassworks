@@ -455,7 +455,10 @@ hls.js on MSE, and each stream gets the hardware H.264 decoder (below).
   it is `slow`, as no stall could lift it. When the counts leave out 500 ms or less their stalls
   count, but they can be under-read by up to that much, so "fluid" holds its 1 s bar against the stalls
   plus what was left out: 600 ms of stalls with 400 ms left out is not measured, with 399 ms it is
-  fluid. report.md's camera cell says in how many runs the stalls were n/a or the level open.
+  fluid. "Good" likewise holds its 500 ms gap bar against the longest gap plus what was left out, as a
+  gap open at the counts' end could run on into it: a 450 ms gap with 100 ms left out is not
+  measured, 400 with 100 is good. That uses the longest gap anywhere, not only one open at the end
+  (the counts don't say which), so it can leave a level open that was good, never grade one wrongly. report.md's camera cell says in how many runs the stalls were n/a or the level open.
 - **Gaps and stalls over HLS (the fallback, not graded)**: gaps over 500 ms between frames
   presented by `requestVideoFrameCallback`, the longest and their sum, and the `waiting` events.
 

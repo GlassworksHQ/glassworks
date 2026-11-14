@@ -651,8 +651,12 @@ class ReceiverSpanShort(unittest.TestCase):
         self.assertEqual(R.CAMERA_UNCOVERED_MAX_MS, 500)
         ok = R.camera_run(self.line([29543] * 4), "heavy")             # 500 ms left out: covered
         self.assertNotIn("stalls_reported", ok)
-        self.assertEqual(ok["uncovered_ms"], 500.0)                    # recorded: the fluid bar reads it
-        self.assertEqual(G.camera_level(ok), "good")
+        self.assertEqual(ok["uncovered_ms"], 500.0)                    # recorded: the graders read it
+        # Graded, but good can't be confirmed: the 216.9 ms gap could run on into the 500 ms left out.
+        self.assertIsNone(G.camera_level(ok))
+        close = R.camera_run(self.line([29760] * 4), "heavy")            # 283 ms left out: 216.9 + 283 <= 500
+        self.assertEqual(G.camera_level(close), "good")
+        # A span past the window (nothing left out) stays good too; checked below.
         one = R.camera_run(self.line([29543, 29543, 29542, 29543]), "heavy")   # 501 ms: not
         self.assertIs(one["stalls_reported"], False)
         self.assertEqual(one["uncovered_ms"], 501.0)
@@ -660,6 +664,7 @@ class ReceiverSpanShort(unittest.TestCase):
         past = R.camera_run(self.line([30050] * 4), "heavy")
         self.assertNotIn("stalls_reported", past)
         self.assertEqual(past["uncovered_ms"], 0.0)
+        self.assertEqual(G.camera_level(past), "good")
 
     def test_hls_has_no_span_and_is_unaffected(self):
         run = R.camera_run(camera_line("heavy", path="hls"), "heavy")

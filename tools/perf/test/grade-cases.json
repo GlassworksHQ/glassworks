@@ -5808,7 +5808,7 @@
    "level": "slow"
   },
   {
-   "name": "no stalls and 500 ms left out: good (the fluid total isn't good's bar)",
+   "name": "no stalls, a 120 ms gap and 500 ms left out: the gap could reach 620 ms, not measured",
    "run": {
     "first_frame_ms": 1200,
     "shown_pct": 99.0,
@@ -5816,7 +5816,7 @@
     "stall_total_ms": 0,
     "uncovered_ms": 500.0
    },
-   "level": "good"
+   "level": null
   },
   {
    "name": "701 ms of stalls and 300 ms left out: 1001 ms, over the bar, not measured",
@@ -5826,6 +5826,50 @@
     "max_gap_ms": 701,
     "stall_total_ms": 701,
     "uncovered_ms": 300.0
+   },
+   "level": null
+  },
+  {
+   "name": "a 450 ms gap and 100 ms left out (#265's CodeRabbit): could be 550 ms, not measured",
+   "run": {
+    "first_frame_ms": 1200,
+    "shown_pct": 99.0,
+    "max_gap_ms": 450,
+    "stall_total_ms": 0,
+    "uncovered_ms": 100.0
+   },
+   "level": null
+  },
+  {
+   "name": "a 400 ms gap and 100 ms left out: at most 500 ms, good",
+   "run": {
+    "first_frame_ms": 1200,
+    "shown_pct": 99.0,
+    "max_gap_ms": 400,
+    "stall_total_ms": 0,
+    "uncovered_ms": 100.0
+   },
+   "level": "good"
+  },
+  {
+   "name": "the bound gap (217 ms at 15 fps) and 283 ms left out: good",
+   "run": {
+    "first_frame_ms": 1200,
+    "shown_pct": 99.0,
+    "max_gap_ms": 217,
+    "stall_total_ms": 0,
+    "uncovered_ms": 283.0
+   },
+   "level": "good"
+  },
+  {
+   "name": "the bound gap (217 ms) and 284 ms left out: could pass 500 ms, not measured",
+   "run": {
+    "first_frame_ms": 1200,
+    "shown_pct": 99.0,
+    "max_gap_ms": 217,
+    "stall_total_ms": 0,
+    "uncovered_ms": 284.0
    },
    "level": null
   }

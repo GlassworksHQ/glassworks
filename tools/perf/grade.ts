@@ -163,7 +163,11 @@ export function cameraLevel(run: CameraRun | null | undefined, rubric: Rubric): 
   }
   for (const lv of rubric.grade.camera_levels) {
     if (run.first_frame_ms > lv.first_frame_max_ms || run.shown_pct < lv.shown_min_pct) continue;
-    if (lv.max_gap_max_ms !== undefined && (run.max_gap_ms === null || run.max_gap_ms === undefined || run.max_gap_ms > lv.max_gap_max_ms)) continue;
+    if (lv.max_gap_max_ms !== undefined) {
+      if (run.max_gap_ms === null || run.max_gap_ms === undefined || run.max_gap_ms > lv.max_gap_max_ms) continue;
+      // A gap open at the counts' end could run on into what they left out (#265): open.
+      if (run.max_gap_ms + (run.uncovered_ms ?? 0) > lv.max_gap_max_ms) return null;
+    }
     if (lv.stall_total_max_ms !== undefined) {
       if (run.stall_total_ms === null || run.stall_total_ms === undefined || run.stall_total_ms >= lv.stall_total_max_ms) continue;
       // Under the bar as counted, maybe not in what the counts left out (#265): open.
