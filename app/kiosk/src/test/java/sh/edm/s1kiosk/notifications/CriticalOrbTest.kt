@@ -66,4 +66,31 @@ class CriticalOrbTest {
         repeat(100) { if (!orb.layersIn) { Thread.sleep(100); idle(16) } }
         assertTrue("baked without an alert", orb.layersIn)
     }
+
+    /** Verifier on #228: the window hidden (the activity stopped) pauses the orb; shown again, it resumes. */
+    @Test fun aHiddenWindowPausesIt() {
+        orb.start()
+        assertTrue(orb.running)
+        orb.dispatchWindowVisibilityChanged(android.view.View.INVISIBLE)
+        assertFalse(orb.running)
+        val frames = orb.frames
+        idle(1_000)
+        assertEquals("no frames while hidden", frames, orb.frames)
+        orb.dispatchWindowVisibilityChanged(android.view.View.VISIBLE)
+        assertTrue(orb.running)
+        idle(300)
+        assertTrue("shown: it moves again", orb.frames > frames + 5)
+    }
+
+    /** Verifier on #228: an alert that comes before the attach-time bake bakes at once. */
+    @Test fun anAlertBeforeTheBakeBakesAtOnce() {
+        var asks = 0
+        val counted = OrbBakes(bake = { _, _ -> asks++ })
+        val early = CriticalOrb(root.context, counted).also { root.addView(it, FrameLayout.LayoutParams(450, 450)) }
+        assertEquals("not baked yet: the attach-time bake waits 4 s", 0, asks)
+        early.start()
+        assertEquals("the alert bakes at once", 1, asks)
+        idle(CriticalOrb.BAKE_AFTER_MS + 100)
+        assertEquals("and only once", 1, asks)
+    }
 }
