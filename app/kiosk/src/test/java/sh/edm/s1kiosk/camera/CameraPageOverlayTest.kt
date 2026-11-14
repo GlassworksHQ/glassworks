@@ -78,4 +78,29 @@ class CameraPageOverlayTest {
         Mockup.label(o, CameraPage.NEEDS_SNAPSHOTS) // the switch's line follows the card
         assertEquals(false, def.prefs.onvif)
     }
+
+    private fun all(v: android.view.View): List<android.view.View> =
+        listOf(v) + ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+
+    private fun onScreen(o: KioskSettingsOverlay, text: String) =
+        all(o).filterIsInstance<android.widget.TextView>().any { it.text.toString().contains(text) }
+
+    @Test fun thePasswordShowsOnlyWhileTheRowIsTapped() {
+        val def = CameraDefinition(file, hasCamera = true, granted = { true }).apply { switch.on = true }
+        def.prefs.signIn = "glassworks" to "made-up-pass-1234"
+        val o = menu(def, pane())
+        assertEquals("hidden at first", false, onScreen(o, "made-up-pass-1234"))
+        assertEquals(true, onScreen(o, "glassworks · password hidden, tap to show"))
+        val row = all(o).filterIsInstance<android.widget.TextView>().first { it.text.toString().startsWith("glassworks ·") }
+        val tappable = generateSequence(row as android.view.View) { it.parent as? android.view.View }.first { it.isClickable }
+        tappable.performClick()
+        assertEquals("shown on the tap", true, onScreen(o, "made-up-pass-1234"))
+        o.refresh(); Mockup.idle()
+        assertEquals("still shown while the page stays open", true, onScreen(o, "made-up-pass-1234"))
+        tappable.performClick()
+        assertEquals("hidden on the next tap", false, onScreen(o, "made-up-pass-1234"))
+        tappable.performClick()
+        o.previewSection("about"); o.previewSection(CameraPane.ID); Mockup.idle()
+        assertEquals("hidden again when the page is drawn again", false, onScreen(o, "made-up-pass-1234"))
+    }
 }

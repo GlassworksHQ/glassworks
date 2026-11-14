@@ -91,9 +91,12 @@ class CameraPageTest {
     }
 
     @Test fun theSignInNeverShowsAndSaysHowToSetIt() {
-        assertEquals("Set", CameraPage.signIn(true))
-        assertEquals("Not set. Set a sign-in with adb for now.", CameraPage.signIn(false))
-        assertFalse("no repository path on the panel", CameraPage.signIn(false).contains("/"))
+        val made = "glassworks" to "made-up-pass-1234"
+        assertEquals("glassworks · password hidden, tap to show", CameraPage.signIn(made))
+        assertFalse("the row never says the password", CameraPage.signIn(made).contains(made.second))
+        assertEquals("glassworks · made-up-pass-1234 · tap to hide", CameraPage.signInShown(made))
+        assertEquals(CameraPage.SIGN_IN_NOT_MADE, CameraPage.signIn(null))
+        assertFalse("no repository path on the panel", CameraPage.signIn(null).contains("/"))
     }
 
     @Test fun beforeThePaneRunsItSaysSo() {

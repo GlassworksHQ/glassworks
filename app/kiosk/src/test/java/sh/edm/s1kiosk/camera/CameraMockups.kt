@@ -146,11 +146,13 @@ class CameraMockups {
         return o
     }
 
-    private fun shot(name: String, o: KioskSettingsOverlay, scrollTo: String? = null, bottom: Boolean = true) {
+    private fun shot(name: String, o: KioskSettingsOverlay, scrollTo: String? = null, bottom: Boolean = true, then: (KioskSettingsOverlay) -> Unit = {}) {
         o.previewSection("camera")
         Mockup.idle()
         Mockup.layout(o)
         scrollTo?.let { o.previewScrollTo(Mockup.label(o, it), alignBottom = bottom); Mockup.idle() }
+        then(o)
+        Mockup.idle()
         Mockup.save(name, o)
     }
 
@@ -214,11 +216,16 @@ class CameraMockups {
         shot("camera-01b-presence-only-scrolled", menu(Rig().someoneWalksUp()), scrollTo = "Camera sensitivity")
         shot("camera-02-snapshots-sending", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS }.someoneWalksUp().stillLeft()))
         val streaming = Rig(watching = listOf("192.0.2.20", "192.0.2.25")) {
-            it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true; it.signIn = "viewer" to "made-up-pass"
+            it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true; it.signIn = "glassworks" to "mXk7qEwR3hTz9cVa4nPd" // made up, in the generated shape
         }.someoneWalksUp()
         shot("camera-03-onvif-streaming", menu(streaming))
         shot("camera-03b-onvif-addresses", menu(streaming), scrollTo = "Sign-in", bottom = false)
-        shot("camera-04-onvif-no-sign-in", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true }.someoneWalksUp()), scrollTo = "Sign-in", bottom = false)
+        shot("camera-03c-sign-in-shown", menu(streaming), scrollTo = "Sign-in", bottom = false) { o ->
+            // The row tapped: the password shows until the next tap or until the page is drawn again.
+            val row = Mockup.label(o, "glassworks · password hidden, tap to show")
+            generateSequence(row as View) { it.parent as? View }.first { it.isClickable }.performClick()
+        }
+        shot("camera-04-stream-off-sign-in-not-made", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS }.someoneWalksUp()), scrollTo = "Sign-in", bottom = false)
         shot("camera-05-privacy-on", menu(Rig { it.privacy = true }))
         shot("camera-05b-privacy-stream-refused", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.privacy = true }), scrollTo = "Privacy", bottom = false)
         shot("camera-06-not-allowed", menu(Rig(allowed = false)))

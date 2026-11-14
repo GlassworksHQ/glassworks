@@ -92,7 +92,8 @@ class CameraDefinition(
                             val no = CameraPage.streamRefusal(prefs.privacy, prefs.use)
                             if (on && no != null) done(no) else { prefs.onvif = on; done(null) }
                         },
-                        SettingsItem.Info({ "Sign-in" }, { CameraPage.signIn(prefs.signIn != null) }, fixable = { prefs.signIn == null }),
+                        // The username; the password only while the row is tapped, on the panel (maintainer, 2026-11-14).
+                        SettingsItem.Info({ "Sign-in" }, { CameraPage.signIn(prefs.signIn) }, reveal = { CameraPage.signInShown(prefs.signIn) }),
                         SettingsItem.Info({ "Address" }, { CameraPage.address(read().address) }),
                         SettingsItem.Info({ "Stream" }, { CameraPage.stream(read()) }),
                         SettingsItem.Info({ "ONVIF device" }, { CameraPage.device(read()) }),

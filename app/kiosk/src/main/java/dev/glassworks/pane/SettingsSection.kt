@@ -209,9 +209,17 @@ sealed interface SettingsItem {
 
     /**
      * A name and a status line under it (the app's version, what plays now). Read again while the page is
-     * open. [fixable]: the line says what's missing that the person can set (amber).
+     * open. [fixable]: the line says what's missing that the person can set (amber). [reveal]: a line shown
+     * in place of [detail] while the person has tapped the row on the panel, hidden again by another tap
+     * or when the page is drawn again (the camera stream's password). Only the panel's own menu reads it;
+     * the Manage page and every other surface show [detail].
      */
-    class Info(val title: () -> String, val detail: () -> String, val fixable: () -> Boolean = { false }) : SettingsItem
+    class Info(
+        val title: () -> String,
+        val detail: () -> String,
+        val fixable: () -> Boolean = { false },
+        val reveal: (() -> String)? = null,
+    ) : SettingsItem
 
     /** Items under their own heading, in a card of their own. */
     class Group(val title: String, val items: List<SettingsItem>) : SettingsItem

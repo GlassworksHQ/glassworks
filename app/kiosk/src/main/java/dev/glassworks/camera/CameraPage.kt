@@ -120,8 +120,13 @@ object CameraPage {
     fun streamDetail(privacy: Boolean, use: CameraUse): String =
         streamRefusal(privacy, use) ?: "For Frigate, go2rtc, Home Assistant's ONVIF integration and UniFi Protect."
 
-    /** Never the username or password. Not set is a fixable problem: the row is amber. */
-    fun signIn(signedIn: Boolean): String = if (signedIn) "Set" else SIGN_IN_NOT_SET
+    /** The username, never the password: that is [signInShown], on a tap. None yet: made when the stream turns on. */
+    fun signIn(signIn: Pair<String, String>?): String =
+        signIn?.let { "${it.first} · password hidden, tap to show" } ?: SIGN_IN_NOT_MADE
+
+    /** The row while tapped: the username and the password, for typing into Home Assistant or Protect. */
+    fun signInShown(signIn: Pair<String, String>?): String =
+        signIn?.let { "${it.first} · ${it.second} · tap to hide" } ?: SIGN_IN_NOT_MADE
 
     fun address(a: StreamAddress?): String =
         a?.let { "${it.host} · RTSP port ${it.rtspPort}, ONVIF port ${it.onvifPort}" } ?: "The panel has no address yet"
@@ -142,6 +147,6 @@ object CameraPage {
     const val NOT_ALLOWED_LINE = "Android hasn't allowed the camera. Allow it in setup, or in Android's app settings"
     const val NEEDS_SNAPSHOTS = "Needs Presence + snapshots."
     const val PRIVACY_ON = "Camera privacy is on."
-    const val SIGN_IN_NOT_SET = "Not set. Set a sign-in with adb for now."
+    const val SIGN_IN_NOT_MADE = "Made for this panel when the stream is turned on"
     const val PRIVACY_DETAIL = "Closes the camera. Presence, snapshots and the stream stop."
 }

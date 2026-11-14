@@ -197,15 +197,25 @@ class CameraSetupTest {
         assertFalse(r.def.prefs.onvif)
     }
 
-    @Test fun anUnsetSignInIsAmberOnThePage() {
+    @Test fun theSignInRowShowsTheUsernameAndThePasswordOnlyThroughReveal() {
         val r = Rig(allowed = true)
         r.def.switch.on = true
         val signIn = paneSections(listOf(r.def)).single().items.filterIsInstance<SettingsItem.Group>().single { it.title == "ONVIF stream" }.items
             .filterIsInstance<SettingsItem.Info>().single { it.title() == "Sign-in" }
-        assertTrue(signIn.fixable())
-        r.def.prefs.signIn = "viewer" to "made-up-pass"
-        assertFalse(signIn.fixable())
-        assertEquals("Set", signIn.detail())
+        assertEquals(CameraPage.SIGN_IN_NOT_MADE, signIn.detail())
+        assertFalse("not a problem to fix: the stream makes one", signIn.fixable())
+        r.def.prefs.signIn = "glassworks" to "made-up-pass-1234"
+        assertTrue(signIn.detail().startsWith("glassworks"))
+        assertFalse(signIn.detail().contains("made-up-pass-1234"))
+        assertTrue(signIn.reveal!!().contains("made-up-pass-1234"))
+
+        // The Manage page draws the same items, and shows the username without the password.
+        val page = dev.glassworks.manage.ManagePages().section(
+            dev.glassworks.manage.ManageFixture().status, dev.glassworks.manage.ManagePages.Viewer("someone", "csrf"),
+            "/panes/camera", "Camera", null, null, paneSections(listOf(r.def)),
+        )
+        assertTrue(page.contains("glassworks"))
+        assertFalse("never on the Manage page", page.contains("made-up-pass-1234"))
     }
 
     @Test fun theAddressIsReadOncePerPage() {

@@ -440,9 +440,11 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     private fun infoRow(i: SettingsItem.Info): View {
         val name = g.text(16.5f, TX)
         val value = g.text(15f, MU).apply { setLineSpacing(0f, 1.15f) }
+        // Shown only while tapped, and never kept: the row starts hidden whenever the page is drawn.
+        var revealed = false
         fun bind() {
             name.text = i.title()
-            val v = i.detail()
+            val v = if (revealed) i.reveal?.invoke() ?: i.detail() else i.detail()
             if (value.text != v) value.text = v
             value.setTextColor(if (i.fixable()) AMBER else MU)
             value.visibility = if (v.isEmpty()) View.GONE else View.VISIBLE
@@ -459,6 +461,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 addView(name)
                 addView(value, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
             }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
+            if (i.reveal != null) {
+                isClickable = true
+                setOnClickListener { revealed = !revealed; bind() }
+            }
         }
     }
 
