@@ -102,7 +102,7 @@ class S1Manage(
     private inner class Host : ManageHost {
         override val actions: PanelActions = Actions()
 
-        override val name = PanelDevice.FRIENDLY_NAME
+        override val name = PanelDevice.PRODUCT_NAME
 
         override fun status(): PanelStatus {
             val defs = runtime.paneDefinitions(app)
@@ -266,7 +266,8 @@ class S1Manage(
 
     /** The panel's IP addresses now, `localhost`, its ESPHome name and its Android host name, as `.local`. */
     private fun ownHosts(): Set<String> {
-        val out = hashSetOf("localhost", "${PanelDevice.NAME}.local")
+        val out = hashSetOf("localhost")
+        runtime.device?.nodeName?.let { out += "$it.local" }
         runCatching {
             for (i in NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()) for (a in i.inetAddresses.toList()) {
                 a.hostAddress?.let { out += it.substringBefore('%').lowercase() }
