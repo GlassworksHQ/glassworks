@@ -119,4 +119,13 @@ object Platform : PlatformApi(Build.VERSION.SDK_INT) {
      * gives `armeabi-v7a, armeabi`; an arm64 device gives `arm64-v8a` first.
      */
     val supportedAbis: List<String> = Build.SUPPORTED_ABIS.toList()
+
+    /** The device's model as its maker names it (`Build.MODEL`): "Pixel Tablet". The S1 says "QUAD-CORE R818 EVB2". */
+    val model: String get() = Build.MODEL.orEmpty()
+
+    /** Who made it (`Build.MANUFACTURER`): "Google". The S1 says "Allwinner". */
+    val manufacturer: String get() = Build.MANUFACTURER.orEmpty()
+
+    /** The hardware platform (`Build.HARDWARE`, `ro.hardware`): the S1's A133 says "sun50iw10p1". */
+    val hardware: String get() = Build.HARDWARE.orEmpty()
 }

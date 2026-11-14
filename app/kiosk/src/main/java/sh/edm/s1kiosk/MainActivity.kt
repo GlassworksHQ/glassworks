@@ -27,6 +27,7 @@ import dev.glassworks.pane.intentExtras
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
+import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
 import sh.edm.s1kiosk.dashboard.DashboardOptions
 import sh.edm.s1kiosk.dashboard.Dashboards
@@ -182,7 +183,7 @@ class MainActivity : Activity() {
             onShowingChanged = { timerOverlay.voiceShowing(it) } // a timer set by voice flies out of the orb
         }
         timerOverlay = TimerOverlay(this)
-        setupOverlay = SetupOverlay(this, setupPanes).apply {
+        setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
             onChooseNetwork = ::openWifiSettings

@@ -14,6 +14,12 @@ below as the release notes.
   panel checks each value as its own controls would. The open settings menu on the panel follows a
   change made in the browser. A few parts only the panel can draw yet (the radio's roles, the time
   zone picker, the wall base's relays, the Bluetooth proxy's devices) say "On the panel".
+- **On a device that isn't an Aqara S1, the app runs as that device.** On a tablet, for example, it
+  names itself after the device in Home Assistant ("Pixel Tablet", `pixel-tablet-a1b2c3`) with its
+  own maker and model. It runs the panes the device's hardware allows: Voice and Music with a
+  microphone and a speaker, the Bluetooth proxy with Bluetooth LE, and Diagnostics. The radio shows
+  "Can't run", and the S1's own Wall base and Time zone aren't there. On the S1, only the names in
+  Music Assistant and Improv change (below).
 - **Every pane's settings page shows what it is doing.** No page says "no settings of its own" any
   more. Diagnostics shows CPU, temperature, RAM, Wi-Fi, storage and uptime, with the last hour as a
   line. Wall base shows the base, its firmware, protection and power, and each relay with its switch
@@ -27,6 +33,10 @@ below as the release notes.
   shapes: the status chips, switches, rows and dialogs match, and the Manage page's menu folds the
   panes you turned off under "Off · N", as the panel does. On the panel, hairlines and tile corners
   move to the brand's values.
+- **Music Assistant and Improv use the panel's own name.** The Music Assistant player and the Wi-Fi
+  setup over Bluetooth now say what the device is, "Aqara S1 Plus" on the S1 (the name Home Assistant
+  shows), instead of "Glassworks Panel". So an S1 and a tablet no longer show up under the same name.
+  Two S1s still share it: rename one in Music Assistant's player settings.
 - **Panes you turned off fold at the bottom of the list.** In the settings menu they sit under
   "Off · N"; open it, or a pane in it, to see them. An off pane's page says what being off means.
   Every pane shows its state after its name, Running, On, Off or Can't run, as the Manage page does,
@@ -140,6 +150,15 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
+  to call itself `s1-panel`, and adding a second device made Home Assistant offer to replace the
+  first. Now the S1 announces itself as "Aqara S1 Plus", with a node name such as
+  `aqara-s1-plus-a1b2c3` that ends in part of its MAC. A panel you already added stays in place with
+  all its entity ids. Home Assistant shows "Aqara S1 Plus" after the update, unless you renamed it.
+- **The screen stays on after Home Assistant wakes it.** After the panel had gone dark on its own,
+  a wake that wasn't a touch (Home Assistant's screen switch, a timer, voice, Wi-Fi setup) turned the
+  screen off again after about 20 seconds. Now it stays on until the panel's idle timeout, as after
+  a touch.
 - **A pane you turn off stays off after a restart.** Turning voice or music off, then restarting
   the app at once, could bring the pane back on: the setting was saved after the app had gone.
   Zoom, secure hosts and remote debugging, which restart the app, could lose their change the same
