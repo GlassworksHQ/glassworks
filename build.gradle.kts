@@ -10,6 +10,8 @@ plugins {
     // Maven Central publishing of the libraries (#153), and their KDoc jars. Both Apache-2.0, build time only.
     id("com.vanniktech.maven.publish") version "0.37.0" apply false
     id("org.jetbrains.dokka") version "2.2.0" apply false
+    // The libraries' public API check (apiCheck, apiDump). Apache-2.0, build time only; its tasks are wired below.
+    id("org.jetbrains.kotlinx.binary-compatibility-validator") version "0.18.2" apply false
 }
 
 // The ABI this APK is built for: -Ps1Abi=arm64-v8a or S1_ABI. Unset: the S1's. One APK per ABI, because
@@ -98,7 +100,63 @@ subprojects {
         // Kotlin 2.1 metadata and kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can compile against them. A
         // compiler reads metadata up to one minor version ahead, and AGP 9's built-in Kotlin is 2.2: built at the
         // repo's 2.4, a fresh minSdk 23 app fails (tools/release/lib-consumer-check.sh).
-        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension> { coreLibrariesVersion = "2.1.21" }
+        // Strict explicit API mode: every public declaration says so, with KDoc. A release can't be changed,
+        // so nothing becomes public API by default.
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension> {
+            coreLibrariesVersion = "2.1.21"
+            explicitApi()
+        }
+        // The public API, dumped in libs/<name>/api/<name>.api: `apiCheck` (part of `check`, and run by pr.yml's
+        // libs-publish) fails when it changes and the dump doesn't; `apiDump` rewrites the dump. Neither KGP's
+        // abiValidation nor BCV's own plugin sees an Android library on AGP 9's built-in Kotlin (KT-78025: no
+        // classes, an empty dump), so BCV's tasks are wired here, on the classes of the compilation that ships.
+        // What BCV's worker runs on, as its own plugin sets it up: ASM (BSD-3-Clause) and kotlin-metadata-jvm
+        // (Apache-2.0), build time only.
+        val abiRuntime = configurations.create("abiValidationRuntime") {
+            isCanBeConsumed = false
+            isCanBeResolved = true
+        }
+        dependencies {
+            abiRuntime("org.ow2.asm:asm:9.6")
+            abiRuntime("org.ow2.asm:asm-tree:9.6")
+            abiRuntime("org.jetbrains.kotlin:kotlin-metadata-jvm:${org.jetbrains.kotlin.gradle.plugin.getKotlinPluginVersion(logger)}")
+        }
+        val apiBuild = tasks.register<kotlinx.validation.KotlinApiBuildTask>("apiBuild") {
+            val kotlin = project.extensions.getByName("kotlin") as org.jetbrains.kotlin.gradle.dsl.KotlinSingleTargetExtension<*>
+            val shipped = if (project.pluginManager.hasPlugin("com.android.library")) "release" else "main"
+            // The compile task's output, not output.classesDirs: that is empty on AGP 9's built-in Kotlin. The
+            // libraries are all Kotlin.
+            inputClassesDirs.from(kotlin.target.compilations.named(shipped).flatMap { it.compileTaskProvider }
+                .flatMap { (it as org.jetbrains.kotlin.gradle.tasks.KotlinCompileTool).destinationDirectory })
+            outputApiFile.set(layout.buildDirectory.file("api/${project.name}.api"))
+            runtimeClasspath.from(abiRuntime)
+        }
+        val apiCheck = tasks.register<kotlinx.validation.KotlinApiCompareTask>("apiCheck") {
+            group = "verification"
+            description = "Fails if the public API differs from api/${project.name}.api (update it with apiDump)."
+            projectApiFile.set(layout.projectDirectory.file("api/${project.name}.api"))
+            generatedApiFile.set(apiBuild.flatMap { it.outputApiFile })
+        }
+        tasks.register<Copy>("apiDump") {
+            description = "Writes the public API to api/${project.name}.api."
+            from(apiBuild.flatMap { it.outputApiFile })
+            into(layout.projectDirectory.dir("api"))
+        }
+        tasks.matching { it.name == "check" }.configureEach { dependsOn(apiCheck) }
+        // The README's Kotlin examples are compiled, and run, by the library's ReadmeExample* tests.
+        val readmeSnippets = tasks.register<ReadmeSnippets>("readmeSnippets") {
+            readme.set(layout.projectDirectory.file("README.md"))
+            examples.from(fileTree("src/test") { include("**/ReadmeExample*.kt") })
+        }
+        tasks.matching { it.name == "test" }.configureEach { dependsOn(readmeSnippets) }
+        // Every public declaration has KDoc: the KDoc jar is the libraries' reference, and an undocumented
+        // declaration fails it (publishToMavenLocal builds it, so pr.yml's libs-publish runs this).
+        pluginManager.withPlugin("org.jetbrains.dokka") {
+            extensions.configure<org.jetbrains.dokka.gradle.DokkaExtension> {
+                dokkaSourceSets.configureEach { reportUndocumented.set(true) }
+                dokkaPublications.configureEach { failOnWarning.set(true) }
+            }
+        }
         tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
             compilerOptions {
                 languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
@@ -128,6 +186,32 @@ subprojects {
                 onVariants { it.sources.resources?.addGeneratedSourceDirectory(licence, LicenceResources::outputDir) }
             }
         }
+    }
+}
+
+/**
+ * Fails when a ```kotlin block of a library's README.md isn't in its ReadmeExample* test sources, line for line
+ * (indentation and blank lines aside), so the README can't drift from code that compiles. Gradle blocks (they
+ * declare a dev.glassworks dependency) are skipped. Where a test must differ, it says what the README shows
+ * instead: `0 /* README: ApiServer.DEFAULT_PORT */` reads as `ApiServer.DEFAULT_PORT`.
+ */
+abstract class ReadmeSnippets : DefaultTask() {
+    @get:InputFile @get:PathSensitive(PathSensitivity.RELATIVE) abstract val readme: RegularFileProperty
+    @get:InputFiles @get:PathSensitive(PathSensitivity.RELATIVE) abstract val examples: ConfigurableFileCollection
+
+    @TaskAction
+    fun check() {
+        fun lines(text: String) = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val source = lines(examples.files.sorted().joinToString("\n") { it.readText() }
+            .replace(Regex("""\S+ /\* README: (.+?) \*/"""), "$1"))
+        val blocks = Regex("```kotlin\r?\n(.*?)```", RegexOption.DOT_MATCHES_ALL).findAll(readme.get().asFile.readText())
+            .map { it.groupValues[1] }.filter { "implementation(\"dev.glassworks:" !in it }.toList()
+        if (blocks.isEmpty()) throw GradleException("${readme.get().asFile}: no Kotlin examples")
+        val missing = blocks.filter { block -> lines(block).let { want -> source.windowed(want.size).none { it == want } } }
+        if (missing.isNotEmpty()) throw GradleException(
+            "${readme.get().asFile}: ${missing.size} Kotlin example(s) aren't in ${examples.files.map { it.name }} " +
+                "line for line. Copy each into the test so it compiles:\n\n" + missing.joinToString("\n---\n"),
+        )
     }
 }
 

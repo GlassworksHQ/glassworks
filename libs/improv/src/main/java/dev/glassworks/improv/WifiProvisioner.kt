@@ -29,7 +29,7 @@ import android.util.Log
  * `isTargetSdkLessThanQOrPrivileged()` still allows them for (a) a device-owner/profile-owner app
  * and (b) an app holding the SYSTEM_ALERT_WINDOW app-op (`checkSystemAlertWindowPermission`, e.g.
  * `adb shell appops set <pkg> SYSTEM_ALERT_WINDOW allow`). A device owner can also grant itself the
- * location permission ([ensureLocationIfDeviceOwner]). Both use the "legacy" path below. Otherwise it falls
+ * location permission. Both use the "legacy" path below. Otherwise it falls
  * back to a WifiNetworkSuggestion, which on Android 10 needs the user to approve a notification and
  * is never preferred over an already-saved network that works.
  *
@@ -37,18 +37,38 @@ import android.util.Log
  * mode on (WifiPermissionsUtil.enforceCanAccessScanResults); without it WifiInfo is redacted.
  *
  * Main thread only.
+ *
+ * @param ctx Any context.
+ * @param main The main thread's handler.
+ * @param admin Your DeviceAdminReceiver, if the app can be device owner; null = look it up among the
+ *   active admins.
  */
 @SuppressLint("MissingPermission")
-class WifiProvisioner(
+public class WifiProvisioner(
     private val ctx: Context,
     private val main: Handler,
-    /** Your DeviceAdminReceiver, if the app can be device owner; null = look it up among the active admins. */
     private val admin: ComponentName? = null,
 ) {
 
-    sealed class Outcome {
-        data class Connected(val ssid: String, val ip: String?, val method: String) : Outcome()
-        data class Failed(val reason: String, val restored: String?) : Outcome()
+    /** How a [connect] ended. */
+    public sealed class Outcome {
+        /**
+         * On the network.
+         *
+         * @property ssid The network joined.
+         * @property ip The device's IPv4 address on it, or null if it isn't known yet.
+         * @property method How it joined, for logs: `already-connected`, `device-owner`, `addNetwork` or
+         *   `suggestion`.
+         */
+        public data class Connected(public val ssid: String, public val ip: String?, public val method: String) : Outcome()
+
+        /**
+         * Joining failed.
+         *
+         * @property reason Why, in words for the user or a log.
+         * @property restored The network it went back to, or null for none.
+         */
+        public data class Failed(public val reason: String, public val restored: String?) : Outcome()
     }
 
     private val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -57,20 +77,23 @@ class WifiProvisioner(
     private var job: Attempt? = null
 
     /** Progress text for the overlay (e.g. "approve the notification"). */
-    var onProgress: ((String) -> Unit)? = null
+    public var onProgress: ((String) -> Unit)? = null
 
-    val isDeviceOwner: Boolean get() = runCatching { dpm.isDeviceOwnerApp(ctx.packageName) }.getOrDefault(false)
+    internal val isDeviceOwner: Boolean get() = runCatching { dpm.isDeviceOwnerApp(ctx.packageName) }.getOrDefault(false)
 
-    val canDrawOverlays: Boolean get() = Settings.canDrawOverlays(ctx)
+    internal val canDrawOverlays: Boolean get() = Settings.canDrawOverlays(ctx)
 
-    /** True when addNetwork/enableNetwork are expected to work (see class comment). */
-    val legacyApiAllowed: Boolean
+    /**
+     * True when addNetwork/enableNetwork are expected to work (see the class comment). When false,
+     * [connect] uses a network suggestion, which the user must approve in a notification.
+     */
+    public val legacyApiAllowed: Boolean
         get() = !Compat.hasNetworkSuggestions || isDeviceOwner || (Compat.isAndroid10 && canDrawOverlays)
 
-    val hasLocationPermission: Boolean
+    internal val hasLocationPermission: Boolean
         get() = ctx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    val locationEnabled: Boolean
+    internal val locationEnabled: Boolean
         get() = runCatching {
             if (Compat.hasIsLocationEnabled) {
                 ctx.getSystemService(LocationManager::class.java).isLocationEnabled
@@ -81,14 +104,18 @@ class WifiProvisioner(
             }
         }.getOrDefault(false)
 
-    /** Needed to read scan results and the current SSID/networkId on API 29. */
-    val hasLocationAccess: Boolean get() = hasLocationPermission && locationEnabled
+    /**
+     * The app holds ACCESS_FINE_LOCATION and location is on: needed to read scan results and the
+     * current SSID/networkId on API 29.
+     */
+    public val hasLocationAccess: Boolean get() = hasLocationPermission && locationEnabled
 
-    fun status(): String = "deviceOwner=$isDeviceOwner saw=$canDrawOverlays legacyApi=$legacyApiAllowed " +
+    /** One line on the provisioner's access (device owner, overlays, location, Wi-Fi), for logs. */
+    public fun status(): String = "deviceOwner=$isDeviceOwner saw=$canDrawOverlays legacyApi=$legacyApiAllowed " +
         "fineLocation=$hasLocationPermission locationOn=$locationEnabled wifiOn=${wm.isWifiEnabled}"
 
     /** A device owner can grant itself the location permission (needed for SSIDs and scans). */
-    fun ensureLocationIfDeviceOwner() {
+    internal fun ensureLocationIfDeviceOwner() {
         if (hasLocationPermission || !isDeviceOwner) return
         val admin = admin ?: dpm.activeAdmins?.firstOrNull { it.packageName == ctx.packageName } ?: run {
             Log.w(TAG, "device owner but no active admin component found; cannot grant location")
@@ -102,14 +129,14 @@ class WifiProvisioner(
         }
     }
 
-    /** False when the scan was refused (e.g. throttled): the cached results are all there is. */
-    fun requestScan(): Boolean {
+    /** Asks Wi-Fi for a new scan. False when it was refused (e.g. throttled): the cached results are all there is. */
+    public fun requestScan(): Boolean {
         @Suppress("DEPRECATION")
         return runCatching { wm.startScan() }.getOrDefault(false)
     }
 
     /** Cached scan results as Improv triples; empty without location access. */
-    fun scan(): List<ScannedNetwork> {
+    public fun scan(): List<ScannedNetwork> {
         ensureLocationIfDeviceOwner()
         if (!hasLocationAccess) {
             Log.w(TAG, "scan: no location access (${status()}); returning no networks")
@@ -125,7 +152,7 @@ class WifiProvisioner(
      * A fresh scan: turns Wi-Fi on if it is off, starts a scan and reports [scan] once results
      * arrive (SCAN_RESULTS_AVAILABLE) or after [timeoutMs], whichever is first. Main thread.
      */
-    fun scanFresh(timeoutMs: Long, cb: (List<ScannedNetwork>) -> Unit) {
+    public fun scanFresh(timeoutMs: Long, cb: (List<ScannedNetwork>) -> Unit) {
         var finished = false
         lateinit var receiver: BroadcastReceiver
         val finish = Runnable {
@@ -155,7 +182,8 @@ class WifiProvisioner(
         }
     }
 
-    fun cancel() {
+    /** Cancels a [connect] in progress; its callback gets [Outcome.Failed] with `cancelled`. */
+    public fun cancel() {
         preparing?.let { finishPreparing(it, Outcome.Failed("cancelled", null)) }
         job?.finish(Outcome.Failed("cancelled", null))
     }
@@ -207,9 +235,10 @@ class WifiProvisioner(
     /**
      * Joins [ssid]. Turns Wi-Fi on first if it is off (allowed on API 29 for the same callers as
      * addNetwork, see the class comment). [hidden]: null = decide from the scan (not seen = hidden),
-     * else as given. [password] is never logged, only its length.
+     * else as given. [password] is never logged, only its length. [cb] gets the outcome once, on the
+     * main thread.
      */
-    fun connect(ssid: String, password: String, hidden: Boolean? = null, cb: (Outcome) -> Unit) {
+    public fun connect(ssid: String, password: String, hidden: Boolean? = null, cb: (Outcome) -> Unit) {
         preparing?.let { finishPreparing(it, Outcome.Failed("superseded", null)) }
         job?.finish(Outcome.Failed("superseded", null))
         if (!wm.isWifiEnabled) {
@@ -439,17 +468,18 @@ class WifiProvisioner(
         }
     }
 
-    companion object {
+    /** Settings shared by every provisioner. */
+    public companion object {
         /** Logcat tag; set it before use to log under your app's own. */
-        @Volatile var logTag: String = "ImprovWifi"
+        @Volatile public var logTag: String = "ImprovWifi"
         private val TAG get() = logTag
         /** Same as ESPHome's improv_ble connect timeout. */
-        const val CONNECT_TIMEOUT_MS = 30_000L
+        internal const val CONNECT_TIMEOUT_MS: Long = 30_000L
         /** Suggestions wait for the user to approve a notification. */
-        const val SUGGESTION_TIMEOUT_MS = 120_000L
+        internal const val SUGGESTION_TIMEOUT_MS: Long = 120_000L
         /** setWifiEnabled(true) → WIFI_STATE_ENABLED takes a few seconds on the panel. */
-        const val WIFI_ENABLE_TIMEOUT_MS = 15_000L
+        internal const val WIFI_ENABLE_TIMEOUT_MS: Long = 15_000L
         /** After turning Wi-Fi on: wait this long at most for the network to show up in a scan. */
-        const val FIRST_SCAN_WAIT_MS = 6_000L
+        internal const val FIRST_SCAN_WAIT_MS: Long = 6_000L
     }
 }

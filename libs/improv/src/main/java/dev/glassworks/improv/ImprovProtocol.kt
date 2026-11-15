@@ -1,7 +1,7 @@
 package dev.glassworks.improv
 
 /**
- * Improv Wi-Fi via BLE, wire format only (pure Kotlin, JVM-testable).
+ * Improv Wi-Fi via BLE: the GATT UUIDs, capability flags and command ids.
  *
  * Sources (checked 2026-11-09):
  *  - Spec: https://www.improv-wifi.com/ble/ (rev 2.4)
@@ -13,44 +13,60 @@ package dev.glassworks.improv
  * the sum of all previous bytes, keeping only the low byte. Result data is a list of strings, each
  * `[len, utf8 bytes...]`.
  */
-object Improv {
-    const val SERVICE_UUID = "00467768-6228-2272-4663-277478268000"
-    const val STATE_UUID = "00467768-6228-2272-4663-277478268001"
-    const val ERROR_UUID = "00467768-6228-2272-4663-277478268002"
-    const val RPC_COMMAND_UUID = "00467768-6228-2272-4663-277478268003"
-    const val RPC_RESULT_UUID = "00467768-6228-2272-4663-277478268004"
-    const val CAPABILITIES_UUID = "00467768-6228-2272-4663-277478268005"
+public object Improv {
+    /** The Improv GATT service. */
+    public const val SERVICE_UUID: String = "00467768-6228-2272-4663-277478268000"
+    /** The current state characteristic (read, notify): an [ImprovState] code. */
+    public const val STATE_UUID: String = "00467768-6228-2272-4663-277478268001"
+    /** The error characteristic (read, notify): an [ImprovError] code. */
+    public const val ERROR_UUID: String = "00467768-6228-2272-4663-277478268002"
+    /** The RPC command characteristic (write): the client's commands. */
+    public const val RPC_COMMAND_UUID: String = "00467768-6228-2272-4663-277478268003"
+    /** The RPC result characteristic (read, notify): the device's answers. */
+    public const val RPC_RESULT_UUID: String = "00467768-6228-2272-4663-277478268004"
+    /** The capabilities characteristic (read): the `CAP_*` flags. */
+    public const val CAPABILITIES_UUID: String = "00467768-6228-2272-4663-277478268005"
 
     /** 16-bit service data UUID 0x4677 (spec rev 2.0), as a full 128-bit UUID. */
-    const val SERVICE_DATA_UUID = "00004677-0000-1000-8000-00805f9b34fb"
+    public const val SERVICE_DATA_UUID: String = "00004677-0000-1000-8000-00805f9b34fb"
 
     // Capabilities bitmask (capabilities characteristic and service data byte 2).
-    const val CAP_IDENTIFY = 0x01
-    const val CAP_DEVICE_INFO = 0x02
-    const val CAP_SCAN_WIFI = 0x04
-    const val CAP_HOSTNAME = 0x08
+    /** Capability: the device can identify itself (blink, beep, show something). */
+    public const val CAP_IDENTIFY: Int = 0x01
+    /** Capability: the device answers [CMD_DEVICE_INFO]. */
+    public const val CAP_DEVICE_INFO: Int = 0x02
+    /** Capability: the device lists the Wi-Fi networks it sees ([CMD_SCAN_WIFI]). */
+    public const val CAP_SCAN_WIFI: Int = 0x04
+    /** Capability: the device's hostname can be read and set ([CMD_HOSTNAME]). */
+    public const val CAP_HOSTNAME: Int = 0x08
 
     // RPC commands.
-    const val CMD_WIFI_SETTINGS = 0x01
-    const val CMD_IDENTIFY = 0x02
-    const val CMD_DEVICE_INFO = 0x03
-    const val CMD_SCAN_WIFI = 0x04
-    const val CMD_HOSTNAME = 0x05
-    const val CMD_DEVICE_NAME = 0x06
+    /** Command: join this Wi-Fi network (SSID, password). */
+    public const val CMD_WIFI_SETTINGS: Int = 0x01
+    /** Command: identify yourself. */
+    public const val CMD_IDENTIFY: Int = 0x02
+    /** Command: report firmware, version, chip and device name. */
+    public const val CMD_DEVICE_INFO: Int = 0x03
+    /** Command: list the Wi-Fi networks you see. */
+    public const val CMD_SCAN_WIFI: Int = 0x04
+    /** Command: read or set the hostname. */
+    public const val CMD_HOSTNAME: Int = 0x05
+    /** Command: read or set the device name. */
+    public const val CMD_DEVICE_NAME: Int = 0x06
 
     /** Max encoded result: command + length + 255 data bytes + checksum (sdk-cpp RPC_RESPONSE_MAX_SIZE). */
-    const val MAX_PACKET = 258
+    public const val MAX_PACKET: Int = 258
 
-    fun checksum(data: ByteArray, end: Int = data.size): Byte {
+    internal fun checksum(data: ByteArray, end: Int = data.size): Byte {
         var sum = 0
         for (i in 0 until end) sum += data[i].toInt() and 0xFF
         return sum.toByte()
     }
 
     /** Encodes an RPC packet whose data is a list of length-prefixed strings (commands and results). */
-    fun encode(command: Int, strings: List<String>): ByteArray = encodeRaw(command, strings.map { it.toByteArray(Charsets.UTF_8) })
+    internal fun encode(command: Int, strings: List<String>): ByteArray = encodeRaw(command, strings.map { it.toByteArray(Charsets.UTF_8) })
 
-    fun encodeRaw(command: Int, strings: List<ByteArray>): ByteArray {
+    internal fun encodeRaw(command: Int, strings: List<ByteArray>): ByteArray {
         val dataLen = strings.sumOf { 1 + it.size }
         require(dataLen <= 255) { "RPC data too long ($dataLen > 255)" }
         strings.forEach { require(it.size <= 255) { "string too long" } }
@@ -68,14 +84,14 @@ object Improv {
     }
 
     /** 6-byte service data for UUID 0x4677: state, capabilities, 4 reserved zero bytes. */
-    fun serviceData(state: ImprovState, capabilities: Int): ByteArray =
+    internal fun serviceData(state: ImprovState, capabilities: Int): ByteArray =
         byteArrayOf(state.code.toByte(), capabilities.toByte(), 0, 0, 0, 0)
 
     /**
      * Parses one complete RPC command packet. Mirrors sdk-cpp parse_improv_data: the length byte must
      * match, the checksum must match, and Wi-Fi settings must hold two strings that fit.
      */
-    fun parse(packet: ByteArray): RpcCommand {
+    internal fun parse(packet: ByteArray): RpcCommand {
         if (packet.size < 3 || (packet[1].toInt() and 0xFF) != packet.size - 3) return RpcCommand.Invalid("bad length")
         if (checksum(packet, packet.size - 1) != packet[packet.size - 1]) return RpcCommand.Invalid("bad checksum")
         val cmd = packet[0].toInt() and 0xFF
@@ -92,7 +108,7 @@ object Improv {
     }
 
     /** Splits the data part into length-prefixed strings; null if they don't tile the data exactly. */
-    fun strings(packet: ByteArray): List<ByteArray>? {
+    internal fun strings(packet: ByteArray): List<ByteArray>? {
         val end = packet.size - 1
         var p = 2
         val out = mutableListOf<ByteArray>()
@@ -110,7 +126,7 @@ object Improv {
      * truncated to what fits in [maxPacket] bytes (255 data bytes, and the notification MTU).
      * An empty list means no networks.
      */
-    fun encodeScan(networks: List<ScannedNetwork>, maxPacket: Int = MAX_PACKET): ByteArray {
+    internal fun encodeScan(networks: List<ScannedNetwork>, maxPacket: Int = MAX_PACKET): ByteArray {
         val limit = minOf(maxPacket, MAX_PACKET) - 3
         val strings = mutableListOf<ByteArray>()
         var size = 0
@@ -128,28 +144,55 @@ object Improv {
     }
 }
 
-data class ScannedNetwork(val ssid: String, val rssi: Int, val auth: String)
+/**
+ * One Wi-Fi network from a scan, as Improv reports it.
+ *
+ * @property ssid The network's name.
+ * @property rssi The signal strength in dBm.
+ * @property auth The security, as Improv labels it: `NO` for an open network, else labels such as
+ *   `WPA2` or `WPA2/WPA3` ([WifiSecurityRules.improvAuth]).
+ */
+public data class ScannedNetwork(public val ssid: String, public val rssi: Int, public val auth: String)
 
-enum class ImprovState(val code: Int) {
+/** Improv's state, as the state characteristic and the advertisement report it. */
+public enum class ImprovState(
+    /** The wire value. */
+    public val code: Int,
+) {
+    /** Waiting for a physical action on the device before it takes Wi-Fi settings. */
     AUTHORIZATION_REQUIRED(0x01),
+    /** Ready to take Wi-Fi settings. */
     AUTHORIZED(0x02),
+    /** Joining the network it was given. */
     PROVISIONING(0x03),
+    /** On the network. */
     PROVISIONED(0x04),
 }
 
-enum class ImprovError(val code: Int) {
+/** Improv's error, as the error characteristic reports it. */
+public enum class ImprovError(
+    /** The wire value. */
+    public val code: Int,
+) {
+    /** No error. */
     NONE(0x00),
+    /** The command was malformed or its checksum was wrong. */
     INVALID_RPC(0x01),
+    /** The device doesn't know the command. */
     UNKNOWN_RPC(0x02),
+    /** Joining the network failed. */
     UNABLE_TO_CONNECT(0x03),
+    /** The command needs authorization first. */
     NOT_AUTHORIZED(0x04),
+    /** The hostname isn't valid. */
     BAD_HOSTNAME(0x05),
+    /** Any other failure. */
     UNKNOWN(0xFF),
 }
 
-sealed class RpcCommand {
+internal sealed class RpcCommand {
     data class WifiSettings(val ssid: String, val password: String) : RpcCommand() {
-        override fun toString() = "WifiSettings(ssid=$ssid, password=<${password.length} chars>)"
+        override fun toString(): String = "WifiSettings(ssid=$ssid, password=<${password.length} chars>)"
     }
     object Identify : RpcCommand()
     object DeviceInfo : RpcCommand()
@@ -163,7 +206,7 @@ sealed class RpcCommand {
  * separate writes; see the spec's "over 20 bytes" note). Same rule as ESPHome
  * process_incoming_data_: wait until `size - 3 == length`, drop the buffer if it overshoots.
  */
-class RpcAssembler {
+internal class RpcAssembler {
     private var buf = ByteArray(0)
 
     /** Appends [chunk]; returns a complete packet when one is ready, else null. */

@@ -2,12 +2,12 @@ package dev.glassworks.improv
 
 /**
  * Pure helpers for turning Improv credentials into an Android Wi-Fi config (JVM-testable).
- * [capabilities] is Android's `ScanResult.capabilities`, e.g. "[WPA2-PSK-CCMP][RSN-PSK-CCMP][ESS]",
- * "[RSN-PSK+SAE-CCMP][ESS]" (WPA2/WPA3 transition), "[RSN-SAE-CCMP][ESS]", "[WEP][ESS]", "[ESS]".
+ * `capabilities` is Android's `ScanResult.capabilities`, e.g. `[WPA2-PSK-CCMP][RSN-PSK-CCMP][ESS]`,
+ * `[RSN-PSK+SAE-CCMP][ESS]` (WPA2/WPA3 transition), `[RSN-SAE-CCMP][ESS]`, `[WEP][ESS]`, `[ESS]`.
  */
-enum class WifiSecurity { OPEN, OWE, WEP, PSK, SAE, EAP }
+internal enum class WifiSecurity { OPEN, OWE, WEP, PSK, SAE, EAP }
 
-object WifiSecurityRules {
+internal object WifiSecurityRules {
 
     /** Improv auth type label(s) for the scan result (spec: WEP, WPA, WPA2, WPA2 EAP, WPA3, WAPI, NO). */
     fun improvAuth(capabilities: String): String {
@@ -63,7 +63,7 @@ object WifiSecurityRules {
         else -> null
     }
 
-    fun quote(s: String) = "\"" + s + "\""
+    fun quote(s: String): String = "\"" + s + "\""
 
     /** WifiInfo.getSSID() returns `"name"` for UTF-8 SSIDs, bare hex otherwise, or `<unknown ssid>`. */
     fun unquote(s: String?): String? {
@@ -78,7 +78,7 @@ object WifiSecurityRules {
     /** Redirect URL returned after provisioning: the panel's setup page. */
     fun redirectUrl(ip: String?, port: Int = SETUP_PORT): String? = ip?.let { "http://$it:$port/" }
 
-    const val SETUP_PORT = 8099
+    const val SETUP_PORT: Int = 8099
 
     private fun isHex(s: String) = s.isNotEmpty() && s.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
 }

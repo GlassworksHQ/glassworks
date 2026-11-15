@@ -48,19 +48,31 @@ import java.util.concurrent.ConcurrentHashMap
  * notification sent before onNotificationSent of the previous one).
  *
  * All public methods: main thread. GATT callbacks arrive on binder threads and are posted to [main].
+ *
+ * It carries bytes only: run an [ImprovSession] on top, feeding it [Listener.onRpcWrite] and
+ * publishing its state, errors and results here. Needs the Bluetooth permissions
+ * (`BLUETOOTH_ADVERTISE` and `BLUETOOTH_CONNECT` from Android 12).
+ *
+ * @param ctx Any context.
+ * @param main The main thread's handler; callbacks run on it.
+ * @param listener Gets the client's writes and connection events.
  */
 @SuppressLint("MissingPermission")
-class ImprovBleServer(
+public class ImprovBleServer(
     private val ctx: Context,
     private val main: Handler,
     private val listener: Listener,
 ) {
-    interface Listener {
-        fun onRpcWrite(chunk: ByteArray)
-        fun onClientConnected(address: String)
-        fun onClientDisconnected(address: String)
+    /** What the server reports, on the main thread. */
+    public interface Listener {
+        /** A client wrote [chunk] to the RPC command characteristic; a command may take several writes. */
+        public fun onRpcWrite(chunk: ByteArray)
+        /** A client at Bluetooth [address] connected. */
+        public fun onClientConnected(address: String)
+        /** The client at [address] disconnected. */
+        public fun onClientDisconnected(address: String)
         /** Advertising started (or failed with a message). */
-        fun onAdvertising(ok: Boolean, detail: String)
+        public fun onAdvertising(ok: Boolean, detail: String)
     }
 
     private val manager = ctx.getSystemService(BluetoothManager::class.java)
@@ -87,13 +99,16 @@ class ImprovBleServer(
     private var state: ImprovState = ImprovState.AUTHORIZATION_REQUIRED
     private var capabilities = 0
 
-    val connectedCount: Int get() = devices.size
+    internal val connectedCount: Int get() = devices.size
 
     /** Smallest (MTU - 3) among connected clients: the largest notification everyone receives whole. */
-    fun maxNotify(): Int = (devices.keys.map { (mtu[it] ?: 23) - 3 }.minOrNull() ?: Improv.MAX_PACKET).coerceAtLeast(20)
+    public fun maxNotify(): Int = (devices.keys.map { (mtu[it] ?: 23) - 3 }.minOrNull() ?: Improv.MAX_PACKET).coerceAtLeast(20)
 
-    /** Diagnostics logged at startup (the BT 4.2 RTL8821CS must support LE peripheral mode). */
-    fun capabilityReport(): String {
+    /**
+     * One line on what the Bluetooth adapter supports (LE advertising, extended advertising, the
+     * permissions), for a log at startup.
+     */
+    public fun capabilityReport(): String {
         val a = adapter ?: return "no BluetoothAdapter"
         val adv = runCatching { a.bluetoothLeAdvertiser != null }.getOrDefault(false)
         val multi = runCatching { a.isMultipleAdvertisementSupported }.getOrDefault(false)
@@ -131,8 +146,13 @@ class ImprovBleServer(
         return runCatching { a.enable() }.getOrDefault(false).also { Log.i(logTag, "BluetoothAdapter.enable() = $it") }
     }
 
-    /** Opens the GATT server and, once the service is registered, starts advertising. */
-    fun start(initial: ImprovState, caps: Int): Boolean {
+    /**
+     * Opens the GATT server and, once the service is registered, starts advertising with the [initial]
+     * state and the [caps] capability flags ([Improv] `CAP_*`). If Bluetooth is off, it turns it on
+     * where Android allows and starts once it is on. False if it can't start; [Listener.onAdvertising]
+     * says why. True if it is running already.
+     */
+    public fun start(initial: ImprovState, caps: Int): Boolean {
         if (running) return true
         val a = adapter
         if (a == null) { listener.onAdvertising(false, "no Bluetooth adapter"); return false }
@@ -186,7 +206,8 @@ class ImprovBleServer(
         return true // advertising starts in onServiceAdded
     }
 
-    fun stop() {
+    /** Stops advertising, disconnects every client and closes the GATT server. */
+    public fun stop() {
         btReceiver?.let { runCatching { ctx.unregisterReceiver(it) } } // a pending start must not fire later
         btReceiver = null
         stopAdvertising()
@@ -203,15 +224,18 @@ class ImprovBleServer(
         devices.clear(); subscribed.clear(); mtu.clear(); prepared.clear(); chars.clear()
     }
 
-    fun setState(s: ImprovState) {
+    /** Publishes the state: notifies subscribed clients and updates the advertisement. */
+    public fun setState(s: ImprovState) {
         state = s
         setValue(U_STATE, byteArrayOf(s.code.toByte()))
         updateAdvertisement()
     }
 
-    fun setError(e: ImprovError) = setValue(U_ERROR, byteArrayOf(e.code.toByte()))
+    /** Publishes the error to subscribed clients. */
+    public fun setError(e: ImprovError): Unit = setValue(U_ERROR, byteArrayOf(e.code.toByte()))
 
-    fun sendResult(packet: ByteArray) = setValue(U_RESULT, packet)
+    /** Publishes an RPC result packet to subscribed clients. */
+    public fun sendResult(packet: ByteArray): Unit = setValue(U_RESULT, packet)
 
     private fun setValue(uuid: UUID, v: ByteArray) {
         values[uuid] = v
@@ -446,19 +470,20 @@ class ImprovBleServer(
         }
     }
 
-    companion object {
+    /** Settings shared by every server. */
+    public companion object {
         /** Logcat tag for this server; set it before starting to use your app's own. */
-        @Volatile var logTag: String = "ImprovBle"
-        val U_STATE: UUID = UUID.fromString(Improv.STATE_UUID)
-        val U_ERROR: UUID = UUID.fromString(Improv.ERROR_UUID)
-        val U_RPC: UUID = UUID.fromString(Improv.RPC_COMMAND_UUID)
-        val U_RESULT: UUID = UUID.fromString(Improv.RPC_RESULT_UUID)
-        val U_CAPS: UUID = UUID.fromString(Improv.CAPABILITIES_UUID)
-        val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        @Volatile public var logTag: String = "ImprovBle"
+        internal val U_STATE: UUID = UUID.fromString(Improv.STATE_UUID)
+        internal val U_ERROR: UUID = UUID.fromString(Improv.ERROR_UUID)
+        internal val U_RPC: UUID = UUID.fromString(Improv.RPC_COMMAND_UUID)
+        internal val U_RESULT: UUID = UUID.fromString(Improv.RPC_RESULT_UUID)
+        internal val U_CAPS: UUID = UUID.fromString(Improv.CAPABILITIES_UUID)
+        internal val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
         private fun short(u: UUID) = u.toString().takeLast(4)
 
-        fun advertiseError(code: Int) = when (code) {
+        internal fun advertiseError(code: Int) = when (code) {
             AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "DATA_TOO_LARGE"
             AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "TOO_MANY_ADVERTISERS"
             AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "ALREADY_STARTED"

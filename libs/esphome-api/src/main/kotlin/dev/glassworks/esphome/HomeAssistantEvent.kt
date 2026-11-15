@@ -13,8 +13,11 @@ package dev.glassworks.esphome
  *
  * [ApiServer.sendHomeAssistantEvent] sends it. The notifications pane (#118) reports a tapped button
  * this way.
+ *
+ * @property event The event type, `esphome.` followed by snake_case, such as `esphome.button_pressed`.
+ * @property data The event's data. Home Assistant adds `device_id`.
  */
-class HomeAssistantEvent(val event: String, val data: Map<String, String> = emptyMap()) {
+public class HomeAssistantEvent(public val event: String, public val data: Map<String, String> = emptyMap()) {
     init {
         require(NAME.matches(event)) { "event '$event' must be esphome.<snake_case>" }
     }
@@ -25,7 +28,8 @@ class HomeAssistantEvent(val event: String, val data: Map<String, String> = empt
         return w.bool(5, true)
     }
 
-    override fun toString() = "HomeAssistantEvent($event, keys=${data.keys})"
+    /** The event and its data's keys, without the values, so it is safe to log. */
+    override fun toString(): String = "HomeAssistantEvent($event, keys=${data.keys})"
 
     private companion object {
         val NAME = Regex("esphome\\.[a-z0-9_]+")

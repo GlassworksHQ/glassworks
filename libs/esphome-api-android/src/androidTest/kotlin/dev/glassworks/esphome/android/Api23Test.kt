@@ -13,6 +13,10 @@ import dev.glassworks.esphome.MemoryKeyStore
 import dev.glassworks.esphome.Msg
 import dev.glassworks.esphome.NoiseCipher
 import dev.glassworks.esphome.NoiseKeys
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -25,9 +29,24 @@ class Api23Test {
 
     @Test fun aKeyFromHomeAssistantIsAccepted() {
         val store = MemoryKeyStore()
-        val r = NoiseKeys(store).handleSetKey("AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=".toByteArray())
-        assertTrue(r.message, r.success)
-        assertArrayEquals(key, store.key)
+        val loopback = InetAddress.getByName("127.0.0.1")
+        val server = ApiServer(0, { identity }, emptyList(), NoiseKeys(store), loopback)
+        try {
+            server.start()
+            Socket().use { s ->
+                s.connect(InetSocketAddress(loopback, server.localPort), 2_000)
+                s.soTimeout = 5_000
+                // NoiseEncryptionSetKeyRequest { key = base64 of the 32-byte key }, as Home Assistant sends it.
+                val request = ProtoWriter().bytes(1, "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=".toByteArray()).toByteArray()
+                s.getOutputStream().write(plaintextFrame(Msg.NOISE_ENCRYPTION_SET_KEY_REQUEST, request))
+                val (type, response) = readPlaintextFrame(DataInputStream(s.getInputStream()))
+                assertEquals(Msg.NOISE_ENCRYPTION_SET_KEY_RESPONSE, type)
+                assertTrue("the key is accepted", ProtoMessage(response).bool(1))
+            }
+            assertArrayEquals(key, store.load())
+        } finally {
+            server.stop()
+        }
     }
 
     @Test fun noiseCipherRoundTrips() {
@@ -51,6 +70,44 @@ class Api23Test {
         } finally {
             mdns.stop()
             server.stop()
+        }
+    }
+
+    /** A plaintext API frame: `0x00`, varint payload length, varint type, payload. */
+    private fun plaintextFrame(type: Int, payload: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(0)
+        writeVarint(out, payload.size)
+        writeVarint(out, type)
+        out.write(payload)
+        return out.toByteArray()
+    }
+
+    /** Reads one plaintext API frame: (type, payload). */
+    private fun readPlaintextFrame(input: DataInputStream): Pair<Int, ByteArray> {
+        assertEquals("plaintext indicator", 0, input.readUnsignedByte())
+        val length = readVarint(input)
+        val type = readVarint(input)
+        return type to ByteArray(length).also { input.readFully(it) }
+    }
+
+    private fun writeVarint(out: ByteArrayOutputStream, value: Int) {
+        var v = value
+        while (v and 0x7F.inv() != 0) {
+            out.write((v and 0x7F) or 0x80)
+            v = v ushr 7
+        }
+        out.write(v)
+    }
+
+    private fun readVarint(input: DataInputStream): Int {
+        var result = 0
+        var shift = 0
+        while (true) {
+            val b = input.readUnsignedByte()
+            result = result or ((b and 0x7F) shl shift)
+            if (b and 0x80 == 0) return result
+            shift += 7
         }
     }
 }

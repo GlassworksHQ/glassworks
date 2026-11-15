@@ -363,6 +363,33 @@ the setup is in the root `build.gradle.kts`.
 
 **A release can't be deleted from Maven Central**, and its version can't be used again.
 
+### The public API
+
+Each library's public API is dumped in `libs/<name>/api/<name>.api`: every public class and member,
+as apps compile against it. `./gradlew apiCheck` fails when the code's API differs from the dump. It
+is part of `check`, and `libs-publish` in `pr.yml` runs it. When you change the API on purpose,
+update the dump with:
+
+```sh
+./gradlew apiDump        # or :esphome-api:apiDump for one library
+```
+
+Commit the dump with the change. Its diff is the API change a reviewer reads. A removed or changed
+line breaks apps built against an older release, so it needs a new minor version while the version
+starts with 0, and a new major version from 1.0.
+
+The rest of the API rules, all in the root `build.gradle.kts`:
+
+- **Explicit API mode (strict).** Every public declaration says `public`. Make anything else
+  `internal`: once released, a public declaration can't be taken back without breaking someone.
+- **KDoc on every public declaration.** The KDoc jar (Dokka) fails to build when one has none.
+- **README examples compile.** Each ```` ```kotlin ```` block of a library's README must be in its
+  `ReadmeExample*` test, line for line (`readmeSnippets`, which `test` runs). Gradle blocks are skipped.
+
+The dump comes from the binary-compatibility-validator's tasks, wired by hand. Neither Kotlin's own
+`abiValidation` nor that plugin finds the classes of an Android library on AGP 9's built-in Kotlin
+(KT-78025): both write an empty dump.
+
 ### Cut a release
 
 The tag is `libs/<name>/v<MAJOR.MINOR.PATCH>`. It must match `version` in that library's

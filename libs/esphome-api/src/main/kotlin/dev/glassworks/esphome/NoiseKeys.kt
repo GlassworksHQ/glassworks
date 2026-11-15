@@ -2,23 +2,30 @@ package dev.glassworks.esphome
 
 import java.security.MessageDigest
 
-/** Where the Noise PSK lives (KioskPrefs on the panel, memory in tests). Never log what passes through. */
-interface NoiseKeyStore {
+/**
+ * Where the device keeps its API key (the Noise PSK) between runs: a file, preferences, a keystore.
+ * Never log what passes through.
+ */
+public interface NoiseKeyStore {
     /** The stored 32-byte key, or null if the device is unprovisioned. */
-    fun load(): ByteArray?
+    public fun load(): ByteArray?
 
     /** Persists [key] (null = clear) synchronously. Returns false if it could not be written. */
-    fun save(key: ByteArray?): Boolean
+    public fun save(key: ByteArray?): Boolean
 }
 
-class MemoryKeyStore(initial: ByteArray? = null) : NoiseKeyStore {
-    @Volatile var key: ByteArray? = initial?.copyOf()
+/**
+ * A [NoiseKeyStore] in memory, starting with [initial]: the key is lost when the process ends. For
+ * tests, and for a fixed key.
+ */
+public class MemoryKeyStore(initial: ByteArray? = null) : NoiseKeyStore {
+    @Volatile internal var key: ByteArray? = initial?.copyOf()
     override fun load(): ByteArray? = key?.copyOf()
     override fun save(key: ByteArray?): Boolean { this.key = key?.copyOf(); return true }
 }
 
 /** Outcome of a `NoiseEncryptionSetKeyRequest`. [message] is safe to log (no key material). */
-data class SetKeyResult(val success: Boolean, val activate: Boolean, val message: String)
+internal data class SetKeyResult(val success: Boolean, val activate: Boolean, val message: String)
 
 /**
  * Noise key state of the API server, modelled on ESPHome's (esphome 2026.10.2
@@ -35,28 +42,34 @@ data class SetKeyResult(val success: Boolean, val activate: Boolean, val message
  *   ([activatePending]): from then on only Noise with that key is accepted, and every session opened
  *   before (plaintext, zero-PSK, or the old key) is disconnected.
  *
- * Thread-safe. Pure JVM (unit-tested in NoiseKeysTest).
+ * Thread-safe. Pass it to [ApiServer], which handles Home Assistant's key requests with it.
+ *
+ * @param store Where the key is saved. The constructor loads it.
  */
-class NoiseKeys(private val store: NoiseKeyStore) {
+public class NoiseKeys(private val store: NoiseKeyStore) {
 
     private val lock = Any()
 
     /** Key used for new connections; null = unprovisioned. */
-    @Volatile var active: ByteArray? = store.load()?.takeIf(::isUsableKey)?.copyOf()
+    @Volatile internal var active: ByteArray? = store.load()?.takeIf(::isUsableKey)?.copyOf()
         private set
 
     /** Last persisted key (may still be waiting for activation). */
     @Volatile private var saved: ByteArray? = active
 
-    val hasKey: Boolean get() = active != null
+    /** True when a key is active: only encrypted connections with it get in. */
+    public val hasKey: Boolean get() = active != null
 
-    /** ESPHome: `api_encryption_provisionable = !noise_ctx.has_psk()`. */
-    val provisionable: Boolean get() = active == null
+    /**
+     * True while no key is active, so Home Assistant may set one (ESPHome:
+     * `api_encryption_provisionable = !noise_ctx.has_psk()`).
+     */
+    public val provisionable: Boolean get() = active == null
 
-    /** The latest key, including one saved but not yet activated. */
-    val latest: ByteArray? get() = saved?.copyOf()
+    /** A copy of the latest key, including one saved but not yet active, or null for none. */
+    public val latest: ByteArray? get() = saved?.copyOf()
 
-    fun handleSetKey(field: ByteArray): SetKeyResult = synchronized(lock) {
+    internal fun handleSetKey(field: ByteArray): SetKeyResult = synchronized(lock) {
         if (field.isEmpty()) {
             if (saved == null && active == null) return SetKeyResult(true, false, "key cleared (no key was set)")
             if (!store.save(null)) return SetKeyResult(false, false, "failed to clear encryption key")
@@ -75,7 +88,7 @@ class NoiseKeys(private val store: NoiseKeyStore) {
     }
 
     /** Makes the saved key the active one. Returns true if the active key changed. */
-    fun activatePending(): Boolean = synchronized(lock) {
+    internal fun activatePending(): Boolean = synchronized(lock) {
         val next = saved
         if (sameKey(next, active)) return false
         active = next?.copyOf()
@@ -86,7 +99,7 @@ class NoiseKeys(private val store: NoiseKeyStore) {
      * Replaces the key from the panel's own settings (adb extras / settings dialog), persisted by
      * the caller already. Returns true if the active key changed.
      */
-    fun replace(key: ByteArray?): Boolean = synchronized(lock) {
+    internal fun replace(key: ByteArray?): Boolean = synchronized(lock) {
         val k = key?.takeIf(::isUsableKey)?.copyOf()
         saved = k
         if (sameKey(k, active)) return false
@@ -94,21 +107,22 @@ class NoiseKeys(private val store: NoiseKeyStore) {
         true
     }
 
-    companion object {
+    /** Key helpers. */
+    public companion object {
         /** The well-known provisioning PSK (aioesphomeapi `ZERO_NOISE_PSK`). */
-        val ZERO_PSK = ByteArray(32)
+        internal val ZERO_PSK = ByteArray(32)
 
-        fun isUsableKey(k: ByteArray): Boolean = k.size == 32 && k.any { it != 0.toByte() }
+        internal fun isUsableKey(k: ByteArray): Boolean = k.size == 32 && k.any { it != 0.toByte() }
 
         private fun sameKey(a: ByteArray?, b: ByteArray?) =
             if (a == null || b == null) a == null && b == null else a.contentEquals(b)
 
         /** Decodes the base64 text of a `NoiseEncryptionSetKeyRequest.key`; null unless 32 bytes. */
-        fun decodeKeyField(field: ByteArray): ByteArray? =
+        internal fun decodeKeyField(field: ByteArray): ByteArray? =
             decodeBase64(String(field, Charsets.US_ASCII).trim())?.takeIf { it.size == 32 }
 
         /** First 4 hex digits of SHA-256(key): enough to tell keys apart in logs, reveals nothing. */
-        fun fingerprint(key: ByteArray): String =
+        public fun fingerprint(key: ByteArray): String =
             MessageDigest.getInstance("SHA-256").digest(key).take(2).joinToString("") { "%02x".format(it) }
     }
 }

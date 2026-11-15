@@ -7,15 +7,15 @@ import java.io.InputStream
 import java.io.OutputStream
 
 /** One API message: type id + protobuf payload. */
-class Frame(val type: Int, val data: ByteArray)
+internal class Frame(val type: Int, val data: ByteArray)
 
-class ProtocolException(message: String) : IOException(message)
+internal class ProtocolException(message: String) : IOException(message)
 
 /**
  * Framing of the ESPHome native API on one TCP connection (server side).
  * [read] is called from the connection's reader thread, [write] from its writer thread.
  */
-interface FrameTransport {
+internal interface FrameTransport {
     /** Runs the handshake (Noise only). Returns false if the connection must be closed. */
     fun handshake(): Boolean = true
 
@@ -29,7 +29,7 @@ interface FrameTransport {
  * Plaintext framing (aioesphomeapi `_frame_helper/plain_text.py`, esphome
  * `api_frame_helper_plaintext.cpp`): `0x00`, varint payload length, varint type, payload.
  */
-class PlaintextTransport(input: InputStream, private val output: OutputStream) : FrameTransport {
+internal class PlaintextTransport(input: InputStream, private val output: OutputStream) : FrameTransport {
     private val input = DataInputStream(input)
 
     private fun readVarint(): Int {
@@ -97,7 +97,7 @@ class PlaintextTransport(input: InputStream, private val output: OutputStream) :
  * Prologue = "NoiseAPIInit" + 2-byte length of the ClientHello + ClientHello.
  * Data frames are encrypted `type(2 BE) + length(2 BE) + payload`.
  */
-class NoiseTransport(
+internal class NoiseTransport(
     input: InputStream,
     private val output: OutputStream,
     private val psk: ByteArray,

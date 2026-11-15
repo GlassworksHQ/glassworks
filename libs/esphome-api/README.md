@@ -76,8 +76,8 @@ ESPHome device. Package `dev.glassworks.esphome`, MIT licensed.
   Android scanner is [bluetooth-proxy](../bluetooth-proxy/README.md).
 - **Sendspin pairing-token hand-off:** for HA → Music Assistant, through `SendspinTokenSource`.
   Leave it unset if you don't have a Sendspin player.
-- **Noise primitives:** `NoiseCipher` and `NoiseResponder` are reusable on their own. S1 Kiosk's
-  Sendspin client uses them.
+- **Noise cipher:** `NoiseCipher`, Noise's ChaChaPoly cipher state, is reusable on its own. S1
+  Kiosk's Sendspin client uses it.
 
 Checked against the real `aioesphomeapi` client, the library Home Assistant uses (see
 [Tests](#tests)).

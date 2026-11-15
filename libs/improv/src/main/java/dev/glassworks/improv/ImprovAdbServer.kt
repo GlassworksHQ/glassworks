@@ -15,19 +15,23 @@ import java.io.OutputStream
  * USB adb access (an authorized adb key) is the physical authorization, so there is no separate
  * authorization step: the session starts Ready (or Provisioned when already online).
  *
+ * @param socketName The abstract socket's name, without the `@`.
+ * @param logTag The logcat tag for each session's log.
  * @param effects Called once per connection with that connection's output; [ImprovSerialSession.Effects.send]
  *   should write to it (synchronized, flushed).
  */
-class ImprovAdbServer(
+public class ImprovAdbServer(
     socketName: String,
     private val logTag: String = "ImprovAdb",
     private val effects: (output: OutputStream) -> ImprovSerialSession.Effects,
 ) {
     private val server = AdbSocketServer(socketName, logTag, ::serve)
 
-    fun start() = server.start()
+    /** Starts listening. Does nothing when already listening. */
+    public fun start(): Unit = server.start()
 
-    fun stop() = server.stop()
+    /** Stops listening and closes every open connection. */
+    public fun stop(): Unit = server.stop()
 
     private fun serve(input: InputStream, output: OutputStream) {
         val session = ImprovSerialSession(effects(output)) { Log.i(logTag, it) }

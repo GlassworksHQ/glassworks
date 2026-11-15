@@ -1,8 +1,8 @@
 package dev.glassworks.improv
 
 /**
- * Improv Serial (https://www.improv-wifi.com/serial/): wire format and session, pure Kotlin
- * (ImprovSerialTest). Transport-agnostic: feed bytes to [SerialPacketReader] and write what
+ * Improv Serial (https://www.improv-wifi.com/serial/): the packet types, commands, states and errors.
+ * Pure Kotlin and transport-agnostic: feed bytes to [SerialPacketReader] and write what
  * [ImprovSerialSession] sends to any byte stream (a UART, a socket, an adb stream). S1 Kiosk carries
  * it over adb ([ImprovAdbServer]); the browser client is kiln/packages/improv-serial (keep in sync).
  *
@@ -10,33 +10,49 @@ package dev.glassworks.improv
  * low byte of the sum of all previous bytes. RPC data is `[command, length, payload...]`, the
  * payload being length-prefixed UTF-8 strings (as over BLE, minus the inner checksum).
  */
-object ImprovSerial {
-    val HEADER = "IMPROV".toByteArray(Charsets.US_ASCII)
-    const val VERSION = 1
+public object ImprovSerial {
+    internal val HEADER: ByteArray = "IMPROV".toByteArray(Charsets.US_ASCII)
+    /** The protocol version every packet carries. */
+    public const val VERSION: Int = 1
 
-    const val TYPE_STATE = 0x01
-    const val TYPE_ERROR = 0x02
-    const val TYPE_RPC = 0x03
-    const val TYPE_RPC_RESULT = 0x04
+    /** Packet type: the device's current state, one of the `STATE_*` values. */
+    public const val TYPE_STATE: Int = 0x01
+    /** Packet type: an error, one of the `ERROR_*` values. */
+    public const val TYPE_ERROR: Int = 0x02
+    /** Packet type: an RPC command from the client. */
+    public const val TYPE_RPC: Int = 0x03
+    /** Packet type: the device's answer to an RPC command. */
+    public const val TYPE_RPC_RESULT: Int = 0x04
 
-    const val RPC_WIFI_SETTINGS = 0x01
-    const val RPC_REQUEST_STATE = 0x02
-    const val RPC_REQUEST_INFO = 0x03
-    const val RPC_SCAN_WIFI = 0x04
+    /** RPC: join this Wi-Fi network (SSID, password). */
+    public const val RPC_WIFI_SETTINGS: Int = 0x01
+    /** RPC: send the current state. */
+    public const val RPC_REQUEST_STATE: Int = 0x02
+    /** RPC: send firmware, version, chip and device name. */
+    public const val RPC_REQUEST_INFO: Int = 0x03
+    /** RPC: list the Wi-Fi networks the device sees. */
+    public const val RPC_SCAN_WIFI: Int = 0x04
 
-    const val STATE_READY = 0x02
-    const val STATE_PROVISIONING = 0x03
-    const val STATE_PROVISIONED = 0x04
+    /** State: ready to take Wi-Fi settings. */
+    public const val STATE_READY: Int = 0x02
+    /** State: joining the network. */
+    public const val STATE_PROVISIONING: Int = 0x03
+    /** State: on the network. */
+    public const val STATE_PROVISIONED: Int = 0x04
 
-    const val ERROR_INVALID_RPC = 0x01
-    const val ERROR_UNKNOWN_RPC = 0x02
-    const val ERROR_UNABLE_TO_CONNECT = 0x03
-    const val ERROR_UNKNOWN = 0xFF
+    /** Error: the packet or the command was malformed. */
+    public const val ERROR_INVALID_RPC: Int = 0x01
+    /** Error: the device doesn't know the command. */
+    public const val ERROR_UNKNOWN_RPC: Int = 0x02
+    /** Error: joining the network failed. */
+    public const val ERROR_UNABLE_TO_CONNECT: Int = 0x03
+    /** Error: any other failure. */
+    public const val ERROR_UNKNOWN: Int = 0xFF
 
     /** Header (6) + version + type + length. */
     private const val PREFIX = 9
 
-    fun frame(type: Int, data: ByteArray): ByteArray {
+    internal fun frame(type: Int, data: ByteArray): ByteArray {
         require(data.size <= 255) { "Improv packet too large (${data.size})" }
         val out = ByteArray(PREFIX + data.size + 1)
         HEADER.copyInto(out)
@@ -49,7 +65,7 @@ object ImprovSerial {
     }
 
     /** `[command, length, strings...]` as RPC commands and results carry it. */
-    fun rpcData(command: Int, strings: List<String>): ByteArray {
+    internal fun rpcData(command: Int, strings: List<String>): ByteArray {
         val parts = strings.map { it.toByteArray(Charsets.UTF_8) }
         parts.forEach { require(it.size <= 255) { "Improv string longer than 255 bytes" } }
         val len = parts.sumOf { 1 + it.size }
@@ -66,14 +82,14 @@ object ImprovSerial {
         return out
     }
 
-    fun state(state: Int): ByteArray = frame(TYPE_STATE, byteArrayOf(state.toByte()))
-    fun error(code: Int): ByteArray = frame(TYPE_ERROR, byteArrayOf(code.toByte()))
-    fun result(command: Int, strings: List<String>): ByteArray = frame(TYPE_RPC_RESULT, rpcData(command, strings))
-    /** An RPC command packet (the client side; used by tests). */
-    fun rpc(command: Int, strings: List<String> = emptyList()): ByteArray = frame(TYPE_RPC, rpcData(command, strings))
+    internal fun state(state: Int): ByteArray = frame(TYPE_STATE, byteArrayOf(state.toByte()))
+    internal fun error(code: Int): ByteArray = frame(TYPE_ERROR, byteArrayOf(code.toByte()))
+    internal fun result(command: Int, strings: List<String>): ByteArray = frame(TYPE_RPC_RESULT, rpcData(command, strings))
+    /** An RPC command packet with [strings] as its arguments, as a client sends it: for a client or a test. */
+    public fun rpc(command: Int, strings: List<String> = emptyList()): ByteArray = frame(TYPE_RPC, rpcData(command, strings))
 
     /** Data of an RPC (or RPC result) packet: command, length, then length-prefixed strings. */
-    fun parseRpc(data: ByteArray): SerialRpc {
+    internal fun parseRpc(data: ByteArray): SerialRpc {
         if (data.size < 2) return SerialRpc.Invalid("short RPC")
         val cmd = data[0].toInt() and 0xFF
         val len = data[1].toInt() and 0xFF
@@ -101,7 +117,7 @@ object ImprovSerial {
      * (hidden SSIDs skipped, one per SSID keeping the strongest, strongest first, SSIDs over 32
      * bytes skipped), then an empty result that ends the list.
      */
-    fun scanResults(networks: List<SerialNetwork>): List<ByteArray> {
+    internal fun scanResults(networks: List<SerialNetwork>): List<ByteArray> {
         val best = LinkedHashMap<String, SerialNetwork>()
         for (n in networks) {
             if (n.ssid.isEmpty() || n.ssid.toByteArray(Charsets.UTF_8).size > 32) continue
@@ -113,8 +129,11 @@ object ImprovSerial {
             result(RPC_SCAN_WIFI, emptyList())
     }
 
-    /** Device info strings, each clipped so the four fit one result (253 bytes of strings). */
-    fun info(firmware: String, version: String, chip: String, name: String): ByteArray =
+    /**
+     * The answer to [RPC_REQUEST_INFO], for [ImprovSerialSession.Effects.info]. Each string is clipped
+     * so the four fit one result (253 bytes of strings).
+     */
+    public fun info(firmware: String, version: String, chip: String, name: String): ByteArray =
         result(RPC_REQUEST_INFO, listOf(firmware, version, chip, name).map { clip(it, 60) })
 
     private fun clip(s: String, maxBytes: Int): String {
@@ -124,12 +143,18 @@ object ImprovSerial {
     }
 }
 
-/** A network as the serial scan reports it: [secure] = a password is needed. */
-data class SerialNetwork(val ssid: String, val rssi: Int, val secure: Boolean)
+/**
+ * One Wi-Fi network as the serial scan reports it.
+ *
+ * @property ssid The network's name.
+ * @property rssi The signal strength in dBm.
+ * @property secure The network needs a password.
+ */
+public data class SerialNetwork(public val ssid: String, public val rssi: Int, public val secure: Boolean)
 
-sealed class SerialRpc {
+internal sealed class SerialRpc {
     data class WifiSettings(val ssid: String, val password: String) : SerialRpc() {
-        override fun toString() = "WifiSettings(ssid=$ssid, password=<${password.length} chars>)"
+        override fun toString(): String = "WifiSettings(ssid=$ssid, password=<${password.length} chars>)"
     }
     object RequestState : SerialRpc()
     object RequestInfo : SerialRpc()
@@ -141,20 +166,38 @@ sealed class SerialRpc {
 /**
  * Accumulates bytes and yields complete packets. Garbage before a header is skipped silently; a
  * complete packet with a bad checksum or version is reported as [Item.Bad] and the reader resyncs on
- * the next header (as the client's PacketReader does).
+ * the next header (as the client's PacketReader does). Not thread-safe.
+ *
+ * @param maxBuffer The most bytes it holds while waiting for a complete packet; past that it drops them.
  */
-class SerialPacketReader(private val maxBuffer: Int = 4096) {
-    sealed class Item {
-        data class Packet(val type: Int, val data: ByteArray) : Item() {
-            override fun equals(other: Any?) = other is Packet && other.type == type && other.data.contentEquals(data)
-            override fun hashCode() = type * 31 + data.contentHashCode()
+public class SerialPacketReader(private val maxBuffer: Int = 4096) {
+    /** What [push] found in the bytes. */
+    public sealed class Item {
+        /**
+         * A complete packet with a good checksum.
+         *
+         * @property type An [ImprovSerial] `TYPE_*` value.
+         * @property data The packet's data.
+         */
+        public data class Packet(public val type: Int, public val data: ByteArray) : Item() {
+            /** Equal when the type and the data's bytes are. */
+            override fun equals(other: Any?): Boolean = other is Packet && other.type == type && other.data.contentEquals(data)
+            /** From the type and the data's bytes, as [equals] compares them. */
+            override fun hashCode(): Int = type * 31 + data.contentHashCode()
         }
-        data class Bad(val reason: String) : Item()
+
+        /**
+         * A complete packet that failed its checksum or version check.
+         *
+         * @property reason Which check failed, for a log.
+         */
+        public data class Bad(public val reason: String) : Item()
     }
 
     private var buf = ByteArray(0)
 
-    fun push(chunk: ByteArray, len: Int = chunk.size): List<Item> {
+    /** Adds the first [len] bytes of [chunk]; returns the packets they completed, in order. */
+    public fun push(chunk: ByteArray, len: Int = chunk.size): List<Item> {
         buf += chunk.copyOf(len)
         val out = mutableListOf<Item>()
         while (true) {
@@ -205,27 +248,33 @@ class SerialPacketReader(private val maxBuffer: Int = 4096) {
  * - Request info: firmware, version, chip, device name.
  * - Scan: one result per network, then an empty result ([ImprovSerial.scanResults]).
  * - A malformed packet gets error 0x01, an unknown command 0x02. Passwords are never logged.
+ *
+ * @param fx The device side: sending, Wi-Fi and device info.
+ * @param log Takes the session's log lines.
  */
-class ImprovSerialSession(private val fx: Effects, private val log: (String) -> Unit = {}) {
-    interface Effects {
+public class ImprovSerialSession(private val fx: Effects, private val log: (String) -> Unit = {}) {
+    /** What the session needs from the device. */
+    public interface Effects {
         /** Writes one packet to the client (may throw if the client is gone). */
-        fun send(packet: ByteArray)
+        public fun send(packet: ByteArray)
         /** The panel is on Wi-Fi now (for the initial state). */
-        fun online(): Boolean
+        public fun online(): Boolean
         /** Where to continue setup once on Wi-Fi ("" = none). */
-        fun redirectUrl(): String
-        fun info(): ByteArray
+        public fun redirectUrl(): String
+        /** The device info packet: [ImprovSerial.info]. */
+        public fun info(): ByteArray
         /** Fresh Wi-Fi scan; may block for a few seconds. */
-        fun scan(): List<SerialNetwork>
+        public fun scan(): List<SerialNetwork>
         /** Starts joining; [done] (any thread) with the redirect URL on success, null on failure. */
-        fun connect(ssid: String, password: String, done: (redirect: String?) -> Unit)
+        public fun connect(ssid: String, password: String, done: (redirect: String?) -> Unit)
     }
 
     private val reader = SerialPacketReader()
     private var seq = 0
     private var redirect = ""
 
-    @Volatile var state: Int = -1
+    /** The session's [ImprovSerial] `STATE_*` value, or -1 until the client first asks for it. */
+    @Volatile public var state: Int = -1
         private set
 
     private fun ensureState() {
@@ -233,7 +282,7 @@ class ImprovSerialSession(private val fx: Effects, private val log: (String) -> 
     }
 
     /** Bytes from the client. */
-    fun onBytes(chunk: ByteArray, len: Int = chunk.size) {
+    public fun onBytes(chunk: ByteArray, len: Int = chunk.size) {
         for (item in reader.push(chunk, len)) {
             when (item) {
                 is SerialPacketReader.Item.Bad -> { log("bad packet: ${item.reason}"); sendError(ImprovSerial.ERROR_INVALID_RPC) }

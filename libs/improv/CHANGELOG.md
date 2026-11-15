@@ -11,3 +11,7 @@ publish the matching section below as the release notes.
 - **First release on Maven Central.** The device side of Improv Wi-Fi for Android: the protocol,
   the state machines, the BLE GATT server, the serial transport and the adb transport. Android 6
   (API 23) and newer.
+- **The API.** Over BLE, `ImprovSession` on `ImprovBleServer`; over serial, `ImprovSerialSession` with
+  `SerialPacketReader`, or `ImprovAdbServer` over adb; and `WifiProvisioner`, which joins the network
+  on Android 10 and later too. The packet encoding and the Wi-Fi security rules stay internal. Every
+  public declaration has KDoc, in the KDoc jar.

@@ -1,0 +1,727 @@
+public final class dev/glassworks/esphome/ActionArg {
+	public fun <init> (Ljava/lang/String;Ldev/glassworks/esphome/ActionArgType;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ldev/glassworks/esphome/ActionArgType;
+	public final fun copy (Ljava/lang/String;Ldev/glassworks/esphome/ActionArgType;)Ldev/glassworks/esphome/ActionArg;
+	public static synthetic fun copy$default (Ldev/glassworks/esphome/ActionArg;Ljava/lang/String;Ldev/glassworks/esphome/ActionArgType;ILjava/lang/Object;)Ldev/glassworks/esphome/ActionArg;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getName ()Ljava/lang/String;
+	public final fun getType ()Ldev/glassworks/esphome/ActionArgType;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/ActionArgType : java/lang/Enum {
+	public static final field BOOL Ldev/glassworks/esphome/ActionArgType;
+	public static final field BOOL_ARRAY Ldev/glassworks/esphome/ActionArgType;
+	public static final field FLOAT Ldev/glassworks/esphome/ActionArgType;
+	public static final field FLOAT_ARRAY Ldev/glassworks/esphome/ActionArgType;
+	public static final field INT Ldev/glassworks/esphome/ActionArgType;
+	public static final field INT_ARRAY Ldev/glassworks/esphome/ActionArgType;
+	public static final field STRING Ldev/glassworks/esphome/ActionArgType;
+	public static final field STRING_ARRAY Ldev/glassworks/esphome/ActionArgType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/esphome/ActionArgType;
+	public static fun values ()[Ldev/glassworks/esphome/ActionArgType;
+}
+
+public final class dev/glassworks/esphome/ActionCall {
+	public fun <init> (Ldev/glassworks/esphome/ApiAction;Ljava/util/Map;Z)V
+	public final fun bool (Ljava/lang/String;)Z
+	public final fun bools (Ljava/lang/String;)Ljava/util/List;
+	public final fun float (Ljava/lang/String;)F
+	public final fun floats (Ljava/lang/String;)Ljava/util/List;
+	public final fun getAction ()Ldev/glassworks/esphome/ApiAction;
+	public final fun getArgs ()Ljava/util/Map;
+	public final fun getReturnResponse ()Z
+	public final fun int (Ljava/lang/String;)I
+	public final fun ints (Ljava/lang/String;)Ljava/util/List;
+	public final fun string (Ljava/lang/String;)Ljava/lang/String;
+	public final fun strings (Ljava/lang/String;)Ljava/util/List;
+}
+
+public final class dev/glassworks/esphome/ActionResponse : java/lang/Enum {
+	public static final field NONE Ldev/glassworks/esphome/ActionResponse;
+	public static final field ONLY Ldev/glassworks/esphome/ActionResponse;
+	public static final field OPTIONAL Ldev/glassworks/esphome/ActionResponse;
+	public static final field STATUS Ldev/glassworks/esphome/ActionResponse;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/esphome/ActionResponse;
+	public static fun values ()[Ldev/glassworks/esphome/ActionResponse;
+}
+
+public final class dev/glassworks/esphome/ApiAction : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/util/List;Ldev/glassworks/esphome/ActionResponse;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/List;Ldev/glassworks/esphome/ActionResponse;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getArgs ()Ljava/util/List;
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public final fun getSupportsResponse ()Ldev/glassworks/esphome/ActionResponse;
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public abstract class dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	protected final fun base ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public final fun getAuthOnly ()Z
+	public final fun getCategory ()Ldev/glassworks/esphome/EntityCategory;
+	public fun getCommandType ()I
+	public final fun getDisabledByDefault ()Z
+	public final fun getIcon ()Ljava/lang/String;
+	public final fun getKey ()I
+	public abstract fun getListType ()I
+	public final fun getName ()Ljava/lang/String;
+	public final fun getObjectId ()Ljava/lang/String;
+	public fun getStateType ()I
+	public abstract fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public final fun setAuthOnly (Z)V
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/ApiServer {
+	public static final field Companion Ldev/glassworks/esphome/ApiServer$Companion;
+	public static final field DEFAULT_PORT I
+	public static final field NOISE_PROTOCOL Ljava/lang/String;
+	public fun <init> (ILkotlin/jvm/functions/Function0;Ljava/util/List;Ldev/glassworks/esphome/NoiseKeys;Ljava/net/InetAddress;)V
+	public synthetic fun <init> (ILkotlin/jvm/functions/Function0;Ljava/util/List;Ldev/glassworks/esphome/NoiseKeys;Ljava/net/InetAddress;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (ILkotlin/jvm/functions/Function0;Ljava/util/List;[B)V
+	public final fun getBluetooth ()Ldev/glassworks/esphome/BluetoothProxyHandler;
+	public final fun getEncrypted ()Z
+	public final fun getHasSubscriber ()Z
+	public final fun getLocalPort ()I
+	public final fun getOnClientHello ()Lkotlin/jvm/functions/Function2;
+	public final fun getOnCommand ()Lkotlin/jvm/functions/Function0;
+	public final fun getOnKeyActivated ()Lkotlin/jvm/functions/Function0;
+	public final fun getOnStatesSubscribed ()Lkotlin/jvm/functions/Function3;
+	public final fun getOnTimeZone ()Lkotlin/jvm/functions/Function1;
+	public final fun getProvisionable ()Z
+	public final fun getSendspin ()Ldev/glassworks/esphome/SendspinTokenSource;
+	public final fun getVoice ()Ldev/glassworks/esphome/VoiceAssistantHandler;
+	public final fun publishStates ()V
+	public final fun removeBluetooth (Ldev/glassworks/esphome/BluetoothProxyHandler;)Z
+	public final fun replaceKey ([B)V
+	public final fun sendBluetoothAdvertisements (Ljava/util/List;)Z
+	public final fun sendEvent (Ldev/glassworks/esphome/EventEntity;Ljava/lang/String;)Z
+	public final fun sendHomeAssistantEvent (Ldev/glassworks/esphome/HomeAssistantEvent;)Z
+	public final fun sendVoice (ILdev/glassworks/esphome/ProtoWriter;)Z
+	public final fun setBluetooth (Ldev/glassworks/esphome/BluetoothProxyHandler;)V
+	public final fun setEntities (Ljava/util/List;)V
+	public final fun setOnClientHello (Lkotlin/jvm/functions/Function2;)V
+	public final fun setOnCommand (Lkotlin/jvm/functions/Function0;)V
+	public final fun setOnKeyActivated (Lkotlin/jvm/functions/Function0;)V
+	public final fun setOnStatesSubscribed (Lkotlin/jvm/functions/Function3;)V
+	public final fun setOnTimeZone (Lkotlin/jvm/functions/Function1;)V
+	public final fun setSendspin (Ldev/glassworks/esphome/SendspinTokenSource;)V
+	public final fun setVoice (Ldev/glassworks/esphome/VoiceAssistantHandler;)V
+	public final fun start ()V
+	public final fun stop ()V
+}
+
+public final class dev/glassworks/esphome/ApiServer$Companion {
+}
+
+public final class dev/glassworks/esphome/BinarySensorEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/BluetoothProxyFeature {
+	public static final field ACTIVE_CONNECTIONS I
+	public static final field CACHE_CLEARING I
+	public static final field CONNECTION_PARAMS_SETTING I
+	public static final field INSTANCE Ldev/glassworks/esphome/BluetoothProxyFeature;
+	public static final field PAIRING I
+	public static final field PASSIVE_SCAN I
+	public static final field RAW_ADVERTISEMENTS I
+	public static final field REMOTE_CACHING I
+	public static final field STATE_AND_MODE I
+}
+
+public abstract interface class dev/glassworks/esphome/BluetoothProxyHandler {
+	public abstract fun getAuthOnly ()Z
+	public abstract fun getFeatureFlags ()I
+	public abstract fun onRefused ()V
+	public abstract fun onSubscribed (Z)V
+}
+
+public final class dev/glassworks/esphome/BluetoothProxyHandler$DefaultImpls {
+	public static fun getAuthOnly (Ldev/glassworks/esphome/BluetoothProxyHandler;)Z
+	public static fun onRefused (Ldev/glassworks/esphome/BluetoothProxyHandler;)V
+}
+
+public final class dev/glassworks/esphome/BrightnessLightEntity : dev/glassworks/esphome/ApiEntity {
+	public static final field COLOR_MODE_BRIGHTNESS I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/ButtonEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Lkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/CameraEntity : dev/glassworks/esphome/ApiEntity {
+	public static final field Companion Ldev/glassworks/esphome/CameraEntity$Companion;
+	public static final field MAX_FRAME_BYTES I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZFLkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZFLkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getListType ()I
+	public final fun getMaxFps ()F
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/CameraEntity$Companion {
+}
+
+public final class dev/glassworks/esphome/DeviceIdentity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()I
+	public final fun component9 ()I
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)Ldev/glassworks/esphome/DeviceIdentity;
+	public static synthetic fun copy$default (Ldev/glassworks/esphome/DeviceIdentity;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIILjava/lang/Object;)Ldev/glassworks/esphome/DeviceIdentity;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCompilationTime ()Ljava/lang/String;
+	public final fun getEsphomeVersion ()Ljava/lang/String;
+	public final fun getFriendlyName ()Ljava/lang/String;
+	public final fun getMacAddress ()Ljava/lang/String;
+	public final fun getMacHex ()Ljava/lang/String;
+	public final fun getManufacturer ()Ljava/lang/String;
+	public final fun getModel ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getVoiceFeatures ()I
+	public final fun getWebserverPort ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/EntityCategory : java/lang/Enum {
+	public static final field CONFIG Ldev/glassworks/esphome/EntityCategory;
+	public static final field DIAGNOSTIC Ldev/glassworks/esphome/EntityCategory;
+	public static final field NONE Ldev/glassworks/esphome/EntityCategory;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getValue ()I
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/esphome/EntityCategory;
+	public static fun values ()[Ldev/glassworks/esphome/EntityCategory;
+}
+
+public final class dev/glassworks/esphome/EspHomeLog {
+	public static final field INSTANCE Ldev/glassworks/esphome/EspHomeLog;
+	public final fun d (Ljava/lang/String;)V
+	public final fun getSink ()Ldev/glassworks/esphome/EspHomeLog$Sink;
+	public final fun getTag ()Ljava/lang/String;
+	public final fun i (Ljava/lang/String;)V
+	public final fun setSink (Ldev/glassworks/esphome/EspHomeLog$Sink;)V
+	public final fun setTag (Ljava/lang/String;)V
+	public final fun w (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public static synthetic fun w$default (Ldev/glassworks/esphome/EspHomeLog;Ljava/lang/String;Ljava/lang/Throwable;ILjava/lang/Object;)V
+}
+
+public final class dev/glassworks/esphome/EspHomeLog$Level : java/lang/Enum {
+	public static final field DEBUG Ldev/glassworks/esphome/EspHomeLog$Level;
+	public static final field INFO Ldev/glassworks/esphome/EspHomeLog$Level;
+	public static final field WARN Ldev/glassworks/esphome/EspHomeLog$Level;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/esphome/EspHomeLog$Level;
+	public static fun values ()[Ldev/glassworks/esphome/EspHomeLog$Level;
+}
+
+public abstract interface class dev/glassworks/esphome/EspHomeLog$Sink {
+	public abstract fun log (Ldev/glassworks/esphome/EspHomeLog$Level;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)V
+}
+
+public final class dev/glassworks/esphome/EventEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getEventTypes ()Ljava/util/List;
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/HomeAssistantEvent {
+	public fun <init> (Ljava/lang/String;Ljava/util/Map;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getData ()Ljava/util/Map;
+	public final fun getEvent ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/MediaCommand {
+	public static final field CLEAR_PLAYLIST I
+	public static final field ENQUEUE I
+	public static final field INSTANCE Ldev/glassworks/esphome/MediaCommand;
+	public static final field MUTE I
+	public static final field PAUSE I
+	public static final field PLAY I
+	public static final field STOP I
+	public static final field TOGGLE I
+	public static final field UNMUTE I
+	public static final field VOLUME_DOWN I
+	public static final field VOLUME_UP I
+}
+
+public final class dev/glassworks/esphome/MediaPlayerCommandData {
+	public fun <init> (Ljava/lang/Integer;Ljava/lang/Float;Ljava/lang/String;Z)V
+	public final fun component1 ()Ljava/lang/Integer;
+	public final fun component2 ()Ljava/lang/Float;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/Integer;Ljava/lang/Float;Ljava/lang/String;Z)Ldev/glassworks/esphome/MediaPlayerCommandData;
+	public static synthetic fun copy$default (Ldev/glassworks/esphome/MediaPlayerCommandData;Ljava/lang/Integer;Ljava/lang/Float;Ljava/lang/String;ZILjava/lang/Object;)Ldev/glassworks/esphome/MediaPlayerCommandData;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAnnouncement ()Z
+	public final fun getCommand ()Ljava/lang/Integer;
+	public final fun getMediaUrl ()Ljava/lang/String;
+	public final fun getVolume ()Ljava/lang/Float;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/MediaPlayerEntity : dev/glassworks/esphome/ApiEntity {
+	public static final field Companion Ldev/glassworks/esphome/MediaPlayerEntity$Companion;
+	public static final field FEATURE_BROWSE_MEDIA I
+	public static final field FEATURE_MEDIA_ANNOUNCE I
+	public static final field FEATURE_PAUSE I
+	public static final field FEATURE_PLAY I
+	public static final field FEATURE_PLAY_MEDIA I
+	public static final field FEATURE_STOP I
+	public static final field FEATURE_VOLUME_MUTE I
+	public static final field FEATURE_VOLUME_SET I
+	public static final field FEATURE_VOLUME_STEP I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/MediaPlayerEntity$Companion {
+}
+
+public final class dev/glassworks/esphome/MediaPlayerStateData {
+	public fun <init> (IFZ)V
+	public final fun component1 ()I
+	public final fun component2 ()F
+	public final fun component3 ()Z
+	public final fun copy (IFZ)Ldev/glassworks/esphome/MediaPlayerStateData;
+	public static synthetic fun copy$default (Ldev/glassworks/esphome/MediaPlayerStateData;IFZILjava/lang/Object;)Ldev/glassworks/esphome/MediaPlayerStateData;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMuted ()Z
+	public final fun getState ()I
+	public final fun getVolume ()F
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/MediaState {
+	public static final field ANNOUNCING I
+	public static final field IDLE I
+	public static final field INSTANCE Ldev/glassworks/esphome/MediaState;
+	public static final field PAUSED I
+	public static final field PLAYING I
+}
+
+public final class dev/glassworks/esphome/MemoryKeyStore : dev/glassworks/esphome/NoiseKeyStore {
+	public fun <init> ()V
+	public fun <init> ([B)V
+	public synthetic fun <init> ([BILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun load ()[B
+	public fun save ([B)Z
+}
+
+public final class dev/glassworks/esphome/Msg {
+	public static final field AUTHENTICATION_REQUEST I
+	public static final field BINARY_SENSOR_STATE I
+	public static final field BUTTON_COMMAND I
+	public static final field CAMERA_IMAGE_REQUEST I
+	public static final field CAMERA_IMAGE_RESPONSE I
+	public static final field DEVICE_CAPABILITIES_REQUEST I
+	public static final field DEVICE_CAPABILITIES_RESPONSE I
+	public static final field DEVICE_INFO_REQUEST I
+	public static final field DEVICE_INFO_RESPONSE I
+	public static final field DISCONNECT_REQUEST I
+	public static final field DISCONNECT_RESPONSE I
+	public static final field EVENT_RESPONSE I
+	public static final field EXECUTE_SERVICE_REQUEST I
+	public static final field EXECUTE_SERVICE_RESPONSE I
+	public static final field GET_TIME_REQUEST I
+	public static final field GET_TIME_RESPONSE I
+	public static final field HELLO_REQUEST I
+	public static final field HELLO_RESPONSE I
+	public static final field HOMEASSISTANT_ACTION_REQUEST I
+	public static final field INSTANCE Ldev/glassworks/esphome/Msg;
+	public static final field LIGHT_COMMAND I
+	public static final field LIGHT_STATE I
+	public static final field LIST_ENTITIES_BINARY_SENSOR I
+	public static final field LIST_ENTITIES_BUTTON I
+	public static final field LIST_ENTITIES_CAMERA I
+	public static final field LIST_ENTITIES_DONE I
+	public static final field LIST_ENTITIES_EVENT I
+	public static final field LIST_ENTITIES_LIGHT I
+	public static final field LIST_ENTITIES_MEDIA_PLAYER I
+	public static final field LIST_ENTITIES_NUMBER I
+	public static final field LIST_ENTITIES_REQUEST I
+	public static final field LIST_ENTITIES_SELECT I
+	public static final field LIST_ENTITIES_SENSOR I
+	public static final field LIST_ENTITIES_SERVICES I
+	public static final field LIST_ENTITIES_SWITCH I
+	public static final field LIST_ENTITIES_TEXT I
+	public static final field LIST_ENTITIES_TEXT_SENSOR I
+	public static final field LIST_ENTITIES_UPDATE I
+	public static final field MEDIA_PLAYER_COMMAND I
+	public static final field MEDIA_PLAYER_STATE I
+	public static final field NOISE_ENCRYPTION_SET_KEY_REQUEST I
+	public static final field NOISE_ENCRYPTION_SET_KEY_RESPONSE I
+	public static final field NUMBER_COMMAND I
+	public static final field NUMBER_STATE I
+	public static final field PING_REQUEST I
+	public static final field PING_RESPONSE I
+	public static final field SELECT_COMMAND I
+	public static final field SELECT_STATE I
+	public static final field SENDSPIN_PAIRING_TOKEN_REQUEST I
+	public static final field SENDSPIN_PAIRING_TOKEN_RESPONSE I
+	public static final field SENSOR_STATE I
+	public static final field SUBSCRIBE_HA_SERVICES_REQUEST I
+	public static final field SUBSCRIBE_HA_STATES_REQUEST I
+	public static final field SUBSCRIBE_LOGS_REQUEST I
+	public static final field SUBSCRIBE_STATES_REQUEST I
+	public static final field SUBSCRIBE_VOICE_ASSISTANT_REQUEST I
+	public static final field SWITCH_COMMAND I
+	public static final field SWITCH_STATE I
+	public static final field TEXT_COMMAND I
+	public static final field TEXT_SENSOR_STATE I
+	public static final field TEXT_STATE I
+	public static final field UPDATE_COMMAND I
+	public static final field UPDATE_STATE I
+	public static final field VOICE_ASSISTANT_ANNOUNCE_FINISHED I
+	public static final field VOICE_ASSISTANT_ANNOUNCE_REQUEST I
+	public static final field VOICE_ASSISTANT_AUDIO I
+	public static final field VOICE_ASSISTANT_CONFIGURATION_REQUEST I
+	public static final field VOICE_ASSISTANT_CONFIGURATION_RESPONSE I
+	public static final field VOICE_ASSISTANT_EVENT_RESPONSE I
+	public static final field VOICE_ASSISTANT_REQUEST I
+	public static final field VOICE_ASSISTANT_RESPONSE I
+	public static final field VOICE_ASSISTANT_SET_CONFIGURATION I
+	public static final field VOICE_ASSISTANT_TIMER_EVENT I
+}
+
+public final class dev/glassworks/esphome/NoiseCipher {
+	public fun <init> ([B)V
+	public final fun decrypt ([B[B)[B
+	public final fun encrypt ([B[B)[B
+}
+
+public abstract interface class dev/glassworks/esphome/NoiseKeyStore {
+	public abstract fun load ()[B
+	public abstract fun save ([B)Z
+}
+
+public final class dev/glassworks/esphome/NoiseKeys {
+	public static final field Companion Ldev/glassworks/esphome/NoiseKeys$Companion;
+	public fun <init> (Ldev/glassworks/esphome/NoiseKeyStore;)V
+	public final fun getHasKey ()Z
+	public final fun getLatest ()[B
+	public final fun getProvisionable ()Z
+}
+
+public final class dev/glassworks/esphome/NoiseKeys$Companion {
+	public final fun fingerprint ([B)Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/NoiseMacException : java/lang/Exception {
+	public fun <init> ()V
+}
+
+public final class dev/glassworks/esphome/NumberEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZFFFLjava/lang/String;ILjava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZFFFLjava/lang/String;ILjava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/ProtoException : java/lang/Exception {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/esphome/ProtoMessage {
+	public static final field Companion Ldev/glassworks/esphome/ProtoMessage$Companion;
+	public fun <init> ([B)V
+	public final fun bool (I)Z
+	public final fun bytes (I)[B
+	public final fun fixed32 (I)I
+	public final fun fixed32s (I)Ljava/util/List;
+	public final fun float (I)F
+	public final fun has (I)Z
+	public final fun long (I)J
+	public final fun longs (I)Ljava/util/List;
+	public final fun messages (I)Ljava/util/List;
+	public final fun string (I)Ljava/lang/String;
+	public final fun strings (I)Ljava/util/List;
+	public final fun uint32 (I)I
+}
+
+public final class dev/glassworks/esphome/ProtoMessage$Companion {
+	public final fun zigzag (J)I
+}
+
+public final class dev/glassworks/esphome/ProtoWriter {
+	public fun <init> ()V
+	public final fun bool (IZ)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun bytes (I[BZ)Ldev/glassworks/esphome/ProtoWriter;
+	public static synthetic fun bytes$default (Ldev/glassworks/esphome/ProtoWriter;I[BZILjava/lang/Object;)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun fixed32 (IIZ)Ldev/glassworks/esphome/ProtoWriter;
+	public static synthetic fun fixed32$default (Ldev/glassworks/esphome/ProtoWriter;IIZILjava/lang/Object;)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun float (IF)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun int32 (II)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun message (ILdev/glassworks/esphome/ProtoWriter;)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun sint32 (II)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun string (ILjava/lang/String;Z)Ldev/glassworks/esphome/ProtoWriter;
+	public static synthetic fun string$default (Ldev/glassworks/esphome/ProtoWriter;ILjava/lang/String;ZILjava/lang/Object;)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun strings (ILjava/lang/Iterable;)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun toByteArray ()[B
+	public final fun uint32 (II)Ldev/glassworks/esphome/ProtoWriter;
+	public final fun uint64 (IJ)Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/RawAdvertisement {
+	public static final field BATCH_SIZE I
+	public static final field Companion Ldev/glassworks/esphome/RawAdvertisement$Companion;
+	public static final field MAX_DATA I
+	public fun <init> (JII[B)V
+	public final fun getAddress ()J
+	public final fun getAddressType ()I
+	public final fun getData ()[B
+	public final fun getRssi ()I
+}
+
+public final class dev/glassworks/esphome/RawAdvertisement$Companion {
+}
+
+public final class dev/glassworks/esphome/SelectEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/util/List;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/util/List;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/SendspinApi {
+	public static final field FEATURE_PAIRING_TOKEN I
+	public static final field INSTANCE Ldev/glassworks/esphome/SendspinApi;
+	public static final field STATUS_DISABLED I
+	public static final field STATUS_ENCRYPTION_REQUIRED I
+	public static final field STATUS_FAILED I
+	public static final field STATUS_NOT_READY I
+	public static final field STATUS_OK I
+}
+
+public abstract interface class dev/glassworks/esphome/SendspinTokenSource {
+	public abstract fun clientIdIfStarted ()Ljava/lang/String;
+	public abstract fun pairingToken ()Lkotlin/Pair;
+}
+
+public final class dev/glassworks/esphome/SensorEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;ILdev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;ILdev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/SwitchEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/TextEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZIILjava/lang/String;ILkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZIILjava/lang/String;ILkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/TextSensorEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun shownState ()Ljava/lang/String;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/TimerEventType {
+	public static final field CANCELLED I
+	public static final field FINISHED I
+	public static final field INSTANCE Ldev/glassworks/esphome/TimerEventType;
+	public static final field STARTED I
+	public static final field UPDATED I
+}
+
+public final class dev/glassworks/esphome/UpdateEntity : dev/glassworks/esphome/ApiEntity {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
+	public fun getCommandType ()I
+	public fun getListType ()I
+	public fun getStateType ()I
+	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/UpdateStateData {
+	public fun <init> (ZZZFLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Z
+	public final fun component3 ()Z
+	public final fun component4 ()F
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()Ljava/lang/String;
+	public final fun component9 ()Ljava/lang/String;
+	public final fun copy (ZZZFLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/glassworks/esphome/UpdateStateData;
+	public static synthetic fun copy$default (Ldev/glassworks/esphome/UpdateStateData;ZZZFLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/esphome/UpdateStateData;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCurrentVersion ()Ljava/lang/String;
+	public final fun getHasProgress ()Z
+	public final fun getInProgress ()Z
+	public final fun getLatestVersion ()Ljava/lang/String;
+	public final fun getMissingState ()Z
+	public final fun getProgress ()F
+	public final fun getReleaseSummary ()Ljava/lang/String;
+	public final fun getReleaseUrl ()Ljava/lang/String;
+	public final fun getTitle ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class dev/glassworks/esphome/VoiceAssistantHandler {
+	public abstract fun configuration ()Ldev/glassworks/esphome/VoiceConfiguration;
+	public abstract fun onAnnounce (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public abstract fun onEvent (ILjava/util/Map;)V
+	public abstract fun onStartResponse (IZ)V
+	public abstract fun onSubscribe (Z)V
+	public abstract fun onTimer (ILjava/lang/String;Ljava/lang/String;IIZ)V
+	public abstract fun setActiveWakeWords (Ljava/util/List;)V
+}
+
+public final class dev/glassworks/esphome/VoiceConfiguration {
+	public fun <init> (Ljava/util/List;Ljava/util/List;I)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()Ljava/util/List;
+	public final fun component3 ()I
+	public final fun copy (Ljava/util/List;Ljava/util/List;I)Ldev/glassworks/esphome/VoiceConfiguration;
+	public static synthetic fun copy$default (Ldev/glassworks/esphome/VoiceConfiguration;Ljava/util/List;Ljava/util/List;IILjava/lang/Object;)Ldev/glassworks/esphome/VoiceConfiguration;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getActive ()Ljava/util/List;
+	public final fun getAvailable ()Ljava/util/List;
+	public final fun getMaxActive ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/VoiceEventType {
+	public static final field ERROR I
+	public static final field INSTANCE Ldev/glassworks/esphome/VoiceEventType;
+	public static final field INTENT_END I
+	public static final field INTENT_PROGRESS I
+	public static final field INTENT_START I
+	public static final field RUN_END I
+	public static final field RUN_START I
+	public static final field STT_END I
+	public static final field STT_START I
+	public static final field STT_VAD_END I
+	public static final field STT_VAD_START I
+	public static final field TTS_END I
+	public static final field TTS_START I
+	public static final field TTS_STREAM_END I
+	public static final field TTS_STREAM_START I
+	public static final field WAKE_WORD_END I
+	public static final field WAKE_WORD_START I
+}
+
+public final class dev/glassworks/esphome/VoiceFeature {
+	public static final field ANNOUNCE I
+	public static final field API_AUDIO I
+	public static final field INSTANCE Ldev/glassworks/esphome/VoiceFeature;
+	public static final field SPEAKER I
+	public static final field START_CONVERSATION I
+	public static final field TIMERS I
+	public static final field VOICE_ASSISTANT I
+}
+
+public final class dev/glassworks/esphome/VoiceRequestFlag {
+	public static final field INSTANCE Ldev/glassworks/esphome/VoiceRequestFlag;
+	public static final field USE_VAD I
+	public static final field USE_WAKE_WORD I
+}
+
+public final class dev/glassworks/esphome/WakeWordInfo {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Ldev/glassworks/esphome/WakeWordInfo;
+	public static synthetic fun copy$default (Ldev/glassworks/esphome/WakeWordInfo;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Ldev/glassworks/esphome/WakeWordInfo;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getTrainedLanguages ()Ljava/util/List;
+	public final fun getWakeWord ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

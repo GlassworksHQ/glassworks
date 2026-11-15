@@ -10,3 +10,5 @@ publish the matching section below as the release notes.
 ### Added
 - **First release on Maven Central.** `EspHomeMdns` advertises an esphome-api device over mDNS
   with Android's `NsdManager`, so Home Assistant discovers it. Android 6 (API 23) and newer.
+- **The API.** `EspHomeMdns` alone: `start` with an `ApiServer` or a port, and `stop`. It publishes
+  the TXT records ESPHome does, including the encryption state.

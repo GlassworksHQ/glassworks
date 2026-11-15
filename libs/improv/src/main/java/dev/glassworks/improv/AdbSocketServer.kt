@@ -12,10 +12,14 @@ import java.util.Collections
  * An abstract Unix socket that only adb may open (`adb forward tcp:N localabstract:<name>`, or a
  * WebUSB adb client opening the `localabstract:<name>` service): an accept thread, the [AdbPeer]
  * check, and one thread per connection running [serve]. Connections may come one after another or
- * side by side (at most [MAX_CONNECTIONS]). Having USB adb access to the device (an authorized key)
+ * side by side (at most 4). Having USB adb access to the device (an authorized key)
  * is the authorization: other apps on the device are refused.
+ *
+ * @param name The abstract socket's name, without the `@`.
+ * @param tag The logcat tag.
+ * @param serve Runs one connection, on its own thread; the connection closes when it returns.
  */
-class AdbSocketServer(
+public class AdbSocketServer(
     private val name: String,
     private val tag: String,
     private val serve: (input: InputStream, output: OutputStream) -> Unit,
@@ -25,13 +29,15 @@ class AdbSocketServer(
     private var acceptThread: Thread? = null
     private val open = Collections.synchronizedSet(HashSet<LocalSocket>())
 
-    fun start() {
+    /** Starts listening. Does nothing when already listening. */
+    public fun start() {
         if (running) return
         running = true
         acceptThread = Thread({ acceptLoop() }, "adb-$name").apply { isDaemon = true; start() }
     }
 
-    fun stop() {
+    /** Stops listening and closes every open connection. */
+    public fun stop() {
         if (!running) return
         running = false
         runCatching { server?.close() }
@@ -92,7 +98,7 @@ class AdbSocketServer(
         }, "adb-$name-conn").apply { isDaemon = true; start() }
     }
 
-    companion object {
-        const val MAX_CONNECTIONS = 4
+    internal companion object {
+        const val MAX_CONNECTIONS: Int = 4
     }
 }
