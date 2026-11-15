@@ -536,14 +536,15 @@ def cmd_coldstart(dev, a):
             cur = st["current"]
             if not cur or cur[1] != nonce:
                 return
-            t0 = C.now()
-            st["touched_at"] = t0
+            st["touched_at"] = C.now()
+            t0 = time.time()
             dev.sh(cmd)
             st["touched_at"] = C.now()     # it reached the panel when `input` returned (seconds later)
             # When each gesture went over adb and how long `input` took on the panel, on this
-            # computer's clock (fakeha.jsonl's): #202, smoke 5's heavy stalled during the taps.
+            # computer's clock (fakeha.jsonl's): #202, smoke 5's heavy stalled during the taps. Real
+            # seconds even on the tests' scaled clock, as fakeha.jsonl's are (CodeRabbit on #274).
             res.setdefault("gestures_sent", []).append([cur[0], round(t0, 3), cmd.split()[1],
-                                                         round(C.now() - t0, 3)])
+                                                         round(time.time() - t0, 3)])
             if i + 1 < n:
                 C.sleep(gap)
 

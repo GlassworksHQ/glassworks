@@ -151,6 +151,13 @@ class Runner(unittest.TestCase):
         self.assertEqual({g[2] for g in sent}, {"tap", "swipe"})
         self.assertTrue(all(isinstance(g[1], float) and g[3] >= 0 for g in sent))
         self.assertEqual(sum(1 for g in sent if g[0] == "heavy" and g[2] == "tap"), 2)
+        # On fakeha.jsonl's clock: each gesture comes after its view's open there, and before the next.
+        with open(os.path.join(self.out, "fakeha.jsonl")) as f:
+            opens = [(e["t"], e["open"]["view"]) for e in map(json.loads, f) if (e.get("open") or {}).get("view")]
+        for g in sent:
+            i = max(k for k, (t, v) in enumerate(opens) if v == g[0])
+            self.assertGreater(g[1], opens[i][0], g)
+            self.assertLess(g[1], opens[i + 1][0] if i + 1 < len(opens) else float("inf"), g)
         self.assertEqual(c["order"], ["light", "typical-nocam", "typical", "heavy"])
         ref = self.rep["graded"]["reference"]
         for t in ("typical", "heavy"):
