@@ -1225,7 +1225,7 @@ def reference_ram(ref_idles, refstarts, package, budgets, mem_total_kb):
             "samples": len(bm),
             "app_pss_kb": max(m["app_pss_kb"] for m in bm),
             "by_role_pss_kb": {r: max(m["by_role"].get(r, {}).get("pss_kb", 0) for m in bm) for r in roles},
-            # Each process's peak RSS since it started (VmHWM), summed: catches a peak between two samples.
+            # Each process's peak RSS since it started (VmHWM), summed: includes a peak between two samples, as RSS (an upper bound on PSS).
             "app_rss_hwm_kb": max(sum(r["rss_peak_kb"] for r in m["by_role"].values()) for m in bm),
             "mem_available_min_kb": min((m["mem_available_kb"] for m in bm if m["mem_available_kb"] is not None), default=None),
         } if bm else None,
@@ -1913,8 +1913,9 @@ def ram_markdown(ram):
            "PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each "
            "graded run, and between the graded pages. The peak is the largest of the between-page samples only (the "
            "idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside "
-           "them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed; the VmHWM "
-           "line below catches it.", ""]
+           "them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed. The VmHWM "
+           "line below is each process's peak RSS since it started, so it includes such a peak, but RSS counts "
+           "shared pages in full: it bounds the PSS peak from above and doesn't measure it.", ""]
     idle, peak = ram.get("reference_idle"), ram.get("graded_peak")
     roles = sorted(set((idle or {}).get("by_role_pss_kb", {})) | set((peak or {}).get("by_role_pss_kb", {})))
     if idle or peak:

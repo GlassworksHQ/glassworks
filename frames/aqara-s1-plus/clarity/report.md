@@ -47,7 +47,7 @@ Order of the pages (it turns each run): light, typical-nocam, typical, heavy; ty
 
 ## RAM on the reference dashboards (not graded)
 
-PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each graded run, and between the graded pages. The peak is the largest of the between-page samples only (the idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed; the VmHWM line below catches it.
+PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each graded run, and between the graded pages. The peak is the largest of the between-page samples only (the idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed. The VmHWM line below is each process's peak RSS since it started, so it includes such a peak, but RSS counts shared pages in full: it bounds the PSS peak from above and doesn't measure it.
 
 | Process | Idle (median of runs) | Peak, sampled between the graded pages |
 |---|---|---|

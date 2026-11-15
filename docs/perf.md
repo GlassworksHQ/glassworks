@@ -1345,7 +1345,9 @@ Assistant:
 - **Peak, sampled between the graded pages**: after each graded page, while the screen is still and nothing is
   timed, the runner samples RAM. The largest of those samples is the peak. It is taken between tasks,
   not inside them (a `dumpsys` during a task would disturb what it measures), so a short peak inside
-  a task can be missed; `VmHWM` catches it, and the report gives it beside the PSS peak.
+  a task can be missed. `VmHWM` (each process's peak RSS since it started) includes such a peak, and the
+  report gives it beside the PSS peak; RSS counts shared pages in full, so it bounds the PSS peak from above
+  and doesn't measure it.
 - **Per pane**, with `--pane-ram assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on`
   (the settings now, put back
   afterwards). The kiosk is pointed at the typical reference dashboard. In each run the runner turns every switchable
