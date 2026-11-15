@@ -30,7 +30,11 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
   return {
     load: (file: Blob, onProgress: (x: number) => void) => loadFrom(file, onProgress),
     fetch: (url: string, onProgress: (x: number) => void) => loadFrom(resumableBody(url, want.size), onProgress),
-    /** Writes system.sparse and userdata.sparse. The loaded image stays, so a retry can build again. */
+    /**
+     * Writes system.sparse and userdata.sparse. The loaded image stays, so a retry after a failed
+     * flash can build again. A build that fails drops it: patching may have stopped halfway, and the
+     * next build must start from the checked download, not from that.
+     */
     async build(o: BuildOptions, onProgress: (step: PrepareStep, x: number) => void): Promise<void> {
       if (!loaded) throw new Error('select the system image first');
       const out = { system: await fresh('system.sparse'), userdata: await fresh('userdata.sparse') };
@@ -38,6 +42,9 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
       const sink = (k: 'system' | 'userdata') => (b: Uint8Array) => { out[k].write(b, { at: pos[k] }); pos[k] += b.length; };
       try {
         await buildImages(loaded, { ...o, hwrotation: 270 }, { system: sink('system'), userdata: sink('userdata') }, onProgress);
+      } catch (e) {
+        loaded = undefined;
+        throw e;
       } finally {
         close('system.sparse');
         close('userdata.sparse');

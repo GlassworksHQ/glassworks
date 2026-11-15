@@ -31,20 +31,22 @@ const optional = async (fb: FastbootLike, name: string) => { try { return await 
 
 /**
  * Read-only: is this the Mirror's LK, with the partitions the images are made for? The sizes are
- * the hard check (a wrong one stops the install). Product and the download size are only shown:
- * Kiln hasn't read this LK's answers yet.
+ * the hard check (a wrong one stops the install), and so is the download size. Product and secure are
+ * only shown: Kiln hasn't read this LK's answers yet.
  */
 export async function checkFastboot(fb: FastbootLike): Promise<FastbootReport> {
   const size = async (p: string) => { try { return await fb.partitionSize(p); } catch { return undefined; } };
   const system = await size('system'), userdata = await size('userdata');
   const product = await optional(fb, 'product'), max = await optional(fb, 'max-download-size'), secure = await optional(fb, 'secure');
   const mb = (n?: number) => (n === undefined ? 'not reported' : `${(n / 1024 / 1024).toFixed(0)} MiB (${n} bytes)`);
-  // fastboot.js falls back to 512 MiB without it: on a unit with less, a download would fail mid-write
-  const maxBytes = max !== undefined && /^(0x[0-9a-f]+|\d+)$/i.test(max.trim()) ? Number(max.trim()) : undefined;
+  // fastboot.js falls back to 512 MiB without it: on a unit with less, a download would fail mid-write.
+  // LK writes it as 0x%x and @glassworks/fastboot reads it as hex, so a bare number is refused: read as
+  // hex, a decimal answer would look several times bigger than the real buffer.
+  const maxBytes = max !== undefined && /^0x[0-9a-f]+$/i.test(max.trim()) ? Number.parseInt(max.trim(), 16) : undefined;
   const checks: Check[] = [
     { what: 'System partition', found: mb(system), ok: system === SYSTEM_BYTES, need: `${SYSTEM_BYTES} bytes, the size the Glass Panes image is made for` },
     { what: 'Userdata partition', found: mb(userdata), ok: !!userdata && userdata >= 1024 ** 3 && userdata % 4096 === 0, need: 'at least 1 GiB, whole 4 KiB blocks' },
-    { what: 'Download size', found: mb(maxBytes), ok: !!maxBytes && maxBytes >= 4096, need: 'max-download-size reported, at least one 4 KiB block' },
+    { what: 'Download size', found: mb(maxBytes), ok: !!maxBytes && maxBytes >= 4096, need: 'max-download-size reported in hex (0x…), at least one 4 KiB block' },
   ];
   const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`];
   return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info };

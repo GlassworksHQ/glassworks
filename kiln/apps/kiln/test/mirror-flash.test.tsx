@@ -25,7 +25,7 @@ afterEach(() => cleanup());
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
-function setup(o: { system?: number; flashFails?: number; proxy?: 'ok' | 'down' } = {}) {
+function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down' } = {}) {
   let fails = o.flashFails ?? 0;
   const calls: string[] = [];
   const images: ImageMaker = {
@@ -35,7 +35,7 @@ function setup(o: { system?: number; flashFails?: number; proxy?: 'ok' | 'down' 
       if (o.proxy === 'down') throw new ProxyError('the download proxy answered 502: GitHub answered 503');
       onProgress(0.5); onProgress(1);
     },
-    async build(b, onProgress) { calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
+    async build(b, onProgress) { if (o.buildFails) throw new Error('No space left on the device'); calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
     check: (file, which, onProgress) => { calls.push(`check ${which}`); return checkDownload(file, which === 'system' ? GLASS_PANES.system : GLASS_PANES_USERDATA, onProgress); },
     async discard() { calls.push('discard'); },
   };
@@ -109,6 +109,18 @@ describe('installing Glassworks over fastboot', () => {
     expect(f.state.screen).toBe('adb');
     expect(calls.filter((c) => c.startsWith('build'))).toHaveLength(2);
     expect(calls.filter((c) => c.startsWith('fetch'))).toHaveLength(1);
+  });
+
+  it('a failed build: back to the image, which must be selected or downloaded again (it may be patched halfway)', async () => {
+    const { f, mirror, calls } = setup({ buildFails: true });
+    await f.downloadImage();
+    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
+    expect(f.state).toMatchObject({ screen: 'error', flashFailed: false });
+    expect(f.state.image).toBeUndefined();
+    expect(calls.filter((c) => c.startsWith('flash'))).toHaveLength(0);
+    f.retry();
+    expect(f.state.screen).toBe('image');
   });
 
   it('after a refused write, "Try again without FILL" builds the zeros as RAW blocks', async () => {

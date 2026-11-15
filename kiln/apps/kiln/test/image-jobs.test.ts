@@ -57,4 +57,16 @@ describe('the image worker\'s jobs', () => {
     expect(removed).toBe(1);
     await expect(jobs.build(o, () => {})).rejects.toThrow(/select the system image first/);
   });
+
+  it('drops the image when a build fails, so the next one starts from the checked download', async () => {
+    const image = await smallSystemImage();
+    const bytes = new Uint8Array(await image.arrayBuffer());
+    const want = { name: 'system.img', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+    const jobs = imageJobs(async () => new MemHandle(), async () => {}, want);
+    await jobs.load(image, () => {});
+    const o = { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 26 }), adbKey: 'QAAA= kiln@glassworks', userdataBytes: 64 * 1024 * 1024 };
+    await expect(jobs.build(o, () => {})).rejects.toThrow(/needs Android API 26/);
+    expect(jobs.isLoaded()).toBe(false);
+    await expect(jobs.build({ ...o, apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23 }) }, () => {})).rejects.toThrow(/select the system image first/);
+  });
 });

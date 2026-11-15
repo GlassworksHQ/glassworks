@@ -48,7 +48,9 @@ describe('fastboot checks (read-only)', () => {
     const sizes = { 'partition-size:system': `0x${SYSTEM_BYTES.toString(16)}`, 'partition-size:userdata': '0x14cc00000' };
     expect((await checkFastboot(lk(sizes))).ok).toBe(false);
     expect((await checkFastboot(lk({ ...sizes, 'max-download-size': '0x800' }))).ok).toBe(false);
-    expect((await checkFastboot(lk({ ...sizes, 'max-download-size': '268435456' }))).ok).toBe(true);
+    expect((await checkFastboot(lk({ ...sizes, 'max-download-size': '0x10000000' }))).ok).toBe(true);
+    // a bare number is ambiguous: @glassworks/fastboot would read 268435456 as hex, ~40 times too big
+    expect((await checkFastboot(lk({ ...sizes, 'max-download-size': '268435456' }))).ok).toBe(false);
   });
 });
 

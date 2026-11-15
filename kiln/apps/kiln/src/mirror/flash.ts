@@ -189,6 +189,7 @@ export class FlashSession {
     if (!this.fb || !s.fastboot?.ok || !s.understood || s.screen === 'working') return;
     const work = (step: WorkStep, x: number) => this.set({ work: { step, x } });
     this.set({ screen: 'working', error: undefined, flashFailed: false, work: { step: s.back ? 'flash-system' : 'patch', x: 0 } });
+    let building = false;
     try {
       let images: { system: Blob; userdata: Blob };
       if (s.back) {
@@ -198,8 +199,10 @@ export class FlashSession {
         const adbKey = this.d.adbKey();
         if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
         this.log('Building the images');
+        building = true;
         images = await this.d.images.build({ apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill },
           (step, x) => work(step, x));
+        building = false;
       }
       this.log(`Flashing${s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
       this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
@@ -212,7 +215,8 @@ export class FlashSession {
       this.set({ screen: s.back ? 'done' : 'adb' });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
-      this.set({ screen: 'error', error: (e as Error).message });
+      // a failed build dropped the loaded image (it may be patched halfway): select or download it again
+      this.set({ screen: 'error', error: (e as Error).message, ...(building ? { image: undefined } : {}) });
     }
   }
 
