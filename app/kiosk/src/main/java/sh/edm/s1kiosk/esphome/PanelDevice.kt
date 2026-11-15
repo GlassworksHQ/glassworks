@@ -22,6 +22,9 @@ import dev.glassworks.camera.FrameEgress
 import dev.glassworks.camera.stillGate
 import dev.glassworks.diagnostics.DiagnosticsPane
 import dev.glassworks.frame.Frame
+import dev.glassworks.frame.friendlyName
+import dev.glassworks.frame.nodeName
+import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.EntityRegistry
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
@@ -110,20 +113,10 @@ class PanelDevice internal constructor(
         init { EspHomeLog.tag = ESPHOME_LOG_TAG }
 
         /**
-         * The ESPHome node name. Home Assistant's config entry keeps it (`device_name`), the mDNS service
-         * is named after it, and HA up to 2025.11 makes new entity ids from it (`s1_panel_*`). Never
-         * change it. From HA 2025.12 new entity ids take the device's name as HA shows it
-         * ([FRIENDLY_NAME], or the user's own), and from 2026.8 the area's name can come first.
+         * The product's name, on the panel's own pages (the QR pages, Manage). Home Assistant gets the
+         * device's own names instead ([dev.glassworks.frame.DeviceName], #260).
          */
-        const val NAME = "s1-panel"
-
-        /**
-         * What Home Assistant calls the panel (#63), from DeviceInfo and the mDNS `friendly_name`. HA's
-         * device registry takes it on every connect unless someone renamed the device there. Entity ids
-         * already registered never change: their unique ids are `<mac>/<device_id>/<domain>/<entity name>`
-         * (aioesphomeapi `build_unique_id` v3), with no device name in them.
-         */
-        const val FRIENDLY_NAME = "Glassworks Panel"
+        const val PRODUCT_NAME = "Glassworks Panel"
         /** Reported ESPHome version (recent, so HA doesn't treat the device as outdated). */
         const val ESPHOME_VERSION = "2026.10.2"
         /** Same flags as an ESPHome voice_assistant with a media player (Voice PE): no SPEAKER. */
@@ -151,6 +144,9 @@ class PanelDevice internal constructor(
     private val noiseKeys = NoiseKeys(prefs.noiseKeyStore)
     /** Read by the API server on its connection threads; replaced when voice is turned on or off. */
     @Volatile private lateinit var identity: DeviceIdentity
+
+    /** The node name it announces, or null before it has started. The Manage page allows it as a Host header (`<name>.local`). */
+    val nodeName: String? get() = if (::identity.isInitialized) identity.name else null
     private lateinit var entities: List<ApiEntity>
     private lateinit var coreEntities: List<ApiEntity>
     private val voicePlayer = ExoAudioPlayer(context, "voice", AudioAttributes.USAGE_ASSISTANT)
@@ -224,14 +220,17 @@ class PanelDevice internal constructor(
     /** esphome-main. Each step checks [stopped], so a [stop] during startup leaves nothing running. */
     internal fun startInternal() {
         if (synchronized(lifecycle) { stopped }) return
+        val mac = stableMac()
+        val name = frame.nodeName(mac) ?: run { EspHomeLog.w("No ESPHome node name for MAC '$mac': the device isn't announced"); return }
+        // HA keys its entry and entity unique ids by the MAC, so a new node name keeps both (docs/esphome.md#names).
         val id = DeviceIdentity(
-            name = NAME,
-            friendlyName = FRIENDLY_NAME,
-            macAddress = stableMac(),
+            name = name,
+            friendlyName = frame.friendlyName(),
+            macAddress = mac,
             esphomeVersion = ESPHOME_VERSION,
             compilationTime = "S1 Kiosk ${BuildConfig.VERSION_NAME}",
-            manufacturer = "Aqara",
-            model = "Panel Hub S1 Plus (S1 Kiosk)",
+            manufacturer = frame.hardware.manufacturer,
+            model = "${frame.hardware.model} (S1 Kiosk)",
             voiceFeatures = voiceFeatures(),
             // Home Assistant's "Visit" link on the device page opens the Manage page (#33).
             webserverPort = OAuth.SIGNIN_PORT,
@@ -302,6 +301,14 @@ class PanelDevice internal constructor(
             runtime.paneDefinitions(ctx).filterIsInstance<BluetoothProxyDefinition>().map { it.pane(paneContext, exec) } +
             listOfNotNull(cameraPane(paneContext, identity)) +
             DiagnosticsPane(paneContext, frame.cpuThermalZone, runtime.engine::isContentProcess, exec)
+        // A pane the frame lacks the hardware for (CantRun) isn't built: no entities, nothing started.
+        val cantRun = runtime.paneDefinitions(ctx).filterIsInstance<CantRun>().map { it.id }.toSet()
+        panes = panes.filter { it.id !in cantRun }
+        // Timers ride with Assist (their pane.json requires the same): without it they go too.
+        if (assistPane !in panes) {
+            assist = null
+            panes = panes.filter { it !is TimersPane }
+        }
         runtime.panes = panes
         // Every pane's on/off, also while the pane is off.
         coreEntities = buildEntities() + switches.values.map { it.entity() }
@@ -471,8 +478,8 @@ class PanelDevice internal constructor(
 
     private fun isOn(pane: Pane) = switches[pane.id]?.on != false
 
-    /** The voice assistant's features for Home Assistant: none while its pane ([PaneSwitch.voiceAssistant]) is off. */
-    private fun voiceFeatures() = if (switches.values.firstOrNull { it.voiceAssistant }?.on != false) VOICE_FEATURES else 0
+    /** The voice assistant's features for Home Assistant: none while its pane ([PaneSwitch.voiceAssistant]) is off, or has no switch because it can't run here. */
+    private fun voiceFeatures() = if (switches.values.firstOrNull { it.voiceAssistant }?.on == true) VOICE_FEATURES else 0
 
     /**
      * esphome-main: starts each pane that was turned on and stops each that was turned off (#67), and

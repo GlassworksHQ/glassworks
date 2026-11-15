@@ -40,7 +40,7 @@ class RestartKeepsSettingsTest {
         GlassworksRuntime(AqaraS1Plus()).paneDefinitions(ctx).mapNotNull { d -> d.switch?.let { d.id to it.on } }.toMap()
 
     private val allOff = mapOf(
-        "assist" to false, "sendspin" to false, "bluetooth-proxy" to false, "wall-base" to false, "time-zone" to false, "camera" to false,
+        "assist" to false, "sendspin" to false, "bluetooth-proxy" to false, "wall-base" to false, "time-zone" to false,
         "diagnostics" to false,
     )
 
@@ -79,7 +79,7 @@ class RestartKeepsSettingsTest {
     @Test fun aPaneTurnedOffWithAnExtraThenRestartedStaysOff() {
         val ctx = process()
         val intent = Intent().putExtra("restart", true)
-        listOf("voice_enabled", "sendspin_enabled", "bluetooth_proxy_enabled", "wall_base_enabled", "time_zone_enabled", "camera_enabled", "diagnostics_enabled")
+        listOf("voice_enabled", "sendspin_enabled", "bluetooth_proxy_enabled", "wall_base_enabled", "time_zone_enabled", "diagnostics_enabled")
             .forEach { intent.putExtra(it, false) }
         definitions(ctx).intentExtras().applyFrom(intent)
         assertEquals(allOff, switches(process()))
