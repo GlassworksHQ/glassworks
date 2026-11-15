@@ -33,7 +33,7 @@ class ManagePages(private val zone: TimeZone = TimeZone.getDefault(), private va
 
     /**
      * The signed-in browser, for the nav's foot and the forms' CSRF field. [homeAssistant]: it signed in with
-     * Home Assistant, which a pane's on/off may need ([SettingsChange.needsHomeAssistant]).
+     * Home Assistant, which showing a sign-in's password needs.
      */
     class Viewer(val who: String, val csrf: String, val homeAssistant: Boolean = true)
 
@@ -150,13 +150,11 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
                 notice: String? = null): String {
         val heading = sec?.heading ?: title
         val why = sec?.let { runCatching { it.unavailable() }.getOrNull() }
-        val locked = sec?.master?.let { m -> !v.homeAssistant && SettingsChange.needsHomeAssistant(SettingsChange.MASTER, m, !runCatching { m.value() }.getOrDefault(false)) } == true
-        val master = sec?.master?.takeIf { why == null }?.let { m -> toggle(v, sec.id, SettingsChange.MASTER, m, heading, locked = locked) }.orEmpty()
+        val master = sec?.master?.takeIf { why == null }?.let { m -> toggle(v, sec.id, SettingsChange.MASTER, m, heading) }.orEmpty()
         val head = """<div class="phr">${if (state != null) """<span class="crumb">Panes ›</span>""" else ""}<h1 class="ph">${esc(heading)}</h1>""" +
             """${state?.let { """<span class="pchip">${chip(it)}</span>""" }.orEmpty()}$master</div>"""
         val lines = listOfNotNull(
             why?.let { """<p class="sub">${esc("This pane can't run on this panel: $it.")}</p>""" },
-            if (master.isNotEmpty() && locked) """<p class="sub">${esc(NEEDS_HA)}</p>""" else null,
             problem?.let { """<p class="err" role="alert">${esc(it)}</p>""" },
             if (restart) """<div class="banner"><i class="dot work"></i><span>${esc(SettingsChange.RESTART_TEXT)}</span>${action(v, "/action/restart", "Restart now", "pill primary")}</div>""" else null,
         ).joinToString("")
@@ -186,11 +184,10 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
     private fun fields(v: Viewer, section: String, key: String) =
         csrf(v) + """<input type="hidden" name="section" value="${esc(section)}"><input type="hidden" name="key" value="${esc(key)}">"""
 
-    /** The on/off: a switch that posts the other value. [locked]: shown, but this browser can't change it ([NEEDS_HA]). */
-    private fun toggle(v: Viewer, section: String, key: String, item: SettingsItem.Switch, label: String, locked: Boolean = false): String {
+    /** The on/off: a switch that posts the other value. */
+    private fun toggle(v: Viewer, section: String, key: String, item: SettingsItem.Switch, label: String): String {
         val on = runCatching { item.value() }.getOrDefault(false)
-        val lock = if (locked) """ disabled title="${esc(NEEDS_HA)}"""" else ""
-        return """<form class="tgf" method="post" action="/settings">${fields(v, section, key)}<button class="tg${if (on) " on" else ""}" type="submit" name="value" value="${if (on) "off" else "on"}" role="switch" aria-checked="$on" aria-label="${esc(label)}"$lock><i></i></button></form>"""
+        return """<form class="tgf" method="post" action="/settings">${fields(v, section, key)}<button class="tg${if (on) " on" else ""}" type="submit" name="value" value="${if (on) "off" else "on"}" role="switch" aria-checked="$on" aria-label="${esc(label)}"><i></i></button></form>"""
     }
 
     private fun items(v: Viewer, path: String, section: String, items: List<SettingsItem>, prefix: String = ""): String = items.joinToString("") { item ->
@@ -400,9 +397,6 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
     companion object {
         /** Sections drawn on a page of their own under "System" in the nav, not under "Panel". */
         val OWN_PAGES = setOf("log", "security", "about")
-
-        /** A pane's on/off on the page of a browser signed in with the panel's code. */
-        const val NEEDS_HA = "Turning a pane on or off needs a Home Assistant sign-in. Sign out, then continue with Home Assistant."
 
         /** A sign-in's Show on the page of a browser signed in with the panel's code. */
         const val NEEDS_HA_REVEAL = "Showing the password needs a Home Assistant sign-in. It shows on the panel too."

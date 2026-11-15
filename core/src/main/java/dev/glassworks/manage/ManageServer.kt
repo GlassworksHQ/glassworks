@@ -254,7 +254,7 @@ class ManageServer(
      * `/settings`, POST: change one item, as the panel's menu does (#242). The form names the section, the
      * item's key ([SettingsChange.changeable]) and the value; [SettingsChange.change] checks it and calls the
      * item's own save, on the panel's main thread ([ManageHost.onMain]). A switch that asks first on the panel
-     * asks here too, then comes back with `confirmed`. A pane's on/off needs a Home Assistant sign-in.
+     * asks here too, then comes back with `confirmed`, for either sign-in, as on the panel.
      */
     private fun changeSetting(req: HttpRequest, s: Session, viewer: ManagePages.Viewer): HttpResponse {
         val status = host.status()
@@ -264,10 +264,6 @@ class ManageServer(
         val key = req.form["key"].orEmpty()
         val item = SettingsChange.find(section, key) ?: return HttpResponse.seeOther("$page?done=gone")
         val what = "${section.title} › " + if (key == SettingsChange.MASTER) "on/off" else key.replace("/", " › ")
-        if (s.with != SignedInWith.HOME_ASSISTANT && SettingsChange.needsHomeAssistant(key, item, req.form["value"] == "on")) {
-            event("${who(s)}: refused to change $what: needs a Home Assistant sign-in")
-            return settingsPage(status, viewer, page.removePrefix("/"), problem = ManagePages.NEEDS_HA, code = 403)!!
-        }
         if (item is SettingsItem.SignIn) return changeSignIn(req, s, viewer, page, key, what, item)
         // The time window's dialog sends On, From and To; the rest send their value as text.
         val raw = if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")

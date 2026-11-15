@@ -78,17 +78,19 @@ class ManageSettingsTest {
         assertEquals(0, f.onMainCalls)
     }
 
-    @Test fun aPanesOnOffNeedsAHomeAssistantSignIn() {
+    /** Maintainer, 2026-11-15: Manage has the panel's features; the sign-in is the only extra layer. */
+    @Test fun aCodeSignInTurnsPanesOnAndOffAndIsAskedFirstAsOnThePanel() {
         val b = f.Browser()
         b.post("/manage/code", mapOf("next" to "/"))
         b.post("/manage/code", mapOf("next" to "/", "code" to f.shown.last()!!.code))
         val page = b.get("/radio").text()
-        assertTrue("the switch shows, locked", page.contains("role=\"switch\" aria-checked=\"true\" aria-label=\"Zigbee / Thread radio\" disabled"))
-        assertTrue(page.contains(esc(ManagePages.NEEDS_HA)))
-        val r = b.post("/settings", form(b, "radio", "on", "value" to "off", "confirmed" to "1"))
-        assertEquals(403, r.status)
-        assertTrue(radioOn)
-        // Its own settings don't need it: the code is someone at the panel.
+        assertTrue("the switch, not locked", page.contains("role=\"switch\" aria-checked=\"true\" aria-label=\"Zigbee / Thread radio\"><i></i>"))
+        val ask = b.post("/settings", form(b, "radio", "on", "value" to "off"))
+        assertEquals(200, ask.status)
+        assertTrue(ask.text().contains("Turn the radio off?"))
+        assertTrue("asked, not done", radioOn)
+        assertEquals(303, b.post("/settings", form(b, "radio", "on", "value" to "off", "confirmed" to "1")).status)
+        assertFalse(radioOn)
         assertEquals(303, b.post("/settings", form(b, "screen", "Full screen", "value" to "off")).status)
         assertFalse(hide)
     }

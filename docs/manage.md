@@ -46,9 +46,10 @@ integration or Frigate. Show needs a Home Assistant sign-in, and the Log records
 password. You can change the user name and password, or **Clear** them. Leave the password empty to
 keep it.
 
-**Turning a pane on or off needs a Home Assistant sign-in.** In Home Assistant these switches only
-answer the panel's key, so a browser signed in with the panel's code sees them but can't change them.
-A switch the panel asks about first, such as turning the radio off, always needs it.
+**Either sign-in can turn panes on and off**, as on the panel. A switch the panel asks about first,
+such as turning the radio off, asks the same question here, and nothing changes until you answer it.
+In Home Assistant these switches only answer the panel's key; the code on the panel stands for being
+at the panel.
 
 ## Signing in
 

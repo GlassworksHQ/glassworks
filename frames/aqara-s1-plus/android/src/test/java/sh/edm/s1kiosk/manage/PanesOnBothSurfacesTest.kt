@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.pm.PackageManager
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.manage.ManageFixture
-import dev.glassworks.manage.ManagePages
 import dev.glassworks.manage.text
 import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.PaneState
@@ -94,6 +93,11 @@ class PanesOnBothSurfacesTest {
                 assertFalse("${frame.name}: no setup card for $id", frame.runtime.setupPanes(app).any { it.steps.any { st -> st.id == id } })
             }
             assertTrue(overview.contains("${rail.size} in this frame"))
+            // Hidden everywhere else, the diagnostics file still says why each one is missing.
+            val lacks = mapOf("camera" to "camera", "radio" to "silabs-radio")
+            for (id in frame.hidden) {
+                assertTrue("${frame.name}: diagnostics name $id", s.manage.diagnostics().lines().contains("  $id: HIDDEN, the frame lacks ${lacks[id]}"))
+            }
         }
     }
 
@@ -124,7 +128,7 @@ class PanesOnBothSurfacesTest {
             val s = surfaces(frame.runtime)
             val b = s.browser
             val switched = s.panel.sections.filter { it.id in s.panel.panes && it.master != null && it.unavailable() == null }
-            assertTrue(frame.name, switched.size >= frame.rail.size - 2)
+            assertEquals("${frame.name}: every pane on the rail has its on/off", frame.rail, switched.map { it.id })
             for (sec in switched) {
                 val m = sec.master!!
                 val page = b.get("/${sec.id}").text()
@@ -150,15 +154,40 @@ class PanesOnBothSurfacesTest {
         }
     }
 
-    @Test fun aCodeSignInSeesPaneSwitchesLockedWithWhy() {
+    /**
+     * Maintainer, 2026-11-15: Manage has the panel's settings, with the sign-in as the only extra layer. A code
+     * sign-in turns a pane off and on; the radio asks first, and nothing changes until the question is answered.
+     */
+    @Test fun aCodeSignInSwitchesPanesAsThePanelDoes() {
         for (frame in frames()) {
             val s = surfaces(frame.runtime)
             val code = s.fixture.Browser()
             code.post("/manage/code", mapOf("next" to "/"))
             code.post("/manage/code", mapOf("next" to "/", "code" to s.fixture.shown.last()!!.code))
-            val page = code.get("/diagnostics").text()
-            assertTrue(frame.name, page.contains("aria-label=\"Diagnostics\" disabled"))
-            assertTrue(frame.name, page.contains(esc(ManagePages.NEEDS_HA)))
+            assertFalse(frame.name, code.get("/diagnostics").text().contains("aria-label=\"Diagnostics\" disabled"))
+            val sw = frame.runtime.paneDefinitions(app).single { it.id == "diagnostics" }.switch!!
+            assertTrue(sw.on)
+            fun post(section: String, value: String) =
+                code.post("/settings", mapOf("csrf" to code.csrf(), "section" to section, "key" to SettingsChange.MASTER, "value" to value))
+            val off = post("diagnostics", "off")
+            assertEquals(frame.name, 303, off.status)
+            assertEquals(200, code.get(off.headers["Location"]!!).status)
+            assertFalse("${frame.name}: diagnostics off", sw.on)
+            assertEquals(303, post("diagnostics", "on").status)
+            assertTrue("${frame.name}: diagnostics on again", sw.on)
+            val radio = s.panel.sections.firstOrNull { it.id == "radio" }?.master ?: continue
+            prefs.radio.mode = "thread_router"
+            try {
+                assertTrue("${frame.name}: the radio is on", radio.value())
+                val ask = post("radio", "off")
+                assertEquals(200, ask.status)
+                assertTrue(ask.text().contains(esc("Turn the radio off?")))
+                assertEquals("${frame.name}: not confirmed, the radio stays", "thread_router", prefs.radio.mode)
+                assertTrue(radio.value())
+            } finally {
+                prefs.radio.mode = null
+            }
         }
     }
+
 }

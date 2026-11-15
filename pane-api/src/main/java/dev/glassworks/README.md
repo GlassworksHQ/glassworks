@@ -450,13 +450,13 @@ The settings sections are the ones the panel's menu draws, from the frame's one 
 dialog. Each change is a POST to `/settings` (CSRF token, `Origin` check) with the section, the item's
 key and the value, applied with `SettingsChange.change` on the thread `ManageHost.onMain` gives (the
 main thread on Android), so a change from the browser takes the panel's own path. A `Switch` that
-asks first on the panel asks here too. A pane's `master` needs a Home Assistant sign-in: in Home
-Assistant it is an `authOnly` switch. `SettingsChange.CODE_MAY_SWITCH_PANES` lets a code sign-in flip a
-plain one; one that asks first (the radio's off) always needs Home Assistant. `Link` and `Native` say "On the panel". A pane's row
-(`manage.paneRow`) takes its name and on/off from its section: the title, `unavailable` for Can't run,
-the `master` switch (#67) for Off; its chip is `chipWord` and `chipTone`, as on the rail. Off panes
-fold under "Off · N" in the nav, as in the rail. `PanelManageParityTest` walks every item the menu
-draws and fails when one is missing on the Manage page, or changeable on one side only.
+asks first on the panel asks here too. Either sign-in may change any item, a pane's `master`
+included (maintainer, 2026-11-15: the sign-in is the only extra layer). `Link` and `Native` say "On
+the panel". A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
+`unavailable` for Can't run, the `master` switch (#67) for Off; its chip is `chipWord` and
+`chipTone`, as on the rail. Off panes fold under "Off · N" in the nav, as in the rail.
+`PanelManageParityTest` walks every item the menu draws and fails when one is missing on the Manage
+page, or changeable on one side only.
 
 **One look (#243).** `dev.glassworks.brand.Tokens` holds glassworks.dev's colours, the chip, the
 switch, corners and the settings row: the panel's `Glass` and the pages' CSS (`PageShell.TOKENS`,

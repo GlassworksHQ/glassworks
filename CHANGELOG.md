@@ -15,7 +15,7 @@ below as the release notes.
   asks once. The S1 is unchanged: it updates through its root service as before.
 - **Change the panel's settings from the Manage page.** Every setting in the panel's own menu is on
   the Manage page too, in the same order and words, and you can change it there: switches, sliders,
-  addresses, times and choices, and each pane's on/off (that one needs a Home Assistant sign-in). The
+  addresses, times and choices, and each pane's on/off, with either sign-in. The
   panel checks each value as its own controls would. The open settings menu on the panel follows a
   change made in the browser. A few parts only the panel can draw yet (the radio's roles, the time
   zone picker, the wall base's relays, the Bluetooth proxy's devices) say "On the panel".

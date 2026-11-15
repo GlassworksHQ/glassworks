@@ -21,6 +21,7 @@ import dev.glassworks.manage.ManageLog
 import dev.glassworks.manage.ManageServer
 import dev.glassworks.manage.PaneRow
 import dev.glassworks.manage.paneRow
+import dev.glassworks.pane.CantRun
 import dev.glassworks.manage.PanelActions
 import dev.glassworks.manage.PanelStatus
 import dev.glassworks.manage.SessionStore
@@ -90,6 +91,9 @@ class S1Manage(
     /** What the Manage page shows now; tests read it. */
     internal fun status(): PanelStatus = host.status()
 
+    /** The diagnostics file before redaction; tests read it. */
+    internal fun diagnostics(): String = host.diagnostics()
+
     internal val actions: PanelActions get() = host.actions
 
     fun startLog() = tail.start()
@@ -115,7 +119,7 @@ class S1Manage(
                 haBase = prefs.haBase,
                 tiles = listOf(haTile(), wifiTile(), engineTile(), memoryTile()),
                 // The panes the panel's rail lists, no more: one the frame can't run has no section, so it isn't shown (#23).
-                panes = defs.mapNotNull { d -> panes.firstOrNull { it.id == d.id }?.let { s1PaneRow(d.id, it) } },
+                panes = panes.map { s1PaneRow(it.id, it) },
                 sections = model.sections,
                 // After the About section's own items (the version, the licences).
                 about = listOf(
@@ -143,6 +147,10 @@ class S1Manage(
             appendLine()
             appendLine("Panes:")
             for (p in s.panes) appendLine("  ${p.id}: ${p.state.kind} ${p.state.detail}")
+            // Not shown anywhere, so say here why each is missing.
+            for (d in runtime.paneDefinitions(app).filterIsInstance<CantRun>()) {
+                appendLine("  ${d.id}: HIDDEN, the frame lacks ${(d.requires - runtime.frame.provides).joinToString { it.id }}")
+            }
             appendLine()
             appendLine("Settings:")
             for (sec in s.sections) {
@@ -226,7 +234,7 @@ class S1Manage(
 
     /** A pane's row ([paneRow]): what the S1 can say about a running Voice, Music and Radio. */
     /** Each pane's state is its section's own ([dev.glassworks.pane.paneState]), as the panel's rail shows it (#243). */
-    private fun s1PaneRow(id: String, section: SettingsSection?): PaneRow = when (id) {
+    private fun s1PaneRow(id: String, section: SettingsSection): PaneRow = when (id) {
         "radio" -> paneRow(id, section, listOf("Share Home Assistant's Thread network (start it on the panel first)" to ThreadJoin.PATH))
         else -> paneRow(id, section)
     }
