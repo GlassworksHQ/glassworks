@@ -7,7 +7,7 @@ import android.graphics.fonts.FontFamily
 import android.graphics.fonts.FontStyle
 import android.util.Log
 import dev.glassworks.platform.Platform
-import sh.edm.s1kiosk.R
+import dev.glassworks.core.R
 import java.nio.ByteBuffer
 import java.util.Locale
 import kotlin.math.roundToInt
