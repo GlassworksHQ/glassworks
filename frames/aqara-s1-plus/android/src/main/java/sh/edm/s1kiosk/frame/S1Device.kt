@@ -20,7 +20,7 @@ import java.util.concurrent.Executors
  * The S1's Device page ([dev.glassworks.frame.Frame.deviceSection]): what belongs to the device and to no
  * pane. Block Aqara cloud (the wall base pane's setting and Home Assistant entity, `block_aqara_cloud`; the
  * pane still applies it), the cloud daemon's state, which of Aqara's apps are turned off
- * (tools/debloat/debloat.sh), and the radio's mode, which opens the Radio pane.
+ * (frames/aqara-s1-plus/tools/debloat/debloat.sh), and the radio's mode, which opens the Radio pane.
  */
 class S1Device(
     private val cloud: AqaraCloud,
@@ -93,7 +93,7 @@ class S1Device(
         const val RADIO_TITLE = "Radio mode"
         const val STALE_MS = 5_000L
 
-        /** tools/debloat/debloat.sh's list and its launcher, in its order, with a name for each. */
+        /** frames/aqara-s1-plus/tools/debloat/debloat.sh's list and its launcher, in its order, with a name for each. */
         val AQARA_APPS = mapOf(
             "com.aqara.inhome.manager" to "Cloud manager",
             "com.lumi.ota" to "Firmware updater",
