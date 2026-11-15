@@ -273,7 +273,9 @@ class OnvifServer(
         val path = rawPath.substringBefore('?')
         if (path == "/onvif/snapshot.jpg" || path == "/snapshot.jpg") {
             if (method != "GET" && method != "HEAD") return HttpResponse(405, ByteArray(0), "text/plain")
-            if (!httpAuthOk(method, rawPath, headers)) return unauthorized("text/plain", "Unauthorized".toByteArray())
+            // Digest's stale nonce gets its fresh challenge here too (verifier 3965c4ee), as on the SOAP services.
+            val auth = httpAuth(method, rawPath, headers)
+            if (auth != AuthResult.OK) return unauthorized("text/plain", "Unauthorized".toByteArray(), stale = auth == AuthResult.STALE)
             val jpeg = try { snapshot?.invoke() } catch (_: Exception) { null }
                 ?: return HttpResponse(503, "No snapshot available".toByteArray(), "text/plain")
             return HttpResponse(200, if (method == "HEAD") ByteArray(0) else jpeg, "image/jpeg", listOf("Cache-Control" to "no-store"))
@@ -401,8 +403,6 @@ class OnvifServer(
             OnvifXml.constantTimeEquals(pw, OnvifXml.passwordDigest(nonce, created, c.second))
         }
     }
-
-    internal fun httpAuthOk(method: String, uri: String, headers: Map<String, String>): Boolean = httpAuth(method, uri, headers) == AuthResult.OK
 
     /**
      * HTTP Basic or Digest. Digest is checked against the nonce the client sent: the right password with a

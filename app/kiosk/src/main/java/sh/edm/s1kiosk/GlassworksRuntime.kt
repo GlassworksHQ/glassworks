@@ -13,6 +13,8 @@ import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.frame.Frame
 import dev.glassworks.manage.PanelCode
+import dev.glassworks.notifications.NotificationsDefinition
+import dev.glassworks.notifications.NotificationsHub
 import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
@@ -32,6 +34,7 @@ import sh.edm.s1kiosk.setup.SetupPane
 import sh.edm.s1kiosk.setup.SetupState
 import sh.edm.s1kiosk.update.UpdateManager
 import sh.edm.s1kiosk.voice.AssistDefinition
+import sh.edm.s1kiosk.voice.OrbBakes
 import sh.edm.s1kiosk.voice.VoiceUi
 import java.util.concurrent.Executors
 
@@ -72,6 +75,12 @@ class GlassworksRuntime(
 
     private var definitions: List<PaneDefinition>? = null
 
+    /** The notifications pane's state, for the overlay and the settings page (#118). */
+    val notifications = NotificationsHub()
+
+    /** The glass orb's shared layers: the timer-done stage and the critical alert bake them once. Main thread. */
+    val orbs = OrbBakes()
+
     /**
      * One thread for the settings pages' work that must not run on the main thread and must keep its order
      * (Music's volume, sent to Music Assistant). Made on first use; idle, it is one parked daemon thread.
@@ -80,7 +89,7 @@ class GlassworksRuntime(
 
     /**
      * Every pane's definition, made once: their on/off, setup steps, settings sections and adb extras. The
-     * core's panes in the order the settings list them (voice, music, radio, Bluetooth proxy), then the frame's, then the camera, then diagnostics.
+     * core's panes in the order the settings list them (voice, music, notifications, radio, Bluetooth proxy), then the frame's, then the camera, then diagnostics.
      * MainActivity and KioskService ask for them first thing, before discovery can save an HA URL in
      * this process (the radio step's one-time check needs that).
      */
@@ -93,6 +102,11 @@ class GlassworksRuntime(
                 setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
                 readout = RadioDefinition.AppReadout(this, prefs.radio) { prefs.haBase },
             )
+            val notify = NotificationsDefinition(
+                prefs.paneFile("notifications"), notifications,
+                nodeName = { device?.nodeName },
+                now = android.os.SystemClock::elapsedRealtime,
+            )
             // It requires a camera: without one in the frame's hardware it is CantRun (below), as every pane that lacks its own.
             val camera = CameraDefinition(
                 prefs.paneFile("camera"),
@@ -100,7 +114,7 @@ class GlassworksRuntime(
                 pickers = { c -> sh.edm.s1kiosk.camera.CameraUseCards(c) },
             )
             val bluetoothProxy = BluetoothProxyDefinition(prefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(app), ::BluetoothProxyPage)
-            (listOf(AssistDefinition(prefs.paneFile("assist")), SendspinDefinition(prefs.paneFile("sendspin"), settingsWorker::execute), radio, bluetoothProxy) +
+            (listOf(AssistDefinition(prefs.paneFile("assist")), SendspinDefinition(prefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
                 paneFrame.paneDefinitions(app) + camera + DiagnosticsDefinition(prefs.paneFile("diagnostics")))
                 .map { CantRun.unless(it, frame.provides) }
         }.also { definitions = it }

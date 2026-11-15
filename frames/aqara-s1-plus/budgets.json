@@ -56,6 +56,11 @@
       "size_max_bytes": 100000,
       "note": "0.02 MB on 2026-11-14 with its engine library"
     },
+    "notifications": {
+      "not_switched": "it is off by default and, on, only waits for a notify call; Clarity's pane fixtures (tools/perf, #205) don't switch it yet",
+      "size_max_bytes": 100000,
+      "note": "0.04 MB on 2026-11-13 (#118)"
+    },
     "camera": {
       "not_switched": "the S1 has no camera, so the pane can't run here",
       "size_max_bytes": 170000,

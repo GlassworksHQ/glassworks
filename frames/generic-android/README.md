@@ -72,6 +72,7 @@ It will install as a normal app. It doesn't install from Kiln yet.
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
 | Diagnostics | Planned | Worked out: needs no special hardware. |
 | Bluetooth proxy | Depends on the device | Worked out: needs Bluetooth LE. |
+| Notifications | Planned | Worked out: needs no special hardware. |
 | Camera | Depends on the device | Worked out: needs a camera. |
 | Wall base | No | S1 only. |
 
