@@ -16,5 +16,6 @@
 @media (prefers-reduced-motion: reduce) {
   .lean {
     transition: none;
+    transform: none;
   }
 }
