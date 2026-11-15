@@ -23,7 +23,7 @@ keeps working while the screen is off. Logs: `adb logcat -s S1ESPHome S1Voice`.
 
 ## Add it to Home Assistant
 
-1. Install the app ([install.md](install.md)). The panel downloads the wake word models itself the
+1. Install the app ([install.md](../frames/aqara-s1-plus/docs/install.md)). The panel downloads the wake word models itself the
    first time it needs one (`voice/ModelFetcher.kt`): the four official microWakeWord models
    (`okay_nabu`, `hey_jarvis`, `alexa`, `hey_mycroft`) from
    [esphome/micro-wake-word-models](https://github.com/esphome/micro-wake-word-models) at a pinned
@@ -252,21 +252,21 @@ So on a panel HA already has:
 | switch `Voice overlay` | `voice_overlay` | Full-screen overlay during voice runs: an orb that follows the voice, what was heard and the reply; tap anywhere to cancel the run (default on) |
 | number `Mic gain` | `mic_gain` | 0.5–4× |
 | number `Wake word threshold` | `wake_word_threshold` | 0.10–0.99. For a microWakeWord word, the probability cutoff for the mean of the model's last 5 outputs; it starts at the model's own (Okay Nabu and Hey Jarvis 0.97, Mycroft 0.95, Alexa 0.9) and goes back to it when you pick another word. Lower is more sensitive. For a legacy openWakeWord word, openWakeWord's score threshold (default 0.5), as before |
-| select `Radio mode` | `radio_mode` | `Off` (default), `Zigbee coordinator (TCP)`, `Zigbee router (repeater)`, `Thread border router`, `Thread router (repeater)` ([radio.md](radio.md); before 0.4.3 the repeaters were `Zigbee router` / `Thread router`, still accepted when sent); without the root helper only `Off` applies, other choices are refused and snap back |
+| select `Radio mode` | `radio_mode` | `Off` (default), `Zigbee coordinator (TCP)`, `Zigbee router (repeater)`, `Thread border router`, `Thread router (repeater)` ([radio.md](../frames/aqara-s1-plus/docs/radio.md); before 0.4.3 the repeaters were `Zigbee router` / `Thread router`, still accepted when sent); without the root helper only `Off` applies, other choices are refused and snap back |
 | text_sensor `Radio status` | `radio_status` | diagnostic; e.g. `Off: Aqara's radio services stopped, radio idle. …`, or the root helper's `ok zigbee_tcp: EZSP on tcp:6638`, plus who may connect and the ZHA / Zigbee2MQTT settings |
-| text `Radio allowed clients` | `radio_allowed_clients` | who may reach the radio's ports besides Home Assistant: addresses or CIDRs, `any`, or empty = Home Assistant only ([radio-guide.md](radio-guide.md#who-may-connect)) |
-| select `Zigbee stack` | `zigbee_stack` | `Aqara 7.3.3 (EZSP 12, ZHA)` (default) or `Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)` ([radio.md](radio.md#zigbee-stack-aqara-or-silicon-labs-helper-v4)); encrypted connection only, needs helper v4 |
+| text `Radio allowed clients` | `radio_allowed_clients` | who may reach the radio's ports besides Home Assistant: addresses or CIDRs, `any`, or empty = Home Assistant only ([radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md#who-may-connect)) |
+| select `Zigbee stack` | `zigbee_stack` | `Aqara 7.3.3 (EZSP 12, ZHA)` (default) or `Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)` ([radio.md](../frames/aqara-s1-plus/docs/radio.md#zigbee-stack-aqara-or-silicon-labs-helper-v4)); encrypted connection only, needs helper v4 |
 | text_sensor `Radio helper` | `radio_helper` | diagnostic; which root helper runs (boot image or radio bundle, version) and whether the boot image needs updating |
 | text_sensor `Radio firmware` | `radio_firmware` | diagnostic; the radio's firmware version, flash progress or result |
-| select `Radio firmware image` | `radio_firmware_image` | `Keep current`, `Aqara stock image`, `Image from the radio bundle`; arms the choice for 2 minutes ([radio.md](radio.md#radio-firmware-updates-helper-v4)); encrypted connection only |
+| select `Radio firmware image` | `radio_firmware_image` | `Keep current`, `Aqara stock image`, `Image from the radio bundle`; arms the choice for 2 minutes ([radio.md](../frames/aqara-s1-plus/docs/radio.md#radio-firmware-updates-helper-v4)); encrypted connection only |
 | button `Flash radio firmware` | `radio_firmware_flash` | flashes the armed image; encrypted connection only |
-| button `Join Zigbee network` / `Leave Zigbee network` | `zigbee_router_join` / `zigbee_router_leave` | Zigbee router mode ([radio.md](radio.md#zigbee-router)) |
+| button `Join Zigbee network` / `Leave Zigbee network` | `zigbee_router_join` / `zigbee_router_leave` | Zigbee router mode ([radio.md](../frames/aqara-s1-plus/docs/radio.md#zigbee-router)) |
 | button `Leave Thread network` | `thread_leave` | forgets the Thread dataset and router settings, in any mode; encrypted connection only, needs helper v4 |
-| button `Join Home Assistant's Thread network` | `thread_join_ha` | gets the preferred Thread network's dataset from Home Assistant and switches to Thread router; if the panel's HA user isn't an administrator, the panel shows a QR code for a one-off administrator sign-in ([radio-guide.md](radio-guide.md#repeater-modes-experimental)); encrypted connection only |
+| button `Join Home Assistant's Thread network` | `thread_join_ha` | gets the preferred Thread network's dataset from Home Assistant and switches to Thread router; if the panel's HA user isn't an administrator, the panel shows a QR code for a one-off administrator sign-in ([radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md#repeater-modes-experimental)); encrypted connection only |
 | text_sensor `Thread join` | `thread_join` | diagnostic; how the last join went (waiting for the QR code, joining `<network>`, or why not) |
 | text `Thread dataset` | `thread_dataset` | write-only (always reads empty): the active dataset hex for the Thread router mode; whitespace in a paste (spaces, line breaks, no-break or zero-width spaces) is accepted and dropped; never logged |
 | text_sensor `IP address` | `ip_address` | diagnostic |
-| text `Time zone` | `time_zone` | an Olson id such as `Europe/Berlin`, kept by the root helper across reboots ([install.md](install.md#time-zone)); encrypted connection only |
+| text `Time zone` | `time_zone` | an Olson id such as `Europe/Berlin`, kept by the root helper across reboots ([install.md](../frames/aqara-s1-plus/docs/install.md#time-zone)); encrypted connection only |
 | text_sensor `Time zone status` | `time_zone_status` | diagnostic; whether the zone is being kept |
 | text_sensor `App version` | `app_version` | diagnostic |
 | update `App update` (firmware) | `app_update` | the latest GitHub release vs this app; install from HA ([app updates](#app-updates)) |
@@ -295,7 +295,7 @@ microphone or a port.
 | switch `Voice` | `voice` | the voice assistant and timers | `voice_enabled` | no |
 | switch `Music Assistant player (Sendspin)` | `sendspin` | Sendspin (the same entity as before) | `sendspin_enabled` | no |
 | switch `Wall base` | `wall_base` | the wall base driver; off closes the port, and Aqara's daemon may run again unless `Block Aqara cloud` is on | `wall_base_enabled` | no |
-| switch `Keep time zone` | `keep_time_zone` | the time zone; off sets the zone to keep to `(off)`, so the root helper keeps none and adopts none ([radio.md](radio.md#root-helper-contract-v4)), and on keeps the same zone again. *Time zone status* says `off` only once the helper has let go | `time_zone_enabled` | no |
+| switch `Keep time zone` | `keep_time_zone` | the time zone; off sets the zone to keep to `(off)`, so the root helper keeps none and adopts none ([radio.md](../frames/aqara-s1-plus/docs/radio.md#root-helper-contract-v4)), and on keeps the same zone again. *Time zone status* says `off` only once the helper has let go | `time_zone_enabled` | no |
 | switch `Diagnostics` | `diagnostics` | the diagnostic sensors; off stops the sampling | `diagnostics_enabled` | no |
 | switch `Bluetooth proxy` | `bluetooth_proxy` | the Bluetooth proxy; **off by default**. On or off changes what the device info offers, so Home Assistant reconnects | `bluetooth_proxy_enabled` | no |
 
@@ -494,7 +494,7 @@ usual `--ez camera_enabled true` on the main activity.
      10, `GET_SIGNING_CERTIFICATES` alone leaves `signingInfo` empty for a downloaded APK, so up to
      0.4.0 every update was refused as "the APK is not signed". **Fixed in 0.4.1**; because the bug is
      in the installed version, panels on 0.4.0 or older update once by hand
-     ([install.md](install.md#updating)).
+     ([install.md](../frames/aqara-s1-plus/docs/install.md#updating)).
   4. The verified file becomes `files/update/pending.apk`, and the root update service installs it
      ([frames/aqara-s1-plus/research/root.md](../frames/aqara-s1-plus/research/root.md)). On success the app is replaced and restarted, and the
      new version reports the result in *Update status*.
@@ -786,7 +786,7 @@ ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gra
   `media_player.<device>_speaker` stays for TTS, announcements and HA media; while it announces,
   the Sendspin output is muted locally.
 - Chromecast: not possible. A Cast receiver must be a Google-certified device.
-- Radio modes other than `Off` need the root helper from the boot-image patch ([radio.md](radio.md)).
+- Radio modes other than `Off` need the root helper from the boot-image patch ([radio.md](../frames/aqara-s1-plus/docs/radio.md)).
 - Entities marked "encrypted connection only" refuse changes from a plaintext connection (a panel that
   was never given a key).
 

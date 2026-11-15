@@ -90,8 +90,8 @@ announcements, with a calm full-screen overlay while you talk.
 | 🏠 **One ESPHome device** | HA discovers the panel and sets up encryption automatically. You get the screen as a light, presence, light level, a speaker, voice settings and the wall base, plus the dashboard and radio controls. [The entities](../../docs/esphome.md) |
 | 🎵 **Music Assistant player** | A native Sendspin player that plays in sync with your other speakers. [Sendspin guide](../../docs/sendspin.md) |
 | 🔔 **Notifications** | HA sends a notification and the panel shows it over the dashboard, with a camera's picture, buttons and a sound. It can also open a dashboard view full screen, like a doorbell's. [Notifications guide](../../docs/notifications.md) |
-| 👋 **Wakes when you walk up** | The screen wakes as you approach, turns off when the room is empty, and dims at night. It is driven by the panel's own sensors. [Sensors guide](../../docs/sensors.md) |
-| 📡 **Radio for Home Assistant** | The panel's Zigbee/Thread radio can be a Zigbee coordinator for ZHA or (experimental) Zigbee2MQTT, a Thread border router, or a repeater in your existing network. You switch roles from HA. [How to](../../docs/radio-guide.md) |
+| 👋 **Wakes when you walk up** | The screen wakes as you approach, turns off when the room is empty, and dims at night. It is driven by the panel's own sensors. [Sensors guide](docs/sensors.md) |
+| 📡 **Radio for Home Assistant** | The panel's Zigbee/Thread radio can be a Zigbee coordinator for ZHA or (experimental) Zigbee2MQTT, a Thread border router, or a repeater in your existing network. You switch roles from HA. [How to](docs/radio-guide.md) |
 | 🔄 **Updates in Home Assistant** | New versions show up under *Settings → Updates*, and one click installs them. Fixes for the radio side come with them. [Updates](#updates) |
 | 🔌 **Wall base relays** | A driver for the mains relay base that speaks its UART protocol directly, with no Aqara daemon. Not yet tried on a real base. [Wall bases](research/bases.md) |
 | 🔒 **No Aqara cloud** | Aqara's launcher, apps, updater and cloud daemon are switched off (reversibly), so the panel stops talking to Aqara. |
@@ -170,7 +170,7 @@ a Silicon Labs EFR32 802.15.4 radio, a VI5300 time-of-flight sensor and an ambie
 
 In the browser, over USB. It backs the panel up first, then roots and flashes it.
 
-Install it from Kiln: [kiln.glassworks.dev/aqara-s1-plus](https://kiln.glassworks.dev/aqara-s1-plus). The steps are in [docs/install.md](../../docs/install.md), and Kiln's recipe for it is in [`installer/`](installer/).
+Install it from Kiln: [kiln.glassworks.dev/aqara-s1-plus](https://kiln.glassworks.dev/aqara-s1-plus). The steps are in [docs/install.md](docs/install.md), and Kiln's recipe for it is in [`installer/`](installer/).
 
 Without root, the app can install over adb on its own, but you lose the radio modes.
 
@@ -214,7 +214,7 @@ Kiln runs entirely in your browser and uploads nothing. It walks you through fiv
 </table>
 
 Every screen, per-OS setup, what to do when something fails, undo, updating and troubleshooting
-are in **[docs/install.md](../../docs/install.md)**.
+are in **[docs/install.md](docs/install.md)**.
 
 > [!NOTE]
 > The web installer has been tested end to end on a real S1 Plus (firmware 4.5.80), from FEL mode
@@ -235,7 +235,7 @@ tools/install.sh --url http://homeassistant.local:8123 \
     --timezone America/Los_Angeles --locale en-US # install and configure S1 Kiosk over adb
 ```
 
-See [docs/install.md](../../docs/install.md#command-line) for the details.
+See [docs/install.md](docs/install.md#command-line) for the details.
 
 ## The radio
 
@@ -254,8 +254,8 @@ menu (*Radio*), which also shows what to do next, with QR codes for your phone:
   already have and extends it.
 
 Only Home Assistant can connect to the radio unless you allow other computers. The step-by-step
-guide is **[docs/radio-guide.md](../../docs/radio-guide.md)**; the technical reference is
-[docs/radio.md](../../docs/radio.md).
+guide is **[docs/radio-guide.md](docs/radio-guide.md)**; the technical reference is
+[docs/radio.md](docs/radio.md).
 
 ## Updates
 
@@ -275,7 +275,7 @@ Each update is checked against its checksum and the project's signing key first.
   one-time reinstall, because the two are signed with different keys. The installers do it for you
   and keep the panel on its Wi-Fi. Without root over adb, which is the normal case, **the app's
   settings are reset**: you sign in again and may need to add the panel to Home Assistant again.
-  See [docs/install.md](../../docs/install.md#switching-a-development-build-to-a-release).
+  See [docs/install.md](docs/install.md#switching-a-development-build-to-a-release).
 
 ## Known issues
 
@@ -332,7 +332,7 @@ serial console was only used during development.
 
 Yes. *Undo a previous install* (or `fel-install.sh --undo`) restores `boot`, `vbmeta` and the
 splash from your backup, and a factory reset afterwards brings back Aqara's setup. See
-[docs/install.md](../../docs/install.md#undo).
+[docs/install.md](docs/install.md#undo).
 </details>
 
 <details>

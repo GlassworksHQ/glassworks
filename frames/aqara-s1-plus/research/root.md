@@ -149,7 +149,7 @@ panel's adb serial. The scripts keep `ANDROID_SERIAL` for adb only.
 
 ## Radio bundle service
 
-`s1kiosk_bundle` installs the signed radio bundle the app ships ([radio.md](../../../docs/radio.md#radio-bundles-helper-v4)).
+`s1kiosk_bundle` installs the signed radio bundle the app ships ([radio.md](../docs/radio.md#radio-bundles-helper-v4)).
 Same shape and threat model as `s1kiosk_update`:
 
 - **App side:** stage `/data/data/sh.edm.s1kiosk/files/radio/bundle-in/` (manifest, `manifest.sig`, the
@@ -171,5 +171,5 @@ Same shape and threat model as `s1kiosk_update`:
 
 ## Next
 - Browser installer (WebUSB): built, in [`kiln/`](../../../kiln/src/README.md); design in
-  [web-installer.md](web-installer.md), user guide in [docs/install.md](../../../docs/install.md).
+  [web-installer.md](web-installer.md), user guide in [docs/install.md](../docs/install.md).
 - After `fel-install.sh`, `tools/install.sh` installs and configures the kiosk app over adb.

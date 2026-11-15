@@ -54,6 +54,6 @@ See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `sh/edm/s1kiosk/fra
   (`{presence, proximityRaw, lux, screenOn, night}`) plus a `s1kiosk-state` DOM event.
 
 All of this is exposed to Home Assistant through the panel's ESPHome device (presence, illuminance,
-screen light, timeouts, night window, presence range); see [esphome.md](esphome.md).
+screen light, timeouts, night window, presence range); see [esphome.md](../../../docs/esphome.md).
 
 Not used yet: the SC7A20 accelerometer (a tap/knock-to-wake idea).

@@ -6,5 +6,5 @@
     "silabs-radio"
   ],
   "status": "beta",
-  "docs": "docs/radio.md"
+  "docs": "frames/aqara-s1-plus/docs/radio.md"
 }

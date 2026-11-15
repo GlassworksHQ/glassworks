@@ -224,7 +224,7 @@ below as the release notes.
   splash and the panel was then installed again, that install's backup held a stock `boot` with our
   power-on splash, and undo restored our splash while saying the stock one was back. Both installers
   now refuse such a backup before writing anything, and point you to the first install's backup or
-  the by-hand undo in docs/install.md.
+  the by-hand undo in frames/aqara-s1-plus/docs/install.md.
 - **A Thread dataset typed in the settings menu no longer shows an error.** After you pasted the
   dataset under the radio's *Advanced* and the radio took it, the menu said "The kiosk service isn't
   running yet" instead of "Dataset handed to the radio". The dataset was stored either way; now the
@@ -262,7 +262,7 @@ below as the release notes.
   the splash. A backup missing one of them (a damaged or hand-made `.zip` or folder) used to restore
   the rest and report success, leaving our splash on the panel. Now the web installer and
   `fel-install.sh --undo` both refuse it before writing anything, and the
-  [install guide](docs/install.md#undo) says how to put back boot and vbmeta by hand.
+  [install guide](frames/aqara-s1-plus/docs/install.md#undo) says how to put back boot and vbmeta by hand.
 - **Sign-in: someone on your network who reads the sign-in code can no longer use it.** Both sign-ins (the
   dashboard QR code and the administrator sign-in for the Thread join) now use PKCE, so Home Assistant
   only hands out the panel's token to the panel itself. Needs Home Assistant 2026.10 or later to take

@@ -4,10 +4,10 @@ import sh.edm.s1kiosk.radio.RadioHelper
 import sh.edm.s1kiosk.radio.RadioMode
 
 /**
- * The setup screen's radio step (docs/radio.md, "App side"): which modes are offered, their one-line
+ * The setup screen's radio step (frames/aqara-s1-plus/docs/radio.md, "App side"): which modes are offered, their one-line
  * explanations, and how RadioController's answer is read back. Pure Kotlin (RadioStepTest).
  *
- * Offered, as verified on the reference panel (docs/radio.md):
+ * Offered, as verified on the reference panel (frames/aqara-s1-plus/docs/radio.md):
  *  - Off (default) and Zigbee coordinator (ZHA over TCP): verified end to end with bellows.
  *  - Thread border router: verified with real Matter devices, as the only border router and next to
  *    an existing one (must be on Home Assistant's network).

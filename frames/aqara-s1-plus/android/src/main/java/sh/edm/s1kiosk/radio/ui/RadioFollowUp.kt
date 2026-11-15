@@ -275,7 +275,7 @@ object RadioFollowUp {
      * The setup screen's version: calm and short, so it fits the step card (480 dp screen) without
      * scrolling. What to do and the QR code, the URL or serial path, the live state and the one button
      * the step needs (Join). The full explanation, the Zigbee stack choice, Leave buttons and notes are
-     * in the settings menu's card and docs/radio-guide.md.
+     * in the settings menu's card and frames/aqara-s1-plus/docs/radio-guide.md.
      */
     private fun setupCard(f: Facts): Card = when (f.mode) {
         RadioMode.OFF -> Card(f.mode, "The radio is off", listOf("You can choose a role later in the panel's settings menu or in Home Assistant."))

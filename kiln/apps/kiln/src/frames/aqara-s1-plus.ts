@@ -6,7 +6,7 @@ import photo from '../../../../../docs/img/fel-button.jpg';
 import type { RecoveryData } from '../recovery/player';
 import type { RadioPlan, RadioStep } from '../wizard/state';
 
-const DOCS = 'https://github.com/GlassworksHQ/glassworks/blob/main/docs';
+const DOCS = 'https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs';
 
 export interface AskCopy { title: string; body: string; pick: string }
 
@@ -37,7 +37,7 @@ export const s1PlusUi = {
     learn: `${DOCS}/install.md`,
   },
   app: 'S1 Kiosk',
-  /** Undo's two depths (docs/install.md#undo). */
+  /** Undo's two depths (frames/aqara-s1-plus/docs/install.md#undo). */
   undo: {
     factory: { title: 'As it came from Aqara', detail: 'The original software, then a factory reset on the panel. Everything is removed.' },
     keep: { title: 'Keep its settings', detail: 'Aqara\'s apps come back first, over USB with the panel running. Wi-Fi and the rest stay.', button: 'Give back Aqara\u2019s apps' },
@@ -57,7 +57,7 @@ export const THREAD_FROM_HA = 404;
 export interface PanelApp { version?: string; code?: number }
 
 /**
- * After the radio role is applied: what to do in Home Assistant to use it, per mode (docs/radio.md).
+ * After the radio role is applied: what to do in Home Assistant to use it, per mode (frames/aqara-s1-plus/docs/radio.md).
  * Undefined when there is nothing to do (Off). `app`: the installed S1 Kiosk, which decides how the
  * Thread router gets its network.
  */

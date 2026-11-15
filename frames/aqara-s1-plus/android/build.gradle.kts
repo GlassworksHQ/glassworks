@@ -85,7 +85,7 @@ android {
         jniLibs { useLegacyPackaging = true }
     }
 
-    // The signed radio bundle (docs/radio.md "Radio bundles"): S1_RADIO_BUNDLE_ASSETS is a directory
+    // The signed radio bundle (frames/aqara-s1-plus/docs/radio.md "Radio bundles"): S1_RADIO_BUNDLE_ASSETS is a directory
     // holding radio-bundle/ (tools/radio/make-bundle.py --out). The release workflow sets it; other
     // builds ship no bundle and the app leaves the panel's root side as it is.
     System.getenv("S1_RADIO_BUNDLE_ASSETS")?.takeIf { it.isNotEmpty() }?.let { dir ->

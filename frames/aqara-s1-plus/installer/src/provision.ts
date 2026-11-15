@@ -26,7 +26,7 @@ export const DEBLOAT = [
   'com.lumi.factory',
 ] as const;
 
-/** Aqara's radio + cloud services, started again on undo (provider-first order, docs/radio.md). */
+/** Aqara's radio + cloud services, started again on undo (provider-first order, frames/aqara-s1-plus/docs/radio.md). */
 const AQARA_SERVICES = ['zigbee_cpcd', 'zigbee_socat', 'zigbee_zigbeed', 'zigbee_host', 'zigbee_agent', 'ha_matter', 'ha_master'];
 
 /** Each APK provision installs: S1 Kiosk, and the on-screen keyboard when the recipe has it. */
@@ -256,7 +256,7 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
     r.step(`Time zone ${opts.timezone}`);
     await r.run('settings put global auto_time_zone 0');
     await r.run(`service call alarm 3 s16 ${q(opts.timezone)}`);
-    // Kept by the root helper (v4): Aqara's SystemManager resets the zone at every boot (docs/install.md).
+    // Kept by the root helper (v4): Aqara's SystemManager resets the zone at every boot (frames/aqara-s1-plus/docs/install.md).
     await r.run(`setprop persist.s1kiosk.timezone ${q(opts.timezone)}`);
   }
   if (opts.locale && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(opts.locale)) throw new Error(`bad locale ${opts.locale}`);

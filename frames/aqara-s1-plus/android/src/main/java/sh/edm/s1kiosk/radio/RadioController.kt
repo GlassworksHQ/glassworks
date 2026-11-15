@@ -52,7 +52,7 @@ interface StackStore { var stack: String? }
 class MemoryStackStore(override var stack: String? = null) : StackStore
 
 /**
- * Radio mode manager (docs/radio.md). Two backends:
+ * Radio mode manager (frames/aqara-s1-plus/docs/radio.md). Two backends:
  *  - **Root helper installed** (`init.svc.s1kiosk_radio` set): every mode is delegated to it: the app
  *    writes [RadioHelper.PROP_MODE], `ctl.restart`s the service, and shows the helper's status.
  *  - **No helper** (today): `Off` is applied directly by stopping Aqara's radio init services;
@@ -321,7 +321,7 @@ class RadioController(
     fun helperText(): String = listOfNotNull(refusedStack, helperBase()).joinToString(". ")
 
     private fun helperBase(): String {
-        if (!helperInstalled()) return "not installed: the panel's boot image has no root helper, so only Off works (see docs/radio.md)"
+        if (!helperInstalled()) return "not installed: the panel's boot image has no root helper, so only Off works (see frames/aqara-s1-plus/docs/radio.md)"
         val v = helperVersion()
         if (v < RadioHelper.BUNDLE_VERSION) {
             return "v$v from the boot image. Update the boot image once with the web installer: after that, helper fixes, " +
@@ -467,7 +467,7 @@ class RadioController(
         if (!available(m)) {
             status = if (!helperInstalled()) {
                 "${m.label} needs the root helper (init service ${RadioHelper.SERVICE} is not installed; " +
-                    "see docs/radio.md). Still in ${mode.label}."
+                    "see frames/aqara-s1-plus/docs/radio.md). Still in ${mode.label}."
             } else {
                 "${m.label} needs the root helper v${m.minHelperVersion} or newer (installed: v${helperVersion()}; " +
                     "update the panel's boot image). Still in ${mode.label}."

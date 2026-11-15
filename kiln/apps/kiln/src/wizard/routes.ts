@@ -134,7 +134,7 @@ export function onState(s: WizardState, step: Step | undefined): Decision {
   return { kind: forward ? 'push' : 'replace', step: to };
 }
 
-/** s1.edm.sh's (and docs/install.md's) hash links, and this app's older ones, to routes. */
+/** s1.edm.sh's (and frames/aqara-s1-plus/docs/install.md's) hash links, and this app's older ones, to routes. */
 export const OLD_HASH: Record<string, Step> = {
   install: 'start',
   undo: 'undo',

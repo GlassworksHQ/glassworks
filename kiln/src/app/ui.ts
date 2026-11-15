@@ -967,7 +967,7 @@ class Installer {
   }
 
   /**
-   * After the radio role is applied: what to do in Home Assistant to use it, per mode (docs/radio.md).
+   * After the radio role is applied: what to do in Home Assistant to use it, per mode (frames/aqara-s1-plus/docs/radio.md).
    * Returns false when there is nothing to do (Off).
    */
   private radioNextSteps(mode: string): boolean {

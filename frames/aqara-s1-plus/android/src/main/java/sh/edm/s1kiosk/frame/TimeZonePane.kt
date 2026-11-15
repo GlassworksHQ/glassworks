@@ -10,7 +10,7 @@ import dev.glassworks.esphome.TextEntity
 import dev.glassworks.esphome.TextSensorEntity
 
 /**
- * The S1's `Time zone` and `Time zone status` entities (docs/install.md "Time zone"), backed by [TimeZoneKeeper].
+ * The S1's `Time zone` and `Time zone status` entities (frames/aqara-s1-plus/docs/install.md "Time zone"), backed by [TimeZoneKeeper].
  * Turned off, the root helper stops keeping the zone ([TimeZoneKeeper.OFF]), and the pane keeps it in [prefs]
  * for when it is turned on.
  */

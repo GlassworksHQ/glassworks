@@ -5,7 +5,7 @@ import java.net.Inet6Address
 import java.net.InetAddress
 
 /**
- * Who may reach the radio's network services (EZSP bridge tcp:6638, OTBR REST tcp:8081), docs/radio.md
+ * Who may reach the radio's network services (EZSP bridge tcp:6638, OTBR REST tcp:8081), frames/aqara-s1-plus/docs/radio.md
  * "Who may connect". Pure (no Android): parsing/normalizing allow-lists and deciding what the app
  * hands to the root helper in [RadioHelper.PROP_ALLOW].
  *

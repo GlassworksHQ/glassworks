@@ -3,7 +3,7 @@ package sh.edm.s1kiosk.radio
 import java.io.File
 
 /**
- * Radio (EFR32 RCP) firmware updates, helper v4 (docs/radio.md "Radio firmware"). Never automatic:
+ * Radio (EFR32 RCP) firmware updates, helper v4 (frames/aqara-s1-plus/docs/radio.md "Radio firmware"). Never automatic:
  * the owner picks an image in the `Radio firmware image` select, which arms it for [ARM_MS], and then
  * presses `Flash radio firmware`. The app only writes a request naming the image and the start of its
  * SHA-256 ([RadioHelper.FW_REQUEST_FILE]); the root helper does everything else with Aqara's own cpcd

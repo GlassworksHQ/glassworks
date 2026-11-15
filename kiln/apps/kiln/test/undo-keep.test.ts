@@ -37,7 +37,7 @@ describe('Undo, keeping the settings', () => {
       appsBack: false,
       note: {
         kind: 'err', title: 'This backup can\'t undo the install.', sub: expect.stringMatching(/^This backup has no .+\. This step changed nothing on the panel\.$/),
-        link: { href: s1PlusUi.help.undo, text: 'Undo by hand' }, // docs/install.md#undo: the way on
+        link: { href: s1PlusUi.help.undo, text: 'Undo by hand' }, // frames/aqara-s1-plus/docs/install.md#undo: the way on
       },
     });
   });

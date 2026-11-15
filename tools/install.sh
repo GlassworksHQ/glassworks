@@ -2,7 +2,7 @@
 # One-shot setup of an Aqara Panel Hub S1 Plus as a Home Assistant kiosk, over ADB (no root).
 #
 # Prerequisite: ADB reachable (USB or Wi-Fi). Stock firmware exposes no ADB; see
-# docs/install.md#command-line for how to enable it. Everything below is reversible: see --undo.
+# frames/aqara-s1-plus/docs/install.md#command-line for how to enable it. Everything below is reversible: see --undo.
 #
 #   export ANDROID_SERIAL=<panel serial>        # if more than one device is attached
 #   tools/install.sh --url http://homeassistant.local:8123/my-dashboard [options]
@@ -18,7 +18,7 @@
 #   --keep-dnd          keep Aqara's 22:00-07:00 Do-Not-Disturb screen-off
 #   --switch            if S1 Kiosk on the panel has another signing key (a debug build) and Android
 #                       refuses the APK: switch without asking (default: explain and ask). See
-#                       docs/install.md#switching-a-development-build-to-a-release
+#                       frames/aqara-s1-plus/docs/install.md#switching-a-development-build-to-a-release
 #   --undo              revert: re-enable Aqara apps + launcher, restore DND and the IME, remove
 #                       S1 Kiosk (or disable it, if it saved the panel's Wi-Fi), start Aqara's radio
 #                       services again, check HOME is Aqara's
@@ -56,7 +56,7 @@ run() { if [[ $DRY -eq 1 ]]; then echo "  + $*"; else "$@"; fi; }
 try() { if [[ $DRY -eq 1 ]]; then echo "  + $* || true"; else "$@" || true; fi; }
 sh_() { run adb shell "$@"; }
 
-# ---- Wi-Fi ownership and the signing-key switch (docs/install.md; frames/aqara-s1-plus/installer/src/switch.ts) ----
+# ---- Wi-Fi ownership and the signing-key switch (frames/aqara-s1-plus/docs/install.md; frames/aqara-s1-plus/installer/src/switch.ts) ----
 # Android 10 forgets every Wi-Fi network an app saved when that app is uninstalled, and S1 Kiosk
 # saves the panel's Wi-Fi itself (Improv). The Wi-Fi password is only ever held in a shell variable:
 # never echoed, never in a command line (it reaches improv-send.py on stdin), never in a file.
@@ -308,7 +308,7 @@ if [[ $UNDO -eq 1 ]]; then
   elif ! adb shell pm uninstall "$PKG" | grep -q Success; then
     try adb shell pm disable-user --user 0 "$PKG"
   fi
-  # Radio (docs/radio.md): the app kept Aqara's radio services stopped ("Off" mode) and blocked
+  # Radio (frames/aqara-s1-plus/docs/radio.md): the app kept Aqara's radio services stopped ("Off" mode) and blocked
   # ha_master, Aqara's cloud link. Start them in provider-first order; they are init services, so a
   # reboot would bring them back as well.
   for svc in zigbee_cpcd zigbee_socat zigbee_zigbeed zigbee_host zigbee_agent ha_matter ha_master; do
@@ -324,7 +324,7 @@ if [[ $UNDO -eq 1 ]]; then
   fi
   if [[ $KEPT -eq 1 ]]; then
     echo "Done. Aqara's apps are back and S1 Kiosk is disabled, so the panel stays on its Wi-Fi."
-    echo "To remove S1 Kiosk completely, see docs/install.md#undo. Reinstall: $0 --url ..."
+    echo "To remove S1 Kiosk completely, see frames/aqara-s1-plus/docs/install.md#undo. Reinstall: $0 --url ..."
   else
     echo "Done. Aqara's apps are back and S1 Kiosk is removed (reinstall: $0 --url ...)."
   fi

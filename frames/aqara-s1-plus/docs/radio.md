@@ -9,9 +9,9 @@ border router, or Thread router (repeater joining an existing Thread network). T
 entities always reach HA as an ESPHome device over Wi-Fi, whatever the radio does. The mode is picked in Home Assistant with the
 `Radio mode` select of the panel's ESPHome device (`select.s1_panel_radio_mode` on a panel added before
 #63, `select.glassworks_panel_radio_mode` on one added before #260, `select.aqara_s1_plus_radio_mode` on
-a new S1, [Names](esphome.md#names)), status in the
+a new S1, [Names](../../../docs/esphome.md#names)), status in the
 `Radio status` text sensor. Every radio entity except `Radio status` is disabled by default (#132):
-turn it on in Home Assistant before you use it ([esphome.md](esphome.md#categories-and-defaults)), or
+turn it on in Home Assistant before you use it ([esphome.md](../../../docs/esphome.md#categories-and-defaults)), or
 use the panel's settings menu. The steps on this page assume it is on.
 
 | Mode (select option) | Needs root helper | State (2026-11-10, reference panel) |
@@ -23,7 +23,7 @@ use the panel's settings menu. The steps on this page assume it is on.
 | `Thread router (repeater)` | helper v2 | **experimental**: joined Home Assistant's real Thread network and was promoted to router (2026-11-10); not soak-tested |
 
 There is no "Aqara (stock)" mode: with Aqara's launcher/apps disabled and its cloud blocked
-([frames/aqara-s1-plus/research/debloat.md](../frames/aqara-s1-plus/research/debloat.md), AqaraCloud.kt), nothing can use the hub's own Zigbee network. **Stock comes back by
+([frames/aqara-s1-plus/research/debloat.md](../research/debloat.md), AqaraCloud.kt), nothing can use the hub's own Zigbee network. **Stock comes back by
 uninstalling the app (or `tools/install.sh --undo`) and rebooting**: all of Aqara's radio services
 are init services started on every boot. `--undo` also force-stops the kiosk and `ctl.start`s them
 right away.
@@ -159,7 +159,7 @@ its startup RSTACK. Z3Gateway was restarted afterwards and re-attached normally.
   On first use ZHA forms its own network (or restores a backup) into zigbeed's NVM.
 - **Zigbee2MQTT `ember`: not with Aqara's zigbeed.** zigbee-herdsman 11.2.1 requires EZSP 13-19
   (EmberZNet >= 7.4) and throws "Adapter EZSP protocol version (12) is not supported by Host [13-19]".
-  The deprecated `ezsp` adapter works with it (tested, [frames/aqara-s1-plus/research/zigbee2mqtt.md](../frames/aqara-s1-plus/research/zigbee2mqtt.md)),
+  The deprecated `ezsp` adapter works with it (tested, [frames/aqara-s1-plus/research/zigbee2mqtt.md](../research/zigbee2mqtt.md)),
   but is on its way out. The fix is Silicon Labs' zigbeed 8.2.2 (EZSP 18) on the same stock radio
   firmware: the `Zigbee stack` choice ([below](#zigbee-stack-aqara-or-silicon-labs-helper-v4)).
 
@@ -228,7 +228,7 @@ network could make the same one. The radio ports then stay
 closed to everyone: ZHA and the OTBR integration can't connect, and *Radio status* says `nobody yet
 (waiting for Home Assistant to connect over ESPHome)`. To fix it, either give the panel a key
 (Home Assistant 2026.11 or later sets one up by itself the next time it connects; see
-[esphome.md](esphome.md#encryption-automatic)) or put Home Assistant's address in *Radio
+[esphome.md](../../../docs/esphome.md#encryption-automatic)) or put Home Assistant's address in *Radio
 allowed clients*.
 
 The owner can replace the automatic list with the `Radio allowed clients` text entity (in HA: the
@@ -425,7 +425,7 @@ As a **repeater** (*Thread router* mode) the panel has no such requirement: it o
 ## Root helper contract (v4)
 
 The root half of the modes lives in a helper. The Magisk boot patch installs it as an init service
-([frames/aqara-s1-plus/research/root.md](../frames/aqara-s1-plus/research/root.md); working on the reference panel since 2026-11-09). Files:
+([frames/aqara-s1-plus/research/root.md](../research/root.md); working on the reference panel since 2026-11-09). Files:
 
 - `tools/radio/s1kiosk_radio.sh`: the helper (mksh).
 - `tools/radio/s1kiosk_radio.rc`: the init snippet.
@@ -490,7 +490,7 @@ current helper as the fallback; everything else comes with app updates as a **si
 
 **What's in the boot image (once):** `s1kiosk_radio.sh` (loader + the v4 helper as fallback),
 `s1kiosk_bundle.sh` + `.rc` (the install service), `s1kiosk_verify` (a 70 KB static ARM Ed25519
-checker: [`tools/root/verify/`](../tools/root/verify/s1kiosk_verify.c), Monocypher 4.0.3, built
+checker: [`tools/root/verify/`](../../../tools/root/verify/s1kiosk_verify.c), Monocypher 4.0.3, built
 reproducibly by `tools/root/build-verify.sh`), `s1kiosk_bundle.pub` (the project's public key), and
 otbr-agent/ot-ctl as before.
 
@@ -500,7 +500,7 @@ and the Silicon Labs runtime (`sisdk/`). It may list radio firmware images (`fir
 project ships none. The release workflow builds and signs it (`tools/radio/make-bundle.py`, key in the
 `S1_RADIO_BUNDLE_KEY` environment secret, read only by the workflow's signing job, which signs only
 commits on `main` and checks every input against committed hashes:
-[releasing.md](releasing.md#3b-the-radio-bundle-key-once)); its version is the APK's versionCode
+[releasing.md](../../../docs/releasing.md#3b-the-radio-bundle-key-once)); its version is the APK's versionCode
 (`make-bundle.py` refuses a higher one, which would lock panels out of every later bundle). The APK carries it as assets; it is not published on its own.
 
 **Flow:** the app compares the bundle it carries with the root-written, world-readable
@@ -558,7 +558,7 @@ same pty pair, the same `:6638` bridge and firewall):
 | `Aqara 7.3.3 (EZSP 12, ZHA)` (default) | Aqara's `/vendor/bin/zigbeed`, its init service | 12 | ZHA (bellows); Zigbee2MQTT's deprecated `ezsp` adapter |
 | `Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)` | Silicon Labs' zigbeed 8.2.2 from Simplicity SDK 2025.6.3, through the bundle's glibc runtime | 18 | Zigbee2MQTT `ember` (`adapter: ember`, `port: tcp://<panel>:6638`), ZHA |
 
-How it works ([frames/aqara-s1-plus/research/zigbee2mqtt.md](../frames/aqara-s1-plus/research/zigbee2mqtt.md) has the panel tests):
+How it works ([frames/aqara-s1-plus/research/zigbee2mqtt.md](../research/zigbee2mqtt.md) has the panel tests):
 
 - **zigbeed itself is never shipped by us.** It is Silicon Labs MSLA object code. When the stack is
   chosen, the helper reports `sisdk missing 8.2.2 <sha256>`; the **app** fetches the 253 KB armhf .deb
@@ -640,7 +640,7 @@ Verified on the panel (2026-11-10): re-flashing Aqara's stock image through this
 Limits, on purpose: only images whose CPC protocol Aqara's cpcd 4.3.3 speaks (v4) can be verified, so
 an image built from a newer SDK (CPC v5/v6) would fail verification and be rolled back until a bundle
 also brings a matching host cpcd. No image is shipped; see
-[frames/aqara-s1-plus/research/rcp-firmware.md](../frames/aqara-s1-plus/research/rcp-firmware.md) for what building one for this board takes.
+[frames/aqara-s1-plus/research/rcp-firmware.md](../research/rcp-firmware.md) for what building one for this board takes.
 
 ## App side
 
@@ -680,7 +680,7 @@ Assistant entities and the Thread join from Home Assistant, as a Glassworks pane
   The setup channel (web installer) offers the same five options; options carry optional
   `experimental` and `repeater` flags. `radio.set_mode` accepts only those options' ids
   (`RadioStep.OPTIONS`): a mode the step doesn't offer is refused with "Unknown radio mode", even when
-  `RadioMode` has it ([onboarding.md](onboarding.md#from-the-web-installer-improv-serial--setup-channel-over-adb-)).
+  `RadioMode` has it ([onboarding.md](../../../docs/onboarding.md#from-the-web-installer-improv-serial--setup-channel-over-adb-)).
 - Kiosk settings menu, Radio section (`radio/ui/RadioSectionView`): the radio's on/off at the top
   right (the section's master switch; off asks first, on shows the roles), the roles as in setup
   (`RadioTechPicker`, #63 round 2; the one in effect lit, another asks to switch), then a panel with
@@ -918,7 +918,7 @@ and the **proof build from `build-otbr.sh` already is that profile** (all of tho
 
 ## Open risks
 
-- **Root helper needs the Magisk boot patch** ([frames/aqara-s1-plus/research/root.md](../frames/aqara-s1-plus/research/root.md)). Panels without it only get `Off`. Persistent `Off` across a reboot without the helper relies on the app starting and
+- **Root helper needs the Magisk boot patch** ([frames/aqara-s1-plus/research/root.md](../research/root.md)). Panels without it only get `Off`. Persistent `Off` across a reboot without the helper relies on the app starting and
   re-applying it (a few seconds of Aqara's stack at boot).
 - **EZSP-over-TCP and the OTBR REST API have no authentication.** The helper's firewall (v3) admits
   only Home Assistant's address. That is an address check, not authentication: a host that can take
