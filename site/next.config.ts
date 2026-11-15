@@ -11,7 +11,11 @@ const nextConfig: NextConfig = {
   turbopack: { root: repo },
   outputFileTracingRoot: repo,
   // The frame card ships TypeScript and CSS modules, not built JavaScript (packages/frame-card).
-  transpilePackages: ["@glassworks/frame-card"],
+  // shiki (the docs' code highlighting) is on Next's list of packages it leaves external, and the
+  // trace missed the @shikijs/* packages it imports, so on Vercel every page rendered on demand failed
+  // with a 500. Bundled, nothing of it has to be found at run time. `npm run check:trace` loads every
+  // remaining external module from each route's bundle alone.
+  transpilePackages: ["@glassworks/frame-card", "shiki"],
   // The site reads frames/*/design, frames/*/clarity/clarity.json and the Markdown the docs and blog
   // publish (src/lib/docs/sources.ts, src/lib/blog/posts.ts), with the images beside it. A function
   // may render a doc again on revalidation, so those go into the server bundles; nothing else from the
