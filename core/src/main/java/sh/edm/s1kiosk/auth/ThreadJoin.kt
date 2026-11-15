@@ -152,7 +152,8 @@ class ThreadJoin(
     private fun fetch(base: String, token: String): ThreadFetch = try {
         client.fetchPreferred(base, token)
     } catch (e: RuntimeException) {
-        AuthLog.w("Thread join: fetch failed", e)
+        // The class only: a client's message (or the trace's) can carry the frame it sent, token included.
+        AuthLog.w("Thread join: fetch failed (${e.javaClass.simpleName})")
         ThreadFetch.Failed("unexpected error (${e.javaClass.simpleName})")
     }
 

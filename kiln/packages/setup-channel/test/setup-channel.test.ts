@@ -52,6 +52,15 @@ describe('setup channel', () => {
     expect(c.state?.ha.signedIn).toBe(true);
   });
 
+  it('thread_join starts the join; its progress comes in pushed states', async () => {
+    const app = fakeApp();
+    const c = new SetupChannel(app);
+    await c.joinThread();
+    expect(app.sent).toEqual([{ id: 1, op: 'radio.thread_join' }]);
+    app.push({ event: 'state', state: { ...base, radio: { ...base.radio, mode: 'thread_router', threadJoin: { phase: 'joined', role: 'child' } } } });
+    expect(c.state?.radio.threadJoin).toEqual({ phase: 'joined', role: 'child' });
+  });
+
   it('validates addresses', () => {
     expect(validHaUrl('http://homeassistant.local:8123')).toBe(true);
     expect(validHaUrl('https://ha.example.com/dash')).toBe(true);

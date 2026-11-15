@@ -254,6 +254,22 @@ line, both ways:
   `radio.answered` is false.
 - `radio.set_allow` (first name `set_radio_allow`) with `allow`: who may reach the radio's TCP
   services, as the `Radio allowed clients` entity ([radio.md](../frames/aqara-s1-plus/docs/radio.md)).
+- `radio.thread_join`, no arguments (#166): starts *Join Home Assistant's Thread network*, the same
+  join as the button on the panel and in HA (`auth/ThreadJoin`), and answers at once. A join already
+  running is left to run. Refused (`ok:false`) when `radio.mode` isn't `thread_router` ("The radio isn't
+  a Thread router: …") and when `ha.signedIn` is false ("The panel isn't signed in to Home Assistant:
+  …"). Its progress is `radio.threadJoin`, sent only in `thread_router`:
+  `phase` is `idle`, `fetching` (getting the dataset with the panel's sign-in), `needs_admin` (the
+  panel's HA user isn't an administrator: the panel shows a QR code for `adminUrl`,
+  `http://<ip>:8099/thread`), `joining` (the dataset is fetched and handed to the radio), `joined` or
+  `failed` (also when the radio reports an error after the hand-off). Until the root helper has taken
+  the dataset and reported a new status, the phase stays `joining` and `role` is left out: the status
+  before that is the previous network's. A dataset the helper doesn't take within a minute is `failed`
+  ("the radio's root helper didn't take …"). `reason` says why for `needs_admin` and `failed`, in plain words. `role` is the radio's
+  Thread role once it has a dataset (`detached`, `child`, `router`, `leader`, …). `idle` is also what a
+  restart shows, so a panel already on a network reads `idle` with a `role`. After *Leave Thread network*
+  (no dataset again) a finished join reads `idle` too. Never the dataset, network
+  key or PSKc: `RadioThreadJoinTest` checks every reply and log.
 - While connected, `{"event":"state","state":…}` is pushed whenever the serialized state changes
   (checked every 1.5 s, once the client has asked for the state).
 - No secrets ever: no tokens, no API key, no passwords.
