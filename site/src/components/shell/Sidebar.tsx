@@ -38,6 +38,7 @@ export function Sidebar() {
         <NavLink href="/panes">
           Panes<small>{panes.length}</small>
         </NavLink>
+        <NavLink href="/blueprints">Blueprints</NavLink>
         <a href={`${links.s1}/tree/main/docs`} className={s.ni}>
           Docs<small aria-hidden="true">↗</small>
         </a>

@@ -1,0 +1,28 @@
+.row {
+  flex-wrap: wrap;
+}
+
+.acts {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: none;
+}
+
+.file {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-sky);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.file:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  .acts {
+    flex-basis: 100%;
+  }
+}
