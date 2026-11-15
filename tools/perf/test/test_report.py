@@ -528,6 +528,33 @@ class CameraFailedRuns(unittest.TestCase):
         self.assertNotIn("showed no frame", R.camera_cell({"camera_runs": [ok, ok]}, {"camera": "good"}))
 
 
+class HeldBack(unittest.TestCase):
+    """s1rtc10: the headline said "Held back by typical dashboards: the view takes 1.2 s to open" when
+    typical's open was good and its blocking (2.9 s, poor) held it back. The headline names the tasks
+    next_limits gives, each in its own words."""
+
+    def test_a_page_held_back_only_by_blocking(self):
+        ok = {"inp_ms": 100, "load_ms": 1241, "blocking_ms": 100, "scroll_level": "fluid", "updates_level": "fluid",
+              "camera_level": "good"}
+        tiers = {"light": dict(ok, camera_level=None), "typical-nocam": dict(ok, blocking_ms=2862.0, camera_level=None),
+                 "typical": dict(ok, blocking_ms=2900.0), "heavy": dict(ok, blocking_ms=3100.0)}
+        g = G.grade(tiers, 2000)
+        self.assertEqual(g["grade"], "D")
+        self.assertEqual(G.next_limits(g), [{"page": "typical-nocam", "needs": "fluid", "tasks": ["blocking"]}])
+        ref = {"tiers": {"typical-nocam": {"load_ms": {"median": 1241}, "blocking_ms": {"median": 2862.0}}}}
+        h = R.headline("Aqara S1 Plus", g, ref)
+        self.assertIn("Held back by typical dashboards without a camera: the main thread is blocked for 2.9 s after the view is drawn.", h)
+        self.assertNotIn("to open", h)
+
+    def test_every_task_has_its_own_words(self):
+        s_ = {"load_ms": {"median": 1241}, "blocking_ms": {"median": 2862.0}}
+        self.assertEqual(R.task_phrase("load", s_), "the view takes 1.2 s to open")
+        self.assertEqual(R.task_phrase("blocking", {}), "the blocking after the view is drawn wasn't measured")
+        for t in G.TASKS:
+            R.task_phrase(t, s_)                       # none falls through to another task's words
+        self.assertRaises(ValueError, R.task_phrase, "nonsense", s_)
+
+
 class TimedOut(unittest.TestCase):
     """#202, s1rtc3: a view that didn't finish within the runner's deadline fails its own unmeasured
     tasks, measured: open and tap at the deadline, the rest below the lowest bar. Not missing."""
@@ -573,6 +600,40 @@ class TimedOut(unittest.TestCase):
         self.assertIn("the view didn't finish in 1 of 3 run(s)", cell)
         self.assertNotIn("showed no frame", cell)
         self.assertEqual(R.camera_cell({"camera_runs": [late]}, {"camera": "slow"}), "the view didn't finish in 1 of 1 run(s), slow")
+
+
+class Published(unittest.TestCase):
+    """A report published in the frame's folder (frames/<id>/clarity/): written with --out, the run
+    directory untouched, and --app-version shown as given, which the grade never reads."""
+
+    def test_out_and_app_version(self):
+        b = Build()
+        b.setUp()
+        before = sorted(os.listdir(b.dir))
+        out = tempfile.mkdtemp()
+        p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "report.py"), b.dir, "--out", out,
+                            "--app-version", "pre-v1"], capture_output=True, text=True, timeout=120)
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(sorted(os.listdir(b.dir)), before)                    # nothing written into the run
+        self.assertEqual(sorted(os.listdir(out)), ["report.json", "report.md"])
+        with open(os.path.join(out, "report.json")) as f:
+            rep = json.load(f)
+        self.assertEqual((rep["frame"]["app"]["version_name"], rep["frame"]["app"]["version_label"]), ("pre-v1", "given"))
+        self.assertIsNone(rep["frame"]["app"]["version_code"])
+        with open(os.path.join(out, "report.md")) as f:
+            md = f.read()
+        self.assertIn("app pre-v1", md)
+        self.assertNotIn("0.4.3", md)
+        self.assertEqual(S.summarise(rep, allow_provisional=True)["app_version"], "pre-v1")
+        # The grade is the same with or without the label.
+        self.assertEqual(rep["grade"]["grade"], b.rep["grade"]["grade"])
+        self.assertEqual(rep["grade"]["bands"], b.rep["grade"]["bands"])
+
+    def test_the_apk_sizes_take_the_label(self):
+        rep = {"frame": {"app": {"package": "sh.edm.s1kiosk", "version_name": "0.4.3", "version_code": "403"}},
+               "apk": [{"file": "baseline-main-5d0a0d2.apk", "abis": ["armeabi-v7a"], "bytes": 1}]}
+        R.label_app_version(rep, "pre-v1")
+        self.assertEqual(rep["apk"][0]["file"], "sh.edm.s1kiosk-pre-v1.apk")
 
 
 class CpuClock(unittest.TestCase):
@@ -638,6 +699,40 @@ class ReceiverSpanShort(unittest.TestCase):
         for st, span in zip(line["streams"], spans):
             st.update(span_ms=span, source="webrtc+rvfc", gaps_source="webrtc (bound)", max_gap_ms=216.9)
         return line
+
+    def test_the_webrtc_detail_says_freezes_n_a_when_the_counts_miss_the_window(self):
+        """#255's review: s1rtc10's heavy detail said "0 freezes" from counts that covered about 6.5 s of
+        30; the stalls were n/a, the freezes must be too, with the time the counts cover."""
+        def run(spans):
+            line = self.line(spans)
+            for st in line["streams"]:
+                st["webrtc"] = {"inbound": True, "frames_decoded": 100, "frames_dropped": 0, "freezes": 0, "freeze_s": 0.0}
+            return R.camera_run(line, "heavy")
+        short = R.webrtc_detail(run([6600, 6600, 6700, 6700]))
+        self.assertIn("freezes n/a (the receiver's counts cover 6.6 s of the window's 30.0 s)", short)
+        self.assertNotIn("0 freezes", short)
+        whole = R.webrtc_detail(run([30043] * 4))
+        self.assertIn("0 freezes (0.0 s)", whole)
+        self.assertNotIn("freezes n/a", whole)
+        self.assertNotIn("receiver's counts cover", whole)
+
+    def test_freezes_n_a_when_a_stream_never_played_and_the_rest_are_short(self):
+        """#255's review: with a stream that never played the run is not whole and has no uncovered_ms;
+        the freezes still go n/a, from the played streams' spans. The one that never played (its span
+        the window's) doesn't count, as in camera_run."""
+        line = self.line([30043, 6600, 6700, 6700])
+        for st in line["streams"]:
+            st["webrtc"] = {"inbound": True, "frames_decoded": 100, "frames_dropped": 0, "freezes": 0, "freeze_s": 0.0}
+        line["streams"][0].update(first_frame_ms=None, shown_pct=None)
+        run = R.camera_run(line, "heavy")
+        self.assertNotIn("uncovered_ms", run)
+        self.assertIn("freezes n/a (the receiver's counts cover 6.6 s of the window's 30.0 s)", R.webrtc_detail(run))
+        # Only the stream that never played is short: the played ones cover the window.
+        line = self.line([6600, 30043, 30043, 30043])
+        for st in line["streams"]:
+            st["webrtc"] = {"inbound": True, "frames_decoded": 100, "frames_dropped": 0, "freezes": 0, "freeze_s": 0.0}
+        line["streams"][0].update(first_frame_ms=None, shown_pct=None)
+        self.assertIn("0 freezes (0.0 s)", R.webrtc_detail(R.camera_run(line, "heavy")))
 
     def test_a_short_span_is_not_measured(self):
         # s1rtc9, heavy run 2: three streams' counts covered 6821 ms of 30043.
@@ -1746,7 +1841,15 @@ class PaneOnAlone(unittest.TestCase):
         self.assertEqual(ram["pane_budget"]["assist"]["ok"], False)          # 30 MB against 20 MB, three samples each
         self.assertEqual(ram["panes_not_switched"], [{"id": "radio", "why": "its mode"}])
         self.assertEqual(ram["panes_waiting"], [])                            # kept in glassworks.perf/4, empty since #67
-        self.assertIn("Not measured on their own: radio (its mode).", "\n".join(R.ram_markdown(ram)))
+        md = "\n".join(R.ram_markdown(ram))
+        self.assertIn("Not measured on their own: radio (its mode).", md)
+        # #255's review: the peak is sampled between pages, and the report says so where it's shown.
+        self.assertIn("| Process | Idle (median of runs) | Peak, sampled between the graded pages |", md)
+        self.assertIn("a short peak inside a task can be missed", md)
+        # The peak is from the between-page samples only (the idle median can be above it): as the code does.
+        self.assertIn("The peak is the largest of the between-page samples only (the idle samples aren't in it", md)
+        self.assertNotIn("Peak during the graded tasks", md)
+        self.assertIn("- app_pss_peak (sampled between pages): ", md)
         self.assertTrue(ram["budget"]["ok"])
         self.assertIsNone(R.reference_ram({}, [], "sh.edm.s1kiosk", budgets, 2_000_000))
         # F6: a run that failed may have stopped mid-page; its samples aren't the peak.

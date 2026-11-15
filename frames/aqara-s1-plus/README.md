@@ -104,7 +104,12 @@ announcements, with a calm full-screen overlay while you talk.
 
 **Status: beta.**
 
-The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
+**Clarity v2: D**, a good wall panel for light dashboards (measured 2026-11-15 UTC, 3 of 3 runs, not
+provisional). Typical dashboards hold it back: without a camera their view is drawn in 1.2 s, but the main
+thread then stays blocked for 2.9 s. The report is in
+[clarity/report.md](clarity/report.md), and the summary the site grades in
+[clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)). The Clarity
+badge shows the grade once glassworks.dev publishes it.
 
 What works on `main`, as of 2026-11-14. The latest release is v0.4.3, and rows marked New come with
 the next one. "Verified" means tested on a real panel in a real home.
@@ -418,6 +423,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [idle-cpu.md](research/idle-cpu.md): Why the kiosk uses ~40% of a core at idle: the wake word's embedding model, per-thread numbers, and the options (#105)
 - [bluetooth.md](research/bluetooth.md): The panel's Bluetooth (RTL8821CS, shared with Wi-Fi), Android 10's scan rules from AOSP, and what HA needs from an ESPHome Bluetooth proxy (#121)
 - [view-open.md](research/view-open.md): Where typical's 4.7 s view open goes: HA's JavaScript on one Gecko thread at 1.5 GHz; the app candidates tried on the panel (none helped), and what's left upstream (#244)
+- [install-crash-loop.md](research/install-crash-loop.md): Why the kiosk crash-looped after installs: Android 10's ActivityManager LRU bug (one step per kiosk force-stop), not dex2oat; the netwatch check that restarts the framework (#248)
 
 ## Files
 

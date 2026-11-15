@@ -2,6 +2,13 @@
 """Build report.json and report.md from a tools/perf run directory (MIT). Offline; no adb.
 
     python3 tools/perf/report.py <run-dir> [--apk app.apk ...] [--budgets frames/<id>/budgets.json]
+                                 [--out DIR] [--app-version LABEL]
+
+--out writes report.json and report.md there instead of into the run directory (a published copy,
+e.g. frames/<id>/clarity/; the run's own files stay as they are). --app-version shows LABEL as the
+app's version, in place of the version the device reported (e.g. "pre-v1" for a build before the
+app's first release): report.md, report.json and the APK sizes show it as given, and nothing in the
+grade reads it.
 
 The report schema (glassworks.perf/4) is documented in docs/perf.md.
 """
@@ -913,6 +920,14 @@ def task_phrase(task, s_):
         return (f"a camera takes {statistics.median(ff) / 1000:.1f} s to show its first frame and shows {shown:.0f}% of its frames"
                 + (f" ({failed} of {len(runs)} run(s) had a stream that showed no frame)" if failed else "")
                 + (f"; its stalls weren't measured in {na} of {len(runs)} run(s)" if na else ""))
+    if task == "blocking":
+        # Rubric 2: the wait after the draw, its own task; never the open's words (s1rtc10's headline
+        # read "the view takes 1.2 s to open" for a page held back by 2.9 s of blocking).
+        if med("blocking_ms") is None:
+            return "the blocking after the view is drawn wasn't measured"
+        return f"the main thread is blocked for {med('blocking_ms') / 1000:.1f} s after the view is drawn"
+    if task != "load":
+        raise ValueError(f"no words for task {task!r}")
     if med("load_ms") is not None:
         return f"the view takes {med('load_ms') / 1000:.1f} s to open"
     return "opening the view wasn't measured"
@@ -939,7 +954,9 @@ def headline(name, g, ref):
     for t, phrases in hb:
         if phrases:
             # "typical dashboards", "typical dashboards with a camera" (rubric v10, #205).
-            label = "typical dashboards with a camera" if t == "typical" else f"{LABEL.get(t, t)} dashboards"
+            # And "without a camera" for typical-nocam: its numbers aren't typical-with-a-camera's (#255's review).
+            label = {"typical": "typical dashboards with a camera",
+                     "typical-nocam": "typical dashboards without a camera"}.get(t, f"{LABEL.get(t, t)} dashboards")
             out += f" {lead} {label}: " + "; ".join(phrases) + "."
     if g["capped_by_start"]:
         out += f" A slow restart ({g['start']['value'] / 1000:.1f} s) caps it at {G.START_CAP}."
@@ -1208,7 +1225,7 @@ def reference_ram(ref_idles, refstarts, package, budgets, mem_total_kb):
             "samples": len(bm),
             "app_pss_kb": max(m["app_pss_kb"] for m in bm),
             "by_role_pss_kb": {r: max(m["by_role"].get(r, {}).get("pss_kb", 0) for m in bm) for r in roles},
-            # Each process's peak RSS since it started (VmHWM), summed: catches a peak between two samples.
+            # Each process's peak RSS since it started (VmHWM), summed: includes a peak between two samples, as RSS (an upper bound on PSS).
             "app_rss_hwm_kb": max(sum(r["rss_peak_kb"] for r in m["by_role"].values()) for m in bm),
             "mem_available_min_kb": min((m["mem_available_kb"] for m in bm if m["mem_available_kb"] is not None), default=None),
         } if bm else None,
@@ -1646,9 +1663,20 @@ def webrtc_detail(c):
     busy = (f"; the page's frame callbacks (detail, how busy the page was): {sum(x.get('callbacks') or 0 for x in cbs)} "
             f"for {total('frames_decoded')} frames, stalls by them up to {max((x.get('stall_total_ms') or 0) for x in cbs) / 1000:.1f} s"
             if cbs else "")
+    # Receiver counts that leave more of the window out than a stall can hide in (#265): their freezes
+    # are n/a there too, as the stalls are, and the counts say the time they cover (#255's review).
+    # From the spans themselves, of the streams that played (as camera_run's uncovered_ms), so a run in
+    # which a stream never played, with no uncovered_ms, still gets it (#255's review).
+    spans = [s["span_ms"] for s in c.get("detail") or [] if (s.get("webrtc") or {}).get("inbound")
+             and s.get("span_ms") is not None and s.get("first_frame_ms") is not None and s.get("shown_pct") is not None]
+    window = c.get("window_ms")
+    short = bool(spans and window and window - min(spans) > CAMERA_UNCOVERED_MAX_MS)
+    freezes = ("freezes n/a" if short else f"{total('freezes')} freezes ({total('freeze_s', '{:.1f}')} s)")
+    covered = (f" (the receiver's counts cover {min(spans) / 1000:.1f} s of the window's {window / 1000:.1f} s)"
+               if short else "")
     return (f"decoder {', '.join(decs)}" + (f" ({', '.join(hw)})" if hw else "")
             + f", {total('frames_decoded')} frames decoded, {total('frames_dropped')} dropped, "
-            f"{total('freezes')} freezes ({total('freeze_s', '{:.1f}')} s), candidate {', '.join(cand) or 'n/a'}{restarts}{busy}")
+            f"{freezes}{covered}, candidate {', '.join(cand) or 'n/a'}{restarts}{busy}")
 
 
 def by_cpu(khz):
@@ -1883,11 +1911,16 @@ def ram_markdown(ram):
         return []
     out = ["", "## RAM on the reference dashboards (not graded)", "",
            "PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each "
-           "graded run, and between the graded pages (the largest of those is the peak during the graded tasks).", ""]
+           "graded run, and between the graded pages. The peak is the largest of the between-page samples only (the "
+           "idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside "
+           "them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed. The VmHWM "
+           "line below is each process's peak RSS since it started, so it includes such a peak, but RSS counts "
+           "shared pages in full: it bounds the PSS peak from above and doesn't measure it. It covers only the processes "
+           "still running, with a readable VmHWM, when it is read: one that exited earlier isn't in it.", ""]
     idle, peak = ram.get("reference_idle"), ram.get("graded_peak")
     roles = sorted(set((idle or {}).get("by_role_pss_kb", {})) | set((peak or {}).get("by_role_pss_kb", {})))
     if idle or peak:
-        out += ["| Process | Idle (median of runs) | Peak during the graded tasks |", "|---|---|---|"]
+        out += ["| Process | Idle (median of runs) | Peak, sampled between the graded pages |", "|---|---|---|"]
         for r in roles:
             pk = (peak or {}).get("by_role_pss_kb", {}).get(r)
             pk = "n/a" if pk is None else f"{pk / 1024:.0f} MB"
@@ -1902,7 +1935,9 @@ def ram_markdown(ram):
         out += ["", "Budgets (frames/<id>/budgets.json):"]
         for k, c in b["checks"].items():
             val = "n/a" if c["value_kb"] is None else f"{c['value_kb'] / 1024:.0f} MB"
-            out.append(f"- {k}: {val} against {c['budget_kb'] / 1024:.0f} MB: {budget_word(c['ok'])}")
+            # A peak here is the sampled one above (between pages), not a maximum inside the tasks.
+            what = " (sampled between pages)" if "peak" in k else ""
+            out.append(f"- {k}{what}: {val} against {c['budget_kb'] / 1024:.0f} MB: {budget_word(c['ok'])}")
     if ram.get("panes"):
         out += ["", "Each pane on by itself against every pane off, on the typical reference dashboard (median of runs; "
                     "the tolerance is twice the noisier set's estimated standard deviation; `:boot` left out). Only samples "
@@ -1946,17 +1981,35 @@ def main():
     ap.add_argument("--apk", action="append", default=[])
     ap.add_argument("--budgets", default=None, help="a frame's budgets file; default frames/<id>/budgets.json, else tools/perf/budgets.json")
     ap.add_argument("--keep-apk", action="store_true", help="keep the apk sizes of the existing report.json (run.sh --idle-only)")
+    ap.add_argument("--out", default=None, help="write report.json and report.md here (default: the run directory)")
+    ap.add_argument("--app-version", default=None, help="show this label as the app's version (never graded)")
     a = ap.parse_args()
     rep = build(a.run_dir, a.apk, a.budgets)
     old = os.path.join(a.run_dir, "report.json")
     if a.keep_apk and not a.apk and os.path.exists(old):
         rep["apk"] = read_json(old).get("apk", [])
-    with open(os.path.join(a.run_dir, "report.json"), "w") as f:
+    if a.app_version:
+        label_app_version(rep, a.app_version)
+    out = a.out or a.run_dir
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "report.json"), "w") as f:
         json.dump(rep, f, indent=1)
+        f.write("\n")
     md = markdown(rep)
-    with open(os.path.join(a.run_dir, "report.md"), "w") as f:
+    with open(os.path.join(out, "report.md"), "w") as f:
         f.write(md)
     print(md)
+
+
+def label_app_version(rep, label):
+    """The app's version as given (--app-version), in place of the device's: the frame's app, and the
+    APK sizes' file names (a test build's carry its commit). Only labels: the grade reads none of it,
+    and the summary's app_version is this label."""
+    app = rep["frame"]["app"]
+    app.update(version_name=label, version_code=None, version_label="given")
+    for x in rep.get("apk") or []:
+        x["file"] = f"{app.get('package', 'app')}-{label}.apk"
+    return rep
 
 
 if __name__ == "__main__":

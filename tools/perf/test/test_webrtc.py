@@ -310,17 +310,30 @@ class Session(unittest.TestCase):
         self.assertLess(t_first, 3.0)
         self.assertGreaterEqual(len(frames), 25)                  # 2 s and more at 15 fps
         self.assertEqual(set(frames), {(1280, 720)})
-        ws.call({"type": "unsubscribe_events", "subscription": res["id"]})
-        deadline = time.time() + 5
-        while time.time() < deadline:
+
+        def log_since():
             with open(self.log) as f:
-                log = [json.loads(line) for line in f]
-            if any(e.get("webrtc_closed") for e in log):
-                break
-            time.sleep(0.1)
+                return [e for e in (json.loads(line) for line in f) if e.get("t", 0) >= since]
+
+        def wait_for(what, seconds):
+            """The fake logs from its own threads: poll its log for `what` until a deadline (CI's
+            runners are slower than a Mac, #255's perf-webrtc runs 43668791271 and 43669201881)."""
+            deadline = time.time() + seconds
+            while True:
+                log = log_since()
+                if any(what(e) for e in log) or time.time() >= deadline:
+                    return log
+                time.sleep(0.1)
+
+        # This client closed its connection first: the peer loses it from the browser's side, not by
+        # consent. Wait for that before unsubscribing: the fake logs `lost` only while the session is
+        # still subscribed (webrtc.py _ice), and an unsubscribe that lands first ends it as closed.
+        log = wait_for(lambda e: e.get("lost"), 10)
+        self.assertEqual({e.get("reason") for e in log if e.get("lost")}, {"remote"})
+        ws.call({"type": "unsubscribe_events", "subscription": res["id"]})
+        log = wait_for(lambda e: e.get("webrtc_closed"), 5)
         self.assertTrue(any(e.get("webrtc_closed") == "camera.clarity_cam_0" for e in log))
         self.assertTrue(any(e.get("webrtc_ice") == "completed" for e in log))
-        self.assertFalse([e for e in log if e.get("webrtc_error")])
         # The relay timed the peer's checks through the browser (round 3's question on the S1): when
         # the browser's TCP connection closes, its record says how many came back, and how fast.
         deadline = time.time() + 10
@@ -342,13 +355,11 @@ class Session(unittest.TestCase):
         self.assertEqual(len(secs[0]), 6)
         self.assertGreater(secs[-1][1], secs[0][1])                  # kB down grew: the video flowed
         self.assertTrue(all(row[5] >= 0 for row in secs))
-        with open(self.log) as f:
-            ws = [json.loads(line) for line in f if '"ws_second"' in line]
-        self.assertTrue([e for e in ws if e["t"] >= since and e["down_msgs"] >= 1 and "send_ms_max" in e])
-        # This client closed its connection first: the peer lost it from the browser's side, not by consent.
-        mine = [e for e in log if e["t"] >= since]
-        self.assertEqual({e.get("reason") for e in mine if e.get("lost")}, {"remote"})
-        self.assertFalse([e for e in mine if e.get("aioice")])
+        log = wait_for(lambda e: e.get("ws_second") and e["down_msgs"] >= 1 and "send_ms_max" in e, 5)
+        self.assertTrue([e for e in log if e.get("ws_second") and e["down_msgs"] >= 1 and "send_ms_max" in e])
+        # Read last, so it covers everything the session logged.
+        self.assertFalse([e for e in log if e.get("aioice")])
+        self.assertFalse([e for e in log if e.get("webrtc_error")])
 
 
     def session_with(self, cam, between, pion=None):

@@ -12,10 +12,17 @@ import grade as G
 PAGES = G.TIERS
 # How each page reads in a sentence. Rubric v10 (#205): typical is measured without its camera
 # (typical-nocam, which C grades) and with it (typical, which B grades).
-NAME = {"typical-nocam": "typical", "typical": "typical with a camera"}
+NAME = {"typical-nocam": "typical without a camera", "typical": "typical with a camera"}
 GOOD = {"good", "premium"}
 FLUID = {"fluid"}
-NOT_A_LIMIT = GOOD | FLUID | {"none", None}
+# What the lowest level (fluid) accepts, per task, from rubric.json: a band outside it is a limit. Not
+# one fixed set of bands: fluid accepts needs-improvement for open and blocking, but not for a tap.
+FLUID_ACCEPTS = G.LEVELS[G.LEVEL_ORDER[-1]]
+
+
+def _is_limit(task, band):
+    """A measured band that keeps its page below fluid (a band of None wasn't measured: not a limit)."""
+    return band is not None and band not in FLUID_ACCEPTS.get(task, GOOD | FLUID | {"none"})
 MAX_LIMITS = 3
 
 # The fluid bars each limit is measured against (rubric.json): how far past it a task is ranks it.
@@ -159,7 +166,7 @@ def _with_camera(rep):
     if not levels.get("typical-nocam") or levels.get("typical") or "typical" not in _tiers(rep):
         return None
     b = _bands(rep).get("typical") or {}
-    scored = [(s, G.TASKS.index(t), t) for t in G.TASKS if b.get(t) not in NOT_A_LIMIT
+    scored = [(s, G.TASKS.index(t), t) for t in G.TASKS if _is_limit(t, b.get(t))
               for s in [_limit(t, _tiers(rep).get("typical"))] if s]
     if not scored:
         return None
@@ -203,7 +210,7 @@ def limits_sentence(rep):
     best, reached = best_page(rep)
     said = _with_camera(rep) if best == "typical-nocam" and reached else None   # in the good sentence already
     for t in G.TASKS:
-        bad = [p for p in PAGES if (bands.get(p) or {}).get(t) not in NOT_A_LIMIT and not (said and p == "typical" and t == said[0])]
+        bad = [p for p in PAGES if _is_limit(t, (bands.get(p) or {}).get(t)) and not (said and p == "typical" and t == said[0])]
         scored = [(p, _limit(t, tiers.get(p))) for p in bad]
         scored = [(p, s) for p, s in scored if s]
         if scored:
@@ -250,7 +257,7 @@ def _starving_cameras(rep):
     (page, whether those runs' decoders were all hardware)."""
     out = []
     for p in PAGES:
-        if (_bands(rep).get(p) or {}).get("camera") in NOT_A_LIMIT:
+        if not _is_limit("camera", (_bands(rep).get(p) or {}).get("camera")):
             continue
         runs = _tiers(rep).get(p, {}).get("camera_runs") or []
         judged = [(r, _starving_run(r)) for r in runs]
@@ -265,7 +272,7 @@ def _starving_cameras(rep):
 
 def _slow_fetch(rep):
     for p in PAGES:
-        if (_bands(rep).get(p) or {}).get("camera") in NOT_A_LIMIT:
+        if not _is_limit("camera", (_bands(rep).get(p) or {}).get("camera")):
             continue
         p95 = [((r.get("fetches") or {}).get("segment") or {}).get("total_ms", {}).get("p95")
                for r in _tiers(rep).get(p, {}).get("camera_runs") or [] if (r.get("path") or "hls") == "hls"]
@@ -277,7 +284,7 @@ def _slow_fetch(rep):
 def cause_sentence(rep):
     """One likely limit, with at most two pieces of evidence, or None without evidence."""
     bands, tiers = _bands(rep), _tiers(rep)
-    slow_scroll = [p for p in PAGES if (bands.get(p) or {}).get("scroll") not in NOT_A_LIMIT]
+    slow_scroll = [p for p in PAGES if _is_limit("scroll", (bands.get(p) or {}).get("scroll"))]
     main = [p for p in slow_scroll if "main-thread" in (tiers.get(p, {}).get("scroll_limited_by") or [])]
     comp = [p for p in slow_scroll if "compositor" in (tiers.get(p, {}).get("scroll_limited_by") or [])]
     starving = _starving_cameras(rep)
