@@ -32,7 +32,7 @@ export function flashLevel(s: FlashState): number {
 
 /** Glass Panes, from the Mirror's frame.json `credits` (frames/README.md#credits). */
 const glassPanes = () => stepCredits('lululemon-mirror', credits, ['image']);
-/** The Mirror's reversibility, as frame.json rates it (#146). */
+/** The Mirror's reversibility, as frame.json rates it (issue 146). */
 const REVERSIBLE = FRAMES.find((x) => x.id === 'lululemon-mirror')?.ratings.reversible.detail;
 
 /** At the step that hands over the image: who built it, and whose its vendor files are. */
