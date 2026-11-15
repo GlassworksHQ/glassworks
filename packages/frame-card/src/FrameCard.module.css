@@ -260,7 +260,14 @@
   }
 
   .card:hover,
-  .card:focus-visible {
+  .card:focus-visible,
+  .card:hover .float,
+  .card:focus-visible .float {
     transform: none;
+  }
+
+  .card:hover .shadow,
+  .card:focus-visible .shadow {
+    opacity: 0;
   }
 }

@@ -58,17 +58,6 @@
   max-width: 56ch;
 }
 
-/* a fixed box, so a render of any shape loads without moving the page */
-.render {
-  position: relative;
-  height: 300px;
-}
-
-.render img {
-  object-fit: contain;
-  filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.45));
-}
-
 .notice {
   margin: 0 4px 18px;
   padding: 14px 18px;
@@ -167,10 +156,6 @@
 
   .h1 {
     font-size: 34px;
-  }
-
-  .render {
-    height: 200px;
   }
 
   .kvs {
