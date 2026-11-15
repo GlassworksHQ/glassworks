@@ -27,13 +27,15 @@ class WallBasePane(
     config: WallBase.Config,
     private val device: ScheduledExecutorService,
     private val cloud: AqaraCloud,
+    /** Makes the base's link; null for the real one. A test passes one that records the relay writes (#269). */
+    newLink: ((WallBase.Config, java.util.concurrent.ScheduledExecutorService, BaseLink.Listener) -> BaseLink)? = null,
 ) : Pane {
     override val id = "wall-base"
 
     private val prefs = WallBasePrefs(ctx.prefs(id))
     /** What [WallBase] reports to; public so a test can play the base. */
     val baseListener: WallBase.Listener = Listener()
-    private val base = WallBase(ctx.context, BaseLayout.decode(prefs.layout) ?: BaseLayout.NONE, baseListener, config)
+    private val base = WallBase(ctx.context, BaseLayout.decode(prefs.layout) ?: BaseLayout.NONE, baseListener, config, newLink)
     /** The backend and transport [start] opens: the frame's at first, then what the settings ask for, also while off (#67). */
     @Volatile private var wanted: WallBase.Config = config
     /** The backend and transport it runs; public so a test can see what the frame built. */
