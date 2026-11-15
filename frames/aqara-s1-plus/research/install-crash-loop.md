@@ -236,7 +236,8 @@ What can be done, best first:
 1. **Restart the framework as soon as the counter breaks (built; armed run pending).**
    `s1kiosk_netwatch.sh` reads the header every 15 s (`dumpsys activity processes sh.edm.s1kiosk`,
    ~35 ms). If a start is below 0 on two reads in a row, it kills `system_server`, at most once per
-   10 minutes. That is what ends the loop anyway, only sooner and every time: 15–30 s of loop and one
+   10 minutes. It kills only the `system_server` whose reads were broken, never a replacement:
+   it takes the PID before each read, starts the count again for a new PID, and checks the PID at the kill. That is what ends the loop anyway, only sooner and every time: 15–30 s of loop and one
    framework restart, instead of up to 11 minutes. Init brings zygote and the framework back. The
    radio helper is a separate init service, so it should keep running (to be checked in the armed
    run). It lives in netwatch so the boot image's file list stays the same for the CLI and Kiln. It

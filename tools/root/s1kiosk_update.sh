@@ -27,7 +27,9 @@ SRC=$SRC_DIR/pending.apk
 STAGE_DIR=/data/s1kiosk/update          # root 0700
 STAGE=$STAGE_DIR/pending.apk
 MAX_BYTES=268435456                      # 256 MiB, as the app's own limit
-RESTART_WAIT=${S1U_RESTART_WAIT:-300}       # s to wait for PackageManager after a framework restart
+# s to wait for PackageManager after a framework restart. The .rc sets no environment, so it is 300
+# on a panel; S1U_RESTART_WAIT is for the off-device tests, and anything else is logged below.
+RESTART_WAIT=${S1U_RESTART_WAIT:-300}
 VERIFY=${0%/*}/s1kiosk_verify
 
 say() { log -t s1kiosk_update "$*" 2>/dev/null; }
@@ -49,6 +51,8 @@ field() { echo "$1" | tr ' ' '\n' | sed -n "s/^$2://p"; }
 snapshot() { pm list packages --show-versioncode 2>/dev/null | grep -v "^package:$PKG " | sort > "$1"; }
 num() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; return 0; }
 
+num "$RESTART_WAIT" || RESTART_WAIT=300
+[ "$RESTART_WAIT" = 300 ] || say "RESTART_WAIT is ${RESTART_WAIT}s (S1U_RESTART_WAIT), not 300"
 status "running: checking the request"
 
 # 1. the kiosk's uid

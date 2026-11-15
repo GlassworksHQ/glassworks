@@ -588,7 +588,7 @@ cp /bin/sleep "$T/bin/system_server"
 upd() { # pm-mode: stage the APK, run the service, print its status
   pkill -x system_server; (system_server 2000 >/dev/null 2>&1 &); sleep 0.2
   rm -f "$APP/files/update/pending.apk"; printf 'PK-apk' > "$APP/files/update/pending.apk"; chown 10050 "$APP/files/update/pending.apk"
-  echo 30200 > "$T/pm-version"; echo "$1" > "$T/pm-mode"; rm -f "$T/pm-down"   # PackageManager up at the start
+  echo 30200 > "$T/pm-version"; echo "$1" > "$T/pm-mode"; rm -f "$T/pm-down"   # PackageManager up at the start, whatever a case before left
   S1U_RESTART_WAIT=10 timeout 60 /system/bin/sh "$TB/s1kiosk_update.sh" >/dev/null 2>&1
   prop sys.s1kiosk.update.status
 }
@@ -602,6 +602,7 @@ check "...polling it while it is down" test "$(wc -l < "$T/pm-down.log")" = 2
 echo 1000 > "$T/pm-down-after"
 check "framework never comes back: an error after the wait (S1U_RESTART_WAIT=10)" has "$(upd restart)" "error: framework restarted mid-install, did not come back"
 rm -f "$T/pm-down-after" "$T/pm-down" "$T/pm-down.log"
+check "a test wait (not 300 s) is logged" grep -q "RESTART_WAIT is 10s (S1U_RESTART_WAIT), not 300" "$T/log"
 check "framework restarted, package not committed: an error that says so" has "$(upd restart-noup)" "error: framework restarted mid-install, not updated; pm install: Exc"
 check "...cut to what a property holds" test "$(prop sys.s1kiosk.update.status | wc -c)" -le 91
 rm -f "$T/pm-mode"; pkill -x system_server
@@ -616,8 +617,11 @@ w "$T/bin/dumpsys" <<'EOF2'
 [ "$1 $2" = "activity processes" ] || exit 1
 if [ -f /t/lru-seq ]; then
   l=$(head -n 1 /t/lru-seq); sed -i 1d /t/lru-seq
-  # "RESTART <line>": the framework restarts by itself while dumpsys runs, then <line> is printed
+  # "RESTART <line>": the framework restarts by itself while dumpsys runs, then <line> is printed.
+  # "<line> THEN-RESTART": <line> is printed, then the framework restarts before the next check.
   case "$l" in "RESTART "*) l=${l#RESTART }; pkill -x system_server; (system_server 2000 >/dev/null 2>&1 &); sleep 0.2 ;; esac
+  case "$l" in *" THEN-RESTART")
+    printf '%s\n' "${l% THEN-RESTART}"; pkill -x system_server; (system_server 2000 >/dev/null 2>&1 &); sleep 0.2; exit 0 ;; esac
   [ "$l" = - ] || printf '%s\n' "$l"; exit 0
 fi
 [ -s /t/lru ] || exit 1
@@ -688,6 +692,25 @@ check "...no restart counted" test -z "$(prop sys.s1kiosk.am.restarts)"
 dseq "$B" "RESTART $B" "$B"
 check "...a broken read of the new one counts from 1 again" has "$(prop sys.s1kiosk.am.status)" "(1/2)"
 check "...and nothing was killed" test -z "$(prop sys.s1kiosk.am.restarts)"
+# Restarted between two checks: the second broken read is of a new pid, which pidof still gives at the
+# kill. Only the reset on a new pid stops the kill here.
+dseq "$B THEN-RESTART" "$B"
+check "framework restarted between two broken reads: the new one is not killed" test "$(pidof system_server)" != "$(cat "$T/ss-pid")" -a -n "$(pidof system_server)"
+check "...its broken read counts as the first" has "$(prop sys.s1kiosk.am.status)" "(1/2)"
+check "...no restart counted" test -z "$(prop sys.s1kiosk.am.restarts)"
+# Any S1N_AM_DRY other than 1 is armed.
+pkill -x system_server; (system_server 2000 >/dev/null 2>&1 &); sleep 0.2; pidof system_server > "$T/ss-pid"
+echo "18 19 19" > "$T/lru"; rm -f "$T/lru-seq" "$T/props/sys.s1kiosk.am.restarts"
+S1N_AM_DRY=yes S1N_ONCE=2 S1N_SLEEP=0 timeout 60 /system/bin/sh "$TB/s1kiosk_netwatch.sh" >/dev/null 2>&1
+check "S1N_AM_DRY=yes is not a dry run: killed" sh -c '! kill -0 "$(cat /t/ss-pid)" 2>/dev/null'
+# The kernel log's start line says which mode runs. Here /dev/kmsg is a plain file that each log line
+# replaces, so these runs do no checks (S1N_ONCE=0) and leave only the start line.
+startline() { [ -c /dev/kmsg ] && rm -f /dev/kmsg; : > /dev/kmsg
+  env "$@" S1N_ONCE=0 timeout 20 /system/bin/sh "$TB/s1kiosk_netwatch.sh" >/dev/null 2>&1; cat /dev/kmsg; }
+check "start line: armed by default" has "$(startline S1N_SLEEP=0)" "ActivityManager check armed"
+check "...armed for S1N_AM_DRY=yes" has "$(startline S1N_AM_DRY=yes)" "ActivityManager check armed"
+check "...dry run only for S1N_AM_DRY=1" has "$(startline S1N_AM_DRY=1)" "ActivityManager check dry run"
+check "...a bad S1N_SLEEP falls back to 15 s" has "$(startline S1N_SLEEP=x)" "start: every 15s"
 pkill -x system_server; rm -f "$T/lru" "$T/lru-seq" "$T/bin/dumpsys"
 
 # ---------------------------------------------------------------------------------- time zone

@@ -18,14 +18,19 @@
 #   dumpsys activity processes sh.edm.s1kiosk     (~35 ms)
 #   "  Process LRU list (sorted by oom_adj, 27 total, non-act at 3, non-svc at 3):"
 # (start = total - non-act, total - non-svc). If one is below 0 on 2 reads in a row, it kills
-# system_server: what ends the loop by itself, only sooner. init restarts zygote and the framework;
-# init services (this one, the radio helper) keep running. At most once per 10 min.
+# system_server: what ends the loop by itself, only sooner. It kills only the system_server whose
+# reads were broken, never a replacement (the pid is taken before each read and checked at the kill).
+# init restarts zygote and the framework; init services (this one, the radio helper) keep running.
+# At most once per 10 min.
 # The cap lives in this process: if netwatch itself restarts, it resets. That is harmless, because
 # a framework restart resets the starts too, so the next one needs ~24 more kiosk force-stops.
 # Status: sys.s1kiosk.am.status, sys.s1kiosk.am.restarts ("<count> <uptime of the last>s")
-# Dry run, by hand only (init passes no environment): S1N_AM_DRY=1 sh s1kiosk_netwatch.sh does all of
-# this but the kill, and reports "would restart the framework".
+# Dry run, by hand only (the .rc sets no environment): S1N_AM_DRY=1 sh s1kiosk_netwatch.sh does all
+# of this but the kill, and reports "would restart the framework". S1N_SLEEP and S1N_ONCE are for the
+# off-device tests. The start line in the kernel log says which mode runs.
 INTERVAL=${S1N_SLEEP:-15}
+case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=15 ;; esac
+AM_MODE=armed; [ "${S1N_AM_DRY:-0}" = 1 ] && AM_MODE="dry run"
 NEEDED=4
 COOLDOWN=300
 AM_NEEDED=2
@@ -38,6 +43,7 @@ am_count=0
 am_pid=
 loops=0
 log() { echo "s1kiosk_netwatch: $*" > /dev/kmsg; }
+log "start: every ${INTERVAL}s; ActivityManager check $AM_MODE, a framework restart after $AM_NEEDED broken reads, at most one per ${AM_COOLDOWN}s"
 
 # "<total> <activity start> <service start>", or nothing if dumpsys didn't answer.
 lru_starts() {
@@ -62,7 +68,7 @@ am_check() {
     setprop sys.s1kiosk.am.status "broken: LRU starts $2 $3 of $1; restarted at ${am_last}s, in the cooldown"
     return
   fi
-  if [ -n "$S1N_AM_DRY" ]; then
+  if [ "$AM_MODE" != armed ]; then
     am_last=$now; am_bad=0
     log "LRU start below 0 (starts $2 $3 of $1): would restart the framework (dry run)"
     setprop sys.s1kiosk.am.status "would restart the framework at uptime ${now}s (dry run; LRU starts $2 $3 of $1)"
