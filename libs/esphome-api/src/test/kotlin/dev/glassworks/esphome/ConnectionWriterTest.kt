@@ -298,9 +298,43 @@ class ConnectionWriterTest {
         }
     }
 
+    /** Many entity changes while a client doesn't read: one waiting thread and one request, not one per change. */
+    @Test
+    fun repeatedEntityChangesSendOneDisconnectRequest() {
+        val s = server()
+        val (c, sock) = stuckClient(s)
+        c.use {
+            fun discThreads() = Thread.getAllStackTraces().keys.count { it.isAlive && it.name.startsWith("esphome-disc-") }
+            val before = discThreads()
+            repeat(200) { s.setEntities(listOf(sensor)) }
+            awaitBlocked(sock)
+            assertTrue("disconnect threads: ${discThreads()}, ${before + 1} at most", discThreads() <= before + 1)
+            sock.resume()
+            var requests = 0
+            while (true) {
+                val f = try { c.read() } catch (_: Exception) { null } ?: break
+                if (f.type == Msg.DISCONNECT_REQUEST) requests++
+            }
+            assertEquals("DisconnectRequests", 1, requests)
+        }
+    }
+
     /** An Error on the writer closes the connection, so a caller waiting for a write isn't left hanging (#223). */
     @Test
-    fun anErrorOnTheWriterClosesTheConnection() {
+    fun anErrorOnTheWriterClosesTheConnection() = writerFailureClosesTheConnection()
+
+    /** The same with a log sink that fails too: the close can't depend on the log line before it. */
+    @Test
+    fun anErrorOnTheWriterClosesTheConnectionWhenTheLogFails() {
+        val sink = EspHomeLog.sink
+        EspHomeLog.sink = EspHomeLog.Sink { level, tag, msg, t ->
+            if (level == EspHomeLog.Level.WARN) throw IllegalStateException("test: the log sink fails")
+            sink.log(level, tag, msg, t)
+        }
+        try { writerFailureClosesTheConnection() } finally { EspHomeLog.sink = sink }
+    }
+
+    private fun writerFailureClosesTheConnection() {
         val s = server()
         PlainClient(s.localPort).use { c ->
             c.roundTrip()

@@ -29,7 +29,8 @@ internal class Outbox(private val maxBytes: Int) {
 
     /**
      * Like [offer], then waits until the writer has written them. False if they didn't fit, or if the
-     * connection closed or [timeoutMs] passed first.
+     * connection closed or [timeoutMs] passed first. After a timeout the frames stay queued and are
+     * written late, so the caller closes the connection.
      */
     fun offerAndWait(frames: List<Frame>, timeoutMs: Long = Long.MAX_VALUE): Boolean {
         val seq = enqueue(frames)

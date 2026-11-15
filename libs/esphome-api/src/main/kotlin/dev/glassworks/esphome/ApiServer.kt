@@ -10,6 +10,7 @@ import java.net.Socket
 import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -633,6 +634,8 @@ public class ApiServer(
         @Volatile var authenticated = false
         /** Set when the key changed: only the disconnect handshake is processed from now on. */
         @Volatile private var retired = false
+        /** A DisconnectRequest is on its way ([askToDisconnect]). */
+        private val disconnecting = AtomicBoolean()
         private val remote = socket.remoteSocketAddress?.toString() ?: "?"
         /** Handshake done and the writer running: messages can be sent, and the keepalive applies. */
         @Volatile var ready = false
@@ -704,6 +707,9 @@ public class ApiServer(
         }
 
         private fun writeLoop() {
+            // Closes however the writer ends, an Error or a failing log sink included: left open, the
+            // connection would hold every caller waiting for a write (the camera, the Disconnect and
+            // set-key answers) until the keepalive dropped it.
             try {
                 while (true) {
                     transport.write(outbox.take() ?: return)
@@ -711,11 +717,9 @@ public class ApiServer(
                 }
             } catch (e: IOException) {
                 if (isOpen) EspHomeLog.w("[$id] write failed: ${e.message}")
-                close()
             } catch (t: Throwable) {
-                // An Error too: left open, the connection would hold every caller waiting for a write
-                // (the camera, the Disconnect and set-key answers) until the keepalive dropped it.
                 EspHomeLog.w("[$id] writer error", t)
+            } finally {
                 close()
             }
         }
@@ -732,8 +736,11 @@ public class ApiServer(
                 return true
             }
             if (isOpen) {
-                EspHomeLog.w("[$id] $remote is not reading: messages waited too long or filled the queue (${MAX_QUEUED_BYTES / 1024} KiB); closing")
-                close()
+                try {
+                    EspHomeLog.w("[$id] $remote is not reading: messages waited too long or filled the queue (${MAX_QUEUED_BYTES / 1024} KiB); closing")
+                } finally {
+                    close()
+                }
             }
             return false
         }
@@ -763,17 +770,28 @@ public class ApiServer(
          * Sends a DisconnectRequest and closes [graceMs] after it is written, or on the client's answer.
          * The wait for the write runs on a thread of its own, so the caller doesn't wait for a slow client.
          * If the request isn't written within [disconnectWriteMs], the connection closes without it.
+         * Only the first call does anything: a later one (more entity changes, a key change) would only
+         * add a thread and a request, and the first one already closes the connection.
          */
         private fun askToDisconnect(graceMs: Long) {
+            if (!disconnecting.compareAndSet(false, true)) return
             Thread({
-                if (send(listOf(Frame(Msg.DISCONNECT_REQUEST, ByteArray(0))), wait = true, timeoutMs = disconnectWriteMs)) {
-                    try { Thread.sleep(graceMs) } catch (_: InterruptedException) {}
+                try {
+                    if (send(listOf(Frame(Msg.DISCONNECT_REQUEST, ByteArray(0))), wait = true, timeoutMs = disconnectWriteMs)) {
+                        Thread.sleep(graceMs)
+                    }
+                } catch (_: InterruptedException) {
+                } finally {
+                    close()
                 }
-                close()
             }, "esphome-disc-$id").apply { isDaemon = true; start() }
         }
 
-        /** Asks the client to disconnect and closes after the ack or 500 ms; ignores everything else. */
+        /**
+         * Asks the client to disconnect and closes after the ack or 500 ms; ignores everything else. If
+         * the entities changed just before, their DisconnectRequest stands, and the connection closes
+         * when that one ends (2 s after it is written).
+         */
         fun retire() {
             if (retired) return
             retired = true
