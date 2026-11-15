@@ -26,6 +26,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAST = ("test_grade", "test_report", "test_summary", "test_notes")
@@ -103,7 +104,8 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true", help="each unit's tests by name")
     a = ap.parse_args()
     todo = queue.Queue()
-    for u in units(modules(a.set)):
+    units_all = units(modules(a.set))
+    for u in units_all:
         todo.put(u)
     total = todo.qsize()
     done, lock = [], threading.Lock()
@@ -116,7 +118,10 @@ def main():
                 name = todo.get_nowait()
             except queue.Empty:
                 return
-            r = run_unit(name, k, tmp, a.verbose)
+            try:
+                r = run_unit(name, k, tmp, a.verbose)
+            except Exception:      # e.g. a full disk: the unit failed, it didn't pass (CodeRabbit on #280)
+                r = {"name": name, "ok": False, "tests": 0, "skipped": 0, "s": 0.0, "out": traceback.format_exc()}
             with lock:
                 done.append(r)
                 print(f"[{len(done)}/{total}] {'ok  ' if r['ok'] else 'FAIL'} {r['s']:6.1f} s  {name}", flush=True)
@@ -130,6 +135,8 @@ def main():
         t.join()
     shutil.rmtree(tmp, ignore_errors=True)
     failed = [r["name"] for r in done if not r["ok"]]
+    # Every unit must have reported; one that didn't never ran, which is a failure too.
+    failed += sorted(set(units_all) - {r["name"] for r in done})
     print(f"\n{sum(r['tests'] for r in done)} tests in {len(done)} units, {a.jobs} at a time: "
           f"{time.monotonic() - t0:.1f} s ({sum(r['s'] for r in done):.1f} s of units); "
           f"{sum(r['skipped'] for r in done)} skipped; slowest: "
