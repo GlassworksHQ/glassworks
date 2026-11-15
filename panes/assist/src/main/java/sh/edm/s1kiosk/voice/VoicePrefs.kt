@@ -4,6 +4,8 @@
 
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.WakeWord
+import dev.glassworks.voice.WakeWords
 import android.content.SharedPreferences
 
 /**

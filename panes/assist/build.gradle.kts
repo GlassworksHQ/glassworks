@@ -27,8 +27,7 @@ extensions.configure<com.android.build.api.dsl.LibraryExtension> {
 dependencies {
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
-    // Wake word inference, microWakeWord and the legacy openWakeWord (ships every ABI; the APK keeps the one built).
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
+    api(project(":voice")) // the engine: microphone, wake word, TFLite
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")

@@ -50,7 +50,7 @@ import sh.edm.s1kiosk.voice.AssistDefinition
 import sh.edm.s1kiosk.voice.AssistPane
 import sh.edm.s1kiosk.voice.SpeakerMedia
 import sh.edm.s1kiosk.voice.VoiceEngine
-import sh.edm.s1kiosk.voice.VoiceEvent
+import dev.glassworks.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceLevels
 import sh.edm.s1kiosk.voice.VoiceUi
 import sh.edm.s1kiosk.voice.chime

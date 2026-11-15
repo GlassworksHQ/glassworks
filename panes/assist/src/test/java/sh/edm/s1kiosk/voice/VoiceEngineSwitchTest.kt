@@ -1,5 +1,8 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.ModelsMissingException
+import dev.glassworks.voice.VoiceConfig
+import dev.glassworks.voice.WakeDetector
 import android.app.Application
 import org.junit.After
 import org.junit.Assert.assertEquals

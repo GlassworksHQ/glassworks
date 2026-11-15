@@ -1,5 +1,15 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.MicroModel
+import dev.glassworks.voice.MicroWakeWord
+import dev.glassworks.voice.Microphone
+import dev.glassworks.voice.ModelFetcher
+import dev.glassworks.voice.ModelsMissingException
+import dev.glassworks.voice.TfliteWakeWord
+import dev.glassworks.voice.VoiceConfig
+import dev.glassworks.voice.WakeDetector
+import dev.glassworks.voice.WakeWord
+import dev.glassworks.voice.WakeWords
 import android.content.Context
 import sh.edm.s1kiosk.esphome.VoiceAssistantController
 import sh.edm.s1kiosk.esphome.WakeWordCatalog

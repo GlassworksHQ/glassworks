@@ -1,7 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.esphome.*
-import sh.edm.s1kiosk.voice.VoiceEvent
+import dev.glassworks.voice.VoiceEvent
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

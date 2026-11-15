@@ -1,4 +1,4 @@
-"""Regenerate panes/assist/src/test/resources/oww_reference.json.
+"""Regenerate libs/voice/src/test/resources/oww_reference.json.
 
 Runs openWakeWord's real streaming feature code (`AudioFeatures` from
 https://raw.githubusercontent.com/dscripka/openWakeWord/main/openwakeword/utils.py) with
@@ -6,7 +6,7 @@ deterministic fake melspectrogram/embedding/wake models, so OwwFeaturesTest can 
 Kotlin port buffers, windows and caps exactly like upstream. Only numpy is needed:
 
     curl -fsSLo /tmp/oww_utils.py https://raw.githubusercontent.com/dscripka/openWakeWord/main/openwakeword/utils.py
-    python3 -I tools/voice/oww_reference.py /tmp/oww_utils.py panes/assist/src/test/resources/oww_reference.json
+    python3 -I tools/voice/oww_reference.py /tmp/oww_utils.py libs/voice/src/test/resources/oww_reference.json
 """
 import sys, types, json, math
 import numpy as np

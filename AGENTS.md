@@ -20,7 +20,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | `core/`, `pane-api/` | The Glassworks core (`dev.glassworks.*`) and the pane API every pane builds on | Kotlin, Android |
 | `engines/engine-gecko` | The GeckoView engine and the kiosk's web extension | Kotlin, JavaScript |
 | `panes/<id>` | One module per pane (`:pane-<id>`): assist, camera, diagnostics, notifications, sendspin, timers, bluetooth-proxy. A frame's own panes sit in `frames/<id>/panes/` | Kotlin, Android |
-| `libs/*` | Libraries split out of the app: `esphome-api` (JVM), `esphome-api-android`, `improv`, `bluetooth-proxy`, `sendspin` | Kotlin |
+| `libs/*` | Libraries split out of the app: `esphome-api` (JVM), `esphome-api-android`, `improv`, `bluetooth-proxy`, `sendspin`, `voice` | Kotlin |
 | `kiln/` | Kiln, the WebUSB installer (FEL → fastboot → boot patch → adb), served at s1.edm.sh. The page in `src/`, protocol modules in `packages/`, the Next.js app in `apps/kiln` | TypeScript, Vite, Next.js, Rust→WASM |
 | `frames/<id>/` | Everything about one frame: its README, its Kiln recipe (`installer/`), its design data (`design/frame.json`, `recovery.json`) and its research notes (`research/`) | TypeScript, JSON, Markdown |
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup | TypeScript, React |

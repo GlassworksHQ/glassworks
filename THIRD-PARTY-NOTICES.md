@@ -81,7 +81,7 @@ of `:kiosk`, including transitive dependencies. The versions are the ones Gradle
 - **TensorFlow Lite Micro audio microfrontend** (`tensorflow/lite/experimental/microfrontend/lib`:
   window, fft, filterbank, noise reduction, PCAN gain control, log scale). Apache-2.0, Copyright 2018
   The TensorFlow Authors. Ported to Kotlin in
-  `panes/assist/src/main/java/sh/edm/s1kiosk/voice/MicroFrontend.kt`, which stays under Apache-2.0 and
+  `libs/voice/src/main/java/dev/glassworks/voice/MicroFrontend.kt`, which stays under Apache-2.0 and
   says what changed. Ported from the copy in https://github.com/rhasspy/pymicro-features (tag
   `v2.0.2`, commit `96bd69cfad79aa67697e176570d3dd87052c3def`), the same code as
   https://github.com/tensorflow/tflite-micro.

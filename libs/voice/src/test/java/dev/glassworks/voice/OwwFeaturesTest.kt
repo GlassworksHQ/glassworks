@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals

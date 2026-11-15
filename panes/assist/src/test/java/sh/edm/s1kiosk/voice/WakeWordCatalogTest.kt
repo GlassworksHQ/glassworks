@@ -1,5 +1,9 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.ModelFetcher
+import dev.glassworks.voice.VoiceConfig
+import dev.glassworks.voice.WakeWord
+import dev.glassworks.voice.WakeWords
 import android.app.Application
 import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
