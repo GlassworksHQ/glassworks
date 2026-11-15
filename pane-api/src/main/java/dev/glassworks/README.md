@@ -236,10 +236,10 @@ going back to the dashboard, closing the settings menu, the main thread), and th
 must never be covered above its menus, and tells each about screen changes, Back (topmost layer first) and
 its own end.
 
-These types live in the S1 app module (`:kiosk`) until S-shell part 2 frees them, then move to core:
+These types live in the core (`:glassworks-core`):
 [`DeviceHost.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/esphome/DeviceHost.kt),
-[`PaneOverlay.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/PaneOverlay.kt) (with
-`OverlayHost`) and [`AppParts.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/AppParts.kt).
+[`PaneOverlay.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/PaneOverlay.kt) (with
+`OverlayHost`) and [`AppParts.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/AppParts.kt).
 
 Every pane also has a **`pane.json` and an `icon.svg`** in its folder, next to its `PaneDefinition` (or its
 `Pane`, for a pane without a definition of its own, like timers). They describe it to Kiln and glassworks.dev:
