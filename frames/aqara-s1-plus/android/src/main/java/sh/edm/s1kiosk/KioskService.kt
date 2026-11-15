@@ -54,7 +54,7 @@ class KioskService : Service() {
         promote()
         glassworks.screen.start(this)
         wifiScanner = glassworks.s1?.screenOffWifiScanner(this) { main.post { if (wifiScanner != null) promote() } }?.also { it.start() }
-        glassworks.voiceState = if (KioskPrefs(this).voice.enabled) "idle" else "off"
+        glassworks.voiceState = if (PanePrefs(this).voice.enabled) "idle" else "off"
         glassworks.voiceUi = VoiceUi(glassworks.voiceState)
         glassworks.voiceCancel = { device?.cancelVoice() }
         HaAuth.startServer(this)

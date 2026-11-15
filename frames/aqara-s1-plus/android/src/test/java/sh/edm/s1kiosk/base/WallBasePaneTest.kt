@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config
 import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.EventEntity
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.frame.AqaraCloud
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -26,14 +26,14 @@ import java.util.concurrent.TimeUnit
 @Config(sdk = [34], application = Application::class)
 class WallBasePaneTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val prefs = KioskPrefs(app).wallBase.apply { layout = "" }
+    private val prefs = PanePrefs(app).wallBase.apply { layout = "" }
     private val device = Executors.newSingleThreadScheduledExecutor()
     private var changes = 0
     private val sent = ArrayList<Pair<EventEntity, String>>()
 
     private fun newPane() = WallBasePane(
         PaneContext(
-            app, KioskPrefs(app)::paneFile,
+            app, PanePrefs(app)::paneFile,
             DeviceIdentity(
                 name = "test", friendlyName = "Test", macAddress = "02:00:00:00:00:01", esphomeVersion = "x",
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
@@ -66,7 +66,7 @@ class WallBasePaneTest {
         // CodeRabbit on #235: mounting a base dropped Block Aqara cloud and the daemon from the page.
         pane.tracker.apply(mapOf(BaseRes.DOCK_CLASS to 0x0100F110, BaseRes.CHANNEL_COUNT to 2, BaseRes.RELAY_MASK to 3), 0)
         pane.baseListener.onLayout(pane.tracker.current()!!)
-        val items = dev.glassworks.pane.paneSections(listOf(WallBaseDefinition(KioskPrefs(app).paneFile("wall-base")))) { pane }.single().items
+        val items = dev.glassworks.pane.paneSections(listOf(WallBaseDefinition(PanePrefs(app).paneFile("wall-base")))) { pane }.single().items
         val ha = items.filterIsInstance<dev.glassworks.pane.SettingsItem.States>().single()
         assertEquals("the base's own are its tiles and cards", listOf("Block Aqara cloud", "Aqara cloud daemon"), ha.rows().map { it.name })
     }
@@ -126,7 +126,7 @@ class WallBasePaneTest {
 
     private fun paneWith(config: WallBase.Config, init: FakeInit) = WallBasePane(
         PaneContext(
-            app, KioskPrefs(app)::paneFile,
+            app, PanePrefs(app)::paneFile,
             DeviceIdentity(
                 name = "test", friendlyName = "Test", macAddress = "02:00:00:00:00:01", esphomeVersion = "x",
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
@@ -186,7 +186,7 @@ class WallBasePaneTest {
         }
     }
 
-    private val switch get() = WallBaseDefinition(KioskPrefs(app).paneFile("wall-base")).switch
+    private val switch get() = WallBaseDefinition(PanePrefs(app).paneFile("wall-base")).switch
 
     @Test fun turnedOffItLetsAqarasDaemonHaveThePortAgain() = assertEquals("running", turnedOffAfterUart(blocked = false))
 

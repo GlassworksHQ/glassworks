@@ -56,6 +56,7 @@ import kotlin.system.exitProcess
 class MainActivity : Activity() {
 
     private lateinit var prefs: KioskPrefs
+    private lateinit var panePrefs: PanePrefs
     private lateinit var loadingOverlay: LoadingOverlay
     private lateinit var settingsOverlay: KioskSettingsOverlay
     private lateinit var voiceOverlay: VoiceOverlay
@@ -163,6 +164,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = KioskPrefs(this)
+        panePrefs = PanePrefs(this)
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
         applyIntent(intent, fromNewIntent = false)
@@ -189,7 +191,7 @@ class MainActivity : Activity() {
         notificationOverlay = NotificationOverlay(this, glassworks.notifications, notificationImages(), orbs = glassworks.orbs).apply {
             screenOn = { glassworks.screen.screenOn }
             onPage = { url -> if (url != null) openInPage(url) else backToDashboard() }
-            onDoNotDisturb = { on -> prefs.notifications.doNotDisturb = on }
+            onDoNotDisturb = { on -> panePrefs.notifications.doNotDisturb = on }
         }
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
             onUsePanel = ::onUsePanelLogin
@@ -261,7 +263,7 @@ class MainActivity : Activity() {
             notificationOverlay.update(glassworks.notifications.state)
             settingsOverlay.screenChanged(glassworks.screen.screenOn) // a revealed stream password doesn't outlast the screen
         }
-        glassworks.onVoiceUi = { voiceOverlay.update(glassworks.voiceUi, prefs.voice.overlay) }
+        glassworks.onVoiceUi = { voiceOverlay.update(glassworks.voiceUi, panePrefs.voice.overlay) }
         // Images leaving the panel (#117): the dot follows, on the main thread (PanelDevice posts each change).
         glassworks.onCameraLeaving = { cameraDot.show(glassworks.cameraLeaving) }
         cameraDot.show(glassworks.cameraLeaving)

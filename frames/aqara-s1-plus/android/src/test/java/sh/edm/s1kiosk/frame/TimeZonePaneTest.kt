@@ -12,7 +12,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.RadioHelper
 import sh.edm.s1kiosk.radio.SysProps
 
@@ -52,11 +52,11 @@ class TimeZonePaneTest {
     }
 
     private val props = Props()
-    private val switch = TimeZoneDefinition(KioskPrefs(app).paneFile("time-zone")).switch
+    private val switch = TimeZoneDefinition(PanePrefs(app).paneFile("time-zone")).switch
     private val keeper = TimeZoneKeeper(props, zones = { setOf("Europe/Berlin") }, inline = true, log = {})
     private val pane = TimeZonePane(
         PaneContext(
-            app, KioskPrefs(app)::paneFile,
+            app, PanePrefs(app)::paneFile,
             DeviceIdentity(
                 name = "test", friendlyName = "Test", macAddress = "02:00:00:00:00:01", esphomeVersion = "x",
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
@@ -64,7 +64,7 @@ class TimeZonePaneTest {
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
             build = AppBuild("1.0.0", 10000, debug = false),
         ),
-        TimeZonePrefs(KioskPrefs(app).paneFile("time-zone")),
+        TimeZonePrefs(PanePrefs(app).paneFile("time-zone")),
         keeper,
     )
 

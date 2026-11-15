@@ -15,6 +15,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.sendspin.SendspinPrefs
@@ -30,13 +31,14 @@ import java.net.InetAddress
 class PanelNameTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
+    private val panePrefs = PanePrefs(app)
     private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val devices = ArrayList<PanelDevice>()
 
     @Before fun setUp() {
-        prefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
-        prefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
-        prefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        panePrefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
+        panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
+        panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
     }
 
     @After fun tearDown() = devices.forEach { runCatching { it.stop() } }

@@ -13,6 +13,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
 import sh.edm.s1kiosk.auth.SignInServer
@@ -31,6 +32,7 @@ import java.net.InetAddress
 class ManageHostsTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
+    private val panePrefs = PanePrefs(app)
     private val tokens = HaTokenClient(object : HttpPoster {
         override fun postForm(url: String, body: String) = 0 to ""
         override fun get(url: String, maxBytes: Int) = 0 to ""
@@ -42,9 +44,9 @@ class ManageHostsTest {
 
     /** The device KioskService runs, started, with its engines off. */
     private fun startDevice(): PanelDevice {
-        prefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
-        prefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
-        prefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        panePrefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
+        panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
+        panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
         val exec = ManualExecutor()
         return PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = RecordingMdns(), apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress()).also { it.start(); exec.runDue(); runtime.device = it }

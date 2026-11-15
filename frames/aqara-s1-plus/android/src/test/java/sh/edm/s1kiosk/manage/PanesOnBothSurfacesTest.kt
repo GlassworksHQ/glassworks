@@ -24,6 +24,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
 import sh.edm.s1kiosk.auth.SignInServer
@@ -42,6 +43,7 @@ import sh.edm.s1kiosk.settings.S1Settings
 class PanesOnBothSurfacesTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
+    private val panePrefs = PanePrefs(app)
     private val tokens = HaTokenClient(object : HttpPoster {
         override fun postForm(url: String, body: String) = 0 to ""
         override fun get(url: String, maxBytes: Int) = 0 to ""
@@ -176,16 +178,16 @@ class PanesOnBothSurfacesTest {
             assertEquals(303, post("diagnostics", "on").status)
             assertTrue("${frame.name}: diagnostics on again", sw.on)
             val radio = s.panel.sections.firstOrNull { it.id == "radio" }?.master ?: continue
-            prefs.radio.mode = "thread_router"
+            panePrefs.radio.mode = "thread_router"
             try {
                 assertTrue("${frame.name}: the radio is on", radio.value())
                 val ask = post("radio", "off")
                 assertEquals(200, ask.status)
                 assertTrue(ask.text().contains(esc("Turn the radio off?")))
-                assertEquals("${frame.name}: not confirmed, the radio stays", "thread_router", prefs.radio.mode)
+                assertEquals("${frame.name}: not confirmed, the radio stays", "thread_router", panePrefs.radio.mode)
                 assertTrue(radio.value())
             } finally {
-                prefs.radio.mode = null
+                panePrefs.radio.mode = null
             }
         }
     }

@@ -20,7 +20,7 @@ import java.io.File
 @Config(sdk = [34], application = Application::class)
 class CameraAdbActivityTest {
     private val app get() = RuntimeEnvironment.getApplication()
-    private val camera get() = KioskPrefs(app).camera
+    private val camera get() = PanePrefs(app).camera
 
     private fun send(i: Intent) { Robolectric.buildActivity(CameraAdbActivity::class.java, i).setup() }
 

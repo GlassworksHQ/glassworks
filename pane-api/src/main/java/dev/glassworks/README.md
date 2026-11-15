@@ -271,7 +271,7 @@ private val prefs = SendspinPrefs(ctx.prefs(id))
 
 The frame decides which file holds a namespace. A namespace is the owner of a set of keys, not a
 file or a key prefix. On the S1 every pane's settings stay in `kiosk.xml`, under the key names they
-had before panes ([`KioskPrefs.PANE_FILES`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/KioskPrefs.kt)), because panels
+had before panes ([`PanePrefs.PANE_FILES`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/PanePrefs.kt)), because panels
 update in place and no stored value may move. `PrefsPinTest` pins every file, key, type and default.
 `ctx.prefs` refuses a namespace the frame does not know.
 

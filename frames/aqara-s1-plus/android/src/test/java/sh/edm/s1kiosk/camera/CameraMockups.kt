@@ -34,6 +34,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.FixedReadout
 import sh.edm.s1kiosk.radio.HelperFacts
 import sh.edm.s1kiosk.radio.RadioMode
@@ -74,7 +75,7 @@ class CameraMockups {
 
     @After fun tearDown() {
         exec.shutdownNow()
-        KioskPrefs(app).paneFile("camera").edit().clear().commit()
+        PanePrefs(app).paneFile("camera").edit().clear().commit()
     }
 
     private class Camera : FrameSource {
@@ -93,7 +94,7 @@ class CameraMockups {
 
     /** A camera device's pane in one state, set up as [setUp] says, then started as the panel would. */
     private inner class Rig(allowed: Boolean = true, watching: List<String> = emptyList(), setUp: (CameraPrefs) -> Unit = {}) {
-        val file = KioskPrefs(app).paneFile("camera").also { it.edit().clear().commit() }
+        val file = PanePrefs(app).paneFile("camera").also { it.edit().clear().commit() }
         val def = CameraDefinition(file, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) }, time = { "14:31" })
         val camera = Camera()
         var now = 0L
@@ -187,7 +188,7 @@ class CameraMockups {
     /** Setup on [step], with the camera's card and step from the real definition. [then] acts on the screen. */
     private fun setupShot(name: String, step: String, allowed: Boolean = false, then: (SetupOverlay) -> Unit = {}) {
         val a = Mockup.activity()
-        val file = KioskPrefs(app).paneFile("camera").also { it.edit().clear().commit() }
+        val file = PanePrefs(app).paneFile("camera").also { it.edit().clear().commit() }
         val def = CameraDefinition(file, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) })
         def.switch.on = true
         val panes = listOf(

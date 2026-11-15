@@ -4,44 +4,19 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
-import dev.glassworks.bluetoothproxy.BluetoothProxyPrefs
-import dev.glassworks.camera.CameraPrefs
-import dev.glassworks.diagnostics.DiagnosticsPrefs
-import dev.glassworks.notifications.NotificationsPrefs
 import dev.glassworks.screen.ScreenSettings
 import dev.glassworks.esphome.NoiseKeyStore
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.auth.StoredAuth
-import sh.edm.s1kiosk.base.WallBasePrefs
-import sh.edm.s1kiosk.frame.TimeZonePrefs
-import sh.edm.s1kiosk.radio.RadioPrefs
-import sh.edm.s1kiosk.sendspin.SendspinPrefs
-import sh.edm.s1kiosk.voice.VoicePrefs
 
 /**
- * The panel's core settings (SharedPreferences, private to the app), and each pane's typed settings
- * for the code that builds the panes and their definitions (GlassworksRuntime.paneDefinitions). Secrets: the ESPHome API encryption key (`kiosk.xml`, which Home Assistant provisions) and
- * the HA refresh token (`auth.xml`, see [auth]). Neither is ever logged.
+ * The panel's core settings (SharedPreferences, private to the app). The app decides where each pane's
+ * settings live (PanePrefs in the S1 app). Secrets: the ESPHome API encryption key (`kiosk.xml`, which
+ * Home Assistant provisions) and the HA refresh token (`auth.xml`, see [auth]). Neither is ever logged.
  */
-class KioskPrefs(private val context: Context) : ScreenSettings {
+class KioskPrefs(context: Context) : ScreenSettings {
     private val sp = context.getSharedPreferences("kiosk", Context.MODE_PRIVATE)
     private val authSp = context.getSharedPreferences("auth", Context.MODE_PRIVATE)
-
-    /** The file that holds the settings of the pane with id [namespace] ([dev.glassworks.pane.PaneContext.prefs]). */
-    fun paneFile(namespace: String): SharedPreferences = context.getSharedPreferences(
-        PANE_FILES[namespace] ?: throw IllegalArgumentException("No settings file for pane '$namespace'"),
-        Context.MODE_PRIVATE,
-    )
-
-    val sendspin = SendspinPrefs(paneFile("sendspin"))
-    val voice = VoicePrefs(paneFile("assist"))
-    val wallBase = WallBasePrefs(paneFile("wall-base"))
-    val radio = RadioPrefs(paneFile("radio"))
-    val timeZone = TimeZonePrefs(paneFile("time-zone"))
-    val diagnostics = DiagnosticsPrefs(paneFile("diagnostics"))
-    val camera = CameraPrefs(paneFile("camera"))
-    val bluetoothProxy = BluetoothProxyPrefs(paneFile("bluetooth-proxy"))
-    val notifications = NotificationsPrefs(paneFile("notifications"))
 
     fun registerListener(l: SharedPreferences.OnSharedPreferenceChangeListener) =
         sp.registerOnSharedPreferenceChangeListener(l)
@@ -264,15 +239,6 @@ class KioskPrefs(private val context: Context) : ScreenSettings {
 
     companion object {
         const val AUTO = "auto"
-
-        /**
-         * The settings file of each pane, by pane id. Every pane's settings stay in `kiosk.xml`, where
-         * they were before panes: panels update in place, so no stored value may move.
-         */
-        val PANE_FILES = mapOf(
-            "sendspin" to "kiosk", "assist" to "kiosk", "wall-base" to "kiosk", "radio" to "kiosk",
-            "time-zone" to "kiosk", "diagnostics" to "kiosk", "bluetooth-proxy" to "kiosk", "notifications" to "kiosk", "camera" to "kiosk",
-        )
 
         /** Decodes a base64 API key; null unless it is exactly 32 bytes. */
         fun decodeApiKey(b64: String): ByteArray? = try {

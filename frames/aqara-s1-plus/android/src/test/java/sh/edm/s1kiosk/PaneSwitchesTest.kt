@@ -46,7 +46,7 @@ class PaneSwitchesTest {
     }
 
     @Test fun withACameraTheOffPageSaysTheCameraStaysClosed() {
-        val withCamera = dev.glassworks.camera.CameraDefinition(KioskPrefs(app).paneFile("camera"))
+        val withCamera = dev.glassworks.camera.CameraDefinition(PanePrefs(app).paneFile("camera"))
         val page = paneSections(listOf(withCamera)).single()
         assertEquals(listOf(dev.glassworks.camera.CameraDefinition.OFF_NOTE), page.items.map { (it as SettingsItem.Note).text() })
     }

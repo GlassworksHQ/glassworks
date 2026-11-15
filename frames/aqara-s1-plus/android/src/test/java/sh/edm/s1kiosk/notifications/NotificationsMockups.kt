@@ -32,6 +32,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.FixedReadout
 import sh.edm.s1kiosk.radio.RadioMode
 import sh.edm.s1kiosk.radio.radioDefinition
@@ -144,9 +145,10 @@ class NotificationsMockups {
     private fun settings(name: String, on: Boolean, list: List<Entry>) {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val app = RuntimeEnvironment.getApplication()
-        val prefs = KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel" }
+        KioskPrefs(app).urlSetting = "http://homeassistant.local:8123/lovelace/panel"
+        val panePrefs = PanePrefs(app)
         val hub = NotificationsHub().apply { publish(NotificationsHub.State(list = list)) }
-        val notify = NotificationsDefinition(prefs.paneFile("notifications"), hub, { "aqara-s1-plus-a1b2c3" }, now = { now })
+        val notify = NotificationsDefinition(panePrefs.paneFile("notifications"), hub, { "aqara-s1-plus-a1b2c3" }, now = { now })
         notify.switch.on = on
         val radio = radioDefinition(app, FixedReadout(null, running = true))
         val panes = listOf(
@@ -165,7 +167,7 @@ class NotificationsMockups {
         val a = Mockup.activity()
         val ha = "http://homeassistant.local:8123"
         val radio = radioDefinition(a, FixedReadout(null, mode = RadioMode.OFF, haBase = ha, panelIp = "192.0.2.10"))
-        val notify = NotificationsDefinition(KioskPrefs(a).paneFile("notifications"), NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L })
+        val notify = NotificationsDefinition(PanePrefs(a).paneFile("notifications"), NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L })
         val panes = listOf(
             SetupPane(PaneChoice("Voice", "Assist and timers", on = { true }, apply = { null }), emptyList()),
             SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { null }), emptyList()),

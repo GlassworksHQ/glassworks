@@ -24,7 +24,7 @@ import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
 import dev.glassworks.esphome.TimerEventType
 import dev.glassworks.esphome.WakeWordInfo
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.esphome.UrlPlayer
 import sh.edm.s1kiosk.esphome.VoiceAssistantController
 
@@ -32,7 +32,7 @@ import sh.edm.s1kiosk.esphome.VoiceAssistantController
 @Config(sdk = [34], application = Application::class)
 class AssistPaneTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val prefs = KioskPrefs(app).voice
+    private val prefs = PanePrefs(app).voice
     private val events = ArrayList<PanelEvent>()
     private val heard = ArrayList<VoiceEvent>()
     private var chimes = 0
@@ -42,7 +42,7 @@ class AssistPaneTest {
 
     private fun pane(onVoiceEvent: (VoiceEvent) -> Unit = { heard += it }) = AssistPane(
         ctx = PaneContext(
-            app, KioskPrefs(app)::paneFile,
+            app, PanePrefs(app)::paneFile,
             DeviceIdentity(
                 name = "test", friendlyName = "Test", macAddress = "02:00:00:00:00:01", esphomeVersion = "x",
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,

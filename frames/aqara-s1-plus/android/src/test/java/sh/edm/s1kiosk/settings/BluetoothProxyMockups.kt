@@ -22,6 +22,7 @@ import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
 import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 import dev.glassworks.esphome.bluetoothproxy.ScanPower
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.FixedReadout
 import sh.edm.s1kiosk.radio.radioDefinition
 import sh.edm.s1kiosk.setup.SetupFlow
@@ -66,7 +67,7 @@ class BluetoothProxyMockups {
     private val retrying = ProxyStatus(true, false, ScanFailure.ANDROID_ERROR, 0, 0, hour.map { 0 }, retryInMs = 29_400)
 
     private fun proxy(on: Boolean, phase: ProxyPhase, status: ProxyStatus?, why: ScanFailure? = null): PaneDefinition {
-        val file = KioskPrefs(app).paneFile("bluetooth-proxy")
+        val file = PanePrefs(app).paneFile("bluetooth-proxy")
         file.edit().putBoolean(BluetoothProxyPrefs.KEY_ENABLED, on).commit()
         return BluetoothProxyDefinition(file, Radio(why)) { host, _ -> BluetoothProxyPage(host, Shown(phase, status)) }
     }

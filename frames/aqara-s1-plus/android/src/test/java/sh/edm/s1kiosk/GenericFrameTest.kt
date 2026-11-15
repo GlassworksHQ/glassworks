@@ -48,6 +48,7 @@ import java.net.InetAddress
 class GenericFrameTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
+    private val panePrefs = PanePrefs(app)
     private val devices = ArrayList<PanelDevice>()
     private val repo = RepoFiles.root
 
@@ -63,8 +64,8 @@ class GenericFrameTest {
         ShadowBuild.setModel("Pixel Tablet")
         ShadowBuild.setHardware("tangorpro")
         features(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_BLUETOOTH_LE, PackageManager.FEATURE_CAMERA_ANY)
-        prefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
-        prefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
+        panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
         prefs.deviceMac = "02:00:00:A1:B2:C3"
     }
 
@@ -145,7 +146,7 @@ class GenericFrameTest {
     }
 
     @Test fun musicAssistantAndImprovUseTheDevicesOwnName() {
-        prefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, true).commit()
+        panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, true).commit()
         for ((runtime, name, product, maker) in listOf(
             Quad(generic(), "Pixel Tablet", "Pixel Tablet (S1 Kiosk)", "Google"),
             Quad(GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), "Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara"),

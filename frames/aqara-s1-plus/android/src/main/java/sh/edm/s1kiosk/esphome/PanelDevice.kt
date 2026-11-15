@@ -49,6 +49,7 @@ import dev.glassworks.esphome.android.EspHomeMdns
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.MainActivity
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.dashboard.Dashboard
@@ -129,6 +130,7 @@ class PanelDevice internal constructor(
 
     private val ctx = context.applicationContext
     private val prefs = KioskPrefs(ctx)
+    private val panePrefs = PanePrefs(ctx)
     private val main = Handler(Looper.getMainLooper())
     /** Typed as the interface. The device-only parts come in through [Frame.panes]. */
     private val frame: Frame = runtime.frame
@@ -272,7 +274,7 @@ class PanelDevice internal constructor(
     internal fun initEntities(identity: DeviceIdentity) {
         this.identity = identity
         val paneContext = PaneContext(
-            ctx, prefs::paneFile, identity, runtime.build,
+            ctx, panePrefs::paneFile, identity, runtime.build,
             publishStates = { runCatching { exec.execute { server?.publishStates() } } },
             emit = ::emit,
             entitiesChanged = { runCatching { exec.execute { rebuildEntities() } } },
@@ -301,7 +303,7 @@ class PanelDevice internal constructor(
                 silence = { synchronized(this) { chimePlayer }?.cancel() },
             ),
             NotificationsPane(
-                paneContext, prefs.notifications, runtime.notifications,
+                paneContext, panePrefs.notifications, runtime.notifications,
                 screen = object : NotificationScreen {
                     override fun wake() = ui { screen.wake("notification") }
                     override fun hold() = ui { screen.hold("notification") }

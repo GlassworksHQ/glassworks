@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.radio
 
 import android.content.Context
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp
 import sh.edm.s1kiosk.setup.SetupState
 
@@ -27,5 +28,6 @@ class FixedReadout(
 /** The radio's definition over [readout], with the app's prefs (`kiosk.xml`). */
 fun radioDefinition(context: Context, readout: RadioReadout): RadioDefinition {
     val prefs = KioskPrefs(context)
-    return RadioDefinition(prefs.radio, { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) }, readout)
+    val panePrefs = PanePrefs(context)
+    return RadioDefinition(panePrefs.radio, { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) }, readout)
 }

@@ -73,9 +73,9 @@ class AppBuildTest {
     }
 
     @Test fun homeAssistantAndMusicAssistantGetTheGivenVersion() {
-        val prefs = KioskPrefs(app)
-        prefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
-        prefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        val panePrefs = PanePrefs(app)
+        panePrefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
+        panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
         val exec = ManualExecutor()
         val mdns = RecordingMdns()
         val device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,

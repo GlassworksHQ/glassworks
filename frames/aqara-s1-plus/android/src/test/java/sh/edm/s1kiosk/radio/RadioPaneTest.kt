@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.radio
 
 import dev.glassworks.platform.AppBuild
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import dev.glassworks.pane.PaneContext
@@ -22,7 +23,6 @@ import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
 import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.ThreadFetch
 import java.net.InetAddress
@@ -52,7 +52,7 @@ class RadioPaneTest {
 
     private val pane by lazy {
         val ctx = PaneContext(
-            app, KioskPrefs(app)::paneFile,
+            app, PanePrefs(app)::paneFile,
             DeviceIdentity(
                 name = "test", friendlyName = "Test", macAddress = "02:00:00:00:00:01", esphomeVersion = "x",
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
