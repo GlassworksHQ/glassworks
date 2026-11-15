@@ -25,11 +25,7 @@ import sh.edm.s1kiosk.auth.HttpPoster
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.frame.TimeZoneDefinition
-import sh.edm.s1kiosk.radio.RadioMode
-import sh.edm.s1kiosk.radio.ui.RadioFollowUp
-import sh.edm.s1kiosk.radio.ui.RadioStep
-import sh.edm.s1kiosk.radio.ui.RoleStyle
-import sh.edm.s1kiosk.radio.ui.RadioTwin
+import sh.edm.s1kiosk.radio.ui.RadioViewWords
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
 import sh.edm.s1kiosk.settings.PaneFixtures
 import sh.edm.s1kiosk.settings.S1Settings
@@ -61,11 +57,13 @@ class PanelManageParityTest {
      * must be on the panel's view, and everything its view shows must be in the twin, so a row either side
      * drops fails here. The radio's view picks its role from tiles under a header; its twin is one Role row.
      */
-    private fun twinOwn(section: String, word: String): Boolean = section == "radio" &&
-        (word == RadioTwin.ROLE || RadioMode.entries.any { RadioStep.shortName(it) == word })
+    private fun twinOwn(section: String, word: String): Boolean = section == "radio" && RadioViewWords.twinOwn(panes.coordinator, word)
 
-    /** What a panel view draws that its twin leaves to its own rows, by section, each with why. */
-    private fun viewOwn(section: String, text: String): Boolean = section == "radio" && text in RADIO_VIEW_OWN
+    /**
+     * What a panel view draws that its twin leaves to its own rows, by section: for the radio, the fixture's
+     * mode only (the coordinator); RadioTwinTest checks every mode both ways with the same list.
+     */
+    private fun viewOwn(section: String, text: String): Boolean = section == "radio" && RadioViewWords.own(panes.coordinator, text)
 
     /** Every item and its key, a native view's twin too: its items' keys are their titles, as if they sat in the section (#269). */
     private fun walk(items: List<SettingsItem>, prefix: String = "", f: (SettingsItem, String) -> Unit) = walkTwins(items, prefix) { i, k, _ -> f(i, k) }
@@ -97,16 +95,6 @@ class PanelManageParityTest {
         is SettingsItem.Action -> listOf(i.title, i.detail()).filter { it.isNotEmpty() }
         else -> listOf(SettingsChange.titleOf(i))
     }
-
-    /** The radio view's own words: everything else it draws must be in its twin (#269 verifier). */
-    private val RADIO_VIEW_OWN: Set<String> = setOf(
-        // The role picker's tiles (RadioTechPicker): the twin's Role row and its list of roles.
-        "Zigbee", "For ZHA or Zigbee2MQTT", "Coordinator", "Repeater β", "Thread", "For Matter over Thread", "Border router",
-        // The longer explanation, left out on purpose (RadioTwin).
-        "How does this work?  ›",
-    ) +
-        // How the role is doing, in the card's header and pill: the page's chip says it on the Manage page.
-        RadioMode.entries.map(RoleStyle::header) + RadioFollowUp.Health.entries.map { it.label }
 
     /** Every word a twin's items say, a group's items' too, with each tile's unit and line. */
     private fun twinWords(items: List<SettingsItem>): Set<String> = items.flatMap { i ->

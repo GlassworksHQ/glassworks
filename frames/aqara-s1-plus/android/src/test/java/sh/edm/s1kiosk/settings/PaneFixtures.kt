@@ -90,11 +90,15 @@ class PaneFixtures(private val app: Application) {
     }
 
     /** A three-channel switch base, as the tracker hears it, with relay 1 on and button 1 just pressed; or none. */
-    fun wallBase(attached: Boolean = true): WallBasePane {
+    fun wallBase(
+        attached: Boolean = true,
+        /** The base's link: none by default; a test passes one that records relay writes. */
+        newLink: ((WallBase.Config, java.util.concurrent.ScheduledExecutorService, sh.edm.s1kiosk.base.BaseLink.Listener) -> sh.edm.s1kiosk.base.BaseLink)? = null,
+    ): WallBasePane {
         PanePrefs(app).wallBase.layout = ""
         val device = Executors.newSingleThreadScheduledExecutor().also { held += it }
         // No getprop or setprop on the host: Aqara's daemon reads as stopped, as on a panel with the UART base.
-        val p = WallBasePane(ctx, WallBase.Config(BaseBackend.UART), device, AqaraCloud { cmd -> if (cmd.firstOrNull() == "getprop") "stopped" else "" })
+        val p = WallBasePane(ctx, WallBase.Config(BaseBackend.UART), device, AqaraCloud { cmd -> if (cmd.firstOrNull() == "getprop") "stopped" else "" }, newLink)
         p.tracker.apply(if (!attached) mapOf(BaseRes.DOCK_CLASS to 0) else mapOf(
             BaseRes.DOCK_CLASS to 0x0100F110, BaseRes.CHANNEL_COUNT to 3, BaseRes.RELAY_MASK to 7,
             BaseRes.relay(1) to 1, BaseRes.relay(2) to 0, BaseRes.relay(3) to 0,

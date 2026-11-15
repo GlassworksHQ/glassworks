@@ -23,6 +23,8 @@ class ManageTwinsTest {
     private var resets = 0
     private var failing = false
     private var role = "thread_router"
+    private var wipes = 0
+    private var otherResets = 0
     private val f = ManageFixture()
 
     private val zones = listOf("Europe/Madrid" to "Madrid", "Europe/London" to "London", "America/New_York" to "New York", "UTC" to "UTC")
@@ -35,17 +37,23 @@ class ManageTwinsTest {
                 SettingsItem.Action("Home Assistant's time zone", { "UTC+00:00 · like Europe/London" }, "Use it") { d ->
                     if (failing) d("The root helper didn't answer.") else { used++; zone = "Europe/London"; d(null) }
                 },
-                SettingsItem.Choice("Role", { role }, { listOf("zigbee_tcp" to "Zigbee coordinator", "thread_router" to "Thread repeater") },
+                SettingsItem.Choice("Role", { role }, { listOf("zigbee_tcp" to "Zigbee coordinator", "thread" to "Thread border router", "thread_router" to "Thread repeater") },
                     confirm = { v -> if (v == role) null else SettingsItem.Confirm("Switch to Zigbee coordinator?", "The panel stops repeating for your Thread network.", "Switch") }) { v, d -> role = v; d(null) },
                 SettingsItem.Action("Thread network", { "Joined" }, "Reset",
                     confirm = SettingsItem.Confirm("Reset the Thread network?", "Thread devices drop off.", "Reset")) { d -> resets++; d(null) },
+                SettingsItem.Action("Factory reset", { "" }, "Reset",
+                    confirm = SettingsItem.Confirm("Reset the panel?", "Everything goes.", "Reset")) { d -> wipes++; d(null) },
             )
         }
         val tz = SettingsSection("time-zone", "Time zone", listOf(
             SettingsItem.Native("tz", "The zone, from a list", twin = twin) { error("the panel's view isn't drawn here") },
         ))
         val radio = SettingsSection("radio", "Radio", listOf(SettingsItem.Native("radio", "The roles") { error("not here") }))
-        f.statusFn = { f.status.copy(panes = listOf(paneRow("time-zone", tz), paneRow("radio", radio)), sections = listOf(tz, radio)) }
+        // Another page with an action of the same name, for an answer's section.
+        val other = SettingsSection("other", "Other", listOf(SettingsItem.Native("other", "Other", twin = {
+            listOf(SettingsItem.Action("Thread network", { "" }, "Reset", confirm = SettingsItem.Confirm("Reset it here?", "", "Reset")) { d -> otherResets++; d(null) })
+        }) { error("not here") }))
+        f.statusFn = { f.status.copy(panes = listOf(paneRow("time-zone", tz), paneRow("radio", radio), paneRow("other", other)), sections = listOf(tz, radio, other)) }
     }
 
     private fun signedIn() = f.Browser().also { it.signInWithHa() }
@@ -126,6 +134,53 @@ class ManageTwinsTest {
         assertEquals(303, b.post("/settings", form(b, "Role", "value" to "zigbee_tcp", "answer" to ask.answer()!!)).status)
         assertEquals("zigbee_tcp", role)
         assertEquals("the role it has: no question, saved at once", 303, b.post("/settings", form(b, "Role", "value" to "zigbee_tcp")).status)
+    }
+
+    private fun asked(b: ManageFixture.Browser, section: String, key: String, value: String) =
+        b.post("/settings", mapOf("csrf" to b.csrf(), "section" to section, "key" to key, "value" to value)).answer()!!
+
+    private fun answering(b: ManageFixture.Browser, section: String, key: String, value: String, answer: String) =
+        b.post("/settings", mapOf("csrf" to b.csrf(), "section" to section, "key" to key, "value" to value, "answer" to answer)).status
+
+    /** #269 delta verifier: an answer is for its own page, item and value, not just its session. */
+    @Test fun anAnswerIsForItsOwnSectionKeyAndValue() {
+        val b = signedIn()
+        assertEquals("another page's item of the same name asks again", 200,
+            answering(b, "other", "Thread network", "run", asked(b, "time-zone", "Thread network", "run")))
+        assertEquals(0, otherResets)
+        assertEquals("another item on the page asks again", 200,
+            answering(b, "time-zone", "Factory reset", "run", asked(b, "time-zone", "Thread network", "run")))
+        assertEquals(0, wipes)
+        assertEquals("another value asks again", 200,
+            answering(b, "time-zone", "Role", "thread", asked(b, "time-zone", "Role", "zigbee_tcp")))
+        assertEquals("thread_router", role)
+        assertEquals("its own change runs", 303, answering(b, "time-zone", "Role", "thread", asked(b, "time-zone", "Role", "thread")))
+        assertEquals("thread", role)
+        assertEquals(0, resets + wipes + otherResets)
+    }
+
+    /** #269 delta verifier: an answer is good for five minutes on the server's monotonic clock. */
+    @Test fun anAnswerRunsOutAfterFiveMinutes() {
+        val b = signedIn()
+        val late = asked(b, "time-zone", "Thread network", "run")
+        f.monoMs += 5 * 60_000 + 1
+        assertEquals("ran out: asks again", 200, answering(b, "time-zone", "Thread network", "run", late))
+        assertEquals(0, resets)
+        val inTime = asked(b, "time-zone", "Thread network", "run")
+        f.monoMs += 4 * 60_000
+        assertEquals(303, answering(b, "time-zone", "Thread network", "run", inTime))
+        assertEquals(1, resets)
+    }
+
+    /** #269 delta verifier: signing out drops the session's open questions. */
+    @Test fun signingOutForgetsTheSessionsQuestions() {
+        val b = signedIn()
+        asked(b, "time-zone", "Thread network", "run")
+        asked(b, "time-zone", "Role", "zigbee_tcp")
+        val id = f.sessions.list(f.haBase).single().id
+        assertEquals(2, f.server.questionsWaiting(id))
+        assertEquals(303, b.post("/manage/signout", mapOf("csrf" to b.csrf())).status)
+        assertEquals(0, f.server.questionsWaiting(id))
     }
 
     /** Either sign-in (#288); one that costs something asks first, as on the panel. */

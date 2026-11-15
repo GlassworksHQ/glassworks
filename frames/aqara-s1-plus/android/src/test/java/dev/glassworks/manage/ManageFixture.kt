@@ -27,6 +27,8 @@ class ManageFixture(
 ) {
     val dir: File = Files.createTempDirectory("manage").toFile()
     var now = 1_763_000_000_000L
+    /** The server's monotonic clock, ms: tests move it past a question's five minutes. */
+    var monoMs = 0L
     val log = ManageLog(File(dir, "log"), clock = { now })
     val sessions = SessionStore(File(dir, "sessions.json"), clock = { now })
     val code = PanelCode(clock = { now })
@@ -117,6 +119,7 @@ class ManageFixture(
         event = { events += it },
         ownHosts = { setOf("192.0.2.40", "glassworks-panel.local", "fd00::40", "127.0.0.1") },
         saveWaitMs = saveWaitMs,
+        monoMs = { monoMs },
     )
 
     init {
