@@ -44,6 +44,7 @@ import sh.edm.s1kiosk.setup.SetupOverlay
 import sh.edm.s1kiosk.setup.SetupPane
 import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
+import sh.edm.s1kiosk.setup.s1SetupOverlay
 import sh.edm.s1kiosk.ui.Mockup
 import java.io.ByteArrayOutputStream
 
@@ -175,7 +176,7 @@ class NotificationsMockups {
             SetupPane(radio.setupChoice, radio.setupSteps),
             SetupPane(PaneChoice("Wall base", "The S1's wired base", on = { true }, apply = { null }), emptyList()),
         )
-        val s = SetupOverlay(a, panes)
+        val s = s1SetupOverlay(a, panes)
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         val flow = SetupFlow.ids(true, listOf("radio"))
         s.render(SetupOverlay.Model(

@@ -27,6 +27,12 @@ interface AppParts {
     /** The app's layers over the dashboard in its activity, built from what the activity gives them, bottom first. */
     fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay>
 
+    /** The activity started (each start, off the main thread): the app's own upkeep (the S1's direct-boot splash). */
+    fun activityStarted(context: Context) {}
+
+    /** The app's service started, before it starts the device: the app's own first state (the S1's voice state). */
+    fun serviceStarted(context: Context, runtime: GlassworksRuntime) {}
+
     /** The app's activity: the one that shows the dashboard, and that Home Assistant's commands go to. */
     val mainActivity: Class<out Activity>
 

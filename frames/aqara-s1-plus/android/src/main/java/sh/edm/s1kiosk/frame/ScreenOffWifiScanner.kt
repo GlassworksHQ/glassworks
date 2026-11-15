@@ -17,6 +17,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import dev.glassworks.frame.ServiceWork
 import sh.edm.s1kiosk.frame.WifiScanPolicy.Link
 
 /**
@@ -41,7 +42,7 @@ class ScreenOffWifiScanner(
     private val clock: () -> Long = SystemClock::elapsedRealtime,
     /** On the scanner's thread. */
     private val onForegroundOnly: () -> Unit = {},
-) {
+) : ServiceWork {
     companion object {
         const val TAG = "S1Kiosk.Wifi"
         private const val RETRY_MS = 120_000L
@@ -67,7 +68,7 @@ class ScreenOffWifiScanner(
         override fun onReceive(c: Context, i: Intent) = step()
     }
 
-    @Synchronized fun start() {
+    @Synchronized override fun start() {
         if (handler != null) return
         reportedForegroundOnly = false
         val h = Handler(looper ?: HandlerThread("s1-wifi-scan").also { it.start(); thread = it }.looper)
@@ -81,7 +82,7 @@ class ScreenOffWifiScanner(
         h.post(due)
     }
 
-    @Synchronized fun stop() {
+    @Synchronized override fun stop() {
         val h = handler ?: return
         handler = null
         runCatching { ctx.unregisterReceiver(receiver) }

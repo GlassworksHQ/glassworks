@@ -179,6 +179,15 @@ class S1Panes : AppParts {
 
     override val mainActivity = MainActivity::class.java
 
+    /** The direct-boot splash (our look before unlock at the next boot): on only while it's safe. */
+    override fun activityStarted(context: Context) = BootSplashActivity.sync(context)
+
+    /** The voice state starts as the assistant's switch says; the overlay starts from it. */
+    override fun serviceStarted(context: Context, runtime: GlassworksRuntime) {
+        runtime.voiceState = if (PanePrefs(context).voice.enabled) "idle" else "off"
+        voiceUi = VoiceUi(runtime.voiceState)
+    }
+
     override fun paneFile(context: Context, namespace: String) = PanePrefs.file(context, namespace)
 
     override fun managePage(context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
@@ -294,6 +303,3 @@ class S1Panes : AppParts {
     }
 }
 
-// TODO(S-shell): remove once the activity and the service no longer read the S1 app's panes' state.
-/** The S1 app's parts of a runtime it made ([KioskApp.runtime]). */
-val GlassworksRuntime.s1Panes: S1Panes get() = app as S1Panes

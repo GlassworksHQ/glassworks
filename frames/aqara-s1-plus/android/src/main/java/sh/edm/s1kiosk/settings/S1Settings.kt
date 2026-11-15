@@ -17,7 +17,6 @@ import dev.glassworks.pane.withHaLink
 import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.Licences
-import sh.edm.s1kiosk.frame.AqaraS1Plus
 
 /**
  * The panel's settings: the one model the menu ([KioskSettingsOverlay]) and the Manage page both draw
@@ -45,7 +44,7 @@ object S1Settings {
         val core = CoreSettings(
             prefs, version,
             status = { runtime.screen.statusLine() + " · voice=" + runtime.voiceState },
-            deviceSettings = if (!deviceSettings) null else SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.AQARA_DETAIL) { c ->
+            deviceSettings = if (!deviceSettings) null else SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.DEVICE_SETTINGS_DETAIL) { c ->
                 if (!frame.openSystemSettings(c)) Toast.makeText(c, "No settings app on this panel", Toast.LENGTH_LONG).show()
             },
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) { c -> (c as? Activity)?.let(Licences::show) },
@@ -68,7 +67,7 @@ object S1Settings {
     }
 
     /** The frame's name in words: "S1 Plus", or the device's ("Google Pixel Tablet"). */
-    fun frameName(runtime: Glassworks): String = if (runtime.frame is AqaraS1Plus) "S1 Plus" else runtime.frame.friendlyName()
+    fun frameName(runtime: Glassworks): String = runtime.frame.shortName ?: runtime.frame.friendlyName()
 
     /** Whether [context]'s frame has its own settings app, for [model]. */
     fun hasDeviceSettings(runtime: Glassworks, context: Context): Boolean = runtime.frame.systemSettings(context) != null

@@ -14,6 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.radio.FixedReadout
 import sh.edm.s1kiosk.radio.HelperFacts
 import sh.edm.s1kiosk.radio.RadioDefinition
@@ -129,7 +130,7 @@ class SettingsMenuTest {
         assertEquals(
             listOf(
                 "Wake when someone's near", "Presence range", "Turn off when idle", "At night", "At night, turn off after",
-                "Brightness", SettingsMenu.AQARA_TITLE,
+                "Brightness", AqaraS1Plus.SETTINGS_TITLE,
             ),
             m["screen"],
         )
@@ -169,14 +170,14 @@ class SettingsMenuTest {
     @Test
     fun aqaraSettingsOnlyWhenItResolves() {
         val screen = menu(deviceSettings = false).first { it.id == "screen" }
-        assertFalse(SettingsMenu.AQARA_TITLE in titles(screen.items))
+        assertFalse(AqaraS1Plus.SETTINGS_TITLE in titles(screen.items))
         assertEquals(6, screen.items.size) // everything else stays
     }
 
     @Test
     fun aqaraEntryText() {
-        assertEquals("Aqara's own settings", SettingsMenu.AQARA_TITLE)
-        assertEquals("", SettingsMenu.AQARA_DETAIL)
+        assertEquals("Aqara's own settings", AqaraS1Plus.SETTINGS_TITLE)
+        assertEquals("", SettingsMenu.DEVICE_SETTINGS_DETAIL)
     }
 
     @Test

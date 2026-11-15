@@ -22,7 +22,7 @@ class CameraAdbActivity : Activity() {
         super.onCreate(savedInstanceState)
         val i = intent
         if (i != null) {
-            val c = PanePrefs(this).camera
+            val c = CameraPrefs(glassworks.paneFile(this, "camera"))
             i.getStringExtra(CameraPrefs.KEY_USE)?.let { c.use = if (it in setOf("snapshots", "camera", CameraPrefs.USE_CAMERA, CameraPrefs.STORED_CAMERA)) CameraUse.PRESENCE_AND_SNAPSHOTS else CameraUse.PRESENCE }
             if (i.hasExtra(CameraPrefs.KEY_PRIVACY)) c.privacy = i.getBooleanExtra(CameraPrefs.KEY_PRIVACY, true)
             if (i.hasExtra(CameraPrefs.KEY_ONVIF)) c.onvif = i.getBooleanExtra(CameraPrefs.KEY_ONVIF, false)

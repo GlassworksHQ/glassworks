@@ -34,7 +34,6 @@ import dev.glassworks.pane.SetupHost
 import dev.glassworks.pane.SetupScreen
 import dev.glassworks.pane.SetupStep
 import sh.edm.s1kiosk.auth.OAuth
-import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.ui.Glass
 import sh.edm.s1kiosk.ui.GroupedRail
 import sh.edm.s1kiosk.ui.Glass.Companion.AMBER
@@ -69,7 +68,7 @@ class SetupOverlay(
      */
     private val setupPanes: List<SetupPane> = emptyList(),
     /** What Home Assistant shows for the panel (`Frame.friendlyName()`), on the HA step. */
-    private val haName: String = AqaraS1Plus.DISPLAY_NAME,
+    private val haName: String,
 ) : FrameLayout(context) {
 
     private val choices = setupPanes.map { it.choice }

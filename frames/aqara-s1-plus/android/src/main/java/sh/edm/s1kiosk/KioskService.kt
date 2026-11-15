@@ -9,8 +9,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import dev.glassworks.frame.ServiceWork
 import dev.glassworks.platform.Platform
-import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.settings.SettingsMenu
 import android.os.IBinder
 import android.os.Handler
@@ -21,12 +21,10 @@ import sh.edm.s1kiosk.auth.UrlConnectionPoster
 import dev.glassworks.frame.systemSettings
 import sh.edm.s1kiosk.discovery.HaDiscovery
 import sh.edm.s1kiosk.esphome.PanelDevice
-import sh.edm.s1kiosk.frame.ScreenOffWifiScanner
 import sh.edm.s1kiosk.improv.ImprovController
 import sh.edm.s1kiosk.improv.ImprovSerialServer
 import sh.edm.s1kiosk.manage.CodeOverlay
 import sh.edm.s1kiosk.setup.SetupChannelServer
-import sh.edm.s1kiosk.voice.VoiceUi
 
 /**
  * Long-lived foreground service that owns the sensor/screen policy and the ESPHome device
@@ -36,11 +34,11 @@ import sh.edm.s1kiosk.voice.VoiceUi
 class KioskService : Service() {
 
     private val main = Handler(Looper.getMainLooper())
-    /** The S1 app's runtime, for the panes' shared state the service hands around (the voice overlay, the device). */
-    private val runtime get() = (application as KioskApp).glassworks
+    /** The app's runtime, for its parts and the device it starts. */
+    private val runtime get() = glassworksRuntime
     private var device: PanelDevice? = null
     private var discovery: HaDiscovery? = null
-    private var wifiScanner: ScreenOffWifiScanner? = null
+    private var frameWork: ServiceWork? = null
     private var codeOverlay: CodeOverlay? = null
     private lateinit var foreground: KioskForeground
 
@@ -55,9 +53,8 @@ class KioskService : Service() {
         )
         promote()
         glassworks.screen.start(this)
-        wifiScanner = (runtime.frame as? AqaraS1Plus)?.screenOffWifiScanner(this) { main.post { if (wifiScanner != null) promote() } }?.also { it.start() }
-        glassworks.voiceState = if (PanePrefs(this).voice.enabled) "idle" else "off"
-        runtime.s1Panes.voiceUi = VoiceUi(glassworks.voiceState)
+        frameWork = glassworks.frame.serviceWork(this) { main.post { if (frameWork != null) promote() } }?.also { it.start() }
+        runtime.app.serviceStarted(this, runtime)
         glassworks.voiceCancel = { device?.cancelVoice() }
         HaAuth.startServer(this)
         codeOverlay = CodeOverlay(this) { glassworks.panelCode.dismiss() }
@@ -105,15 +102,15 @@ class KioskService : Service() {
         glassworks.panelCode.canDisplay = { false }
         codeOverlay?.show(null)
         codeOverlay = null
-        wifiScanner?.stop()
-        wifiScanner = null
+        frameWork?.stop()
+        frameWork = null
         super.onDestroy()
     }
 
     /**
      * Runs the service with every foreground type it may have now. Called on each start, so
      * [start] after a runtime grant adds the type without a restart (voice keeps the mic with the
-     * screen off). Also called on the Wi-Fi scanner's first refusal for the location app-op, which
+     * screen off). Also called when the frame's service work asks (the S1's Wi-Fi scanner, on its first refusal for the location app-op), which
      * covers a grant from outside the app. Does nothing while the types are unchanged.
      */
     private fun promote() {
@@ -158,7 +155,7 @@ class KioskService : Service() {
         @Suppress("DEPRECATION")
         val b = if (Platform.hasNotificationChannels) Notification.Builder(this, CHANNEL)
         else Notification.Builder(this)
-        b.setSmallIcon(R.drawable.ic_launcher)
+        b.setSmallIcon(notificationIcon())
             .setContentTitle("S1 Kiosk")
             .setContentText("Tap for kiosk settings · screen, sensors & ESPHome API running")
             .setContentIntent(menu)
@@ -167,10 +164,13 @@ class KioskService : Service() {
         glassworks.frame.systemSettings(this)?.let { settings ->
             val pi = PendingIntent.getActivity(this, REQ_PANEL_SETTINGS, settings, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             @Suppress("DEPRECATION")
-            b.addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_launcher), "Panel settings", pi).build())
+            b.addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, notificationIcon()), "Panel settings", pi).build())
         }
         return b.build()
     }
+
+    /** The app's icon, from its manifest; Android's default app icon for an APK without one, so the service still starts. */
+    private fun notificationIcon(): Int = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
         private const val CHANNEL = "kiosk"

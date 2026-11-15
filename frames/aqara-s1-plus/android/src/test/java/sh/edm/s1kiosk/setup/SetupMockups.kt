@@ -67,7 +67,7 @@ class SetupMockups {
 
     private fun shot(name: String, m: SetupOverlay.Model, radio: RadioFollowUp.Facts? = null, followUp: Boolean = false, then: (SetupOverlay) -> Unit = {}) {
         val a = Mockup.activity()
-        val s = SetupOverlay(a, panes(a, radio, followUp))
+        val s = s1SetupOverlay(a, panes(a, radio, followUp))
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(m)
         then(s)

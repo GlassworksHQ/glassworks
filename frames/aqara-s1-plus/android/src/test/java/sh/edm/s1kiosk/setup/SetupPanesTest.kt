@@ -70,7 +70,7 @@ class SetupPanesTest {
 
     private fun overlay(ps: List<SetupPane> = panes, m: SetupOverlay.Model = model(SetupFlow.PANES)): SetupOverlay {
         val a = Mockup.activity()
-        val s = SetupOverlay(a, ps)
+        val s = s1SetupOverlay(a, ps)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(m)
         Mockup.idle()

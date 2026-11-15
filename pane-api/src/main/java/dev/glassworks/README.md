@@ -522,6 +522,10 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
+| `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
+| `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |
+| `systemSettingsTitle` | What the settings call the device's own settings app when it isn't Android's (the S1's: Aqara's). Null (the default) means Android's. |
+| `serviceWork(context, onForegroundOnly)` | Work the frame runs while the app's service runs: the S1's Wi-Fi scans while the screen is off (#3). Null (the default) means none. |
 | `deviceSection(context, running)` | The frame's Device page: settings and facts about the device that belong to no pane. Every settings surface lists it under Panel, after Screen, named after the frame ("S1 Plus"; a generic device's model). `running` gives a running pane by id. Null (the default) means no page. |
 
 The app makes one frame at start, and `GlassworksRuntime` holds it. The device shell
@@ -530,8 +534,9 @@ The app makes one frame at start, and `GlassworksRuntime` holds it. The device s
 The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
 presence source is the VI5300 time-of-flight sensor, with Lumi's `proximity_threshold` range table,
 and its light source is the MK6212 sensor. Its panes are the wall base (with Aqara's cloud daemon,
-which holds the wall base UART) and the time zone. It also holds the root update service. The rest of
-the planned frame (screen off, installer) comes in the next migration steps.
+which holds the wall base UART) and the time zone. It also holds the root update service (`rootUpdates`) and
+the Wi-Fi scans while the screen is off (`serviceWork`). The rest of the planned frame (installer) comes in
+the next migration steps.
 
 ## Engine
 

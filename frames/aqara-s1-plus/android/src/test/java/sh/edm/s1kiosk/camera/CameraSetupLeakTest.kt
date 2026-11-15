@@ -24,6 +24,7 @@ import sh.edm.s1kiosk.setup.SetupOverlay
 import sh.edm.s1kiosk.setup.SetupPane
 import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
+import sh.edm.s1kiosk.setup.s1SetupOverlay
 import sh.edm.s1kiosk.ui.Mockup
 
 /**
@@ -73,7 +74,7 @@ class CameraSetupLeakTest {
             SetupPane(PaneChoice("Voice", "Assist and timers", on = { true }, apply = { null }), emptyList()),
             SetupPane(def.setupChoice!!, def.setupSteps),
         )
-        val s = SetupOverlay(a, panes)
+        val s = s1SetupOverlay(a, panes)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         val m = SetupOverlay.Model(
             step = SetupFlow.SIGNIN, done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.PANES, "camera"),

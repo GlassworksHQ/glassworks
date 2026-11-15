@@ -21,7 +21,7 @@ class SetupDoneTest {
 
     private fun overlay(preview: Boolean): SetupOverlay {
         val a = Mockup.activity()
-        val s = SetupOverlay(a)
+        val s = s1SetupOverlay(a)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.finish(SetupOverlay.Model(
             step = SetupFlow.SIGNIN, done = emptySet(), wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),

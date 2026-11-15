@@ -13,6 +13,7 @@ import dev.glassworks.frame.Frame
 import dev.glassworks.frame.Hardware
 import dev.glassworks.frame.NamedBy
 import dev.glassworks.frame.RootUpdates
+import dev.glassworks.frame.ServiceWork
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
@@ -65,8 +66,12 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
     override val rootUpdates: RootUpdates = RootUpdateInstaller()
 
     /** Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3). One per service run. */
-    fun screenOffWifiScanner(context: Context, onForegroundOnly: () -> Unit) =
+    override fun serviceWork(context: Context, onForegroundOnly: () -> Unit): ServiceWork =
         ScreenOffWifiScanner(context, onForegroundOnly = onForegroundOnly)
+
+    override val shortName = "S1 Plus"
+
+    override val systemSettingsTitle = SETTINGS_TITLE
 
     /**
      * The S1's firmware has no Android Settings app. Its own one (com.lumi.settings: Network, Sounds,
@@ -86,6 +91,9 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
     companion object {
         /** frame.json's `name` (PanelNameTest checks it). */
         const val DISPLAY_NAME = "Aqara S1 Plus"
+
+        /** What the settings menu calls the S1's own settings app (com.lumi.settings). */
+        const val SETTINGS_TITLE = "Aqara's own settings"
 
         /**
          * `Build.HARDWARE` on the S1's A133 (read 2026-11-14), the S1 frame's only check. Its other build
