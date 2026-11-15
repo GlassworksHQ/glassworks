@@ -11,35 +11,45 @@ import java.net.Socket
 import java.net.URI
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.Base64
+import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
 /**
- * Minimal RFC 6455 WebSocket client for `ws://` (Sendspin uses plain ws; Noise protects the
- * payloads) and `wss://` (Home Assistant's websocket API, ThreadJoin). Handles fragmented messages, ping/pong and close; masks every client frame. No
- * `Origin` header is sent. [receive] returns whole messages with the [System.nanoTime] at which the
- * last byte was read (spec "Receive timestamps").
+ * A minimal RFC 6455 WebSocket client, blocking, for `ws://` (Sendspin uses plain ws; Noise protects the
+ * payloads) and `wss://` (such as Home Assistant's websocket API). It handles fragmented messages,
+ * ping/pong and close, and masks every client frame. It sends no `Origin` header and negotiates no
+ * extension. [receive] returns whole messages with the [System.nanoTime] at which the last byte was read
+ * (Sendspin spec "Receive timestamps"). Open one with [connect].
  */
-class WsClient private constructor(
+public class WsClient private constructor(
     private val socket: Socket,
     private val input: InputStream,
     /** The TCP socket under [socket] (the same one for `ws://`); [abort] closes this one. */
     private val tcp: Socket,
 ) {
 
-    class Message(val text: Boolean, val data: ByteArray, val receivedNanos: Long)
+    /** One whole message: [text] (UTF-8 in [data]) or binary, read completely at [receivedNanos] ([System.nanoTime]). */
+    public class Message(
+        /** A text message; else binary. */
+        public val text: Boolean,
+        /** The payload. */
+        public val data: ByteArray,
+        /** When its last byte was read, in [System.nanoTime]. */
+        public val receivedNanos: Long,
+    )
 
     private val out = BufferedOutputStream(socket.getOutputStream(), 64 * 1024)
     private val writeLock = Any()
     private val rng = SecureRandom()
-    @Volatile var closed = false; private set
+    /** True once either side closed the connection, or [abort] dropped it. */
+    @Volatile public var closed: Boolean = false; private set
 
-    /** Sends one complete text message. */
-    fun sendText(s: String) = sendFrame(0x1, s.toByteArray(Charsets.UTF_8))
+    /** Sends one complete text message. Throws [IOException] once [closed]. Safe from any thread. */
+    public fun sendText(s: String): Unit = sendFrame(0x1, s.toByteArray(Charsets.UTF_8))
 
-    /** Sends one complete binary message. */
-    fun sendBinary(b: ByteArray) = sendFrame(0x2, b)
+    /** Sends one complete binary message. Throws [IOException] once [closed]. Safe from any thread. */
+    public fun sendBinary(b: ByteArray): Unit = sendFrame(0x2, b)
 
     private fun sendFrame(opcode: Int, payload: ByteArray) {
         synchronized(writeLock) {
@@ -60,8 +70,12 @@ class WsClient private constructor(
         }
     }
 
-    /** Next complete text/binary message, or null when the peer closed the connection. */
-    fun receive(): Message? {
+    /**
+     * Blocks for the next whole text or binary message, or returns null when the server closed the
+     * connection. Answers pings on the way. Throws [IOException] on a protocol error, the read timeout or
+     * a message over 4 MiB. From one thread at a time.
+     */
+    public fun receive(): Message? {
         var msgOpcode = -1
         val buf = ByteArrayOutputStream()
         while (true) {
@@ -103,13 +117,13 @@ class WsClient private constructor(
      * a write that is stuck (the socket has no write timeout). It closes the TCP socket, not the TLS
      * wrapper, so no TLS close runs on the caller's thread (which may be the main thread).
      */
-    fun abort() {
+    public fun abort() {
         closed = true
         try { tcp.close() } catch (_: Exception) {}
     }
 
-    /** Sends a close frame (best effort) and closes the socket. */
-    fun close(code: Int = 1000) {
+    /** Sends a close frame with [code] (best effort) and closes the socket. */
+    public fun close(code: Int = 1000) {
         if (!closed) {
             try { sendFrame(0x8, byteArrayOf((code ushr 8).toByte(), code.toByte())) } catch (_: IOException) {}
         }
@@ -134,16 +148,18 @@ class WsClient private constructor(
         return b
     }
 
-    companion object {
+    /** Opens connections. */
+    public companion object {
         /** Sendspin messages are ≤ 64 KiB per Noise frame; generous cap for one WebSocket message. */
-        const val MAX_MESSAGE = 4L * 1024 * 1024
+        internal const val MAX_MESSAGE = 4L * 1024 * 1024
 
         /**
          * Opens `ws://host:port/path` (or `wss://`, TLS with the system's trusted CAs and hostname
-         * check) and completes the upgrade.
+         * check) and completes the upgrade. [readTimeoutMs] then bounds each read in [receive]. Blocks:
+         * not on the main thread. Throws [IOException] when it can't connect or the server refuses.
          */
         @Throws(IOException::class)
-        fun connect(url: String, connectTimeoutMs: Int = 5_000, readTimeoutMs: Int = 30_000): WsClient {
+        public fun connect(url: String, connectTimeoutMs: Int = 5_000, readTimeoutMs: Int = 30_000): WsClient {
             val uri = URI(url)
             val tls = when (uri.scheme) {
                 "ws" -> false
@@ -162,13 +178,16 @@ class WsClient private constructor(
                     val ssl = (SSLSocketFactory.getDefault() as SSLSocketFactory)
                         .createSocket(plain, host, port, true) as SSLSocket
                     s = ssl
-                    ssl.sslParameters = ssl.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
+                    if (Compat.hasEndpointIdentification) ssl.sslParameters = ssl.sslParameters.apply { endpointIdentificationAlgorithm = "HTTPS" }
                     ssl.soTimeout = connectTimeoutMs
                     ssl.startHandshake()
+                    if (!Compat.hasEndpointIdentification && !HttpsURLConnection.getDefaultHostnameVerifier().verify(host, ssl.session)) {
+                        throw IOException("certificate doesn't match $host")
+                    }
                 }
                 s.soTimeout = readTimeoutMs
                 val input = BufferedInputStream(s.getInputStream(), 64 * 1024)
-                val key = Base64.getEncoder().encodeToString(ByteArray(16).also { SecureRandom().nextBytes(it) })
+                val key = Base64.encode(ByteArray(16).also { SecureRandom().nextBytes(it) })
                 val hostHeader = if (host.contains(':')) "[$host]" else host
                 val req = "GET $path HTTP/1.1\r\n" +
                     "Host: $hostHeader:$port\r\n" +
@@ -186,7 +205,7 @@ class WsClient private constructor(
                     val i = line.indexOf(':')
                     if (i > 0 && line.substring(0, i).trim().equals("Sec-WebSocket-Accept", true)) accept = line.substring(i + 1).trim()
                 }
-                val expected = Base64.getEncoder().encodeToString(
+                val expected = Base64.encode(
                     MessageDigest.getInstance("SHA-1").digest((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").toByteArray())
                 )
                 if (accept != expected) throw IOException("bad Sec-WebSocket-Accept")

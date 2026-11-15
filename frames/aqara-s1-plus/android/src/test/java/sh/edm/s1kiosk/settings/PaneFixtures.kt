@@ -27,7 +27,8 @@ import sh.edm.s1kiosk.radio.SysProps
 import dev.glassworks.pane.PanelEvent
 import dev.glassworks.pane.PanelTimer
 import sh.edm.s1kiosk.sendspin.SendspinPane
-import dev.glassworks.sendspin.SendspinSession
+import dev.glassworks.sendspin.SendspinPlayer
+import sh.edm.s1kiosk.sendspin.MusicView
 import sh.edm.s1kiosk.esphome.UrlPlayer
 import sh.edm.s1kiosk.voice.AssistPane
 import sh.edm.s1kiosk.voice.SpeakerMedia
@@ -135,9 +136,13 @@ class PaneFixtures(private val app: Application) {
     fun music(): SendspinPane {
         val p = SendspinPane(ctx, haBase = { "http://homeassistant.local:8123" })
         p.player.setVolume(40)
-        p.player.status = SendspinSession.Status(SendspinSession.Phase.PLAYING, serverName = "Music Assistant", paired = true, codec = "flac")
-        p.player.activeUrl = "ws://192.0.2.30:8927/sendspin"
-        p.player.nowPlaying = "Claude Debussy – Clair de lune"
+        p.view = object : MusicView {
+            override val status = SendspinPlayer.Status(SendspinPlayer.Phase.PLAYING, serverName = "Music Assistant", paired = true, codec = "flac")
+            override val serverUrl = "ws://192.0.2.30:8927/sendspin"
+            override val nowPlayingText = "Claude Debussy – Clair de lune"
+            override val volume get() = p.player.volume
+            override fun setVolume(volume: Int) = p.player.setVolume(volume)
+        }
         return p
     }
 

@@ -1,12 +1,14 @@
 package dev.glassworks.sendspin
 
+import dev.glassworks.sendspin.SendspinPlayer.Phase
+import dev.glassworks.sendspin.SendspinPlayer.Status
 import dev.glassworks.esphome.NoiseCipher
 import dev.glassworks.esphome.NoiseMacException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 
-object SsLog {
+internal object SsLog {
     private const val TAG = "S1Sendspin"
     private val onAndroid = System.getProperty("java.vendor")?.contains("Android") == true
     fun d(msg: String) = if (onAndroid) { android.util.Log.d(TAG, msg); Unit } else println("D/$TAG: $msg")
@@ -15,15 +17,20 @@ object SsLog {
         if (onAndroid) { android.util.Log.w(TAG, msg, t); Unit } else println("W/$TAG: $msg ${t ?: ""}")
 }
 
-/** Which PSK keyed the Noise session (spec "Pre-Shared Key"). */
-enum class PskCategory(val code: String) {
-    LONG_TERM("lt"), PAIRING("pr"), SENTINEL("sn");
+/** Which pre-shared key keyed the session's Noise handshake (Sendspin spec "Pre-Shared Key"). */
+public enum class PskCategory(internal val code: String) {
+    /** The key of an earlier pairing with this server: the player is paired. */
+    LONG_TERM("lt"),
+    /** The pairing key from the [SendspinPlayer.pairingToken]: the server pairs now. */
+    PAIRING("pr"),
+    /** The published sentinel key: neither paired nor pairing. */
+    SENTINEL("sn");
 
-    companion object { fun of(code: String) = entries.firstOrNull { it.code == code } }
+    internal companion object { fun of(code: String) = entries.firstOrNull { it.code == code } }
 }
 
 /** The player side of a session: what the session hands to the audio pipeline and asks of it. */
-interface SsPlayerHooks {
+internal interface SsPlayerHooks {
     /** `stream/start` (new stream or format update); [codecHeader] is the decoded `codec_header`, if any. */
     fun onStreamStart(format: SsFormat, codecHeader: ByteArray?)
     fun onStreamClear(fromTimestampUs: Long?)
@@ -35,14 +42,14 @@ interface SsPlayerHooks {
     fun onOutputDelay(ms: Int)
     fun playerState(): SsPlayerState
     fun onMetadata(title: String?, artist: String?) {}
-    fun onStatus(status: SendspinSession.Status) {}
+    fun onStatus(status: SendspinPlayer.Status) {}
 }
 
 /** What [SendspinPlayer] needs of one connection: a [SendspinSession], or a fake in tests. */
-interface SsConnection {
+internal interface SsConnection {
     val timeFilter: TimeFilter
     fun run(): SendspinSession.Result
-    fun status(): SendspinSession.Status
+    fun status(): SendspinPlayer.Status
     fun close(reason: String?)
     fun abort()
     fun sendState()
@@ -62,7 +69,7 @@ interface SsConnection {
  *
  * [run] blocks until the connection ends. [close] may be called from any thread.
  */
-class SendspinSession(
+internal class SendspinSession(
     private val url: String,
     private val store: SsStore,
     private val hello: SsHelloInfo,
@@ -71,21 +78,6 @@ class SendspinSession(
     override val timeFilter: TimeFilter = TimeFilter(),
     private val nowUs: () -> Long = { System.nanoTime() / 1000 },
 ) : SsConnection {
-    enum class Phase { CONNECTING, HANDSHAKE, HELD, PAIRING, READY, PLAYING, CLOSED }
-
-    data class Status(
-        val phase: Phase,
-        val serverName: String? = null,
-        val serverId: String? = null,
-        val paired: Boolean = false,
-        val psk: PskCategory? = null,
-        val activities: List<String> = emptyList(),
-        val roles: List<String> = emptyList(),
-        val groupName: String? = null,
-        val closeReason: String? = null,
-        /** Codec of the active stream. */
-        val codec: String? = null,
-    )
 
     class Result(val established: Boolean, val activated: Boolean, val reason: String)
 

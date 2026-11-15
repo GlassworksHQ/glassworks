@@ -5,23 +5,19 @@ import dev.glassworks.esphome.NoiseMacException
 import org.bouncycastle.math.ec.rfc7748.X25519
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /** Sendspin crypto helpers (spec "Encryption", aiosendspin 10.2.1 `noise/keys.py`, `noise/constants.py`). */
-object SsCrypto {
+internal object SsCrypto {
     const val KEY_SIZE = 32
     const val PEER_ID_LEN = 43
     const val SUITE = "25519_ChaChaPoly_SHA256"
 
-    private val B64E = Base64.getUrlEncoder().withoutPadding()
-    private val B64D = Base64.getUrlDecoder()
-
-    fun b64url(b: ByteArray): String = B64E.encodeToString(b)
+    fun b64url(b: ByteArray): String = Base64.encode(b, url = true, pad = false)
 
     /** Lenient on padding like aiosendspin `b64url_decode`; throws IllegalArgumentException. */
-    fun unb64url(s: String): ByteArray = B64D.decode(s.trimEnd('='))
+    fun unb64url(s: String): ByteArray = Base64.decode(s.trimEnd('='), url = true)
 
     fun sha256(vararg parts: ByteArray): ByteArray =
         MessageDigest.getInstance("SHA-256").run { parts.forEach { update(it) }; digest() }
@@ -99,14 +95,26 @@ object SsCrypto {
     }
 }
 
-/** A Sendspin static identity: X25519 keypair; `client_id` = base64url(public key). */
-class SsIdentity(val privateKey: ByteArray) {
+/**
+ * The player's long-term identity: an X25519 key pair. The server knows the player by [peerId]. A [SsStore]
+ * keeps [privateKey], a credential: never log it.
+ */
+public class SsIdentity(
+    /** The 32-byte X25519 private key. */
+    public val privateKey: ByteArray,
+) {
     init { require(privateKey.size == SsCrypto.KEY_SIZE) }
-    val publicKey: ByteArray = SsCrypto.x25519Public(privateKey)
-    val peerId: String = SsCrypto.b64url(publicKey)
 
-    companion object {
-        fun generate(rng: SecureRandom = SecureRandom()) = SsIdentity(SsCrypto.x25519PrivateKey(rng))
+    /** The 32-byte public key. */
+    public val publicKey: ByteArray = SsCrypto.x25519Public(privateKey)
+
+    /** The client id: the public key in base64url without padding (43 characters). */
+    public val peerId: String = SsCrypto.b64url(publicKey)
+
+    /** Makes identities. */
+    public companion object {
+        /** A new identity from [rng]. */
+        public fun generate(rng: SecureRandom = SecureRandom()): SsIdentity = SsIdentity(SsCrypto.x25519PrivateKey(rng))
     }
 }
 
@@ -125,7 +133,7 @@ class SsIdentity(val privateKey: ByteArray) {
  * The server is the initiator. The PSK is chosen after message 1 (its payload names a `psk_id`),
  * so [setPsk] must be called between [readMessage1] and [writeMessage2] (spec "Pre-Shared Key").
  */
-class KKpsk2Responder(
+internal class KKpsk2Responder(
     private val localPriv: ByteArray,
     private val remoteStatic: ByteArray,
     prologue: ByteArray,

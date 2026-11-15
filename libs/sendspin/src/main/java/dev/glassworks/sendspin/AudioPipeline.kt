@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Where decoded audio goes: [PlaybackScheduler] on the panel. Always 16-bit PCM. */
-interface PcmOutput {
+internal interface PcmOutput {
     fun start(f: SsFormat)
     fun push(c: PcmChunk)
     fun clear(fromUs: Long?)
@@ -16,7 +16,7 @@ interface PcmOutput {
  * A FLAC decoder fed one complete frame per [queue] (MediaCodec `audio/flac` on the panel; a fake
  * in JVM tests). Errors are thrown; the pipeline then discards the instance.
  */
-interface FlacFrameDecoder {
+internal interface FlacFrameDecoder {
     /** The underlying codec's name, for the log. */
     val name: String
 
@@ -61,7 +61,7 @@ interface FlacFrameDecoder {
  *   [FLAC_FAILURE_WINDOW_MS], or a decoder that can't be created, call [onFlacFailed] once and
  *   FLAC audio is dropped from then on (the player reconnects advertising PCM only).
  */
-class AudioPipeline(
+internal class AudioPipeline(
     private val out: PcmOutput,
     private val flacDecoderFactory: () -> FlacFrameDecoder,
     private val onFlacFailed: (reason: String) -> Unit,
@@ -170,7 +170,7 @@ class AudioPipeline(
             is Ev.Audio -> onAudio(ev.chunk)
             is Ev.Clear -> {
                 if (ev.fromUs == null) pending.clear()
-                else pending.entries.removeIf { it.value.serverTsUs >= ev.fromUs }
+                else pending.entries.removeAll { it.value.serverTsUs >= ev.fromUs }
                 out.clear(ev.fromUs)
             }
             Ev.End -> {

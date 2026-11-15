@@ -164,10 +164,10 @@ class GenericFrameTest {
             Quad(KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), "Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara"),
         )) {
             val (_, device) = run(runtime)
-            val hello = (device.paneList().single { it.id == "sendspin" } as SendspinPane).player.hello()
-            assertEquals(name, hello.name)
-            assertEquals(product, hello.productName)
-            assertEquals(maker, hello.manufacturer)
+            val identity = (device.paneList().single { it.id == "sendspin" } as SendspinPane).player.identity
+            assertEquals(name, identity.name)
+            assertEquals(product, identity.productName)
+            assertEquals(maker, identity.manufacturer)
             assertEquals(name, ImprovIdentity.ble(runtime.frame, runtime.build)[3])
             assertEquals(name, ImprovIdentity.serial(runtime.frame, runtime.build)[3])
             device.stop()

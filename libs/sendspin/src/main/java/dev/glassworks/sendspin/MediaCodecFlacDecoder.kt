@@ -1,5 +1,6 @@
 package dev.glassworks.sendspin
 
+import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaCodecList
@@ -13,8 +14,12 @@ import java.nio.ByteOrder
  * libFLAC). It is configured with `csd-0` = `fLaC` + STREAMINFO, which the decoder parses as codec
  * config (`C2SoftFlacDec` → `FLACDecoder::parseMetadata`), asks for 16-bit output, and gets one
  * output buffer per input frame carrying the input's `presentationTimeUs`, used here as the tag.
+ *
+ * `KEY_PCM_ENCODING` (API 24) is a plain string key: below API 24 a decoder ignores it and gives
+ * 16-bit PCM, which the output check assumes when the key is absent.
  */
-class MediaCodecFlacDecoder : FlacFrameDecoder {
+@SuppressLint("InlinedApi")
+internal class MediaCodecFlacDecoder : FlacFrameDecoder {
     private var codec: MediaCodec? = null
     private val bi = MediaCodec.BufferInfo()
     private var channels = 2
