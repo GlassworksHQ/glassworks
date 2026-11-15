@@ -54,7 +54,8 @@ androidComponents {
 }
 
 // The legacy test APK's ABI (root build.gradle.kts): arm64-v8a by default, the Mirror's.
-val legacyAbi: String by rootProject.extra
+@Suppress("UNCHECKED_CAST")
+val legacyAbi: String = (rootProject.extensions.extraProperties.get("legacyAbi") as Lazy<*>).value as String
 
 dependencies {
     api(project(":glassworks-core"))

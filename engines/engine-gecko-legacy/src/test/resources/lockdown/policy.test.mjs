@@ -33,7 +33,10 @@ test("origins match Origin.kt (OriginTest's cases)", () => {
   for (const [url, origin] of Object.entries(cases)) assert.equal(P.origin(url), origin, url);
   for (const none of [null, undefined, "", "about:blank", "data:text/html,x", "moz-extension://abc/x", "javascript:x",
     "file:///x", "ftp://192.0.2.10/", "http://", "http://:8123/", "http://192.0.2.10:0/", "http://192.0.2.10:99999/",
-    "http://192.0.2.10:12a/", "http://[2001:db8::1/", "blob:about:blank"]) {
+    "http://192.0.2.10:12a/", "http://[2001:db8::1/", "blob:about:blank",
+    "http://example.com\\@192.0.2.10:8123/", "http://192.0.2.10:8123\\@example.com/", "http://exa\tmple.com@192.0.2.10:8123/",
+    "http://exa\nmple.com@192.0.2.10:8123/", "http://exa mple.com@192.0.2.10:8123/", "http://exa\u0001mple.com@192.0.2.10:8123/",
+    "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/"]) {
     assert.equal(P.origin(none), null, String(none));
   }
 });
@@ -83,8 +86,16 @@ test("without the app's origin the top-level document's stands in", () => {
   assert.equal(P.decide({ url: "https://example.com/", type: "xmlhttprequest" }, null).allow, false, "no origin at all: blocked");
 });
 
-test("top-level loads and non-network URLs pass: the app's navigation delegate decides those", () => {
-  assert.equal(P.decide(req("https://example.com/", "main_frame"), HA).allow, true);
+test("a top-level load must be Home Assistant's once the app has said which: redirects, forms, meta refresh", () => {
+  assert.deepEqual(decide(req("https://example.com/", "main_frame"), HA), { allow: false, host: "example.com", frame: false });
+  assert.deepEqual(decide(req(`${HA}/lovelace/0`, "main_frame"), HA), { allow: true });
+  assert.deepEqual(decide(req("https://example.com/", "main_frame"), null), { allow: true }, "the app's first load, before it says");
+});
+
+test("data:, moz-extension: and about: pass; a network URL that doesn't parse is refused", () => {
   assert.equal(P.decide(req("data:image/png;base64,AA==", "image"), HA).allow, true);
   assert.equal(P.decide(req("moz-extension://4b1d/blocked.html", "sub_frame"), HA).allow, true);
+  assert.deepEqual(decide(req("http://example.com\\@192.0.2.10:8123/x.png", "image"), HA), { allow: false, host: "", frame: false });
+  assert.deepEqual(decide(req("http://192.0.2.10:+8123/", "sub_frame"), HA), { allow: false, host: "", frame: true });
+  assert.deepEqual(decide(req("http://192.0.2.10:8123\\@example.com/", "main_frame"), HA), { allow: false, host: "", frame: false });
 });

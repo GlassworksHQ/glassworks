@@ -44,6 +44,7 @@ class LockdownPolicyTest {
         for (no in listOf(
             "http://192.0.2.10/", "https://192.0.2.10:8123/", "http://192.0.2.11:8123/", "http://192.0.2.10:8124/",
             "https://www.example.com/", "http://192.0.2.10:8123.example.com/", "http://192.0.2.10:8123@example.com/",
+            "http://192.0.2.10:8123\\@example.com/", "http://example.com\\@192.0.2.10:8123/", "http://exa\tmple.com@192.0.2.10:8123/",
             "about:config", "about:addons", "data:text/html,<h1>x</h1>", "file:///sdcard/x.html", "javascript:alert(1)",
             "resource://android/assets/extension/content.js", "moz-extension://abc/blocked.html", "", "not a url",
         )) {
@@ -60,9 +61,14 @@ class LockdownPolicyTest {
         }
     }
 
-    @Test fun `new windows and downloads are always refused`() {
-        assertFalse(policy.allows(Load.WINDOW, "$ha/"))
+    @Test fun `a new window loads in place only if it is Home Assistant's`() {
+        assertTrue(policy.allows(Load.WINDOW, "$ha/history"))
         assertFalse(policy.allows(Load.WINDOW, "https://www.example.com/"))
+        assertFalse("an empty window would blank the dashboard", policy.allows(Load.WINDOW, "about:blank"))
+        assertFalse(policy.allows(Load.WINDOW, "http://192.0.2.10:8123\\@example.com/"))
+    }
+
+    @Test fun `downloads are always refused`() {
         assertFalse(policy.allows(Load.DOWNLOAD, "$ha/api/backup/download"))
         assertFalse(policy.allows(Load.DOWNLOAD, "blob:$ha/1f2e"))
     }

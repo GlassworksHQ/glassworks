@@ -34,6 +34,12 @@ class LegacyTestAppManifestTest {
         return seen
     }
 
+    /** The test APK is the S1 app on the legacy engine: the same modules, but the engine (test-app/build.gradle.kts). */
+    @Test fun `the test app depends on the S1 app's modules, with the legacy engine`() {
+        fun direct(path: String) = dependency.findAll(build(path)).map { it.groupValues[1] }.toSet()
+        assertEquals(direct(":kiosk") - ":engine-gecko" + ":engine-gecko-legacy", direct(":kiosk-legacy"))
+    }
+
     @Test fun `every module above API 23 is named in overrideLibrary`() {
         val manifest = RepoFiles.file("engines/engine-gecko-legacy/test-app/src/debug/AndroidManifest.xml").readText()
         val named = Regex("""tools:overrideLibrary="([^"]+)"""").find(manifest)?.groupValues?.get(1)?.split(',')?.map { it.trim() }?.toSet()

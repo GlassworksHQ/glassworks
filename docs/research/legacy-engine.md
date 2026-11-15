@@ -1,12 +1,14 @@
 # Legacy engine: does GeckoView 144 run on Android 6–7, locked to Home Assistant?
 
-**Status (2026-11-15): partly working.** GeckoView 144.0.2 (arm64-v8a) starts on API 23 and API 25 emulators.
-It draws Home Assistant's real frontend and runs the S1 app's helper extension (`window.s1kiosk`). The lockdown
-refuses everything outside the dashboard's origin, with a note on the page. On the emulators, parts of the page
-sometimes draw as black 1024×512 tiles. The S1 app's own screens still call API 24+ and crash on Android 6. Not
-yet run on a lululemon Mirror: the plan is in "How to reproduce".
+**Status (2026-11-15): working for the engine; the app itself is not yet.** GeckoView 144.0.2 (arm64-v8a) runs
+on a real lululemon Mirror (Android 6.0.1) and on API 23 and API 25 emulators. It draws Home Assistant's real
+frontend and runs the S1 app's helper extension (`window.s1kiosk`). The lockdown refuses everything outside the
+dashboard's origin, with a note on the page, and nothing reached the other origin in any run. The emulators'
+black tiles don't happen on the Mirror's Adreno 306. The S1 app's own screens still call API 24+ and crash on
+Android 6.
 
-Devices: Android emulator, `system-images;android-23;default;arm64-v8a` (Android 6.0) and
+Devices: a lululemon Studio Mirror (community image, Android 6.0.1, 929 MB RAM, Adreno 306, no root), run by the
+maintainer's root thread; Android emulators `system-images;android-23;default;arm64-v8a` (Android 6.0) and
 `system-images;android-25;default;arm64-v8a` (Android 7.1.1), 1 GB RAM, 1280×800, on an Apple Silicon Mac.
 Engine: `org.mozilla.geckoview:geckoview-arm64-v8a:144.0.20251027123126` (reports itself as 144.0.2). Part of #198;
 the engine choice is #39's (2026-11-15: 144, else 143).
@@ -145,27 +147,83 @@ Three things to find out:
     (`adb timed out after 10000ms`) on the loaded host, so the launches used `am start -n` and the API 25
     captures used `adb exec-out screencap`.
 
+11. **The Mirror** (2026-11-15, verified by the root thread, 12:38–12:46 PST; results on #346). Test build
+    `s1-kiosk-legacy-test-68f08af` installed with `adb install` as `shell`, removed with `adb uninstall` after.
+    The lockdown page as in step 4: same origin loaded; the other origin's image, frame, fetch, XHR and WebSocket
+    were blocked; the link, `window.open` and the download were refused; **0 requests** reached the other origin.
+    Clarity's fake HA drew `/clarity-ref/typical-nocam` in full, with **no black tiles** on first paint, after two
+    minutes of swiping, or on content drawn after scrolling. Memory after two minutes: main 68 MB RSS, content
+    (`:tab36`) 114 MB, GPU 56 MB, crash helper 13 MB, about 250 MB in all, with 158 MB free plus cache. No
+    `FATAL` in logcat.
+
+12. **The lockdown, second round** (2026-11-15, API 23 emulator, verified). A review of #346 asked for the ways a
+    page can reach another origin without a plain request: WebRTC, speculative connections, a cross-origin
+    download, meta refresh, an auto-submitted POST, `target=_top` from a frame, and a 302. The legacy engine now
+    turns off WebRTC (`media.peerconnection.enabled=false`) and Gecko's own early connections
+    (`network.dns.disablePrefetch`, `network.predictor.enabled=false`, `network.http.speculative-parallel-limit=0`,
+    `network.prefetch-next=false`), and `policy.js` holds top-level loads (`main_frame`) to Home Assistant too.
+    `tools/legacy/lockdown-page.py` got a row for each, and its other origin now logs every **connection** as well
+    as every request, so a preconnect that sends nothing would still show:
+    ```
+    [home] 127.0.0.1 "GET /t/meta HTTP/1.1" 200 -
+    [home] 127.0.0.1 "GET /t/redirect?to=frame HTTP/1.1" 302 -
+    [home] 127.0.0.1 "GET /t/post?target=_self HTTP/1.1" 200 -
+    [home] 127.0.0.1 "GET /t/post?target=_top HTTP/1.1" 200 -
+    [home] 127.0.0.1 "GET /t/link-top HTTP/1.1" 200 -
+    W LegacyCheck: Lockdown: refused frame from 127.0.0.1:18126     (×4: the cross-origin frame, meta refresh, 302, POST)
+    W LegacyCheck: Lockdown: refused page from 127.0.0.1:18126      (×2: POST to the top, link to the top)
+    (taps)
+    W LegacyCheck: Lockdown: refused page from 127.0.0.1:18126      (link)
+    W LegacyCheck: Lockdown: refused window from 127.0.0.1:18126    (window.open, other origin)
+    W LegacyCheck: Lockdown: refused download from 127.0.0.1:18125  (same-origin download: the GET reached home)
+    W LegacyCheck: Lockdown: refused page from 127.0.0.1:18126      (cross-origin download: refused as a page, no GET)
+    W LegacyCheck: Lockdown: refused page from 127.0.0.1:18126      (a page that 302s elsewhere)
+    W LegacyCheck: Lockdown: refused page from 127.0.0.1:18126      (a page that meta-refreshes elsewhere)
+    $ grep -c "LEAK:" lockpage.log
+    0
+    ```
+    `window.open` to Home Assistant's own origin opened in place. The WebRTC row read `off (no RTCPeerConnection)`.
+    `onLoadRequest` sees server redirects on 144: the 302 was refused there, before the extension's check.
+    `onSubframeLoadRequest` sees a frame's meta refresh, 302 and POST.
+
+13. **When the lockdown can't start** (2026-11-15, API 23 emulator, a scratch build with the extension's path
+    broken, not committed). `Lockdown extension failed: nothing will load (the lockdown fails closed)` in logcat,
+    and over the page: "Home Assistant can't load: the lockdown didn't start." No request reached either server.
+    If the extension is only slow, the same screen says so after 20 s, and the page loads if it comes up later.
+
 ## Result
 
 | | GeckoView 144 on API 23–25 |
 |---|---|
-| Starts, draws a page | Yes, on both emulators |
-| HA's frontend, sign-in and a dashboard | Yes on API 23; black tiles on the emulator; API 25 run unfinished |
+| Starts, draws a page | Yes: the Mirror, both emulators |
+| HA's frontend, sign-in and a dashboard | Yes on the Mirror (no black tiles) and API 23 (black tiles: the emulator's); API 25 run unfinished |
+| Memory with a dashboard open | About 250 MB RSS on the Mirror (929 MB RAM) |
 | S1 helper extension (`content.js`, native port, `window.s1kiosk`) | Works unchanged |
 | API gaps against 159 for what the engine uses | None (same source compiles against both) |
 | Size per ABI | 6.6–6.8 MB smaller AAR than 159 |
 | Crashes | None from GeckoView. The S1 app's MainActivity: API 24 call |
 
-The lockdown, verified on both emulators:
+The lockdown. Every row ran on the API 23 emulator (steps 4 and 12); the first six also on API 25 (step 8) and
+on the Mirror (step 11). "Nothing left" means the other origin's server logged no connection and no request.
 
-| Load | How it is stopped | What the page shows |
-|---|---|---|
-| Top-level page from another origin (link, redirect, `location`) | `onLoadRequest` → deny | Note: "<host> isn't your Home Assistant, so it didn't open." |
-| `window.open`, `target=_blank` | `onLoadRequest` (new window) → deny; `onNewSession` refuses too | The same note |
-| Download | `onExternalResponse` → nothing saved | "Downloads are off on this panel." |
-| Cross-origin iframe, web card | `onSubframeLoadRequest` → deny; the extension would show `blocked.html` in its place | Empty frame, note "Blocked content from <host>." |
-| Image, map tile, fetch, XHR, WebSocket, script from another origin | Lockdown extension, `webRequest` blocking | The same note |
-| The first load, before the extension is up | Waits (`ReadyGate`) | Nothing until the lockdown is on |
+| The page tries | Stopped by | Nothing left? | On the page |
+|---|---|---|---|
+| A link to another origin | `onLoadRequest` → deny | Yes | "<host> isn't your Home Assistant, so it didn't open." |
+| `window.open` to another origin | `onLoadRequest` (new window) → deny | Yes | Same |
+| `window.open` to Home Assistant | Loads in place, as on the current engine | — | The page |
+| A same-origin download | `onExternalResponse`: nothing saved. The GET reaches Home Assistant first | — | "Downloads are off on this panel." |
+| An image, fetch or WebSocket from another origin | The extension's `webRequest` blocking | Yes | "Blocked content from <host>." |
+| A cross-origin iframe | `onSubframeLoadRequest` → deny | Yes | Empty frame, same note |
+| A cross-origin download (`<a download>`) | `onLoadRequest`: a page load, refused | Yes | "isn't your Home Assistant" |
+| A meta refresh, 302 or auto-submitted POST in a frame | `onSubframeLoadRequest` → deny | Yes | Same note |
+| A POST or link with `target=_top` from a frame | `onLoadRequest` → deny | Yes | Same note |
+| A top-level 302 or meta refresh to another origin | `onLoadRequest` → deny; `policy.js` also cancels a `main_frame` request off Home Assistant | Yes | Same note |
+| WebRTC (`RTCPeerConnection`) | `media.peerconnection.enabled=false`: the constructor is gone | Yes (no UDP to check over `adb reverse`; the API is absent) | — |
+| `<link rel=preconnect>`, `dns-prefetch`, `prefetch` | The prefs above | Yes, not even a connection | — |
+| Anything, before the extension is up | `Page.load` waits; after 20 s, or if the extension fails, a message over the page | Yes | "Home Assistant can't load: the lockdown didn't start." |
+
+Untested: a `<link rel=preconnect>` added after load by script, a service worker's own fetches, and a WebRTC
+connection to a TURN server on Home Assistant (WebRTC is off, so HA's frontend uses HLS for cameras).
 
 GeckoView's `ContentBlocking` can't do this part: it blocks by tracker lists and anti-tracking categories, not by
 an origin we choose. So the per-request blocking is a built-in web extension (`assets/lockdown`), the same way the
@@ -187,13 +245,14 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
 
 ## Open questions
 
-- Black tiles: the emulator's GLES, or GeckoView 144 on Android 6? The Mirror run answers it.
-- Memory on the Mirror's ~930 MB, with the dashboard open for a while, and whether the low-memory killer takes
-  the content process.
+- Memory over hours on the Mirror (2 minutes: about 250 MB), and whether the low-memory killer ever takes the
+  content process.
 - The extensions process: GeckoView runs extensions out of process; `extensions.webextensions.remote=false`
   would save one process. Not tried.
 - What the lockdown blocks that HA itself uses: brand icons from `brands.home-assistant.io`, a dashboard URL that
   redirects to another origin (`http` → `https`, a reverse proxy), and HA's external sign-in providers. Each is
   refused today and says so on the page.
-- GeckoView 143 wasn't needed: 144 didn't fail on either emulator. If it fails on the Mirror, 143 is the fallback.
+- GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
+- The allowed origin follows the app's own loads (`page.load`). Setting it once, from the configured dashboard URL,
+  is #198's next part.
 - The app itself on API 23–25: the API 24+ calls behind `registerDefaultNetworkCallback`.

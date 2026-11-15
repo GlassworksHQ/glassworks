@@ -14,7 +14,8 @@ import dev.glassworks.engine.gecko.PageGuard.Load
  * - A top-level page loads only from that origin. `about:blank` is allowed (an empty page).
  * - A frame loads only from that origin, or is `about:blank`/`about:srcdoc` (they inherit the page's origin)
  *   or the lockdown's own note (`moz-extension:`). Cross-origin iframes and web cards are refused.
- * - New windows and downloads are always refused.
+ * - A new window loads in place, as in the current engine, if it is Home Assistant's; any other is refused.
+ * - Downloads are always refused.
  *
  * Before the app has loaded anything, nothing from the network loads. Subresources (images, map tiles,
  * fetches, WebSockets) don't pass through here: the lockdown extension blocks them (assets/lockdown).
@@ -35,7 +36,8 @@ internal class LockdownPolicy {
     fun allows(kind: Load, url: String): Boolean {
         val u = url.trim()
         return when (kind) {
-            Load.WINDOW, Load.DOWNLOAD -> false
+            Load.DOWNLOAD -> false
+            Load.WINDOW -> sameOrigin(u)
             Load.PAGE -> u == "about:blank" || sameOrigin(u)
             Load.FRAME -> u == "about:blank" || u == "about:srcdoc" || u.startsWith("moz-extension://") || sameOrigin(u)
         }

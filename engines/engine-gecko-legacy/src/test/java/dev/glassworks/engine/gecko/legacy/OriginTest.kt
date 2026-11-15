@@ -28,7 +28,11 @@ class OriginTest {
         for ((url, origin) in cases) assertEquals(url, origin, Origin.of(url))
         for (none in listOf(null, "", "about:blank", "data:text/html,x", "moz-extension://abc/x", "javascript:x", "file:///x",
             "ftp://192.0.2.10/", "http://", "http://:8123/", "http://192.0.2.10:0/", "http://192.0.2.10:99999/", "http://192.0.2.10:12a/",
-            "http://[2001:db8::1/", "blob:about:blank")) {
+            "http://[2001:db8::1/", "blob:about:blank",
+            // A browser reads these as another host than the text after the last @ says, or the port isn't digits.
+            "http://example.com\\@192.0.2.10:8123/", "http://192.0.2.10:8123\\@example.com/", "http://exa\tmple.com@192.0.2.10:8123/",
+            "http://exa\nmple.com@192.0.2.10:8123/", "http://exa mple.com@192.0.2.10:8123/", "http://exa\u0001mple.com@192.0.2.10:8123/",
+            "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/")) {
             assertEquals(none, null, Origin.of(none))
         }
     }
@@ -36,6 +40,6 @@ class OriginTest {
     @Test fun hosts() {
         assertEquals("www.example.com", Origin.host("https://www.example.com/embed"))
         assertEquals("192.0.2.10:8124", Origin.host("http://192.0.2.10:8124/"))
-        assertEquals("this content", Origin.host("data:text/html,x"))
+        assertEquals("", Origin.host("data:text/html,x"))
     }
 }

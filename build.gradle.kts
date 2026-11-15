@@ -34,12 +34,14 @@ val s1Abi: String = ((findProperty("s1Abi") as String?) ?: System.getenv("S1_ABI
 if (s1Abi !in releaseAbis) throw GradleException("s1Abi '$s1Abi' must be one of ${releaseAbis.joinToString()}")
 extra["s1Abi"] = s1Abi
 // The legacy engine's test APK (engines/engine-gecko-legacy, #198): -PlegacyAbi or LEGACY_ABI. Unset: the lululemon
-// Mirror's first ABI (arm64-v8a: a 64-bit zygote on its MSM8916, frames/lululemon-mirror/research/mirror-abis.md).
-val legacyAbi: String = ((findProperty("legacyAbi") as String?) ?: System.getenv("LEGACY_ABI"))
-    ?.trim()?.takeIf { it.isNotEmpty() }
-    ?: frameAbis["lululemon-mirror"]?.first() ?: throw GradleException("frames/lululemon-mirror/design/frame.json is missing")
-if (legacyAbi !in releaseAbis) throw GradleException("legacyAbi '$legacyAbi' must be one of ${releaseAbis.joinToString()}")
-extra["legacyAbi"] = legacyAbi
+// Mirror's first ABI (arm64-v8a: a 64-bit zygote on its MSM8916, frames/lululemon-mirror/research/mirror-abis.md),
+// else the S1's. Lazy: only the two legacy modules read it, so no other build depends on the Mirror's frame.
+extra["legacyAbi"] = lazy {
+    val abi = (providers.gradleProperty("legacyAbi").orNull ?: System.getenv("LEGACY_ABI"))?.trim()?.takeIf { it.isNotEmpty() }
+        ?: frameAbis["lululemon-mirror"]?.first() ?: s1Abi
+    if (abi !in releaseAbis) throw GradleException("legacyAbi '$abi' must be one of ${releaseAbis.joinToString()}")
+    abi
+}
 
 // The test settings of every Glassworks module (not the libraries in libs/, which test on their own):
 // -Ps1MockupDir writes the *Mockups PNGs (a module without mockups then runs none, not fails), and

@@ -591,8 +591,10 @@ holds the page to one origin: the one the app loads with `page.load(url)`.
 |---|---|
 | A page, iframe, image, fetch or WebSocket from the dashboard's origin | Loads |
 | The same from another origin (map tiles, web cards, cross-origin iframes) | Refused, with a note at the bottom of the page |
-| A new window (`window.open`, `target=_blank`) or a download | Refused, with a note |
-| Anything, before the lockdown extension is up | Waits; if the extension can't start, nothing loads |
+| A new window (`window.open`, `target=_blank`) to the dashboard's origin | Loads in place, as on the current engine |
+| A new window elsewhere, a download, a redirect, form or meta refresh to another origin | Refused, with a note |
+| WebRTC, and Gecko's own early connections (DNS prefetch, preconnect) | Off: HA's frontend uses HLS for cameras |
+| Anything, before the lockdown extension is up | Waits; after 20 s, or if the extension can't start, the page says so and nothing loads |
 
 A pane that needs another origin in the page doesn't work on the legacy engine. The research and the
 emulator runs are in [legacy-engine.md](../../../../../../docs/research/legacy-engine.md).
