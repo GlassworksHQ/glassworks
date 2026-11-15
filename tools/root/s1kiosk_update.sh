@@ -16,6 +16,8 @@
 #      FIFO or /dev/zero between the checks above and the copy can't redirect or hang it;
 #   4. afterwards the kiosk's versionCode must have gone up and no other package may have changed;
 #      a package that appeared is uninstalled again.
+#      If pm fails because the framework restarted mid-install (system_server's pid changed, #248),
+#      it waits for PackageManager and applies the same checks: the update counts only if they pass.
 # Status for the app: sys.s1kiosk.update.status = "<running|ok|error>: <detail>".
 PKG=sh.edm.s1kiosk
 ACTIVITY=$PKG/.MainActivity
@@ -25,10 +27,14 @@ SRC=$SRC_DIR/pending.apk
 STAGE_DIR=/data/s1kiosk/update          # root 0700
 STAGE=$STAGE_DIR/pending.apk
 MAX_BYTES=268435456                      # 256 MiB, as the app's own limit
+# s to wait for PackageManager after a framework restart. The .rc sets no environment, so it is 300
+# on a panel; S1U_RESTART_WAIT is for the off-device tests, and anything else is logged below.
+RESTART_WAIT=${S1U_RESTART_WAIT:-300}
 VERIFY=${0%/*}/s1kiosk_verify
 
 say() { log -t s1kiosk_update "$*" 2>/dev/null; }
-status() { setprop sys.s1kiosk.update.status "$1"; say "$1"; }
+# A property value holds at most 91 bytes (setprop refuses more), so the status is cut; the log has it all.
+status() { setprop sys.s1kiosk.update.status "$(printf %s "$1" | cut -c 1-91)"; say "$1"; }
 # Only our own files: $SRC belongs to the app (it clears files/update/ itself), and a root rm
 # through a path the app controls could be redirected.
 cleanup() { rm -f "$STAGE" "$STAGE_DIR/before.txt" "$STAGE_DIR/after.txt"; }
@@ -45,6 +51,8 @@ field() { echo "$1" | tr ' ' '\n' | sed -n "s/^$2://p"; }
 snapshot() { pm list packages --show-versioncode 2>/dev/null | grep -v "^package:$PKG " | sort > "$1"; }
 num() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; return 0; }
 
+num "$RESTART_WAIT" || RESTART_WAIT=300
+[ "$RESTART_WAIT" = 300 ] || say "RESTART_WAIT is ${RESTART_WAIT}s (S1U_RESTART_WAIT), not 300"
 status "running: checking the request"
 
 # 1. the kiosk's uid
@@ -81,11 +89,25 @@ fi
 snapshot "$STAGE_DIR/before.txt"
 
 status "running: installing ($size bytes, from versionCode $before)"
+framework=$(pidof system_server)
 # The APK goes in on stdin (-S): pm never opens a path, so nothing depends on who may read $STAGE.
 out=$(pm install -r -S "$size" < "$STAGE" 2>&1)
 case "$out" in
   *Success*) ;;
-  *) fail "pm install: $(echo "$out" | grep -v '^$' | tail -n 1 | cut -c 1-160)" ;;
+  *)
+    why="pm install: $(echo "$out" | grep -v '^$' | tail -n 1 | cut -c 1-160)"
+    # Android 10 can restart its framework in the middle of an install (#248), after the package is
+    # committed. pm then fails though the update went in, so wait for PackageManager to come back
+    # and let step 4 decide from the versionCode. Any other failure is final.
+    [ -n "$framework" ] && [ "$(pidof system_server)" != "$framework" ] || fail "$why"
+    status "running: the framework restarted mid-install; waiting for it"
+    i=0
+    while [ -z "$(pkg_line)" ] && [ "$i" -lt "$RESTART_WAIT" ]; do sleep 5; i=$((i + 5)); done
+    [ -n "$(pkg_line)" ] || fail "framework restarted mid-install, did not come back; $why"
+    after=$(field "$(pkg_line)" versionCode)
+    num "$after" && [ "$after" -gt "$before" ] || fail "framework restarted mid-install, not updated; $why"
+    say "pm install failed while the framework restarted, but versionCode $before -> $after"
+    ;;
 esac
 
 # 4. only the kiosk changed, and it went up
