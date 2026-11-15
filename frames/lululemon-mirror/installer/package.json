@@ -1,0 +1,20 @@
+{
+  "name": "@glassworks/lululemon-mirror-installer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kiln's recipe for the lululemon Studio Mirror: adb only, no root. Read-only checks, S1 Kiosk's legacy APK, the home screen, and undo.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fakes": "./test/fakes.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glassworks/adb": "0.0.0",
+    "@glassworks/app-adb": "0.0.0"
+  }
+}

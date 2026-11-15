@@ -102,6 +102,8 @@ Not available yet. As planned, it installs by flashing system and userdata over 
 
 Check before flashing: fastboot must report MSM8916 and the expected partition sizes. If anything differs, stop.
 
+**Test only, today:** on a Mirror that already runs the community image, Kiln can install S1 Kiosk's legacy build over adb, from an APK file on your computer: `/lululemon-mirror?apk=local` ([its recipe](installer)). It changes nothing else on the Mirror, and its undo removes the app and gives the home screen back. Making S1 Kiosk the home screen needs one tap on the Mirror, in Android's chooser ([home-app.md](research/home-app.md)), and the Mirror has no touchscreen, so use scrcpy or a USB mouse.
+
 ## Panes
 
 | Pane | Support | Note |
@@ -126,6 +128,8 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [mirror-android.md](research/mirror-android.md): Can the lululemon Mirror run Android 8+ for the current GeckoView? The signed boot image blocks it; the kexec idea, the paths, blobs and read-only probes (desk research, #39)
 - [revisions.md](research/revisions.md): Which Mirror revisions are a target: the later NXP i.MX8 revisions, and why screen size doesn't identify it (read, no hardware)
 - [mirror-abis.md](research/mirror-abis.md): Which ABIs the Mirror's userspace runs: 64-bit in the community image, stock untested (#98)
+- [home-app.md](research/home-app.md): How adb without root makes S1 Kiosk the home screen on Android 6: no `cmd`, so Android's chooser and an Always tap (read-only, 2026-11-15)
+- [community-image-terms.md](research/community-image-terms.md): May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open (#40)
 
 ## Files
 

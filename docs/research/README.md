@@ -259,6 +259,8 @@ This page is the index of every note. Notes about one device live with its frame
 | [mirror-android.md](../../frames/lululemon-mirror/research/mirror-android.md) | Can the lululemon Mirror run Android 8+ for the current GeckoView? The signed boot image blocks it; the kexec idea, the paths, blobs and read-only probes (desk research, #39) |
 | [revisions.md](../../frames/lululemon-mirror/research/revisions.md) | Which Mirror revisions are a target: the later NXP i.MX8 revisions (only JTAG access reported), and why screen size doesn't identify it (read, no hardware) |
 | [mirror-abis.md](../../frames/lululemon-mirror/research/mirror-abis.md) | Which ABIs the Mirror's userspace runs: 64-bit in the community image, stock untested (#98) |
+| [home-app.md](../../frames/lululemon-mirror/research/home-app.md) | How adb without root makes S1 Kiosk the Mirror's home screen on Android 6: no `cmd`, so Android's chooser and an Always tap (read-only probes, 2026-11-15) |
+| [community-image-terms.md](../../frames/lululemon-mirror/research/community-image-terms.md) | May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open for the maintainer (#40) |
 
 ### Generic Android ([`frames/generic-android/`](../../frames/generic-android/README.md))
 

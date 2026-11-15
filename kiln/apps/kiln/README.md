@@ -62,6 +62,7 @@ install on a real panel. Until it has, s1.edm.sh keeps serving the page in
 | `/aqara-s1-plus/undo` | Undo: how far back, which backup. "Keep its settings" checks the backup (kiln-core's `checkRestorable`) before Aqara's apps go back; a refused backup, or a broken plan in the recipe, changes nothing on the panel and links to undoing by hand | shows Undo |
 | `/aqara-s1-plus/undo/connect`, `/undo/restore`, `/undo/done` | Undo's recovery mode, writing, and done | go to `/aqara-s1-plus/undo` |
 | `/aqara-s1-plus/resume` | An alias of `/set-up` (s1.edm.sh's `#/resume`) | as `/set-up`: connects to an installed panel; the address then becomes `/aqara-s1-plus/set-up` |
+| `/lululemon-mirror` | **Test only.** With `?apk=local`: S1 Kiosk's legacy build from an APK file picked on this computer, installed over adb on a Mirror that runs the community image, with undo. Without it, the page says the Mirror doesn't install from Kiln yet. The picker doesn't list the Mirror (it is `planned`) | shows the test page or the "not yet" page |
 | `/api/release-asset` | Streams an S1 Kiosk release APK from GitHub Releases (no CORS there) | — |
 
 The session is the truth and the address bar follows it (`src/wizard/routes.ts`, `useRouteSync.ts`).
@@ -100,6 +101,7 @@ know, and the screens say Kiln can't tell instead.
 | `src/wizard/screens.tsx` | One component per screen of the design, on Radix primitives |
 | `src/components/Credit.tsx` | The outside work an install stands on, from the frame's `credits` ([frames/README.md](../../../frames/README.md#credits)): `Credit` next to the step that uses it (`built="image"`: "This image is built by git-nimrod as part of Glass Panes."), `BuiltOn` on the start page and the done screen, `stepCredits()` to pick them from a recipe's `credits` |
 | `src/frames/aqara-s1-plus.ts` | What the screens say for the S1: the USB names to pick, help links, the radio's next steps |
+| `src/mirror/` | The Mirror's test page (`MirrorWizard.tsx`), its session (`session.ts`, no React) and demos (`demo.ts`), on `@glassworks/lululemon-mirror-installer` |
 | `src/recovery/player.ts` | The recovery-mode player, drawing a frame's data. The S1's is `frames/aqara-s1-plus/design/recovery.json` (canonical); `docs/design/kiln/recovery/` keeps the prototype's copy, and a test keeps them equal |
 
 Rules that tests guard:
@@ -126,7 +128,10 @@ InstallFlow. Other `?demo=` names jump to one screen (`src/wizard/demo.ts`), for
 `app` and `app-update` (settings before a first install and an update), `app-installing` and
 `app-keyboard` (the install's steps), `wifi` (the panel on Wi-Fi already) and `wifi-new` (it isn't),
 `radio-thread` and `radio-thread-old` (a Thread router on an S1 Kiosk that gets the network from
-Home Assistant, and on 0.4.3, which can't). They work in `next dev`,
+Home Assistant, and on 0.4.3, which can't). The Mirror's test page has its own: `/lululemon-mirror?demo=run`
+clicks through a simulated Mirror (`src/mirror/demo.ts`); `pick`, `checks`, `checks-fail`, `installing`,
+`home` (waiting for the person's tap on the Mirror), `done`, `done-unconfirmed`, `undo-done` and `error`
+jump to one screen. They work in `next dev`,
 or in a build made with `NEXT_PUBLIC_KILN_DEMO=1`.
 
 ## Vercel
