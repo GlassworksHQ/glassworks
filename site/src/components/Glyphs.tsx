@@ -238,3 +238,12 @@ export const FeedGlyph = (props: GlyphProps) => (
     <circle cx="6" cy="18" r="1.2" fill="currentColor" />
   </svg>
 );
+
+/** Layers: work built on other work (a frame's credits). */
+export const CreditGlyph = (props: GlyphProps) => (
+  <svg {...base} {...props}>
+    <path d="m12 4 8 4-8 4-8-4z" />
+    <path d="m4 12 8 4 8-4" />
+    <path d="m4 16 8 4 8-4" />
+  </svg>
+);

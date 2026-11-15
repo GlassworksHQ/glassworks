@@ -133,5 +133,43 @@
       "value": "ha"
     }
   },
-  "ratingsNote": "Without root, the app can install over adb on its own, but you lose the radio modes."
+  "ratingsNote": "Without root, the app can install over adb on its own, but you lose the radio modes.",
+  "credits": [
+    {
+      "id": "sunxi-tools",
+      "who": {
+        "name": "linux-sunxi",
+        "href": "https://github.com/linux-sunxi"
+      },
+      "what": "FEL tooling",
+      "project": {
+        "name": "sunxi-tools",
+        "href": "https://github.com/linux-sunxi/sunxi-tools"
+      },
+      "licence": "GPL-2.0",
+      "uses": "The FEL protocol reference that Kiln's recovery-mode step follows to start U-Boot from RAM.",
+      "quote": {
+        "text": "A collection of command line tools for ARM devices with Allwinner SoCs.",
+        "href": "https://github.com/linux-sunxi/sunxi-tools"
+      }
+    },
+    {
+      "id": "magisk",
+      "who": {
+        "name": "topjohnwu",
+        "href": "https://github.com/topjohnwu"
+      },
+      "what": "Root",
+      "project": {
+        "name": "Magisk",
+        "href": "https://github.com/topjohnwu/Magisk"
+      },
+      "licence": "GPL-3.0",
+      "uses": "The root that the S1's boot patch adds. Kiln downloads it from Magisk's own release and checks its hash; Glassworks never ships it.",
+      "quote": {
+        "text": "The Magic Mask for Android",
+        "href": "https://github.com/topjohnwu/Magisk"
+      }
+    }
+  ]
 }

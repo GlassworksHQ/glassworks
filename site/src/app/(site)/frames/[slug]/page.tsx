@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { HeroModel } from "@/components/FrameCard";
 import { RatingLabel, RatingValue, SpecLabel, paneIcon } from "@/components/DeviceBits";
 import { Chip, FactRow, ListCard, Row, Sq, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
-import { BookGlyph, KilnGlyph } from "@/components/Glyphs";
+import { BookGlyph, CreditGlyph, KilnGlyph } from "@/components/Glyphs";
 import { ClarityPanel } from "@/components/clarity/Clarity";
 import { ClarityChipLink } from "@/components/clarity/ClarityChipLink";
 import { CLARITY, clarityFor } from "@/lib/clarity";
@@ -127,6 +127,33 @@ async function Device({ params }: { params: Params }) {
       </header>
 
       {d.notice && <p className={s.notice}>{d.notice}</p>}
+
+      {d.credits && d.credits.length > 0 && (
+        <ListCard id="credits" title="Built on community work" aside={<span>Thank you</span>}>
+          {d.credits.map((c) => (
+            <div key={c.id} className={`${m.row} ${s.credit}`}>
+              <Sq>
+                <CreditGlyph />
+              </Sq>
+              <span className={m.rt}>
+                <b>
+                  <a href={c.project.href}>{c.project.name}</a> · {c.what}
+                </b>
+                <span>
+                  By <a href={c.who.href}>{c.who.name}</a>
+                  {c.licence && <> · {c.licence}</>}
+                </span>
+                <span className={s.uses}>{c.uses}</span>
+                {c.quote && (
+                  <span className={s.quote}>
+                    <q cite={c.quote.href}>{c.quote.text}</q> <a href={c.quote.href}>Their words</a>
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
+        </ListCard>
+      )}
 
       <Tiles>
         <Tile label="Install" value={ratingText("difficulty", d.ratings.difficulty.value)} sub={d.ratings.difficulty.detail} />

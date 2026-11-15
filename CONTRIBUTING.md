@@ -39,6 +39,9 @@ python3 tools/check-doc-links.py                     # docs links
 - **UI changes need screenshots** in the PR: before and after for a changed screen, after for a new
   one. Without a panel, use the app's mockup tests or the installer's `?demo=` states
   ([AGENTS.md](AGENTS.md#pull-requests)).
+- **A frame that uses someone else's image, exploit, tool or research credits them** in its
+  `frame.json` `credits`, and its Kiln recipe names the credits its steps use
+  ([frames/README.md](frames/README.md#credits)).
 - **Write down what you find on the hardware** in `frames/<id>/research/` (or `docs/research/` if it
   applies to every frame), including what didn't work
   ([the playbook](docs/research/bringup.md), [template](docs/research/TEMPLATE.md)).

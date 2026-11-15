@@ -65,6 +65,64 @@ export interface FrameDesign {
   ratingsNote?: string;
   notice?: string;
   unverified?: boolean;
+  /** the outside work the frame stands on: images, unlocks, tools, research (frames/README.md#credits) */
+  credits?: FrameCredit[];
+}
+
+/** One piece of outside work a frame relies on, and who made it. */
+export interface FrameCredit {
+  /** kebab-case, unique in the frame; a Kiln recipe names the credits its steps use by it */
+  id: string;
+  /** the person or group, linked to their profile */
+  who: { name: string; href: string };
+  /** what they made, in a few words: `Android image`, `Bootloader unlock`, `Research` */
+  what: string;
+  project: { name: string; href: string };
+  /** as the project states it; leave it out when it states none */
+  licence?: string;
+  /** one plain sentence: what Glassworks uses from it */
+  uses: string;
+  /** their own words for the work, and the page they're from */
+  quote?: { text: string; href: string };
+  /** name it on the frame's card: the work the device can't run without, such as its image */
+  card?: boolean;
+}
+
+const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const isHttps = (v: unknown) => typeof v === 'string' && URL.canParse(v) && new URL(v).protocol === 'https:';
+const isText = (v: unknown) => typeof v === 'string' && /\S/.test(v) && !/\n/.test(v);
+
+/**
+ * What's wrong with a frame's `credits`, one line per problem; empty when it's fine. Kiln's tests and
+ * glassworks.dev's build both run it, so a credit without its links never reaches a page.
+ */
+export function creditProblems(f: Pick<FrameDesign, 'credits'>): string[] {
+  if (f.credits === undefined) return [];
+  if (!Array.isArray(f.credits)) return ['credits: should be a list'];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  f.credits.forEach((c, i) => {
+    const at = `credits[${i}]${typeof c?.id === 'string' ? ` (${c.id})` : ''}`;
+    if (typeof c?.id !== 'string' || !KEBAB.test(c.id)) out.push(`${at}.id: should be kebab-case`);
+    else if (seen.has(c.id)) out.push(`${at}.id: used twice`);
+    else seen.add(c.id);
+    for (const [k, v] of [['who.name', c?.who?.name], ['what', c?.what], ['project.name', c?.project?.name], ['uses', c?.uses]] as const) {
+      if (!isText(v)) out.push(`${at}.${k}: should be one line of text`);
+    }
+    for (const [k, v] of [['who.href', c?.who?.href], ['project.href', c?.project?.href]] as const) {
+      if (!isHttps(v)) out.push(`${at}.${k}: should be an https link`);
+    }
+    if (c?.licence !== undefined && !isText(c.licence)) out.push(`${at}.licence: leave it out, or state it`);
+    if (c?.quote !== undefined && (c.quote === null || typeof c.quote !== "object" || !isText(c.quote.text) || !isHttps(c.quote.href))) out.push(`${at}.quote: needs its text and an https link to where it's from`);
+    if (c?.card !== undefined && typeof c.card !== 'boolean') out.push(`${at}.card: should be true or false`);
+  });
+  return out;
+}
+
+/** The card's credit line, from the first credit marked `card`: "Built on Glass Panes by git-nimrod". */
+export function cardCredit(f: Pick<FrameDesign, 'credits'>): string | undefined {
+  const c = f.credits?.find((x) => x.card);
+  return c && `Built on ${c.project.name} by ${c.who.name}`;
 }
 
 /** A card's three tags, phrased to stand alone (glassworks.dev `cardTags`). */

@@ -69,6 +69,36 @@
   font-size: 14.5px;
 }
 
+/* a frame's credits: the work it stands on, each with its links (frames/README.md#credits) */
+.credit {
+  align-items: flex-start;
+}
+
+.credit a {
+  color: var(--ink-sky);
+  text-decoration: none;
+}
+
+.credit a:hover {
+  text-decoration: underline;
+}
+
+/* outranks Manage's muted row text (.rt > span:not(.chips)) */
+.credit > span > span.uses {
+  color: var(--fg);
+  margin-top: 4px;
+}
+
+.credit > span > span.quote {
+  margin-top: 6px;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+
+.credit q {
+  font-style: italic;
+}
+
 .clarity {
   margin-bottom: 18px;
 }

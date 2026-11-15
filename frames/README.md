@@ -52,6 +52,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `ratings` | The nine install ratings, each `{ value, detail? }`: `difficulty`, `reversible`, `modifiesAndroid`, `root`, `opensDevice`, `vendorApps`, `wipes`, `backup`, `updates` |
 | `ratingsNote`, `notice` | Optional. A sentence of context; something a buyer must know |
 | `unverified` | Optional. `true` when any of it comes from writeups rather than a real device |
+| `credits` | Optional. The outside work the frame stands on, and who made it ([below](#credits)) |
 
 `model`:
 
@@ -75,6 +76,52 @@ redraws them.
 `frame.json` is written by hand, and the build reads it; nothing generates it (maintainer, 2026-11-13,
 #98). It differs from decisions.md's sketch in two names: the renderer needs side colours (`sides`)
 where the sketch has `color.body`, and the screen is placed with `top` where the sketch has `offset`.
+
+### Credits
+
+Some frames exist because other people did the hard part: an Android image, a bootloader unlock, the
+research on a board. Glassworks names them wherever a person meets their work, and never presents
+it as ours. **A frame that uses someone else's image, exploit, tool or research credits it in
+`credits`**, one entry per piece of work:
+
+| Field | What |
+|---|---|
+| `id` | kebab-case, unique in the frame. The frame's Kiln recipe names its credits by it |
+| `who` | `{ name, href }`: the person or group, as they publish (their handle is fine), linked to their profile |
+| `what` | What they made, in a few words: `Android image`, `Bootloader unlock`, `Research`, `Teardown` |
+| `project` | `{ name, href }`: the project, as they name it |
+| `licence` | Optional. The licence as the project states it. Leave it out when it states none; don't guess one |
+| `uses` | One plain sentence: what Glassworks uses from it, and where (a step, a research note) |
+| `quote` | Optional. `{ text, href }`: their own words for the work, copied exactly, and the page they're from |
+| `card` | Optional. `true` names it on the frame's card ("Built on Glass Panes by git-nimrod"). For the work the device can't run without, such as its image |
+
+Where it shows:
+
+| Where | What |
+|---|---|
+| glassworks.dev, the frame's page | **Built on community work**, under the header: every credit, with its links, licence, use and quote |
+| The frame's card (site and Kiln's picker) | The `card` credit, as one line under the summary |
+| Kiln | Next to each step that uses the work (`Credit`, e.g. "This image is built by git-nimrod as part of Glass Panes."), and on the frame's start page and done screen (`BuiltOn`), from `kiln/apps/kiln/src/components/Credit.tsx` |
+| `frames/<id>/README.md` | A **Credits** section near the top, in words, with what the project itself credits in turn |
+
+**Checked.** `creditProblems()` ([`packages/frame-card`](../packages/frame-card/README.md)) fails a
+credit without its links or its words; glassworks.dev's build and Kiln's `frame-designs.test.ts` run
+it. Each frame installer exports `credits`, a `StepCredits` from kiln-core (step name → credit ids;
+`{}` when it uses no outside work), and `kiln/apps/kiln/test/frame-credits.test.ts` fails if an id
+isn't in the frame's `credits`, or if an installer or Kiln links someone else's code on GitHub,
+GitLab or Codeberg (a release to download, say) without a credit that a recipe uses.
+
+Credits are not licence notices. Code we ship is listed in
+[THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md); a credit is for the work a frame stands on,
+shipped by us or not. The Mirror's image is credited even though it isn't our code: Kiln fetches it
+from Glass Panes' GitHub release through Refract, our download proxy, which passes it through without
+storing it.
+
+| Frame | Credits |
+|---|---|
+| `aqara-s1-plus` | sunxi-tools (linux-sunxi), the FEL protocol Kiln's recovery-mode step follows; Magisk (topjohnwu), the root the boot patch adds |
+| `lululemon-mirror` | Glass Panes (git-nimrod), the Android image it runs; research from repairman29, Onemoremichael and olm3ca; MDME's teardown |
+| `generic-android` | None |
 
 ### `abis`
 

@@ -12,6 +12,12 @@ standard texts. The copyright holders are named under each component below. The 
 and those texts under **Open source licences** in its hidden settings: tap the top-left corner five
 times.
 
+**Frames credit the work they stand on.** This file covers code we distribute. Some frames also rely
+on other people's work: another project's Android image, an exploit, a tool or research. Each frame
+names those people in its `frame.json` `credits`, and glassworks.dev, Kiln and the frame's README
+show them where that work is used ([frames/README.md](frames/README.md#credits)). A new frame that
+uses someone else's work adds a credit, whether or not it is listed here.
+
 Checked against the code on 2026-11-10. `checkThirdPartyNotices` in
 `frames/aqara-s1-plus/android/build.gradle.kts` fails a release build if a library in the APK is
 missing from section 1.

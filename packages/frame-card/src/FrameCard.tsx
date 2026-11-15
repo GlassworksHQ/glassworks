@@ -10,7 +10,7 @@
 // heading level (`as`), the name is that heading and its wrappers are divs, for a link on a page.
 import { useRef } from 'react';
 import { DeviceModel } from './DeviceModel';
-import { STAGE_TEXT, cardTags, ships, type FrameDesign, type Stage } from './frame';
+import { STAGE_TEXT, cardCredit, cardTags, ships, type FrameDesign, type Stage } from './frame';
 import s from './FrameCard.module.css';
 
 /** The card's own class: the hover lift, the floating model and the tags. */
@@ -21,6 +21,7 @@ const G = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWi
 const Undo = () => <svg {...G}><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>;
 const Edit = () => <svg {...G}><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="m13.5 6.5 4 4" /></svg>;
 const Check = () => <svg {...G}><circle cx="12" cy="12" r="8.5" /><path d="m8.5 12.2 2.4 2.4 4.6-5" /></svg>;
+const Stack = () => <svg {...G}><path d="m12 4 8 4-8 4-8-4z" /><path d="m4 12 8 4 8-4" /><path d="m4 16 8 4 8-4" /></svg>;
 const Meter = ({ level }: { level: number }) => (
   <svg {...G}>{[0, 1, 2].map((i) => <rect key={i} x={4.5 + i * 6} y={16 - i * 4.5} width="3.5" height={4.5 + i * 4.5} rx="1.2" fill={i < level ? 'currentColor' : 'none'} />)}</svg>
 );
@@ -70,12 +71,14 @@ export function useTilt<T extends HTMLElement>() {
  * frame that doesn't ship yet) tells screen readers the tags are expected, not tested. It is hidden
  * text, not an aria-label, so it joins the tags in a link's name and in Kiln's aria-describedby.
  * `screen` is the URL the caller's bundler gives the frame's `render` file; without it, the model shows an
- * example dashboard.
+ * example dashboard. A frame built on someone else's work (a credit marked `card`) names it under the
+ * summary, as plain text: the card is a link or a button, so the credit's own links are on its page.
  */
 export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ships(f.status), screen }: {
   f: FrameDesign; idPrefix?: string; as?: 'span' | 'h2' | 'h3' | 'h4'; expected?: boolean; screen?: string;
 }) {
   const Box = Name === 'span' ? 'span' : 'div';
+  const credit = cardCredit(f);
   return (
     <>
       <span className={s.model}>
@@ -89,6 +92,7 @@ export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ship
         </Box>
         {f.aka && <span className={s.aka}>{f.aka}</span>}
         <span id={idPrefix ? `${idPrefix}-summary` : undefined} className={s.summary}>{f.summary}</span>
+        {credit && <span className={s.credit}><Stack />{credit}</span>}
         <span id={idPrefix ? `${idPrefix}-tags` : undefined} className={s.tags}>
           {expected && <span className={s.expected}>Expected, not tested yet: </span>}
           {cardTags(f.ratings).map((t) => (

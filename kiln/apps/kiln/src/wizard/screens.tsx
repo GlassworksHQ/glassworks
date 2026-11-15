@@ -6,6 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import { fmtSize } from '@glassworks/kiln-core';
 import Link from 'next/link';
+import { BuiltOn, stepCredits } from '../components/Credit';
 import { LastRun } from '../components/LastRun';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FrameUi } from '../frames/aqara-s1-plus';
@@ -52,6 +53,7 @@ export function Connect({ s, session, frame }: P) {
       <p className="small">Then click Connect and pick <code>{frame.felPick}</code>.{s.flow === 'undo' ? ' Nothing is written until your backup checks out.' : s.changed === 'unknown' ? ' Kiln can\'t tell if an earlier try in this browser tab changed the panel.' : s.changed ? ' An earlier try already changed the panel.' : ' Nothing is written yet.'}</p>
       {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">How</a></p>}
       <LastRun />
+      <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
       <div className="foot">
         <span className="links">
           <Dialog.Root>
@@ -138,6 +140,7 @@ export function Firing({ s, frame }: P) {
       <ul className="plain">
         {steps.map((m) => <li key={m.text}><span className={m.done ? 'ok' : 'go'}>{m.done ? '✓' : '→'}</span> {m.text}</li>)}
       </ul>
+      <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
       <div className="foot">
         <span className="small">{s.flow === 'undo' ? 'Each part is checked after it is written.' : backedUp ? 'Your backup is safe in this browser.' : 'Your backup comes before any write.'}</span>
         <TechLog s={s} />
@@ -484,7 +487,7 @@ export function SetUp(p: P) {
 }
 
 /** 7 · Done: in one line. The backup is one row whose download is the ember action; undo is a link. */
-export function Done({ s, session }: P) {
+export function Done({ s, session, frame }: P) {
   const d = s.done!;
   return (
     <section className="card" aria-labelledby="h">
@@ -498,6 +501,7 @@ export function Done({ s, session }: P) {
         </div>
       )}
       {d.backup?.error && <p className="status err" role="alert">{d.backup.error}</p>}
+      {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
       <div className="foot">
         {s.flow === 'install' ? <button type="button" className="link" onClick={() => void session.click('undo', () => session.openUndo())}>Undo</button> : <span />}
         <Link className={`btn ${d.backup ? 'ghost' : 'ember'}`} href="/">Back to Kiln</Link>

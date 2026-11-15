@@ -8,6 +8,10 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Kiln credits the projects an install is built on.** On the S1, the first screen, the install and
+  the done screen say "Built on sunxi-tools by linux-sunxi and Magisk by topjohnwu", with links to
+  both. The frames' pages on glassworks.dev have a "Built on community work" section, and the Mirror's
+  card names the Glass Panes image it runs.
 - **Add a pane's Home Assistant blueprints from its settings page.** Notifications and Camera have a
   *Blueprints for Home Assistant* card: the doorbell, a question with buttons on the panels, lights on
   when someone is at the panel, and a snapshot to your phone when nobody is home. **Add to Home

@@ -70,3 +70,11 @@ export interface SetUpContext<A extends string> {
   /** A step heading, or with an empty step, a detail line under it. */
   step(step: string, detail?: string): void;
 }
+
+/**
+ * The outside work each step of a frame's install relies on: step name to credit ids from the
+ * frame's `frame.json` `credits` (frames/README.md#credits). Every frame installer exports one as
+ * `credits`; Kiln shows those credits on the steps and the done screen, and its tests fail on an id
+ * the frame doesn't credit, or on someone else's code-host link a step uses without a credit.
+ */
+export type StepCredits<S extends string = string> = Readonly<Partial<Record<S, readonly string[]>>>;

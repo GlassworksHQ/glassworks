@@ -7,4 +7,4 @@ export {
   BackupRefused, InstallFlow, checkRestorable, fmtSize, restoreFromBackup,
   type AskKind, type Bar, type Devices, type FlowDeps, type FlowUi, type PartState, type Phase, type Progress,
 } from './flow';
-export type { BackupPlan, FlashStep, PatchContext, Recipe, SetUpContext } from './recipe';
+export type { BackupPlan, FlashStep, PatchContext, Recipe, SetUpContext, StepCredits } from './recipe';
