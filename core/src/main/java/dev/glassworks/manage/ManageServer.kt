@@ -304,6 +304,8 @@ class ManageServer(
         val question: SettingsItem.Confirm? = when {
             item is SettingsItem.Switch && (raw == "on" || raw == "off") -> runCatching { item.confirm(raw == "on") }.getOrNull()
             item is SettingsItem.Action && raw == SettingsItem.Action.RUN -> item.confirm
+            // A choice that asks first (the radio's role).
+            item is SettingsItem.Choice -> runCatching { item.confirm(raw) }.getOrNull()
             else -> null
         }
         if (question != null && !answered(req.form["answer"], s.id, id, key, raw)) {

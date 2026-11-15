@@ -25,9 +25,13 @@ changes them the same way.
 
 On a phone the menu folds behind the ☰ button. Light or dark follows your phone or computer.
 
-Not on the page, because they need someone at the panel: the first Wi-Fi, Bluetooth's "Allow", and
-Aqara's own settings app. Some pane pages still have parts only the panel draws, and the page says
-"On the panel" for them: the radio's roles and Thread network. The wall base page has the relays'
+Not on the page, because they need someone at the panel: the first Wi-Fi, Bluetooth's "Allow",
+Aqara's own settings app, and pasting a Thread dataset (it carries the network key, and the page is
+plain HTTP). Every pane page has what the panel's page has. The radio page has the role, what to do
+next for it (the ZHA serial path, the OpenThread Border Router URL, the joined Thread network), the
+Zigbee stack, and the role's buttons: Join and Leave, and **Get it from Home Assistant** for a Thread
+repeater. A new role, a new stack and each Leave ask first, with the panel's words. The QR codes stay
+on the panel. The wall base page has the relays'
 switches and each button's last press, or what a base adds when none is mounted. A relay's switch
 shows what the base reports, so reload to see it change. The Bluetooth proxy page shows what the panel's shows: how it's listening, the advertisements and scanner
 tiles, and its entities, with **Turn on Bluetooth** or **Turn on location** when one of them stops it.

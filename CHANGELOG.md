@@ -22,6 +22,10 @@ below as the release notes.
 - **Switch the wall base's relays from the Manage page.** The browser's wall base page has a switch
   for each relay and each button's last press, as the panel's page has. Without a base, it says what
   one adds.
+- **Change the radio's role from the Manage page.** The browser's radio page has the role, what to do
+  next for it, the Zigbee stack, and the role's buttons (Join, Leave, Get it from Home Assistant), as
+  on the panel. Changing the role or the stack, and leaving a network, ask first with the same words.
+  Pasting a Thread dataset stays on the panel.
 - **Add a pane's Home Assistant blueprints from its settings page.** Notifications and Camera have a
   *Blueprints for Home Assistant* card: the doorbell, a question with buttons on the panels, lights on
   when someone is at the panel, and a snapshot to your phone when nobody is home. **Add to Home

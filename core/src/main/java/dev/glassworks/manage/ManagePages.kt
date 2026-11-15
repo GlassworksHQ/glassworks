@@ -198,8 +198,8 @@ ${foot(viewer)}"""
         class Edit(override val key: String, val problem: String? = null, val typed: String? = null) : Dialog
 
         /**
-         * Ask [ask] before setting the switch at [key] to [value] (`on`/`off`), or running the action there
-         * ([SettingsItem.Action.RUN]). [answer]: the one-shot token the form sends back with the answer.
+         * Ask [ask] before setting the switch at [key] to [value] (`on`/`off`), picking the choice's [value], or
+         * running the action there ([SettingsItem.Action.RUN]). [answer]: the one-shot token the form sends back.
          */
         class Confirm(override val key: String, val value: String, val ask: SettingsItem.Confirm, val answer: String) : Dialog
     }

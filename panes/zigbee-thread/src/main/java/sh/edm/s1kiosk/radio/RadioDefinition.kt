@@ -27,6 +27,7 @@ import sh.edm.s1kiosk.auth.ThreadJoin
 import sh.edm.s1kiosk.discovery.HaUrls
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp
 import sh.edm.s1kiosk.radio.ui.RadioSettingsView
+import sh.edm.s1kiosk.radio.ui.RadioTwin
 import sh.edm.s1kiosk.radio.ui.RadioSetupScreen
 import sh.edm.s1kiosk.radio.ui.RadioStep
 
@@ -354,7 +355,8 @@ class RadioDefinition(
         )
         val allowedNow = SettingsItem.Note { allowedNow(running, readout.allowedNow()) }
         val items = if (running) listOf(
-            SettingsItem.Native(NATIVE_KEY, "Roles, pairing and Thread network") { host -> RadioSettingsView(host, this) },
+            // The panel draws the roles and card itself; the Manage page draws their twin (#269).
+            SettingsItem.Native(NATIVE_KEY, "Roles, pairing and Thread network", twin = { RadioTwin.items(this) }) { host -> RadioSettingsView(host, this) },
             SettingsItem.Group("Who may connect", listOf(allow, allowedNow)),
         ) else listOf(allow, allowedNow) // nothing to drive without the controller: no picker or card
         return listOf(SettingsSection(
