@@ -12,7 +12,7 @@ mkdir -p "$LAB"
 [ -x "$LAB/venv/bin/python" ] || { python3 -m venv "$LAB/venv"; "$LAB/venv/bin/pip" -q install onvif-zeep-async==4.3.0; }
 while nc -z 127.0.0.1 18000 2>/dev/null; do sleep 1; done
 rm -f "$LAB/server.log"
-(cd "$repo/app" && env ONVIF_LAB_SECONDS=$((secs + 40)) ONVIF_LAB_LOG="$LAB/server.log" "$@" \
+(cd "$repo" && env ONVIF_LAB_SECONDS=$((secs + 40)) ONVIF_LAB_LOG="$LAB/server.log" "$@" \
     ./gradlew :kiosk:testDebugUnitTest --tests '*OnvifLabServer*' --rerun -q > "$LAB/gradle.log" 2>&1 &)
 until [ -f "$LAB/server.log" ] && nc -z 127.0.0.1 18000 2>/dev/null; do sleep 1; done
 "$LAB/venv/bin/python" "$repo/tools/camera/onvif-ha-client.py" 127.0.0.1 18000 viewer made-up-pass "$secs" | tee "$LAB/client.log" | tail -5

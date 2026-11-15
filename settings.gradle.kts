@@ -19,13 +19,14 @@ dependencyResolutionManagement {
 
 rootProject.name = "s1-kiosk"
 include(":kiosk")
+project(":kiosk").projectDir = file("app/kiosk")
 
 // Reusable libraries extracted from the app (each has its own README).
 include(":esphome-api")
-project(":esphome-api").projectDir = file("libs/esphome-api")
+project(":esphome-api").projectDir = file("app/libs/esphome-api")
 include(":esphome-api-android")
-project(":esphome-api-android").projectDir = file("libs/esphome-api-android")
+project(":esphome-api-android").projectDir = file("app/libs/esphome-api-android")
 include(":improv")
-project(":improv").projectDir = file("libs/improv")
+project(":improv").projectDir = file("app/libs/improv")
 include(":bluetooth-proxy")
-project(":bluetooth-proxy").projectDir = file("libs/bluetooth-proxy")
+project(":bluetooth-proxy").projectDir = file("app/libs/bluetooth-proxy")

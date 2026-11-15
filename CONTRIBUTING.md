@@ -27,7 +27,7 @@ Small PRs against `main`. CI (`.github/workflows/pr.yml`) runs the app's unit te
 build, the installer's typecheck, tests and build, the install scripts' tests and the docs' links.
 
 ```sh
-cd app && ./gradlew test :kiosk:assembleDebug        # the app
+./gradlew test :kiosk:assembleDebug                 # the app
 npm install && npm run stage -w kiln && npm test     # the web installer, from the repo root
 tools/install/test/install-tests.sh                  # the install scripts
 python3 tools/check-doc-links.py                     # docs links

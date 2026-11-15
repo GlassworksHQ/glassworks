@@ -332,7 +332,7 @@ if [[ $UNDO -eq 1 ]]; then
 fi
 
 step "Install kiosk app"
-[[ -f "$APK" ]] || { echo "APK not found: $APK (build it: cd app && ./gradlew :kiosk:assembleDebug)" >&2; exit 1; }
+[[ -f "$APK" ]] || { echo "APK not found: $APK (build it: ./gradlew :kiosk:assembleDebug)" >&2; exit 1; }
 if [[ $DRY -eq 1 ]]; then
   echo "  + adb install -r -g $APK"
   if adb shell pm list packages "$PKG" | tr -d '\r' | grep -qx "package:$PKG"; then

@@ -379,7 +379,6 @@ the player (it arrives as `set_output_delay`).
 ## Tests
 
 ```sh
-cd app
 python3 -m venv /tmp/sendspin-venv && /tmp/sendspin-venv/bin/pip install 'aiosendspin[server]==10.2.1'
 SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :kiosk:testDebugUnitTest
 ```

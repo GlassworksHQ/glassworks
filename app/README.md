@@ -107,10 +107,9 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
 Requirements: JDK 21, Android SDK with **platform `android-37.2`** (`sdkmanager "platforms;android-37.2"`).
 
 ```sh
-cd app
 echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties   # or set ANDROID_HOME
 ./gradlew :kiosk:assembleDebug
-# -> kiosk/build/outputs/apk/debug/kiosk-debug.apk
+# -> app/kiosk/build/outputs/apk/debug/kiosk-debug.apk
 ```
 
 Toolchain: Gradle 9.8.1 (wrapper), AGP 9.3.3, Kotlin 2.4.20, compileSdk 37.2, targetSdk 34, minSdk 26.
