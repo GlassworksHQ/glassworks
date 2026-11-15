@@ -142,7 +142,8 @@ else private, write to [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone h
 | [`packages/`](packages/frame-card/README.md) | Code shared with glassworks.dev: the frame card and 3D renderer |
 | [`site/`](site/README.md) | [glassworks.dev](https://www.glassworks.dev), the project site, and the brand's badges and banners |
 | [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android/README.md) | S1 Kiosk, the Android app (GeckoView, ESPHome API, voice, Sendspin), with the Glassworks core in `dev.glassworks` |
-| `tools/` | Command-line installer, U-Boot/FEL build, boot patch, radio helper, Clarity, dev tools |
+| [`frames/aqara-s1-plus/tools/`](frames/aqara-s1-plus/tools/AGENTS.md) | The S1's command-line installer, U-Boot/FEL build, boot patch, radio helper |
+| `tools/` | Tools every frame shares: Clarity, release and size checks, dev tools |
 | [`branding/`](branding/glass-tile/README.md) | Boot splash and animation, social preview |
 | [`docs/`](docs/README.md) | User guides, plus [research](docs/research/README.md) |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release |

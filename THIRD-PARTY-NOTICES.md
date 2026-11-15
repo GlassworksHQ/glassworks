@@ -251,7 +251,8 @@ The files the installer at https://s1.edm.sh serves and writes to the panel. Pin
   and `ea0050fd…b98e` (`u-boot.bin`).
 - Corresponding source: upstream U-Boot `main` at commit `934995f642a21ca7f35fa9aed5f061394fcba243`
   (https://github.com/u-boot/u-boot/commit/934995f642a21ca7f35fa9aed5f061394fcba243). Add this
-  repository's [`frames/aqara-s1-plus/tools/fel/uboot/`](frames/aqara-s1-plus/tools/fel/uboot) at commit `8b2bf488fed3c7ba8343a32c67c9651066479128`:
+  repository's [`tools/fel/uboot/`](https://github.com/GlassworksHQ/glassworks/tree/8b2bf488fed3c7ba8343a32c67c9651066479128/tools/fel/uboot) at commit `8b2bf488fed3c7ba8343a32c67c9651066479128`
+  (now [`frames/aqara-s1-plus/tools/fel/uboot/`](frames/aqara-s1-plus/tools/fel/uboot)):
   - `patches/0001-sunxi-a133-ddr4-match-boot0-controller-setup.patch`
   - `patches/0002-fastboot-add-upload-command.patch`
   - `aqara-s1-plus_defconfig`
@@ -474,7 +475,7 @@ renders above:
 
 | Component | Licence | Where it ships | Corresponding source |
 |---|---|---|---|
-| U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`frames/aqara-s1-plus/tools/fel/uboot/`](frames/aqara-s1-plus/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
+| U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`tools/fel/uboot/`](https://github.com/GlassworksHQ/glassworks/tree/8b2bf488fed3c7ba8343a32c67c9651066479128/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
