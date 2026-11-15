@@ -113,7 +113,7 @@ export function creditProblems(f: Pick<FrameDesign, 'credits'>): string[] {
       if (!isHttps(v)) out.push(`${at}.${k}: should be an https link`);
     }
     if (c?.licence !== undefined && !isText(c.licence)) out.push(`${at}.licence: leave it out, or state it`);
-    if (c?.quote !== undefined && (!isText(c.quote.text) || !isHttps(c.quote.href))) out.push(`${at}.quote: needs its text and an https link to where it's from`);
+    if (c?.quote !== undefined && (c.quote === null || typeof c.quote !== "object" || !isText(c.quote.text) || !isHttps(c.quote.href))) out.push(`${at}.quote: needs its text and an https link to where it's from`);
     if (c?.card !== undefined && typeof c.card !== 'boolean') out.push(`${at}.card: should be true or false`);
   });
   return out;

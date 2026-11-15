@@ -49,6 +49,7 @@ describe('creditProblems', () => {
     expect(creditProblems({ credits: [good, good] })).toEqual(['credits[1] (an-image).id: used twice']);
     expect(problems({ ...good, licence: '' })).toEqual(['credits[0] (an-image).licence: leave it out, or state it']);
     expect(problems({ ...good, quote: { text: 'Their words.' } })).toEqual(['credits[0] (an-image).quote: needs its text and an https link to where it\'s from']);
+    expect(problems({ ...good, quote: null })).toEqual(['credits[0] (an-image).quote: needs its text and an https link to where it\'s from']);
   });
 });
 
