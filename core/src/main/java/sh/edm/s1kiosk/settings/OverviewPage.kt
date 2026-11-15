@@ -37,15 +37,21 @@ class OverviewPage(context: Context, private val columns: Int) : LinearLayout(co
     /** What the last action said: started, or why not. */
     private var answer: Pair<String, Boolean>? = null
     private var last: PanelStatus? = null
+    /** The uptime line and each tile's binder, to change in place. */
+    private var meta: TextView? = null
+    private val tileViews = ArrayList<(Tile) -> Unit>()
 
     init { orientation = VERTICAL }
 
     fun bind(s: PanelStatus, a: PanelActions) {
         actions = a
         last = s
-        val shape = listOf(s.version, ManagePages.duration(s.uptimeMs), s.tiles, s.panes.map { listOf(it.id, it.title, it.state) }, answer)
-        if (shape == drawn) return
+        // Drawn anew only when what it's made of changes: a rebuild would cancel a tap in progress. The
+        // uptime and the tiles' readings change in place.
+        val shape = listOf(s.tiles.map { it.label to (it.tone != null) }, s.panes.map { listOf(it.id, it.title, it.state) }, answer)
+        if (shape == drawn) { meta?.text = meta(s); s.tiles.forEachIndexed { n, t -> tileViews.getOrNull(n)?.invoke(t) }; return }
         drawn = shape
+        tileViews.clear()
         removeAllViews()
         addView(hero(s, a), LayoutParams(-1, -2))
         addView(tiles(s.tiles), LayoutParams(-1, -2).apply { topMargin = g.px(GAP) })
@@ -74,8 +80,7 @@ class OverviewPage(context: Context, private val columns: Int) : LinearLayout(co
                 addView(g.dot(Glass.GREEN), LayoutParams(g.px(10f), g.px(10f)).apply { marginEnd = g.px(12f) })
                 addView(g.heading(26f).apply { text = "Running" })
             })
-            addView(g.text(15f, Glass.MU).apply { text = "Glassworks ${s.version} · up ${ManagePages.duration(s.uptimeMs)}" },
-                LayoutParams(-1, -2).apply { topMargin = g.px(6f) })
+            addView(g.text(15f, Glass.MU).apply { text = meta(s) }.also { meta = it }, LayoutParams(-1, -2).apply { topMargin = g.px(6f) })
             addView(Wrap(context, g.px(10f), g.px(10f)).apply {
                 OverviewAction.entries.forEach { act ->
                     addView(g.ghost(act.label).apply {
@@ -122,16 +127,28 @@ class OverviewPage(context: Context, private val columns: Int) : LinearLayout(co
         val p = g.px(CARD_PAD)
         setPadding(p, p, p, p)
         addView(g.text(13.5f, Glass.MU).apply { text = t.label; setSingleLine() })
+        val dot = t.tone?.let { g.dot(toneColor(it)) }
+        val value = g.text(18f, Glass.TX).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
+        val detail = g.text(14f, Glass.MU).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
         addView(LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            t.tone?.let { addView(g.dot(toneColor(it)), LayoutParams(g.px(8f), g.px(8f)).apply { marginEnd = g.px(9f) }) }
-            addView(g.text(18f, Glass.TX).apply { text = t.value; setSingleLine(); ellipsize = TextUtils.TruncateAt.END })
+            dot?.let { addView(it, LayoutParams(g.px(8f), g.px(8f)).apply { marginEnd = g.px(9f) }) }
+            addView(value)
         }, LayoutParams(-1, -2).apply { topMargin = g.px(6f) })
-        if (t.detail.isNotEmpty()) addView(g.text(14f, Glass.MU).apply { text = t.detail; setSingleLine(); ellipsize = TextUtils.TruncateAt.END },
-            LayoutParams(-1, -2).apply { topMargin = g.px(5f) })
-        contentDescription = "${t.label}: ${t.value}"
+        addView(detail, LayoutParams(-1, -2).apply { topMargin = g.px(5f) })
+        val bind = { n: Tile ->
+            if (value.text != n.value) value.text = n.value
+            if (detail.text != n.detail) detail.text = n.detail
+            detail.visibility = if (n.detail.isEmpty()) View.GONE else View.VISIBLE
+            n.tone?.let { (dot?.background as? android.graphics.drawable.GradientDrawable)?.setColor(toneColor(it)) }
+            contentDescription = "${n.label}: ${n.value}"
+        }
+        bind(t)
+        tileViews += bind
     }
+
+    private fun meta(s: PanelStatus) = "Glassworks ${s.version} · up ${ManagePages.duration(s.uptimeMs)}"
 
     private fun panes(s: PanelStatus) = card().apply {
         addView(LinearLayout(context).apply {

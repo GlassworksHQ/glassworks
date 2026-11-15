@@ -70,6 +70,8 @@ object HaAuth {
     /** The Home Assistant user the dashboard is signed in as, once asked ([account]). Forgotten when the sign-in changes. */
     @Volatile private var accountName: String? = null
     @Volatile private var accountAskedAt = 0L
+    /** Counts sign-ins and sign-outs: an answer about an earlier one is dropped. */
+    @Volatile private var accountGen = 0
 
     /**
      * Who the dashboard is signed in as: "Signed in as Alex", "Signed in" until Home Assistant has said, or
@@ -83,12 +85,14 @@ object HaAuth {
         if (accountAskedAt == 0L || now - accountAskedAt > 60_000) {
             accountAskedAt = now
             val base = signedInBase
+            val gen = accountGen
             accessToken(force = false) { a ->
                 val token = (a as? Access.Ok)?.accessToken ?: return@accessToken
                 if (base == null) return@accessToken
                 // Not on the auth thread: the page's token refreshes wait for it.
                 Thread({
-                    S1Manage.Gateway(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.let { accountName = it.name }
+                    val name = S1Manage.Gateway(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.name
+                    synchronized(this) { if (name != null && gen == accountGen) accountName = name }
                 }, "ha-account").apply { isDaemon = true }.start()
             }
         }
@@ -99,8 +103,11 @@ object HaAuth {
     const val NOT_SIGNED_IN = "Not signed in"
 
     private fun notifyChanged() {
-        accountName = null
-        accountAskedAt = 0L
+        synchronized(this) {
+            accountGen++
+            accountName = null
+            accountAskedAt = 0L
+        }
         val v = signedIn
         main.post { listeners.forEach { runCatching { it(v) } } }
     }

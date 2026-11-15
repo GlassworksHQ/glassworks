@@ -64,6 +64,10 @@ class SettingsSidebar(context: Context) : LinearLayout(context) {
 
     /** Draws [nav] with [selected] picked. [overview]: the menu has an Overview. [frame]: the frame's name, under "Settings". */
     fun bind(nav: SettingsNav, selected: String?, overview: Boolean, frame: String) {
+        // The refresh ticks bind the same list again: drawn anew, it would cancel a tap in progress.
+        val key = listOf(nav, selected, overview, frame)
+        if (key == drawn) return
+        drawn = key
         val moved = selected != shown
         shown = selected
         frameName.text = frame
@@ -86,6 +90,9 @@ class SettingsSidebar(context: Context) : LinearLayout(context) {
 
     /** The page the list was last drawn for. */
     private var shown: String? = null
+
+    /** What the list was last drawn from. */
+    private var drawn: List<Any?>? = null
 
     private fun group(title: String, rows: List<View>) {
         if (rows.isEmpty()) return

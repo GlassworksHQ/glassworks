@@ -405,6 +405,33 @@ class SettingsOverlayTest {
     }
 
     @Test
+    fun aRefreshKeepsTheRowsATapMayBeOn() {
+        // CodeRabbit on #299: drawn anew on each tick, the sidebar and the Overview cancelled a tap in progress.
+        val f = dev.glassworks.manage.ManageFixture()
+        var uptime = 60_000L
+        var rssi = "−52 dBm"
+        val a = Mockup.activity()
+        val m = MenuFixture.model(a, radioDefinition(a, FixedReadout(null, running = true)))
+        val o = KioskSettingsOverlay(a).apply {
+            reload = { m }
+            overview = KioskSettingsOverlay.Overview({
+                f.status.copy(uptimeMs = uptime, tiles = f.status.tiles.map { if (it.label == "Wi-Fi") it.copy(detail = rssi) else it })
+            }, f.actions)
+        }
+        a.setContentView(o, ViewGroup.LayoutParams(-1, -1))
+        o.show(m)
+        Mockup.idle()
+        val voice = row(o, "Voice")
+        val wifi = Mockup.label(o, "−52 dBm")
+        uptime = 3 * 60 * 60_000L
+        rssi = "−61 dBm"
+        o.refresh()
+        assertTrue("the sidebar's row is the same view", row(o, "Voice") === voice)
+        assertTrue("the tile's line is the same view, changed", wifi.text == "−61 dBm" && wifi.isShown)
+        assertTrue(shown(o, "Glassworks 0.9.2 · up 3 h, 0 min"))
+    }
+
+    @Test
     fun theOverviewsButtonsRunTheManagePagesActions() {
         val f = dev.glassworks.manage.ManageFixture()
         val o = withOverview(f)
