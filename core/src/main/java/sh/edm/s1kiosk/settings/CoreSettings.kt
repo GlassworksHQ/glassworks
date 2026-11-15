@@ -26,6 +26,8 @@ class CoreSettings(
     private val live: Live = Live(),
     /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"); null leaves the row out. */
     private val account: () -> String? = { null },
+    /** The app's name, before [version] in About ([dev.glassworks.platform.AppBuild.product]). */
+    private val product: String = dev.glassworks.platform.AppBuild.S1_KIOSK,
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -94,7 +96,7 @@ class CoreSettings(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
         )),
         SettingsPlace.ABOUT to SettingsSection("about", "About", listOf(
-            SettingsItem.Info(title = { "S1 Kiosk $version" }, detail = { "" }),
+            SettingsItem.Info(title = { "$product $version" }, detail = { "" }),
             licences,
         )),
     )

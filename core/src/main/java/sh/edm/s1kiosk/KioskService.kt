@@ -156,7 +156,7 @@ class KioskService : Service() {
         val b = if (Platform.hasNotificationChannels) Notification.Builder(this, CHANNEL)
         else Notification.Builder(this)
         b.setSmallIcon(notificationIcon())
-            .setContentTitle("S1 Kiosk")
+            .setContentTitle(glassworks.build.product)
             .setContentText("Tap for kiosk settings · screen, sensors & ESPHome API running")
             .setContentIntent(menu)
             .setOngoing(true)

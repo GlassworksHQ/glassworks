@@ -54,6 +54,7 @@ object S1Settings {
                 brightness = { runtime.screen.refreshBrightness() },
             ),
             account = runtime.dashboardAccount::shown,
+            product = runtime.build.product,
         )
         // One pane's failure leaves the others' pages.
         val sections = panes.flatMap { d ->
