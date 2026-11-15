@@ -97,7 +97,7 @@ describe('routes', () => {
     expect(onState(S.done, 'done')).toEqual({ kind: 'stay' });
   });
 
-  it('maps s1.edm.sh\'s old links (docs/install.md lists them)', () => {
+  it('maps s1.edm.sh\'s old links (frames/aqara-s1-plus/docs/install.md lists them)', () => {
     expect(['#/install', '#/undo', '#/resume', '#/wifi', '#/home-assistant', '#/radio', '#/nope', ''].map(fromHash))
       .toEqual(['start', 'undo', 'set-up', 'wifi', 'home-assistant', 'radio', undefined, undefined]);
   });

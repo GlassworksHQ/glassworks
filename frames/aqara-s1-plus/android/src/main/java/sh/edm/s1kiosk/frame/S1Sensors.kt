@@ -23,12 +23,12 @@ class Vi5300Presence(
     private val writeSecure: (Context, String, Int) -> Boolean = { c, name, v -> Settings.Secure.putInt(c.contentResolver, name, v) },
 ) : PresenceSource {
     internal companion object {
-        /** The S1's sensor is `vi5300 Proximity Sensor` (vendor lumi, docs/sensors.md). */
+        /** The S1's sensor is `vi5300 Proximity Sensor` (vendor lumi, frames/aqara-s1-plus/docs/sensors.md). */
         fun isVi5300(name: String?): Boolean = name?.contains("vi5300", ignoreCase = true) == true
 
         /** Lumi's threshold table (index -> decimetres), from com.lumi.systemmanager Monitor.java. */
         val RANGE_DM = intArrayOf(0, 1, 2, 4, 6, 8, 10, 12, 15, 20, 25)
-        const val NO_RANGE = "The sensor's range didn't change: the app needs the permission to write secure settings (docs/sensors.md)."
+        const val NO_RANGE = "The sensor's range didn't change: the app needs the permission to write secure settings (frames/aqara-s1-plus/docs/sensors.md)."
         const val NOT_WRITTEN = "The sensor's range didn't change: Android didn't save the setting. Try again."
     }
 

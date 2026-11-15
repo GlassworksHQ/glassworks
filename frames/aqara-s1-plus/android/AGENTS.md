@@ -17,7 +17,7 @@ A new library in `libs/` or a new pane needs a branded README header: see
 - The app has **no root**. It reaches the root side only through properties and init services
   (`setprop persist.s1kiosk.radio_mode …`, `setprop ctl.start s1kiosk_update`), and must keep working
   on a panel without the patched boot image. Check the `sys.s1kiosk.*` capability properties before
-  you use a service. The contracts are in [`docs/radio.md`](../../../docs/radio.md#root-helper-contract-v4)
+  you use a service. The contracts are in [`docs/radio.md`](../docs/radio.md#root-helper-contract-v4)
   and [`frames/aqara-s1-plus/research/root.md`](../research/root.md).
 - Aqara's own services (`ha_master`, the system manager's DND rule) fight the kiosk. See
   [`frames/aqara-s1-plus/research/debloat.md`](../research/debloat.md) and

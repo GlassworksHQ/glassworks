@@ -78,7 +78,7 @@ then calls `AlarmManager.setTimeZone` with the first `TimeZone.getAvailableIDs()
 offset matches: `Antarctica/Casey` (logcat tag `PropReceiver`, "syncTimeZone … / setTimeZoneOffset id …").
 The app can't set the zone (`SET_TIME_ZONE` is signature|privileged), so the root helper (v4) keeps the
 owner's zone (`persist.s1kiosk.timezone`) with the same `service call alarm 3` and re-applies it whenever
-`persist.sys.timezone` drifts ([../radio.md](../../../docs/radio.md#root-helper-contract-v4), [../install.md](../../../docs/install.md#time-zone)).
+`persist.sys.timezone` drifts ([../radio.md](../docs/radio.md#root-helper-contract-v4), [../install.md](../docs/install.md#time-zone)).
 
 Home Assistant's UI language is a **per-user HA profile setting** (Profile → Localization), not the
 Android locale.

@@ -6,7 +6,7 @@
 # Release with notes from CHANGELOG.md. Every ABI's APK has the same versionCode (docs/releasing.md
 # "ABIs"). Panels find theirs through the app's update entity in Home Assistant.
 #
-# The APK carries the signed radio bundle (docs/radio.md "Radio bundles"): the radio helper,
+# The APK carries the signed radio bundle (frames/aqara-s1-plus/docs/radio.md "Radio bundles"): the radio helper,
 # otbr-agent/ot-ctl and the Silicon Labs Zigbee runtime (never Silicon Labs' zigbeed itself). Its key
 # lets code run as root on every panel, so it is kept away from everything else:
 #   inputs       builds the Silicon Labs runtime (no secrets); its output must match the committed

@@ -60,7 +60,7 @@ if [ "$MODE" = undo ]; then
   # restoring only the rest would report an undo that left our splash on the panel.
   [ -f "$UNDO/bootloader.img" ] || die "$UNDO has no bootloader.img: the backup is incomplete. Nothing was changed.
        To put back only boot and vbmeta (the splash stays ours), flash them by hand from our U-Boot:
-       docs/install.md#undo."
+       frames/aqara-s1-plus/docs/install.md#undo."
   for f in boot.img vbmeta.img bootloader.img; do
     (cd "$UNDO" && grep " $f\$" SHA256SUMS | shasum -a 256 -c -) || die "$UNDO/$f does not match its SHA256SUMS"
   done
@@ -71,7 +71,7 @@ if [ "$MODE" = undo ]; then
     die "could not check the splash in $UNDO/bootloader.img. Nothing was changed."
   case "$splash" in ours*) die "$UNDO/bootloader.img holds our splash (${splash#ours }), not Aqara's: this backup was taken after an install. Nothing was changed.
        Use the backup from your first install. Without one, put back only boot and vbmeta by hand (the
-       splash stays ours): docs/install.md#undo." ;; esac
+       splash stays ours): frames/aqara-s1-plus/docs/install.md#undo." ;; esac
 else
   mkdir -p "$OUT"; chmod 700 "$OUT"
 fi

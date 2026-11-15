@@ -8,7 +8,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /**
- * The small EZSP v12 subset the Zigbee router host needs (docs/radio.md "Zigbee router"), against
+ * The small EZSP v12 subset the Zigbee router host needs (frames/aqara-s1-plus/docs/radio.md "Zigbee router"), against
  * zigbeed (EmberZNet 7.3.3, EZSP 12). Frame ids and struct layouts as in bellows' v12 schema.
  */
 object Ezsp {

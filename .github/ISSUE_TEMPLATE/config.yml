@@ -4,10 +4,10 @@ contact_links:
     url: https://github.com/GlassworksHQ/glassworks/discussions
     about: Ask a question, share an idea, or talk about bringing up a new device.
   - name: Install guide and troubleshooting
-    url: https://github.com/GlassworksHQ/glassworks/blob/main/docs/install.md#troubleshooting
+    url: https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/install.md#troubleshooting
     about: Most installer problems are covered here.
   - name: Radio guide
-    url: https://github.com/GlassworksHQ/glassworks/blob/main/docs/radio-guide.md
+    url: https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/radio-guide.md
     about: Setting up ZHA, Zigbee2MQTT, Thread and repeaters.
   - name: Report a security problem
     url: https://github.com/GlassworksHQ/glassworks/security/advisories/new

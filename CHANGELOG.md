@@ -256,7 +256,7 @@ below as the release notes.
   the splash. A backup missing one of them (a damaged or hand-made `.zip` or folder) used to restore
   the rest and report success, leaving our splash on the panel. Now the web installer and
   `fel-install.sh --undo` both refuse it before writing anything, and the
-  [install guide](docs/install.md#undo) says how to put back boot and vbmeta by hand.
+  [install guide](frames/aqara-s1-plus/docs/install.md#undo) says how to put back boot and vbmeta by hand.
 - **Sign-in: someone on your network who reads the sign-in code can no longer use it.** Both sign-ins (the
   dashboard QR code and the administrator sign-in for the Thread join) now use PKCE, so Home Assistant
   only hands out the panel's token to the panel itself. Needs Home Assistant 2026.10 or later to take

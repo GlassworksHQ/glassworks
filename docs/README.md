@@ -7,7 +7,6 @@ rules every part follows.
 
 | Guide | What it covers |
 |---|---|
-| [install.md](install.md) | Installing with the web installer or the command line, updating, undo, troubleshooting |
 | [onboarding.md](onboarding.md) | Design notes for the first boot: Wi-Fi (Improv), adding it to Home Assistant, QR sign-in, dashboard picker (the steps themselves are in install.md) |
 | [manage.md](manage.md) | The Manage page at `http://<panel>:8099/`: signing in through Home Assistant or with the code on the panel, the log, diagnostics, and how it keeps you safe |
 | [esphome.md](esphome.md) | The panel as an ESPHome device: every entity, the voice assistant, encryption, app updates |
@@ -15,12 +14,21 @@ rules every part follows.
 | [sendspin.md](sendspin.md) | The native Music Assistant player (Sendspin): setup, pairing, synced playback |
 | [perf.md](perf.md) | Clarity, the performance test and grade for any frame: how to run it, what it measures, the rubric and its sources, the report format |
 | [size.md](size.md) | APK size per frame and per pane in CI: the parts, the assets lint, the size budgets, the PR comment |
-| [sensors.md](sensors.md) | Presence (VI5300 time-of-flight), ambient light, and how the screen uses them |
-| [radio-guide.md](radio-guide.md) | Using the Zigbee/Thread radio: ZHA, Zigbee2MQTT, Thread, repeaters, who may connect |
-| [radio.md](radio.md) | The radio's technical reference: how each mode works, tests, firmware, the root helper |
 | [releasing.md](releasing.md) | For maintainers: the signing keys, GitHub secrets, tagging a release, the radio bundle |
 | [branding.md](branding.md) | Where the Glassworks brand lives, and which badge or banner each part of this repo uses |
 | [legal.md](legal.md) | Legal notes: your own device, no copy protection bypassed, what is and isn't shipped, trademarks, licences ([third-party notices](../THIRD-PARTY-NOTICES.md)) |
+
+## Aqara S1 Plus
+
+The guides that only apply to the S1 Plus live with its frame, in
+[frames/aqara-s1-plus/docs](../frames/aqara-s1-plus/docs/).
+
+| Guide | What it covers |
+|---|---|
+| [install.md](../frames/aqara-s1-plus/docs/install.md) | Installing with the web installer or the command line, updating, undo, troubleshooting |
+| [sensors.md](../frames/aqara-s1-plus/docs/sensors.md) | Presence (VI5300 time-of-flight), ambient light, and how the screen uses them |
+| [radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md) | Using the Zigbee/Thread radio: ZHA, Zigbee2MQTT, Thread, repeaters, who may connect |
+| [radio.md](../frames/aqara-s1-plus/docs/radio.md) | The radio's technical reference: how each mode works, tests, firmware, the root helper |
 
 What changed in each release: [CHANGELOG.md](../CHANGELOG.md). The app itself is documented in
 [app/README.md](../frames/aqara-s1-plus/android/README.md) and the boot branding in

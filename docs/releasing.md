@@ -111,7 +111,7 @@ environments, so every signed build waits for an approval.
 ## 3b. The radio bundle key (once)
 
 Only the armeabi-v7a (S1) APK carries a **signed radio bundle**: the root radio helper, otbr-agent/ot-ctl
-and the Silicon Labs Zigbee runtime ([radio.md](radio.md#radio-bundles-helper-v4)). The other ABIs'
+and the Silicon Labs Zigbee runtime ([radio.md](../frames/aqara-s1-plus/docs/radio.md#radio-bundles-helper-v4)). The other ABIs'
 APKs carry none, because no S1 runs them. Panels whose boot image has the bundle
 loader install it only if it is signed with the Ed25519 key whose public half is baked into the boot
 image ([`tools/root/s1kiosk_bundle.pub`](../tools/root/s1kiosk_bundle.pub)). It is a separate key from
@@ -260,7 +260,7 @@ on `update.s1_panel_app_update`: HA sends the entity's "check" command.
 returns no signer for a downloaded APK. 0.4.1 also asks for `GET_SIGNATURES`
 ([esphome.md](esphome.md#app-updates)). Because the bug is in the version doing the installing, those
 panels need one manual update to 0.4.1 or later (the web installer's *Already installed? Finish setting
-it up*, or `adb install -r`, see [install.md](install.md#updating)); from then on HA installs work.
+it up*, or `adb install -r`, see [install.md](../frames/aqara-s1-plus/docs/install.md#updating)); from then on HA installs work.
 
 The hosted web installer installs the latest release it saw when it was last built
 (`kiln/scripts/stage-assets.mjs`). The workflow's last step asks Vercel to rebuild it through the
@@ -341,4 +341,4 @@ The update entity then says so ("signed with a different key than this app"). Mo
 to releases takes a one-time reinstall: uninstall the debug app, then install the release APK.
 Both installers do that for you, after asking, and keep the panel on its Wi-Fi. The app's data is
 kept only where adb has root; on a normal panel the switch **resets the app's settings** (sign-in,
-pairing key, options). See [install.md](install.md#switching-a-development-build-to-a-release).
+pairing key, options). See [install.md](../frames/aqara-s1-plus/docs/install.md#switching-a-development-build-to-a-release).

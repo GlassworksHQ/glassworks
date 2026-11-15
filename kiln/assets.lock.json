@@ -20,14 +20,14 @@
       "url": "https://github.com/GlassworksHQ/glassworks/releases/download/installer-files-2/otbr-agent",
       "sha256": "dbf671761139257631f90bda050cb10f1da975b4f4bf3b01f68136aa3426a69c",
       "license": "BSD-3-Clause AND Apache-2.0 AND MIT AND Zlib AND LicenseRef-Silabs-MSLA AND LGPL-2.1-or-later AND GPL-3.0-or-later WITH GCC-exception-3.1",
-      "source": "https://github.com/GlassworksHQ/glassworks/blob/main/docs/radio.md (ot-br-posix border-router build, tools/radio/build-otbr.sh PROFILE=br)"
+      "source": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/radio.md (ot-br-posix border-router build, tools/radio/build-otbr.sh PROFILE=br)"
     },
     {
       "name": "ot-ctl",
       "url": "https://github.com/GlassworksHQ/glassworks/releases/download/installer-files-2/ot-ctl",
       "sha256": "cbbfb98b332b0197ff0613e0c85e4f06b4719e0ad09e450c8301365928feab6a",
       "license": "BSD-3-Clause AND LGPL-2.1-or-later AND GPL-3.0-or-later WITH GCC-exception-3.1",
-      "source": "https://github.com/GlassworksHQ/glassworks/blob/main/docs/radio.md (ot-br-posix border-router build, tools/radio/build-otbr.sh PROFILE=br)"
+      "source": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/radio.md (ot-br-posix border-router build, tools/radio/build-otbr.sh PROFILE=br)"
     },
     {
       "name": "verify",

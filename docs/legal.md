@@ -8,7 +8,7 @@ and the rules differ from country to country.
 S1 Unleashed changes the software on an Aqara Panel Hub S1 Plus that you own. The installer
 works on the panel connected to your computer over USB. Before it writes anything, it saves a backup of
 the partitions it changes, and that backup stays with you. *Undo a previous install* writes it back
-([install.md](install.md)). Changing the panel's software probably voids its warranty.
+([install.md](../frames/aqara-s1-plus/docs/install.md)). Changing the panel's software probably voids its warranty.
 
 ## No copy protection is bypassed
 

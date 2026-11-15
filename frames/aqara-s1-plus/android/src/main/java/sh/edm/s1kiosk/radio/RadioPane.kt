@@ -16,7 +16,7 @@ import sh.edm.s1kiosk.auth.ThreadFetch
 import sh.edm.s1kiosk.auth.ThreadJoin
 
 /**
- * The S1's Zigbee/Thread radio as a pane (docs/radio.md): the [RadioController], its Home Assistant
+ * The S1's Zigbee/Thread radio as a pane (frames/aqara-s1-plus/docs/radio.md): the [RadioController], its Home Assistant
  * entities, and the Thread join from Home Assistant. While it runs, the setup screen, the setup
  * channel and the settings menu reach the controller through [GlassworksRuntime.radio].
  */
@@ -50,7 +50,7 @@ class RadioPane(
             },
         ),
         // Zigbee stack behind the coordinator mode (helper v4): Aqara's (EZSP 12) or Silicon Labs' (EZSP 18,
-        // for Zigbee2MQTT; the panel downloads it from Silicon Labs). docs/radio.md "Zigbee stack".
+        // for Zigbee2MQTT; the panel downloads it from Silicon Labs). frames/aqara-s1-plus/docs/radio.md "Zigbee stack".
         SelectEntity(
             "zigbee_stack", "Zigbee stack", "mdi:layers-outline", disabledByDefault = true, options = ZigbeeStack.LABELS,
             get = { radio.zigbeeStack.label }, set = { radio.setZigbeeStack(it) },
@@ -64,7 +64,7 @@ class RadioPane(
         ).apply { authOnly = true },
         ButtonEntity("radio_firmware_flash", "Flash radio firmware", "mdi:flash-alert", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.firmwareFlash() })
             .apply { authOnly = true },
-        // Zigbee router: join/leave the network that has permit-join open (docs/radio.md "Zigbee router").
+        // Zigbee router: join/leave the network that has permit-join open (frames/aqara-s1-plus/docs/radio.md "Zigbee router").
         ButtonEntity("zigbee_router_join", "Join Zigbee network", "mdi:zigbee", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.routerJoin() }),
         ButtonEntity("zigbee_router_leave", "Leave Zigbee network", "mdi:link-variant-off", EntityCategory.CONFIG, disabledByDefault = true, press = { radio.routerLeave() }),
         // Forget the Thread network (helper v4, any mode): deletes the dataset (network key) and router settings.

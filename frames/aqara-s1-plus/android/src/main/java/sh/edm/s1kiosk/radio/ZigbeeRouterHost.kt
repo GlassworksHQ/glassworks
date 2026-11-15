@@ -20,7 +20,7 @@ interface RouterHost {
 }
 
 /**
- * The Zigbee router role (docs/radio.md "Zigbee router"): a small EZSP host that drives zigbeed
+ * The Zigbee router role (frames/aqara-s1-plus/docs/radio.md "Zigbee router"): a small EZSP host that drives zigbeed
  * (a full EmberZNet stack) as an EMBER_ROUTER. Routing, link status, child tables and ZDO all run in
  * zigbeed; this host only has to
  *  1. bring the stack up on every session (ASH reset, `version`, `networkInit`),

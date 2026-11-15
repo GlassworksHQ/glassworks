@@ -166,7 +166,7 @@ The UI went through five mockups before *option E*, the one that shipped.
   forces the screen off 15 s after every wake. The panel had also shipped in the
   `Africa/Algiers` time zone. The installer now turns that rule off through Aqara's own binder API,
   and the kiosk runs its own night mode, using the panel's time-of-flight and light sensors.
-  → [screen-policy.md](../../frames/aqara-s1-plus/research/screen-policy.md) · [../sensors.md](../sensors.md)
+  → [screen-policy.md](../../frames/aqara-s1-plus/research/screen-policy.md) · [../sensors.md](../../frames/aqara-s1-plus/docs/sensors.md)
 - **Aqara's cloud.** Disabling Aqara's apps didn't stop it phoning home. A native daemon,
   `ha_master`, kept the cloud link up. A watchdog in Aqara's system manager also forced a Wi-Fi
   reassociation whenever that link dropped. The kiosk stops the daemon at start, and the panel
@@ -194,7 +194,7 @@ firmware over CPC. Aqara's stack is
 
 The radio's firmware flash path was proven by reflashing the identical stock RCP image.
 
-→ [../radio.md](../radio.md)
+→ [../radio.md](../../frames/aqara-s1-plus/docs/radio.md)
 
 ## 8. The wall base
 

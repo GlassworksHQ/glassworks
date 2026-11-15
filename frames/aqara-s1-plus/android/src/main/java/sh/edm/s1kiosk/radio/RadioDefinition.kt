@@ -313,7 +313,7 @@ class RadioDefinition(
         val running = readout.running()
         val allow = SettingsItem.Text(
             "IP addresses or ranges, or any", "empty = Home Assistant only", SettingsItem.TextKind.ADDRESS,
-            // Same setting as HA's "Radio allowed clients" (docs/radio.md "Firewall"): empty = Home Assistant only.
+            // Same setting as HA's "Radio allowed clients" (frames/aqara-s1-plus/docs/radio.md "Firewall"): empty = Home Assistant only.
             value = readout::allowedClients,
             enabled = { running },
             shown = { it.ifBlank { "Home Assistant only" } },

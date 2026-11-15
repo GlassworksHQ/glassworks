@@ -24,7 +24,7 @@ for scripting or if you'd rather not use WebUSB. Both back up the panel first an
 
 ## Before you start
 
-- **Panel:** Aqara Panel Hub S1 Plus (MP-K03D). See [supported hardware](../frames/aqara-s1-plus/README.md#supported-hardware).
+- **Panel:** Aqara Panel Hub S1 Plus (MP-K03D). See [supported hardware](../README.md#supported-hardware).
 - **Cable:** a USB-C **data** cable. Many charging cables carry no data. Plug it straight into the
   computer, not through a hub or dock.
 - **Tool:** a small screwdriver to open the back cover. You need to reach one button on the board.
@@ -58,7 +58,7 @@ ROM, so it is always there and it doesn't care what is on the eMMC. With the bac
 button is a small tactile switch to the right of the shield can's notch, just below the round
 sensor window. It is not the reset button on the case.
 
-![The S1 Plus board with the back cover removed; the FEL button is circled](img/fel-button.jpg)
+![The S1 Plus board with the back cover removed; the FEL button is circled](../../../docs/img/fel-button.jpg)
 
 To enter FEL: unplug the panel, **hold the button, plug in USB-C**, then let go. It enters FEL as
 soon as it has power, within about two seconds. The screen stays black. That's expected.
@@ -88,14 +88,14 @@ offers **Back to it**.
 
 ### 1 · Panel
 
-<img src="img/kiln/picker.webp" alt="Pick your panel: frame cards for the Aqara S1 Plus (Beta, selected), lululemon Studio Mirror (planned), Generic Android (planned) and Your panel. Under them, the links Undo an install and Finish setting up, and Continue." width="100%">
+<img src="../../../docs/img/kiln/picker.webp" alt="Pick your panel: frame cards for the Aqara S1 Plus (Beta, selected), lululemon Studio Mirror (planned), Generic Android (planned) and Your panel. Under them, the links Undo an install and Finish setting up, and Continue." width="100%">
 
 *Pick **Aqara S1 Plus**, then **Continue**. The two links at the bottom are for a panel that is
 already installed.*
 
 ### 2 · Connect
 
-<img src="img/kiln/connect.webp" alt="Connect: Hold the button. Plug it in. An animation of the panel's back cover coming off, with the steps take out the screws, remove the back cover, hold the button, plug in the USB cable. Then click Connect and pick USB Device (1f3a:efe8). Nothing is written yet." width="100%">
+<img src="../../../docs/img/kiln/connect.webp" alt="Connect: Hold the button. Plug it in. An animation of the panel's back cover coming off, with the steps take out the screws, remove the back cover, hold the button, plug in the USB cable. Then click Connect and pick USB Device (1f3a:efe8). Nothing is written yet." width="100%">
 
 *The animation is the instruction. **Show me a photo** opens the board photo above.*
 
@@ -107,7 +107,7 @@ list is empty, or the device won't open, see [Troubleshooting](#troubleshooting)
 
 ### 3 · Install
 
-<img src="img/kiln/install.webp" alt="Install: Keep it plugged in. A progress bar at 68 percent, writing the new software, under a minute left. Done so far: found your S1 Plus, started the installer in its memory, backed up and checked, prepared the new software. Your backup is safe in this browser." width="100%">
+<img src="../../../docs/img/kiln/install.webp" alt="Install: Keep it plugged in. A progress bar at 68 percent, writing the new software, under a minute left. Done so far: found your S1 Plus, started the installer in its memory, backed up and checked, prepared the new software. Your backup is safe in this browser." width="100%">
 
 *Keep the cable in and the page open. **Technical log** shows each partition with its size and hash.*
 
@@ -130,8 +130,8 @@ from a click. Kiln shows a **Your turn** sheet each time:
 
 <table>
 <tr>
-<td width="50%"><img src="img/kiln/ask-fastboot.webp" alt="Your turn: One click to continue. The panel restarted into the installer. Nothing has been written yet. Pick USB download gadget in the list. Button: Choose the panel."></td>
-<td width="50%"><img src="img/kiln/ask-adb.webp" alt="Your turn: One last click. The panel is starting its new software. Leave its screen alone meanwhile. Pick QUAD-CORE R818 EVB2 in the list. Button: Choose the panel."></td>
+<td width="50%"><img src="../../../docs/img/kiln/ask-fastboot.webp" alt="Your turn: One click to continue. The panel restarted into the installer. Nothing has been written yet. Pick USB download gadget in the list. Button: Choose the panel."></td>
+<td width="50%"><img src="../../../docs/img/kiln/ask-adb.webp" alt="Your turn: One last click. The panel is starting its new software. Leave its screen alone meanwhile. Pick QUAD-CORE R818 EVB2 in the list. Button: Choose the panel."></td>
 </tr>
 <tr>
 <td><em>After U-Boot starts: click <b>Choose the panel</b> and pick <code>USB download gadget</code>.</em></td>
@@ -153,8 +153,8 @@ about a minute.
 
 <table>
 <tr>
-<td width="50%"><img src="img/kiln/app.webp" alt="A few settings: Language American English (en-US), Time zone America/New York, 12-hour or 24-hour, On-screen keyboard checked. About a minute. Button: Install S1 Kiosk."></td>
-<td width="50%"><img src="img/kiln/app-installing.webp" alt="Installing S1 Kiosk. Keep it plugged in. Steps: install S1 Kiosk (Android installs it and optimises it for this panel), make it the panel's home screen, install the on-screen keyboard, apply your time zone, language and clock, first start."></td>
+<td width="50%"><img src="../../../docs/img/kiln/app.webp" alt="A few settings: Language American English (en-US), Time zone America/New York, 12-hour or 24-hour, On-screen keyboard checked. About a minute. Button: Install S1 Kiosk."></td>
+<td width="50%"><img src="../../../docs/img/kiln/app-installing.webp" alt="Installing S1 Kiosk. Keep it plugged in. Steps: install S1 Kiosk (Android installs it and optimises it for this panel), make it the panel's home screen, install the on-screen keyboard, apply your time zone, language and clock, first start."></td>
 </tr>
 <tr>
 <td><em>The settings. On an installed panel the heading says <b>Update S1 Kiosk</b>.</em></td>
@@ -172,8 +172,8 @@ another network**.
 
 <table>
 <tr>
-<td width="50%"><img src="img/kiln/wifi-new.webp" alt="Which Wi-Fi? Networks in range of the panel: Home Net (selected), Home Net 5G, Neighbours, Cafe Guest, Other. A password field. Links: Skip, do it on the panel. Button: Connect."></td>
-<td width="50%"><img src="img/kiln/wifi-fail.webp" alt="Couldn't join Home Net. Sent to the panel over USB: done. The panel joins the network: failed. The panel could not join that network. Check the password, or that the network is in range. Button: Try again."></td>
+<td width="50%"><img src="../../../docs/img/kiln/wifi-new.webp" alt="Which Wi-Fi? Networks in range of the panel: Home Net (selected), Home Net 5G, Neighbours, Cafe Guest, Other. A password field. Links: Skip, do it on the panel. Button: Connect."></td>
+<td width="50%"><img src="../../../docs/img/kiln/wifi-fail.webp" alt="Couldn't join Home Net. Sent to the panel over USB: done. The panel joins the network: failed. The panel could not join that network. Check the password, or that the network is in range. Button: Try again."></td>
 </tr>
 <tr>
 <td><em>Pick a network. <b>Other…</b> lets you type a name that isn't listed.</em></td>
@@ -186,7 +186,7 @@ it. **Sign in** opens the panel's own sign-in page in a new tab, the same one it
 to, so your login goes from Home Assistant straight to the panel. This page notices when you are
 done. Then click **Continue**.
 
-<img src="img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field, a Sign in button. Link: Skip, do it on the panel. Button: Continue." width="100%">
+<img src="../../../docs/img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field, a Sign in button. Link: Skip, do it on the panel. Button: Continue." width="100%">
 
 *Home Assistant also finds the panel by itself. Click **Add** on the discovered panel in
 Settings → Devices & services.*
@@ -196,8 +196,8 @@ change it any time in Home Assistant.
 
 <table>
 <tr>
-<td width="50%"><img src="img/kiln/radio.webp" alt="What should the radio do? Off (selected), Zigbee coordinator, Thread border router, Zigbee router (repeater, experimental), Thread router (repeater, experimental). Now: Off: radio idle. Link: Skip, leave it as it is. Button: Finish."></td>
-<td width="50%"><img src="img/kiln/radio-next.webp" alt="Use the radio in Home Assistant, after choosing Zigbee coordinator: first add the panel to Home Assistant; add the radio (radio type EZSP, serial path socket://192.0.2.50:6638 with a Copy link); pair your Zigbee devices; using Zigbee2MQTT instead (experimental). The first three steps have an Open in Home Assistant link; the Zigbee2MQTT step has Copy links for its values."></td>
+<td width="50%"><img src="../../../docs/img/kiln/radio.webp" alt="What should the radio do? Off (selected), Zigbee coordinator, Thread border router, Zigbee router (repeater, experimental), Thread router (repeater, experimental). Now: Off: radio idle. Link: Skip, leave it as it is. Button: Finish."></td>
+<td width="50%"><img src="../../../docs/img/kiln/radio-next.webp" alt="Use the radio in Home Assistant, after choosing Zigbee coordinator: first add the panel to Home Assistant; add the radio (radio type EZSP, serial path socket://192.0.2.50:6638 with a Copy link); pair your Zigbee devices; using Zigbee2MQTT instead (experimental). The first three steps have an Open in Home Assistant link; the Zigbee2MQTT step has Copy links for its values."></td>
 </tr>
 <tr>
 <td><em>The choice.</em></td>
@@ -216,15 +216,15 @@ More on each mode: [radio-guide.md](radio-guide.md).
 
 Wi-Fi, Home Assistant and the radio can each be skipped (*Skip, do it on the panel*) and done
 later on the panel itself. Its setup screen covers Wi-Fi (including Improv over Bluetooth), adding
-it to Home Assistant, and QR sign-in. See [onboarding.md](onboarding.md).
+it to Home Assistant, and QR sign-in. See [onboarding.md](../../../docs/onboarding.md).
 
-<img src="img/panel/improv-allow.webp" alt="On the panel: Allow Wi-Fi setup over Bluetooth? Home Assistant (Improv via BLE) or improv-wifi.com on a phone can send it Wi-Fi details." width="70%">
+<img src="../../../docs/img/panel/improv-allow.webp" alt="On the panel: Allow Wi-Fi setup over Bluetooth? Home Assistant (Improv via BLE) or improv-wifi.com on a phone can send it Wi-Fi details." width="70%">
 
 *Setting up Wi-Fi on the panel instead: it asks before it accepts Wi-Fi details over Bluetooth.*
 
 ### 5 · Done
 
-<img src="img/kiln/done.webp" alt="Done. The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device. A row: Original software, backed up. Keep it: it's also kept in this browser. s1-backup-20261112-101500.zip, 9 partitions, 52 MiB. Button: Download. Links: Undo, Back to Kiln." width="100%">
+<img src="../../../docs/img/kiln/done.webp" alt="Done. The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device. A row: Original software, backed up. Keep it: it's also kept in this browser. s1-backup-20261112-101500.zip, 9 partitions, 52 MiB. Button: Download. Links: Undo, Back to Kiln." width="100%">
 
 *Click **Download** and keep the `.zip`.*
 
@@ -234,8 +234,8 @@ in this browser, but clearing the browser's site data deletes that copy. If the 
 our software, the row says the backup isn't the original: keep the one from your first install.
 
 Home Assistant discovers the panel as an ESPHome device and sets up encryption by itself.
-What you get in HA: [esphome.md](esphome.md). Music Assistant pairs with the panel automatically:
-[sendspin.md](sendspin.md).
+What you get in HA: [esphome.md](../../../docs/esphome.md). Music Assistant pairs with the panel automatically:
+[sendspin.md](../../../docs/sendspin.md).
 
 ## When something fails
 
@@ -244,8 +244,8 @@ fix. **More help** has tips, the error message, the technical log, and the way t
 
 <table>
 <tr>
-<td width="50%"><img src="img/kiln/error.webp" alt="It disconnected. Nothing was written. Try a cable straight into this computer. Link: More help. Button: Try again."></td>
-<td width="50%"><img src="img/kiln/error-written.webp" alt="Something went wrong while writing. Part of the new software was written. Don't unplug it yet: put it in recovery mode again and use Undo with your backup. Links: More help, Try again. Button: Undo with your backup."></td>
+<td width="50%"><img src="../../../docs/img/kiln/error.webp" alt="It disconnected. Nothing was written. Try a cable straight into this computer. Link: More help. Button: Try again."></td>
+<td width="50%"><img src="../../../docs/img/kiln/error-written.webp" alt="Something went wrong while writing. Part of the new software was written. Don't unplug it yet: put it in recovery mode again and use Undo with your backup. Links: More help, Try again. Button: Undo with your backup."></td>
 </tr>
 <tr>
 <td><em><b>Nothing was written</b>: the panel is as it was. Fix the cause and click <b>Try again</b>.</em></td>
@@ -266,7 +266,7 @@ unplug the panel, plug it back in, and use **Finish setting up**. The titles Kil
 Open **Undo an install** from Kiln's first screen, or **Undo** on the Done screen. The rail shows
 **Backup → Connect → Restore → Done**.
 
-<img src="img/kiln/undo.webp" alt="Put it back. Two choices: As it came from Aqara (selected): the original software, then a factory reset on the panel, everything is removed. Keep its settings: Aqara's apps come back first, over USB with the panel running; Wi-Fi and the rest stay. A row: The backup in this browser, with Download this backup. Link: Use a backup file. Button: Continue. From a terminal instead: tools/install/fel-install.sh --undo ~/s1-backup." width="100%">
+<img src="../../../docs/img/kiln/undo.webp" alt="Put it back. Two choices: As it came from Aqara (selected): the original software, then a factory reset on the panel, everything is removed. Keep its settings: Aqara's apps come back first, over USB with the panel running; Wi-Fi and the rest stay. A row: The backup in this browser, with Download this backup. Link: Use a backup file. Button: Continue. From a terminal instead: tools/install/fel-install.sh --undo ~/s1-backup." width="100%">
 
 *Choose how far back, and which backup. Kiln uses the backup in this browser, or **Use a backup
 file** for the `.zip`.*
@@ -287,8 +287,8 @@ file** for the `.zip`.*
 
 <table>
 <tr>
-<td width="50%"><img src="img/kiln/restore.webp" alt="Restore: Keep it plugged in. Putting the original software back, 45 percent. Found your S1 Plus, started the installer in its memory, putting the original software back. Each part is checked after it is written."></td>
-<td width="50%"><img src="img/kiln/undo-done.webp" alt="The original software is back. One last step, on the panel: swipe down, tap Settings on the S1 Kiosk notification, then Advanced settings, Factory reset. Button: Back to Kiln."></td>
+<td width="50%"><img src="../../../docs/img/kiln/restore.webp" alt="Restore: Keep it plugged in. Putting the original software back, 45 percent. Found your S1 Plus, started the installer in its memory, putting the original software back. Each part is checked after it is written."></td>
+<td width="50%"><img src="../../../docs/img/kiln/undo-done.webp" alt="The original software is back. One last step, on the panel: swipe down, tap Settings on the S1 Kiosk notification, then Advanced settings, Factory reset. Button: Back to Kiln."></td>
 </tr>
 <tr>
 <td><em>Restore. Keep it plugged in.</em></td>
@@ -368,7 +368,7 @@ NO_BL31=1 tools/fel/fel-boot.sh &&            # our U-Boot in RAM; it starts fas
 the panel's **App update**. Press **Install**; the panel downloads it, checks its checksum and
 signing key, installs it and restarts the app. There's nothing to confirm on the panel (on boot
 software from before the first releases, Android asks on the panel's screen). Details:
-[esphome.md](esphome.md#app-updates).
+[esphome.md](../../../docs/esphome.md#app-updates).
 
 - **On v0.4.0 or older, update by hand once.** Those versions can't install an update from Home
   Assistant: it always fails with "the APK is not signed". Plug the panel in, open Kiln, choose
@@ -412,7 +412,7 @@ tools/install.sh --url http://homeassistant.local:8123 \
   get the radio modes with the root helper from `fel-install.sh`.
 - Undo from the CLI: see [Undo](#undo).
 
-How each step works, and why: [frames/aqara-s1-plus/research/root.md](../frames/aqara-s1-plus/research/root.md) and [frames/aqara-s1-plus/research/fel.md](../frames/aqara-s1-plus/research/fel.md).
+How each step works, and why: [frames/aqara-s1-plus/research/root.md](../research/root.md) and [frames/aqara-s1-plus/research/fel.md](../research/fel.md).
 
 ## Switching a development build to a release
 
@@ -438,7 +438,7 @@ plan without changing anything.
 
 - **Root** here means that adb's shell can run `su`. That is only the case with a development boot
   image (`DEV_SU_HOURS`) or a Magisk policy for the adb shell, see
-  [frames/aqara-s1-plus/research/root.md](../frames/aqara-s1-plus/research/root.md#persistent-root-magisk--the-s1-kiosk-root-helper). A normal
+  [frames/aqara-s1-plus/research/root.md](../research/root.md#persistent-root-magisk--the-s1-kiosk-root-helper). A normal
   install doesn't give adb root. The installer checks with `su -c id`.
 - The Wi-Fi password is never written to a file, a log or the screen. A network that S1 Kiosk didn't
   save, for example one set up in Aqara's settings, is not affected.
@@ -459,7 +459,7 @@ within seconds after boot, and whenever it changes later.
 - The installer records your choice (`persist.s1kiosk.timezone`) along with setting it.
 - To change it later: the panel's ESPHome device in Home Assistant, Configuration, **Time zone**: an id
   like `Europe/Berlin` or `America/New_York`. HA adds it turned off, so turn it on first
-  ([how](esphome.md#categories-and-defaults)). It only accepts zones the panel knows, and only from Home
+  ([how](../../../docs/esphome.md#categories-and-defaults)). It only accepts zones the panel knows, and only from Home
   Assistant's encrypted connection. **Time zone status** (Diagnostic) says whether the zone is being
   kept.
 - Panels set up before this: on their first boot with the new helper it keeps the zone that is in place
@@ -482,4 +482,4 @@ within seconds after boot, and whenever it changes later.
 | *Something went wrong while writing*, or a read-back didn't match | Kiln stops and doesn't restart the panel, which may not start now. Don't unplug it while Kiln is writing. Once it has stopped, unplug it, put it in recovery mode again (hold the button, plug in) and use *Undo with your backup*, or try again. FEL is always available. |
 | *The panel didn't finish starting* | Unplug it and plug it back in, then use **Finish setting up**. |
 | *This backup can't undo the install* | See [Which backup](#which-backup). Nothing on the panel was changed. |
-| The screen turns off at night | That's the kiosk's night mode, which you can tune in Home Assistant. With `install.sh --keep-dnd`, Aqara's own Do Not Disturb (22:00–07:00) also forces it off; see [frames/aqara-s1-plus/research/screen-policy.md](../frames/aqara-s1-plus/research/screen-policy.md). |
+| The screen turns off at night | That's the kiosk's night mode, which you can tune in Home Assistant. With `install.sh --keep-dnd`, Aqara's own Do Not Disturb (22:00–07:00) also forces it off; see [frames/aqara-s1-plus/research/screen-policy.md](../research/screen-policy.md). |

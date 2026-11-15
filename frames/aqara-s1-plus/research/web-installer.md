@@ -1,7 +1,7 @@
 # Browser installer (WebUSB) — design
 
 > **Historical note.** This is the spec written *before* the installer was built. The installer now
-> exists in [`kiln/`](../../../kiln/src/README.md); the user guide is [docs/install.md](../../../docs/install.md).
+> exists in [`kiln/`](../../../kiln/src/README.md); the user guide is [docs/install.md](../docs/install.md).
 > Where the shipped code and this spec differ, the code wins.
 
 **Status: design only. Nothing here is implemented yet, and nothing in it touches a panel.**
@@ -676,7 +676,7 @@ Not checked: the first-install timeline (above), and whether the signing-key swi
 ### 8.1 Happy path (factory panel), mirroring `fel-install.sh` steps 1-8
 1. **Welcome / OS onboarding** (§11): per-OS driver/permission note + browser check.
 2. **Enter FEL** — show `docs/img/fel-button.jpg` (1400×695) and instructions: power off, hold PCB
-   button, plug USB-C, hold ~10 s ([docs/install.md](../../../docs/install.md#finding-the-fel-button)). "Connect" → `requestDevice`
+   button, plug USB-C, hold ~10 s ([docs/install.md](../docs/install.md#finding-the-fel-button)). "Connect" → `requestDevice`
    `1f3a:efe8`; run `ver`; gate `0x1855` (§1).
 3. **Boot our U-Boot** — SPL + U-Boot upload + reset64 (§2); wait for the `1f3a:1010` re-enumeration;
    second `requestDevice` for fastboot; getvar gate (§1).

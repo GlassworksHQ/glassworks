@@ -1,6 +1,6 @@
 # Onboarding plan: from "fresh panel" to "showing my dashboard" with minimal config
 
-> **Setting up a panel?** Follow [install.md](install.md) (steps 4 and 5). This page is the design and
+> **Setting up a panel?** Follow [install.md](../frames/aqara-s1-plus/docs/install.md) (steps 4 and 5). This page is the design and
 > research behind those steps: how each piece works and what was verified.
 
 Goal: a user who has just installed S1 Kiosk never types a URL, token, IP or key on the panel.
@@ -253,7 +253,7 @@ line, both ways:
   restart, the same rule as the Panes card. Kiln sends it for a fresh panel kept on Off, when
   `radio.answered` is false.
 - `radio.set_allow` (first name `set_radio_allow`) with `allow`: who may reach the radio's TCP
-  services, as the `Radio allowed clients` entity ([radio.md](radio.md)).
+  services, as the `Radio allowed clients` entity ([radio.md](../frames/aqara-s1-plus/docs/radio.md)).
 - While connected, `{"event":"state","state":…}` is pushed whenever the serialized state changes
   (checked every 1.5 s, once the client has asked for the state).
 - No secrets ever: no tokens, no API key, no passwords.

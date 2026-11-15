@@ -427,8 +427,8 @@ check "and says why" has "$out" "could not check the splash in $T/undo/bootloade
 check "before any tool runs" test ! -s "$T/tools.log"
 check "nothing written" test ! -e "$T/emmc/bootloader"
 
-echo "== docs/install.md#undo: the by-hand check passes boot and vbmeta, and stops on either"
-CHK=$(awk '/install-tests.sh runs this block/ {f = 1; next} f && /^```sh$/ {g = 1; next} g && /^```$/ {exit} g' "$REPO/docs/install.md")
+echo "== frames/aqara-s1-plus/docs/install.md#undo: the by-hand check passes boot and vbmeta, and stops on either"
+CHK=$(awk '/install-tests.sh runs this block/ {f = 1; next} f && /^```sh$/ {g = 1; next} g && /^```$/ {exit} g' "$REPO/frames/aqara-s1-plus/docs/install.md")
 check "the doc has the check" test -n "$CHK"
 bh() { (cd "$1" && sh -c "$CHK" 2>&1); }
 mkdir -p "$T/bh"

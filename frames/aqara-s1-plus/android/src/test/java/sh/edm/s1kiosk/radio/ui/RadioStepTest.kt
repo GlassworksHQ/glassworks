@@ -18,7 +18,7 @@ class RadioStepTest {
             listOf(RadioMode.OFF, RadioMode.ZIGBEE_TCP, RadioMode.THREAD, RadioMode.ZIGBEE_ROUTER, RadioMode.THREAD_ROUTER),
             RadioStep.OPTIONS.map { it.mode },
         )
-        // Verified: Off, the Zigbee coordinator and the Thread border router. The repeaters are experimental (docs/radio.md).
+        // Verified: Off, the Zigbee coordinator and the Thread border router. The repeaters are experimental (frames/aqara-s1-plus/docs/radio.md).
         assertEquals(
             listOf(RadioMode.ZIGBEE_ROUTER, RadioMode.THREAD_ROUTER),
             RadioStep.OPTIONS.filter { it.experimental }.map { it.mode },

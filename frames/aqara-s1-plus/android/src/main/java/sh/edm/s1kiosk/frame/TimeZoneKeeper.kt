@@ -10,7 +10,7 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 /**
- * The panel's time zone (docs/install.md "Time zone"). Aqara's SystemManager resets it at every boot
+ * The panel's time zone (frames/aqara-s1-plus/docs/install.md "Time zone"). Aqara's SystemManager resets it at every boot
  * (with its own cloud-side setting empty it picks the first zone at UTC+8, Antarctica/Casey), and the
  * app can't set the zone itself (SET_TIME_ZONE is a privileged permission). So the app only records
  * the wanted zone in [PROP]; the root helper (v4) applies it and puts it back whenever it drifts, and
@@ -36,7 +36,7 @@ class TimeZoneKeeper(
         /**
          * [PROP] while the pane is off (#67). Not a zone id, so the v4 helper keeps no zone, adopts none
          * and reports it as `error: '(off)' is not a time zone id`. An empty value can't mean off: the
-         * helper adopts the zone in place then (docs/radio.md, Time zone).
+         * helper adopts the zone in place then (frames/aqara-s1-plus/docs/radio.md, Time zone).
          */
         const val OFF = "(off)"
         private const val OFF_SEEN = "error: '$OFF'"

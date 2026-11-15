@@ -6,7 +6,7 @@
 # through the new app.
 #
 # Runs as root: pushed to /data/local/tmp and started with `su -c 'sh <this> <command>'` from adb's
-# shell, only on panels where adb's shell has root (a development boot image, see docs/install.md).
+# shell, only on panels where adb's shell has root (a development boot image, see frames/aqara-s1-plus/docs/install.md).
 # It takes no secrets as input and writes none to disk.
 #
 #   wifi-list      kiosk-saved networks, one per line: "<n> <psk|open|wep|other> <SSID as stored>"

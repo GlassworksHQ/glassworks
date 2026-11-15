@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         If the installer stopped partway, your backup is safe and FEL mode is always there. Don't
-        retry a flash until you've read [Troubleshooting](https://github.com/GlassworksHQ/glassworks/blob/main/docs/install.md#troubleshooting).
+        retry a flash until you've read [Troubleshooting](https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/install.md#troubleshooting).
         Security problems go through [SECURITY.md](https://github.com/GlassworksHQ/glassworks/blob/main/SECURITY.md), not here.
 
   - type: dropdown

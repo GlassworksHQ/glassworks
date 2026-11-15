@@ -1,7 +1,7 @@
 package sh.edm.s1kiosk.radio
 
 /**
- * The panel's EFR32 radio modes (docs/radio.md). [id] is what is stored (app prefs and the helper's
+ * The panel's EFR32 radio modes (frames/aqara-s1-plus/docs/radio.md). [id] is what is stored (app prefs and the helper's
  * `persist.s1kiosk.radio_mode`); [label] is the option shown in Home Assistant's `Radio mode` select.
  *
  * There is no "Aqara (stock)" mode: with Aqara's launcher/apps disabled and its cloud blocked nothing
@@ -26,7 +26,7 @@ enum class RadioMode(val id: String, val label: String, val needsHelper: Boolean
     THREAD_ROUTER("thread_router", "Thread router (repeater)", true, minHelperVersion = 2);
 
     // Concurrent Zigbee + Thread on the one multi-PAN radio (shared channel) is deliberately not a
-    // mode here: Home Assistant deprecated multiprotocol for the same hardware design (docs/radio.md).
+    // mode here: Home Assistant deprecated multiprotocol for the same hardware design (frames/aqara-s1-plus/docs/radio.md).
     // The helper still accepts the experimental id "zigbee_tcp_thread" when set by hand.
 
     /**
@@ -112,7 +112,7 @@ object AqaraRadio {
 }
 
 /**
- * Contract with the root helper that the boot-image patch will install (docs/radio.md).
+ * Contract with the root helper that the boot-image patch will install (frames/aqara-s1-plus/docs/radio.md).
  * The app writes [PROP_MODE] and `ctl.restart`s [SERVICE]; the helper (tools/radio/s1kiosk_radio.sh)
  * applies the mode, supervises its processes and reports in [PROP_STATUS].
  */
