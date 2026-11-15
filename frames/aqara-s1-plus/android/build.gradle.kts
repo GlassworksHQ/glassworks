@@ -97,9 +97,6 @@ android {
 }
 
 dependencies {
-    // Voice assistant: wake word inference, microWakeWord and the legacy openWakeWord (ships every ABI;
-    // abiFilters keeps the one built, minSdk 19).
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
     // Libraries extracted from this app (app/libs/). esphome-api brings BouncyCastle (Noise), which
     // Sendspin's encryption also uses.
     implementation(project(":glassworks-pane-api"))
@@ -109,12 +106,10 @@ dependencies {
     implementation(project(":pane-bluetooth-proxy"))
     implementation(project(":pane-camera"))
     implementation(project(":pane-notifications"))
+    implementation(project(":pane-assist"))
     implementation(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy")) // the Bluetooth proxy pane's engine (#121)
-    // Audio playback (TTS, announcements, media player): streams over HTTP in-process, avoiding the
-    // vendor CedarX HTTP stack. Same version GeckoView already ships.
-    implementation("androidx.media3:media3-exoplayer:1.11.1")
     // XZ decoder (pure Java, 0BSD) for Silicon Labs' zigbeed .deb (radio/SisdkZigbeed.kt).
     implementation("org.tukaani:xz:1.10")
 
