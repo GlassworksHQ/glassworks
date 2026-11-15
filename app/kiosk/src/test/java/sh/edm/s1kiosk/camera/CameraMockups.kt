@@ -52,7 +52,8 @@ import java.util.concurrent.Executors
 
 /**
  * Mock-ups of the camera pane's screens (#117) on a panel with a camera, at the panel's 1440x720 px:
- * its page in each state, the "● Camera" pill on a dashboard, and setup's Panes and Camera steps. The
+ * its page in each state, the privacy dot on a dashboard (below Android 12 only), and setup's Panes and
+ * Camera steps. The
  * page reads a real [CameraPane] driven with a fake camera and stream. Illustrative values only: RFC
  * 5737 addresses, no images of anyone. Skipped unless asked:
  *   ./gradlew :kiosk:testDebugUnitTest --tests '*CameraMockups*' -Ps1MockupDir=<dir>
@@ -156,13 +157,13 @@ class CameraMockups {
         Mockup.save(name, o)
     }
 
-    /** A stand-in for a dashboard, as the timer mock-ups draw it, with the pill as MainActivity places it. */
-    private fun dashboard(name: String) {
+    /** A stand-in for a dashboard, as the timer mock-ups draw it, with the dot as MainActivity places it on Android [api]. */
+    private fun dashboard(name: String, api: Int) {
         val a = Mockup.activity()
         val root = FrameLayout(a)
         root.addView(FakeDashboard(a), FrameLayout.LayoutParams(-1, -1))
-        val pill = CameraPill(a).apply { show(true) }
-        root.addView(pill, pill.layoutParams())
+        val dot = CameraDot(a, dev.glassworks.platform.PlatformApi(api)).apply { show(true) } // images leaving
+        root.addView(dot, dot.layoutParams())
         a.setContentView(root, android.view.ViewGroup.LayoutParams(-1, -1))
         Mockup.idle()
         Mockup.save(name, root)
@@ -233,7 +234,8 @@ class CameraMockups {
         off.pane.stop()
         off.def.switch.on = false
         shot("camera-07-off", menu(off))
-        dashboard("camera-08-pill")
+        dashboard("camera-08-dot-android-10", api = 29)
+        dashboard("camera-08b-no-dot-android-13", api = 33)
         setupShot("camera-09-setup-panes", SetupFlow.PANES)
         setupShot("camera-10-setup-camera-asks", "camera")
         setupShot("camera-11-setup-camera-refused", "camera") { s -> Mockup.label(s, "Allow the camera").let { if (!it.performClick()) (it.parent as View).performClick() } }

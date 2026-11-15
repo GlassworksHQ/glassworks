@@ -102,9 +102,9 @@ below as the release notes.
   shows the username and, when you tap it, the password. Everything is off until you turn it on,
   and *Camera privacy* closes the camera. The camera has its own page in the panel's settings, with
   the panel's address and the stream's URLs, and a Camera step in setup that asks Android for the
-  camera. A green "● Camera" pill sits at the top right whenever images leave the panel. On the S1,
-  which has no camera, the panel's settings say the pane can't run, and Home Assistant gets nothing
-  new.
+  camera. Whenever images leave the panel, Android 12 and later show their own camera indicator, and
+  older Android a small green dot in the top-right corner. On the S1, which has no camera, the
+  panel's settings say the pane can't run, and Home Assistant gets nothing new.
 - **The panel can be a Bluetooth proxy for Home Assistant.** Turn on *Bluetooth proxy* in the
   panel's settings or on setup's Panes step, and Home Assistant finds it by itself and hears the
   Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a

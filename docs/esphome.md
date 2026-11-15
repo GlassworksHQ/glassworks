@@ -427,8 +427,9 @@ On the panel, *Settings → Camera* shows how the camera is doing, what it may d
 Presence + snapshots), Camera privacy and the stream switch, the stream's sign-in, the panel's address
 with the stream's RTSP and ONVIF URLs, and who watches now. First-boot setup has a Camera step under
 Panes that picks the use and asks Android for the camera. While images leave the panel (a still to
-Home Assistant, the stream to a viewer), a green "● Camera" pill shows at the top right, under
-Android's own camera dot.
+Home Assistant, the stream to a viewer), Android 12 and later show their own camera indicator; on
+older Android the panel shows a small green dot in the top-right corner, over no content. The page's
+*Images out* tile says the same.
 
 **The stream's sign-in is made for each panel.** The first time the stream is turned on without one,
 the panel makes its own: the username `glassworks` and a random 20-character password (letters and
