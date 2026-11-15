@@ -36,7 +36,7 @@ const GROUP = "dev.glassworks";
 const OUT = join(site, "public/docs/libraries");
 const STATE = join(site, ".api-docs");
 // one cache per repository, so a jar from MAVEN_REPO never stands in for Central's
-const CACHE = join(STATE, "cache", MAVEN.replace(/^https?:\/\//, "").replace(/[^\w.-]+/g, "_"));
+const CACHE = join(STATE, "cache", MAVEN.replace(/[^\w.-]+/g, "_"));
 
 const read = (p) => readFileSync(p, "utf8");
 const writeAtomic = (p, data) => {
@@ -225,7 +225,8 @@ async function reference(lib, out) {
     if (!meta) return { kind: "unreleased" };
     const xml = meta.toString("utf8");
     const version = (xml.match(/<release>([^<]+)<\/release>/) ?? xml.match(/<latest>([^<]+)<\/latest>/))?.[1].trim();
-    if (!version) throw new Error(`${lib.name}: maven-metadata.xml names no release`);
+    // the version names folders the cache deletes and rewrites: a plain version only
+    if (!version || !/^\w[\w.+-]*$/.test(version)) throw new Error(`${lib.name}: maven-metadata.xml names no usable release (${version})`);
     unpack(await javadocJar(lib.name, version), dir, lib, version);
     return { kind: "site", version, href: href(lib.name) };
   } catch (e) {
