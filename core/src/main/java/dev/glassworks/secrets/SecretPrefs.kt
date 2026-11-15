@@ -30,8 +30,11 @@ class SecretPrefs(
     private val store: SecretStore,
     private val warn: (String) -> Unit = { Log.w(SecretStore.TAG, it) },
 ) : SharedPreferences {
-    /** Sealed text to its value: the key store is a binder call away, and settings are read often. */
-    private val opened = ConcurrentHashMap<String, String>()
+    /**
+     * Each secret's last opened value, by key, with the sealed text it came from: the key store is a binder
+     * call away, and settings are read often. One per key, so a replaced value isn't kept.
+     */
+    private val opened = ConcurrentHashMap<String, Pair<String, String>>()
     private val warned: MutableSet<Warning> = ConcurrentHashMap.newKeySet()
     private val listeners = HashMap<SharedPreferences.OnSharedPreferenceChangeListener, SharedPreferences.OnSharedPreferenceChangeListener>()
 
@@ -69,9 +72,9 @@ class SecretPrefs(
     private fun read(key: String, stored: String?): Read {
         if (stored == null) return Read.Absent
         if (!SecretStore.isSealed(stored)) return Read.Value(stored)
-        opened[stored]?.let { return Read.Value(it) }
+        opened[key]?.takeIf { it.first == stored }?.let { return Read.Value(it.second) }
         return when (val o = store.open(stored, scope(key))) {
-            is SecretStore.Opened.Value -> Read.Value(o.text).also { opened[stored] = o.text }
+            is SecretStore.Opened.Value -> Read.Value(o.text).also { opened[key] = stored to o.text }
             SecretStore.Opened.Lost -> {
                 warnOnce(Warning.LOST, "$file/$key was sealed with a key this panel no longer has; it is removed and needs setting again")
                 synchronized(this) { if (raw.all[key] == stored) commit(raw.edit().remove(key), "removing $key") }
@@ -174,7 +177,8 @@ class SecretPrefs(
             return false
         }
 
-        override fun commit(): Boolean = allowed() && e.commit()
-        override fun apply() { if (allowed()) e.apply() }
+        // Under the same lock as removing a lost value in read(), so that never removes a value written meanwhile.
+        override fun commit(): Boolean = synchronized(this@SecretPrefs) { allowed() && e.commit() }
+        override fun apply() = synchronized(this@SecretPrefs) { if (allowed()) e.apply() }
     }
 }

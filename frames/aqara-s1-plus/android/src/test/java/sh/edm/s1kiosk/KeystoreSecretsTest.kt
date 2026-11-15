@@ -83,14 +83,14 @@ class KeystoreSecretsTest {
         assertEquals("one key, made once", setOf(SecretStore.KEY_ALIAS), FakeAndroidKeyStore.keys.keys)
     }
 
-    @Test fun aKeyEntryThatCantBeReadIsReplacedAndItsSecretsAreLost() {
+    @Test fun aKeyEntryThatIsGoneForGoodIsReplacedAndItsSecretsAreLost() {
         KioskPrefs(app); PrefsSsStore(app)
         val old = FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS)
-        FakeAndroidKeyStore.unrecoverable = true
+        FakeAndroidKeyStore.unrecoverable = 17 // KEY_PERMANENTLY_INVALIDATED
         ShadowLog.clear()
         val prefs = KioskPrefs(app)
         assertNull("signed out", prefs.auth)
-        FakeAndroidKeyStore.unrecoverable = false
+        FakeAndroidKeyStore.unrecoverable = null
         assertNotEquals("a new key", old, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
         assertFalse(prefs.hasAuth)
         assertNull(prefs.noiseKeyStore.load())
@@ -102,6 +102,49 @@ class KeystoreSecretsTest {
         assertTrue(logs.none { token in it })
         prefs.auth = sh.edm.s1kiosk.auth.StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token")
         assertEquals("signing in again works", "made-up-new-token", KioskPrefs(app).auth?.refreshToken)
+    }
+
+    @Test fun aKeyEntryThatFailsForAMomentIsKept() {
+        KioskPrefs(app); PrefsSsStore(app)
+        val sealed = onDisk()
+        val old = FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS)
+        FakeAndroidKeyStore.unrecoverable = 4 // SYSTEM_ERROR: Android wraps it in UnrecoverableKeyException too
+        assertNull("reads as signed out for now", KioskPrefs(app).auth)
+        assertEquals("the same key", old, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
+        assertEquals("nothing removed", sealed, onDisk())
+        FakeAndroidKeyStore.unrecoverable = null
+        assertEquals(token, KioskPrefs(app).auth?.refreshToken)
+    }
+
+    /** The key store comes back between reading the pairings and writing them: the empty read must not replace them. */
+    @Test fun pairingsAreNeverReplacedByAListReadDuringAnOutage() {
+        PrefsSsStore(app).records().single()
+        var calls = 0
+        val flaky = SecretStore {
+            calls++
+            if (calls == 1) null else java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.getKey(SecretStore.KEY_ALIAS, null) as javax.crypto.SecretKey
+        }
+        val ss = PrefsSsStore(app, flaky)
+        ss.touchRecord("made-up-server", 9L)
+        ss.putRecord(SsPairingRecord("made-up-other", ByteArray(32), 2L), emptySet())
+        val back = PrefsSsStore(app).records()
+        assertTrue("still paired with the stored server: $back", back.any { it.serverId == "made-up-server" })
+    }
+
+    @Test fun aCameraSignInThatCantBeStoredSaysSo() {
+        KioskPrefs(app); PanePrefs(app)
+        val def = CameraDefinition(PanePrefs(app).paneFile("camera")).apply { switch.on = true }
+        FakeAndroidKeyStore.down = true
+        val item = def.settings().single().items.filterIsInstance<dev.glassworks.pane.SettingsItem.Group>().flatMap { it.items }
+            .filterIsInstance<dev.glassworks.pane.SettingsItem.SignIn>().single()
+        var answer: String? = "none"
+        item.save("made-up-user" to "made-up-typed-in-outage") { answer = it }
+        assertEquals(dev.glassworks.camera.CameraPrefs.NOT_SAVED, answer)
+        answer = "none"
+        item.save(null) { answer = it }
+        assertEquals("a clear isn't saved either", dev.glassworks.camera.CameraPrefs.NOT_SAVED, answer)
+        FakeAndroidKeyStore.down = false
+        assertEquals("made-up-user" to "made-up-camera-pass-7", PanePrefs(app).camera.signIn)
     }
 
     @Test fun aKeyStoreOutageWritesNothingBack() {
@@ -121,8 +164,8 @@ class KeystoreSecretsTest {
         ss.putRecord(SsPairingRecord("made-up-other", ByteArray(32), 2L), emptySet())
         ss.touchRecord("made-up-server", 3L)
         ss.removeRecord("made-up-server")
-        PanePrefs(app).camera.signIn = "made-up-user" to "made-up-typed-in-outage"
-        PanePrefs(app).camera.signIn = null
+        assertTrue("a camera sign-in isn't stored, and says so", runCatching { PanePrefs(app).camera.signIn = "made-up-user" to "made-up-typed-in-outage" }.isFailure)
+        assertTrue(runCatching { PanePrefs(app).camera.signIn = null }.isFailure)
         assertEquals("nothing replaced, nothing removed, nothing regenerated", sealed, onDisk())
 
         FakeAndroidKeyStore.down = false
@@ -161,7 +204,6 @@ class KeystoreSecretsTest {
         val keys = dev.glassworks.esphome.NoiseKeys(prefs.noiseKeyStore)
         assertTrue("nobody gets in, not plaintext", keys.locked)
         assertFalse(keys.provisionable)
-        assertFalse(keys.handleSetKey(java.util.Base64.getEncoder().encode(ByteArray(32) { 9 })).success)
         FakeAndroidKeyStore.down = false
         val after = dev.glassworks.esphome.NoiseKeys(KioskPrefs(app).noiseKeyStore)
         assertTrue("the same key once the key store is back", after.hasKey && !after.locked)

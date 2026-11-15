@@ -27,12 +27,16 @@ import javax.crypto.spec.SecretKeySpec
  * A software stand-in for Android's `AndroidKeyStore` provider, which Robolectric doesn't have, so the
  * app's real Keystore code (KeystoreKey, SecretStore.keystore()) runs in a JVM test. Keys are plain AES
  * keys in memory. [down] makes the key store fail to load (an outage); [unrecoverable] makes reading a
- * key fail as a broken Keystore entry does. [install] before a test, [uninstall] after it.
+ * key fail as Android does, with the key store's error code in the cause ([Error]): 17
+ * (KEY_PERMANENTLY_INVALIDATED) is gone for good, 4 (SYSTEM_ERROR) passes. [install] before a test, [uninstall] after it.
  */
 object FakeAndroidKeyStore {
     val keys = ConcurrentHashMap<String, SecretKey>()
     @Volatile var down = false
-    @Volatile var unrecoverable = false
+    @Volatile var unrecoverable: Int? = null
+
+    /** Stands in for android.security.KeyStoreException, which the app reads by its getErrorCode(). */
+    class Error(private val code: Int) : Exception("key store error $code") { fun getErrorCode(): Int = code }
 
     private val provider = object : Provider("AndroidKeyStore", 1.0, "test stand-in for Android's key store") {
         init {
@@ -48,14 +52,15 @@ object FakeAndroidKeyStore {
 
     fun uninstall() {
         Security.removeProvider(provider.name)
-        keys.clear(); down = false; unrecoverable = false
+        keys.clear(); down = false; unrecoverable = null
     }
 
     class Store : KeyStoreSpi() {
         override fun engineLoad(stream: InputStream?, password: CharArray?) { if (down) throw java.io.IOException("key store down") }
         override fun engineGetKey(alias: String, password: CharArray?): Key? {
             if (down) throw KeyStoreException("key store down")
-            if (unrecoverable && keys.containsKey(alias)) throw UnrecoverableKeyException("broken entry")
+            val code = unrecoverable
+            if (code != null && keys.containsKey(alias)) throw UnrecoverableKeyException("Failed to obtain information about key").apply { initCause(Error(code)) }
             return keys[alias]
         }
         override fun engineDeleteEntry(alias: String) { keys.remove(alias) }

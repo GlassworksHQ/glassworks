@@ -62,8 +62,8 @@ class SecretStore(private val key: () -> SecretKey?) {
         } catch (e: AEADBadTagException) {
             Opened.Lost
         } catch (e: InvalidKeyException) {
-            // KeyPermanentlyInvalidatedException is one: the key is there but can never be used again.
-            Opened.Lost
+            // Android 10 maps many key store failures to this, passing ones too: lost only when it says so.
+            if (KeystoreKey.lostForGood(e)) Opened.Lost else Opened.Unavailable
         } catch (e: GeneralSecurityException) {
             Opened.Unavailable
         } catch (e: RuntimeException) {

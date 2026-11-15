@@ -65,5 +65,18 @@ class SecretStoreTest {
         assertEquals("it may open later", SecretStore.Opened.Unavailable, none.open(sealed, "kiosk/api_key"))
     }
 
+    /** Android 10 hands key store errors on as their causes; only some say the key is gone (AOSP KeyStore.java). */
+    @Test fun onlyAKeyStoreCodeThatMeansGoneForGoodIsLost() {
+        class Coded(private val code: Int) : Exception() { fun getErrorCode() = code }
+        for (code in listOf(7, 8, 17, -33)) {
+            assertTrue("$code", dev.glassworks.platform.KeystoreKey.lostForGood(java.security.InvalidKeyException("Keystore operation failed", Coded(code))))
+        }
+        for (code in listOf(2, 3, 4, 6, 15)) {
+            assertFalse("$code", dev.glassworks.platform.KeystoreKey.lostForGood(java.security.InvalidKeyException("Keystore operation failed", Coded(code))))
+        }
+        assertFalse("no code: may pass", dev.glassworks.platform.KeystoreKey.lostForGood(java.security.InvalidKeyException("x")))
+        assertEquals(17, dev.glassworks.platform.KeystoreKey.errorCode(java.security.UnrecoverableKeyException("x").apply { initCause(Coded(17)) }))
+    }
+
     private fun aesKey(): SecretKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
 }

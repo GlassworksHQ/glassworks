@@ -356,6 +356,7 @@ public final class dev/glassworks/esphome/MemoryKeyStore : dev/glassworks/esphom
 	public synthetic fun <init> ([BILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun load ()[B
 	public fun save ([B)Z
+	public fun unreadable ()Z
 }
 
 public final class dev/glassworks/esphome/Msg {
@@ -443,6 +444,11 @@ public final class dev/glassworks/esphome/NoiseCipher {
 public abstract interface class dev/glassworks/esphome/NoiseKeyStore {
 	public abstract fun load ()[B
 	public abstract fun save ([B)Z
+	public abstract fun unreadable ()Z
+}
+
+public final class dev/glassworks/esphome/NoiseKeyStore$DefaultImpls {
+	public static fun unreadable (Ldev/glassworks/esphome/NoiseKeyStore;)Z
 }
 
 public final class dev/glassworks/esphome/NoiseKeys {
@@ -450,6 +456,7 @@ public final class dev/glassworks/esphome/NoiseKeys {
 	public fun <init> (Ldev/glassworks/esphome/NoiseKeyStore;)V
 	public final fun getHasKey ()Z
 	public final fun getLatest ()[B
+	public final fun getLocked ()Z
 	public final fun getProvisionable ()Z
 }
 

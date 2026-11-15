@@ -152,24 +152,27 @@ object HaAuth {
         }
     }
 
-    /** Revokes the refresh token at HA (best effort) and deletes it. [done] on the auth thread. */
-    fun signOut(reason: String, done: () -> Unit = {}) {
+    /**
+     * Revokes the refresh token at HA (best effort) and deletes it. [done] on the auth thread, with false
+     * when the token couldn't be deleted (the key store is down: it stays, and signs in again once it's back).
+     */
+    fun signOut(reason: String, done: (signedOut: Boolean) -> Unit = {}) {
         exec.execute {
             val auth = prefs.auth
             if (auth != null) {
                 val ok = tokens.revoke(auth)
                 AuthLog.i("Signed out ($reason); revoke ${if (ok) "sent" else "not reachable"}")
             }
-            clearLocal()
-            done()
+            done(clearLocal())
         }
     }
 
-    private fun clearLocal() {
+    /** Deletes the stored sign-in; false when it couldn't be (the key store is down, so the sealed token stays). */
+    private fun clearLocal(): Boolean {
         val had = prefs.hasAuth
-        // During a key store outage the sealed token stays (it reads as signed out until the store is back).
-        try { prefs.auth = null } catch (e: SignInNotStored) { AuthLog.w("${e.message}; it stays until the key store is back") }
+        val cleared = try { prefs.auth = null; true } catch (e: SignInNotStored) { AuthLog.w("${e.message}; it stays until the key store is back"); false }
         cache.clear()
         if (had) notifyChanged()
+        return cleared
     }
 }

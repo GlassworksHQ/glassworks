@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.sendspin
 
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.secrets.SecretPrefs
 import dev.glassworks.secrets.SecretStore
 import sh.edm.s1kiosk.SecretFiles
 import android.content.Context
@@ -49,10 +50,12 @@ class PrefsSsStore(context: Context, secrets: SecretStore = SecretStore.keystore
     @Synchronized override fun records() = SsStore.decodeRecords(sp.getString("records", null))
 
     /**
-     * Rewrites the pairings from [records]. While the stored ones can't be read (an outage), [records] is
-     * empty and the store refuses the edit (SecretPrefs never replaces a sealed value it can't read).
+     * Rewrites the pairings from [records], unless the stored ones can't be read now. Then [records] is
+     * empty, and if the key store came back between that read and the write, the empty list would replace
+     * every pairing. A true [SecretPrefs.canRead] keeps the opened value, so the read below sees it.
      */
     private fun writeRecords(commit: Boolean, change: (List<SsPairingRecord>) -> List<SsPairingRecord>) {
+        if (!sp.canRead("records")) return
         val e = sp.edit().putString("records", SsStore.encodeRecords(change(records())))
         if (commit) e.commit() else e.apply()
     }

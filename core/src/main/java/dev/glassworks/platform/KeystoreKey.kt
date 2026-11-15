@@ -36,9 +36,10 @@ class KeystoreKey(private val alias: String, private val warn: (String) -> Unit)
             val k = try {
                 store.getKey(alias, null) as? SecretKey
             } catch (e: UnrecoverableKeyException) {
-                // The entry is there but can never be read again: what it sealed is lost either way, so
-                // start over with a new key (signed out, paired again) rather than run without one.
-                warn("The secrets key couldn't be read (${e.javaClass.simpleName}); made a new one, so secrets need setting again")
+                // Android wraps every key store error in this one, a passing one too. Only an entry that is
+                // gone for good is replaced (signed out, paired again); anything else is an outage.
+                if (!lostForGood(e)) throw e
+                warn("The secrets key can't be read any more (${errorCode(e)}); made a new one, so secrets need setting again")
                 store.deleteEntry(alias)
                 null
             } ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, PROVIDER).run {
@@ -58,7 +59,27 @@ class KeystoreKey(private val alias: String, private val warn: (String) -> Unit)
         }
     }
 
-    private companion object {
-        const val PROVIDER = "AndroidKeyStore"
+    companion object {
+        private const val PROVIDER = "AndroidKeyStore"
+
+        /**
+         * The key store's error codes that mean a key is gone for good (read 2026-11-15 from AOSP
+         * android-10.0.0_r1 `keystore/java/android/security/KeyStore.java`): KEY_NOT_FOUND 7,
+         * VALUE_CORRUPTED 8 ("Key blob corrupted"), KEY_PERMANENTLY_INVALIDATED 17, and Keymaster's
+         * KM_ERROR_INVALID_KEY_BLOB -33. Android 10 hands 17 to Cipher.init as a plain
+         * InvalidKeyException, so the code decides, not the exception's type. Any other code (LOCKED 2,
+         * SYSTEM_ERROR 4, …) may pass, so it is an outage.
+         */
+        private val GONE_FOR_GOOD = setOf(7, 8, 17, -33)
+
+        /** The key store error code in [e]'s causes (android.security.KeyStoreException, read by name), or null. */
+        fun errorCode(e: Throwable): Int? = generateSequence(e) { it.cause }.take(8).firstNotNullOfOrNull { t ->
+            runCatching { t.javaClass.getMethod("getErrorCode").invoke(t) as? Int }.getOrNull()
+        }
+
+        /** [e] says the key can never be used again: a code in [GONE_FOR_GOOD], or KeyPermanentlyInvalidatedException. */
+        fun lostForGood(e: Throwable): Boolean =
+            generateSequence(e) { it.cause }.take(8).any { it is android.security.keystore.KeyPermanentlyInvalidatedException } ||
+                errorCode(e) in GONE_FOR_GOOD
     }
 }

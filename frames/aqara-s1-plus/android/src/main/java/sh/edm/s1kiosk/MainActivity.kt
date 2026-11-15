@@ -1105,7 +1105,7 @@ class MainActivity : Activity() {
     /** `externalApp.revokeExternalAuth`: the user logged out in the HA frontend. */
     private fun revokeExternalAuth(sender: PagePort, reply: (JSONObject) -> Unit) {
         if (!senderAllowed(sender)) { reply(JSONObject().put("success", false)); return }
-        HaAuth.signOut("logged out in the frontend") { reply(JSONObject().put("success", true)) }
+        HaAuth.signOut("logged out in the frontend") { ok -> reply(JSONObject().put("success", ok)) }
     }
 
     override fun onDestroy() {

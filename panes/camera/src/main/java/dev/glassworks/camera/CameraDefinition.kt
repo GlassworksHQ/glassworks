@@ -100,9 +100,8 @@ class CameraDefinition(
                             // An empty field keeps the stored password; if it was cleared since the sheet opened, there is none to keep.
                             val kept = prefs.signIn?.second
                             when {
-                                v == null -> { prefs.signIn = null; done(null) }
-                                v.second == null && kept == null -> done(SettingsChange.TYPE_PASSWORD)
-                                else -> { prefs.signIn = v.first to (v.second ?: kept!!); done(null) }
+                                v?.second == null && v != null && kept == null -> done(SettingsChange.TYPE_PASSWORD)
+                                else -> done(runCatching { prefs.signIn = v?.let { (u, p) -> u to (p ?: kept!!) } }.exceptionOrNull()?.message)
                             }
                         },
                         SettingsItem.Info({ "Address" }, { CameraPage.address(read().address) }),
