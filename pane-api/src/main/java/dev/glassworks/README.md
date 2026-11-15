@@ -192,7 +192,7 @@ Every S1 entity, with its category, default and reason:
 
 A pane takes its `PaneContext` in the constructor and overrides only what it needs. This is the
 shape of the Sendspin pane, the first one moved out of the S1 app
-([`SendspinPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPane.kt)):
+([`SendspinPane.kt`](../../../../../../panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPane.kt)):
 
 ```kotlin
 class MusicPane(ctx: PaneContext) : Pane {
@@ -263,7 +263,7 @@ home that already has the panel.
 
 A pane gets its settings file with `ctx.prefs(id)`, where the namespace is the pane's own id. It
 wraps the file in its own typed class and reads and writes only its own keys there, as the Sendspin
-pane does with [`SendspinPrefs`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPrefs.kt):
+pane does with [`SendspinPrefs`](../../../../../../panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPrefs.kt):
 
 ```kotlin
 private val prefs = SendspinPrefs(ctx.prefs(id))
