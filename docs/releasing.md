@@ -272,6 +272,30 @@ Vercel preview. Production builds come only from that deploy hook, called by `re
 `main` that changes an installer input (`kiln/`, `branding/`, or a repo file the installer stages), or
 by hand from the Actions tab.
 
+## Raising targetSdk
+
+`targetSdk` is in `frames/aqara-s1-plus/android/build.gradle.kts`, and only there. It opts the app
+into newer Android rules on newer devices. It doesn't change which devices can install the app:
+`minSdk` (26) decides that.
+
+Raise it once a year, when a new Android version comes out. Generic Android devices on Android 12+
+install updates without a tap only if the new APK targets a recent enough API, and each Android
+version raises that bar by one level (Android 17 needs 35;
+[frames/generic-android](../frames/generic-android/README.md#silent-self-update-android-12)).
+
+1. Read Android's "behaviour changes for apps targeting" page for the new level, and note in the PR
+   which items apply to the app and how each is handled.
+2. Raise `targetSdk` by one, in its own PR.
+3. Check it on the newest device we have (today the Pixel Tablet): the setup screen, the settings,
+   the overlays and the dashboard are not under the system bars, the foreground service starts after
+   a reboot, and an update from HA installs without a tap. Before/after screenshots go in the PR.
+4. `tools/release/check-update-compat.sh` must still pass: the target doesn't touch applicationId,
+   signing or versionCode.
+
+| Date | targetSdk | Why | PR |
+|---|---|---|---|
+| 2026-11-15 | 34 → 35 | Android 17 (the Pixel Tablet) installs updates without a tap | #277 |
+
 ## Building a signed APK locally
 
 The same environment variables as CI. Without them, `assembleRelease` produces an **unsigned** APK

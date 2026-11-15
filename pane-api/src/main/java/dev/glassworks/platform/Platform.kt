@@ -5,6 +5,7 @@
 package dev.glassworks.platform
 
 import android.app.ActivityManager
+import android.app.ActivityOptions
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
@@ -16,6 +17,7 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.os.Bundle
 
 /**
  * What the running Android can do. This is the only place in the app that reads
@@ -75,6 +77,14 @@ open class PlatformApi(
      */
     val hasSystemCameraIndicator: Boolean get() = apiLevel >= 31
 
+    /**
+     * An app may update itself without a tap (Android 12): a PackageInstaller session can ask for
+     * `USER_ACTION_NOT_REQUIRED`. Android still asks when the app lacks
+     * `UPDATE_PACKAGES_WITHOUT_USER_ACTION` or "Install unknown apps", or when the new APK targets
+     * too old an API for the device. Below it the session cannot ask, and Android always asks.
+     */
+    val canInstallWithoutUserAction: Boolean get() = apiLevel >= 31
+
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 
@@ -84,6 +94,20 @@ open class PlatformApi(
      * the flag does not exist and every PendingIntent is mutable.
      */
     val mutablePendingIntentFlag: Int get() = if (apiLevel >= 31) PendingIntent.FLAG_MUTABLE else 0
+
+    /**
+     * Options for an activity `PendingIntent` that must bring the app back from the background, such
+     * as the restart alarm: the app lends it its own right to start activities (the overlay app-op,
+     * or being HOME). From Android 15, for apps targeting 35, a PendingIntent no longer gets that by
+     * default, and AlarmManager lends none of its own. The option exists from Android 14; below it
+     * the default already lends it, so null.
+     */
+    @Suppress("DEPRECATION") // MODE_BACKGROUND_ACTIVITY_START_ALLOWED: ALLOW_IF_VISIBLE needs a visible window, and a restart has none
+    fun backgroundStartOptions(): Bundle? =
+        if (apiLevel >= 34) ActivityOptions.makeBasic()
+            .setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
+            .toBundle()
+        else null
 
     /**
      * Registers a receiver for a system broadcast that apps outside this one may also send. From
