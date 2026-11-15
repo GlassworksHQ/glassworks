@@ -52,7 +52,6 @@ class PanelManageParityTest {
     private val panelOnly = mapOf(
         "radio" to "the roles picker, the Thread dataset and the radio's actions (RadioSettingsView)",
         "wall-base" to "the relays' cards, or what a base adds (WallBaseViews)",
-        "bluetooth-proxy" to "the devices and Allow, which needs someone at the panel (BluetoothProxyPage)",
     )
 
     /** Every item and its key, a native view's twin too: its items' keys are their titles, as if they sat in the section (#269). */

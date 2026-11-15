@@ -3,6 +3,7 @@ package sh.edm.s1kiosk.settings
 import android.app.Application
 import android.view.View
 import dev.glassworks.bluetoothproxy.BluetoothProxyModel
+import dev.glassworks.bluetoothproxy.ProxyPage
 import dev.glassworks.bluetoothproxy.ProxyPhase
 import dev.glassworks.pane.SettingsItem
 import org.junit.Assert.assertEquals
@@ -76,6 +77,49 @@ class BluetoothProxyPageTest {
         val v = page(Model(ProxyPhase.OFF))
         assertTrue(shown(v, "The Bluetooth proxy is off. The panel doesn't scan, and Home Assistant no longer hears devices through it."))
         assertEquals(2, all(v).count { it.text == "Unavailable" && it.isShown })
+    }
+
+    /**
+     * #269: the page's typed twin (the Manage page's) says what the panel's page shows, in every phase:
+     * each of its words is on screen there, and each word the panel shows is in the twin.
+     */
+    @Test fun theTwinSaysWhatThePageSaysInEveryPhase() {
+        for (phase in ProxyPhase.entries) {
+            val m = Model(phase, ProxyStatus(phase == ProxyPhase.LISTENING, phase != ProxyPhase.OFF, null, 412, 37, lastHour = listOf(3, 9, 4), retryInMs = 4000))
+            val v = page(m)
+            val twin = ProxyPage.twin(m)
+            val words = twin.flatMap { i ->
+                when (i) {
+                    is SettingsItem.Status -> listOf(i.text())
+                    is SettingsItem.Info -> listOf(i.title(), i.detail())
+                    is SettingsItem.Action -> listOf(i.title, i.detail(), i.label)
+                    is SettingsItem.Tiles -> i.tiles().flatMap { listOf(it.name, it.value, it.detail) }
+                    is SettingsItem.Note -> listOf(i.text())
+                    is SettingsItem.States -> listOf(i.title) + i.rows().flatMap { listOf(it.name, it.value) }
+                    else -> error("$phase: no ${i::class.simpleName} on this page")
+                }
+            }.filter { it.isNotEmpty() }
+            for (w in words) assertTrue("$phase: the panel shows \"$w\"", all(v).any { it.text.toString() == w && it.isShown })
+            val panel = all(v).filter { it.isShown && it.text.isNotEmpty() }.map { it.text.toString() } - setOf(ProxyPage.ADS_UNIT)
+            for (w in panel) assertTrue("$phase: the twin has \"$w\"", w in words)
+        }
+    }
+
+    @Test fun theTwinsButtonTurnsBluetoothOnOrSaysWhyNot() {
+        val m = Model(ProxyPhase.BLUETOOTH_OFF, bluetoothOk = false)
+        val button = ProxyPage.twin(m).filterIsInstance<SettingsItem.Action>().single()
+        assertEquals("Turn on Bluetooth", button.label)
+        var answer: String? = "none"
+        button.run { answer = it }
+        assertEquals(listOf("bluetooth"), m.asked)
+        assertEquals(ProxyPage.REFUSED, answer)
+        m.bluetoothOk = true
+        button.run { answer = it }
+        assertEquals(null, answer)
+        val loc = Model(ProxyPhase.LOCATION_OFF)
+        ProxyPage.twin(loc).filterIsInstance<SettingsItem.Action>().single().run { answer = it }
+        assertEquals(listOf("location"), loc.asked)
+        assertTrue("no button where the app can't fix it", ProxyPage.twin(Model(ProxyPhase.NO_PERMISSION)).none { it is SettingsItem.Action })
     }
 
     private fun all(root: View): List<android.widget.TextView> = buildList {
