@@ -21,11 +21,14 @@ class AudioPipelineTest {
     private val flac = SsFormat.FLAC_48K_STEREO_16
     private val pcm = SsFormat.PCM_48K_STEREO_16
 
-    private class Rec : PcmOutput {
+    private class Rec(private val pushMs: Long = 0) : PcmOutput {
         val events: MutableList<String> = Collections.synchronizedList(ArrayList())
         val chunks: MutableList<PcmChunk> = Collections.synchronizedList(ArrayList())
         override fun start(f: SsFormat) { events += "start ${f.codec}/${f.sampleRate}/${f.channels}/${f.bitDepth}" }
-        override fun push(c: PcmChunk) { events += "push ${c.serverTsUs} ${c.frames}"; chunks += c }
+        override fun push(c: PcmChunk) {
+            if (pushMs > 0) Thread.sleep(pushMs)
+            events += "push ${c.serverTsUs} ${c.frames}"; chunks += c
+        }
         override fun clear(fromUs: Long?) { events += "clear $fromUs" }
         override fun end() { events += "end" }
     }
@@ -94,6 +97,18 @@ class AudioPipelineTest {
         assertEquals(header.toList(), made.single().opened!!.toList())
         assertEquals(3L, p.stats().flacFrames)
         assertTrue(failures.isEmpty())
+    }
+
+    /** #214: idle used to be reported between taking the last frame out of the decoder and pushing it. */
+    @Test
+    fun idleWaitsUntilTheLastFrameIsPushed() {
+        val out = Rec(pushMs = 20)
+        val p = pipeline(out)
+        p.start(flac, header)
+        p.audio(chunk(1_000_000, frames[0]))
+        p.audio(chunk(1_096_000, frames[1], frames[2]))
+        p.idle()
+        assertEquals(listOf(1_000_000L, 1_096_000L, 1_192_000L), out.chunks.map { it.serverTsUs })
     }
 
     @Test
