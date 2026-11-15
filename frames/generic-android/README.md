@@ -63,6 +63,12 @@ no proximity sensor; then the screen goes off after the idle time and wakes on a
 | Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin |
 | Presence and light | None | Android's proximity and light sensors |
 
+Settings that S1 Kiosk takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
+this app only from adb: `adb shell am start -n dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity --es …`.
+Starting that activity takes `WRITE_SECURE_SETTINGS`, which adb's shell has and other apps can't get. The
+launcher and the home screen use an alias whose extras the app drops, so another app on the device can't
+change a setting.
+
 The two are separate apps with their own data and keys, so both can be installed on one device. Only one
 can run at a time: both serve Home Assistant on port 6053 and the Manage page on 8099. Stop the other
 first (`adb shell am force-stop <id>`).

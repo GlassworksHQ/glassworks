@@ -21,6 +21,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -115,11 +116,27 @@ class GenericAppTest {
 
     @Test fun theManifestRunsTheCoresShellAndCanBeTheHomeApp() {
         val pm = app.packageManager
-        val home = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(app.packageName), 0)
-        assertEquals(listOf("sh.edm.s1kiosk.MainActivity"), home.map { it.activityInfo.name })
-        val info = pm.getPackageInfo(app.packageName, PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS)
+        for (category in listOf(Intent.CATEGORY_HOME, Intent.CATEGORY_LAUNCHER)) {
+            val found = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(category).setPackage(app.packageName), 0)
+            assertEquals(category, listOf(GenericParts.LAUNCHER), found.map { it.activityInfo.name })
+        }
+        val info = pm.getPackageInfo(app.packageName, PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_ACTIVITIES)
         assertTrue(info.services.orEmpty().any { it.name == "sh.edm.s1kiosk.KioskService" })
         assertTrue(info.receivers.orEmpty().map { it.name }.containsAll(listOf("sh.edm.s1kiosk.BootReceiver", "sh.edm.s1kiosk.update.UpdateInstallReceiver")))
+        val main = info.activities.orEmpty().single { it.name == "sh.edm.s1kiosk.MainActivity" }
+        assertEquals("other apps can't start it with settings in its extras", "android.permission.WRITE_SECURE_SETTINGS", main.permission)
+    }
+
+    /** CodeRabbit on #364: an app could have set the dashboard's address or the API key through MainActivity's extras. */
+    @Test fun onlyAdbAndTheAppItselfChangeSettingsWithExtras() {
+        val parts = GenericParts()
+        fun start(cls: String) = Intent().setClassName(app.packageName, cls).putExtra("url", "http://192.0.2.66/").putExtra("api_encryption", false)
+        val viaLauncher = start(GenericParts.LAUNCHER)
+        assertTrue("dropped", sh.edm.s1kiosk.MainActivity.screenExtras(viaLauncher, parts::trustsExtras))
+        assertNull(viaLauncher.extras)
+        val direct = start("sh.edm.s1kiosk.MainActivity")
+        assertFalse("kept", sh.edm.s1kiosk.MainActivity.screenExtras(direct, parts::trustsExtras))
+        assertEquals("http://192.0.2.66/", direct.getStringExtra("url"))
     }
 
     @Test fun theFrameReadsAndroidsStandardSensors() {

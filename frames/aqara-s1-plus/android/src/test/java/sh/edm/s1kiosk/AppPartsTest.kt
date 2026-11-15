@@ -76,6 +76,8 @@ class AppPartsTest {
     @Test fun theS1AppsRuntimeRunsTheS1Panes() {
         val s1 = KioskApp.runtime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))
         assertTrue("the S1 app's overlays and hooks are the S1 panes'", s1.app is S1Panes)
+        // adb, Kiln and Clarity drive S1 Kiosk with MainActivity's extras from any caller (#23 keeps that).
+        assertTrue(s1.app.trustsExtras(android.content.Intent().setClassName(app, "sh.edm.s1kiosk.MainActivity").putExtra("url", "http://192.0.2.1/")))
     }
 
     @Test fun theS1AppsVoiceStateStartsFromTheAssistantsSwitch() {
