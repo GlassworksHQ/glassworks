@@ -10,7 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Agent guide: glassworks.dev (`site/`)
 
-The Glassworks project site: the landing page, `/frames`, `/panes`, `/brand` and `/trademarks`. The
+The Glassworks project site: the landing page, `/frames`, `/panes`, `/docs`, `/changelog`, `/brand`
+and `/trademarks`. The
 repo-wide rules in the root [AGENTS.md](../AGENTS.md) apply here too; these are the site's own.
 
 ## Commands
@@ -42,7 +43,9 @@ files change.
    `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric, the latest
    release from `../CHANGELOG.md`. Blueprints are read from GitHub at the latest release tag when the
    site is built (`src/lib/blueprints.ts`), so the build needs github.com; `BLUEPRINTS_REF=<tag or
-   commit>` builds from another ref. A data change
+   commit>` builds from another ref. The docs are the repo's own Markdown: `src/lib/docs/sources.ts`
+   maps each file to its URL and nav group, and the site never keeps a copy. A doc's text changes in
+   the Markdown, on GitHub; a new doc gets a line in `sources.ts`. A data change
    and the page that shows it go in one PR. The site's own words for that data are in
    `src/lib/frameText.ts`.
 3. **Brand files are generated.** `public/brand/` comes from `scripts/brand/` (`npm run brand`).
@@ -65,3 +68,7 @@ files change.
    points typescript-eslint at it. Don't use the `@typescript/typescript6` alias: its dependency
    hoists to the root and takes every workspace's `tsc`. A bare `tsc` inside `site/` is 6; the
    `typecheck` script runs the root's TypeScript 7 by path. Don't add a script that calls bare `tsc`.
+8. **The docs build fails on a link it can't resolve**: a relative link to a missing file, or an
+   `#anchor` its target doesn't have. Links follow GitHub's rules (its heading slugs), so a link that
+   works on GitHub works here, and `tools/check-doc-links.py` checks the same Markdown. Search is
+   Pagefind, built over the static HTML by `npm run build`; it only works on a built site.

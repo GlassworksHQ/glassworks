@@ -234,3 +234,19 @@ a.group:hover {
     display: none;
   }
 }
+
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sub {
+  padding-left: 24px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.sub.on {
+  color: var(--fg);
+}

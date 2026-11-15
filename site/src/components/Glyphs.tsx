@@ -224,3 +224,10 @@ export const RulerGlyph = (props: GlyphProps) => (
     <path d="M6.5 8v3M10.5 8v4M14.5 8v3M18.5 8v4" />
   </svg>
 );
+
+export const BookGlyph = (props: GlyphProps) => (
+  <svg {...base} {...props}>
+    <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5Z" />
+    <path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19" />
+  </svg>
+);

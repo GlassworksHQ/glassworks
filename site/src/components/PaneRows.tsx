@@ -3,13 +3,13 @@ import { Row, Sq, StageChip } from "./Manage";
 import { paneLine, type Pane } from "@/lib/site";
 
 /** The panes as Manage rows: icon, what it does and needs, stage. */
-export function PaneRows({ panes }: { panes: Pane[] }) {
+export function PaneRows({ panes }: { panes: (Pane & { href?: string })[] }) {
   return panes.map((p) => {
     const Icon = paneIcon[p.id];
     return (
       <Row
         key={p.id}
-        href={`/panes/${p.id}`}
+        href={p.href ?? `/panes/${p.id}`}
         lead={
           <Sq>
             <Icon />

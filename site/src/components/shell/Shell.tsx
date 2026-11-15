@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { Mark } from "../Mark";
+import { SearchButton } from "../search/SearchButton";
 import s from "./Shell.module.css";
 
 /** The page frame: the sidebar beside the page, or on phones a top bar whose menu opens it. */
@@ -32,6 +33,7 @@ export function Shell({ nav, children }: { nav: ReactNode; children: ReactNode }
           Glassworks
         </Link>
         <span className={s.topR}>
+          <SearchButton variant="icon" />
           <button type="button" className={s.iconBtn} aria-label="Menu" aria-expanded={open} aria-controls="site-nav" onClick={() => setOpen(!open)}>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
               {open ? <path d="M6 6l12 12M18 6 6 18" /> : <path d="M4 8h16M4 16h16" />}

@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 import { frames } from "./frames";
 import { absoluteUrl, type SitePath } from "./seo";
 import { panes } from "./site";
+import { lastChanged } from "./docs";
+import { SOURCES as DOC_SOURCES } from "./docs/sources";
 
 /*
  * Every page search engines should know about, for app/sitemap.ts. Each section of the site is one
@@ -36,8 +38,13 @@ const framePages: RouteSource = () => frames.map((f) => ({ path: `/frames/${f.id
 
 const panePages: RouteSource = () => panes.map((p) => ({ path: `/panes/${p.id}` }));
 
-/** /docs and /docs/<slug>: none yet. */
-const docs: RouteSource = () => [];
+/** /docs, its indexes, every published doc and /changelog (src/lib/docs/sources.ts). */
+const docs: RouteSource = () => [
+  { path: "/docs" },
+  { path: "/docs/panes" },
+  { path: "/docs/libraries" },
+  ...DOC_SOURCES.map((s) => ({ path: s.url as SitePath, modified: lastChanged(s.file) })),
+];
 
 /** /blog and /blog/<slug>: none yet. */
 const blog: RouteSource = () => [];
