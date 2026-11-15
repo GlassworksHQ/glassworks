@@ -93,6 +93,7 @@ class AudioPipeline(
     private val stats = Stats()
     /** Events queued and not yet handled (tests: [awaitIdle]). */
     private val outstanding = AtomicInteger()
+    /** [pending]'s size, published only between steps of the decode loop (tests: [awaitIdle]). */
     @Volatile private var pendingCount = 0
     @Volatile var flacFailedReason: String? = null; private set
     @Volatile var decoderName: String? = null; private set
@@ -130,7 +131,7 @@ class AudioPipeline(
     /** A snapshot; [resetMax] restarts [Stats.maxDecodeNs] (per logging interval). */
     fun stats(resetMax: Boolean = false): Stats = synchronized(statsLock) { stats.copy().also { if (resetMax) stats.maxDecodeNs = 0 } }
 
-    /** Tests: waits until every queued event is handled and no frame is inside the decoder. */
+    /** Tests: waits until every queued event is handled and every frame queued to the decoder is pushed or dropped. */
     fun awaitIdle(timeoutMs: Long): Boolean {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
         while (System.nanoTime() < deadline) {
@@ -152,6 +153,7 @@ class AudioPipeline(
                     try { handle(ev) } catch (t: Throwable) { SsLog.w("decode: event failed", t) }
                 }
                 if (pending.isNotEmpty()) drainOutputs(if (ev == null) 5_000L else 0L)
+                pendingCount = pending.size // after the step's pushes, before outstanding drops
                 if (ev != null) outstanding.decrementAndGet()
             }
         } catch (_: InterruptedException) {
@@ -169,11 +171,10 @@ class AudioPipeline(
             is Ev.Clear -> {
                 if (ev.fromUs == null) pending.clear()
                 else pending.entries.removeIf { it.value.serverTsUs >= ev.fromUs }
-                pendingCount = pending.size
                 out.clear(ev.fromUs)
             }
             Ev.End -> {
-                pending.clear(); pendingCount = 0
+                pending.clear()
                 releaseDecoder()
                 format = null; header = null; info = null
                 out.end()
@@ -261,7 +262,6 @@ class AudioPipeline(
                 }
                 if (!ok) throw IllegalStateException("no decoder input buffer for 200 ms")
                 pending[tag] = Pending(tsUs, fr.blockSize, wire, System.nanoTime(), nowMs())
-                pendingCount = pending.size
                 synchronized(statsLock) { stats.flacFrames++ }
             } catch (t: Throwable) {
                 countDrop(1)
@@ -289,7 +289,7 @@ class AudioPipeline(
 
     /** Collects decoder outputs; waits up to [timeoutUs] for the first one. */
     private fun drainOutputs(timeoutUs: Long) {
-        val d = decoder ?: run { if (pending.isNotEmpty()) { countDrop(pending.size); pending.clear(); pendingCount = 0 }; return }
+        val d = decoder ?: run { if (pending.isNotEmpty()) { countDrop(pending.size); pending.clear() }; return }
         var wait = timeoutUs
         while (true) {
             val o = try {
@@ -317,7 +317,6 @@ class AudioPipeline(
                 out.push(PcmChunk(Math.round(lastEndUs), o.pcm, o.frames, f.sampleRate, f.channels, 0))
                 lastEndUs += o.frames * 1e6 / f.sampleRate
             }
-            pendingCount = pending.size
             return
         }
         // Frames queued before this one that produced nothing were dropped by the decoder.
@@ -325,7 +324,6 @@ class AudioPipeline(
         var lost = 0
         while (it.hasNext()) { val e = it.next(); if (e.key < o.tag) { it.remove(); lost++ } else break }
         if (lost > 0) countDrop(lost)
-        pendingCount = pending.size
         val ns = System.nanoTime() - p.queuedNs
         synchronized(statsLock) {
             stats.decodeNs += ns
@@ -346,7 +344,7 @@ class AudioPipeline(
     private fun drainAll(ms: Long) {
         val deadline = nowMs() + ms
         while (pending.isNotEmpty() && decoder != null && nowMs() < deadline) drainOutputs(10_000)
-        if (pending.isNotEmpty()) { countDrop(pending.size); pending.clear(); pendingCount = 0 }
+        if (pending.isNotEmpty()) { countDrop(pending.size); pending.clear() }
     }
 
     private fun countDrop(n: Int) = synchronized(statsLock) { stats.droppedFrames += n }
@@ -365,7 +363,7 @@ class AudioPipeline(
         synchronized(statsLock) { stats.decodeErrors++ }
         SsLog.w("FLAC: $reason")
         if (release) {
-            if (pending.isNotEmpty()) { countDrop(pending.size); pending.clear(); pendingCount = 0 }
+            if (pending.isNotEmpty()) { countDrop(pending.size); pending.clear() }
             releaseDecoder()
         }
         val now = nowMs()
