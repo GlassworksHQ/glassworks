@@ -6,8 +6,9 @@ device-neutral open panel core that is being pulled out of this repo step by ste
 
 This file applies to the whole repo. Each area has its own file with the details:
 [`frames/aqara-s1-plus/android/AGENTS.md`](frames/aqara-s1-plus/android/AGENTS.md) (the kiosk app),
-[`kiln/AGENTS.md`](kiln/AGENTS.md) (the browser installer), [`tools/AGENTS.md`](tools/AGENTS.md) (FEL,
-U-Boot, root side, radio, install scripts).
+[`kiln/AGENTS.md`](kiln/AGENTS.md) (the browser installer),
+[`frames/aqara-s1-plus/tools/AGENTS.md`](frames/aqara-s1-plus/tools/AGENTS.md) (FEL, U-Boot, root side,
+radio, install scripts), [`tools/AGENTS.md`](tools/AGENTS.md) (the shared tools).
 Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/research/bringup.md).
 
 ## Layout
@@ -25,8 +26,8 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup | TypeScript, React |
 | `site/` | glassworks.dev, the project site: landing page, `/frames`, `/panes`, `/brand` and the brand generator. Reads `frames/`, `packages/frame-card` and Clarity's grade from this repo at build time | TypeScript, Next.js |
 | `testing/` | Test helpers every Gradle module's tests share: `RepoFiles`, which finds source files across all modules from the repo root | Kotlin |
-| `tools/fel`, `tools/install` | FEL boot, U-Boot board files and patches, the CLI installer | bash |
-| `tools/root`, `tools/radio` | Init services in the patched boot image: root helper, update and bundle services | `/system/bin/sh` (mksh), C |
+| `frames/aqara-s1-plus/tools/` | The S1's own tools. `fel/`, `install/`, `install.sh`: FEL boot, U-Boot board files and patches, the CLI installer. `root/`, `radio/`: init services in the patched boot image (root helper, update and bundle services) | bash, `/system/bin/sh` (mksh), C |
+| `tools/` | Tools every frame shares: Clarity (`perf/`), release, size, showcase, doc checks | Python, bash |
 | `docs/` | User guides; `docs/research/` holds the general engineering notes and the index of every note | Markdown |
 | `branding/` | Boot logo, boot animation, splash | Python |
 
@@ -36,9 +37,9 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 ./gradlew test :kiosk:assembleDebug                 # app + libs: unit tests and a debug APK
 npm install && npm run stage -w kiln && npm test     # npm workspaces, from the repo root (also: npm run typecheck, npm run build)
 npm run lint -w site && npm run build -w site        # glassworks.dev (site/), after the install above
-tools/install/test/install-tests.sh                  # install scripts, off-device
+frames/aqara-s1-plus/tools/install/test/install-tests.sh   # install scripts, off-device
 python3 tools/check-doc-links.py                     # relative links and #anchors in docs
-tools/root/build-verify.sh && tools/radio/test/run.sh  # root side, in an armhf container (Docker)
+frames/aqara-s1-plus/tools/root/build-verify.sh && frames/aqara-s1-plus/tools/radio/test/run.sh  # root side, in an armhf container (Docker)
 python3 -m unittest discover -s branding/boot/test   # boot generator: frame targets and layout
 python3 -m unittest discover -s tools/size/test      # APK size per frame and pane (CI's size job)
 python3 branding/boot/generate.py --frame aqara-s1-plus --out branding/glass-tile && git diff --exit-code branding
@@ -70,7 +71,7 @@ in HA. If a request goes against it, say so and point at the page instead of bui
    ignored). Describe what you read, and give offsets and symbols, but never commit the bytes.
 4. **No GPL payloads shipped by us.** Magisk is downloaded from its official release and checked by
    hash, never vendored. Licences of new dependencies go in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
-5. **Changes to the boot patch, the root helper, the radio or anything in `tools/root` need a real
+5. **Changes to the boot patch, the root helper, the radio or anything in `frames/aqara-s1-plus/tools/root` need a real
    panel before merge.** Say so in the PR. Off-device tests alone are not enough there.
 6. **Updates must keep installing in place.** Don't change `applicationId`, the signing setup or
    `versionCode` logic. `tools/release/check-update-compat.sh` guards this, so don't weaken it.
@@ -183,5 +184,5 @@ and S1's own branding stay plain. The S1's own detail (status, install, radio, F
 
 **Frame** = a device definition (the S1 is `aqara-s1-plus`). **Pane** = a plugin (radio, wall base,
 voice, Sendspin), which declares the hardware it `requires`. **Kiln** = the installer (`kiln/` plus
-`tools/install.sh`). New Kotlin packages for the core go under `dev.glassworks.*`. The S1 app keeps
+`frames/aqara-s1-plus/tools/install.sh`). New Kotlin packages for the core go under `dev.glassworks.*`. The S1 app keeps
 `sh.edm.s1kiosk`, because the boot helpers hardcode it.

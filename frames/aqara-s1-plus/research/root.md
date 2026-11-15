@@ -24,7 +24,7 @@
   - grant `su` to the app or to the adb shell. The app only sets properties
     (`persist.s1kiosk.radio_mode`, `ctl.restart s1kiosk_radio`), and the init service does the
     root work;
-  - ship Magisk. It is GPLv3, so `tools/root/patch-boot-magisk.sh` downloads the official release
+  - ship Magisk. It is GPLv3, so `frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh` downloads the official release
     and checks the SHA-256 GitHub publishes for it.
 - **AVB is not a problem on this firmware:**
   - the panel already runs a `vbmeta` with flags = 3 (hashtree and verification disabled);
@@ -33,13 +33,13 @@
 
 ## Steps (no UART, no adb)
 
-1. **Enter FEL and boot our U-Boot:** `NO_BL31=1 tools/fel/fel-boot.sh`. It starts fastboot on its own.
-2. **Back up over USB:** `tools/install/fb-read-partition.sh boot stock-boot.img`, and the same for
+1. **Enter FEL and boot our U-Boot:** `NO_BL31=1 frames/aqara-s1-plus/tools/fel/fel-boot.sh`. It starts fastboot on its own.
+2. **Back up over USB:** `frames/aqara-s1-plus/tools/install/fb-read-partition.sh boot stock-boot.img`, and the same for
    `vbmeta` and the other small partitions.
    - This uses U-Boot `oem run` plus our fastboot `upload` (patch 0002).
    - It reads 32 MiB in about 1.6 s.
    - On the reference panel the read-back was byte-identical to a known image.
-3. **Patch on the host:** `tools/root/patch-boot-magisk.sh stock-boot.img s1-boot.img`.
+3. **Patch on the host:** `frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh stock-boot.img s1-boot.img`.
    - Runs in Docker (arm64 Linux): Magisk's own `boot_patch.sh` with the arm64 `magiskboot`, and the
      panel's armeabi-v7a `magiskinit`/`magisk`/`init-ld` as payload.
    - Flags: `KEEPVERITY=true KEEPFORCEENCRYPT=true PREINITDEVICE=cache`. That is exactly what
@@ -71,9 +71,9 @@ Since helper v4, binaries and a newer helper come from a **signed radio bundle**
   `magisk --sqlite "REPLACE INTO policies (uid,policy,until,logging,notification) VALUES(2000,2,<epoch>,1,0)"`.
 - Revoke it with `DELETE FROM policies WHERE uid=2000`.
 
-## One command: `tools/install/fel-install.sh`
+## One command: `fel-install.sh`
 
-`tools/install/fel-install.sh [backup-dir]` does everything above, plus two more things.
+`frames/aqara-s1-plus/tools/install/fel-install.sh [backup-dir]` does everything above, plus two more things.
 - **Steps:**
   1. Waits for FEL and checks the SoC id.
   2. Boots our U-Boot. If our U-Boot is already in fastboot, it resumes from there instead.
@@ -84,11 +84,11 @@ Since helper v4, binaries and a newer helper come from a **signed radio bundle**
   6. Sets `vbmeta` flags to 3 if they aren't already, verified by read-back.
   7. Flashes `boot`, verifies it by read-back, then reboots.
   8. Waits for adb.
-- **Extra in the boot image: first-boot provisioning.** `tools/root/s1kiosk_firstboot.{sh,rc}` is a
+- **Extra in the boot image: first-boot provisioning.** `frames/aqara-s1-plus/tools/root/s1kiosk_firstboot.{sh,rc}` is a
   one-shot root service. It authorizes the installing computer's adb key, which is baked into the
   image (`ADB_PUBKEY`, default `~/.android/adbkey.pub`), and turns USB adb on. It runs once and
   leaves a marker in `/data/s1kiosk`.
-- **Extra in the boot image: the app update service.** `tools/root/s1kiosk_update.{sh,rc}` is a
+- **Extra in the boot image: the app update service.** `frames/aqara-s1-plus/tools/root/s1kiosk_update.{sh,rc}` is a
   disabled one-shot root service. At boot init sets `sys.s1kiosk.update.version=1`, so the app knows
   it exists. Details under [App update service](#app-update-service).
 - **Extra in the boot image: the radio bundle loader (helper v4).** `s1kiosk_bundle.{sh,rc}`,
@@ -96,7 +96,7 @@ Since helper v4, binaries and a newer helper come from a **signed radio bundle**
   After this boot image, helper fixes, new radio stacks and radio firmware images come with app
   updates; see [Radio bundle service](#radio-bundle-service).
 
-**Undo:** `tools/install/fel-install.sh --undo <backup-dir>`.
+**Undo:** `frames/aqara-s1-plus/tools/install/fel-install.sh --undo <backup-dir>`.
 - It verifies the backup against its `SHA256SUMS` and refuses a `boot.img` that is already
   Magisk-patched. That happens with a re-run's backup; use the first install's backup instead.
 - It flashes stock `boot` and `vbmeta` through FEL and verifies both by read-back.
@@ -172,4 +172,4 @@ Same shape and threat model as `s1kiosk_update`:
 ## Next
 - Browser installer (WebUSB): built, in [`kiln/`](../../../kiln/src/README.md); design in
   [web-installer.md](web-installer.md), user guide in [docs/install.md](../docs/install.md).
-- After `fel-install.sh`, `tools/install.sh` installs and configures the kiosk app over adb.
+- After `fel-install.sh`, `frames/aqara-s1-plus/tools/install.sh` installs and configures the kiosk app over adb.

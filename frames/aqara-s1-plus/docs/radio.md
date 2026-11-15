@@ -24,7 +24,7 @@ use the panel's settings menu. The steps on this page assume it is on.
 
 There is no "Aqara (stock)" mode: with Aqara's launcher/apps disabled and its cloud blocked
 ([frames/aqara-s1-plus/research/debloat.md](../research/debloat.md), AqaraCloud.kt), nothing can use the hub's own Zigbee network. **Stock comes back by
-uninstalling the app (or `tools/install.sh --undo`) and rebooting**: all of Aqara's radio services
+uninstalling the app (or `frames/aqara-s1-plus/tools/install.sh --undo`) and rebooting**: all of Aqara's radio services
 are init services started on every boot. `--undo` also force-stops the kiosk and `ctl.start`s them
 right away.
 
@@ -290,7 +290,7 @@ Verified on the reference panel (2026-11-10; the computer is on another VLAN tha
 
 ## Proof: Thread on the same radio (spinel IID 2)
 
-`tools/radio/build-otbr.sh` builds static ARM `otbr-agent` + `ot-ctl` (ot-br-posix v2026.11.0,
+`frames/aqara-s1-plus/tools/radio/build-otbr.sh` builds static ARM `otbr-agent` + `ot-ctl` (ot-br-posix v2026.11.0,
 multi-PAN, SiLabs CPC vendor interface + libcpc 4.3.3; nothing vendored, see the script header for
 pins and licenses). Device test, only `zigbee_cpcd` running (Zigbee stopped), root:
 
@@ -310,12 +310,12 @@ concurrent mode is not offered.
 
 The proof build is a **Thread agent, not a usable border router**: border routing, REST, mDNS and
 the border agent are compiled out. The boot image and the radio bundle carry the border-router
-profile instead (`tools/radio/out/` = `PROFILE=br` since 0.3.0):
+profile instead (`frames/aqara-s1-plus/tools/radio/out/` = `PROFILE=br` since 0.3.0):
 
 ## Thread border router build (`PROFILE=br`, 2026-11-10)
 
-`PROFILE=br OTBR_RUNTIME_DIR=/data/s1kiosk/radio/run tools/radio/build-otbr.sh` writes
-`tools/radio/out/br/{otbr-agent,ot-ctl}` (2.3 MB static): same pins plus cJSON and cpp-httplib (MIT,
+`PROFILE=br OTBR_RUNTIME_DIR=/data/s1kiosk/radio/run frames/aqara-s1-plus/tools/radio/build-otbr.sh` writes
+`frames/aqara-s1-plus/tools/radio/out/br/{otbr-agent,ot-ctl}` (2.3 MB static): same pins plus cJSON and cpp-httplib (MIT,
 ot-br-posix's own gitlinks), with border routing, the REST server (`:8081`), **OpenThread's own mDNS**
 (`OTBR_MDNS=openthread`: no avahi/mDNSResponder daemon needed on Android) publishing `_meshcop._udp`
 and SRP-registered services, SRP server auto-enable, and the border agent. Off: NAT64, TREL, backbone
@@ -427,9 +427,9 @@ As a **repeater** (*Thread router* mode) the panel has no such requirement: it o
 The root half of the modes lives in a helper. The Magisk boot patch installs it as an init service
 ([frames/aqara-s1-plus/research/root.md](../research/root.md); working on the reference panel since 2026-11-09). Files:
 
-- `tools/radio/s1kiosk_radio.sh`: the helper (mksh).
-- `tools/radio/s1kiosk_radio.rc`: the init snippet.
-- `tools/radio/build-otbr.sh`: builds `otbr-agent`/`ot-ctl`.
+- `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh`: the helper (mksh).
+- `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.rc`: the init snippet.
+- `frames/aqara-s1-plus/tools/radio/build-otbr.sh`: builds `otbr-agent`/`ot-ctl`.
 
 Contract **v4** (2026-11-10): v3 plus the loader and signed radio bundles ([Radio bundles](#radio-bundles-helper-v4)),
 the Zigbee stack choice ([Zigbee stack](#zigbee-stack-aqara-or-silicon-labs-helper-v4)) and radio firmware
@@ -454,7 +454,7 @@ the last one the root side needs, since everything above the loader then updates
 | Thread dataset hand-off | the app writes hex TLVs to its own `files/radio/thread-dataset` (0600); the helper moves it to `$DIR/thread-dataset` (refuses symlinks, > 1 KiB, non-hex), deletes the app's copy, restarts the agent, joins. Never logged |
 | Loader (v4) | the boot image's `s1kiosk_radio.sh` checks `$DIR/bundle/current` with `s1kiosk_bundle.sh --check` (signature, every file's SHA-256, version not below the floor) at every start and runs its `s1kiosk_radio.sh`; binaries: bundle first, then the boot image. A bundle helper that exits within a minute 3 times running is marked `bad-<v>` and the boot image's helper runs. Props: `sys.s1kiosk.radio.source` = `boot[ (why)]` \| `bundle <v>` \| `dev`, `sys.s1kiosk.radio.bundle` = `none` \| `ok <v>` \| `bad: <why>` |
 | Zigbee stack (v4) | app: `persist.s1kiosk.radio_zigbee` = `aqara` (default) \| `sisdk`; helper: `sys.s1kiosk.radio.zigbee` = `aqara` \| `sisdk ready <ver>` \| `sisdk missing <ver> <sha256>` (app: download it) \| `sisdk no-runtime` \| `sisdk bad <why>`; zigbeed hand-off in the app's `files/radio/zigbeed-8.2.2` |
-| Time zone (v4) | app/installer: `persist.s1kiosk.timezone` = an Olson id; helper: a background loop re-applies it with `service call alarm 3 s16 <id>` when `persist.sys.timezone` differs (Aqara's SystemManager resets it to `Antarctica/Casey` at boot), every 5 s for 10 min, then every 15 s; `sys.s1kiosk.timezone.status` = `<ok\|error\|none> [<id>][: detail]`. Runs in every mode, also after the helper gave up; part of the helper, so it updates with the radio bundle. With no zone chosen, the zone in place at the helper's first look is adopted unless it is `Antarctica/Casey`/`GMT`/`UTC`. So an empty value doesn't mean "keep none": the app's time zone pane, turned off (#67), writes `(off)`, which isn't an id, and the helper keeps and adopts nothing and reports `error: '(off)' is not a time zone id` (read 2026-11-14 from `tz_valid`/`tz_check`; pinned in `tools/radio/test/shell-tests.sh`). Turned on, the app writes the zone back, or empty if it kept none |
+| Time zone (v4) | app/installer: `persist.s1kiosk.timezone` = an Olson id; helper: a background loop re-applies it with `service call alarm 3 s16 <id>` when `persist.sys.timezone` differs (Aqara's SystemManager resets it to `Antarctica/Casey` at boot), every 5 s for 10 min, then every 15 s; `sys.s1kiosk.timezone.status` = `<ok\|error\|none> [<id>][: detail]`. Runs in every mode, also after the helper gave up; part of the helper, so it updates with the radio bundle. With no zone chosen, the zone in place at the helper's first look is adopted unless it is `Antarctica/Casey`/`GMT`/`UTC`. So an empty value doesn't mean "keep none": the app's time zone pane, turned off (#67), writes `(off)`, which isn't an id, and the helper keeps and adopts nothing and reports `error: '(off)' is not a time zone id` (read 2026-11-14 from `tz_valid`/`tz_check`; pinned in `frames/aqara-s1-plus/tools/radio/test/shell-tests.sh`). Turned on, the app writes the zone back, or empty if it kept none |
 | Thread leave (v4) | app: `files/radio/thread-leave` (taken within 3 s in any mode, ignored after 2 min); helper: `sys.s1kiosk.radio.thread_leave` = `<ok\|error> <epoch>: <detail>` |
 | Bundle state (v4) | root: `/data/s1kiosk-pub/radio-bundle` (root 0644 in a root 0755 dir) = `<ok\|bad\|none> <version> <floor>`, what the app decides from |
 | Radio firmware (v4) | app: `files/radio/fw-request` = `<id> <sha256 prefix>` (taken within 3 s, ignored after 2 min); helper: `sys.s1kiosk.radio.fw` = `<idle\|flashing\|ok\|error> <id>[: detail]`, `sys.s1kiosk.radio.fw_targets` = `<id>:<sha12>:<APP> …` |
@@ -490,14 +490,14 @@ current helper as the fallback; everything else comes with app updates as a **si
 
 **What's in the boot image (once):** `s1kiosk_radio.sh` (loader + the v4 helper as fallback),
 `s1kiosk_bundle.sh` + `.rc` (the install service), `s1kiosk_verify` (a 70 KB static ARM Ed25519
-checker: [`tools/root/verify/`](../../../tools/root/verify/s1kiosk_verify.c), Monocypher 4.0.3, built
-reproducibly by `tools/root/build-verify.sh`), `s1kiosk_bundle.pub` (the project's public key), and
+checker: [`frames/aqara-s1-plus/tools/root/verify/`](../tools/root/verify/s1kiosk_verify.c), Monocypher 4.0.3, built
+reproducibly by `frames/aqara-s1-plus/tools/root/build-verify.sh`), `s1kiosk_bundle.pub` (the project's public key), and
 otbr-agent/ot-ctl as before.
 
-**What's in a bundle:** a `manifest` (format in `tools/root/s1kiosk_bundle.sh`), its Ed25519
+**What's in a bundle:** a `manifest` (format in `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.sh`), its Ed25519
 signature, and the files it lists with their sizes and SHA-256: today the helper, otbr-agent, ot-ctl
 and the Silicon Labs runtime (`sisdk/`). It may list radio firmware images (`firmware` lines); the
-project ships none. The release workflow builds and signs it (`tools/radio/make-bundle.py`, key in the
+project ships none. The release workflow builds and signs it (`frames/aqara-s1-plus/tools/radio/make-bundle.py`, key in the
 `S1_RADIO_BUNDLE_KEY` environment secret, read only by the workflow's signing job, which signs only
 commits on `main` and checks every input against committed hashes:
 [releasing.md](../../../docs/releasing.md#3b-the-radio-bundle-key-once)); its version is the APK's versionCode
@@ -546,7 +546,7 @@ bundle is installed, which one the app carries, the last error).
   provisioned key.
 
 Shell tests for all of this (signature, tampering, symlinks, other owners, hard links, rollback, the
-loader's fallback): `tools/radio/test/run.sh` (32-bit ARM container, mksh as Android's shell, mocks).
+loader's fallback): `frames/aqara-s1-plus/tools/radio/test/run.sh` (32-bit ARM container, mksh as Android's shell, mocks).
 
 ## Zigbee stack: Aqara or Silicon Labs (helper v4)
 
@@ -566,7 +566,7 @@ How it works ([frames/aqara-s1-plus/research/zigbee2mqtt.md](../research/zigbee2
   whole 22.9 MB zip), checks the zip/.deb hashes, extracts `usr/local/bin/zigbeed` and checks its SHA-256
   (`a66d4584…e3bb`), then writes it to its private `files/radio/zigbeed-8.2.2`. The helper takes it only
   with that exact SHA-256 and size into `$DIR/sisdk/` (root 0700). Download state shows in `Radio status`.
-- **What we do ship** (bundle `sisdk/`, built by `tools/radio/build-sisdk-runtime.sh`, with
+- **What we do ship** (bundle `sisdk/`, built by `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`, with
   `sisdk/NOTICE.txt` and `licenses/`): `zigbeed.sh` (our wrapper), `libcpc.so.3` built from cpc-daemon
   4.3.3 (Silicon Labs MSLA source sections: distributable compiled, only inside the product for use with
   the Silicon Labs radio, not standalone, hence no separate download; the same terms as the libcpc

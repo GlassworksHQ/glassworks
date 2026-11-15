@@ -115,7 +115,7 @@ There are two backends (`WallBase` + a `BaseLink`), chosen by the pref `base_bac
     the handshake, and a power report from a newly mounted base starts it too. A base that has
     been silent for 61 s is probed, and only an unanswered probe reports it as removed.
   - **Debug transport.** `--es base_transport tcp:127.0.0.1:9999` (or `""` for `/dev/ttyS3`)
-    points the link at [`tools/bracket/base_emulator.py`](../../../tools/bracket/base_emulator.py) via
+    points the link at [`frames/aqara-s1-plus/tools/bracket/base_emulator.py`](../tools/bracket/base_emulator.py) via
     `adb reverse tcp:9999 tcp:9999`. The emulator's energy goes to a separate counter.
 - **`localservice`: `LocalServiceLink`**, the original path. The kiosk binds to the stock
   **LocalService** in `com.lumi.systemmanager` (`systemmanager.intent.action.LOCAL_SERVER`,

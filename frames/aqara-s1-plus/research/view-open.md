@@ -324,7 +324,7 @@ none of these is a fix: lifting it only trades the panel's heat for speed. The l
 
 Either way it should be a setting, off by default until measured, with the radio bundle as the way
 it reaches panels if its services can do it (no reflash), else the boot patch. Changes in
-`tools/root` need a real panel before merge (hard rule 5).
+`frames/aqara-s1-plus/tools/root` need a real panel before merge (hard rule 5).
 
 **Risks.**
 - **Heat.** The S1 idles at 55 to 67 °C, and its first passive trip is 70 °C. A higher ceiling runs

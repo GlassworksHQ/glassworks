@@ -29,7 +29,7 @@ build, the installer's typecheck, tests and build, the install scripts' tests an
 ```sh
 ./gradlew test :kiosk:assembleDebug                 # the app
 npm install && npm run stage -w kiln && npm test     # the web installer, from the repo root
-tools/install/test/install-tests.sh                  # the install scripts
+frames/aqara-s1-plus/tools/install/test/install-tests.sh                  # the install scripts
 python3 tools/check-doc-links.py                     # docs links
 ```
 

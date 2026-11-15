@@ -187,12 +187,12 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
 
 ## 2. Radio bundle (inside release APKs)
 
-`assets/radio-bundle/`, made and signed by `tools/radio/make-bundle.py` in the release workflow. The
+`assets/radio-bundle/`, made and signed by `frames/aqara-s1-plus/tools/radio/make-bundle.py` in the release workflow. The
 panel installs it into its root side. Contents:
 
 ### `s1kiosk_radio.sh`
 
-The radio helper, this project, MIT ([`tools/radio/s1kiosk_radio.sh`](tools/radio/s1kiosk_radio.sh)).
+The radio helper, this project, MIT ([`frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh`](frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh)).
 
 ### `otbr-agent`, `ot-ctl`
 
@@ -211,14 +211,14 @@ linked, so they contain the following:
 | GNU C Library (static) | 2.35, Ubuntu 22.04 `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 | LGPL-2.1-or-later | Free Software Foundation, Inc. and others | section 6 |
 | GCC runtime, libstdc++ (static) | GCC 11.4.0, Ubuntu `11.4.0-1ubuntu1~22.04.3` | GPL-3.0-or-later WITH GCC-exception-3.1 | Free Software Foundation, Inc. | section 6 |
 
-The build and all its pins are in [`tools/radio/build-otbr.sh`](tools/radio/build-otbr.sh) (`PROFILE=br`).
+The build and all its pins are in [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh) (`PROFILE=br`).
 The libcpc in `otbr-agent` has one build-time change: it reads the socket directory from
 `$CPC_SOCKET_DIR`.
 
 ### `sisdk/` (runtime for the Silicon Labs Zigbee stack)
 
-Built by [`tools/radio/build-sisdk-runtime.sh`](tools/radio/build-sisdk-runtime.sh). It must match the
-committed [`tools/radio/sisdk-runtime.sha256`](tools/radio/sisdk-runtime.sha256). It has its own
+Built by [`frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`](frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh). It must match the
+committed [`frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`](frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256). It has its own
 `NOTICE.txt` and `licenses/`, which go into the bundle with it.
 
 - `sisdk/zigbeed.sh`: this project, MIT.
@@ -251,13 +251,13 @@ The files the installer at https://s1.edm.sh serves and writes to the panel. Pin
   and `ea0050fd…b98e` (`u-boot.bin`).
 - Corresponding source: upstream U-Boot `main` at commit `934995f642a21ca7f35fa9aed5f061394fcba243`
   (https://github.com/u-boot/u-boot/commit/934995f642a21ca7f35fa9aed5f061394fcba243). Add this
-  repository's [`tools/fel/uboot/`](tools/fel/uboot) at commit `8b2bf488fed3c7ba8343a32c67c9651066479128`:
+  repository's [`frames/aqara-s1-plus/tools/fel/uboot/`](frames/aqara-s1-plus/tools/fel/uboot) at commit `8b2bf488fed3c7ba8343a32c67c9651066479128`:
   - `patches/0001-sunxi-a133-ddr4-match-boot0-controller-setup.patch`
   - `patches/0002-fastboot-add-upload-command.patch`
   - `aqara-s1-plus_defconfig`
   - `sun50i-a133-aqara-s1-plus.dts`
 
-  Build with [`tools/fel/build-uboot.sh`](tools/fel/build-uboot.sh) (arm64 `ubuntu:22.04`, gcc
+  Build with [`frames/aqara-s1-plus/tools/fel/build-uboot.sh`](frames/aqara-s1-plus/tools/fel/build-uboot.sh) (arm64 `ubuntu:22.04`, gcc
   `11.4.0-1ubuntu1~22.04.3`). A rebuild is not byte-identical, because U-Boot embeds the build time.
 - `u-boot-sunxi-with-spl.bin` also contains a TF-A BL31 (below). The installer starts U-Boot without
   it.
@@ -267,7 +267,7 @@ The files the installer at https://s1.edm.sh serves and writes to the panel. Pin
 - Licence: BSD-3-Clause. Copyright (c) Arm Limited and Contributors. https://www.trustedfirmware.org/projects/tf-a/
 - Version: `v2.15.0` debug build for `sun50i_a133`, from upstream commit
   `a413e1d7d38ed42dcdffc690d52a0cceb142a0e7` (https://github.com/ARM-software/arm-trusted-firmware),
-  with local debugging changes, kept as a patch in [`tools/fel/tfa/`](tools/fel/tfa/). The installer never
+  with local debugging changes, kept as a patch in [`frames/aqara-s1-plus/tools/fel/tfa/`](frames/aqara-s1-plus/tools/fel/tfa/). The installer never
   runs it.
 
 ### `otbr-agent`, `ot-ctl`
@@ -278,14 +278,14 @@ The OpenThread Border Router build described in section 2. Release `installer-fi
 
 The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0dd83…9f80`.
 
-- `tools/root/verify/s1kiosk_verify.c`: this project, MIT.
+- `frames/aqara-s1-plus/tools/root/verify/s1kiosk_verify.c`: this project, MIT.
 - **Monocypher 4.0.3**: BSD-2-Clause (dual-licensed with CC0-1.0; used under BSD-2-Clause).
   Copyright (c) 2017-2023, Loup Vaillant; Copyright (c) 2017-2019, Michael Savage; Copyright (c)
   2017-2023, Fabio Scotoni. https://monocypher.org (`monocypher-4.0.3.tar.gz`, sha256
   `8cc9bc341a66249016db9bd70e9142d8d0aef9945973744b1ac05dbc55d8ee66`).
 - **musl libc** (static), Alpine 3.20: MIT. Copyright © 2005-2020 Rich Felker, et al.
   https://musl.libc.org
-- Reproducible build: [`tools/root/build-verify.sh`](tools/root/build-verify.sh).
+- Reproducible build: [`frames/aqara-s1-plus/tools/root/build-verify.sh`](frames/aqara-s1-plus/tools/root/build-verify.sh).
 
 ### Magisk v31.1
 
@@ -304,9 +304,9 @@ The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0
 ### This project's files
 
 All MIT, from this repository:
-- The root helpers and their init files: `tools/root/s1kiosk_*.sh`, `tools/root/*.rc`,
-  `tools/radio/s1kiosk_radio.{sh,rc}`.
-- `tools/root/s1kiosk_bundle.pub`.
+- The root helpers and their init files: `frames/aqara-s1-plus/tools/root/s1kiosk_*.sh`, `frames/aqara-s1-plus/tools/root/*.rc`,
+  `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.{sh,rc}`.
+- `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub`.
 - The boot branding in `branding/glass-tile/` (`bootanimation.zip`, `bootlogo.bmp`). It shows text set
   in Inter (SIL OFL 1.1, fetched at build time). These downloads carry only images made with the font;
   the font itself ships in the S1 Kiosk APK (section 1, "Assets in the APK").
@@ -429,7 +429,7 @@ renders above:
 - **Silicon Labs `zigbeed`** (EmberZNet 8.2.2). This is Silicon Labs object code under the Silicon Labs
   MSLA. The project neither ships nor hosts it. The panel downloads it from Silicon Labs' own release
   (`SiliconLabs/simplicity_sdk` `v2025.6.3`, `debian-bookworm.zip`) only when the Silicon Labs Zigbee
-  stack is chosen, and checks its SHA-256. `tools/radio/make-bundle.py` refuses to package it, and the
+  stack is chosen, and checks its SHA-256. `frames/aqara-s1-plus/tools/radio/make-bundle.py` refuses to package it, and the
   release workflow fails if an APK contains it.
 - **microWakeWord models** (Apache-2.0, Copyright Kevin Ahrendt): `okay_nabu`, `hey_jarvis`,
   `alexa`, `hey_mycroft` from https://github.com/esphome/micro-wake-word-models (`models/v2` at commit
@@ -474,11 +474,11 @@ renders above:
 
 | Component | Licence | Where it ships | Corresponding source |
 |---|---|---|---|
-| U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`tools/fel/uboot/`](tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
+| U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`frames/aqara-s1-plus/tools/fel/uboot/`](frames/aqara-s1-plus/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
-| GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`tools/radio/build-otbr.sh`](tools/radio/build-otbr.sh). |
-| GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
+| GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
+| GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
 | libstdc++, libgcc_s | GPL-3.0-or-later WITH GCC-exception-3.1 | installer, radio bundle | The Ubuntu GCC cross source packages: `gcc-11-cross` for the static copies in `otbr-agent`/`ot-ctl`, and those named in `sisdk/NOTICE.txt` for `sisdk/lib/`. All are on https://launchpad.net/ubuntu |
 
 Questions about source: open an issue at https://github.com/GlassworksHQ/glassworks/issues.

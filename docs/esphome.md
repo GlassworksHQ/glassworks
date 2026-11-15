@@ -28,7 +28,7 @@ keeps working while the screen is off. Logs: `adb logcat -s S1ESPHome S1Voice`.
    (`okay_nabu`, `hey_jarvis`, `alexa`, `hey_mycroft`) from
    [esphome/micro-wake-word-models](https://github.com/esphome/micro-wake-word-models) at a pinned
    commit, each checked against a pinned SHA-256, into
-   `/sdcard/Android/data/sh.edm.s1kiosk/files/models/micro/`. `tools/install.sh` also pushes them
+   `/sdcard/Android/data/sh.edm.s1kiosk/files/models/micro/`. `frames/aqara-s1-plus/tools/install.sh` also pushes them
    over adb (`tools/voice/fetch-models.sh`, which downloads and checks the same files; `--no-models`
    skips it). Without models the API still works; the engine retries loading every 30 s.
 2. **Discovery**: the panel advertises `aqara-s1-plus-a1b2c3._esphomelib._tcp` over mDNS (its own
@@ -736,7 +736,7 @@ ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gra
   bad/swapped CRC), identity → dock class, protection mapping, termios verification; the handshake
   sequence, retries (200 ms, 3 sends, new seq), unsupported model, reports/energy, an unacked write
   → read, and silence → probe → removal. `UartBaseLinkEmulatorTest`: the real `UartBaseLink` over
-  TCP against `tools/bracket/base_emulator.py` (needs only python3; uses `BRACKET_PYTHON` /
+  TCP against `frames/aqara-s1-plus/tools/bracket/base_emulator.py` (needs only python3; uses `BRACKET_PYTHON` /
   `ESPHOME_PYTHON` / `python3`).
 - `update/*Test`: version comparison and versionCode, GitHub release parsing (fixture shaped like
   the real `releases/latest` response), asset selection and URL checks, `.sha256` parsing, the

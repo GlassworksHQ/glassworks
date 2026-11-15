@@ -63,7 +63,7 @@ Each step makes the next one safer. Don't skip ahead to flashing.
   the vendor". Read the vendor's registers from its running OS (on Allwinner,
   `/sys/class/sunxi_dump/dump`) and yours over the recovery mode, and compare them.
 - **Get a signal out early.** When nothing prints, put raw UART writes at each stage. The TF-A debug
-  patch in [`tools/fel/tfa`](../../tools/fel/tfa/README.md) does this.
+  patch in [`frames/aqara-s1-plus/tools/fel/tfa`](../../frames/aqara-s1-plus/tools/fel/tfa/README.md) does this.
 - **Prove a protocol against the vendor's own tool.** For the wall base, we wrote an emulator from the
   disassembly and ran Aqara's `bracket_cli` against it on the panel ([base-protocol.md](../../frames/aqara-s1-plus/research/base-protocol.md)).
   For the radio, we proved the flash path by reflashing the identical stock image first.

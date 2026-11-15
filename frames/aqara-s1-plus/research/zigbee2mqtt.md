@@ -104,7 +104,7 @@ over SiLabs' own binary, unless EZSP 13 (GSDK 4.4/4.5) is wanted. No prebuilt de
 darkxst/silabs-firmware-builder and NabuCasa's builder only build **firmware** (NCP/RCP/bootloader
 GBLs), not zigbeed.
 
-### Making it run on Android: `tools/radio/build-zigbeed.sh` (prototype, built here)
+### Making it run on Android: `build-zigbeed.sh` (prototype, built here)
 
 1. **libcpc must match Aqara's cpcd 4.3.3.**
    - SiLabs' libcpc 4.7.1.0 refuses a daemon whose version string differs (strings: "libcpc version
@@ -142,7 +142,7 @@ GBLs), not zigbeed.
 Output: `/tmp/zigbeed-sisdk/` (`$ZIGBEED_OUT`; ~4 MB with the runtime) plus `BUILD-INFO.txt` with all
 hashes. Downloads and intermediates go to `/tmp/zigbeed-sisdk-build/` (`$ZIGBEED_BUILD`). Both are
 **outside the repo tree** on purpose, because the bundle holds the MSLA binary, and the script refuses
-paths inside the checkout. (An earlier version wrote to the gitignored `tools/radio/out/`.)
+paths inside the checkout. (An earlier version wrote to the gitignored `frames/aqara-s1-plus/tools/radio/out/`.)
 
 ### Licensing (checked again 2026-11-10 for what the radio bundle ships)
 
@@ -157,7 +157,7 @@ paths inside the checkout. (An earlier version wrote to the gitignored `tools/ra
   SiLabs-built zigbeed inside its add-on images, but that is not a licence opinion either.
 - The bundled glibc (LGPL-2.1+) and libstdc++ (GPL-3.0+ with the GCC Runtime Library Exception) are
   unproblematic if their sources are pointed to.
-- **What the product ships** (radio bundle `sisdk/`, `tools/radio/build-sisdk-runtime.sh`):
+- **What the product ships** (radio bundle `sisdk/`, `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`):
   - `libcpc.so.3` from cpc-daemon v4.3.3: every file says "governed by the sections of the MSLA
     applicable to Source Code". MSLA 4.2.2/4.2.5 allow compiling it and distributing the result
     ("Licensed Programs") to end users "only for use with Authorized Applications and not on a standalone
@@ -296,7 +296,7 @@ IID 2 never meets zigbeed, one protocol at a time). ZHA works too: bellows suppo
 
 ### Step 2 (needs the panel, no flashing): zigbeed 8.2.2 against the stock RCP — **done, passed**
 
-1. Build: `tools/radio/build-zigbeed.sh` (output in `/tmp/zigbeed-sisdk/`). Push `bin/ lib/
+1. Build: `frames/aqara-s1-plus/tools/radio/build-zigbeed.sh` (output in `/tmp/zigbeed-sisdk/`). Push `bin/ lib/
    zigbeed.sh` to `/data/local/tmp/zigbeed-sisdk/` and make it root 0700. The MSLA binary only ever
    lives in `/tmp` / `/data/local/tmp` during a test and is deleted afterwards.
 2. Hold Aqara's stack the way the test needs it:
@@ -384,7 +384,7 @@ newer SDK's RCP speaks a CPC protocol Aqara's cpcd rejects: [rcp-firmware.md](rc
 
 ## 6. Panel results (2026-11-10)
 
-Reference panel: helper v3 (root override, sha256 equal to `tools/radio/s1kiosk_radio.sh`), stock RCP
+Reference panel: helper v3 (root override, sha256 equal to `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh`), stock RCP
 `0017/2.3.3.0_GitHub-e6df00dd6`, Aqara's cpcd 4.3.3. Host: the Mac, zigbee-herdsman 11.2.1 (one patch above
 the 11.2.0 that Zigbee2MQTT 2.14.3 pins), Node 24, through `adb forward` to the panel's loopback, so the
 firewall allow-list was never changed. Only fresh random test networks on channel 25; nothing joined.
@@ -453,7 +453,7 @@ No spinel errors or asserts in the following 60 s.
 - An energy scan, ZHA `form`/restore on 8.2.2, and Z2M's `ember` backup restore into a fresh
   `host_token.nvm`.
 - The helper integration (step 3): implemented and covered by off-device tests
-  (`tools/radio/test/run.sh`, `RadioV4Test`), not run on the panel yet. Panel steps are in the v4 test
+  (`frames/aqara-s1-plus/tools/radio/test/run.sh`, `RadioV4Test`), not run on the panel yet. Panel steps are in the v4 test
   plan (the final report of 2026-11-10 / [../radio.md](../docs/radio.md#zigbee-stack-aqara-or-silicon-labs-helper-v4)).
 - The RSTACK margin: zigbeed 8.2.2 answers in 4.1-4.4 s, herdsman's `ember` waits 5 s. Thin; watch
   Zigbee2MQTT restarts in the soak test.

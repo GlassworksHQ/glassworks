@@ -90,7 +90,7 @@ reflection in the app need keep rules).
 The `size` job in `.github/workflows/pr.yml` measures what ships:
 1. builds the radio bundle as release.yml does (`tools/size/radio-bundle.sh`): the same files (the
    radio helper, the pinned `otbr-agent` and `ot-ctl` checked against `kiln/assets.lock.json`, and the
-   sisdk runtime checked against `tools/radio/sisdk-runtime.sha256`), signed with a throwaway key
+   sisdk runtime checked against `frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`), signed with a throwaway key
    made in the job. The signature is 64 bytes whichever key makes it, so only `manifest.sig` and the
    manifest's version line differ from the release's. No secret is used. The sisdk runtime is cached
    by its inputs;

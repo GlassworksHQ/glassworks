@@ -46,7 +46,7 @@ All ship in read-only `/vendor/app` (one in `/system/app`), so all are restorabl
 
 ## Apply / undo
 
-A reversible script lives at [`tools/debloat/debloat.sh`](../../../tools/debloat/debloat.sh)
+A reversible script lives at [`frames/aqara-s1-plus/tools/debloat/debloat.sh`](../tools/debloat/debloat.sh)
 (`disable` / `enable` / `status`). It disables the safe set and leaves
 system-critical packages alone.
 

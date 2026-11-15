@@ -1,7 +1,7 @@
 # Web installer: module contracts
 
-The design is in `frames/aqara-s1-plus/research/web-installer.md`, and the reference flow in `tools/install/fel-install.sh` +
-`tools/install.sh`. Every module is plain TypeScript (ES2022, no framework). Modules talk to each
+The design is in `frames/aqara-s1-plus/research/web-installer.md`, and the reference flow in `frames/aqara-s1-plus/tools/install/fel-install.sh` +
+`frames/aqara-s1-plus/tools/install.sh`. Every module is plain TypeScript (ES2022, no framework). Modules talk to each
 other only through the exports below. `app/` is the only module that knows about the UI.
 
 `kiln/` is one of the npm workspaces under the repo root's `package.json`. The protocol modules are
@@ -52,7 +52,7 @@ export interface OverlayFile { path: string; mode: number; data: Uint8Array }  /
 export interface PatchInput {
   boot: Uint8Array;               // the panel's boot.img: stock, or already Magisk-patched (restored first)
   magiskApk: Uint8Array;          // Magisk v31.1 APK (sha256 verified by the caller)
-  overlay: OverlayFile[];         // exactly what tools/root/patch-boot-magisk.sh adds (see there)
+  overlay: OverlayFile[];         // exactly what frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh adds (see there)
   preinitDevice?: string;         // default 'cache'
 }
 export interface PatchResult { image: Uint8Array; wasMagisk: boolean; magiskConfig: string; log: string[] }
@@ -68,12 +68,12 @@ export function replaceBootlogo(bootloaderImg: Uint8Array, bmp: Uint8Array): Uin
 export function loadOrCreateAdbKey(storage?: KeyStorage): Promise<AdbKey>;  // { publicKey: 'QAAAA... name', store } (IndexedDB)
 export interface PanelShell { run(cmd): Promise<{ out: string; code: number }>; push(path, data, mode?): Promise<void> }
 export class Panel implements PanelShell { static connect(key, device?): Promise<Panel>; static known(): Promise<USBDevice[]> }
-export function provision(panel: PanelShell, opts: ProvisionOptions, onStep?): Promise<{ ip?: string }>; // tools/install.sh
+export function provision(panel: PanelShell, opts: ProvisionOptions, onStep?): Promise<{ ip?: string }>; // frames/aqara-s1-plus/tools/install.sh
 export function unprovision(panel: PanelShell, onStep?): Promise<void>;                                     // install.sh --undo
 ```
 The recipe's `switch.ts`: when Android refuses the APK over another signing key (a debug build), `provision`
 asks `opts.confirmSwitch(plan)` and then uninstalls + installs, carrying the app's data and Wi-Fi over
-with adb root (panel side: `tools/install/s1kiosk-switch.sh`, same as install.sh). `unprovision` disables
+with adb root (panel side: `frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh`, same as install.sh). `unprovision` disables
 instead of uninstalling when S1 Kiosk saved the panel's Wi-Fi (Android forgets it with the app).
 Wake-word models are not pushed from the browser (CC BY-NC-SA, and GitHub sends no CORS headers);
 the kiosk app fetches them on the panel.

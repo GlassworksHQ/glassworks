@@ -163,9 +163,9 @@ times) shows the same list with each licence's full text.
 
 | Component | Licence | How it's used |
 |---|---|---|
-| U-Boot (with our A133 patches) | GPL-2.0-or-later | Built from source in [`tools/fel/`](tools/fel); runs from RAM only |
+| U-Boot (with our A133 patches) | GPL-2.0-or-later | Built from source in [`frames/aqara-s1-plus/tools/fel/`](frames/aqara-s1-plus/tools/fel); runs from RAM only |
 | Magisk v31.1 | GPL-3.0 | The official release APK, pinned by SHA-256 (the CLI downloads it, the web installer serves the same file); [source](https://github.com/topjohnwu/Magisk/tree/v31.1) |
-| ot-br-posix (`otbr-agent`, `ot-ctl`) | BSD-3-Clause | Built by [`tools/radio/`](tools/radio) |
+| ot-br-posix (`otbr-agent`, `ot-ctl`) | BSD-3-Clause | Built by [`frames/aqara-s1-plus/tools/radio/`](frames/aqara-s1-plus/tools/radio) |
 | cJSON, cpp-httplib (in the border-router `otbr-agent`) | MIT | Bundled by ot-br-posix's REST server |
 | Silicon Labs `libcpc` and CPC interface | Silicon Labs MSLA, Zlib | Built from Silicon Labs' public source into `otbr-agent` and the radio package, to talk to the panel's own radio |
 | GNU C library, GCC runtime | LGPL-2.1-or-later, GPL-3.0 with the GCC exception | Runtime for the radio tools, unmodified from Ubuntu 22.04 |

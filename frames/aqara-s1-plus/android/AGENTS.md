@@ -42,7 +42,7 @@ A new library in `libs/` or a new pane needs a branded README header: see
 - Put protocol logic (ESPHome, Improv, EZSP/ASH, the wall base, Sendspin, FLAC) in plain Kotlin
   that a JVM test can drive, and keep the Android glue thin. `libs/esphome-api` must stay free of
   Android imports.
-- The wall base driver has an emulator: `tools/bracket/base_emulator.py`, reached with
+- The wall base driver has an emulator: `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, reached with
   `--es base_transport tcp:127.0.0.1:9999` and `adb reverse`. It has never met a real base.
 
 ## Code conventions
@@ -90,4 +90,4 @@ Every UI change needs screenshots in the PR, before and after (see [`AGENTS.md`]
   `arm64-v8a` one is `s1-kiosk-test-arm64-v8a-<sha>`. Creating these branches needs admin rights.
 - Test builds carry no radio bundle, so the root side stays as it was.
 - `ANDROID_SERIAL` selects the panel for adb. Don't export it before running `fastboot`; see
-  [`tools/AGENTS.md`](../../../tools/AGENTS.md).
+  [`frames/aqara-s1-plus/tools/AGENTS.md`](../tools/AGENTS.md).

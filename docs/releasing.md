@@ -116,7 +116,7 @@ Only the armeabi-v7a (S1) APK carries a **signed radio bundle**: the root radio 
 and the Silicon Labs Zigbee runtime ([radio.md](../frames/aqara-s1-plus/docs/radio.md#radio-bundles-helper-v4)). The other ABIs'
 APKs carry none, because no S1 runs them. Panels whose boot image has the bundle
 loader install it only if it is signed with the Ed25519 key whose public half is baked into the boot
-image ([`tools/root/s1kiosk_bundle.pub`](../tools/root/s1kiosk_bundle.pub)). It is a separate key from
+image ([`frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub`](../frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub)). It is a separate key from
 the APK key on purpose: it lets root code run on the panel, so it lives only in `~/secure` and in one
 repository secret.
 
@@ -124,7 +124,7 @@ repository secret.
 # Done once (2026-11-10): ~/secure/s1kiosk-radio-bundle-ed25519.pem, mode 600, never printed.
 openssl genpkey -algorithm ed25519 -out ~/secure/s1kiosk-radio-bundle-ed25519.pem   # OpenSSL 3
 openssl pkey -in ~/secure/s1kiosk-radio-bundle-ed25519.pem -pubout -outform DER | tail -c 32 | xxd -p -c 64 \
-  > tools/root/s1kiosk_bundle.pub
+  > frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub
 # The secret: an environment secret of the `radio-signing` environment (Settings -> Environments;
 # create the environment first), so only the release workflow's signing job can read it:
 gh secret set S1_RADIO_BUNDLE_KEY --env radio-signing --repo GlassworksHQ/glassworks \
@@ -135,7 +135,7 @@ gh secret set S1_RADIO_BUNDLE_KEY --env radio-signing --repo GlassworksHQ/glassw
   `main` (`git merge-base --is-ancestor`), runs no third-party action (GitHub's own checkout and
   download-artifact, pinned by commit SHA), and takes nothing from the unprivileged `inputs` job
   without checking it: the Silicon Labs runtime against the committed
-  [`tools/radio/sisdk-runtime.sha256`](../tools/radio/sisdk-runtime.sha256), otbr-agent/ot-ctl against
+  [`frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`](../frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256), otbr-agent/ot-ctl against
   `kiln/assets.lock.json`, the helper from the checkout. No required reviewer is set on the environment
   (one releaser); adding one later only needs the environment setting.
 - Keep no repository-level `S1_RADIO_BUNDLE_KEY`: other jobs would then see it.
@@ -153,13 +153,13 @@ The installer's Vercel build downloads its binaries from pinned URLs ([`kiln/ass
 The boot image's signature checker is one of them since the radio bundle loader:
 
 ```sh
-tools/root/build-verify.sh      # reproducible; must print sha256 6aa0dd83…9f80 (the lock's pin)
-gh release upload installer-files-3 tools/root/out/s1kiosk_verify --repo GlassworksHQ/glassworks
+frames/aqara-s1-plus/tools/root/build-verify.sh      # reproducible; must print sha256 6aa0dd83…9f80 (the lock's pin)
+gh release upload installer-files-3 frames/aqara-s1-plus/tools/root/out/s1kiosk_verify --repo GlassworksHQ/glassworks
 ```
 
 (Create the `installer-files-3` release first if it doesn't exist, e.g. as a copy of
 `installer-files-2` plus this file.) Until it is uploaded, the hosted installer's build fails at
-`stage-assets.mjs --remote` with a download error; local builds use `tools/root/out/` directly.
+`stage-assets.mjs --remote` with a download error; local builds use `frames/aqara-s1-plus/tools/root/out/` directly.
 
 ## 4. Release
 
@@ -233,13 +233,13 @@ gh run watch --repo GlassworksHQ/glassworks   # or the Actions tab
 The workflow then:
 
 1. checks the tag;
-2. builds the Silicon Labs runtime (`inputs` job: `tools/radio/build-sisdk-runtime.sh`, Docker, a pinned
-   image and Ubuntu snapshot; it must reproduce `tools/radio/sisdk-runtime.sha256`; never Silicon Labs'
+2. builds the Silicon Labs runtime (`inputs` job: `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`, Docker, a pinned
+   image and Ubuntu snapshot; it must reproduce `frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`; never Silicon Labs'
    zigbeed itself), then signs the radio bundle in the `sign-bundle` job (environment `radio-signing`,
-   main only, every input checked against committed hashes; `tools/radio/make-bundle.py --app-version`,
-   version = the versionCode, checked against `tools/root/s1kiosk_bundle.pub`). PR CI catches most drift
+   main only, every input checked against committed hashes; `frames/aqara-s1-plus/tools/radio/make-bundle.py --app-version`,
+   version = the versionCode, checked against `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub`). PR CI catches most drift
    before a tag does. The `size` job in `pr.yml` caches the runtime under a key made from the script,
-   `tools/radio/sisdk/` and the hash file. When one of them changes, it rebuilds from scratch and checks
+   `frames/aqara-s1-plus/tools/radio/sisdk/` and the hash file. When one of them changes, it rebuilds from scratch and checks
    the hashes. On a cache hit, it only checks the cached files against the hashes. So drift outside the
    repo (the Ubuntu snapshot, the cpc-daemon tag) still shows first in this fresh release build;
 3. builds `:kiosk:assembleRelease` with `S1_VERSION=1.0.0` once per ABI, the `armeabi-v7a` one with

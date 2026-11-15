@@ -8,8 +8,8 @@
 This is the implementation spec for a browser-based installer that turns a factory **Aqara Panel
 Hub S1 Plus** (A133, `sun50iw10`) into a Home Assistant kiosk with no UART, no terminal and no
 local downloads. It mirrors, step for step, the CLI flow that already passed a factory simulation on
-a real panel: `tools/install/fel-install.sh` → `tools/install.sh` (see
-[frames/aqara-s1-plus/research/root.md](root.md#one-command-toolsinstallfel-installsh) and [frames/aqara-s1-plus/research/fel.md](fel.md)).
+a real panel: `frames/aqara-s1-plus/tools/install/fel-install.sh` → `frames/aqara-s1-plus/tools/install.sh` (see
+[frames/aqara-s1-plus/research/root.md](root.md#one-command-fel-installsh) and [frames/aqara-s1-plus/research/fel.md](fel.md)).
 
 Every claim below is tagged **[verified]** (checked against source / a byte-exact reproduction run
 on this machine today) or **[assumed]** (needs a panel, or a browser-runtime test, to confirm). The
@@ -19,7 +19,7 @@ the existing Docker boot-patch locally to produce golden files, which is explici
 Repo paths are relative to the repo root. External source paths are to the local checkouts used to
 write this doc, pinned by commit:
 - sunxi-tools `~/src/sunxi-tools` @ `34dfa20` (FEL protocol reference) — GPL-2.0 **[verified]**
-- U-Boot `~/src/u-boot-s1` @ `934995f6` + `tools/fel/uboot/patches/*` (our gadget) — GPL-2.0 **[verified]**
+- U-Boot `~/src/u-boot-s1` @ `934995f6` + `frames/aqara-s1-plus/tools/fel/uboot/patches/*` (our gadget) — GPL-2.0 **[verified]**
 - Magisk `topjohnwu/Magisk` @ `0972f67` = tag **v31.1** (`native/src/boot/*`) — GPL-3.0 **[verified]**
 - fastboot.js `kdrag0n/fastboot.js` @ `5b61333` = v1.1.3 — MIT **[verified]**
 - ya-webadb / Tango `yume-chan/ya-webadb` @ `cdc74fa` = v2.6.4 (stable), beta 3.0.0-beta.5 reviewed — MIT **[verified]**
@@ -33,13 +33,13 @@ The CLI pipeline the installer reproduces, with the module that replaces each st
 | CLI stage | CLI file | Browser module | Transport |
 |---|---|---|---|
 | 1. Wait for FEL, check SoC | `fel-install.sh:40-44` | `fel/` (new TS WebUSB port) | WebUSB (`1f3a:efe8`) |
-| 2. Run SPL, upload U-Boot+ATF, warm-reset | `tools/fel/fel-boot.sh` | `fel/` | WebUSB (`1f3a:efe8`) |
+| 2. Run SPL, upload U-Boot+ATF, warm-reset | `frames/aqara-s1-plus/tools/fel/fel-boot.sh` | `fel/` | WebUSB (`1f3a:efe8`) |
 | 3. U-Boot autostarts `fastboot usb 0` | `aqara-s1-plus_defconfig:46-47` | — (device re-enumerates) | — |
 | 4. getvars, back up partitions | `fel-install.sh:52-64`, `fb-read-partition.sh` | `fastboot/` (fastboot.js + `oem run`/`upload`) | WebUSB (`1f3a:1010`) |
-| 5. Patch boot (Magisk + helper + adb key) | `tools/root/patch-boot-magisk.sh` | `bootpatch/` (JS/wasm magiskboot) | none (in-memory) |
+| 5. Patch boot (Magisk + helper + adb key) | `frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh` | `bootpatch/` (JS/wasm magiskboot) | none (in-memory) |
 | 6. vbmeta flags → 3 | `fel-install.sh:73-85` | `bootpatch/` + `fastboot/` | WebUSB |
 | 7. Flash boot, verify, reboot | `fel-install.sh:87-93` | `fastboot/` | WebUSB |
-| 8. First boot authorizes adb key; then install app | `s1kiosk_firstboot.sh`, `tools/install.sh` | `adb/` (Tango) + `provision/` | WebUSB (adb `18d1:…`/Aqara) |
+| 8. First boot authorizes adb key; then install app | `s1kiosk_firstboot.sh`, `frames/aqara-s1-plus/tools/install.sh` | `adb/` (Tango) + `provision/` | WebUSB (adb `18d1:…`/Aqara) |
 
 The whole thing is a static site: HTML/TS/wasm plus pinned asset blobs, no backend. WebUSB needs a
 secure context (HTTPS or `http://localhost`) **[verified: MDN]**, so the site must be served over
@@ -71,7 +71,7 @@ web/
       magiskboot.wasm        Rust compressors (gzip/xz) compiled to wasm32 (§4.4)
       vbmeta.ts              AVB flags patch (§6)
     adb/                     Tango wrappers (§7): keypair, install, shell
-    provision/              port of tools/install.sh (§8)
+    provision/              port of frames/aqara-s1-plus/tools/install.sh (§8)
     assets/                  manifest + SHA-256 verification (§9)
 ```
 
@@ -315,7 +315,7 @@ limit includes the `oem run:` prefix (8 bytes), so each U-Boot command has ≤56
 `fb-read-partition.sh` uses short names. A thin `oemRun(cmd)` wrapper that throws on `FAIL` mirrors
 `fb-read-partition.sh:16`.
 
-**(b) `upload` / `get_staged`** — the custom command from `tools/fel/uboot/patches/0002`
+**(b) `upload` / `get_staged`** — the custom command from `frames/aqara-s1-plus/tools/fel/uboot/patches/0002`
 **[verified in both the patch and the built tree]**:
 - host sends `upload`; device replies `DATA%08x` with `${fastboot_upload_size}`
   (`fb_command.c:344-353`); then streams that many bytes from `fastboot_buf_addr` in EP_BUFFER_SIZE
@@ -354,7 +354,7 @@ does this for vbmeta at `:80-81` and boot at `:89-90`; on mismatch it refuses to
 ## 4. Byte-exact boot patch (the hard part), in the browser
 
 **Goal:** given the panel's own stock `boot.img` (read in §3.2) and the browser's adb public key,
-produce a patched image **identical** to what `tools/root/patch-boot-magisk.sh` produces in Docker.
+produce a patched image **identical** to what `frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh` produces in Docker.
 
 This section was **validated end-to-end on this machine today** by re-implementing the container
 steps in Python and comparing against the real golden output
@@ -390,7 +390,7 @@ Magiskboot's parser and repacker, which the TS port reimplements:
 ### 4.2 What `boot_patch.sh` + the repo wrapper actually do  **[verified: scripts + golden]**
 
 Reading `assets/boot_patch.sh` (v31.1), `assets/util_functions.sh`, and the repo wrapper
-`tools/root/patch-boot-magisk.sh`, the deterministic sequence is:
+`frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh`, the deterministic sequence is:
 
 1. **unpack** the stock boot image → `kernel`, `ramdisk.cpio` (gunzipped), `dtb`
    (`boot_patch.sh:85-97`).
@@ -569,7 +569,7 @@ boot footer's flags at 0 and matched golden **[verified]**. The TS repack must r
 
 ---
 
-## 7. adb over WebUSB (Tango) — the `tools/install.sh` port
+## 7. adb over WebUSB (Tango) — the `install.sh` port
 
 Use **ya-webadb / Tango** (MIT). Pin **v2.6.4** (stable) unless the 3.0 beta API is wanted; the
 relevant pieces exist in both, with renamed symbols (`AdbWebCredentialStore` →
@@ -697,7 +697,7 @@ Not checked: the first-install timeline (above), and whether the signing-key swi
 ### 8.2 Re-run on an already-installed panel  **[verified: deterministic repatch]**
 - If the first `requestDevice` finds the **adb** interface (panel already booted & authorized), skip
   FEL entirely and go to §9 "configure/repair" (install/upgrade the app, re-push models) — like
-  running `tools/install.sh` alone.
+  running `frames/aqara-s1-plus/tools/install.sh` alone.
 - If the user re-enters FEL on an already-patched panel: `patch-boot-magisk.sh` detects "Magisk
   patched boot image" and `restore`s the stock ramdisk first, then re-patches → **identical** output
   (`boot_patch.sh:132-146`, `cpio.rs:562-595`; verified: repatch of golden → `d1a4925f…`). The
@@ -723,7 +723,7 @@ All assets are hosted with the static site and each is pinned by SHA-256; the lo
 
 | Asset | Source / licence | Size | SHA-256 |
 |---|---|---|---|
-| `u-boot.bin` (nodtb+DTB, loaded to 0x4a000000) | our U-Boot, **GPL-2.0** (+ source & `tools/fel/uboot/patches`) | 714184 | `431f107a…e61f` |
+| `u-boot.bin` (nodtb+DTB, loaded to 0x4a000000) | our U-Boot, **GPL-2.0** (+ source & `frames/aqara-s1-plus/tools/fel/uboot/patches`) | 714184 | `431f107a…e61f` |
 | `u-boot-sunxi-with-spl.bin` (SPL source for §2.4) | our U-Boot, GPL-2.0 | 810741 | `fe9a00a6…f3f` |
 | `bl31-s1.bin` (only if a BL31 build is offered) | TF-A, BSD-3-Clause | 53616 | not pinned here; built per `build-uboot.sh` |
 | `Magisk-v31.1.apk` (re-hosted; GitHub blocks cross-origin) | **GPL-3.0**, link to source | 10679283 | `89cefac0…c6e7` |
@@ -757,7 +757,7 @@ CC-BY-NC-SA-4.0 (wake-word models).
    (sha256 `29f329f0…`) and a **fixed test adb key**, the browser patcher must output a boot image
    whose sha256 equals the Docker output for the same key. With the reference key the target is
    `d1a4925f…` (reproduced byte-exact today in a Python model of the container steps). CI runs the
-   real `tools/root/patch-boot-magisk.sh` in Docker to produce the golden, then diffs.
+   real `frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh` in Docker to produce the golden, then diffs.
 2. **Compressor golden tests.** `magiskboot.wasm` `xz_preset6_crc32_bcj(ArmThumb)` must reproduce
    `magisk.xz`, `init-ld.xz`, `.backup/init.xz`; `gzip_best` must reproduce the patched ramdisk.
    (All four verified today both natively and as wasm32-wasip1 under Node.) Run the wasm under
@@ -778,7 +778,7 @@ CC-BY-NC-SA-4.0 (wake-word models).
 8. FEL enumerate + `ver` gate; SPL `eGON.FEL`; U-Boot re-enumeration to `1f3a:1010`; getvar gate.
 9. Backup → patch → vbmeta → flash boot → read-back `cmp` → reboot → adb authorized with no screen
    tap (the CLI hit 21 s, `frames/aqara-s1-plus/research/root.md`), Magisk + helper live.
-10. Full provisioning (`tools/install.sh` parity): app installed, HOME set, debloat, models pushed,
+10. Full provisioning (`frames/aqara-s1-plus/tools/install.sh` parity): app installed, HOME set, debloat, models pushed,
     kiosk shows the HA URL; ESPHome device appears.
 11. Per-OS: Windows (Zadig for FEL; fastboot/adb driver — §11), Linux (udev), macOS (no setup);
     Chrome/Edge/Brave desktop.
