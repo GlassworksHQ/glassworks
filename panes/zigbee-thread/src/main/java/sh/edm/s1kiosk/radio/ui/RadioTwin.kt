@@ -75,7 +75,7 @@ object RadioTwin {
         if (m == def.readout.mode()) return@Choice done(null)
         val r = Request.Mode(m)
         if (!start(def, r)) return@Choice done(BUSY)
-        send.send(r) { why -> def.twinGuard.finish(r); if (why == null) def.choosing = false; done(why) }
+        sending(def, r) { send.send(r) { why -> def.twinGuard.finish(r); if (why == null) def.choosing = false; done(why) } }
     }
 
     private fun roleOf(id: String) = RadioMode.fromId(id)?.takeIf { it != RadioMode.OFF }
@@ -91,7 +91,7 @@ object RadioTwin {
         if (z == def.readout.facts()?.stack) return@Choice done(null)
         val r = Request.Stack(z)
         if (!start(def, r)) return@Choice done(BUSY)
-        send.send(r) { why -> def.twinGuard.finish(r); done(why) }
+        sending(def, r) { send.send(r) { why -> def.twinGuard.finish(r); done(why) } }
     }
 
     /**
@@ -106,11 +106,21 @@ object RadioTwin {
         val r = Request.Act(a)
         if (!start(def, r)) return@Action done(BUSY)
         var answered = false
-        send.send(r) { why ->
-            if (why != null) def.twinGuard.finish(r) // refused: nothing runs
-            if (!answered) { answered = true; done(why) }
+        sending(def, r) {
+            send.send(r) { why ->
+                if (why != null) def.twinGuard.finish(r) // refused: nothing runs
+                if (!answered) { answered = true; done(why) }
+            }
         }
         if (!answered) { answered = true; done(null) }
+    }
+
+    /**
+     * Sends [r] through [block]; a send that throws frees the guard at once (#269 delta verifier), and the
+     * throw goes on to SettingsChange.change, which answers it in words.
+     */
+    private inline fun sending(def: RadioDefinition, r: Request, block: () -> Unit) {
+        try { block() } catch (e: Throwable) { def.twinGuard.finish(r); throw e }
     }
 
     /** [r] may start: no other request runs, from here or (a mode change) the panel and Home Assistant. */

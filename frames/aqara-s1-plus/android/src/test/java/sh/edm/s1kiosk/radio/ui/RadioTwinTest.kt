@@ -19,6 +19,8 @@ import sh.edm.s1kiosk.radio.RadioMode
 import sh.edm.s1kiosk.radio.ThreadRouterState
 import sh.edm.s1kiosk.radio.ZigbeeStack
 import sh.edm.s1kiosk.radio.radioDefinition
+import dev.glassworks.manage.answer
+import dev.glassworks.manage.text
 
 /**
  * #269: the radio's twin on the Manage page says what the panel's radio view says, from the same card
@@ -196,22 +198,17 @@ class RadioTwinTest {
             val twinWords = twin.flatMap { i ->
                 words(listOf(i)) + ((i as? SettingsItem.Choice)?.options()?.map { it.second } ?: emptyList())
             }.toSet()
-            val own = setOf(RadioTwin.ROLE, RadioTwin.JOIN_HA_DETAIL, RadioTwin.PICK) + RadioMode.entries.map(RadioStep::shortName) +
-                RadioFollowUp.Action.entries.map(RadioTwin::short) + RadioFollowUp.Health.entries.map { it.label }
-            val onPanelMissing = twinWords.filter { it !in shown && it !in own && !(it in RadioStep.OPTIONS.map { o -> o.title }) }
+            // The twin's own: its Role row and list, the role's short name, its button words and Get it's line.
+            val roleList = RadioStep.OPTIONS.map { o -> o.title }.toSet()
+            val buttons = twin.filterIsInstance<SettingsItem.Action>().map { it.label }.toSet()
+            val onPanelMissing = twinWords.filter {
+                it !in shown && !RadioViewWords.twinOwn(f, it) && it !in roleList && it !in buttons && it != RadioTwin.JOIN_HA_DETAIL && it != RadioTwin.PICK
+            }
             assertTrue("$what: the twin says $onPanelMissing, which the panel's view doesn't show", onPanelMissing.isEmpty())
-            val viewOwn = VIEW_OWN + RadioMode.entries.map(RoleStyle::header) + RadioFollowUp.Health.entries.map { it.label }
-            val twinMissing = shown.filter { it !in twinWords && it !in viewOwn && !it.startsWith(RadioFollowUp.DATASET_DISCLOSURE) && !it.startsWith("How does this work?") }
+            val twinMissing = shown.filter { it !in twinWords && !RadioViewWords.own(f, it) }
             assertTrue("$what: the panel's view shows $twinMissing, which the twin doesn't have", twinMissing.isEmpty())
         }
     }
-
-    private val VIEW_OWN = setOf(
-        // The role picker's tiles (RadioTechPicker): the twin's Role row and its list.
-        "Zigbee", "For ZHA or Zigbee2MQTT", "Coordinator", "Repeater β", "Thread", "For Matter over Thread", "Border router",
-        // Off's legend under "The radio is off".
-        "β  experimental",
-    )
 
     private fun texts(v: android.view.View): List<String> {
         val out = ArrayList<String>()
@@ -222,6 +219,50 @@ class RadioTwinTest {
         }
         walk(v)
         return out
+    }
+
+    /** #269 delta verifier: a send that throws frees the guard at once; the next request goes. */
+    @Test fun aSendThatThrowsDoesntBlockTheNext() {
+        val d = def(facts(RadioMode.THREAD_ROUTER, thread = threadStates[3], stored = true))
+        var calls = 0
+        val send = RadioTwin.Send { _, _ -> calls++; if (calls == 1) error("the radio thread is gone") }
+        val leave = RadioTwin.items(d, send).filterIsInstance<SettingsItem.Action>().single()
+        val got = ArrayList<String?>()
+        SettingsChange.change(leave, SettingsItem.Action.RUN) { got += it }
+        SettingsChange.change(leave, SettingsItem.Action.RUN) { got += it }
+        assertEquals("both reached the radio: the throw didn't leave it busy", 2, calls)
+        assertTrue(got.toString(), got[0]!!.contains("the radio thread is gone") && got[1] == null)
+    }
+
+    /** #269 delta verifier: two browsers at once, many times: exactly one request starts each round. */
+    @Test fun theGuardLetsOneOfTwoThreadsThrough() {
+        repeat(200) {
+            val g = RadioTwin.Guard(clock = { 0L })
+            val go = java.util.concurrent.CountDownLatch(1)
+            val started = java.util.concurrent.atomic.AtomicInteger()
+            val threads = List(2) { i ->
+                Thread {
+                    go.await()
+                    if (g.start(RadioFollowUp.Request.Mode(if (i == 0) RadioMode.THREAD else RadioMode.ZIGBEE_TCP), "ok", pending = false)) started.incrementAndGet()
+                }.apply { start() }
+            }
+            go.countDown()
+            threads.forEach { it.join() }
+            assertEquals(1, started.get())
+        }
+    }
+
+    /** #269 delta verifier: on the Manage page itself, Role=off is refused with no question. */
+    @Test fun roleOffOnTheManagePageIsRefusedWithNoQuestion() {
+        val d = def(facts(RadioMode.THREAD_ROUTER, thread = threadStates[3], stored = true))
+        val f = dev.glassworks.manage.ManageFixture()
+        f.statusFn = { d.settings().let { s -> f.status.copy(panes = listOf(dev.glassworks.manage.paneRow("radio", s.single())), sections = s) } }
+        val b = f.Browser().also { it.signInWithHa() }
+        val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to "radio", "key" to RadioTwin.ROLE, "value" to RadioMode.OFF.id))
+        assertEquals(422, r.status)
+        assertNull("no question", r.answer())
+        assertTrue(r.text().contains(SettingsChange.PICK))
+        assertEquals("nothing reached the main thread's saves but the refusal", 1, f.onMainCalls)
     }
 
     @Test fun turnedOnFromTheBrowserItOffersTheRoles() {

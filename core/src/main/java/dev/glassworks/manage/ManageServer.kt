@@ -54,7 +54,8 @@ class ManageServer(
     private val event: (String) -> Unit = {},
     /** How long a settings change may take before the page answers "still applying" (the radio's off waits on the radio). */
     private val saveWaitMs: Long = 20_000,
-    private val clock: () -> Long = System::currentTimeMillis,
+    /** A monotonic clock in ms for the questions' expiry: a wall clock that jumps (NTP, a time zone) mustn't stretch or cut it. */
+    private val monoMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
     private val random = SecureRandom()
 
@@ -66,7 +67,7 @@ class ManageServer(
 
     /** A token for the question about [value] at [key]: the dialog's form sends it back with the answer. */
     private fun ask(session: String, section: String, key: String, value: String): String {
-        val now = clock()
+        val now = monoMs()
         asked.entries.removeIf { it.value.untilMs < now }
         // A browser can't pile questions up: the oldest go first.
         while (asked.size >= MAX_ASKED) asked.entries.minByOrNull { it.value.untilMs }?.let { asked.remove(it.key) } ?: break
@@ -76,6 +77,12 @@ class ManageServer(
         return token
     }
 
+    /** A signed-out session's questions go with it. */
+    private fun forget(session: String) { asked.entries.removeIf { it.value.session == session } }
+
+    /** How many questions wait for [session]'s answer (tests). */
+    fun questionsWaiting(session: String): Int = asked.values.count { it.session == session }
+
     /**
      * Whether [token] answers the question about exactly this change for this session. Used up either way: a
      * replayed or a stale answer asks again. A form with `confirmed=1` and no token is no answer.
@@ -83,7 +90,7 @@ class ManageServer(
     private fun answered(token: String?, session: String, section: String, key: String, value: String): Boolean {
         if (token.isNullOrEmpty()) return false
         val a = asked.remove(token) ?: return false
-        return a.untilMs >= clock() && a == a.copy(session = session, section = section, key = key, value = value)
+        return a.untilMs >= monoMs() && a == a.copy(session = session, section = section, key = key, value = value)
     }
 
     fun handle(req: HttpRequest): HttpResponse {
@@ -225,6 +232,7 @@ class ManageServer(
         if (session == null) return HttpResponse.seeOther("/")
         if (!csrfOk(req, session)) return HttpResponse.text(403, "This form has expired. Go back and try again.")
         if (sessions.revoke(session.id) == SessionStore.Revoked.NOT_SAVED) return notSaved()
+        forget(session.id)
         event("${who(session)} signed out (${session.browser})")
         return HttpResponse.seeOther("/", mapOf("Set-Cookie" to clearCookie(SESSION)))
     }
@@ -390,6 +398,7 @@ class ManageServer(
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }
                 if (sessions.revoke(id) == SessionStore.Revoked.NOT_SAVED) return notSaved()
+                forget(id)
                 target?.let { event("${who(s)} signed out ${it.browser}") }
                 if (id == s.id) HttpResponse.seeOther("/", mapOf("Set-Cookie" to clearCookie(SESSION)))
                 else HttpResponse.seeOther("/security?done=signedout")
