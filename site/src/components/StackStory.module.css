@@ -1,19 +1,66 @@
-/* One tall section; its sticky frame holds the words on the left and the stack on the right. */
-/* the story sits on the page's own column, so its edges line up with the header */
+/* One tall section; its sticky frame, one large glass card, holds the words on the left and the stack on the right. */
 .story {
   position: relative;
   height: 620vh;
+  margin-bottom: 18px;
 }
 
 .sticky {
   position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100svh;
+  top: 20px;
+  height: calc(100vh - 40px);
+  height: calc(100svh - 40px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
   gap: 24px;
   align-items: center;
+  padding: 0 40px 0 48px;
+  overflow: hidden;
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  border-radius: 28px;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.sticky::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(70% 60% at 75% 45%, color-mix(in srgb, var(--sky) 7%, transparent), transparent 70%);
+}
+
+.status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.statusChip b {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+a.statusChip:hover {
+  border-color: color-mix(in srgb, var(--sky) 45%, var(--edge));
 }
 
 /* hero copy and the layer list share one cell and crossfade */
@@ -36,7 +83,7 @@
 }
 
 .h1 {
-  font-size: clamp(36px, 5.2vw, 58px);
+  font-size: clamp(34px, 3.9vw, 54px);
   line-height: 1.04;
   letter-spacing: -0.035em;
   font-weight: 300;
@@ -475,9 +522,21 @@
 @media (max-width: 900px) {
   .sticky {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 46svh minmax(0, 1fr);
+    grid-template-rows: 34svh minmax(0, 1fr);
     gap: 8px;
     align-items: start;
+    top: 81px;
+    height: calc(100svh - 97px);
+    padding: 12px 18px 18px;
+    border-radius: 22px;
+  }
+
+  .status {
+    display: none;
+  }
+
+  .hero {
+    gap: 14px;
   }
 
   .stage {
@@ -490,11 +549,11 @@
   }
 
   .svg {
-    max-height: 46svh;
+    max-height: 34svh;
   }
 
   .h1 {
-    font-size: clamp(30px, 8vw, 40px);
+    font-size: 30px;
   }
 
   .lede {

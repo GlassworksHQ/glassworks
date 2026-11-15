@@ -1,4 +1,4 @@
-import { PANES, capabilityText } from "@glassworks/frame-card";
+import { PANES, STAGE_TEXT, capabilityText, type Stage } from "@glassworks/frame-card";
 
 /** The site's own origin, for anything that leaves it: README snippets, metadata. */
 export const SITE = "https://www.glassworks.dev";
@@ -30,7 +30,7 @@ export type PaneId = string;
  * pane: one that belongs to a single device, like the S1's wall base. The rest run anywhere their
  * hardware is. `requires` is said in words; `icon` is the pane's SVG.
  */
-export type Pane = { id: PaneId; name: string; does: string; requires: string; frame?: string; icon: string };
+export type Pane = { id: PaneId; name: string; does: string; requires: string; needs: string; status: Stage; frame?: string; icon: string };
 
 const sentence = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
@@ -39,9 +39,24 @@ export const panes: Pane[] = PANES.map((p) => ({
   name: p.name,
   does: p.does,
   requires: p.requires.length ? sentence(capabilityText(p.requires)) : "Nothing special",
+  needs: p.requires.length ? capabilityText(p.requires) : "nothing special",
+  status: p.status,
   frame: p.frame,
   icon: p.icon,
 }));
 
 export const generalPanes = panes.filter((p) => !p.frame);
 export const framePanes = panes.filter((p) => p.frame);
+
+const STAGES: Stage[] = ["stable", "beta", "alpha", "development", "planned"];
+
+/** "1 beta, 2 planned": how many of these are at each stage, shipping stages first. */
+export function stageCounts(items: { status: Stage }[]) {
+  return STAGES.map((st) => [st, items.filter((i) => i.status === st).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([st, n]) => `${n} ${STAGE_TEXT[st].toLowerCase()}`)
+    .join(", ");
+}
+
+/** A pane's line in a list: what it does, then what it needs. */
+export const paneLine = (p: Pane) => `${p.does} Needs ${p.needs}.`;

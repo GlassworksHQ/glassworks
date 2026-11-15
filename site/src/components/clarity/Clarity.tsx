@@ -17,12 +17,10 @@ import {
   restartText,
   rubric,
   tone,
-  type Clarity,
   type Graded,
 } from "@/lib/clarity";
 import { CopySnippet } from "@/components/CopySnippet";
 import { SITE, readmeImage } from "@/lib/site";
-import { ClarityChipLink } from "./ClarityChipLink";
 import s from "./Clarity.module.css";
 
 /*
@@ -90,44 +88,6 @@ const missingName = (m: string) => {
   const [page, task] = m.split(".");
   return task ? `${pageName(page).toLowerCase()} ${TASK_NAME[task]?.toLowerCase() ?? task}` : m === "start" ? "restart" : m;
 };
-
-/** Why there's no letter, in a few words */
-function noGrade(c: Clarity): string {
-  if (c.state === "none") return "Not measured yet";
-  if (c.state === "re-measure") return "Re-measure";
-  return "Not comparable";
-}
-
-/** Near the top of a frame's page: the small seal; it opens the Clarity panel below. */
-export function ClarityChip({ frameId }: { frameId: string }) {
-  const c = clarityFor(frameId);
-  const letter = c.state === "graded" ? c.grade.grade : null;
-  return (
-    <ClarityChipLink className={s.chip}>
-      <Seal letter={letter} size={30} id="chip" />
-      <span className={s.word}>{CLARITY}</span>
-      {!letter && <span className={s.chipDim}>{noGrade(c).toLowerCase()}</span>}
-      {letter && c.state === "graded" && c.grade.provisional && <span className={s.chipProv}>provisional</span>}
-    </ClarityChipLink>
-  );
-}
-
-/** Under a catalog card: the small seal and the meaning */
-export function ClarityCardLine({ frameId }: { frameId: string }) {
-  const c = clarityFor(frameId);
-  const graded = c.state === "graded";
-  return (
-    <span className={s.card}>
-      <Seal letter={graded ? c.grade.grade : null} size={40} id={`card-${frameId}`} />
-      <span className={s.cardText}>
-        <span className={s.word}>{CLARITY}</span>
-        <span className={s.cardSub}>
-          {graded ? `${cap(c.grade.meaning ?? "")}${c.grade.provisional ? " (provisional)" : ""}` : noGrade(c)}
-        </span>
-      </span>
-    </span>
-  );
-}
 
 function Levels({ c }: { c: Graded }) {
   return (

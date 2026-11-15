@@ -27,8 +27,9 @@ npm run check:seo -w site    # after a build: every page has a title, descriptio
 npm run brand -w site        # regenerate public/brand/ after a frame.json or libraries.json change
 ```
 
-CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frames/`, `docs/`,
-`tools/perf/grade.ts`, `tools/perf/page/rubric.json` or the root package files change.
+CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frames/`,
+`docs/`, `CHANGELOG.md`, `tools/perf/grade.ts`, `tools/perf/page/rubric.json` or the root package
+files change.
 
 ## Rules
 
@@ -38,7 +39,8 @@ CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frame
    may use. `tools/check-brand-images.py` checks this repo's Markdown against the live site.
 2. **No data is written by hand in `site/`.** Frames come from `../frames/<id>/design/frame.json`,
    panes from `@glassworks/frame-card` (each pane's `pane.json`), Clarity's grade from
-   `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric. A data change
+   `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric, the latest
+   release from `../CHANGELOG.md`. A data change
    and the page that shows it go in one PR. The site's own words for that data are in
    `src/lib/frameText.ts`.
 3. **Brand files are generated.** `public/brand/` comes from `scripts/brand/` (`npm run brand`).
@@ -47,7 +49,10 @@ CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frame
 4. **Don't deploy, and don't change Vercel settings.** Production is deployed by the maintainer.
    `vercel.json` keeps Vercel's Git builds off.
 5. **Plain CSS with the tokens in `src/app/globals.css`**, CSS modules per page and component, no UI
-   kit. A new web-only layout needs a mockup the maintainer approves first.
+   kit. Pages build from the Manage parts in `src/components/Manage.tsx` (cards, rows, tiles,
+   chips) inside the sidebar shell (`src/components/shell/`). The theme follows the OS; the
+   sidebar's toggle pins one with `<html data-theme>`, so a night-only rule needs both selectors
+   (see `globals.css`). A new web-only layout needs a mockup the maintainer approves first.
 6. **Every page in the sitemap uses `pageMetadata`** from `src/lib/seo.ts` for its title, description, canonical
    and link preview, and is listed by a source in `src/lib/routes.ts` (the sitemap). Docs and blog
    pages add their source there and pass `type: "article"`. `check:seo` fails the build otherwise.

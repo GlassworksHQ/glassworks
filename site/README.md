@@ -1,6 +1,6 @@
 # glassworks.dev
 
-The Glassworks project site: the landing page and `/brand`. Docs will join this app later; Kiln
+The Glassworks project site: the landing page, frames, panes and `/brand`. Docs will join this app later; Kiln
 (the installer) is a separate app at `kiln.glassworks.dev`. See `planning/site.md` for what goes
 where.
 
@@ -35,7 +35,7 @@ page and component. There's no UI library on purpose; see "Design system" below.
 ```
 src/app/
   globals.css          design tokens + the .glass surface (lift into @glassworks/brand later)
-  layout.tsx           Inter + JetBrains Mono, header, footer, shared SVG gradients
+  layout.tsx           Inter + JetBrains Mono, the sidebar shell, footer, shared SVG gradients, the theme pin
   page.tsx             landing page
   brand/page.tsx       design language and downloads
   icon.svg             favicon (small cut, follows OS theme)
@@ -44,11 +44,14 @@ src/components/
   Mark.tsx             the mark (three plates, the top one lit): variant lit | ember | mono, cut full | small
   Glyphs.tsx           Frame, Pane, Kiln and pane icons on a 24 grid
   GlassTile.tsx        the 2:1 night tile with the light sweep
-  FrameCard.tsx        the catalog card and a frame page's 3D model, from @glassworks/frame-card
+  Manage.tsx           the panel's Manage page as site parts: cards, list rows, tiles, chips
+  FrameRows.tsx, PaneRows.tsx  frames and panes as Manage rows
+  shell/               the sidebar (desktop), the top bar and menu drawer (phones), the theme toggle
 src/lib/site.ts        links and panes
 src/lib/frames.ts      the frame catalog: every ../frames/<id>/design/frame.json in this repo
 src/lib/frameText.ts   the site's words for that data: install ratings, pane support
 src/lib/clarity.ts     each frame's Clarity grade, worked out from its clarity.json at build time
+src/lib/release.ts     the latest app release, from ../CHANGELOG.md
 src/components/clarity/  the Clarity seal, the frame page's panel, the catalog line
 scripts/brand/banner.mjs  the part banner every banner shares, the mark, each part's light
 scripts/brand/frame.mjs   a frame's README banner, banner-frame-<id>, drawn from its frame.json

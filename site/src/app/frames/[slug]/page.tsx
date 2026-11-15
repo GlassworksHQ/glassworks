@@ -1,34 +1,27 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { StatusPill } from "@glassworks/frame-card";
-import { HeroModel } from "@/components/FrameCard";
-import {
-  RatingLabel,
-  RatingValue,
-  SpecLabel,
-  SupportTag,
-  paneIcon,
-} from "@/components/DeviceBits";
+import { RatingLabel, RatingValue, SpecLabel, paneIcon } from "@/components/DeviceBits";
+import { Chip, FactRow, ListCard, Row, Sq, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
 import { KilnGlyph } from "@/components/Glyphs";
-import { Mark } from "@/components/Mark";
+import { ClarityPanel } from "@/components/clarity/Clarity";
+import { ClarityChipLink } from "@/components/clarity/ClarityChipLink";
+import { CLARITY, clarityFor } from "@/lib/clarity";
 import { frameById, frames, installLink } from "@/lib/frames";
-import { frameSeo, ratingKeys, ships } from "@/lib/frameText";
+import { frameSeo, ratingKeys, ratingText, ships, type Support } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { panes } from "@/lib/site";
 import { support } from "@/lib/paneSupport";
 import s from "./device.module.css";
-import { ClarityChip, ClarityPanel } from "@/components/clarity/Clarity";
 
 export function generateStaticParams() {
   return frames.map((f) => ({ slug: f.id }));
 }
 
-export async function generateMetadata(
-  props: PageProps<"/frames/[slug]">,
-): Promise<Metadata> {
+export async function generateMetadata(props: PageProps<"/frames/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;
   const d = frameById(slug);
   if (!d) return {};
@@ -42,164 +35,146 @@ export async function generateMetadata(
 type Params = PageProps<"/frames/[slug]">["params"];
 
 /* The slug is URL data, so it's read inside <Suspense> to keep navigations
-   instant. All devices are prerendered, so the fallback only shows briefly on
-   an unprefetched client navigation; it keeps the page's shape so nothing jumps. */
+   instant. All frames are prerendered, so the fallback only shows briefly on
+   an unprefetched client navigation. */
 export default function DevicePage(props: PageProps<"/frames/[slug]">) {
   return (
-    <Suspense fallback={<DeviceFallback />}>
+    <Suspense fallback={<div className={s.fallback} aria-busy="true" />}>
       <Device params={props.params} />
     </Suspense>
   );
 }
 
-function DeviceFallback() {
-  return (
-    <div className={`wrap ${s.page} ${s.fallback}`} aria-busy="true">
-      <nav className={s.crumbs} aria-label="Breadcrumb">
-        <Link href="/frames">Devices</Link>
-      </nav>
-      <div className={s.hero}>
-        <div className={s.heroText}>
-          <span className={s.ghostLine} />
-          <span className={`${s.ghostLine} ${s.ghostTitle}`} />
-        </div>
-        <span className={s.ghostScreen} />
-      </div>
-    </div>
-  );
-}
+const RANK: Record<Support, number> = { stable: 0, beta: 1, alpha: 2, development: 3, planned: 4, depends: 5, unknown: 6, no: 7 };
 
 async function Device({ params }: { params: Params }) {
   const { slug } = await params;
   const d = frameById(slug);
   if (!d) notFound();
   const install = installLink(d);
+  const c = clarityFor(d.id);
+  const live = ships(d.status);
+
+  const rows = panes
+    .map((p) => ({ p, ...support(d, p.id) }))
+    .sort((a, b) => RANK[a.support] - RANK[b.support] || a.p.name.localeCompare(b.p.name, "en"));
+  const runs = rows.filter((r) => r.support !== "no");
+  const notRunning = rows.filter((r) => !ships(r.support)).map((r) => r.p.name);
+  const running = rows.filter((r) => ships(r.support)).length;
 
   return (
-    <article className={`wrap ${s.page}`}>
+    <article>
       <JsonLd
         nodes={[
           breadcrumbLd([
-            { name: "Devices", path: "/frames" },
+            { name: "Frames", path: "/frames" },
             { name: d.name, path: `/frames/${d.id}` },
           ]),
         ]}
       />
-      <nav className={s.crumbs} aria-label="Breadcrumb">
-        <Link href="/frames">Devices</Link>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page">{d.name}</span>
-      </nav>
-
-      <header className={s.hero}>
-        <div className={s.heroText}>
-          <StatusPill stage={d.status} />
-          <ClarityChip frameId={d.id} />
+      <header className={`${m.card} ${s.hero}`}>
+        <div>
+          <div className={s.chips}>
+            <StageChip support={d.status} />
+            {c.state === "graded" && (
+              <ClarityChipLink className={s.chipLink}>
+                <Chip>
+                  <b>
+                    {CLARITY} {c.grade.grade}
+                  </b>
+                </Chip>
+              </ClarityChipLink>
+            )}
+            <Chip>
+              Frame <code>{d.id}</code>
+            </Chip>
+          </div>
           <h1 className={s.h1}>{d.name}</h1>
           {d.aka && <p className={s.aka}>{d.aka}</p>}
           <p className={s.lede}>{d.summary}</p>
-          {d.project && (
-            <p className={s.project}>
-              Runs as <a href={d.project.href}>{d.project.name}</a>
-            </p>
-          )}
+          <div className={s.acts}>
+            {install?.kiln && (
+              <a href={install.href} className={`${m.btn} ${m.btnKiln}`}>
+                <KilnGlyph />
+                Open Kiln
+              </a>
+            )}
+            {install && !install.kiln && (
+              <a href={install.href} className={m.btn}>
+                Open {new URL(install.href).host}
+              </a>
+            )}
+            {d.project && (
+              <a href={d.project.href} className={m.btn}>
+                {d.project.name} ↗
+              </a>
+            )}
+          </div>
+          <p className={s.how}>{install ? d.install.how : `Not in Kiln yet. ${d.install.how}`}</p>
         </div>
-        <HeroModel f={d} />
+        {d.render && (
+          <div className={s.render}>
+            <Image src={`/frames/${d.id}/render.webp`} alt={`${d.name} running Glassworks`} fill sizes="(max-width: 900px) 100vw, 40vw" priority unoptimized />
+          </div>
+        )}
       </header>
 
       {d.notice && <p className={s.notice}>{d.notice}</p>}
 
-      <section
-        className={`glass ${s.kiln} ${install ? "" : s.kilnOff}`}
-        aria-labelledby="install"
-      >
-        {install && !install.kiln ? (
-          <Mark className={s.kilnMark} title="Glassworks" />
-        ) : (
-          <Mark variant="ember" className={s.kilnMark} title="Kiln" />
-        )}
-        <div className={s.kilnText}>
-          <h2 id="install" className={s.kilnTitle}>
-            {!install ? "Not in Kiln yet" : install.kiln ? "Install with Kiln" : "Install"}
-          </h2>
-          <p>{d.install.how}</p>
-        </div>
-        {install?.kiln && (
-          <a href={install.href} className={s.kilnBtn}>
-            <KilnGlyph className={s.kilnBtnIcon} />
-            Open Kiln
-          </a>
-        )}
-        {install && !install.kiln && (
-          /* not Kiln, so not ember: a plain glass button to the frame's own installer */
-          <a href={install.href} className={s.installBtn}>
-            Open {new URL(install.href).host}
-          </a>
-        )}
-      </section>
+      <Tiles>
+        <Tile label="Install" value={ratingText("difficulty", d.ratings.difficulty.value)} sub={d.ratings.difficulty.detail} />
+        <Tile label="Reversible" value={ratingText("reversible", d.ratings.reversible.value)} sub={d.ratings.reversible.detail} />
+        <Tile
+          label="Panes"
+          value={`${live ? running : runs.length} of ${rows.length}`}
+          sub={!live ? "Planned" : notRunning.length ? `All but ${notRunning.join(", ")}` : "All of them"}
+        />
+        <Tile label="Updates" value={ratingText("updates", d.ratings.updates.value)} sub={d.ratings.updates.detail} />
+      </Tiles>
 
-      <ClarityPanel frameId={d.id} />
-
-      {d.unverified && (
-        <p className={s.caveat}>
-          These details come from public writeups. Nobody has checked them on
-          hardware yet.
-        </p>
-      )}
-
-      <div className={s.cols}>
-        <section className={s.section} aria-labelledby="specs">
-          <h2 id="specs" className={s.h2}>
-            Hardware
-          </h2>
-          <dl className={`glass ${s.specs}`}>
-            {d.specs.map((sp) => (
-              <div key={sp.label} className={s.spec}>
-                <dt>
-                  <SpecLabel label={sp.label} />
-                </dt>
-                <dd>{sp.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-
-        <section className={s.section} aria-labelledby="panes">
-          <h2 id="panes" className={s.h2}>
-            Panes
-          </h2>
-          <ul className={`glass ${s.panes}`}>
-            {panes.map((p) => {
-              const Icon = paneIcon[p.id];
-              const sup = support(d, p.id);
-              return (
-                <li key={p.id}>
-                  <Link href={`/panes/${p.id}`} className={s.pane}>
-                    <span className={s.paneIc}>
-                      <Icon />
-                    </span>
-                    <span className={s.paneText}>
-                      <span className={s.paneName}>{p.name}</span>
-                      {sup.note && <span className={s.paneNote}>{sup.note}</span>}
-                    </span>
-                    <SupportTag support={sup.support} />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+      <div className={s.clarity}>
+        <ClarityPanel frameId={d.id} />
       </div>
 
-      <section className={s.section} aria-labelledby="changes">
-        <h2 id="changes" className={s.h2}>
-          {ships(d.status)
-            ? "What installing changes"
-            : "What installing will change"}
-        </h2>
-        <dl className={`glass ${s.specs} ${s.changeList}`}>
+      {d.unverified && <p className={s.notice}>These details come from public writeups. Nobody has checked them on hardware yet.</p>}
+
+      <div className={m.cols2}>
+        <ListCard id="panes" title="Panes" aside={<span>{live ? `${running} run here` : `${runs.length} planned`}</span>}>
+          {runs.map(({ p, support: sup, note }) => {
+            const Icon = paneIcon[p.id];
+            return (
+              <Row
+                key={p.id}
+                href={`/panes/${p.id}`}
+                lead={
+                  <Sq>
+                    <Icon />
+                  </Sq>
+                }
+                title={p.name}
+                sub={note}
+                end={<StageChip support={sup} />}
+              />
+            );
+          })}
+        </ListCard>
+        <div>
+          <ListCard id="hardware" title="Hardware">
+            {d.specs.map((sp) => (
+              <FactRow key={sp.label} label={<SpecLabel label={sp.label} />} value={sp.value} />
+            ))}
+          </ListCard>
+        </div>
+      </div>
+
+      <section className={`${m.card} ${m.list}`} aria-labelledby="changes">
+        <div className={s.changesHead}>
+          <h2 id="changes">{live ? "What installing changes" : "What installing will change"}</h2>
+          {d.ratingsNote && <span>{d.ratingsNote}</span>}
+        </div>
+        <dl className={s.kvs}>
           {ratingKeys.map((k) => (
-            <div key={k} className={s.spec}>
+            <div key={k} className={s.kv}>
               <dt>
                 <RatingLabel field={k} />
               </dt>
@@ -209,15 +184,12 @@ async function Device({ params }: { params: Params }) {
             </div>
           ))}
         </dl>
-        {d.ratingsNote && <p className={s.note}>{d.ratingsNote}</p>}
-        {/* A frame that doesn't ship yet, or one whose data comes from writeups: these ratings are the
-            plan, not something run on the device. The card reads its tags as "expected" by the same rule. */}
-        {(!ships(d.status) || d.unverified) && (
-          <p className={s.note}>
-            Expected, from the plan. Nothing has been run on this device yet.
-          </p>
-        )}
+        {(!live || d.unverified) && <p className={s.expected}>Expected. Nothing has run on this device yet.</p>}
       </section>
+
+      <p className={s.back}>
+        <Link href="/frames">All frames</Link>
+      </p>
     </article>
   );
 }

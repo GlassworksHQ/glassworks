@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { SupportTag, paneIcon } from "@/components/DeviceBits";
-import { PaneLift } from "@/components/PaneLift";
-import { TiltCard } from "@/components/TiltCard";
+import { paneIcon } from "@/components/DeviceBits";
+import { Chip, ListCard, PageHead, Row, Sq, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
 import { frameById, frames } from "@/lib/frames";
 import { paneSeo, ships } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
@@ -33,11 +33,10 @@ export async function generateMetadata(props: PageProps<"/panes/[id]">): Promise
 
 type Params = PageProps<"/panes/[id]">["params"];
 
-/* Same shape as the devices pages: the id is read inside <Suspense>, and the
-   fallback keeps the page's outline so nothing jumps. */
+/* Same shape as the frame pages: the id is read inside <Suspense>. */
 export default function PanePage(props: PageProps<"/panes/[id]">) {
   return (
-    <Suspense fallback={<div className={`wrap ${s.page} ${s.fallback}`} aria-busy="true" />}>
+    <Suspense fallback={<div className={s.fallback} aria-busy="true" />}>
       <Pane params={props.params} />
     </Suspense>
   );
@@ -55,7 +54,7 @@ async function Pane({ params }: { params: Params }) {
   const runsOn = rows.filter((d) => ships(support(d, p.id).support)).length;
 
   return (
-    <div className={`wrap ${s.page}`}>
+    <article>
       <JsonLd
         nodes={[
           breadcrumbLd([
@@ -64,64 +63,51 @@ async function Pane({ params }: { params: Params }) {
           ]),
         ]}
       />
-      <nav className={s.crumbs} aria-label="Breadcrumb">
-        <Link href="/panes">Panes</Link>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page">{p.name}</span>
-      </nav>
+      <PageHead
+        crumbs={
+          <>
+            <Link href="/panes">Panes</Link>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">{p.name}</span>
+          </>
+        }
+        title={
+          <span className={s.title}>
+            <Sq lit>
+              <Icon />
+            </Sq>
+            {p.name}
+          </span>
+        }
+        lede={p.does}
+      >
+        <span className={s.chips}>
+          <StageChip support={p.status} />
+          {frame && <Chip>Frame pane</Chip>}
+        </span>
+      </PageHead>
 
-      <header className={s.hero}>
-        <div className={s.heroText}>
-          <span className="label">{frame ? `Frame pane · ${frame.name}` : "Pane"}</span>
-          <h1 className={s.h1}>{p.name}</h1>
-          <p className={s.lede}>{p.does}</p>
-          <dl className={s.facts}>
-            <div>
-              <dt>Needs</dt>
-              <dd>{p.requires}</dd>
-            </div>
-            <div>
-              <dt>Runs on</dt>
-              <dd>
-                {runsOn} of {rows.length} {rows.length === 1 ? "device" : "devices"}
-              </dd>
-            </div>
-            <div>
-              <dt>Kind</dt>
-              <dd>{frame ? "Frame pane: lives in its frame" : "General: any frame with the hardware"}</dd>
-            </div>
-          </dl>
-        </div>
-        <TiltCard className={s.stage}>
-          <div className={s.lifted}>
-            <PaneLift Icon={Icon} frame={Boolean(frame)} lifted />
-          </div>
-        </TiltCard>
-      </header>
+      <Tiles cols={3}>
+        <Tile label="Needs" value={p.requires} />
+        <Tile label="Runs on" value={`${runsOn} of ${rows.length} ${rows.length === 1 ? "frame" : "frames"}`} />
+        <Tile label="Kind" value={frame ? "Frame pane" : "General"} sub={frame ? `Lives in the ${frame.name} frame` : "Any frame with the hardware"} />
+      </Tiles>
 
-      <section className={s.section} aria-labelledby="where">
-        <h2 id="where" className={s.h2}>
-          Where it runs
-        </h2>
-        <ul className={`glass ${s.devices}`}>
-          {rows.map((d) => {
-            const sup = support(d, p.id);
-            return (
-              <li key={d.id}>
-                <Link href={`/frames/${d.id}`} className={s.device}>
-                  <span className={s.deviceName}>{d.name}</span>
-                  <SupportTag support={sup.support} />
-                  {sup.note && <span className={s.note}>{sup.note}</span>}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <Link href="/panes" className={s.back}>
-        All panes
-      </Link>
-    </div>
+      <ListCard id="where" title="Where it runs">
+        {rows.map((d) => {
+          const sup = support(d, p.id);
+          return (
+            <Row
+              key={d.id}
+              href={`/frames/${d.id}`}
+              lead={d.render ? <Image className={m.thumb} src={`/frames/${d.id}/render.webp`} alt="" width={92} height={56} unoptimized /> : undefined}
+              title={d.name}
+              sub={sup.note}
+              end={<StageChip support={sup.support} />}
+            />
+          );
+        })}
+      </ListCard>
+    </article>
   );
 }

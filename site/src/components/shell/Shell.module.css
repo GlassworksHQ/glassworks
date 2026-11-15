@@ -1,0 +1,236 @@
+/* Manage's sidebar on desktop; on phones a top bar, and the menu opens the same nav as a drawer. */
+.side {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: var(--side-w);
+  padding: 26px 16px 18px;
+  border-right: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  padding: 0 12px 22px;
+  text-decoration: none;
+}
+
+.brandMark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+
+.brand b {
+  display: block;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.brand small {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.group {
+  margin: 18px 12px 6px;
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+a.group:hover {
+  color: var(--fg);
+}
+
+.ni {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-size: 15px;
+  border: 1px solid transparent;
+  line-height: 1.3;
+}
+
+.ni:hover {
+  background: var(--hover);
+}
+
+.ni.on {
+  background: var(--glass);
+  border-color: var(--edge);
+}
+
+.ni small {
+  color: var(--faint);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.ni small > span {
+  font-size: inherit;
+}
+
+.ember {
+  color: color-mix(in srgb, var(--ember-b) 75%, var(--fg));
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--edge);
+  margin-top: 16px;
+  padding: 14px 12px 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.who a {
+  text-decoration: none;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.who a:hover {
+  color: var(--fg);
+}
+
+.who svg {
+  width: 15px;
+  height: 15px;
+}
+
+.whoEnd {
+  white-space: nowrap;
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.theme {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.theme:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+
+.theme svg {
+  width: 16px;
+  height: 16px;
+}
+
+.top {
+  display: none;
+}
+
+.page {
+  display: contents;
+}
+
+@media (max-width: 900px) {
+  .top {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px max(18px, env(safe-area-inset-right, 0px)) 12px max(18px, env(safe-area-inset-left, 0px));
+    border-bottom: 1px solid var(--edge);
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .topBrand {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    text-decoration: none;
+    font-size: 17px;
+    font-weight: 500;
+  }
+
+  .topMark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .topR {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--muted);
+  }
+
+  .iconBtn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .iconBtn svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .side {
+    display: none;
+    top: 65px;
+    width: 100%;
+    border-right: 0;
+    background: var(--bg);
+    z-index: 19;
+  }
+
+  .side[data-open] {
+    display: flex;
+  }
+
+  .side .brand {
+    display: none;
+  }
+}

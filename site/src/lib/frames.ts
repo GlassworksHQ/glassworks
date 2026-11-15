@@ -37,7 +37,8 @@ function check(file: string, f: FrameDesign, id: string) {
   if (f.kiln && (!f.kiln.startsWith("/") || new URL(f.kiln, KILN).origin !== new URL(KILN).origin)) {
     bad(`kiln "${f.kiln}" should be a route on ${KILN}, starting with a single /`);
   }
-  if (f.install?.href && !/^https?:\/\//.test(f.install.href)) bad(`install.href "${f.install.href}" should be a full URL`);
+  if (f.install?.href && !URL.canParse(f.install.href)) bad(`install.href "${f.install.href}" should be a full URL`);
+  if (f.install?.href && !/^https?:$/.test(new URL(f.install.href).protocol)) bad(`install.href "${f.install.href}" should be http(s)`);
   // the render is served from /frames/<id>/render.webp: a .webp next to frame.json, nothing else
   if (f.render && (!/^[\w-]+\.webp$/.test(f.render) || !fs.existsSync(path.join(path.dirname(file), f.render)))) {
     bad(`render "${f.render}" should be a .webp file next to frame.json`);
@@ -69,5 +70,6 @@ export const frameById = (id: string) => frames.find((f) => f.id === id);
  */
 export function installLink(f: FrameDesign): { href: string; kiln: boolean } | undefined {
   if (f.kiln) return { href: new URL(f.kiln, KILN).href, kiln: true };
-  return f.install.href ? { href: f.install.href, kiln: false } : undefined;
+  // the parsed URL, so a value like "https:host" can never resolve against this site
+  return f.install.href ? { href: new URL(f.install.href).href, kiln: false } : undefined;
 }

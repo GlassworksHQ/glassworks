@@ -1,9 +1,3 @@
-.page {
-  display: grid;
-  gap: 48px;
-  padding-block: 24px 40px;
-}
-
 /* The loading fallback fills the screen, so the footer stays below the fold until the page swaps in
    and doesn't jump up the screen when it does (a layout shift, CLS). */
 .fallback {
@@ -11,357 +5,183 @@
   min-height: 100svh;
 }
 
-.crumbs {
-  display: flex;
-  gap: 10px;
-  font-size: 13.5px;
-  color: var(--faint);
-}
-
-.crumbs a {
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.crumbs a:hover {
-  color: var(--fg);
-}
-
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 48px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 36px;
+  align-items: center;
+  padding: 34px 40px;
+  min-height: 300px;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
   align-items: center;
 }
 
-.heroText {
-  display: grid;
-  gap: 14px;
-  justify-items: start;
+.chipLink {
+  text-decoration: none;
 }
 
 .h1 {
-  font-size: clamp(34px, 5vw, 54px);
-  line-height: 1.04;
-  letter-spacing: -0.03em;
+  font-size: 44px;
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  margin: 12px 0 8px;
 }
 
 .aka {
   color: var(--faint);
-  margin-top: -6px;
+  margin: -4px 0 6px;
 }
 
 .lede {
+  color: var(--muted);
   font-size: 17px;
-  color: var(--muted);
-  max-width: 48ch;
+  max-width: 52ch;
 }
 
-.project {
-  font-size: 14px;
-  color: var(--muted);
+.acts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 22px;
 }
 
-.project a {
-  color: var(--ink-sky);
+.how {
+  margin-top: 14px;
+  color: var(--faint);
+  font-size: 13.5px;
+  max-width: 56ch;
 }
 
-.caveat {
-  font-size: 14px;
-  color: var(--muted);
-  padding: 12px 16px;
-  border-radius: var(--r-pane);
-  border: 1px dashed color-mix(in srgb, var(--fg) 24%, transparent);
+/* a fixed box, so a render of any shape loads without moving the page */
+.render {
+  position: relative;
+  height: 300px;
 }
 
-/* a must-know for buyers, e.g. which version of a device works */
+.render img {
+  object-fit: contain;
+  filter: drop-shadow(0 30px 40px rgba(0, 0, 0, 0.45));
+}
+
 .notice {
-  font-size: 14.5px;
-  color: var(--fg);
+  margin: 0 4px 18px;
   padding: 14px 18px;
-  border-radius: var(--r-pane);
-  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--edge));
-  background: color-mix(in srgb, var(--amber) 8%, transparent);
-}
-
-.cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 32px;
-  align-items: start;
-}
-
-.section {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.h2 {
-  font-size: 24px;
-  line-height: 1.15;
-}
-
-.specs {
-  margin: 0;
-  padding: 4px 20px;
-  border-radius: var(--r-pane);
-}
-
-.spec {
-  display: grid;
-  grid-template-columns: 130px minmax(0, 1fr);
-  gap: 16px;
-  padding: 12px 0;
-  border-top: 1px solid var(--edge);
-  font-size: 14.5px;
-}
-
-.spec:first-child {
-  border-top: 0;
-}
-
-.spec dt {
-  color: var(--faint);
-}
-
-.spec dd {
-  margin: 0;
-}
-
-.panes {
-  list-style: none;
-  margin: 0;
-  padding: 4px 20px;
-  border-radius: var(--r-pane);
-}
-
-.pane {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  gap: 14px;
-  align-items: center;
-  padding: 11px 0;
-  border-top: 1px solid var(--edge);
-}
-
-.panes > li:first-child .pane {
-  border-top: 0;
-}
-
-/* each pane links to its own page */
-.pane {
-  color: inherit;
-  text-decoration: none;
-}
-
-.pane:hover .paneName,
-.pane:focus-visible .paneName {
-  color: var(--ink-sky);
-}
-
-.paneIc {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
   border: 1px solid var(--edge);
-  background: var(--bg-2);
-  display: grid;
-  place-items: center;
+  border-left: 3px solid var(--amber);
+  border-radius: 14px;
+  background: var(--glass);
   color: var(--muted);
-}
-
-.paneIc svg {
-  width: 17px;
-  height: 17px;
-}
-
-.paneText {
-  display: grid;
-  gap: 1px;
-}
-
-.paneName {
   font-size: 14.5px;
+}
+
+.clarity {
+  margin-bottom: 18px;
+}
+
+.changesHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  padding: 16px 0 12px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.changesHead h2 {
   font-weight: 500;
+  font-size: 17px;
 }
 
-.paneNote {
-  font-size: 12.5px;
-  color: var(--faint);
+.changesHead span {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 70ch;
 }
 
-/* Kiln: install sits right under the header, branded as the installer */
-.kiln {
+.kvs {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
-  gap: 20px;
-  align-items: center;
-  padding: 20px 22px;
-  border-radius: var(--r-pane);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 26px;
+  margin: 0;
+  padding: 6px 0 10px;
 }
 
-.kilnMark {
-  width: 52px;
-  color: var(--fg);
-}
-
-.kilnOff .kilnMark {
-  opacity: 0.45;
-}
-
-.kilnText {
+.kv {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--edge);
+  min-width: 0;
   display: grid;
   gap: 4px;
 }
 
-.kilnTitle {
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+.kv:nth-last-child(-n + 3) {
+  border-bottom: 0;
 }
 
-.kilnText p {
+.kv dt {
   color: var(--muted);
-  font-size: 14.5px;
-  max-width: 62ch;
-}
-
-/* Kiln's one primary action: the ember button */
-.kilnBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14.5px;
-  font-weight: 500;
-  text-decoration: none;
-  padding: 12px 20px 12px 16px;
-  border-radius: 999px;
-  color: #1a0c06;
-  background: var(--ember-gradient);
-  white-space: nowrap;
-}
-
-.kilnBtn:hover {
-  filter: brightness(1.06);
-}
-
-.kilnBtnIcon {
-  width: 18px;
-  height: 18px;
-}
-
-/* a frame's own installer, while it doesn't install from Kiln: plain glass, never ember */
-.installBtn {
-  display: inline-flex;
-  align-items: center;
-  font-size: 14.5px;
-  font-weight: 500;
-  text-decoration: none;
-  padding: 11px 20px;
-  border-radius: 999px;
-  color: var(--fg);
-  background: var(--glass);
-  border: 1px solid var(--edge);
-  white-space: nowrap;
-}
-
-.installBtn:hover {
-  border-color: color-mix(in srgb, var(--sky) 40%, var(--edge));
-}
-
-/* the glyph's ember fire would vanish on the ember button; draw it dark */
-.kilnBtnIcon path:nth-child(2) {
-  fill: currentColor;
-  opacity: 0.85;
-}
-
-@media (max-width: 640px) {
-  .kiln {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
-
-  .kiln {
-    align-items: start;
-  }
-
-  .kilnMark {
-    width: 40px;
-    margin-top: 2px;
-  }
-
-  .kilnBtn,
-  .installBtn {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-}
-
-/* what installing changes: nine fields, so three columns of three on wide screens */
-.changeList {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  column-gap: 32px;
-}
-
-.changeList .spec {
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  gap: 2px;
-}
-
-.changeList .spec:nth-child(-n + 3) {
-  border-top: 0;
-}
-
-@media (max-width: 760px) {
-  .changeList {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .changeList .spec:nth-child(-n + 3) {
-    border-top: 1px solid var(--edge);
-  }
-
-  .changeList .spec:first-child {
-    border-top: 0;
-  }
-}
-
-.note {
   font-size: 13.5px;
+}
+
+.kv dd {
+  margin: 0;
+}
+
+.expected {
   color: var(--faint);
+  font-size: 13.5px;
+  padding: 0 0 16px;
 }
 
-/* placeholder while the slug resolves */
-.ghostLine {
-  display: block;
-  height: 14px;
-  width: 90px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--fg) 8%, transparent);
+.back {
+  padding: 4px;
+  font-size: 14px;
 }
 
-.ghostTitle {
-  height: 44px;
-  width: min(100%, 360px);
-  border-radius: 10px;
+.back a {
+  color: var(--muted);
+  text-decoration: none;
 }
 
-.ghostScreen {
-  aspect-ratio: 2 / 1;
-  max-width: 100%;
-  border-radius: clamp(14px, 3vw, 26px);
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
+.back a:hover {
+  color: var(--fg);
 }
 
-@media (max-width: 860px) {
-  .hero,
-  .cols {
-    grid-template-columns: minmax(0, 1fr);
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 22px 20px;
+    gap: 18px;
   }
 
-  .hero {
-    gap: 28px;
+  .hero > :last-child {
+    order: -1;
+  }
+
+  .h1 {
+    font-size: 34px;
+  }
+
+  .render {
+    height: 200px;
+  }
+
+  .kvs {
+    grid-template-columns: 1fr;
+  }
+
+  .kv:nth-last-child(-n + 3) {
+    border-bottom: 1px solid var(--edge);
+  }
+
+  .kv:last-child {
+    border-bottom: 0;
   }
 }

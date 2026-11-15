@@ -601,7 +601,7 @@ jobs:
         # Fails closed like the branding job's: without a base commit to compare with (none, a
         # force-pushed or garbage-collected one) or when git diff fails, the site is checked.
         run: |
-          paths="site packages frames docs tools/perf/grade.ts tools/perf/page/rubric.json package.json package-lock.json .github/workflows/pr.yml"
+          paths="site packages frames docs CHANGELOG.md tools/perf/grade.ts tools/perf/page/rubric.json package.json package-lock.json .github/workflows/pr.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); checking the site."
             echo "run=true" >> "$GITHUB_OUTPUT"
