@@ -174,3 +174,6 @@ class ManageFixture(
 }
 
 fun HttpResponse.text() = String(body, Charsets.UTF_8)
+
+/** The one-shot answer token in a question's dialog (#269), or null when the page asks nothing. */
+fun HttpResponse.answer(): String? = Regex("name=\"answer\" value=\"([^\"]+)\"").find(text())?.groupValues?.get(1)

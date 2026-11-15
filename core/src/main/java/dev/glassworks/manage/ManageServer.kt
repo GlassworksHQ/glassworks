@@ -54,8 +54,37 @@ class ManageServer(
     private val event: (String) -> Unit = {},
     /** How long a settings change may take before the page answers "still applying" (the radio's off waits on the radio). */
     private val saveWaitMs: Long = 20_000,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val random = SecureRandom()
+
+    /** A question's answer (#269 verifier): the change it asked about, for one session, until it runs out. */
+    private data class Asked(val session: String, val section: String, val key: String, val value: String, val untilMs: Long)
+
+    /** The questions the page has shown, by their one-shot token. */
+    private val asked = java.util.concurrent.ConcurrentHashMap<String, Asked>()
+
+    /** A token for the question about [value] at [key]: the dialog's form sends it back with the answer. */
+    private fun ask(session: String, section: String, key: String, value: String): String {
+        val now = clock()
+        asked.entries.removeIf { it.value.untilMs < now }
+        // A browser can't pile questions up: the oldest go first.
+        while (asked.size >= MAX_ASKED) asked.entries.minByOrNull { it.value.untilMs }?.let { asked.remove(it.key) } ?: break
+        val b = ByteArray(18).also(random::nextBytes)
+        val token = Base64.getUrlEncoder().withoutPadding().encodeToString(b)
+        asked[token] = Asked(session, section, key, value, now + ASK_MS)
+        return token
+    }
+
+    /**
+     * Whether [token] answers the question about exactly this change for this session. Used up either way: a
+     * replayed or a stale answer asks again. A form with `confirmed=1` and no token is no answer.
+     */
+    private fun answered(token: String?, session: String, section: String, key: String, value: String): Boolean {
+        if (token.isNullOrEmpty()) return false
+        val a = asked.remove(token) ?: return false
+        return a.untilMs >= clock() && a == a.copy(session = session, section = section, key = key, value = value)
+    }
 
     fun handle(req: HttpRequest): HttpResponse {
         if (req.path in qrPaths) return qrPage(req)
@@ -254,7 +283,8 @@ class ManageServer(
      * `/settings`, POST: change one item, as the panel's menu does (#242). The form names the section, the
      * item's key ([SettingsChange.changeable]) and the value; [SettingsChange.change] checks it and calls the
      * item's own save, on the panel's main thread ([ManageHost.onMain]). A switch or an action that asks first
-     * on the panel asks here too, then comes back with `confirmed`, for either sign-in, as on the panel.
+     * on the panel asks here too, for either sign-in, and runs only when the dialog's one-shot `answer` comes
+     * back for the same session and change.
      */
     private fun changeSetting(req: HttpRequest, s: Session, viewer: ManagePages.Viewer): HttpResponse {
         val status = host.status()
@@ -269,13 +299,15 @@ class ManageServer(
         // SettingsChange.change trims it, so a padded value (" run ") can't skip the question (CodeRabbit on #331).
         val raw = (if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
             else req.form["value"].orEmpty()).trim()
-        if (item is SettingsItem.Switch && req.form["confirmed"] != "1" && (raw == "on" || raw == "off")) {
-            val ask = runCatching { item.confirm(raw == "on") }.getOrNull()
-            if (ask != null) return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, ask))!!
+        // A change that asks first on the panel asks here too, and runs only with the answer to that question:
+        // a one-shot token the dialog carries, for this session and this exact change (#269 verifier).
+        val question: SettingsItem.Confirm? = when {
+            item is SettingsItem.Switch && (raw == "on" || raw == "off") -> runCatching { item.confirm(raw == "on") }.getOrNull()
+            item is SettingsItem.Action && raw == SettingsItem.Action.RUN -> item.confirm
+            else -> null
         }
-        // An action that asks first on the panel (a reset, the radio's roles) asks here too (#269).
-        if (item is SettingsItem.Action && req.form["confirmed"] != "1" && raw == SettingsItem.Action.RUN) {
-            item.confirm?.let { return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, it))!! }
+        if (question != null && !answered(req.form["answer"], s.id, id, key, raw)) {
+            return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, question, ask(s.id, id, key, raw)))!!
         }
         val problem = apply(item, raw)
         val did = if (item is SettingsItem.Action) "ran" else "changed"
@@ -478,6 +510,9 @@ class ManageServer(
         const val PURPOSE_SIGN_IN = "signin"
         const val PURPOSE_REBOOT = "reboot"
 
+        /** How long a question's answer stays good, and how many may wait at once. */
+        private const val ASK_MS = 5 * 60_000L
+        private const val MAX_ASKED = 64
         private const val NO_CODE = "The panel can't show a code right now."
 
         /**

@@ -83,6 +83,27 @@ class PanelManageParityTest {
         else -> listOf(SettingsChange.titleOf(i))
     }
 
+    /** Every word a twin's items say, a group's items' too, with each tile's unit and line. */
+    private fun twinWords(items: List<SettingsItem>): Set<String> = items.flatMap { i ->
+        words(i) + when (i) {
+            is SettingsItem.Group -> twinWords(i.items)
+            is SettingsItem.Tiles -> i.tiles().flatMap { listOf(it.unit, it.detail) }
+            else -> emptyList()
+        }
+    }.filter { it.isNotEmpty() }.toSet()
+
+    /** The words a native view shows now: its visible texts, without glyphs such as the chevron. */
+    private fun shownTexts(v: android.view.View): List<String> {
+        val out = ArrayList<String>()
+        fun walk(x: android.view.View) {
+            if (!x.isShown) return
+            if (x is android.widget.TextView) x.text?.toString()?.trim()?.takeIf { t -> t.any { it.isLetterOrDigit() } }?.let(out::add)
+            if (x is android.view.ViewGroup) for (c in 0 until x.childCount) walk(x.getChildAt(c))
+        }
+        walk(v)
+        return out
+    }
+
     /** The value [i] has now, as a form sends it: posting it back must save and change nothing. */
     private fun current(i: SettingsItem): Map<String, String> = when (i) {
         is SettingsItem.Text -> mapOf("value" to i.value())
@@ -133,6 +154,11 @@ class PanelManageParityTest {
                 if (item is SettingsItem.Native && SettingsChange.twinOf(item).isNotEmpty()) {
                     assertTrue("${sec.id}: ${item.key} has a twin, so it isn't panel-only", sec.id !in panelOnly)
                     assertTrue("${sec.id}: its twin's rows, not \"On the panel\"", !page.contains(ManagePages.ON_THE_PANEL))
+                    // And the other way (#269 verifier): every word the panel's view shows is in its twin, so a row
+                    // the twin drops fails here.
+                    val twin = twinWords(SettingsChange.twinOf(item))
+                    val view = o.previewNative(item.key)?.view ?: error("${sec.id}: the panel drew no ${item.key}")
+                    for (t in shownTexts(view)) assertTrue("${sec.id}: the panel's view shows \"$t\", so its twin must have it ($twin)", t in twin)
                 } else if (item is SettingsItem.Native) {
                     drawnOnlyThere += sec.id
                     assertTrue("${sec.id}: a native view (${item.key}) the Manage page can't draw yet must be listed in panelOnly", sec.id in panelOnly)
@@ -150,7 +176,7 @@ class PanelManageParityTest {
                 // An action does something each time it runs: ManageTwinsTest and theTimeZonesUseItIsOnBoth run one.
                 if (item is SettingsItem.SignIn || item is SettingsItem.Action) continue
                 val before = current(item)
-                val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to sec.id, "key" to key, "confirmed" to "1") + before)
+                val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to sec.id, "key" to key) + before)
                 assertEquals("${sec.id}: \"$key\" saved from the browser (${r.text().substringAfter("class=\"err\"", "").take(120)})", 303, r.status)
                 assertEquals("${sec.id}: \"$key\" kept its value", before, current(item))
                 changed++

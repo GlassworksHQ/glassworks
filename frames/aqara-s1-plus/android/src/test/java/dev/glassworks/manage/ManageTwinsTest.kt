@@ -118,11 +118,13 @@ class ManageTwinsTest {
         assertEquals(200, ask.status)
         val dlg = ask.text().substringAfter("class=\"dlg\"")
         assertTrue(dlg.contains("Reset the Thread network?") && dlg.contains("Thread devices drop off.") && dlg.contains(">Reset</button>"))
-        assertTrue(dlg.contains("name=\"value\" value=\"run\"") && dlg.contains("name=\"confirmed\" value=\"1\""))
+        assertTrue(dlg.contains("name=\"value\" value=\"run\"") && ask.answer() != null)
         assertEquals("asked, not done", 0, resets)
         assertEquals("a padded run asks too", 200, b.post("/settings", form(b, "Thread network", "value" to " run ")).status)
         assertEquals(0, resets)
-        assertEquals(303, b.post("/settings", form(b, "Thread network", "value" to "run", "confirmed" to "1")).status)
+        assertEquals("confirmed=1 alone is no answer", 200, b.post("/settings", form(b, "Thread network", "value" to "run", "confirmed" to "1")).status)
+        assertEquals(0, resets)
+        assertEquals(303, b.post("/settings", form(b, "Thread network", "value" to "run", "answer" to ask.answer()!!)).status)
         assertEquals(1, resets)
     }
 }

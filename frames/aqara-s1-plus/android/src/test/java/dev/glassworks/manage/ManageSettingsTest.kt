@@ -89,7 +89,7 @@ class ManageSettingsTest {
         assertEquals(200, ask.status)
         assertTrue(ask.text().contains("Turn the radio off?"))
         assertTrue("asked, not done", radioOn)
-        assertEquals(303, b.post("/settings", form(b, "radio", "on", "value" to "off", "confirmed" to "1")).status)
+        assertEquals(303, b.post("/settings", form(b, "radio", "on", "value" to "off", "answer" to ask.answer()!!)).status)
         assertFalse(radioOn)
         assertEquals(303, b.post("/settings", form(b, "screen", "Full screen", "value" to "off")).status)
         assertFalse(hide)
@@ -101,9 +101,34 @@ class ManageSettingsTest {
         assertEquals(200, ask.status)
         assertTrue(ask.text().contains("Turn the radio off?") && ask.text().contains("Zigbee devices stop.") && ask.text().contains(">Turn off</button>"))
         assertTrue("asked, not done", radioOn)
-        assertEquals(303, b.post("/settings", form(b, "radio", "on", "value" to "off", "confirmed" to "1")).status)
+        assertEquals(303, b.post("/settings", form(b, "radio", "on", "value" to "off", "answer" to ask.answer()!!)).status)
         assertFalse(radioOn)
         assertTrue("on doesn't ask", b.post("/settings", form(b, "radio", "on", "value" to "on")).status == 303 && radioOn)
+    }
+
+    /**
+     * #269 verifier: the question is more than a page. A form that says `confirmed=1` without the dialog's
+     * one-shot answer gets the question; an answer works once, for its own change and session only.
+     */
+    @Test fun onlyTheDialogsOwnAnswerConfirmsAndOnlyOnce() {
+        val b = signedIn()
+        val direct = b.post("/settings", form(b, "radio", "on", "value" to "off", "confirmed" to "1"))
+        assertEquals("confirmed=1 alone is no answer", 200, direct.status)
+        assertTrue(direct.text().contains("Turn the radio off?"))
+        assertTrue(radioOn)
+        assertEquals("a made-up answer asks again", 200, b.post("/settings", form(b, "radio", "on", "value" to "off", "answer" to "made-up")).status)
+        assertTrue(radioOn)
+        val other = signedIn()
+        val theirs = other.post("/settings", form(other, "radio", "on", "value" to "off")).answer()!!
+        assertEquals("another session's answer asks again", 200, b.post("/settings", form(b, "radio", "on", "value" to "off", "answer" to theirs)).status)
+        assertTrue(radioOn)
+        val mine = b.post("/settings", form(b, "radio", "on", "value" to "off")).answer()!!
+        assertEquals(303, b.post("/settings", form(b, "radio", "on", "value" to "off", "answer" to mine)).status)
+        assertFalse(radioOn)
+        radioOn = true
+        val replay = b.post("/settings", form(b, "radio", "on", "value" to "off", "answer" to mine))
+        assertEquals("a replayed answer asks again", 200, replay.status)
+        assertTrue("and changes nothing", radioOn)
     }
 
     @Test fun aChangeThatNeedsARestartOffersOne() {

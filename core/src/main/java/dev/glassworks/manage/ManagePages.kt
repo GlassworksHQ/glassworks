@@ -197,8 +197,11 @@ ${foot(viewer)}"""
          */
         class Edit(override val key: String, val problem: String? = null, val typed: String? = null) : Dialog
 
-        /** Ask [ask] before setting the switch at [key] to [value] (`on`/`off`), or running the action there ([SettingsItem.Action.RUN]). */
-        class Confirm(override val key: String, val value: String, val ask: SettingsItem.Confirm) : Dialog
+        /**
+         * Ask [ask] before setting the switch at [key] to [value] (`on`/`off`), or running the action there
+         * ([SettingsItem.Action.RUN]). [answer]: the one-shot token the form sends back with the answer.
+         */
+        class Confirm(override val key: String, val value: String, val ask: SettingsItem.Confirm, val answer: String) : Dialog
     }
 
     private fun fields(v: Viewer, section: String, key: String) =
@@ -329,7 +332,7 @@ ${foot(viewer)}"""
         } + "</div>"
         return when (d) {
             is Dialog.Confirm -> sheet(d.ask.title, d.ask.detail,
-                """<input type="hidden" name="value" value="${esc(d.value)}"><input type="hidden" name="confirmed" value="1">""", d.ask.action, null)
+                """<input type="hidden" name="value" value="${esc(d.value)}"><input type="hidden" name="answer" value="${esc(d.answer)}">""", d.ask.action, null)
             is Dialog.Edit -> when (item) {
                 is SettingsItem.Text -> {
                     val mode = when (item.kind) { SettingsItem.TextKind.NUMBER -> "numeric"; SettingsItem.TextKind.DECIMAL -> "decimal"; SettingsItem.TextKind.ADDRESS -> "url"; else -> "text" }

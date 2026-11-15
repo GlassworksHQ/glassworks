@@ -497,7 +497,8 @@ The settings sections are the ones the panel's menu draws, from the frame's one 
 dialog. Each change is a POST to `/settings` (CSRF token, `Origin` check) with the section, the item's
 key and the value, applied with `SettingsChange.change` on the thread `ManageHost.onMain` gives (the
 main thread on Android), so a change from the browser takes the panel's own path. A `Switch` that
-asks first on the panel asks here too. Either sign-in may change any item, a pane's `master`
+asks first on the panel asks here too, and the change runs only with that dialog's answer: a one-shot
+token for the same session and change, good for five minutes (#269). Either sign-in may change any item, a pane's `master`
 included (maintainer, 2026-11-15: the sign-in is the only extra layer). An `Action` is a button that
 posts `run`; one with a `confirm` asks first. A `Native` draws its `twin`'s rows (#269), or says "On the
 panel" when it has none, as a `Link` to something outside the menu does. A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
