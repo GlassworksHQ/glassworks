@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
 import dev.glassworks.sendspin.AudioPipeline
 import dev.glassworks.sendspin.PcmChunk
@@ -11,7 +11,6 @@ import dev.glassworks.sendspin.PcmOutput
 import dev.glassworks.sendspin.SsConnection
 import dev.glassworks.sendspin.SsPlayerHooks
 import android.app.Application
-import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,8 +34,10 @@ import java.util.concurrent.TimeUnit
 @Config(sdk = [34], application = Application::class)
 class SendspinRunsTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val prefs = SendspinPrefs(app.getSharedPreferences("sendspin-runs-test", 0)).apply {
-        server = "ws://192.0.2.10:8927/sendspin"
+    private val settings = object : SendspinPlayer.Settings {
+        override val server = "ws://192.0.2.10:8927/sendspin"
+        override val flac = true
+        override val unpairedAccess = false
     }
 
     /** Records what a pipeline sends and passes it on to the player's output. [holdEnd] keeps a stream/end in the decode thread. */
@@ -71,7 +72,7 @@ class SendspinRunsTest {
             script(this)
             return SendspinSession.Result(true, true, "closed")
         }
-        override fun status() = SendspinSession.Status(SendspinSession.Phase.CLOSED, closeReason = "server closed the connection")
+        override fun status() = SendspinPlayer.Status(SendspinPlayer.Phase.CLOSED, closeReason = "server closed the connection")
         val closeReasons: MutableList<String?> = Collections.synchronizedList(mutableListOf())
         val closed = CountDownLatch(1)
 
@@ -178,7 +179,7 @@ class SendspinRunsTest {
     /** Lazy, so a test can choose its sinks ([realSinks]) before the player makes one. */
     private val player by lazy {
         SendspinPlayer(
-            app, prefs, { null }, DEVICE, AppBuild("1.0.0", 10000, debug = false),
+            app, MemoryStore(), IDENTITY, settings, { null }, {},
             connect = { _, _, hooks ->
                 val first = conns.isEmpty() && firstConnectThread == null
                 if (first && holdFirstConnect) {
@@ -368,7 +369,7 @@ class SendspinRunsTest {
         player.stop()
         player.start()
         val new = conns.awaitAt(1)
-        new.hooks.onStatus(SendspinSession.Status(SendspinSession.Phase.PLAYING, serverName = "Music Assistant", paired = true))
+        new.hooks.onStatus(SendspinPlayer.Status(SendspinPlayer.Phase.PLAYING, serverName = "Music Assistant", paired = true))
         assertFalse(player.statusText(), player.statusText().contains("Old title"))
 
         new.hooks.onMetadata("New title", "New artist")
@@ -517,10 +518,8 @@ class SendspinRunsTest {
     }
 
     private companion object {
-        val READY = SendspinSession.Status(SendspinSession.Phase.READY, serverName = "Music Assistant", paired = true)
-        val DEVICE = dev.glassworks.esphome.DeviceIdentity(
-            "aqara-s1-plus-000001", "Aqara S1 Plus", "02:00:00:00:00:01", "2026.10.2", "S1 Kiosk test", "Aqara", "Panel Hub S1 Plus (S1 Kiosk)", 0,
-        )
+        val READY = SendspinPlayer.Status(SendspinPlayer.Phase.READY, serverName = "Music Assistant", paired = true)
+        val IDENTITY = SendspinPlayer.Identity("Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara", "S1 Kiosk 1.0.0", "02:00:00:00:00:01")
 
         fun CountDownLatch.awaitIgnoringInterrupts() {
             while (true) try { await(); return } catch (_: InterruptedException) {}

@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
  * only [setGain] may come from another thread. A restart makes a new sink rather than reopening the
  * old one, so a thread that outlives its run can only reach its own output (#109).
  */
-interface AudioSink {
+internal interface AudioSink {
     /** (Re)creates the output for this format; any queued audio is dropped and frame counting restarts at 0. */
     fun open(sampleRate: Int, channels: Int)
 
@@ -30,7 +30,7 @@ interface AudioSink {
 }
 
 /** One received chunk, decoded to 16-bit PCM. */
-class PcmChunk(val serverTsUs: Long, val pcm: ShortArray, val frames: Int, val sampleRate: Int, val channels: Int, val wireBytes: Int) {
+internal class PcmChunk(val serverTsUs: Long, val pcm: ShortArray, val frames: Int, val sampleRate: Int, val channels: Int, val wireBytes: Int) {
     val durationUs: Double get() = frames * 1e6 / sampleRate
     val endTsUs: Double get() = serverTsUs + durationUs
 }
@@ -39,7 +39,7 @@ class PcmChunk(val serverTsUs: Long, val pcm: ShortArray, val frames: Int, val s
  * Received audio ordered by server timestamp, with a read cursor. Not thread-safe; the scheduler
  * guards it with its lock.
  */
-class JitterBuffer {
+internal class JitterBuffer {
     private val q = ArrayDeque<PcmChunk>()
     /** Frames of the head chunk already consumed. */
     private var pos = 0
@@ -117,7 +117,7 @@ class JitterBuffer {
  * first report anchors a nominal-rate line, later reports nudge a correction term (EMA), and a jump
  * above 20 ms (an underrun or a reset) re-anchors.
  */
-class OutputClock(private val sampleRate: Int, private val alpha: Double = 0.05) {
+internal class OutputClock(private val sampleRate: Int, private val alpha: Double = 0.05) {
     private var anchorFrame = 0L
     private var anchorNs = 0L
     private var corrNs = 0.0
@@ -156,7 +156,7 @@ class OutputClock(private val sampleRate: Int, private val alpha: Double = 0.05)
  *
  * Thread model: [push]/[clear]/[start]/[end] from the network thread, [step] from the audio thread.
  */
-class PlaybackScheduler(
+internal class PlaybackScheduler(
     private val sink: AudioSink,
     private val timeFilter: () -> TimeFilter.Snapshot,
     private val nowNanos: () -> Long = System::nanoTime,

@@ -13,7 +13,7 @@ package dev.glassworks.sendspin
  *   queued on its own. Boundaries are where the next frame header (sync + CRC-8) starts *and* the
  *   bytes before it end in a matching CRC-16 footer.
  */
-data class FlacStreamInfo(
+internal data class FlacStreamInfo(
     val minBlockSize: Int,
     val maxBlockSize: Int,
     val minFrameSize: Int,
@@ -73,14 +73,14 @@ data class FlacStreamInfo(
 }
 
 /** One parsed FLAC frame header. [sampleRate]/[bitsPerSample] are 0 when "from STREAMINFO". */
-data class FlacFrameHeader(val blockSize: Int, val sampleRate: Int, val channels: Int, val bitsPerSample: Int, val headerLength: Int, val variableBlocking: Boolean)
+internal data class FlacFrameHeader(val blockSize: Int, val sampleRate: Int, val channels: Int, val bitsPerSample: Int, val headerLength: Int, val variableBlocking: Boolean)
 
 /** A frame inside a chunk. */
-data class FlacFrame(val offset: Int, val length: Int, val header: FlacFrameHeader) {
+internal data class FlacFrame(val offset: Int, val length: Int, val header: FlacFrameHeader) {
     val blockSize: Int get() = header.blockSize
 }
 
-object FlacFrames {
+internal object FlacFrames {
     private val CRC8 = IntArray(256).also { t ->
         for (i in 0 until 256) {
             var c = i

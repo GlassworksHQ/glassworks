@@ -12,7 +12,7 @@ import kotlin.math.sqrt
  * Thread-safety: [update] runs on one thread; readers use [snapshot], an immutable copy published
  * through a volatile field, so the audio thread never sees a half-updated state.
  */
-class TimeFilter(
+internal class TimeFilter(
     private val processStdDev: Double = 0.0,
     private val driftProcessStdDev: Double = 1e-11,
     private val forgetFactor: Double = 2.0,
@@ -129,7 +129,7 @@ class TimeFilter(
  *
  * Not thread-safe by itself: the session calls it under its own lock.
  */
-class TimeSyncBurst(private val filter: TimeFilter, private val burstSize: Int = 8, private val probeTimeoutUs: Long = 2_000_000) {
+internal class TimeSyncBurst(private val filter: TimeFilter, private val burstSize: Int = 8, private val probeTimeoutUs: Long = 2_000_000) {
     private var active = false
     private var sent = 0
     private var inFlight: Long? = null

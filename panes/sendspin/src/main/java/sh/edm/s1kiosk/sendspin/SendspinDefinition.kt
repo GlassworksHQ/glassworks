@@ -1,6 +1,6 @@
 package sh.edm.s1kiosk.sendspin
 
-import dev.glassworks.sendspin.SendspinSession
+import dev.glassworks.sendspin.SendspinPlayer
 import dev.glassworks.frame.Capability
 import android.content.SharedPreferences
 import dev.glassworks.pane.IntentExtra
@@ -38,7 +38,7 @@ class SendspinDefinition(
     /** The Music Assistant connection, what plays, its volume and the stream's format (#212). */
     override fun settings(running: Pane?): List<SettingsSection> {
         val p = running as? SendspinPane ?: return emptyList()
-        val player = p.player
+        val player = p.view
         // The player's status is the line under the heading; Home Assistant's own sensor is listed too.
         return listOf(SettingsSection(id, "Music", covers = emptySet(), status = { PaneState(PaneState.Kind.RUNNING, "Sendspin · Music Assistant") }, items = listOfNotNull(
             SettingsItem.Status(text = { status(player.status, player.serverUrl) }, ok = { connected(player.status.phase) }),
@@ -51,24 +51,24 @@ class SendspinDefinition(
     }
 
     companion object {
-        private fun connected(phase: SendspinSession.Phase) = phase == SendspinSession.Phase.READY || phase == SendspinSession.Phase.PLAYING
+        private fun connected(phase: SendspinPlayer.Phase) = phase == SendspinPlayer.Phase.READY || phase == SendspinPlayer.Phase.PLAYING
 
         /** The line under the heading: how the player is connected, and to where. */
-        fun status(s: SendspinSession.Status, url: String?): String {
+        fun status(s: SendspinPlayer.Status, url: String?): String {
             val name = s.serverName ?: "Music Assistant"
             val host = url?.let { runCatching { URI(it).host }.getOrNull() }
             return when (s.phase) {
-                SendspinSession.Phase.READY, SendspinSession.Phase.PLAYING -> "Connected to $name" + (host?.let { " · $it" } ?: "")
-                SendspinSession.Phase.CONNECTING, SendspinSession.Phase.HANDSHAKE -> "Connecting to Music Assistant"
-                SendspinSession.Phase.HELD -> "Waiting for $name to let the panel in"
-                SendspinSession.Phase.PAIRING -> "Pairing with $name"
-                SendspinSession.Phase.CLOSED -> "Not connected to Music Assistant"
+                SendspinPlayer.Phase.READY, SendspinPlayer.Phase.PLAYING -> "Connected to $name" + (host?.let { " · $it" } ?: "")
+                SendspinPlayer.Phase.CONNECTING, SendspinPlayer.Phase.HANDSHAKE -> "Connecting to Music Assistant"
+                SendspinPlayer.Phase.HELD -> "Waiting for $name to let the panel in"
+                SendspinPlayer.Phase.PAIRING -> "Pairing with $name"
+                SendspinPlayer.Phase.CLOSED -> "Not connected to Music Assistant"
             }
         }
 
         /** The stream's format. The player offers only 48 kHz stereo, so the server sends that: the codec is the choice. */
-        fun audio(s: SendspinSession.Status): String =
-            s.codec.let { codec -> if (s.phase != SendspinSession.Phase.PLAYING || codec == null) "Not playing" else "${codec.uppercase()} · 48 kHz · stereo" }
+        fun audio(s: SendspinPlayer.Status): String =
+            s.codec.let { codec -> if (s.phase != SendspinPlayer.Phase.PLAYING || codec == null) "Not playing" else "${codec.uppercase()} · 48 kHz · stereo" }
     }
 
     override val extras = listOf(

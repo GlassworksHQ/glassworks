@@ -5,7 +5,7 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /** A format a player offers / a stream uses (`player@v1_support.supported_formats` entry). */
-data class SsFormat(val codec: String, val channels: Int, val sampleRate: Int, val bitDepth: Int) {
+internal data class SsFormat(val codec: String, val channels: Int, val sampleRate: Int, val bitDepth: Int) {
     fun toJson(): JSONObject = JSONObject().put("codec", codec).put("channels", channels)
         .put("sample_rate", sampleRate).put("bit_depth", bitDepth)
 
@@ -22,7 +22,7 @@ data class SsFormat(val codec: String, val channels: Int, val sampleRate: Int, v
 }
 
 /** What the player reports in `client/state` (spec "client/state player object"). */
-data class SsPlayerState(
+internal data class SsPlayerState(
     val volume: Int,
     val muted: Boolean,
     val outputDelayMs: Int,
@@ -32,7 +32,7 @@ data class SsPlayerState(
 )
 
 /** Static description of this client for `client/hello`. */
-data class SsHelloInfo(
+internal data class SsHelloInfo(
     val name: String,
     val productName: String,
     val manufacturer: String,
@@ -45,15 +45,15 @@ data class SsHelloInfo(
 )
 
 /** A parsed JSON message: `type` + `payload` object (spec "Communication"). */
-class SsJson(val type: String, val payload: JSONObject)
+internal class SsJson(val type: String, val payload: JSONObject)
 
 /** Player audio chunk header (binary type 4): `[4][timestamp i64 BE][send_ahead u32 BE][audio]`. */
-class SsAudioChunk(val timestampUs: Long, val sendAheadUs: Long, val data: ByteArray, val dataOffset: Int) {
+internal class SsAudioChunk(val timestampUs: Long, val sendAheadUs: Long, val data: ByteArray, val dataOffset: Int) {
     val dataLength: Int get() = data.size - dataOffset
 }
 
 /** Encoders/decoders for the messages the client sends or receives (field names from the spec / aiosendspin 10.2.1). */
-object SsMessages {
+internal object SsMessages {
     const val BIN_JSON = 0
     const val BIN_FRAGMENT = 1
     const val BIN_AUDIO = 4
@@ -156,7 +156,7 @@ object SsMessages {
     fun codecHeader(player: JSONObject): ByteArray? {
         if (!player.has("codec_header") || player.isNull("codec_header")) return null
         val s = player.opt("codec_header") as? String ?: return null
-        return try { java.util.Base64.getDecoder().decode(s) } catch (_: IllegalArgumentException) { null }
+        return try { Base64.decode(s) } catch (_: IllegalArgumentException) { null }
     }
 
     private fun String.utf8Cap(max: Int): String {
@@ -168,13 +168,13 @@ object SsMessages {
 }
 
 /** Thrown for a protocol error: the connection must be closed (spec "Out-of-range values", "Fragmentation"). */
-class SsProtocolException(msg: String) : Exception(msg)
+internal class SsProtocolException(msg: String) : Exception(msg)
 
 /**
  * Receive side of Sendspin fragmentation (spec "Fragmentation"): `[1][flags][orig_type][data]` then
  * `[1][flags][data]`; flags bit 1 = first, bit 0 = last, bits 2-7 reserved.
  */
-class SsReassembler(private val maxBytes: Int = 16 * 1024 * 1024) {
+internal class SsReassembler(private val maxBytes: Int = 16 * 1024 * 1024) {
     private var buf: ByteArrayOutputStream? = null
     private var origType = 0
 

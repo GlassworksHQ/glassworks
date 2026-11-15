@@ -13,8 +13,8 @@ import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.PanePrefs
-import dev.glassworks.sendspin.SendspinSession.Phase
-import dev.glassworks.sendspin.SendspinSession.Status
+import dev.glassworks.sendspin.SendspinPlayer.Phase
+import dev.glassworks.sendspin.SendspinPlayer.Status
 
 /** The Music page (#212): its words, and its volume. */
 @RunWith(RobolectricTestRunner::class)

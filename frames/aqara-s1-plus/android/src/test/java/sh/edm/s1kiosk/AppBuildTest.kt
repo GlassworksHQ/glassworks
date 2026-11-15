@@ -86,7 +86,7 @@ class AppBuildTest {
         assertEquals("S1 Kiosk 9.8.7", mdns.identities.single().compilationTime)
         assertEquals("9.8.7", text(device.entityList().single { it.objectId == "app_version" } as TextSensorEntity))
         val sendspin = device.paneList().filterIsInstance<SendspinPane>().single()
-        assertEquals("S1 Kiosk 9.8.7", sendspin.player.hello().softwareVersion)
+        assertEquals("S1 Kiosk 9.8.7", sendspin.player.identity.softwareVersion)
     }
 
     @Test fun theManagePageShowsTheGivenBuild() {

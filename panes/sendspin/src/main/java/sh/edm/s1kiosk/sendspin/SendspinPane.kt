@@ -9,6 +9,7 @@ import dev.glassworks.esphome.EntityCategory
 import dev.glassworks.esphome.SendspinApi
 import dev.glassworks.esphome.SendspinTokenSource
 import dev.glassworks.esphome.TextSensorEntity
+import dev.glassworks.sendspin.SendspinPlayer
 
 /**
  * The Music Assistant player (Sendspin, docs/sendspin.md) as a pane: its two entities, its lifecycle and its settings.
@@ -19,8 +20,24 @@ class SendspinPane(ctx: PaneContext, haBase: () -> String?) : Pane {
 
     private val prefs = SendspinPrefs(ctx.prefs(id))
 
-    /** The settings page (SendspinDefinition) reads it and sets its volume. Public for tests. */
-    val player = SendspinPlayer(ctx.context, prefs, haBase, ctx.device, ctx.build, ctx.publishStates)
+    /** The engine (libs/sendspin). Music Assistant shows the panel under its Home Assistant name. Public for tests. */
+    val player = SendspinPlayer(
+        ctx.context, PrefsSsStore(ctx.context),
+        SendspinPlayer.Identity(
+            name = ctx.device.friendlyName, productName = ctx.device.model, manufacturer = ctx.device.manufacturer,
+            softwareVersion = "S1 Kiosk ${ctx.build.versionName}", macAddress = ctx.device.macAddress,
+        ),
+        prefs, haBase, ctx.publishStates,
+    )
+
+    /** What the settings page ([SendspinDefinition]) shows and sets: the player's, or a still one in the mock-ups. */
+    var view: MusicView = object : MusicView {
+        override val status get() = player.status
+        override val serverUrl get() = player.serverUrl
+        override val nowPlayingText get() = player.nowPlayingText
+        override val volume get() = player.volume
+        override fun setVolume(volume: Int) = player.setVolume(volume)
+    }
 
     // Its on/off (`sendspin`) is the core's, from SendspinDefinition.switch.
     override fun entities(): List<ApiEntity> = listOf(
@@ -57,6 +74,17 @@ class SendspinPane(ctx: PaneContext, haBase: () -> String?) : Pane {
             is PanelEvent.SpeakerClaimed -> player.setDucked(event.claimed)
         }
     }
+}
+
+/** The player as the settings page sees it ([SendspinPlayer] has each of these). */
+interface MusicView {
+    val status: SendspinPlayer.Status
+    val serverUrl: String?
+    val nowPlayingText: String?
+    val volume: Int
+
+    /** Writes to Music Assistant's socket: not on the main thread. */
+    fun setVolume(volume: Int)
 }
 
 // `started` means "started since boot" and is never cleared, so the setting has to be checked first.

@@ -308,9 +308,11 @@ Parts of the app are standalone modules other projects can use:
 - [`libs/bluetooth-proxy`](../../../libs/bluetooth-proxy/README.md): an ESPHome Bluetooth proxy on Android:
   BLE scanning on Android's terms, batched into `esphome-api`. Listening only so far; the app's
   Bluetooth proxy pane runs it (#121).
+- [`libs/sendspin`](../../../libs/sendspin/README.md): the Sendspin player for Music Assistant (protocol,
+  Noise handshake, FLAC, playback in sync). The app's Sendspin pane runs it (#152).
 
 They build with the app (`./gradlew :esphome-api:test :esphome-api-android:assembleDebug
-:improv:testDebugUnitTest :bluetooth-proxy:testDebugUnitTest`) and aren't published to a Maven repository or npm yet.
+:improv:testDebugUnitTest :bluetooth-proxy:testDebugUnitTest :sendspin:testDebugUnitTest`) and aren't published to a Maven repository or npm yet.
 
 ## License
 

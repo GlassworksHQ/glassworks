@@ -361,7 +361,7 @@ class KeystoreSecretsTest {
         val sources = RepoFiles.code(atLeast = 100, inModules = RepoFiles.appModules)
         val opens = sources.filter { "getSharedPreferences(" in it.readText() }.map { RepoFiles.rel(it).substringAfterLast('/') }.toSet()
         val secretOpeners = sources.filter { "SecretFiles.open(" in it.readText() }.map { it.name }.toSet()
-        assertEquals("the openers of kiosk, auth and sendspin", setOf("KioskPrefs.kt", "PanePrefs.kt", "SendspinPlayer.kt"), secretOpeners)
+        assertEquals("the openers of kiosk, auth and sendspin", setOf("KioskPrefs.kt", "PanePrefs.kt", "PrefsSsStore.kt"), secretOpeners)
         assertTrue("the scan sees SecretFiles", "SecretFiles.kt" in opens)
         // The others open only files without secrets: PanePrefs opens SecretFiles' files through it, the
         // wall base its energy counter (s1base), the timers their anchor (timers).

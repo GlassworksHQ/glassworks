@@ -1,29 +1,5 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
-import dev.glassworks.sendspin.AudioPipeline
-import dev.glassworks.sendspin.MediaCodecFlacDecoder
-import dev.glassworks.sendspin.PcmChunk
-import dev.glassworks.sendspin.PlaybackScheduler
-import dev.glassworks.sendspin.SendspinSession
-import dev.glassworks.sendspin.SsAudioChunk
-import dev.glassworks.sendspin.SsIdentity
-import dev.glassworks.sendspin.TimeFilter
-import dev.glassworks.sendspin.SsFormat
-import dev.glassworks.sendspin.SsHelloInfo
-import dev.glassworks.sendspin.SsPairingRecord
-import dev.glassworks.sendspin.SsPlayerState
-import dev.glassworks.sendspin.AudioSink
-import dev.glassworks.sendspin.PcmOutput
-import dev.glassworks.sendspin.SsConnection
-import dev.glassworks.sendspin.SsPlayerHooks
-import dev.glassworks.sendspin.SsStore
-import dev.glassworks.sendspin.SsCrypto
-import dev.glassworks.sendspin.SsLog
-import dev.glassworks.platform.AppBuild
-import dev.glassworks.esphome.DeviceIdentity
-import dev.glassworks.secrets.SecretPrefs
-import dev.glassworks.secrets.SecretStore
-import sh.edm.s1kiosk.SecretFiles
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -38,77 +14,11 @@ import java.net.URI
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** [SsStore] in the app's private SharedPreferences (`sendspin.xml`). Secrets are never logged. */
-class PrefsSsStore(context: Context, secrets: SecretStore = SecretStore.keystore()) : SsStore {
-    /** The identity's private key, the pairing key and the records' keys are sealed ([SecretPrefs]). */
-    private val sp = SecretFiles.open(context.applicationContext, "sendspin", secrets)
-    @Volatile private var cachedIdentity: SsIdentity? = null
-    /** Stand-ins while the key store can't open the stored ones: used, never stored, never cached for good. */
-    @Volatile private var standInIdentity: SsIdentity? = null
-    @Volatile private var standInPsk: ByteArray? = null
-
-    @Synchronized override fun identity(): SsIdentity {
-        cachedIdentity?.let { return it }
-        // Asked first: a true answer keeps the opened value for the read below, so an outage that ends
-        // between the two can't look like "no identity yet" and make a new one.
-        if (!sp.canRead("identity")) return standInIdentity ?: SsIdentity.generate().also { standInIdentity = it }
-        val saved = sp.getString("identity", null)?.let { runCatching { SsIdentity(SsCrypto.unb64url(it)) }.getOrNull() }
-        val id = saved ?: SsIdentity.generate().also { sp.edit().putString("identity", SsCrypto.b64url(it.privateKey)).commit() }
-        cachedIdentity = id
-        return id
-    }
-
-    @Synchronized override fun pairingPsk(): ByteArray {
-        if (!sp.canRead("pairing_psk")) return standInPsk ?: SsCrypto.randomBytes(32).also { standInPsk = it }
-        sp.getString("pairing_psk", null)?.let { s -> runCatching { SsCrypto.unb64url(s) }.getOrNull()?.takeIf { it.size == 32 }?.let { return it } }
-        val psk = SsCrypto.randomBytes(32)
-        sp.edit().putString("pairing_psk", SsCrypto.b64url(psk)).commit()
-        return psk
-    }
-
-    override fun secretsReadable(): Boolean = sp.canRead("identity") && sp.canRead("pairing_psk")
-
-    @Synchronized override fun records() = SsStore.decodeRecords(sp.getString("records", null))
-
-    /**
-     * Rewrites the pairings from [records], unless the stored ones can't be read now. Then [records] is
-     * empty, and if the key store came back between that read and the write, the empty list would replace
-     * every pairing. A true [SecretPrefs.canRead] keeps the opened value, so the read below sees it.
-     */
-    private fun writeRecords(commit: Boolean, change: (List<SsPairingRecord>) -> List<SsPairingRecord>) {
-        if (!sp.canRead("records")) return
-        val e = sp.edit().putString("records", SsStore.encodeRecords(change(records())))
-        if (commit) e.commit() else e.apply()
-    }
-
-    @Synchronized override fun putRecord(r: SsPairingRecord, protectedServerIds: Set<String>) =
-        writeRecords(commit = true) { SsStore.merge(it, r, protectedServerIds) }
-
-    @Synchronized override fun removeRecord(serverId: String) =
-        writeRecords(commit = true) { list -> list.filter { it.serverId != serverId } }
-
-    @Synchronized override fun touchRecord(serverId: String, nowMs: Long) =
-        writeRecords(commit = false) { list -> list.map { if (it.serverId == serverId) it.copy(lastUsedMs = nowMs) else it } }
-
-    override var outputDelayMs: Int
-        get() = sp.getInt("output_delay_ms", 0)
-        set(v) = sp.edit().putInt("output_delay_ms", v.coerceIn(0, 5000)).apply()
-    override var volume: Int
-        get() = sp.getInt("volume", 60)
-        set(v) = sp.edit().putInt("volume", v.coerceIn(0, 100)).apply()
-    override var muted: Boolean
-        get() = sp.getBoolean("muted", false)
-        set(v) = sp.edit().putBoolean("muted", v).apply()
-    override var lastPlaybackServerId: String?
-        get() = sp.getString("last_playback_server", null)
-        set(v) = sp.edit().putString("last_playback_server", v).apply()
-}
-
 /**
  * The output under an [AudioTrackSink]: an [AudioTrack] on the panel ([openAudioTrack]), a fake in
  * tests. Interleaved 16-bit samples.
  */
-interface PcmTrack {
+internal interface PcmTrack {
     /** Blocking write of [samples] samples; returns how many were written, or ≤ 0 on an error. */
     fun write(buf: ShortArray, samples: Int): Int
 
@@ -125,7 +35,7 @@ interface PcmTrack {
  * A playing [AudioTrack] (USAGE_MEDIA, PCM 16-bit, streaming, ~100 ms buffer) at [gain]. Creating
  * one is the call that can block (`AudioTrack.Builder.build()`).
  */
-fun openAudioTrack(sampleRate: Int, channels: Int, gain: Float): PcmTrack {
+internal fun openAudioTrack(sampleRate: Int, channels: Int, gain: Float): PcmTrack {
     val mask = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
     val enc = AudioFormat.ENCODING_PCM_16BIT
     val frame = 2 * channels
@@ -162,7 +72,7 @@ fun openAudioTrack(sampleRate: Int, channels: Int, gain: Float): PcmTrack {
  * [AudioSink] on one [PcmTrack] at a time, from [newTrack] (an [AudioTrack] on the panel). Like any
  * sink it serves one run: [SendspinPlayer] makes a new one per run.
  */
-class AudioTrackSink(
+internal class AudioTrackSink(
     private val newTrack: (sampleRate: Int, channels: Int, gain: Float) -> PcmTrack = ::openAudioTrack,
 ) : AudioSink {
     /** Guards publishing [track] and [gain] together, so no gain change is lost; never held while a track is created. */
@@ -201,34 +111,125 @@ class AudioTrackSink(
 }
 
 /**
- * The panel as a native Sendspin player for Music Assistant (docs/sendspin.md). Owned by
- * PanelDevice; runs in KioskService.
+ * A native [Sendspin](https://github.com/Sendspin/spec) player for Music Assistant:
+ * Music Assistant sees the device as one of its own players and plays to it in sync with the others.
+ * [start] runs it on threads of its own until [stop]. Every method is safe from any thread. [setVolume],
+ * [setMuted], [restartSession] and [onFlacSettingChanged] block on the server's socket: don't call them
+ * from the main thread. [stop] blocks for up to
+ * about 2.5 s, but does its network I/O on a thread of its own, so the main thread may call it.
  *
- * - Client-initiated connection to the Sendspin server: `_sendspin-server._tcp` via mDNS, else
- *   Music Assistant's default port on the Home Assistant host (`ws://<ha host>:8927/sendspin`),
- *   or the `sendspin_server` setting. Reconnects with exponential backoff (1 s … 60 s).
- * - Pairing: Home Assistant reads the pairing token over the ESPHome API and Music Assistant
- *   pairs with it ([pairingToken]); or unpaired ("guest") access if enabled in the settings.
- * - Audio: FLAC (preferred, decoded by MediaCodec) or PCM, through [AudioPipeline] into
- *   [PlaybackScheduler] on an [AudioTrackSink]; volume/mute separate from the voice volume. If
- *   FLAC keeps failing, the player reconnects offering PCM only (see [statusText]).
+ * - The player connects to the server: `_sendspin-server._tcp` via mDNS, else Music Assistant's
+ *   default port on the Home Assistant host (`ws://<host>:8927/sendspin`), or [Settings.server].
+ *   It reconnects with exponential backoff (1 s to 60 s), and at once when the network comes back.
+ * - Pairing: the server pairs with the [pairingToken] (Home Assistant hands it to Music Assistant), or
+ *   plays without pairing when [Settings.unpairedAccess] allows it.
+ * - Audio: FLAC (preferred, decoded by MediaCodec) or PCM, 48 kHz stereo, scheduled against the
+ *   server's clock onto an [AudioTrack] (USAGE_MEDIA). If FLAC keeps failing, the player reconnects
+ *   offering PCM only (see [statusText]).
+ *
+ * Its secrets, volume and pairings are in the [SsStore] it is given. Logs use the tag `S1Sendspin`
+ * and never contain a key or token.
  */
-class SendspinPlayer(
+public class SendspinPlayer internal constructor(
     context: Context,
-    private val prefs: SendspinPrefs,
-    private val haBase: () -> String?,
-    /** The device as Home Assistant knows it: Music Assistant shows the player under its friendly name. */
-    private val device: DeviceIdentity,
-    /** The app's build: Music Assistant shows its version. */
-    private val build: AppBuild,
-    private val onStatusChanged: () -> Unit = {},
-    val store: SsStore = PrefsSsStore(context),
-    private val connect: (url: String, hello: SsHelloInfo, hooks: SsPlayerHooks) -> SsConnection =
-        { url, hello, hooks -> SendspinSession(url, store, hello, { prefs.unpairedAccess }, hooks) },
-    private val newPipeline: (out: PcmOutput, onFlacFailed: (String) -> Unit) -> AudioPipeline =
-        { out, onFlacFailed -> AudioPipeline(out, { MediaCodecFlacDecoder() }, onFlacFailed) },
-    private val newSink: () -> AudioSink = { AudioTrackSink() },
+    internal val store: SsStore,
+    /** How the player introduces itself to the server. */
+    public val identity: Identity,
+    private val settings: Settings,
+    private val homeAssistantUrl: () -> String?,
+    private val onStatusChanged: () -> Unit,
+    private val connect: (url: String, hello: SsHelloInfo, hooks: SsPlayerHooks) -> SsConnection,
+    private val newPipeline: (out: PcmOutput, onFlacFailed: (String) -> Unit) -> AudioPipeline,
+    private val newSink: () -> AudioSink,
 ) {
+    /**
+     * A player that keeps its secrets and pairings in [store] and reads [settings] at each connection.
+     * [homeAssistantUrl] gives Home Assistant's base URL (`http://homeassistant.local:8123`), or null:
+     * Music Assistant usually runs on the same host, so it is the last address tried. [onStatusChanged]
+     * runs on the player's threads when [statusText], [status], [volume] or [muted] may have changed.
+     */
+    public constructor(
+        context: Context,
+        store: SsStore,
+        identity: Identity,
+        settings: Settings,
+        homeAssistantUrl: () -> String? = { null },
+        onStatusChanged: () -> Unit = {},
+    ) : this(
+        context, store, identity, settings, homeAssistantUrl, onStatusChanged,
+        connect = { url, hello, hooks -> SendspinSession(url, store, hello, { settings.unpairedAccess }, hooks) },
+        newPipeline = { out, onFlacFailed -> AudioPipeline(out, { MediaCodecFlacDecoder() }, onFlacFailed) },
+        newSink = { AudioTrackSink() },
+    )
+
+    /** How the player introduces itself in `client/hello`. Music Assistant shows these. */
+    public data class Identity(
+        /** The player's name, as Music Assistant lists it. */
+        public val name: String,
+        /** The device's model. */
+        public val productName: String,
+        /** The device's maker. */
+        public val manufacturer: String,
+        /** The app and its version, such as `My Panel 1.2.0`. */
+        public val softwareVersion: String,
+        /** The device's MAC address (`02:00:00:00:00:01`), or null. Sent only when it is one. */
+        public val macAddress: String? = null,
+    )
+
+    /** What the player reads from the app's settings, at each connection. Read from the player's threads. */
+    public interface Settings {
+        /** [AUTO] to find the server, or `host[:port][/path]`, or a `ws://` URL. */
+        public val server: String
+
+        /** Offer FLAC before PCM. PCM only when false. */
+        public val flac: Boolean
+
+        /** Sendspin's unpaired access: a server may play to the player without pairing. */
+        public val unpairedAccess: Boolean
+    }
+
+    /** Where the connection to the server stands. */
+    public enum class Phase {
+        /** Opening the socket. */
+        CONNECTING,
+        /** In the Noise handshake. */
+        HANDSHAKE,
+        /** Connected, and waiting to be paired or let in by the server. */
+        HELD,
+        /** Pairing with the server. */
+        PAIRING,
+        /** Connected and ready to play. */
+        READY,
+        /** Playing a stream. */
+        PLAYING,
+        /** Not connected. */
+        CLOSED,
+    }
+
+    /** The connection's state, as [status] gives it. */
+    public data class Status(
+        /** Where the connection stands. */
+        public val phase: Phase,
+        /** The server's name, once it said. */
+        public val serverName: String? = null,
+        /** The server's id, once it said. */
+        public val serverId: String? = null,
+        /** Whether the player is paired with this server. */
+        public val paired: Boolean = false,
+        /** Which key the handshake used. */
+        public val psk: PskCategory? = null,
+        /** The server's activities, from its activation. */
+        public val activities: List<String> = emptyList(),
+        /** The roles the server gave the player. */
+        public val roles: List<String> = emptyList(),
+        /** The name of the player's group on the server. */
+        public val groupName: String? = null,
+        /** Why the connection closed, when it did. */
+        public val closeReason: String? = null,
+        /** The codec of the active stream. */
+        public val codec: String? = null,
+    )
+
     private val ctx = context.applicationContext
     @Volatile private var session: SsConnection? = null
     /** The run since the last [start], or null when stopped. Written only under this player's lock. */
@@ -240,14 +241,14 @@ class SendspinPlayer(
     private val outputLock = Any()
     @Volatile private var ducked = false
     private val wake = Object()
-    // Set by tests and the settings mock-ups too.
-    @Volatile var status: SendspinSession.Status = SendspinSession.Status(SendspinSession.Phase.CLOSED)
-    /** True once the client has started since boot (ESPHome reports the client id only then). */
-    @Volatile var started = false; private set
+    /** The connection's state. */
+    @Volatile public var status: Status = Status(Phase.CLOSED); private set
+    /** True once [start] has run, and never cleared. */
+    @Volatile public var started: Boolean = false; private set
     @Volatile private var lastUrl: String? = null
-    /** The server of the session that runs now, or null: what the settings page names (#212). Set by the mock-ups too. */
-    @Volatile var activeUrl: String? = null
-    @Volatile var nowPlaying: String? = null
+    /** The server of the session that runs now, or null. */
+    @Volatile private var activeUrl: String? = null
+    @Volatile private var nowPlaying: String? = null
     /** Why FLAC is no longer offered this run (decoder failures), or null. */
     @Volatile private var flacFailure: String? = null
     /** The platform's FLAC decoder, or null if there is none (then only PCM is offered). */
@@ -255,27 +256,28 @@ class SendspinPlayer(
 
     /** FLAC first (spec: first is preferred), PCM as the fallback; PCM only when FLAC is off or failed. */
     private fun offeredFormats(): List<SsFormat> =
-        if (prefs.flac && flacFailure == null && flacDecoder != null) listOf(SsFormat.FLAC_48K_STEREO_16, SsFormat.PCM_48K_STEREO_16)
+        if (settings.flac && flacFailure == null && flacDecoder != null) listOf(SsFormat.FLAC_48K_STEREO_16, SsFormat.PCM_48K_STEREO_16)
         else listOf(SsFormat.PCM_48K_STEREO_16)
 
-    /** Built per connection: the formats can change between connections. Public for tests. */
-    fun hello() = SsHelloInfo(
-        name = device.friendlyName,
-        productName = device.model,
-        manufacturer = device.manufacturer,
-        softwareVersion = "S1 Kiosk ${build.versionName}",
-        macAddress = device.macAddress.lowercase().takeIf { MAC_RE.matches(it) },
+    /** Built per connection: the formats can change between connections. */
+    internal fun hello() = SsHelloInfo(
+        name = identity.name,
+        productName = identity.productName,
+        manufacturer = identity.manufacturer,
+        softwareVersion = identity.softwareVersion,
+        macAddress = identity.macAddress?.lowercase()?.takeIf { MAC_RE.matches(it) },
         formats = offeredFormats(),
         bufferCapacity = BUFFER_CAPACITY,
     )
 
-    val clientId: String get() = store.identity().peerId
+    /** The player's client id: its identity's public key, as the server knows it. */
+    public val clientId: String get() = store.identity().peerId
 
-    /** The version-0 pairing token (a credential: never log it). */
-    fun pairingToken(): String = SsCrypto.pairingToken(store.identity().publicKey, store.pairingPsk())
+    /** The version-0 pairing token, which the server pairs with. A credential: never log it. */
+    public fun pairingToken(): String = SsCrypto.pairingToken(store.identity().publicKey, store.pairingPsk())
 
-    /** A pairing token made now would be for a stand-in identity ([SsStore.secretsReadable]). */
-    val pairingReady: Boolean get() = store.secretsReadable()
+    /** False while a pairing token would be for a stand-in identity ([SsStore.secretsReadable]). */
+    public val pairingReady: Boolean get() = store.secretsReadable()
 
     /**
      * One [start] to its [stop], with what its threads own. Once it is no longer [current], its
@@ -318,23 +320,24 @@ class SendspinPlayer(
         override fun end() { ifOutputCurrent(r) { r.scheduler.end() } }
     }
 
-    /** One-line state for the ESPHome diagnostic sensor. */
-    fun statusText(): String {
+    /** The state in one line of at most 255 characters, such as `playing from Music Assistant (FLAC): Artist – Title`. */
+    public fun statusText(): String {
         if (current == null) return "off"
         val s = status
         val server = s.serverName ?: "server"
         val note = flacFailure?.let { "; FLAC off, using PCM: $it" } ?: ""
         return (when (s.phase) {
-            SendspinSession.Phase.CONNECTING, SendspinSession.Phase.HANDSHAKE -> "connecting"
-            SendspinSession.Phase.CLOSED -> "disconnected" + (s.closeReason?.let { " ($it)" } ?: "")
-            SendspinSession.Phase.HELD -> "waiting for pairing or approval by $server"
-            SendspinSession.Phase.PAIRING -> "pairing with $server"
-            SendspinSession.Phase.READY -> if (s.paired) "ready, paired with $server" else "ready, unpaired guest of $server"
-            SendspinSession.Phase.PLAYING -> "playing from $server" + (s.codec?.let { " (${it.uppercase()})" } ?: "") + (nowPlaying?.let { ": $it" } ?: "")
+            Phase.CONNECTING, Phase.HANDSHAKE -> "connecting"
+            Phase.CLOSED -> "disconnected" + (s.closeReason?.let { " ($it)" } ?: "")
+            Phase.HELD -> "waiting for pairing or approval by $server"
+            Phase.PAIRING -> "pairing with $server"
+            Phase.READY -> if (s.paired) "ready, paired with $server" else "ready, unpaired guest of $server"
+            Phase.PLAYING -> "playing from $server" + (s.codec?.let { " (${it.uppercase()})" } ?: "") + (nowPlaying?.let { ": $it" } ?: "")
         } + note).take(255)
     }
 
-    @Synchronized fun start() {
+    /** Starts the player, unless it runs. It connects on a thread of its own. */
+    @Synchronized public fun start() {
         if (current != null) return
         started = true
         store.identity(); store.pairingPsk() // create both before HA asks for the token
@@ -355,11 +358,15 @@ class SendspinPlayer(
                 r.backoffMs = 1_000L
                 synchronized(wake) { wake.notifyAll() }
             }
-        }.also { cb -> runCatching { cm?.registerDefaultNetworkCallback(cb) } }
+        }.also { cb -> runCatching { cm?.let { Compat.registerNetworkCallback(it, cb) } } }
     }
 
-    /** Stops, telling the server why (`user_request` when switched off, `shutdown` when the app stops). */
-    @Synchronized fun stop(reason: String = "user_request") {
+    /**
+     * Stops the player and waits up to about 2.5 s for its connection and audio to close. Tells the server
+     * why: `user_request` when the person turned it off, `shutdown` when the app stops. Safe from any thread,
+     * and blocking; its network I/O runs on a thread of its own, so the main thread may call it.
+     */
+    @Synchronized public fun stop(reason: String = "user_request") {
         val r = current ?: return
         synchronized(outputLock) { current = null }
         nowPlaying = null // the stopped run's stream/end can come too late to clear it
@@ -376,7 +383,7 @@ class SendspinPlayer(
         // The audio thread closes its run's sink; let it, so the next run's track usually opens after
         // this one is gone. If it is stuck, it releases the track itself when it comes back.
         try { r.audioThread.join(1_000) } catch (_: InterruptedException) { interrupted = true }
-        status = SendspinSession.Status(SendspinSession.Phase.CLOSED)
+        status = Status(Phase.CLOSED)
         onStatusChanged()
         // Passed on only now, so neither wait above cuts the cleanup short.
         if (interrupted) Thread.currentThread().interrupt()
@@ -401,12 +408,19 @@ class SendspinPlayer(
         return interrupted
     }
 
-    /** Reconnects so a new `client/hello` carries a changed setting (unpaired access, server URL). */
-    fun restartSession() { session?.close("restart") }
+    /**
+     * Reconnects, so the server sees a changed [Settings.server] or [Settings.unpairedAccess]. Safe from any
+     * thread, but blocking (it says goodbye and waits up to 1 s for the server to hang up): don't call it
+     * from the main thread.
+     */
+    public fun restartSession() { session?.close("restart") }
 
-    /** The `sendspin_flac` setting changed: switching it on also retries FLAC after a failure. */
-    fun onFlacSettingChanged() {
-        if (prefs.flac) { flacFailure = null; current?.pipeline?.resetFlacFailure() }
+    /**
+     * Call when [Settings.flac] changed: it reconnects, and turning FLAC on also retries it after a failure.
+     * Blocking like [restartSession]: don't call it from the main thread.
+     */
+    public fun onFlacSettingChanged() {
+        if (settings.flac) { flacFailure = null; current?.pipeline?.resetFlacFailure() }
         onStatusChanged()
         restartSession()
     }
@@ -424,8 +438,8 @@ class SendspinPlayer(
         }, "ss-restart").apply { isDaemon = true; start() }
     }
 
-    /** Voice assistant active: mute locally while staying in sync (spec allows suspending output locally). */
-    fun setDucked(d: Boolean) {
+    /** Silences the output while [d] (a voice assistant speaks), and stays in sync with the group. */
+    public fun setDucked(d: Boolean) {
         if (ducked == d) return
         ducked = d
         applyGain()
@@ -529,11 +543,11 @@ class SendspinPlayer(
     // ------------------------------------------------------------------ server address
 
     private fun resolveUrl(): String? {
-        val setting = prefs.server.trim()
-        if (!setting.equals(SendspinPrefs.AUTO, ignoreCase = true) && setting.isNotEmpty()) return normalize(setting)
+        val setting = settings.server.trim()
+        if (!setting.equals(AUTO, ignoreCase = true) && setting.isNotEmpty()) return normalize(setting)
         lastUrl?.let { return it }
         discover()?.let { return it }
-        val host = haBase()?.let { runCatching { URI(it).host }.getOrNull() } ?: return null
+        val host = homeAssistantUrl()?.let { runCatching { URI(it).host }.getOrNull() } ?: return null
         return "ws://${if (host.contains(':')) "[$host]" else host}:$DEFAULT_SERVER_PORT$DEFAULT_PATH"
     }
 
@@ -623,37 +637,50 @@ class SendspinPlayer(
             if (changed) { SsLog.i("Now playing: ${np ?: "-"}"); onStatusChanged() }
         }
 
-        override fun onStatus(status: SendspinSession.Status) {
+        override fun onStatus(status: Status) {
             if (ifCurrent(r) { this@SendspinPlayer.status = status }) onStatusChanged()
         }
     }
 
-    /** Local volume/mute changes (e.g. from Home Assistant) are reported to the server. */
-    fun setVolume(volume: Int) { store.volume = volume.coerceIn(0, 100); applyGain(); session?.sendState() }
-    fun setMuted(muted: Boolean) { store.muted = muted; applyGain(); session?.sendState() }
-    val volume: Int get() = store.volume
-    /** What plays now (`artist – title`), or null; for the settings page (#212). */
-    val nowPlayingText: String? get() = nowPlaying
+    /** Sets the volume (0 to 100) and tells the server. Safe from any thread, but blocking (it writes to the server's socket): don't call it from the main thread. */
+    public fun setVolume(volume: Int) { store.volume = volume.coerceIn(0, 100); applyGain(); session?.sendState() }
+
+    /** Mutes or unmutes and tells the server. Safe from any thread, but blocking (it writes to the server's socket): don't call it from the main thread. */
+    public fun setMuted(muted: Boolean) { store.muted = muted; applyGain(); session?.sendState() }
+
+    /** The volume, 0 to 100, as the server or [setVolume] last set it. */
+    public val volume: Int get() = store.volume
+
+    /** What plays now (`artist – title`), or null. */
+    public val nowPlayingText: String? get() = nowPlaying
+
     /** The server of the session that runs now, or null between sessions. */
-    val serverUrl: String? get() = activeUrl
-    val muted: Boolean get() = store.muted
+    public val serverUrl: String? get() = activeUrl
+
+    /** Whether the server or [setMuted] muted the player. */
+    public val muted: Boolean get() = store.muted
     /** Tests: whether the current run's scheduler is playing a stream. */
     internal val outputActive: Boolean get() = current?.scheduler?.isActive == true
 
-    companion object {
+    /** The server's defaults. */
+    public companion object {
         /** The session waits up to 1 s for the server to hang up after the goodbye; allow for that. */
         private const val CLOSE_WAIT_MS = 1_500L
-        const val DEFAULT_SERVER_PORT = 8927
-        const val DEFAULT_PATH = "/sendspin"
+        /** [Settings.server] that finds the server: mDNS, then Music Assistant on the Home Assistant host. */
+        public const val AUTO: String = "auto"
+        /** Music Assistant's Sendspin port. */
+        public const val DEFAULT_SERVER_PORT: Int = 8927
+        /** Music Assistant's Sendspin path. */
+        public const val DEFAULT_PATH: String = "/sendspin"
         /**
          * Bytes of encoded chunks (+ headers) the server may have outstanding: ~7.8 s of PCM, ~15 s
          * of typical FLAC (decoded eagerly: ≤ ~3 MB of PCM in the jitter buffer).
          */
-        const val BUFFER_CAPACITY = 1_500_000
+        internal const val BUFFER_CAPACITY = 1_500_000
         /** AudioTrack creation (~50 ms) + its 100 ms buffer + network, with margin. */
-        const val REQUIRED_LEAD_TIME_MS = 300
+        internal const val REQUIRED_LEAD_TIME_MS = 300
         /** Wi-Fi jitter allowance for live streams. */
-        const val MIN_BUFFER_MS = 200
+        internal const val MIN_BUFFER_MS = 200
         private val MAC_RE = Regex("^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
         private val EMPTY = TimeFilter.Snapshot(0.0, 0.0, 0, false, 0, Double.POSITIVE_INFINITY)
     }
