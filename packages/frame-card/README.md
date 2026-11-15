@@ -58,7 +58,8 @@ Kiln was the first to use it, and #114 moved it here, so there is one copy.
 ## The pane catalog
 
 `src/panes.generated.ts` holds every pane's `pane.json` and `icon.svg`, which live next to each pane's
-code in `app/kiosk/src/main/java`. After you add or change one, run:
+code in a Gradle module's `src/main/java` (`panes/<id>`, `frames/<id>/android` or
+`frames/<id>/panes/<id>`). After you add or change one, run:
 
 ```sh
 npm run panes -w @glassworks/frame-card

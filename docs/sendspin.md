@@ -5,7 +5,7 @@ own players, called by the panel's name in Home Assistant (**Aqara S1 Plus** on 
 group it with them. You no longer need MA's "Home Assistant MediaPlayers" bridge for the panel.
 That bridge goes MA → HA → `media_player.<device>_speaker` and has no sync.
 
-Code: `app/kiosk/src/main/java/sh/edm/s1kiosk/sendspin/`. The protocol core is pure
+Code: `panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin/`. The protocol core is pure
 JVM (`SendspinSession`, `SsCrypto`, `TimeFilter`, `PlaybackScheduler`, `WsClient`, `Flac`,
 `AudioPipeline`) and `SendspinPlayer` and `MediaCodecFlacDecoder` are the Android glue. It is owned by `PanelDevice` and runs in the foreground
 `KioskService`. Logs: `adb logcat -s S1Sendspin`.

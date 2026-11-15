@@ -10,8 +10,8 @@ import java.io.File
  * Finds files for tests that read the source tree (confinement scans, the pane catalog, goldens, the
  * bundled font), from the repo root and across every Gradle module, wherever the module sits (#21).
  *
- * A module is a folder with `src/main` under one of [SEARCH]: `app/kiosk` and `app/libs/<x>` today,
- * `core`, `pane-api`, `engines/<x>`, `panes/<x>` and `frames/<id>/android` after the split. A test
+ * A module is a folder with `src/main` under one of [SEARCH]: `core`, `pane-api`, `engines/<x>`, `panes/<x>`,
+ * `libs/<x>`, `frames/<id>/android` and `frames/<id>/panes/<x>` (`app/` too, the layout before #21's split). A test
  * finds the same files from whichever module runs it, so moving code between modules changes no test.
  *
  * Nothing here skips. A lookup that finds nothing, or fewer files than the caller expects, fails: a

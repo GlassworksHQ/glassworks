@@ -3,7 +3,7 @@
 This was branding/glass-tile/common.py until the boot branding became the Glassworks stack
 (#63); the BMP and bootanimation writers stayed there.
 
-Visual language: the kiosk's onboarding screen (app/kiosk/.../setup/SetupOverlay.kt)
+Visual language: the kiosk's onboarding screen (frames/aqara-s1-plus/android/.../setup/SetupOverlay.kt)
 and dashboard card. That means a #0a0b0f backdrop with soft sky and violet glows,
 light display type with tight tracking, small uppercase letter-spaced labels, glass
 surfaces, and amber as the "current step" accent.

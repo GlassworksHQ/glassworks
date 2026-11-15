@@ -74,7 +74,7 @@ fun Test.readsRepoFiles(repo: File) {
     val files = listOf(
         "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
         "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",
-        "tools/bracket/base_emulator.py",
+        "tools/bracket/base_emulator.py", "build.gradle.kts",
     )
     inputs.files(files.map { File(repo, it) }, fileTree(File(repo, "LICENSES")), fileTree(File(repo, "docs")) { include("**/*.md") },
         fileTree(File(repo, "frames")) { include("*/README.md") })

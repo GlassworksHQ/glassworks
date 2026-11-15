@@ -90,7 +90,7 @@ write it or take a library?
 **Superseded on 2026-11-14 by the maintainer's decision: Glassworks follows the maintainer's own,
 tested implementation** in [aguilaair/android-ip-camera](https://github.com/aguilaair/android-ip-camera)
 (branch `onvif-rtsp-motion`, commit `7b5e6f28`, MIT, a fork of DigitallyRefined/android-ip-camera).
-It is ported, not rewritten, in `app/kiosk/src/main/java/dev/glassworks/camera/onvif/`. The library
+It is ported, not rewritten, in `panes/camera/src/main/java/dev/glassworks/camera/onvif/`. The library
 comparison above stays as the record of what was ruled out; RootEncoder and RTSP-Server are no longer
 the plan.
 

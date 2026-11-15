@@ -12,7 +12,7 @@ import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import java.util.Locale
 
-/** The voice assistant ([AssistPane]) for the whole process: its on/off and adb extras (app/README.md). [file] is its settings file. */
+/** The voice assistant ([AssistPane]) for the whole process: its on/off and adb extras (frames/aqara-s1-plus/android/README.md). [file] is its settings file. */
 class AssistDefinition(file: SharedPreferences) : PaneDefinition {
     override val id = "assist"
     override val requires = setOf(Capability.MICROPHONE, Capability.SPEAKER)

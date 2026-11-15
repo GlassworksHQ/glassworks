@@ -5,16 +5,21 @@ open Home Assistant wall panel. It is also the reference device ("frame") for **
 device-neutral open panel core that is being pulled out of this repo step by step.
 
 This file applies to the whole repo. Each area has its own file with the details:
-[`app/AGENTS.md`](frames/aqara-s1-plus/android/AGENTS.md) (the kiosk app), [`kiln/AGENTS.md`](kiln/AGENTS.md) (the browser
-installer), [`tools/AGENTS.md`](tools/AGENTS.md) (FEL, U-Boot, root side, radio, install scripts).
+[`frames/aqara-s1-plus/android/AGENTS.md`](frames/aqara-s1-plus/android/AGENTS.md) (the kiosk app),
+[`kiln/AGENTS.md`](kiln/AGENTS.md) (the browser installer), [`tools/AGENTS.md`](tools/AGENTS.md) (FEL,
+U-Boot, root side, radio, install scripts).
 Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/research/bringup.md).
 
 ## Layout
 
 | Path | What | Language |
 |---|---|---|
-| `app/kiosk` | S1 Kiosk, the GeckoView kiosk app (`sh.edm.s1kiosk`, never rename it) | Kotlin, Android |
-| `app/libs/*` | Libraries split out of the app: `esphome-api` (JVM), `esphome-api-android`, `improv`, `bluetooth-proxy` | Kotlin |
+| `settings.gradle.kts` | The Gradle root is the repo root. This file maps every module to its folder | Kotlin |
+| `frames/aqara-s1-plus/android` | S1 Kiosk (`:kiosk`), the GeckoView kiosk app (`sh.edm.s1kiosk`, never rename it) | Kotlin, Android |
+| `core/`, `pane-api/` | The Glassworks core (`dev.glassworks.*`) and the pane API every pane builds on | Kotlin, Android |
+| `engines/engine-gecko` | The GeckoView engine and the kiosk's web extension | Kotlin, JavaScript |
+| `panes/<id>` | One module per pane (`:pane-<id>`): assist, camera, diagnostics, notifications, sendspin, timers, bluetooth-proxy. A frame's own panes sit in `frames/<id>/panes/` | Kotlin, Android |
+| `libs/*` | Libraries split out of the app: `esphome-api` (JVM), `esphome-api-android`, `improv`, `bluetooth-proxy` | Kotlin |
 | `kiln/` | Kiln, the WebUSB installer (FEL → fastboot → boot patch → adb), served at s1.edm.sh. The page in `src/`, protocol modules in `packages/`, the Next.js app in `apps/kiln` | TypeScript, Vite, Next.js, Rust→WASM |
 | `frames/<id>/` | Everything about one frame: its README, its Kiln recipe (`installer/`), its design data (`design/frame.json`, `recovery.json`) and its research notes (`research/`) | TypeScript, JSON, Markdown |
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup | TypeScript, React |
@@ -146,7 +151,7 @@ header from the example in the table, then change the name, the tagline and the 
 | The README is for | Header | Copy it from |
 |---|---|---|
 | The repository's front page (the root `README.md`) | `banner-glassworks`, centred title and tagline, then the status and roadmap badges | [README.md](README.md) |
-| A library: something another project could use on its own (`app/libs/*`, `packages/*`, or such a package in `kiln/packages/`) | `banner-library-<name>`, centred title and tagline, then the MIT, status and roadmap badges | [improv](libs/improv/README.md) |
+| A library: something another project could use on its own (`libs/*`, `packages/*`, or such a package in `kiln/packages/`) | `banner-library-<name>`, centred title and tagline, then the MIT, status and roadmap badges | [improv](libs/improv/README.md) |
 | The Glassworks core or a pane | `banner-core` or `banner-pane`, title and tagline, then the part badge, licence, status and roadmap badges | [core](pane-api/src/main/java/dev/glassworks/README.md) |
 | Kiln | `banner-kiln`, title and tagline, then the Kiln, MIT, status and roadmap badges | [Kiln](kiln/apps/kiln/README.md) |
 | An app or product built on the core | Title and tagline, then Built on Glassworks, MIT, status and roadmap badges. No banner | [S1 Kiosk](frames/aqara-s1-plus/android/README.md) |

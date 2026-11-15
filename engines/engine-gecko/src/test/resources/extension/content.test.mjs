@@ -1,6 +1,6 @@
 // content.js's "ready" for the connecting screen (#63, round 4 panel run), run under node:test with
 // the browser, the DOM, frames and timers stubbed. Run by ContentScriptReadyTest (or by hand:
-// CONTENT_JS=app/kiosk/src/main/assets/extension/content.js node --test this file).
+// CONTENT_JS=engines/engine-gecko/src/main/assets/extension/content.js node --test this file).
 // Touches nothing outside this process.
 import { test } from "node:test";
 import assert from "node:assert/strict";

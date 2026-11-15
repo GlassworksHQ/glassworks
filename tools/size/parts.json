@@ -1,5 +1,5 @@
 {
- "_comment": "Which part of the APK each file and dex class belongs to (tools/size/apksize.py, docs/size.md). Read from app/kiosk/build.gradle.kts and the imports in app/kiosk/src/main and app/libs (2026-11-13). The longest matching dex prefix wins; a class nothing matches is core. A library is counted in a pane's own total only when that pane alone uses it. A pane's `assets` are paths outside assets/panes/<id>/ that are its own (the radio bundle, which the app and release.yml expect at assets/radio-bundle/). A pane's `dex` lists its package and the classes elsewhere that only it uses (read 2026-11-13 from their users).",
+ "_comment": "Which part of the APK each file and dex class belongs to (tools/size/apksize.py, docs/size.md). Read from the module build files and the imports in each module's src/main (2026-11-13). The longest matching dex prefix wins; a class nothing matches is core. A library is counted in a pane's own total only when that pane alone uses it. A pane's `assets` are paths outside assets/panes/<id>/ that are its own (the radio bundle, which the app and release.yml expect at assets/radio-bundle/). A pane's `dex` lists its package and the classes elsewhere that only it uses (read 2026-11-13 from their users).",
  "engine": {
   "_why": "GeckoView: its Java and native code, and omni.ja (Gecko's own JS, CSS and resources).",
   "dex": ["org.mozilla.", "org.webrtc."],
@@ -11,7 +11,7 @@
  "core_assets": ["assets/extension/", "assets/dexopt/", "assets/licenses/"],
  "libraries": {
   "bouncycastle": {"dex": ["org.bouncycastle."], "files": ["org/bouncycastle/"], "used_by": ["core", "sendspin"],
-                   "_why": "app/libs/esphome-api (Noise) brings it; Sendspin's encryption uses it too"},
+                   "_why": "libs/esphome-api (Noise) brings it; Sendspin's encryption uses it too"},
   "media3": {"dex": ["androidx.media3."], "used_by": ["assist", "engine"],
              "_why": "audio playback (voice/); GeckoView ships the same version (build.gradle.kts)"},
   "tensorflow-lite": {"dex": ["org.tensorflow."], "native": ["libtensorflowlite_jni.so"], "used_by": ["assist"],

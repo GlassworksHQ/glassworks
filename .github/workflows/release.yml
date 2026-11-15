@@ -1,6 +1,6 @@
 # Signed kiosk release on a version tag (docs/releasing.md):
 #   git tag v1.2.3 && git push origin v1.2.3
-# Builds app/kiosk once per ABI with the release key (secrets of the `release-signing` environment),
+# Builds :kiosk (frames/aqara-s1-plus/android) once per ABI with the release key (secrets of the `release-signing` environment),
 # names the APKs s1-kiosk-<version>.apk (armeabi-v7a, the S1's; never rename it) and
 # s1-kiosk-arm64-v8a-<version>.apk, writes a .sha256 for each and publishes all four on a GitHub
 # Release with notes from CHANGELOG.md. Every ABI's APK has the same versionCode (docs/releasing.md
@@ -47,7 +47,7 @@ jobs:
         run: |
           v="${GITHUB_REF_NAME#aqara-s1-plus-}"
           v="${v#v}"
-          # Same rule as app/kiosk/build.gradle.kts: MAJOR.MINOR.PATCH, minor and patch below 100.
+          # Same rule as frames/aqara-s1-plus/android/build.gradle.kts: MAJOR.MINOR.PATCH, minor and patch below 100.
           # No pre-release tags: the app ignores them, so they would only confuse.
           if ! [[ "$v" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
             echo "::error::tag $GITHUB_REF_NAME is not [aqara-s1-plus-]vMAJOR.MINOR.PATCH (minor/patch < 100)"; exit 1
@@ -186,7 +186,7 @@ jobs:
           echo "S1_RADIO_BUNDLE_ASSETS=$RUNNER_TEMP/radio-bundle-assets" >> "$GITHUB_ENV"
           tools/release/changelog-section.sh "$VERSION" > "$RUNNER_TEMP/notes.md"
 
-      # AGP 9.3 / Gradle 9.8 / Kotlin 2.4 (app/build.gradle.kts, gradle-wrapper.properties) need JDK 17+;
+      # AGP 9.3 / Gradle 9.8 / Kotlin 2.4 (build.gradle.kts, gradle-wrapper.properties) need JDK 17+;
       # the app is developed on Temurin 21.
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
@@ -199,7 +199,7 @@ jobs:
           # The default ("tools platform-tools") fails: current sdkmanager has no "tools" package.
           packages: platform-tools
 
-      # compileSdk 37.2 (app/kiosk/build.gradle.kts: release(37) { minorApiLevel = 2 }); AGP fetches
+      # compileSdk 37.2 (frames/aqara-s1-plus/android/build.gradle.kts: release(37) { minorApiLevel = 2 }); AGP fetches
       # its default build-tools itself once the licenses are accepted (setup-android does that).
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"

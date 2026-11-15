@@ -158,7 +158,7 @@ and HA's device page stays short. So every entity has a place:
   change from an automation stay on the panel and its Manage page.
 - **A pane that's off adds nothing to the list a person sees.**
 
-### Libraries (`app/libs/*`)
+### Libraries (`libs/*`)
 
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-library-on-dark.svg"><img alt="Glassworks Library" src="https://www.glassworks.dev/brand/badge-library-on-light.svg" height="30"></picture></a>
 

@@ -139,7 +139,7 @@ Host only; nothing touches a device.
 4. The tests: `MWW_PYTHON=/tmp/mww-venv/bin/python ./gradlew :kiosk:testDebugUnitTest
    --tests '*Micro*'`. Without `MWW_PYTHON` the clip test is skipped; the frontend and detector tests
    always run. CI runs the clip test in the `wake-word` job of `pr.yml` (#184), with the LiteRT pinned
-   in `app/kiosk/mww-test-requirements.txt`.
+   in `panes/assist/mww-test-requirements.txt`.
 5. The C cross-check: the header of `tools/voice/microfrontend_check.cc`.
 
 ## Panel run

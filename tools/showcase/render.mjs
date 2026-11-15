@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-// Screen px per CSS px. The S1's own density is 1.5 (app/AGENTS.md); 1 is the kiosk's zoom at 67%. Each
+// Screen px per CSS px. The S1's own density is 1.5 (frames/aqara-s1-plus/android/AGENTS.md); 1 is the kiosk's zoom at 67%. Each
 // frame is drawn at the density, from MIN_DENSITY to MAX_DENSITY, at which the screen's bottom edge falls
 // just under a row of sections: as many whole rows as fit, none cut through.
 const MIN_DENSITY = 0.6;
@@ -34,7 +34,7 @@ const DEFAULT_DISPLAY = { width: 1920, height: 1200 };
 // WebP quality: 60 keeps every render under 80 KiB with the camera photos in, and text still sharp.
 const QUALITY = 60;
 
-// The kiosk's own look: no sidebar, no header (app/kiosk/src/main/assets/extension/content.js), and
+// The kiosk's own look: no sidebar, no header (engines/engine-gecko/src/main/assets/extension/content.js), and
 // HA's default theme in dark mode.
 const inject = (now) => `(() => {
   // The page's clock stands still at the home's NOW, so the clock card and the graphs' windows are the

@@ -34,7 +34,7 @@ add up to the file. The APKs measured are unsigned (`kiosk-release-unsigned.apk`
 a few kB larger, by its signature block, which isn't any part's. The dex files' bytes are shared out by apkanalyzer's per-class sizes.
 
 **Which classes and libraries are whose** is in `tools/size/parts.json`, read from
-`app/kiosk/build.gradle.kts` and the imports in `app/kiosk/src/main` and `app/libs` (2026-11-13). The
+the module build files and the imports in each module's `src/main` (2026-11-13). The
 longest matching prefix wins; a class nothing matches is the core's. On the S1:
 
 | Library | Used by | So |
@@ -42,7 +42,7 @@ longest matching prefix wins; a class nothing matches is the core's. On the S1:
 | TensorFlow Lite (and `libtensorflowlite_jni.so`) | `voice/` only | Assist's |
 | XZ | `radio/` only | the radio's |
 | ZXing | the sign-in QR code | the core's |
-| BouncyCastle | `app/libs/esphome-api` (Noise) and Sendspin | shared |
+| BouncyCastle | `libs/esphome-api` (Noise) and Sendspin | shared |
 | Media3 | `voice/`, and GeckoView ships the same version | shared |
 
 Classes a pane alone uses outside its own package are listed with it, so its total isn't short:
@@ -81,7 +81,7 @@ bundle (3.49 MB, of which the bundle is 3.32 MB), so its budget is 7.00 MB. Thes
 choices, so that growth is a decision, not a drift. (The first budgets, 2026-11-13, measured a build
 without the bundle, 97.84 MB, which is not what ships; v0.4.3's released APK was 101.08 MB.)
 
-The release build has R8 off (`app/kiosk/build.gradle.kts`, `isMinifyEnabled = false`), so the dex is
+The release build has R8 off (`frames/aqara-s1-plus/android/build.gradle.kts`, `isMinifyEnabled = false`), so the dex is
 the unshrunk code. Turning R8 on would change these numbers and needs its own PR (GeckoView and the
 reflection in the app need keep rules).
 

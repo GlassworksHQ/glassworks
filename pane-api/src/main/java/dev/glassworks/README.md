@@ -465,7 +465,7 @@ switch, corners and the settings row: the panel's `Glass` and the pages' CSS (`P
 Code outside `dev.glassworks.platform` never reads `Build.VERSION.SDK_INT`. If you need a version
 check, add a query to `Platform` that names the capability and says in its KDoc where the boundary
 comes from, then call it. `PlatformTest` pins each boundary, and `PlatformConfinementTest` fails
-`./gradlew test` with the file and line of any other read. The libraries in `app/libs` do not depend
+`./gradlew test` with the file and line of any other read. The libraries in `libs/` do not depend
 on Glassworks, so each keeps its own checks in an internal `Compat.kt`, which the same test allows.
 
 ## Frames

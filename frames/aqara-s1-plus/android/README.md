@@ -73,7 +73,7 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   night times, brightness, Aqara's own settings), each pane under Panes with its on/off, Log (the live
   screen and sensor line) and About. Changes apply as you make them; the few that need a restart offer
   one.
-- **Kiosk mode for HA**: a built-in Gecko web extension (`assets/extension/`) hides the HA dashboard
+- **Kiosk mode for HA**: a built-in Gecko web extension (`engines/engine-gecko/src/main/assets/extension/`) hides the HA dashboard
   header and the sidebar. Add `?kiosk=0` to the URL to show them for one page; while you're editing a
   dashboard they're left visible.
 - **Screen policy from the panel's own sensors** (`dev.glassworks.screen.ScreenPolicy` with the S1 frame's sensors, see
@@ -123,7 +123,7 @@ The APK is ~98 MB (debug, unminified, Gecko native libs for `armeabi-v7a` only).
 
 ```sh
 export ANDROID_SERIAL=<your panel serial>
-adb install -r -g kiosk/build/outputs/apk/debug/kiosk-debug.apk
+adb install -r -g frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk
 adb shell cmd package set-home-activity sh.edm.s1kiosk/.MainActivity
 # optional: lets the BootReceiver start the activity from the background on Android 10
 adb shell appops set sh.edm.s1kiosk SYSTEM_ALERT_WINDOW allow
