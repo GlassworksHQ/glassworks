@@ -1,7 +1,7 @@
 // The pane catalog (#231): the generated list matches the pane files, the words line up, and a frame's
 // rating of a pane is its own when it gives one and is worked out otherwise.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,6 +43,10 @@ describe('the pane list', () => {
       mkdirSync(join(repo, 'app/kiosk/src/main/java'), { recursive: true });
       expect(() => paneFiles(repo)).toThrow(/no pane\.json/);
       expect(() => paneFiles(join(repo, 'nothing-here'))).toThrow(/no pane\.json/);
+      // a pane in a module's src/main/kotlin counts too, as in the app's RepoFiles
+      mkdirSync(join(repo, 'panes/x/src/main/kotlin/dev/x'), { recursive: true });
+      writeFileSync(join(repo, 'panes/x/src/main/kotlin/dev/x/pane.json'), '{}');
+      expect(paneFiles(repo)).toEqual([join(repo, 'panes/x/src/main/kotlin/dev/x/pane.json')]);
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

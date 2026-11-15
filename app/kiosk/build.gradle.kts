@@ -165,7 +165,7 @@ tasks.withType<Test>().configureEach {
     val paneModules = listOf("app", "libs", "core", "pane-api", "engines", "panes", "frames")
     inputs.files(paneModules.map { dir ->
         fileTree(rootProject.file("../$dir")) {
-            include("**/src/main/java/**/pane.json", "**/src/main/java/**/icon.svg")
+            include("**/src/main/**/pane.json", "**/src/main/**/icon.svg") // all of src/main, as RepoFiles.sources
             exclude("**/build/**", "**/node_modules/**")
         }
     }).withPropertyName("paneCatalog").withPathSensitivity(PathSensitivity.RELATIVE)

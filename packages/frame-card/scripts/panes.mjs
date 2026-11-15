@@ -2,7 +2,7 @@
 /**
  * Writes packages/frame-card/src/panes.generated.ts from every pane's pane.json and icon.svg (#231).
  *
- * Reads:  <module>/src/main/java/**\/pane.json and the icon.svg beside each (read-only), in every Gradle
+ * Reads:  <module>/src/main/{java,kotlin}/**\/pane.json and the icon.svg beside each (read-only), in every Gradle
  *         module under MODULE_ROOTS (app/kiosk and app/libs/* today; core, pane-api, engines/*, panes/*
  *         and frames/<id>/android after the split, #21). Finding no pane is an error, not an empty list.
  * Writes: packages/frame-card/src/panes.generated.ts, nothing else.
@@ -52,17 +52,17 @@ export function modules(repo = REPO) {
   return [...new Set(found)].sort();
 }
 
-/** Every pane.json in every module's src/main/java, as absolute paths. Throws when there is none. */
+/** Every pane.json in every module's src/main/java and src/main/kotlin, as absolute paths. Throws when there is none. */
 export function paneFiles(repo = REPO) {
-  const files = modules(repo).flatMap((m) => {
-    const java = join(m, 'src/main/java');
-    if (!isDir(java)) return [];
-    return readdirSync(java, { recursive: true })
-      .map(String)
-      .filter((f) => f.split(/[\\/]/).pop() === 'pane.json')
-      .map((f) => join(java, f));
-  });
-  if (files.length === 0) throw new Error(`no pane.json in any module's src/main/java under ${MODULE_ROOTS.join(', ')} in ${repo}`);
+  const files = modules(repo).flatMap((m) =>
+    ['java', 'kotlin'].map((d) => join(m, 'src/main', d)).filter(isDir).flatMap((src) =>
+      readdirSync(src, { recursive: true })
+        .map(String)
+        .filter((f) => f.split(/[\\/]/).pop() === 'pane.json')
+        .map((f) => join(src, f)),
+    ),
+  );
+  if (files.length === 0) throw new Error(`no pane.json in any module's src/main/java or src/main/kotlin under ${MODULE_ROOTS.join(', ')} in ${repo}`);
   return files.sort();
 }
 
