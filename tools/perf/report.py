@@ -1915,7 +1915,8 @@ def ram_markdown(ram):
            "idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside "
            "them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed. The VmHWM "
            "line below is each process's peak RSS since it started, so it includes such a peak, but RSS counts "
-           "shared pages in full: it bounds the PSS peak from above and doesn't measure it.", ""]
+           "shared pages in full: it bounds the PSS peak from above and doesn't measure it. It covers only the processes "
+           "still running, with a readable VmHWM, when it is read: one that exited earlier isn't in it.", ""]
     idle, peak = ram.get("reference_idle"), ram.get("graded_peak")
     roles = sorted(set((idle or {}).get("by_role_pss_kb", {})) | set((peak or {}).get("by_role_pss_kb", {})))
     if idle or peak:
