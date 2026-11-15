@@ -528,6 +528,33 @@ class CameraFailedRuns(unittest.TestCase):
         self.assertNotIn("showed no frame", R.camera_cell({"camera_runs": [ok, ok]}, {"camera": "good"}))
 
 
+class HeldBack(unittest.TestCase):
+    """s1rtc10: the headline said "Held back by typical dashboards: the view takes 1.2 s to open" when
+    typical's open was good and its blocking (2.9 s, poor) held it back. The headline names the tasks
+    next_limits gives, each in its own words."""
+
+    def test_a_page_held_back_only_by_blocking(self):
+        ok = {"inp_ms": 100, "load_ms": 1241, "blocking_ms": 100, "scroll_level": "fluid", "updates_level": "fluid",
+              "camera_level": "good"}
+        tiers = {"light": dict(ok, camera_level=None), "typical-nocam": dict(ok, blocking_ms=2862.0, camera_level=None),
+                 "typical": dict(ok, blocking_ms=2900.0), "heavy": dict(ok, blocking_ms=3100.0)}
+        g = G.grade(tiers, 2000)
+        self.assertEqual(g["grade"], "D")
+        self.assertEqual(G.next_limits(g), [{"page": "typical-nocam", "needs": "fluid", "tasks": ["blocking"]}])
+        ref = {"tiers": {"typical-nocam": {"load_ms": {"median": 1241}, "blocking_ms": {"median": 2862.0}}}}
+        h = R.headline("Aqara S1 Plus", g, ref)
+        self.assertIn("Held back by typical dashboards: the main thread is blocked for 2.9 s after the view is drawn.", h)
+        self.assertNotIn("to open", h)
+
+    def test_every_task_has_its_own_words(self):
+        s_ = {"load_ms": {"median": 1241}, "blocking_ms": {"median": 2862.0}}
+        self.assertEqual(R.task_phrase("load", s_), "the view takes 1.2 s to open")
+        self.assertEqual(R.task_phrase("blocking", {}), "the blocking after the view is drawn wasn't measured")
+        for t in G.TASKS:
+            R.task_phrase(t, s_)                       # none falls through to another task's words
+        self.assertRaises(ValueError, R.task_phrase, "nonsense", s_)
+
+
 class TimedOut(unittest.TestCase):
     """#202, s1rtc3: a view that didn't finish within the runner's deadline fails its own unmeasured
     tasks, measured: open and tap at the deadline, the rest below the lowest bar. Not missing."""
