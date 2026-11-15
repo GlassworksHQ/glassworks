@@ -2,6 +2,9 @@ package sh.edm.s1kiosk.sendspin
 
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.secrets.SecretPrefs
+import dev.glassworks.secrets.SecretStore
+import sh.edm.s1kiosk.SecretFiles
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -17,12 +20,19 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /** [SsStore] in the app's private SharedPreferences (`sendspin.xml`). Secrets are never logged. */
-class PrefsSsStore(context: Context) : SsStore {
-    private val sp = context.applicationContext.getSharedPreferences("sendspin", Context.MODE_PRIVATE)
+class PrefsSsStore(context: Context, secrets: SecretStore = SecretStore.keystore()) : SsStore {
+    /** The identity's private key, the pairing key and the records' keys are sealed ([SecretPrefs]). */
+    private val sp = SecretFiles.open(context.applicationContext, "sendspin", secrets)
     @Volatile private var cachedIdentity: SsIdentity? = null
+    /** Stand-ins while the key store can't open the stored ones: used, never stored, never cached for good. */
+    @Volatile private var standInIdentity: SsIdentity? = null
+    @Volatile private var standInPsk: ByteArray? = null
 
     @Synchronized override fun identity(): SsIdentity {
         cachedIdentity?.let { return it }
+        // Asked first: a true answer keeps the opened value for the read below, so an outage that ends
+        // between the two can't look like "no identity yet" and make a new one.
+        if (!sp.canRead("identity")) return standInIdentity ?: SsIdentity.generate().also { standInIdentity = it }
         val saved = sp.getString("identity", null)?.let { runCatching { SsIdentity(SsCrypto.unb64url(it)) }.getOrNull() }
         val id = saved ?: SsIdentity.generate().also { sp.edit().putString("identity", SsCrypto.b64url(it.privateKey)).commit() }
         cachedIdentity = id
@@ -30,25 +40,36 @@ class PrefsSsStore(context: Context) : SsStore {
     }
 
     @Synchronized override fun pairingPsk(): ByteArray {
+        if (!sp.canRead("pairing_psk")) return standInPsk ?: SsCrypto.randomBytes(32).also { standInPsk = it }
         sp.getString("pairing_psk", null)?.let { s -> runCatching { SsCrypto.unb64url(s) }.getOrNull()?.takeIf { it.size == 32 }?.let { return it } }
         val psk = SsCrypto.randomBytes(32)
         sp.edit().putString("pairing_psk", SsCrypto.b64url(psk)).commit()
         return psk
     }
 
+    override fun secretsReadable(): Boolean = sp.canRead("identity") && sp.canRead("pairing_psk")
+
     @Synchronized override fun records() = SsStore.decodeRecords(sp.getString("records", null))
 
-    @Synchronized override fun putRecord(r: SsPairingRecord, protectedServerIds: Set<String>) {
-        sp.edit().putString("records", SsStore.encodeRecords(SsStore.merge(records(), r, protectedServerIds))).commit()
+    /**
+     * Rewrites the pairings from [records], unless the stored ones can't be read now. Then [records] is
+     * empty, and if the key store came back between that read and the write, the empty list would replace
+     * every pairing. A true [SecretPrefs.canRead] keeps the opened value, so the read below sees it.
+     */
+    private fun writeRecords(commit: Boolean, change: (List<SsPairingRecord>) -> List<SsPairingRecord>) {
+        if (!sp.canRead("records")) return
+        val e = sp.edit().putString("records", SsStore.encodeRecords(change(records())))
+        if (commit) e.commit() else e.apply()
     }
 
-    @Synchronized override fun removeRecord(serverId: String) {
-        sp.edit().putString("records", SsStore.encodeRecords(records().filter { it.serverId != serverId })).commit()
-    }
+    @Synchronized override fun putRecord(r: SsPairingRecord, protectedServerIds: Set<String>) =
+        writeRecords(commit = true) { SsStore.merge(it, r, protectedServerIds) }
 
-    @Synchronized override fun touchRecord(serverId: String, nowMs: Long) {
-        sp.edit().putString("records", SsStore.encodeRecords(records().map { if (it.serverId == serverId) it.copy(lastUsedMs = nowMs) else it })).apply()
-    }
+    @Synchronized override fun removeRecord(serverId: String) =
+        writeRecords(commit = true) { list -> list.filter { it.serverId != serverId } }
+
+    @Synchronized override fun touchRecord(serverId: String, nowMs: Long) =
+        writeRecords(commit = false) { list -> list.map { if (it.serverId == serverId) it.copy(lastUsedMs = nowMs) else it } }
 
     override var outputDelayMs: Int
         get() = sp.getInt("output_delay_ms", 0)
@@ -233,6 +254,9 @@ class SendspinPlayer(
 
     /** The version-0 pairing token (a credential: never log it). */
     fun pairingToken(): String = SsCrypto.pairingToken(store.identity().publicKey, store.pairingPsk())
+
+    /** A pairing token made now would be for a stand-in identity ([SsStore.secretsReadable]). */
+    val pairingReady: Boolean get() = store.secretsReadable()
 
     /**
      * One [start] to its [stop], with what its threads own. Once it is no longer [current], its

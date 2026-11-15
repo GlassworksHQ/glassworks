@@ -72,6 +72,7 @@ function load(): Source[] {
 
   const panel: [string, string][] = [
     ["manage", "The Manage page"],
+    ["secrets", "Secrets on the panel"],
     ["esphome", "ESPHome entities"],
     ["notifications", "Notifications"],
     ["sendspin", "Music Assistant (Sendspin)"],

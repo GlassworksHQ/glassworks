@@ -91,6 +91,7 @@ public final class dev/glassworks/esphome/ApiServer {
 	public final fun getBluetooth ()Ldev/glassworks/esphome/BluetoothProxyHandler;
 	public final fun getEncrypted ()Z
 	public final fun getHasSubscriber ()Z
+	public final fun getKeyed ()Z
 	public final fun getLocalPort ()I
 	public final fun getOnClientHello ()Lkotlin/jvm/functions/Function2;
 	public final fun getOnCommand ()Lkotlin/jvm/functions/Function0;
@@ -450,6 +451,7 @@ public final class dev/glassworks/esphome/NoiseKeys {
 	public fun <init> (Ldev/glassworks/esphome/NoiseKeyStore;)V
 	public final fun getHasKey ()Z
 	public final fun getLatest ()[B
+	public final fun getLocked ()Z
 	public final fun getProvisionable ()Z
 }
 
@@ -531,6 +533,10 @@ public final class dev/glassworks/esphome/RawAdvertisement {
 public final class dev/glassworks/esphome/RawAdvertisement$Companion {
 }
 
+public abstract interface class dev/glassworks/esphome/ReadableNoiseKeyStore : dev/glassworks/esphome/NoiseKeyStore {
+	public abstract fun read ()Ldev/glassworks/esphome/StoredKey;
+}
+
 public final class dev/glassworks/esphome/SelectEntity : dev/glassworks/esphome/ApiEntity {
 	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/util/List;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLjava/util/List;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -566,6 +572,28 @@ public final class dev/glassworks/esphome/SensorEntity : dev/glassworks/esphome/
 	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
 	public fun shownState ()Ljava/lang/String;
 	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public abstract interface class dev/glassworks/esphome/StoredKey {
+}
+
+public final class dev/glassworks/esphome/StoredKey$Absent : dev/glassworks/esphome/StoredKey {
+	public static final field INSTANCE Ldev/glassworks/esphome/StoredKey$Absent;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/StoredKey$Present : dev/glassworks/esphome/StoredKey {
+	public fun <init> ([B)V
+	public final fun getKey ()[B
+}
+
+public final class dev/glassworks/esphome/StoredKey$Unreadable : dev/glassworks/esphome/StoredKey {
+	public static final field INSTANCE Ldev/glassworks/esphome/StoredKey$Unreadable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class dev/glassworks/esphome/SwitchEntity : dev/glassworks/esphome/ApiEntity {

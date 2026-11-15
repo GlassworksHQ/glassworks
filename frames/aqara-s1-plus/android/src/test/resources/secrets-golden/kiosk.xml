@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="api_key">ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=</string>
+    <boolean name="api_encryption" value="true" />
+    <string name="camera_stream_user">made-up-user</string>
+    <string name="camera_stream_password">made-up-camera-pass-7</string>
+    <string name="ha_url">http://192.0.2.10:8123</string>
+    <float name="zoom" value="0.0" />
+</map>

@@ -15,6 +15,35 @@ public interface NoiseKeyStore {
 }
 
 /**
+ * A [NoiseKeyStore] that can hold a key it can't read for a while (a device key store that is down),
+ * and says so. [NoiseKeys] then locks instead of treating the device as unprovisioned. Optional: a plain
+ * [NoiseKeyStore] is read with [NoiseKeyStore.load]. Added in 0.1.1; [NoiseKeyStore] is unchanged.
+ */
+public interface ReadableNoiseKeyStore : NoiseKeyStore {
+    /**
+     * One read of the stored key that also tells "no key" from "a key I can't read now". [NoiseKeys]
+     * decides from it alone, so an outage that ends between two calls can't make a device with a key
+     * look unprovisioned.
+     */
+    public fun read(): StoredKey
+}
+
+/** What a [ReadableNoiseKeyStore] holds, from one read ([ReadableNoiseKeyStore.read]). Added in 0.1.1. */
+public sealed interface StoredKey {
+    /** The stored key. */
+    public class Present(
+        /** The 32-byte key as stored. */
+        public val key: ByteArray,
+    ) : StoredKey
+
+    /** No key: the device is unprovisioned. */
+    public data object Absent : StoredKey
+
+    /** A key is stored but can't be read now: the server lets nobody in until it can ([NoiseKeys.locked]). */
+    public data object Unreadable : StoredKey
+}
+
+/**
  * A [NoiseKeyStore] in memory, starting with [initial]: the key is lost when the process ends. For
  * tests, and for a fixed key.
  */
@@ -51,7 +80,13 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
     private val lock = Any()
 
     /** Key used for new connections; null = unprovisioned. */
-    @Volatile internal var active: ByteArray? = store.load()?.takeIf(::isUsableKey)?.copyOf()
+    /** One read: [ReadableNoiseKeyStore.read], or Present/Absent from [NoiseKeyStore.load] for a plain store. */
+    private fun read(): StoredKey = (store as? ReadableNoiseKeyStore)?.read()
+        ?: store.load()?.let { StoredKey.Present(it) } ?: StoredKey.Absent
+
+    private val first = read()
+
+    @Volatile internal var active: ByteArray? = (first as? StoredKey.Present)?.key?.takeIf(::isUsableKey)?.copyOf()
         private set
 
     /** Last persisted key (may still be waiting for activation). */
@@ -61,15 +96,39 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
     public val hasKey: Boolean get() = active != null
 
     /**
-     * True while no key is active, so Home Assistant may set one (ESPHome:
-     * `api_encryption_provisionable = !noise_ctx.has_psk()`).
+     * True while no key is active and none is stored unreadable, so Home Assistant may set one (ESPHome:
+     * `api_encryption_provisionable = !noise_ctx.has_psk()`). Never while [locked].
      */
-    public val provisionable: Boolean get() = active == null
+    public val provisionable: Boolean get() = active == null && !locked
+
+    /**
+     * A key is stored but can't be read now ([StoredKey.Unreadable]): the server accepts nobody, not
+     * plaintext and not the zero PSK, and isn't provisionable, until it reads the key. A device that has
+     * a key never falls back to plaintext because its key store is down.
+     */
+    @Volatile public var locked: Boolean = first is StoredKey.Unreadable
+        private set
 
     /** A copy of the latest key, including one saved but not yet active, or null for none. */
     public val latest: ByteArray? get() = saved?.copyOf()
 
+    /**
+     * While [locked], reads the stored key again. True when that ended the lock: the key is [active] now,
+     * or it is gone for good and the device is unprovisioned.
+     */
+    internal fun unlock(): Boolean = synchronized(lock) {
+        if (!locked) return false
+        when (val r = read()) {
+            is StoredKey.Present -> r.key.takeIf(::isUsableKey)?.let { k -> active = k.copyOf(); saved = k.copyOf() }
+            StoredKey.Absent -> {}
+            StoredKey.Unreadable -> return false
+        }
+        locked = false
+        true
+    }
+
     internal fun handleSetKey(field: ByteArray): SetKeyResult = synchronized(lock) {
+        if (locked) return SetKeyResult(false, false, "the stored encryption key can't be read right now")
         if (field.isEmpty()) {
             if (saved == null && active == null) return SetKeyResult(true, false, "key cleared (no key was set)")
             if (!store.save(null)) return SetKeyResult(false, false, "failed to clear encryption key")
@@ -100,8 +159,14 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
      * the caller already. Returns true if the active key changed.
      */
     internal fun replace(key: ByteArray?): Boolean = synchronized(lock) {
+        // No key read because the store can't read it now: not a removed key. Keep what is active.
+        if (key == null && read() is StoredKey.Unreadable) {
+            if (active == null) locked = true
+            return false
+        }
         val k = key?.takeIf(::isUsableKey)?.copyOf()
         saved = k
+        locked = false
         if (sameKey(k, active)) return false
         active = k
         true

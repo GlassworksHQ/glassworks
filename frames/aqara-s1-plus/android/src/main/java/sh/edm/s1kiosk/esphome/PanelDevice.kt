@@ -355,7 +355,7 @@ class PanelDevice(
         // stop() may have run while this start was in flight: then the server must not outlive it.
         val kept = unlessStopped {
             server = s
-            mdns.start(identity, s.localPort, encrypted = s.encrypted, provisionable = s.provisionable)
+            mdns.start(identity, s.localPort, encrypted = s.keyed, provisionable = s.provisionable)
         }
         if (!kept) s.stop()
     }
@@ -365,7 +365,7 @@ class PanelDevice(
         mdns.stop()
         exec.schedule({
             // Like the first registration in startServer(): never once stop() has begun.
-            unlessStopped { if (server === s) mdns.start(identity, s.localPort, encrypted = s.encrypted, provisionable = s.provisionable) }
+            unlessStopped { if (server === s) mdns.start(identity, s.localPort, encrypted = s.keyed, provisionable = s.provisionable) }
         }, 1500, TimeUnit.MILLISECONDS)
     }
 

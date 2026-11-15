@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="identity">AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA</string>
+    <string name="pairing_psk">QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8</string>
+    <string name="records">[{&quot;server_id&quot;:&quot;made-up-server&quot;,&quot;psk&quot;:&quot;YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8&quot;,&quot;used&quot;:1700000000000}]</string>
+    <int name="volume" value="40" />
+</map>

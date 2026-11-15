@@ -42,6 +42,8 @@ class CameraPrefs(private val sp: SharedPreferences) {
     /**
      * The stream's sign-in, or null until both parts are set. Only the person sets it, and no surface
      * shows the password again (maintainer, 2026-11-15): the panel never makes one it couldn't show.
+     * Setting it throws IllegalStateException ([NOT_SAVED]) when it wasn't stored: the app's key store
+     * can't seal it, or can't let the old one go, right now.
      */
     var signIn: Pair<String, String>?
         get() {
@@ -49,7 +51,15 @@ class CameraPrefs(private val sp: SharedPreferences) {
             val pass = sp.getString(KEY_STREAM_PASSWORD, null)?.takeIf { it.isNotEmpty() }
             return if (user != null && pass != null) user to pass else null
         }
-        set(v) { sp.edit().putString(KEY_STREAM_USER, v?.first).putString(KEY_STREAM_PASSWORD, v?.second).commit() }
+        set(v) {
+            if (!sp.edit().putString(KEY_STREAM_USER, v?.first).putString(KEY_STREAM_PASSWORD, v?.second).commit()) throw IllegalStateException(NOT_SAVED)
+        }
+
+    /**
+     * A password is stored but the app's key store can't read it now (an outage): the sign-in is set,
+     * though [signIn] reads null. Saving with an empty password then can't keep it, and says so.
+     */
+    val signInUnreadable: Boolean get() = (sp as? dev.glassworks.secrets.SecretPrefs)?.canRead(KEY_STREAM_PASSWORD) == false
 
     val policy: CameraPolicy get() = CameraPolicy(privacy, use, onvif)
 
@@ -61,6 +71,9 @@ class CameraPrefs(private val sp: SharedPreferences) {
         const val KEY_SENSITIVITY = "camera_sensitivity"
         const val KEY_STREAM_USER = "camera_stream_user"
         const val KEY_STREAM_PASSWORD = "camera_stream_password"
+
+        /** Why a sign-in wasn't saved, for the person who set it. */
+        const val NOT_SAVED = "The panel can't store the sign-in right now. Try again in a minute."
 
         /** The user name the sign-in sheet starts with while none is set: easy to type into Home Assistant or Protect. */
         const val DEFAULT_USER = "glassworks"

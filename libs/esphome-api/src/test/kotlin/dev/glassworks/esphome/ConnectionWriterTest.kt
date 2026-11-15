@@ -201,6 +201,35 @@ class ConnectionWriterTest {
      * the request that set the key must be written first. While its client doesn't read, the key waits.
      */
     @Test
+    fun aLockedKeyLetsNobodyInUntilItReadsAgain() {
+        var down = true
+        val store = object : ReadableNoiseKeyStore {
+            override fun load(): ByteArray? = if (down) null else ByteArray(32) { (it + 1).toByte() }
+            override fun save(key: ByteArray?) = false
+            override fun read(): StoredKey = if (down) StoredKey.Unreadable else StoredKey.Present(load()!!)
+        }
+        val activated = CountDownLatch(1)
+        val s = server(keys = NoiseKeys(store)).apply { onKeyActivated = { activated.countDown() } }
+        assertFalse("not provisionable", s.provisionable)
+        assertFalse(s.encrypted)
+        assertTrue("still advertised as keyed, so HA tries Noise", s.keyed)
+        Socket(InetAddress.getLoopbackAddress(), s.localPort).use { c ->
+            c.soTimeout = 10_000
+            // A plaintext hello, as an unprovisioned device would take: closed without an answer.
+            c.getOutputStream().write(byteArrayOf(0, 6, 1, 0x0a, 4, 't'.code.toByte(), 'e'.code.toByte(), 's'.code.toByte(), 't'.code.toByte()))
+            // Closed with the hello unread: an end of stream or a reset, never an answer.
+            val got = try { c.getInputStream().read() } catch (_: java.net.SocketException) { -1 }
+            assertEquals("refused", -1, got)
+        }
+        down = false
+        now.addAndGet(ApiServer.UNLOCK_RETRY_MS)
+        s.keepaliveTick()
+        assertTrue("the keepalive read it again", activated.await(5, TimeUnit.SECONDS))
+        assertTrue("Noise with the stored key from now on", s.encrypted)
+        assertFalse(s.provisionable)
+    }
+
+    @Test
     fun aKeyActivatesOnlyOnceItsAnswerIsWritten() {
         val activated = CountDownLatch(1)
         val s = server(keys = NoiseKeys(MemoryKeyStore())).apply { onKeyActivated = { activated.countDown() } }

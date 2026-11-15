@@ -51,9 +51,17 @@ ESPHome device built with `api: encryption:` and no key in YAML:
   The panel stores it, activates it 100 ms later and drops every older session. HA reconnects with
   the key. You never see the key.
 - **With a key**: only Noise with that key (as before). Logs show only a 4-hex fingerprint.
+- **A key it can't read right now** (the Keystore is down, [secrets.md](secrets.md#when-the-key-is-gone)):
+  nobody gets in, not plaintext and not a new key, until it reads the key again (on each connection
+  and every minute). mDNS keeps advertising `api_encryption`, so Home Assistant tries Noise. A panel
+  with a key never falls back to plaintext by itself.
 - Removing the device in HA sends an empty key, which puts the panel back to "no key".
+- `$A --ez api_encryption false` (adb only) turns encryption off on purpose: the panel then takes
+  plaintext and zero-PSK clients again, like a panel with no key. Use it to start over, never on a
+  network you don't trust.
 - Manual key, as before: `$A --es api_key $(openssl rand -base64 32) --ez api_encryption true`
-  (applied live; all sessions are dropped). Then enter the same key in HA.
+  (applied live; all sessions are dropped). Then enter the same key in HA. If the panel's key store
+  is down, the key isn't stored and `api_encryption` stays as it was.
 
 Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-).
 

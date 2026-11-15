@@ -21,6 +21,12 @@ interface SsStore {
     /** The per-device pairing PSK (CSPRNG, persistent, never consumed by a pairing). */
     fun pairingPsk(): ByteArray
 
+    /**
+     * The stored identity and pairing key can be read now. False during a key store outage, when
+     * [identity] and [pairingPsk] give stand-ins that are never stored: no pairing token is handed out then.
+     */
+    fun secretsReadable(): Boolean = true
+
     fun records(): List<SsPairingRecord>
 
     /** Stores [r], replacing any record for the same server; evicts the least recently used beyond [MAX_RECORDS]. */

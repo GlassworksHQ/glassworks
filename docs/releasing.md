@@ -298,6 +298,15 @@ version raises that bar by one level (Android 17 needs 35;
 |---|---|---|---|
 | 2026-11-15 | 34 → 35 | Android 17 (the Pixel Tablet) installs updates without a tap | #277 |
 
+## The secret store and downgrades
+
+Since the secret store (2026-11-15, [secrets.md](secrets.md)), the app seals its secrets with a key in
+the Android Keystore. An update seals them in place and keeps every one. **A downgrade doesn't**: a
+build from before the secret store reads a sealed value as a broken one. The panel then needs setting
+up again: the Home Assistant sign-in (QR code), the ESPHome API key, the Sendspin pairing and the
+camera password. `main` isn't a release, so this only matters when you install an older test build
+over a newer one. Don't add a path that writes plaintext back for older builds.
+
 ## Building a signed APK locally
 
 The same environment variables as CI. Without them, `assembleRelease` produces an **unsigned** APK

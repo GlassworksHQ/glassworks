@@ -6,17 +6,22 @@ import android.net.Uri
 import android.util.Base64
 import dev.glassworks.screen.ScreenSettings
 import dev.glassworks.esphome.NoiseKeyStore
+import dev.glassworks.esphome.ReadableNoiseKeyStore
+import dev.glassworks.esphome.StoredKey
+import dev.glassworks.secrets.SecretPrefs
+import dev.glassworks.secrets.SecretStore
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.auth.StoredAuth
 
 /**
  * The panel's core settings (SharedPreferences, private to the app). The app decides where each pane's
- * settings live (PanePrefs in the S1 app). Secrets: the ESPHome API encryption key (`kiosk.xml`, which
- * Home Assistant provisions) and the HA refresh token (`auth.xml`, see [auth]). Neither is ever logged.
+ * settings live (PanePrefs in the S1 app). Secrets (the ESPHome API encryption key in `kiosk.xml`,
+ * which Home Assistant provisions, and the HA refresh token in `auth.xml`, see [auth]) are sealed
+ * with the Keystore key ([SecretFiles]) and never logged.
  */
-class KioskPrefs(context: Context) : ScreenSettings {
-    private val sp = context.getSharedPreferences("kiosk", Context.MODE_PRIVATE)
-    private val authSp = context.getSharedPreferences("auth", Context.MODE_PRIVATE)
+class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()) : ScreenSettings {
+    private val sp = SecretFiles.open(context, "kiosk", secrets)
+    private val authSp = SecretFiles.open(context, "auth", secrets)
 
     fun registerListener(l: SharedPreferences.OnSharedPreferenceChangeListener) =
         sp.registerOnSharedPreferenceChangeListener(l)
@@ -88,10 +93,16 @@ class KioskPrefs(context: Context) : ScreenSettings {
             val cid = authSp.getString("client_id", null) ?: return null
             return StoredAuth(base, cid, rt)
         }
+        /**
+         * Writes the three keys (never `clear()`, which would drop a sealed token the key store can't read
+         * now). Throws [SignInNotStored] when it wasn't stored: a sign-in during a key store outage fails
+         * where the person sees it (the sign-in page says the panel couldn't store it), not silently.
+         */
         set(v) {
-            val e = authSp.edit().clear()
-            if (v != null) e.putString("refresh_token", v.refreshToken).putString("ha_base", v.haBase).putString("client_id", v.clientId)
-            e.commit()
+            val e = authSp.edit()
+            if (v == null) e.remove("refresh_token").remove("ha_base").remove("client_id")
+            else e.putString("refresh_token", v.refreshToken).putString("ha_base", v.haBase).putString("client_id", v.clientId)
+            if (!e.commit()) throw SignInNotStored(if (v == null) "The sign-in can't be removed right now" else "The panel can't store the sign-in right now")
         }
 
     val hasAuth: Boolean get() = authSp.contains("refresh_token")
@@ -188,20 +199,28 @@ class KioskPrefs(context: Context) : ScreenSettings {
         set(v) = sp.edit().putBoolean("api_encryption", v).apply()
 
     /** 32-byte Noise PSK, base64. */
+    /** Setting it throws IllegalStateException when it wasn't stored (the key store is down). */
     var apiKey: String
         get() = sp.getString("api_key", "") ?: ""
-        set(v) = sp.edit().putString("api_key", v.trim()).apply()
+        set(v) { if (!sp.edit().putString("api_key", v.trim()).commit()) throw IllegalStateException("The API key can't be stored right now") }
 
     /** The active Noise key: [apiKey] while [apiEncryption] is on, else null (unprovisioned). */
     fun effectiveApiKey(): ByteArray? = if (apiEncryption) decodeApiKey(apiKey) else null
 
     /** Persists the key HA provisions over the API (synchronously, like ESPHome's pref sync). */
-    val noiseKeyStore: NoiseKeyStore = object : NoiseKeyStore {
+    val noiseKeyStore: NoiseKeyStore = object : ReadableNoiseKeyStore {
         override fun load(): ByteArray? = effectiveApiKey()
+        // Both writes in one edit: when the key isn't stored (the key store is down), neither is
+        // api_encryption, and save() says false, so Home Assistant hears the key wasn't set.
         override fun save(key: ByteArray?): Boolean =
             if (key == null) sp.edit().remove("api_key").putBoolean("api_encryption", false).commit()
             else sp.edit().putString("api_key", Base64.encodeToString(key, Base64.NO_WRAP))
                 .putBoolean("api_encryption", true).commit()
+        override fun read(): StoredKey = if (!apiEncryption) StoredKey.Absent else when (val r = sp.secret("api_key")) {
+            is SecretPrefs.Secret.Value -> decodeApiKey(r.text)?.let { StoredKey.Present(it) } ?: StoredKey.Absent
+            SecretPrefs.Secret.Absent -> StoredKey.Absent
+            SecretPrefs.Secret.Unavailable -> StoredKey.Unreadable
+        }
     }
 
     /** Stable MAC reported to Home Assistant (its config entry is keyed by it). */
@@ -255,3 +274,6 @@ class KioskPrefs(context: Context) : ScreenSettings {
         private const val KEY_REMOTE_DEBUG = "remote_debug"
     }
 }
+
+/** The HA sign-in couldn't be written: the key store can't seal it, or can't let the old one go, now. */
+class SignInNotStored(message: String) : IllegalStateException(message)

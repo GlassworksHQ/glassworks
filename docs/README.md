@@ -12,6 +12,7 @@ rules every part follows.
 | [esphome.md](esphome.md) | The panel as an ESPHome device: every entity, the voice assistant, encryption, app updates |
 | [notifications.md](notifications.md) | Notifications from Home Assistant: the `notify` action and its fields, button presses, priorities, Do not disturb, the doorbell blueprint |
 | [blueprints.md](blueprints.md) | Ready-made Home Assistant automations for the panes, and the card on each pane's page that adds them through Home Assistant's own import dialog |
+| [secrets.md](secrets.md) | The secrets the panel keeps, how they are sealed with the Android Keystore, and what that does and doesn't protect against |
 | [sendspin.md](sendspin.md) | The native Music Assistant player (Sendspin): setup, pairing, synced playback |
 | [perf.md](perf.md) | Clarity, the performance test and grade for any frame: how to run it, what it measures, the rubric and its sources, the report format |
 | [size.md](size.md) | APK size per frame and per pane in CI: the parts, the assets lint, the size budgets, the PR comment |

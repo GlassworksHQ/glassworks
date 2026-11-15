@@ -57,6 +57,12 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **The panel's secrets are encrypted on its storage.** The Home Assistant sign-in, the ESPHome API
+  key, the camera password and the Sendspin pairing are sealed with a key in Android's Keystore, so a
+  copy of the app's settings files holds none of them. The update keeps them all: the panel stays
+  signed in and paired. If the Keystore is unavailable when the updated app first starts, the secrets
+  stay in plaintext until a later start can seal them. Installing an older version afterwards means
+  setting those up again.
 - **The camera stream's password is never shown again once saved.** The panel's settings and the
   Manage page no longer have a Show button for it, and the panel no longer makes a password for you.
   You type your own when you turn the stream on, so you know it for Home Assistant's ONVIF

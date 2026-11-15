@@ -25,4 +25,11 @@ class PairingStatusTest {
     fun onAndStartedIsOk() {
         assertEquals(SendspinApi.STATUS_OK, pairingStatus(enabled = true, started = true))
     }
+
+    /** The key store can't read the identity or the pairing key now: a token would pair a stand-in. */
+    @Test
+    fun unreadableSecretsAreNotReady() {
+        assertEquals(SendspinApi.STATUS_NOT_READY, pairingStatus(enabled = true, started = true, secretsReadable = false))
+        assertEquals(SendspinApi.STATUS_DISABLED, pairingStatus(enabled = false, started = true, secretsReadable = false))
+    }
 }

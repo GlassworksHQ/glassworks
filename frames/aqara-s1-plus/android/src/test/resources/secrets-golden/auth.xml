@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="refresh_token">made-up-refresh-token-0f1e2d3c4b5a69788796a5b4c3d2e1f0</string>
+    <string name="ha_base">http://192.0.2.10:8123</string>
+    <string name="client_id">http://192.0.2.20/</string>
+</map>

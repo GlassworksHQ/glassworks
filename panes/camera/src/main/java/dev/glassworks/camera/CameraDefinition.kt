@@ -94,15 +94,16 @@ class CameraDefinition(
                         // The user name shows; the password is write-only on every surface (maintainer, 2026-11-15).
                         // Cleared, the stream closes until someone sets a new one.
                         SettingsItem.SignIn(
-                            "Sign-in", isSet = { prefs.signIn != null }, user = { prefs.signIn?.first ?: CameraPrefs.DEFAULT_USER },
+                            "Sign-in", isSet = { prefs.signIn != null || prefs.signInUnreadable }, user = { prefs.signIn?.first ?: CameraPrefs.DEFAULT_USER },
                             shown = { CameraPage.signIn(prefs.signIn) },
                         ) { v, done ->
                             // An empty field keeps the stored password; if it was cleared since the sheet opened, there is none to keep.
                             val kept = prefs.signIn?.second
                             when {
-                                v == null -> { prefs.signIn = null; done(null) }
-                                v.second == null && kept == null -> done(SettingsChange.TYPE_PASSWORD)
-                                else -> { prefs.signIn = v.first to (v.second ?: kept!!); done(null) }
+                                // The stored one can't be read now (an outage): it can't be kept, so nothing is saved.
+                                v?.second == null && v != null && kept == null ->
+                                    done(if (prefs.signInUnreadable) CameraPrefs.NOT_SAVED else SettingsChange.TYPE_PASSWORD)
+                                else -> done(runCatching { prefs.signIn = v?.let { (u, p) -> u to (p ?: kept!!) } }.exceptionOrNull()?.message)
                             }
                         },
                         SettingsItem.Info({ "Address" }, { CameraPage.address(read().address) }),

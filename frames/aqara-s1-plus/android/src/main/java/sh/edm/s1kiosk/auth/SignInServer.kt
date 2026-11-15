@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.auth
 
+import sh.edm.s1kiosk.SignInNotStored
 import dev.glassworks.web.PageShell
 import dev.glassworks.web.PageShell.Look
 import java.io.BufferedInputStream
@@ -173,7 +174,8 @@ class SignInServer(
                     onSignedIn(StoredAuth(pending.haBase, pending.clientId, rt), r)
                 } catch (t: Throwable) {
                     AuthLog.w("storing the token failed", t)
-                    return page(500, "Internal Server Error", "Can't sign in", "The panel couldn't store the sign-in.")
+                    val why = (t as? SignInNotStored)?.let { "${it.message}: its key store isn't available. Try again in a minute." }
+                    return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.")
                 }
                 AuthLog.i("Signed in to ${pending.haBase} (refresh token stored)")
                 page(200, "OK", "Panel signed in", "It's loading your dashboard now. You can close this page.", Look.DONE,
