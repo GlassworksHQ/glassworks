@@ -11,7 +11,6 @@ import dev.glassworks.diagnostics.DiagnosticsDefinition
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
-import dev.glassworks.frame.Capability
 import dev.glassworks.frame.Frame
 import dev.glassworks.manage.PanelCode
 import dev.glassworks.pane.CantRun
@@ -91,9 +90,9 @@ class GlassworksRuntime(
                 setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
                 readout = RadioDefinition.AppReadout(this, prefs.radio) { prefs.haBase },
             )
-            // Without a camera in the frame's hardware it is CantRun (below), as every pane is that lacks its own.
+            // It requires a camera: without one in the frame's hardware it is CantRun (below), as every pane that lacks its own.
             val camera = CameraDefinition(
-                prefs.paneFile("camera"), Capability.CAMERA in frame.provides,
+                prefs.paneFile("camera"),
                 granted = { app.checkSelfPermission(android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
                 pickers = { c -> sh.edm.s1kiosk.camera.CameraUseCards(c) },
             )

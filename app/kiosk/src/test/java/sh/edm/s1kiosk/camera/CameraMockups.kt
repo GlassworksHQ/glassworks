@@ -94,7 +94,7 @@ class CameraMockups {
     /** A camera device's pane in one state, set up as [setUp] says, then started as the panel would. */
     private inner class Rig(allowed: Boolean = true, watching: List<String> = emptyList(), setUp: (CameraPrefs) -> Unit = {}) {
         val file = KioskPrefs(app).paneFile("camera").also { it.edit().clear().commit() }
-        val def = CameraDefinition(file, hasCamera = true, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) }, time = { "14:31" })
+        val def = CameraDefinition(file, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) }, time = { "14:31" })
         val camera = Camera()
         var now = 0L
         val egress = FrameEgress({ now }, { _, _ -> }, wall = { 0L }) {}
@@ -187,7 +187,7 @@ class CameraMockups {
     private fun setupShot(name: String, step: String, allowed: Boolean = false, then: (SetupOverlay) -> Unit = {}) {
         val a = Mockup.activity()
         val file = KioskPrefs(app).paneFile("camera").also { it.edit().clear().commit() }
-        val def = CameraDefinition(file, hasCamera = true, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) })
+        val def = CameraDefinition(file, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) })
         def.switch.on = true
         val panes = listOf(
             SetupPane(PaneChoice("Voice", "Assist and timers", on = { true }, apply = { null }), emptyList()),

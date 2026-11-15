@@ -56,7 +56,7 @@ class CameraSetupTest {
 
     private inner class Rig(var allowed: Boolean = false) {
         var picker: Picker? = null
-        val def = CameraDefinition(file, hasCamera = true, granted = { allowed }, pickers = { c -> Picker(c).also { picker = it } })
+        val def = CameraDefinition(file, granted = { allowed }, pickers = { c -> Picker(c).also { picker = it } })
         var next = 0
         fun host(preview: Boolean = false) = object : SetupHost {
             override val preview = preview
@@ -69,7 +69,8 @@ class CameraSetupTest {
         val r = Rig()
         assertEquals("Camera", r.def.setupChoice?.title)
         assertEquals(listOf("camera"), r.def.setupSteps.map { it.id })
-        val s1 = CameraDefinition(file, hasCamera = false)
+        // The S1 has no camera: the app wraps the camera in CantRun (#23), which offers no card and no step.
+        val s1 = dev.glassworks.pane.CantRun.unless(CameraDefinition(file), sh.edm.s1kiosk.frame.AqaraS1Plus().provides)
         assertNull(s1.setupChoice)
         assertTrue(s1.setupSteps.isEmpty())
     }
@@ -151,7 +152,7 @@ class CameraSetupTest {
     }
 
     @Test fun withoutCardsTheUseIsAList() {
-        val def = CameraDefinition(file, hasCamera = true)
+        val def = CameraDefinition(file)
         def.switch.on = true
         val use = paneSections(listOf(def)).single().items.filterIsInstance<SettingsItem.Choice>().single()
         use.save(CameraUse.PRESENCE_AND_SNAPSHOTS.name) {}

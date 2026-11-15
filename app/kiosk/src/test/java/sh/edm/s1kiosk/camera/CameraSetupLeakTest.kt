@@ -66,7 +66,7 @@ class CameraSetupLeakTest {
     /** Setup with the camera's card on and its step done (use picked, Android allows it), Sign in current. */
     internal fun setUp(onStepDone: (SetupOverlay, SetupOverlay.Model) -> Unit = { s, m -> s.render(m) }): Pair<SetupOverlay, SetupOverlay.Model> {
         val a = Mockup.activity()
-        val def = CameraDefinition(file, hasCamera = true, granted = { true }, pickers = CameraUsePickers { CameraUseCards(it) })
+        val def = CameraDefinition(file, granted = { true }, pickers = CameraUsePickers { CameraUseCards(it) })
         def.switch.on = true
         def.prefs.use = CameraUse.PRESENCE
         val panes = listOf(

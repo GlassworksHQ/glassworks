@@ -58,13 +58,13 @@ class CameraPageOverlayTest {
     }
 
     @Test fun aProblemIsARoseDotAndWorkingIsGreen() {
-        val def = CameraDefinition(file, hasCamera = true, granted = { true }).apply { switch.on = true }
+        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
         assertEquals(Glass.ROSE, dotBeside(menu(def, pane(CameraPane.NOT_ALLOWED)), "${CameraPage.NOT_ALLOWED_LINE}."))
         assertEquals(Glass.GREEN, dotBeside(menu(def, pane()), "Watching for people · no image leaves the panel"))
     }
 
     @Test fun pickingPresenceOnlyUpdatesTheStreamRowWhileThePageIsOpen() {
-        val def = CameraDefinition(file, hasCamera = true, granted = { true }, pickers = CameraUsePickers { CameraUseCards(it) }).apply { switch.on = true }
+        val def = CameraDefinition(file, granted = { true }, pickers = CameraUsePickers { CameraUseCards(it) }).apply { switch.on = true }
         def.prefs.use = CameraUse.PRESENCE_AND_SNAPSHOTS
         def.prefs.onvif = true
         val o = menu(def, pane())
@@ -86,7 +86,7 @@ class CameraPageOverlayTest {
         all(o).filterIsInstance<android.widget.TextView>().any { it.text.toString().contains(text) }
 
     @Test fun thePasswordShowsOnlyWhileTheRowIsTapped() {
-        val def = CameraDefinition(file, hasCamera = true, granted = { true }).apply { switch.on = true }
+        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
         def.prefs.signIn = "glassworks" to "made-up-pass-1234"
         val o = menu(def, pane())
         assertEquals("hidden at first", false, onScreen(o, "made-up-pass-1234"))

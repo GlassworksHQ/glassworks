@@ -18,18 +18,17 @@ import java.util.Date
 /**
  * The camera pane ([CameraPane]) for the whole process. It [requires] a camera: on a frame without one
  * (the S1) the app wraps it in [dev.glassworks.pane.CantRun], one page that says why, with no on/off,
- * setup card or entity, as every pane that lacks its hardware (#23). [hasCamera] is the frame's
- * `provides` having one; the device shell builds the pane only then. Its settings have no MainActivity
+ * setup card or entity, as every pane that lacks its hardware (#23); the device shell builds the pane
+ * only where it isn't. Its settings have no MainActivity
  * extras: any app can send those, and on a tablet another app could turn privacy off or open the
  * stream. The app sets them from adb through its own adb-only activity.
  *
- * With a camera: a card on setup's Panes step, setup's Camera step ([CameraSetupStep]), and the page of
+ * Where it runs: a card on setup's Panes step, setup's Camera step ([CameraSetupStep]), and the page of
  * #117's approved design. [granted] reads Android's camera permission; [pickers] draws the two use
  * cards (without it, the page offers the use as a list).
  */
 class CameraDefinition(
     file: SharedPreferences,
-    val hasCamera: Boolean,
     private val granted: () -> Boolean = { false },
     private val pickers: CameraUsePickers? = null,
     /** A time of day as the page shows it. */
@@ -41,12 +40,13 @@ class CameraDefinition(
 
     override val switch = PaneSwitch(
         file, CameraPrefs.KEY_ENABLED, default = false, title = TITLE, detail = "Presence, and snapshots",
-        objectId = "camera_pane", entityName = "Camera pane", icon = "mdi:cctv", inSetup = hasCamera, offNote = OFF_NOTE,
+        objectId = "camera_pane", entityName = "Camera pane", icon = "mdi:cctv", inSetup = true, offNote = OFF_NOTE,
     )
 
     private val step = CameraSetupStep(prefs, on = { switch.on }, turnOff = { switch.on = false }, granted = granted, pickers = pickers)
 
-    override val setupSteps: List<SetupStep> get() = if (hasCamera) listOf(step) else emptyList()
+    /** CantRun drops it on a frame without a camera, as it drops the card. */
+    override val setupSteps: List<SetupStep> get() = listOf(step)
 
     /**
      * The camera's page: how it is doing, what it may do, the readings, privacy, and the stream with its
