@@ -201,6 +201,22 @@ sealed interface SettingsItem {
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
+    /**
+     * A sign-in: a user name and a password, saved together (the camera stream's, #252; the panel makes one
+     * per device). The password is hidden: the row says [shown] of [isSet], and a surface reads [reveal] only
+     * when the person asks to see it (Show), so it can be typed into Protect, Home Assistant's ONVIF or Frigate.
+     * Never in a log, an entity or the diagnostics. `save` gets the pair, or null for Clear;
+     * [SettingsChange.signIn] checks it first.
+     */
+    class SignIn(
+        val title: String,
+        val isSet: () -> Boolean,
+        val user: () -> String? = { null },
+        val reveal: () -> String? = { null },
+        val shown: (Boolean) -> String = { if (it) "Set" else "Not set" },
+        val save: (Pair<String, String>?, done: (String?) -> Unit) -> Unit,
+    ) : SettingsItem
+
     /** Opens something else: another app's settings, the licences. */
     class Link(val title: String, val detail: String, val open: (Context) -> Unit) : SettingsItem
 
@@ -209,16 +225,13 @@ sealed interface SettingsItem {
 
     /**
      * A name and a status line under it (the app's version, what plays now). Read again while the page is
-     * open. [fixable]: the line says what's missing that the person can set (amber). [reveal]: a line shown
-     * in place of [detail] while the person has tapped the row on the panel, hidden again by another tap
-     * or when the page is drawn again (the camera stream's password). Only the panel's own menu reads it;
-     * the Manage page and every other surface show [detail].
+     * open. [fixable]: the line says what's missing that the person can set (amber). A secret is never an
+     * Info: a password the person may read is a [SignIn], shown on request.
      */
     class Info(
         val title: () -> String,
         val detail: () -> String,
         val fixable: () -> Boolean = { false },
-        val reveal: (() -> String)? = null,
     ) : SettingsItem
 
     /** Items under their own heading, in a card of their own. */
@@ -271,7 +284,12 @@ sealed interface SettingsItem {
      * once with [create] and keeps it while the activity lives. A section with a native item is drawn
      * without its own card: native views bring their surfaces, and its other items go in [Group]s.
      */
-    class Native(val key: String, val create: (NativeHost) -> NativeView) : SettingsItem
+    class Native(
+        val key: String,
+        /** What the view is, in words, for a surface that can't draw it (the Manage page's "On the panel" row). */
+        val title: String = "",
+        val create: (NativeHost) -> NativeView,
+    ) : SettingsItem
 
     /** What the menu offers a [Native] view. Main thread. */
     interface NativeHost {

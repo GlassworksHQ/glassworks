@@ -3,14 +3,17 @@
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
-all use this machine's monotonic clock, as the real ones share the device's.
+all use this machine's monotonic clock, as the real ones share the device's: Clarity's clock
+(clock.py), so GW_PERF_TIME_SCALE compresses the fake's waits as it does the runner's.
 """
 import json
 import os
 import re
 import sys
 import threading
-import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import clock as C  # noqa: E402
 
 STATE = os.environ["FAKE_ADB_STATE"]
 PKG = "sh.edm.s1kiosk"
@@ -47,13 +50,13 @@ def paint(start, end):
 
 
 def now():
-    return time.monotonic()
+    return C.mono()
 
 
 def shell(cmd):
     if os.environ.get("FAKE_SCREEN_SLEEP_S") and ("KEYCODE_WAKEUP" in cmd or "--es screen on" in cmd
                                                    or cmd.startswith(("input swipe", "input tap"))):
-        save("awake_at.json", time.time())       # what keeps the fake screen on (a wake, a touch)
+        save("awake_at.json", C.now())       # what keeps the fake screen on (a wake, a touch)
         save("asleep.json", False)
         if "KEYCODE_WAKEUP" in cmd:
             save("nudges.json", state("nudges.json", 0) + 1)
@@ -62,6 +65,9 @@ def shell(cmd):
              "ro.build.version.sdk": "29", "ro.product.cpu.abi": "armeabi-v7a", "ro.product.cpu.abilist": "armeabi-v7a,armeabi",
              "ro.board.platform": "testsoc", "ro.hardware": "testhw"}
     if cmd.startswith("getprop "):
+        # FAKE_REAL_DEVICE: answers as a real device does, which has no such property.
+        if cmd.split()[1] == C.FAKE_PROP and not os.environ.get("FAKE_REAL_DEVICE"):
+            return "1"
         return props.get(cmd.split()[1], "")
     m = re.search(r"echo (\w+);? .*toybox nc( -u)? .*?(\d+\.\d+\.\d+\.\d+) (\d+)$", cmd)
     if m:
@@ -294,7 +300,7 @@ def noise(every):
     """Unrelated device logging, as on a real panel: logcat follows the whole device."""
     while True:
         line("ha_driven", "enterConnectingState: connect fail, errno:111", pid=2527)
-        time.sleep(every)
+        C.sleep(every)
 
 
 def page(nonce):
@@ -308,14 +314,14 @@ def page(nonce):
         line("PowerManagerService", "Going to sleep due to device_admin (uid 1000)...", pid=1919)
     for stage, n in (("css-transform", 1), ("css-transform", 16), ("scroll", 240)):
         gw({"t": "warmup", "stage": stage, "n": n})
-        time.sleep(0.05)
+        C.sleep(0.05)
         a = now()
         gw({"t": "measure", "stage": stage, "n": n})
-        time.sleep(0.6)
+        C.sleep(0.6)
         paint(a, now())
         gw({"t": "step", "stage": stage, "n": n, "window_ms": 600, "scrolled_px": 600 if stage == "scroll" else None,
             "raf": {"n": 36, "median_ms": 16.67, "p95_ms": 16.67, "jank_pct": 0, "frozen_pct": 0}})
-        time.sleep(0.3)
+        C.sleep(0.3)
     gw({"t": "done"})
 
 
@@ -337,11 +343,11 @@ def refdash(nonce, url):
         # FAKE_STAGE_DELAY (protocol 8): a slow view that keeps going: this long before each line
         # after it is usable, so the whole view outlasts the usable deadline but no stage stops.
         if obj.get("t") not in ("refdash", "drawn") and os.environ.get("FAKE_STAGE_DELAY") and tier == os.environ.get("FAKE_STAGE_VIEW", tier):
-            time.sleep(float(os.environ["FAKE_STAGE_DELAY"]))
+            C.sleep(float(os.environ["FAKE_STAGE_DELAY"]))
         page_log(dict(obj, nonce=nonce, run=1), split=not os.environ.get("FAKE_NO_SPLIT"))
 
     # FAKE_SLOW_VIEW: the view takes this long to be usable (the runner keeps the screen awake).
-    time.sleep(float(os.environ.get("FAKE_SLOW_VIEW", "0")))
+    C.sleep(float(os.environ.get("FAKE_SLOW_VIEW", "0")))
     if os.environ.get("FAKE_NEVER_USABLE") == tier:
         return                 # never usable: not a line
     if os.environ.get("FAKE_SCREEN_OFF") == tier:
@@ -350,8 +356,8 @@ def refdash(nonce, url):
     if foreign == "before":
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
     # Protocol 4: the frontend stays loaded; the view opens by navigation, so no page load is logged.
-    origin = time.time() * 1000 - 5000
-    nav = time.time() * 1000 - origin
+    origin = C.now() * 1000 - 5000
+    nav = C.now() * 1000 - origin
     a = now()
     paint(a + 0.15, a + 0.5)
     save("asked.json", {})
@@ -365,37 +371,37 @@ def refdash(nonce, url):
     save("last_nonce.json", nonce)
     if foreign == "after":
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
-    time.sleep(0.5)
+    C.sleep(0.5)
     # Clarity v2: the draw on its own line first, then refdash once free. Each view draws at its own
     # time after the navigation, so a draw stored on the wrong view shows (#264's delta verifier).
     drawn_after = DRAWN_AFTER_MS.get(page, 200)
     gw({"t": "drawn", "tier": tier, "protocol": PROTOCOL, "clarity": CLARITY, "nav_ms": round(nav, 1),
         "usable": {"rendered_tick_ms": round(nav + drawn_after, 1), "first_screen_cards": 14, "head_cards": 10},
-        "origin_epoch_ms": origin, "epoch_ms": time.time() * 1000})
+        "origin_epoch_ms": origin, "epoch_ms": C.now() * 1000})
     if os.environ.get("FAKE_NEVER_FREE") == tier:
         return                 # drawn, but the main thread never free: no refdash
-    time.sleep(0.2)
+    C.sleep(0.2)
     gw({"t": "refdash", "tier": tier, "protocol": PROTOCOL, "clarity": CLARITY, "frontend": "20261028.5", "nodes": 1458, "cards": 50,
         "cards_rendered": 47, "css": [960, 480], "dpr": dpr, "scroll_height": 2635,
-        "fcp_ms": None, "lcp_ms": None, "load_ms": None, "origin_epoch_ms": origin, "epoch_ms": time.time() * 1000,
+        "fcp_ms": None, "lcp_ms": None, "load_ms": None, "origin_epoch_ms": origin, "epoch_ms": C.now() * 1000,
         # Protocol 4: navigation at `nav`; the view's first screen rendered DRAWN_AFTER_MS later, the
         # main thread free 20 ms after that.
         "nav_ms": round(nav, 1), "video_caps": {"mse_h264": True, "native_hls": "", "rvfc": True},
         "usable": {"rendered_tick_ms": round(nav + drawn_after, 1), "first_screen_cards": 14, "head_cards": 10,
                    "interactive_ms": round(nav + drawn_after + 20, 1), "blocking_ms": 0.0, "long_frames": 0, "longest_frame_ms": 16.7}})
-    time.sleep(1.0)
+    C.sleep(1.0)
     if os.environ.get("FAKE_HANG") == tier:
         return                 # as smoke10's heavy: usable, then nothing more (no done)
     mark(f"page warmup {tier}")
     gw({"t": "warmup", "stage": "updates", "n": 1})
     if os.environ.get("FAKE_HANG_LIVE") == tier:
         return                 # as smoke 7's heavy (#202): live, then too slow to say anything more
-    time.sleep(0.3)
+    C.sleep(0.3)
     gw({"t": "measure", "stage": "updates", "n": 1, "moving": 12, "offscreen": 0, "targets": 10, "update_every_ms": 200,
         "animations": 0, "animations_expected": 0})
-    m0, t0 = now(), time.time() * 1000 - origin
+    m0, t0 = now(), C.now() * 1000 - origin
     paint(m0, m0 + 0.5)      # each change on screen within a frame or two
-    time.sleep(0.5)
+    C.sleep(0.5)
     # As long as the real page's (smoke7's were cut at 1023 bytes; this one is about 1.8 KB, so it is
     # split): a change every 10 ms over the 500 ms window, and 31 rAF times.
     # [sent, arrived, transition, kind, tick]: the fake HA's schedule, the page reads each 0.4 ms later.
@@ -413,7 +419,7 @@ def refdash(nonce, url):
         gw({"t": "input-ready", "x": 720, "y": 360, "taps": taps})
         end = now() + 10
         while state("taps.json", 0) - before < taps and now() < end:
-            time.sleep(0.1)
+            C.sleep(0.1)
         gw({"t": "input", "stage": tier, "method": "event-timing", "taps": state("taps.json", 0) - before,
             "values": [16, 48], "inp_ms": 48})
     n = {"typical": 1, "heavy": 4}.get(page, 0)
@@ -461,7 +467,7 @@ def refdash(nonce, url):
         gw(ready)
         end = now() + float(os.environ.get("FAKE_SWIPE_WAIT", "10"))
         while state("swipes.json", 0) == before and now() < end:
-            time.sleep(0.05)
+            C.sleep(0.05)
         moved = state("swipes.json", 0) > before
         if not moved:
             gw({"t": "step", "stage": "scroll", "n": i, "window_ms": 0, "scrolled_px": 0, "raf": {"n": 0}})
@@ -469,11 +475,11 @@ def refdash(nonce, url):
         s0 = now()
         paint(s0, s0 + 0.5)   # the swipe and its fling
         gw({"t": "measure", "stage": "scroll", "n": i})
-        time.sleep(0.5)
+        C.sleep(0.5)
         gw({"t": "step", "stage": "scroll", "n": i, "window_ms": 500, "scrolled_px": 700, "hit_edge": False, "changes_during": 3, "first_scroll_ms": 40,
             "raf": {"n": 30, "median_ms": 16.67, "p95_ms": 16.67, "jank_pct": 0, "frozen_pct": 0, "fps": 60},
             "raf_intervals": [16.7] * 30})
-        time.sleep(0.2)
+        C.sleep(0.2)
     save("asked.json", {})
     mark(f"page done {tier}")
     if os.environ.get("FAKE_HA_URL"):
@@ -485,7 +491,7 @@ def refdash(nonce, url):
             pass
     gw({"t": "done", "stage": tier})
     if foreign == "end":
-        time.sleep(0.3)
+        C.sleep(0.3)
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
 
 def dashboard():
@@ -493,7 +499,7 @@ def dashboard():
     is up from here), then the kiosk's own dashboard."""
     line("ActivityManager", f"Start proc 5555:{PKG}/u0a83 for activity {{{PKG}/{PKG}.MainActivity}}", pid=1918)
     line("ActivityTaskManager", f"Displayed {PKG}/.MainActivity: +1s714ms", pid=1918)
-    time.sleep(0.6)
+    C.sleep(0.6)
     line("GeckoSession", "handleMessage GeckoView:PageStart uri=about:blank")
     line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
     save("session_up.json", True)
@@ -504,32 +510,32 @@ def dashboard():
         # Protocol 4: the kiosk was pointed at a reference dashboard; it comes back to it, and the
         # harness (no nonce: restart mode) says when it was usable, then done.
         line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
-        origin = time.time() * 1000 - 200
+        origin = C.now() * 1000 - 200
         if os.environ.get("FAKE_RESTART_SLOW"):
             # As on the S1: HA's load event (PageStop) comes long before the dashboard is usable.
             line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
-            time.sleep(float(os.environ["FAKE_RESTART_SLOW"]))
-        time.sleep(0.5)
+            C.sleep(float(os.environ["FAKE_RESTART_SLOW"]))
+        C.sleep(0.5)
         page_log({"t": "refdash", "tier": "start", "protocol": PROTOCOL, "clarity": CLARITY, "frontend": "20261028.5", "nodes": 1082, "cards": 22,
                   "cards_rendered": 20, "css": [960, 480],
                   "dpr": float(os.environ.get("FAKE_DPR", "1.5")), "scroll_height": 1936, "fcp_ms": 120, "lcp_ms": 120,
                   "load_ms": 100, "nav_ms": 0,
                   "usable": {"rendered_tick_ms": 400.0, "first_screen_cards": 13, "head_cards": 10, "interactive_ms": 410.0,
                              "blocking_ms": 0.0, "long_frames": 0, "longest_frame_ms": 16.7},
-                  "origin_epoch_ms": origin, "epoch_ms": time.time() * 1000, "run": 1, "nonce": ""}, record=False)
+                  "origin_epoch_ms": origin, "epoch_ms": C.now() * 1000, "run": 1, "nonce": ""}, record=False)
         line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
-        time.sleep(0.2)
+        C.sleep(0.2)
         if not os.environ.get("FAKE_NO_RESTART_DONE"):     # F8: the done line lost (logcat dropped it)
             page_log({"t": "done", "stage": "restart", "run": 1, "nonce": ""}, record=False)
         return
     line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
-    time.sleep(0.8)
+    C.sleep(0.8)
     line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
     if os.environ.get("FAKE_OWN_RELOAD"):
         # A sign-in redirect: the kiosk loads its page a second time, this long after the first stopped.
-        time.sleep(float(os.environ.get("FAKE_OWN_RELOAD_DELAY", "0.5")))
+        C.sleep(float(os.environ.get("FAKE_OWN_RELOAD_DELAY", "0.5")))
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace/0?external_auth=1")
-        time.sleep(0.8)
+        C.sleep(0.8)
         line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
 
 
@@ -552,7 +558,7 @@ def take_commands(base):
                     continue
                 cmd = json.loads(r.read())
         except OSError:
-            time.sleep(0.2)
+            C.sleep(0.2)
             continue
         last = cmd["nonce"]
         q = {k: v for k, v in cmd.items() if k != "view"}
@@ -564,13 +570,13 @@ def take_commands(base):
 
 def screen_timeout(after_s):
     """As the S1 at night: the screen goes off after_s seconds after the last wake or touch."""
-    save("awake_at.json", state("awake_at.json") or time.time())
+    save("awake_at.json", state("awake_at.json") or C.now())
     while True:
-        time.sleep(0.1)
+        C.sleep(0.1)
         awake_at = state("awake_at.json")
         if awake_at is None:
             continue                     # unreadable: no evidence the screen has been idle
-        if not state("asleep.json") and time.time() - awake_at > after_s:
+        if not state("asleep.json") and C.now() - awake_at > after_s:
             save("asleep.json", True)
             line("PowerManagerService", "Going to sleep due to timeout (uid 1000)...", pid=1919)
 
@@ -583,7 +589,8 @@ def logcat():
         threading.Thread(target=noise, args=(float(os.environ["FAKE_LOGCAT_NOISE"]),), daemon=True).start()
     if os.environ.get("FAKE_SCREEN_SLEEP_S"):
         threading.Thread(target=screen_timeout, args=(float(os.environ["FAKE_SCREEN_SLEEP_S"]),), daemon=True).start()
-    end = now() + 60
+    # A cap, so no fake logcat outlives its test for long; the runner ends it before that.
+    end = now() + 600
     while now() < end:
         if state("nonce.json"):
             nonce = state("nonce.json")[0]
@@ -599,7 +606,7 @@ def logcat():
         if state("cold.json"):
             save("cold.json", None)
             dashboard()
-        time.sleep(0.05)
+        C.sleep(0.05)
 
 
 def main():

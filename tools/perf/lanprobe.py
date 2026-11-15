@@ -33,6 +33,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import clock as C  # noqa: E402
 import webrtc  # noqa: E402
 
 ADB = os.environ.get("ADB", "adb")
@@ -56,7 +57,7 @@ def udp_check(addr, port, wait=4.0):
         s.settimeout(0.25)
         # Three lines in one go: one datagram may be lost on Wi-Fi.
         status, out = panel(f"for i in 1 2 3; do echo {token}; sleep 0.2; done | toybox nc -u -w 2 -q 1 {addr} {port}")
-        end = time.monotonic() + wait
+        end = time.monotonic() + C.real(wait)
         while time.monotonic() < end:
             try:
                 data, _ = s.recvfrom(2048)
@@ -74,7 +75,7 @@ def tcp_check(addr, port, wait=4.0):
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((addr, port))
         s.listen(1)
-        s.settimeout(wait)
+        s.settimeout(C.real(wait))
         got = {}
 
         def accept():
@@ -89,7 +90,7 @@ def tcp_check(addr, port, wait=4.0):
         th = threading.Thread(target=accept, daemon=True)
         th.start()
         status, out = panel(f"echo {token} | toybox nc -w 2 -q 1 {addr} {port}")
-        th.join(wait)
+        th.join(C.real(wait))
         return token.encode() in got.get("data", b""), status, out
 
 
@@ -131,6 +132,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--transport", default="auto", choices=("auto",) + webrtc.TRANSPORTS)
     a = ap.parse_args()
+    C.check_device(lambda name: panel(f"getprop {name}")[1])
     got = choose(a.port, a.transport)
     with open(os.path.join(a.out, "transport.json"), "w") as f:
         json.dump(got, f, indent=1)

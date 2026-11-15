@@ -149,14 +149,14 @@ class AssistPane(
     private var rereadUntil = 0L
 
     /** `SystemClock.elapsedRealtime`; a test moves it. */
-    internal var clock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
+    var clock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
 
     /**
      * How long after Home Assistant's read it is asked to connect again: time for it to apply the read.
      * Empirical: 2 s worked in the root's panel run on 2026-11-14, the only evidence; HA applies the read
-     * at once in its event loop (esphome/select.py), so it is a margin, not a measured need.
+     * at once in its event loop (esphome/select.py), so it is a margin, not a measured need. Public for tests.
      */
-    internal var rereadDelayMs = 2_000L
+    var rereadDelayMs = 2_000L
 
     /** After a read: the first of two, within the window, asks for the second ([useWakeWord]). Any thread. */
     private fun configurationRead() {
@@ -245,7 +245,8 @@ class AssistPane(
         controller?.cancel()
     }
 
-    internal fun dispatch(e: VoiceEvent) {
+    /** Public for tests. */
+    fun dispatch(e: VoiceEvent) {
         if (e is VoiceEvent.WakeDetected && prefs.wakeSound) wakeChime()
         satellite = when (e) {
             is VoiceEvent.WakeDetected, is VoiceEvent.Listening -> "Listening"
@@ -269,10 +270,10 @@ class AssistPane(
         try { onVoiceEvent(e) } catch (t: Throwable) { EspHomeLog.w("voice listener failed", t) }
     }
 
-    internal companion object {
+    companion object {
         const val IDLE = "Idle"
 
-        /** How long after the panel's pick Home Assistant's reads still count ([useWakeWord]). Internal for tests. */
-        internal const val REREAD_WINDOW_MS = 30_000L
+        /** How long after the panel's pick Home Assistant's reads still count ([useWakeWord]). Public for tests. */
+        const val REREAD_WINDOW_MS = 30_000L
     }
 }

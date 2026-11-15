@@ -16,7 +16,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Log facade: android.util.Log on the device, stdout in JVM tests. Never pass secrets. */
-internal object AuthLog {
+object AuthLog {
     private const val TAG = "S1Auth"
     private val onAndroid = System.getProperty("java.vendor")?.contains("Android") == true
     fun i(msg: String) = if (onAndroid) { android.util.Log.i(TAG, msg); Unit } else println("I/$TAG: $msg")
