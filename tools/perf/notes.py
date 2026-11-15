@@ -12,7 +12,7 @@ import grade as G
 PAGES = G.TIERS
 # How each page reads in a sentence. Rubric v10 (#205): typical is measured without its camera
 # (typical-nocam, which C grades) and with it (typical, which B grades).
-NAME = {"typical-nocam": "typical", "typical": "typical with a camera"}
+NAME = {"typical-nocam": "typical without a camera", "typical": "typical with a camera"}
 GOOD = {"good", "premium"}
 FLUID = {"fluid"}
 # What the lowest level (fluid) accepts, per task, from rubric.json: a band outside it is a limit. Not

@@ -104,7 +104,12 @@ announcements, with a calm full-screen overlay while you talk.
 
 **Status: beta.**
 
-The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
+**Clarity v2: D**, a good wall panel for light dashboards (measured 2026-11-15 UTC, 3 of 3 runs, not
+provisional). Typical dashboards hold it back: without a camera their view is drawn in 1.2 s, but the main
+thread then stays blocked for 2.9 s. The report is in
+[clarity/report.md](clarity/report.md), and the summary the site grades in
+[clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)). The Clarity
+badge shows the grade once glassworks.dev publishes it.
 
 What works on `main`, as of 2026-11-14. The latest release is v0.4.3, and rows marked New come with
 the next one. "Verified" means tested on a real panel in a real home.

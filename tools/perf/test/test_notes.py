@@ -365,7 +365,7 @@ class TypicalWithoutACamera(unittest.TestCase):
             rep["grade"]["bands"][p]["blocking"] = b
         rep["grade"]["levels"] = {"light": "fluid", "typical-nocam": None, "typical": None, "heavy": None}
         n = N.notes(rep)
-        self.assertIn("typical blocks for 2.9 s after it is drawn", n["limits"])
+        self.assertIn("typical without a camera blocks for 2.9 s after it is drawn", n["limits"])
         self.assertNotIn("light blocks", n["limits"])
         self.assertTrue(n["limits"].startswith("Bigger dashboards slow down: "), n["limits"])
         self.assertFalse(N._is_limit("blocking", "needs-improvement"))
