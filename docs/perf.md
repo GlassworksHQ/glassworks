@@ -1898,7 +1898,7 @@ What the earlier runs on the S1 (2026-11-12, kiosk 0.4.3, GeckoView 159, Android
 ## Run the tests
 
 ```sh
-python3 -m unittest discover -s tools/perf/test
+python3 tools/perf/test/parallel.py      # every Python test here, several at once (or: python3 -m unittest discover -s tools/perf/test)
 node --test tools/perf/test/page.test.mjs tools/perf/test/grade.test.mjs tools/perf/test/browserguard.test.mjs
 # The WebRTC camera (#202), under the WebRTC venv; then HA's frontend in Chrome, and Firefox (Gecko).
 PY=$(python3 tools/perf/webrtcenv.py)
@@ -1912,18 +1912,27 @@ and the fake Home Assistant. A panel's waits are real seconds (a wake every 8 s,
 deadline), so these runs go on a compressed clock: every wait and timestamp of the runner,
 `lanprobe.py` and the fake panel goes through `clock.py`, and the tests set `GW_PERF_TIME_SCALE=0.2`.
 A wait then takes a fifth of its seconds, and the clock runs five times as fast, so recorded times
-keep their units and the tests their numbers. `GW_PERF_TIME_SCALE=1` runs them in real time. A real
-run never sets it, and the runner refuses it on any device that isn't the fake, before it touches
-anything. The whole suite took 10 minutes on a Mac on 2026-11-14 (28 minutes before the scale).
+keep their units and the tests their numbers. `GW_PERF_TIME_SCALE=1` runs them in real time. Two
+things stay on real seconds: `run.sh`'s own sleeps and polls (the tests set its settle and gap times
+to 0, and it never waits to cool on the fake), and the gesture times in a run's file
+(`gestures_sent`), which share `fakeha.jsonl`'s clock. A real run never sets the scale, and then the
+clock asks the device nothing. With it set, `run.sh`, `perfrun.py` and `lanprobe.py` refuse it on
+any device that isn't the fake, before they touch anything else (`test_runner.RealTime`).
 
-For a grading, report or notes change, the fast set is enough (seconds); run `test_runner.py` too
-when you change `perfrun.py`, `run.sh`, `lanprobe.py`, `clock.py` or the fakes. CI runs all of it on
-every PR.
+The tests come in two sets, which `tools/perf/test/parallel.py` runs:
 
-```sh
-cd tools/perf/test && python3 -m unittest test_grade test_report test_summary test_notes   # the fast set
-python3 -m unittest test_runner                                                             # the runner
-```
+| Set | What | When | Took (2026-11-14, a 10-core Mac) |
+|---|---|---|---|
+| `--set fast` | `test_grade`, `test_report`, `test_summary`, `test_notes`: grading, report, export, notes | After a grading, report or notes change | 2 s |
+| `--set slow` | Everything else: `test_runner` and the fakes | Too when you change `perfrun.py`, `run.sh`, `lanprobe.py`, `clock.py` or a fake | 88 s at 8 at a time, 170 s at 4 (about 10 minutes one at a time) |
+
+CI runs both on every PR, the fast set first, in the `scripts` job. `parallel.py` runs each
+`test_runner` class whose tests share one run as one process, each other `test_runner` test as one,
+and each other module as one, `-j` at a time (twice the cores, at most 8; `GW_PERF_TEST_JOBS`). Every
+process gets its own temp directory and its own block of ports (`GW_PERF_TEST_PORT_BASE`), so none
+share a port, a path or a fake panel, and a result doesn't depend on what runs beside it. A failed
+process prints its whole output. One test or class alone: `cd tools/perf/test && python3 -m unittest
+test_runner.Restart`.
 
 `test_webrtc.py` checks the relay (its credentials, one allocation over TCP) and a whole session
 through the fake's websocket API, with aiortc as a relay-only browser. `webrtc.e2e.test.mjs` runs

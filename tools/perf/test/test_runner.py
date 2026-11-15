@@ -22,6 +22,16 @@ os.environ.setdefault("GW_PERF_FRONTEND", STUB_FRONTEND)
 # seconds. GW_PERF_TIME_SCALE=1 runs them in real time. Set per run, never in this process's environ,
 # which the other test modules share.
 TIME_SCALE = os.environ.get("GW_PERF_TIME_SCALE", "0.2")
+# The ports of run.sh's fake (each run takes one and the one after it, the relay's) come from one
+# block: PORT_BASE + 76 to + 100. parallel.py gives each of its workers a block of its own, so runs
+# that go at the same time never share a port. One process's tests run one at a time, as before.
+PORT_BASE = int(os.environ.get("GW_PERF_TEST_PORT_BASE", "18000"))
+
+
+def port(n):
+    return str(PORT_BASE + n)
+
+
 sys.path.insert(0, os.path.dirname(HERE))
 import fakeha  # noqa: E402
 import perfrun  # noqa: E402
@@ -70,12 +80,12 @@ class Runner(unittest.TestCase):
         os.chmod(adb, 0o755)
         env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="2",
                    GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.5", GW_PERF_FRONTEND=STUB_FRONTEND,
-                   GW_PERF_SWITCH_SETTLE="0", FAKE_HA_URL="http://127.0.0.1:18089", GW_PERF_CAMERA=STUB_CAMERA,
+                   GW_PERF_SWITCH_SETTLE="0", FAKE_HA_URL=f"http://127.0.0.1:{port(89)}", GW_PERF_CAMERA=STUB_CAMERA,
                    GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
         env.pop("ANDROID_SERIAL", None)
         cls.state = state
         cls.out = os.path.join(cls.tmp, "out")
-        cls.proc = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", cls.out, "--port", "18089", "--taps", "2",
+        cls.proc = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", cls.out, "--port", port(89), "--taps", "2",
                                    "--restore-dashboard", RESTORE],
                                   env=env, capture_output=True, text=True, timeout=300)
         with open(os.path.join(state, "commands.log")) as f:
@@ -188,14 +198,14 @@ class Runner(unittest.TestCase):
         with open(os.path.join(self.out, "report.md")) as f:
             self.assertIn("## RAM on the reference dashboards", f.read())
         with open(os.path.join(self.tmp, "state", "opened_still.json")) as f:
-            self.assertEqual(json.load(f), ["http://127.0.0.1:18089/clarity-ref/typical"])
+            self.assertEqual(json.load(f), [f"http://127.0.0.1:{port(89)}/clarity-ref/typical"])
 
     def test_it_changes_one_setting_and_puts_it_back(self):
         """Protocol 4: the kiosk's saved dashboard points at the fake HA's start view for the graded
         part, then back at --restore-dashboard (with -W, checked). Nothing else changes."""
         shell = [c[len("shell "):] for c in self.commands if c.startswith("shell ")]
         urls = [re.search(r"--es url '([^']+)'", c).group(1) for c in shell if "--es url" in c]
-        self.assertEqual(urls, ["http://127.0.0.1:18089/clarity-ref/start", RESTORE])
+        self.assertEqual(urls, [f"http://127.0.0.1:{port(89)}/clarity-ref/start", RESTORE])
         self.assertIn("am start -W -n sh.edm.s1kiosk/.MainActivity --es url '" + RESTORE + "'", shell)
         i_set = next(i for i, c in enumerate(self.commands) if "--es url" in c)
         i_back = max(i for i, c in enumerate(self.commands) if "--es url" in c)
@@ -218,8 +228,8 @@ class Runner(unittest.TestCase):
         # The animation test page and the idle sample's page load; the graded views don't: they open
         # inside the loaded frontend, by navigation, on the runner's command to the fake HA.
         self.assertEqual(len(opens), 2)
-        self.assertTrue(opens[0].startswith("http://127.0.0.1:18089/clarity/page/index.html?"), opens[0])
-        self.assertEqual(opens[1], "http://127.0.0.1:18089/clarity-ref/typical")       # the idle sample's page, no nonce
+        self.assertTrue(opens[0].startswith(f"http://127.0.0.1:{port(89)}/clarity/page/index.html?"), opens[0])
+        self.assertEqual(opens[1], f"http://127.0.0.1:{port(89)}/clarity-ref/typical")       # the idle sample's page, no nonce
         views = [c.split()[1:4:2] for c in self.commands if c.startswith("view ")]
         self.assertEqual(views, [["light", "taps=2"], ["typical-nocam", "taps=2"], ["typical", "taps=2"], ["heavy", "taps=2"],
                                  ["typical-hls", "taps=2"], ["heavy-hls", "taps=2"]])
@@ -269,7 +279,7 @@ def fake_env(tmp, **extra):
 
 class RealTime(unittest.TestCase):
     """#268: the time scale is for these tests only. A real run keeps real seconds, and a scaled
-    clock is refused on any device that isn't the fake, before anything on it is touched."""
+    clock is refused on any device that isn't the fake, before anything else on it is touched."""
     PERF = os.path.dirname(HERE)
 
     def env(self, scale):
@@ -288,13 +298,17 @@ class RealTime(unittest.TestCase):
         p = subprocess.run([sys.executable, os.path.join(self.PERF, "perfrun.py"), "device", "--out", tmp],
                            env=env, capture_output=True, text=True, timeout=60)
         self.assertEqual(p.returncode, 0, p.stderr[-800:])
+        # run.sh's first check, too: at scale 1 it passes without a word to the device.
+        p = subprocess.run([sys.executable, os.path.join(self.PERF, "clock.py"), "--check"], env=env,
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(p.returncode, 0, p.stderr)
         with open(log) as f:
             self.assertNotIn("gw.perf.fake_device", f.read())          # a real run doesn't even ask
 
     def test_a_scaled_clock_is_refused_on_a_real_device(self):
         runs = {"perfrun": [sys.executable, os.path.join(self.PERF, "perfrun.py"), "refstart", "--url", HA.url, "--out"],
-                "run.sh": [RUN, "--frame", "test-frame", "--port", "18079", "--restore-dashboard", RESTORE, "--out"],
-                "lanprobe": [sys.executable, os.path.join(self.PERF, "lanprobe.py"), "--port", "18078", "--out"]}
+                "run.sh": [RUN, "--frame", "test-frame", "--port", port(79), "--restore-dashboard", RESTORE, "--out"],
+                "lanprobe": [sys.executable, os.path.join(self.PERF, "lanprobe.py"), "--port", port(78), "--out"]}
         for name, cmd in runs.items():
             with self.subTest(name):
                 tmp, env, log = self.env("0.2")
@@ -303,9 +317,13 @@ class RealTime(unittest.TestCase):
                 p = subprocess.run(cmd + [out], env=env, capture_output=True, text=True, timeout=60)
                 self.assertNotEqual(p.returncode, 0)
                 self.assertIn("GW_PERF_TIME_SCALE=0.2 is for the off-device tests only", p.stderr)
+                # Every adb command it ran, not only the shell ones (#274's verifier): reads, and
+                # the question only the fake answers. No exit trap, reverse, intent or setting yet.
                 with open(log) as f:
-                    shell = [c for c in f.read().splitlines() if c.startswith("shell ")]
-                self.assertEqual([c for c in shell if not c.startswith(("shell getprop", "shell pm path"))], [])
+                    ran = f.read().splitlines()
+                self.assertIn("shell getprop gw.perf.fake_device", ran)
+                self.assertEqual([c for c in ran if c not in
+                                  ("get-state", "shell pm path sh.edm.s1kiosk", "shell getprop gw.perf.fake_device")], [])
                 self.assertEqual(os.listdir(out), [])
 
     def test_a_scale_out_of_range_is_refused(self):
@@ -328,8 +346,8 @@ class StopsPartway(unittest.TestCase):
         on exit, and exits 3 with the command to send, instead of assuming the panel is back."""
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp, FAKE_RESTORE_FAILS="1", GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0",
-                              GW_PERF_BETWEEN_QUIET="0.3", FAKE_HA_URL="http://127.0.0.1:18097")
-        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", "18097",
+                              GW_PERF_BETWEEN_QUIET="0.3", FAKE_HA_URL=f"http://127.0.0.1:{port(97)}")
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", port(97),
                             "--taps", "0", "--skip-synthetic", "--skip-real-use", "--restore-dashboard", RESTORE],
                            env=env, capture_output=True, text=True, timeout=300)
         self.assertEqual(p.returncode, 3, p.stderr[-2000:])
@@ -344,15 +362,15 @@ class StopsPartway(unittest.TestCase):
     def test_the_dashboard_goes_back(self):
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp, FAKE_IDLE_FAILS="1", GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0",
-                              GW_PERF_BETWEEN_QUIET="0.3", FAKE_HA_URL="http://127.0.0.1:18095")
-        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "2", "--out", os.path.join(tmp, "out"), "--port", "18095",
+                              GW_PERF_BETWEEN_QUIET="0.3", FAKE_HA_URL=f"http://127.0.0.1:{port(95)}")
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "2", "--out", os.path.join(tmp, "out"), "--port", port(95),
                             "--taps", "0", "--skip-synthetic", "--skip-real-use", "--restore-dashboard", RESTORE],
                            env=env, capture_output=True, text=True, timeout=300)
         self.assertNotEqual(p.returncode, 0)                       # the idle sample after graded run 1 failed
         self.assertTrue(os.path.exists(os.path.join(tmp, "out", "refstart-1.json")))
         self.assertFalse(os.path.exists(os.path.join(tmp, "out", "refstart-2.json")))
         with open(os.path.join(state, "urls_set.json")) as f:
-            self.assertEqual(json.load(f), ["http://127.0.0.1:18095/clarity-ref/start", RESTORE])
+            self.assertEqual(json.load(f), [f"http://127.0.0.1:{port(95)}/clarity-ref/start", RESTORE])
         self.assertIn("pointing the kiosk back at its dashboard", p.stderr)
 
 
@@ -1178,12 +1196,13 @@ class PortInUse(unittest.TestCase):
         """#202: the WebRTC relay listens on --port + 1; a fake left there would answer the panel's TURN."""
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp)
+        # Both from this worker's block: an ephemeral port's neighbour may be another test's.
+        at = port(76)
         held = socket.socket()
-        held.bind(("127.0.0.1", 0))
+        held.bind(("127.0.0.1", int(at) + 1))
         held.listen(1)
         self.addCleanup(held.close)
-        port = str(held.getsockname()[1] - 1)
-        p = subprocess.run([RUN, "--frame", "test-frame", "--out", os.path.join(tmp, "out"), "--port", port, "--skip-synthetic",
+        p = subprocess.run([RUN, "--frame", "test-frame", "--out", os.path.join(tmp, "out"), "--port", at, "--skip-synthetic",
                             "--skip-real-use", "--restore-dashboard", RESTORE], env=env, capture_output=True, text=True, timeout=60)
         self.assertEqual(p.returncode, 2, p.stderr[-800:])
         self.assertIn(f"port {held.getsockname()[1]} (the WebRTC relay's, --port + 1) is already in use", p.stderr)
@@ -1206,10 +1225,10 @@ class CamerasOnlyWhenNeeded(unittest.TestCase):
             f.write("#!/bin/sh\necho ' V..... mpeg4  MPEG-4 part 2'\n")   # an ffmpeg without libx264
         os.chmod(os.path.join(bindir, "ffmpeg"), 0o755)
         env["PATH"] = bindir + os.pathsep + env["PATH"]
-        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "a"), "--port", "18081",
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "a"), "--port", port(81),
                             "--skip-reference", "--skip-real-use"], env=env, capture_output=True, text=True, timeout=180)
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
-        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "b"), "--port", "18081",
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "b"), "--port", port(81),
                             "--skip-synthetic", "--skip-real-use", "--restore-dashboard", RESTORE],
                            env=env, capture_output=True, text=True, timeout=180)
         self.assertEqual(p.returncode, 2)
@@ -1223,7 +1242,7 @@ class SyntheticScreenOff(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         env, _ = fake_env(tmp, FAKE_SYNTH_SCREEN_OFF="1")
         out = os.path.join(tmp, "out")
-        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", out, "--port", "18087",
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", out, "--port", port(87),
                             "--skip-reference", "--skip-real-use"], env=env, capture_output=True, text=True, timeout=180)
         self.assertEqual(p.returncode, 0, p.stderr[-2000:])
         with open(os.path.join(out, "synthetic-1.jsonl")) as f:
@@ -1287,7 +1306,7 @@ class PaneRam(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp()
         env, cls.state = fake_env(cls.tmp)
         cls.out = os.path.join(cls.tmp, "out")
-        cls.proc = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "2", "--out", cls.out, "--port", "18091",
+        cls.proc = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "2", "--out", cls.out, "--port", port(91),
                                    "--skip-synthetic", "--skip-reference", "--skip-real-use",
                                    "--pane-ram", "assist=on,sendspin=off,mic=on,wall-base=on,time-zone=on,diagnostics=on", "--restore-dashboard", RESTORE],
                                   env=env, capture_output=True, text=True, timeout=300)
@@ -1316,7 +1335,7 @@ class PaneRam(unittest.TestCase):
         self.assertEqual(self.read("settings.json"), {"voice_enabled": "true", "sendspin_enabled": "false", "mic_muted": "false",
                                                       "wall_base_enabled": "true", "time_zone_enabled": "true", "diagnostics_enabled": "true"})   # as given
         self.assertEqual(self.read("saved_url.json"), RESTORE)
-        self.assertEqual(self.read("urls_set.json"), ["http://127.0.0.1:18091/clarity-ref/typical"] * 18 + [RESTORE])
+        self.assertEqual(self.read("urls_set.json"), [f"http://127.0.0.1:{port(91)}/clarity-ref/typical"] * 18 + [RESTORE])
 
     def test_the_warm_up_cycle_is_sampled_but_not_reported(self):
         """#186: s1p3's first sample had the GPU process 15 MB low. Cycle 0 runs every state and keeps
@@ -1356,6 +1375,11 @@ class PaneRam(unittest.TestCase):
         self.assertEqual({p["id"] for p in ram["panes_not_switched"]}, {"radio", "timers", "bluetooth-proxy", "notifications", "camera"})
         self.assertIsNone(ram["reference_idle"])          # no graded runs here
 
+
+class PaneRamRuns(unittest.TestCase):
+    """--pane-ram runs of their own: what goes back, and what is refused (#68). Apart from PaneRam,
+    whose tests share one run, so parallel.py runs each of these on its own."""
+
     def test_a_pane_setting_it_cant_put_back_is_refused_before_the_device_is_touched(self):
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp)
@@ -1371,7 +1395,7 @@ class PaneRam(unittest.TestCase):
     def test_a_run_that_stops_partway_puts_the_panes_and_the_dashboard_back(self):
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp, FAKE_IDLE_FAILS="1")
-        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", "18093",
+        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", port(93),
                             "--skip-synthetic", "--skip-reference", "--skip-real-use",
                             "--pane-ram", "assist=off,sendspin=on,mic=on,wall-base=on,time-zone=on,diagnostics=on", "--restore-dashboard", RESTORE],
                            env=env, capture_output=True, text=True, timeout=120)
@@ -1394,7 +1418,7 @@ class PaneRam(unittest.TestCase):
         with open(os.path.join(state, "settings.json"), "w") as f:
             json.dump({"voice_enabled": "true"}, f)                # on, as on the panel in s1v7
         out = os.path.join(tmp, "out")
-        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", out, "--port", "18099",
+        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", out, "--port", port(99),
                             "--skip-synthetic", "--skip-reference", "--skip-real-use",
                             "--pane-ram", "assist=on,sendspin=on,mic=on,wall-base=on,time-zone=on,diagnostics=on", "--restore-dashboard", RESTORE],
                            env=env, capture_output=True, text=True, timeout=300)
@@ -1415,7 +1439,7 @@ class PaneRam(unittest.TestCase):
         URL intent's answer can tell that the kiosk is still on the fake: am exits 0 either way."""
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp, FAKE_RESTORE_FAILS="1")
-        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", "18085",
+        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", port(85),
                             "--skip-synthetic", "--skip-reference", "--skip-real-use",
                             "--pane-ram", "assist=off,sendspin=on,mic=off,wall-base=on,time-zone=on,diagnostics=on", "--restore-dashboard", RESTORE],
                            env=env, capture_output=True, text=True, timeout=300)
@@ -1431,7 +1455,7 @@ class PaneRam(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp, FAKE_REF_URL_FAILS="1")
         out = os.path.join(tmp, "out")
-        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", out, "--port", "18083",
+        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", out, "--port", port(83),
                             "--skip-synthetic", "--skip-reference", "--skip-real-use",
                             "--pane-ram", "assist=on,sendspin=on,mic=on,wall-base=on,time-zone=on,diagnostics=on", "--restore-dashboard", RESTORE],
                            env=env, capture_output=True, text=True, timeout=300)

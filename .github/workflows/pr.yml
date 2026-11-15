@@ -313,10 +313,14 @@ jobs:
       # Clarity's camera streams are made with ffmpeg; a test checks it makes the same bytes twice.
       - name: ffmpeg
         run: sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends ffmpeg > /dev/null
-      - name: Perf test rubric, report, grade and page statistics
+      # Clarity's tests in two sets (#268, tools/perf/test/parallel.py): the fast one first (seconds),
+      # then the runner end to end against the fake panel, and the fakes, several at once.
+      - name: Perf test rubric, report, grade and page statistics (fast set)
         run: |
-          python3 -m unittest discover -s tools/perf/test -v
+          python3 tools/perf/test/parallel.py --set fast
           node --test tools/perf/test/page.test.mjs tools/perf/test/grade.test.mjs tools/perf/test/browserguard.test.mjs
+      - name: Perf test runner and fakes, end to end (slow set)
+        run: python3 tools/perf/test/parallel.py --set slow
       - name: APK size tool
         run: python3 -m unittest discover -s tools/size/test -v
       - name: Boot generator targets and layout
