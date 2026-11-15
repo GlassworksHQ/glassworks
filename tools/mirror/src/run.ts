@@ -129,6 +129,7 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         userdataBytes = o.userdataBytes ?? r.userdataBytes;
       }],
       ['Build the images (S1 Kiosk, boot animation, rotation; a fresh userdata with the adb key)', async () => {
+        // patched in place: a build that fails ends the run, and the next run loads and checks the file again
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           await buildImages(loaded!, { apk: o.apk, bootAnimation: o.bootAnimation, hwrotation: 270, adbKey: o.adbKey, userdataBytes, fill: o.fill },

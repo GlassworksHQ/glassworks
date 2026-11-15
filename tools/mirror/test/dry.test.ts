@@ -67,6 +67,28 @@ describe('the headless install on a fake Mirror', () => {
     expect(d.lk.commands).toEqual([]);
   });
 
+  it('refuses a max-download-size LK didn\'t write in hex, before anything is written', async () => {
+    const img = await dryImage(work);
+    const lines: string[] = [];
+    const d = dryDevices(img.bytes, (l) => lines.push(l), { maxDownloadReply: '\t16777216' });
+    await expect(runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, work }, d.deps)).rejects.toThrow(/fastboot checks failed/);
+    expect(lines.join('\n')).toMatch(/NO  Download size: not reported \(needs max-download-size reported in hex/);
+    expect(d.lk.commands.some((c) => c.startsWith('download:') || c.startsWith('flash:'))).toBe(false);
+  });
+
+  it('a failed build ends the run before any write; the next run loads the image again', async () => {
+    const img = await dryImage(work);
+    const bad = fakeApk('com.example.other', { minSdk: 23 });
+    const first = dryDevices(img.bytes, () => {});
+    await expect(runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: bad, adbKey: KEY, work }, first.deps)).rejects.toThrow(/not S1 Kiosk/);
+    expect(first.lk.commands.some((c) => c.startsWith('flash:'))).toBe(false);
+    const lines: string[] = [];
+    const again = dryDevices(img.bytes, (l) => lines.push(l));
+    await runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, work }, again.deps);
+    expect(lines.some((l) => /read and checked 100%/.test(l))).toBe(true);
+    expect(again.lk.commands.filter((c) => c.startsWith('flash:'))).toEqual(['flash:system', 'flash:userdata']);
+  }, 60_000);
+
   it('refuses a board that isn\'t the original Mirror, before anything else', async () => {
     const img = await dryImage(work);
     const d = dryDevices(img.bytes, () => {});

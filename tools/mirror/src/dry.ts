@@ -46,8 +46,9 @@ export async function dryImage(work: string, room = 0): Promise<{ path: string; 
  * userdata of DRY_USERDATA (runInstall's `userdataBytes`, dry runs only).
  */
 export class DryLk extends FakeLk {
-  constructor(systemBytes: number) {
-    super(16 * MiB, [['system', systemBytes], ['userdata', DRY_USERDATA]]);
+  /** `maxDownloadReply`: LK's answer, `\t0x…` as it writes it (a test gives a decimal one). */
+  constructor(systemBytes: number, maxDownloadReply = `\t0x${(16 * MiB).toString(16)}`) {
+    super(16 * MiB, [['system', systemBytes], ['userdata', DRY_USERDATA]], maxDownloadReply);
   }
 
   override async out(data: Uint8Array): Promise<void> {
@@ -64,8 +65,8 @@ export class DryLk extends FakeLk {
 export interface Dry { deps: RunDeps; lk: DryLk; before: FakeMirror; after: FirstBootMirror; state: () => 'android' | 'fastboot' | 'glassworks' }
 
 /** Fake devices for runInstall/runWayBack. `stockAtStart: false` starts in fastboot already. */
-export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean } = {}): Dry {
-  const lk = new DryLk(systemBytes);
+export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean; maxDownloadReply?: string } = {}): Dry {
+  const lk = new DryLk(systemBytes, o.maxDownloadReply);
   const before = new FakeMirror();
   const after = new FirstBootMirror();
   after.hideFails = !!o.hideFails;
