@@ -1,20 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
-import { gradeSummary, type Grade, type Rubric, type Summary } from "../../vendor/s1-unleashed/tools/perf/grade";
-import rubricJson from "../../vendor/s1-unleashed/tools/perf/page/rubric.json";
+import { gradeSummary, type Grade, type Rubric, type Summary } from "../../../tools/perf/grade";
+import rubricJson from "../../../tools/perf/page/rubric.json";
 
 /*
- * Clarity, the Glassworks wall-panel performance grade (docs/perf.md in the main repo).
+ * Clarity, the Glassworks wall-panel performance grade (docs/perf.md in this repo).
  *
  * A frame stores measurements only: frames/<id>/clarity/clarity.json, Clarity's summary
  * (glassworks.perf-summary/3), published with its report. The letter is never stored. The site works
- * it out at build time with the main repo's own grade function (tools/perf/grade.ts) and rules
- * (tools/perf/page/rubric.json), both from the pinned submodule, so a rule change there re-grades
+ * it out at build time with this repo's own grade function (tools/perf/grade.ts) and rules
+ * (tools/perf/page/rubric.json), both read from this repo, so a rule change there re-grades
  * every frame here, and a summary from another Clarity version or measuring protocol shows
  * "Re-measure" instead of a letter.
  */
 export const rubric = rubricJson as unknown as Rubric & { name?: string; one_frame_ms: number };
-/** The test's name, from rubric.json once it carries one (main repo #158) */
+/** The test's name, from rubric.json once it carries one (#158) */
 export const CLARITY = rubric.name ?? "Clarity";
 
 type FrameRun = { p95_ms?: number | null; jank_pct?: number | null; frozen_pct?: number | null; fps?: number | null; n?: number | null };
@@ -38,11 +38,11 @@ export type ClaritySummary = Summary & {
   runs?: { attempted?: number; graded?: number };
   pages?: Record<string, Page>;
   report?: string | null;
-  /** not graded; null when not measured (added within /2 by main repo #158) */
+  /** not graded; null when not measured (added within /2 by #158) */
   ram?: { idle_app_pss_kb?: number | null; peak_app_pss_kb?: number | null } | null;
-  /** not graded; one entry per APK (added within /2 by main repo #158) */
+  /** not graded; one entry per APK (added within /2 by #158) */
   apk?: { file?: string; abis?: string[]; bytes?: number }[] | null;
-  /** the report's plain-words notes; they judge by the rubric version they name (main repo #201) */
+  /** the report's plain-words notes; they judge by the rubric version they name (#201) */
   notes?: { text?: string; rubric?: number } | null;
 };
 
@@ -52,7 +52,7 @@ export type Clarity =
   | Graded
   | { state: "re-measure" | "not-comparable"; summary: ClaritySummary; grade: Grade };
 
-const FRAMES = path.join(process.cwd(), "vendor/s1-unleashed/frames");
+const FRAMES = path.join(process.cwd(), "../frames");
 /** The summary format this site reads. An older one (/2) is from before Clarity v2: re-measure. */
 const SCHEMA = "glassworks.perf-summary/3";
 
@@ -96,7 +96,7 @@ export function clarityFor(id: string): Clarity {
 export const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 export const PAGES = rubric.grade.pages; // light, typical-nocam, typical, heavy: lightest first
-/** As the notes name them (main repo tools/perf/notes.py): typical-nocam is typical without a camera */
+/** As the notes name them (tools/perf/notes.py): typical-nocam is typical without a camera */
 export const PAGE_NAME: Record<string, string> = {
   light: "Light",
   "typical-nocam": "Typical without a camera",

@@ -1,7 +1,7 @@
 /**
  * Renders the brand's raster images with headless Chrome:
  *
- *   pnpm brand:raster
+ *   npm run brand:raster
  *
  *   src/app/apple-icon.png          180 × 180, full bleed (iOS rounds it)
  *   public/brand/github-avatar.png 1024 × 1024, full bleed (GitHub rounds it)

@@ -1,21 +1,28 @@
+import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
+
+const repo = fileURLToPath(new URL("..", import.meta.url));
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
-  // The frame card ships TypeScript and CSS modules, not built JavaScript (vendor/s1-unleashed).
+  // The site reads the repo around it (frames/, packages/frame-card, tools/perf), so the root is the
+  // repo, as for Kiln (kiln/apps/kiln/next.config.ts).
+  turbopack: { root: repo },
+  outputFileTracingRoot: repo,
+  // The frame card ships TypeScript and CSS modules, not built JavaScript (packages/frame-card).
   transpilePackages: ["@glassworks/frame-card"],
-  // The site reads only frames/*/design and frames/*/clarity/clarity.json from the main repo; don't
-  // trace the rest into server bundles (a published report.json is a few hundred kB).
+  // The site reads only frames/*/design and frames/*/clarity/clarity.json from the repo; don't trace
+  // the rest into server bundles (a published report.json is a few hundred kB).
   outputFileTracingExcludes: {
     "*": [
-      "vendor/s1-unleashed/{app,kiln,branding,docs,tools,LICENSES}/**",
-      "vendor/s1-unleashed/frames/*/installer/**",
-      "vendor/s1-unleashed/frames/*/clarity/report.*",
+      "../{kiln,branding,docs,tools,LICENSES,core,engines,libs,panes,pane-api,testing}/**",
+      "../frames/*/{installer,android,panes}/**",
+      "../frames/*/clarity/report.*",
     ],
   },
   // Hosts allowed to load dev-server resources (HMR, dev chunks) when you open
-  // `pnpm dev` from another machine. Comma-separated, set in .env.local.
+  // `npm run dev` from another machine. Comma-separated, set in .env.local.
   allowedDevOrigins: process.env.DEV_ORIGINS?.split(",").map((h) => h.trim()).filter(Boolean),
   redirects() {
     return [

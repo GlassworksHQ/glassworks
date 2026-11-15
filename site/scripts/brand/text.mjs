@@ -13,13 +13,14 @@ import * as ot from "opentype.js";
 // the Clarity badges (scripts/brand/clarity.mjs), its ES module (named exports). Either works.
 const opentype = ot.default ?? ot;
 
-// The repo root's node_modules: from the working directory (`pnpm brand`, `next build`, where a
-// bundler can't resolve modules at run time), or else from the script node was given
-// (`node scripts/brand/generate.mjs` from anywhere).
-const ROOTS = [process.cwd(), join(dirname(process.argv[1] ?? ""), "../..")];
+// The npm workspace root's node_modules, where the fonts are hoisted, or site/'s own: from the working
+// directory (`npm run brand`, `next build`, where a bundler can't resolve modules at run time), or
+// else from the script node was given (`node scripts/brand/generate.mjs` from anywhere).
+const script = join(dirname(process.argv[1] ?? ""), "../..");
+const ROOTS = [process.cwd(), join(process.cwd(), ".."), script, join(script, "..")];
 function load(pkg, file) {
   const at = ROOTS.map((r) => join(r, "node_modules", pkg, "files", file)).find((f) => existsSync(f));
-  if (!at) throw new Error(`${pkg}/files/${file} not found under ${ROOTS.join(" or ")}: run pnpm install`);
+  if (!at) throw new Error(`${pkg}/files/${file} not found under ${ROOTS.join(" or ")}: run npm install from the repo root`);
   const buf = readFileSync(at);
   return opentype.parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length));
 }

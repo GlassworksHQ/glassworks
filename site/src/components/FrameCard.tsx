@@ -5,7 +5,7 @@ import { useRef } from "react";
 import { DeviceModel, FrameCardBody, frameCardClass, useTilt, type FrameDesign } from "@glassworks/frame-card";
 import s from "./FrameCard.module.css";
 
-/** The frame's render on the model's screen, served from the main repo by src/app/frames/[slug]/render.webp
+/** The frame's render on the model's screen, served from frames/ by src/app/frames/[slug]/render.webp
  *  (the same image as Kiln's picker); a frame without one keeps the card's example dashboard. */
 const renderUrl = (f: FrameDesign) => (f.render ? `/frames/${f.id}/render.webp` : undefined);
 

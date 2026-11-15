@@ -3,12 +3,12 @@ import path from "node:path";
 import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, type FrameDesign, type Stage } from "@glassworks/frame-card";
 
 /*
- * The frame catalog: every `frames/<id>/design/frame.json` in the main repo, read at build time from
- * the pinned submodule (vendor/s1-unleashed). Kiln reads the same files, and the card that draws them
- * is the same package, so the site, Kiln and the data can't drift. A new frame there appears here
- * when the submodule's pin moves; nothing is written by hand in this repo.
+ * The frame catalog: every `frames/<id>/design/frame.json` in this repo, read at build time (the
+ * site runs from site/, so they are in ../frames). Kiln reads the same files, and the card that draws them
+ * is the same package, so the site, Kiln and the data can't drift. A new frame appears here in the
+ * same commit; nothing is written by hand in site/.
  */
-export const FRAMES = path.join(process.cwd(), "vendor/s1-unleashed/frames");
+export const FRAMES = path.join(process.cwd(), "../frames");
 
 /** Kiln's site: a frame's `kiln` route is relative to it. */
 export const KILN = "https://kiln.glassworks.dev";
@@ -17,12 +17,12 @@ export const KILN = "https://kiln.glassworks.dev";
 const ORDER: Record<Stage, number> = { stable: 0, beta: 1, alpha: 2, development: 3, planned: 4 };
 
 /*
- * frame.json comes from another repo, so the fields every page relies on are checked when it is read:
+ * frame.json is written by hand, so the fields every page relies on are checked when it is read:
  * a bad file fails the build here, naming the file, instead of crashing a page later.
  */
 function check(file: string, f: FrameDesign, id: string) {
   const bad = (why: string) => {
-    throw new Error(`${file}: ${why} (format: vendor/s1-unleashed/frames/README.md)`);
+    throw new Error(`${file}: ${why} (format: frames/README.md)`);
   };
   if (f.id !== id) bad(`id "${f.id}" isn't its folder's name "${id}"`);
   if (!(f.status in ORDER)) bad(`status "${f.status}" isn't one of ${Object.keys(ORDER).join(", ")}`);
@@ -52,9 +52,6 @@ function read(id: string): FrameDesign {
 }
 
 function load(): FrameDesign[] {
-  if (!fs.existsSync(FRAMES)) {
-    throw new Error("vendor/s1-unleashed is empty: run `git submodule update --init` first");
-  }
   return fs
     .readdirSync(FRAMES, { withFileTypes: true })
     .filter((e) => e.isDirectory() && fs.existsSync(path.join(FRAMES, e.name, "design", "frame.json")))

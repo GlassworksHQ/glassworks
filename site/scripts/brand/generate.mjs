@@ -1,13 +1,13 @@
 /**
  * Generates the part badges and README banners into public/brand/.
  *
- *   pnpm brand
+ *   npm run brand
  *
  * Badges (30 px, for a row of shields): core, pane, kiln, library.
  * Banners (640 × 180, for the top of a README): glassworks (the whole stack,
  * for the org profile and the main README), principles (the page of rules every
  * part follows), core, pane, kiln, one per library in src/lib/libraries.json, and
- * one per frame with a tagline in vendor/s1-unleashed (frame.mjs). Each in -on-dark
+ * one per frame with a tagline in frames/ (frame.mjs). Each in -on-dark
  * and -on-light.
  *
  * Info badges (30 px, in place of shields.io): licence (MPL-2.0 for the core,
@@ -49,9 +49,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const out = join(root, "public/brand");
 const readJson = (file) => JSON.parse(readFileSync(join(root, file), "utf8"));
 const libraries = readJson("src/lib/libraries.json");
-// every frame in the pinned main repo with a tagline gets a banner (frame.mjs)
-const FRAMES = join(root, "vendor/s1-unleashed/frames");
-if (!existsSync(FRAMES)) throw new Error("vendor/s1-unleashed is empty: run `git submodule update --init` first");
+// every frame in the repo with a tagline gets a banner (frame.mjs)
+const FRAMES = join(root, "../frames");
 const frames = readdirSync(FRAMES, { withFileTypes: true })
   .filter((e) => e.isDirectory() && existsSync(join(FRAMES, e.name, "design/frame.json")))
   .map((e) => JSON.parse(readFileSync(join(FRAMES, e.name, "design/frame.json"), "utf8")))

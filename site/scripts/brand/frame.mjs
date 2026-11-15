@@ -1,6 +1,6 @@
 /**
  * A frame's README banner, banner-frame-<id>-on-dark.svg and -on-light.svg: the part banner with the
- * frame's own device in the cell, drawn from its frame.json (vendor/s1-unleashed/frames/<id>/design):
+ * frame's own device in the cell, drawn from its frame.json (frames/<id>/design):
  *
  *   model    the device, standing, at the stack's angle: body size and radius, the screen (the given
  *            box, or the face less the bezel), a faint sheen for a mirror finish. The screen shows the
@@ -13,8 +13,8 @@
  * on the two lit cells (the panes); no ember (Kiln's), no status colour.
  *
  * generate.mjs writes one per frame with a tagline into public/brand/, and the site's build checks
- * the committed files still match (src/lib/frameBanners.ts), so moving the submodule pin without
- * running `pnpm brand` fails the build. A name or tagline that doesn't fit fails too.
+ * the committed files still match (src/lib/frameBanners.ts), so changing a frame.json without
+ * running `npm run brand` fails the build. A name or tagline that doesn't fit fails too.
  */
 import { BW, CELL, TX, partBanner } from "./banner.mjs";
 import { C, S, guide } from "./draw.mjs";

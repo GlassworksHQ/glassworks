@@ -21,12 +21,12 @@ export const links = {
   contact: "mailto:hi@glassworks.dev",
 } as const;
 
-/** A pane's id: the app's (the main repo's pane.json files). */
+/** A pane's id: the app's (the repo's pane.json files). */
 export type PaneId = string;
 
 /**
- * Panes, from the main repo's pane catalog (@glassworks/frame-card `PANES`: each pane's pane.json and
- * icon.svg, issue 231), so a new pane appears here when the submodule's pin moves. `frame` marks a frame
+ * Panes, from the repo's pane catalog (@glassworks/frame-card `PANES`: each pane's pane.json and
+ * icon.svg, issue 231), so a new pane appears here in the same commit. `frame` marks a frame
  * pane: one that belongs to a single device, like the S1's wall base. The rest run anywhere their
  * hardware is. `requires` is said in words; `icon` is the pane's SVG.
  */

@@ -9,10 +9,11 @@
     "start": "next start",
     "lint": "eslint",
     "brand": "node scripts/brand/generate.mjs",
-    "brand:raster": "node scripts/brand/raster.mjs"
+    "brand:raster": "node scripts/brand/raster.mjs",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@glassworks/frame-card": "link:vendor/s1-unleashed/packages/frame-card",
+    "@glassworks/frame-card": "0.0.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -20,13 +21,11 @@
   "devDependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
-    "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "opentype.js": "^2.0.0",
-    "typescript": "^5"
-  },
-  "packageManager": "pnpm@10.30.1"
+    "typescript": "npm:@typescript/typescript6@6.0.2"
+  }
 }

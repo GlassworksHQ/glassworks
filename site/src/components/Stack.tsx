@@ -43,7 +43,7 @@ export const LAYERS: Layer[] = [
     lit: [0, 2, 3, 5],
     dashed: [4],
     desc: "Plugins. Each declares what hardware it needs.",
-    // the general panes in the main repo's pane catalog, then the frame panes in a word
+    // the general panes in the repo's pane catalog, then the frame panes in a word
     items: [...PANES.filter((p) => !p.frame).map((p) => p.name), "Frame-specific panes, like the S1 wall base"],
   },
   {

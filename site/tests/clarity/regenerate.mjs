@@ -1,9 +1,9 @@
-// Rebuilds the Clarity samples from the S1's real summary in the pinned submodule (read-only there;
-// writes tests/clarity/{sample,edge}/*.json). Run from the repo root: node tests/clarity/regenerate.mjs
+// Rebuilds the Clarity samples from the S1's real summary in frames/ (read-only there;
+// writes tests/clarity/{sample,edge}/*.json). Run from site/: node tests/clarity/regenerate.mjs
 // Not rebuilt: edge/lululemon-mirror.json, the re-measure case: the S1's Clarity v1 numbers (s1rtc9) under the Mirror's id.
 import fs from "node:fs";
 
-const real = JSON.parse(fs.readFileSync("vendor/s1-unleashed/frames/aqara-s1-plus/clarity/clarity.json", "utf8"));
+const real = JSON.parse(fs.readFileSync("../frames/aqara-s1-plus/clarity/clarity.json", "utf8"));
 const copy = () => structuredClone(real);
 const as = (s, id, name) => ({ ...s, frame: { id, name }, report: null, notes: null });
 const write = (file, s) => fs.writeFileSync(`tests/clarity/${file}`, JSON.stringify(s, null, 1) + "\n");

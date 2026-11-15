@@ -1,7 +1,7 @@
 import { RATING_KEYS, type RatingKey, type Support } from "@glassworks/frame-card";
 
 /*
- * The site's words for a frame's data. The data itself is each frame's `frame.json` in the main repo
+ * The site's words for a frame's data. The data itself is each frame's `frame.json` in this repo
  * (src/lib/frames.ts); its types, the card's tags and the stage names come from
  * @glassworks/frame-card. What's here is how the site's tables and frame pages say it: the nine
  * install ratings, pane support, and the difficulty legend. "unknown" always reads "Not checked".

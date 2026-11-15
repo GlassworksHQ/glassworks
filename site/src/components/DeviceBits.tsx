@@ -26,16 +26,16 @@ import {
 import styles from "./DeviceBits.module.css";
 
 /**
- * Each pane's icon, from its icon.svg in the main repo (the pane catalog): 24 × 24, stroked with
+ * Each pane's icon, from its icon.svg in this repo (the pane catalog): 24 × 24, stroked with
  * currentColor, no fills or colours, so it draws like the site's glyphs. The markup goes in as HTML.
- * It is checked twice: in the main repo, PaneCatalogTest refuses an icon with a script, an external
+ * It is checked twice: in the Android build, PaneCatalogTest refuses an icon with a script, an external
  * reference, CSS or a colour; and here, at build time, `safeIcon` refuses the same, so a bad icon
  * fails the build instead of reaching a page.
  */
 const UNSAFE = /<script|<foreignobject|<image|<style|\bon\w+\s*=|href|url\(|style=/i;
 const safeIcon = (id: string, svg: string) => {
   if (!/^<svg\b[^>]*\bviewBox="0 0 24 24"/.test(svg) || UNSAFE.test(svg)) {
-    throw new Error(`pane "${id}": its icon.svg isn't a plain 24 × 24 stroke icon (main repo: PaneCatalogTest)`);
+    throw new Error(`pane "${id}": its icon.svg isn't a plain 24 × 24 stroke icon (PaneCatalogTest)`);
   }
   return svg;
 };

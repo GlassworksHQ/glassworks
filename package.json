@@ -2,7 +2,7 @@
   "name": "aqara-s1-unleashed",
   "version": "0.0.0",
   "private": true,
-  "description": "The npm workspace root: Kiln (kiln/), each frame's recipe (frames/*/installer), and the packages Kiln and glassworks.dev share (packages/*).",
+  "description": "The npm workspace root: Kiln (kiln/), each frame's recipe (frames/*/installer), the packages Kiln and the site share (packages/*), and glassworks.dev (site/).",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -13,7 +13,8 @@
     "kiln/packages/*",
     "kiln/apps/*",
     "frames/*/installer",
-    "packages/*"
+    "packages/*",
+    "site"
   ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",

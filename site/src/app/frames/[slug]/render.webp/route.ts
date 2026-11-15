@@ -3,8 +3,8 @@ import path from "node:path";
 import { FRAMES, frameById, frames } from "@/lib/frames";
 
 /*
- * The frame's render for its card and page (frame.json `render`, made in the main repo by
- * tools/showcase/render.mjs): served from the pinned submodule at build time, never copied here.
+ * The frame's render for its card and page (frame.json `render`, made in this repo by
+ * tools/showcase/render.mjs): served from frames/<id>/design at build time, never copied here.
  */
 export function generateStaticParams() {
   return frames.filter((f) => f.render).map((f) => ({ slug: f.id }));
