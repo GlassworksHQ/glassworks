@@ -29,7 +29,7 @@ const env = (k, d) => process.env[k] || d;
 const UBOOT = env('UBOOT_BUILD', join(homedir(), 'src/u-boot-s1/build-s1'));
 const MAGISK = env('MAGISK_APK', join(homedir(), 'src/magisk/Magisk-v31.1.apk'));
 const MAGISK_SHA256 = '89cefac0a318afa39fb3880c45c87b036c05bc1ebf02a7a715b7f8d7c26ac6e7';
-const KIOSK = env('KIOSK_APK', join(REPO, 'app/kiosk/build/outputs/apk/debug/kiosk-debug.apk'));
+const KIOSK = env('KIOSK_APK', join(REPO, 'frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk'));
 const KEYBOARD = process.env.KEYBOARD_APK;
 
 const repo = (p) => join(REPO, p);

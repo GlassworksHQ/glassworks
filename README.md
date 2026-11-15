@@ -95,8 +95,8 @@ A pane is a feature the panel can run or leave out. These are the panes today:
 - **Camera**: on a panel with a camera, presence from motion, snapshots and an opt-in ONVIF/RTSP
   stream for Home Assistant ([entities](docs/esphome.md#camera-entities)). New, not yet run on a device.
 
-Each frame's README rates the panes its `frame.json` lists. The [pane API](app/kiosk/src/main/java/dev/glassworks/README.md)
-says how to write one, and [What makes a pane](app/kiosk/src/main/java/dev/glassworks/README.md#what-makes-a-pane)
+Each frame's README rates the panes its `frame.json` lists. The [pane API](pane-api/src/main/java/dev/glassworks/README.md)
+says how to write one, and [What makes a pane](pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane)
 says which features qualify.
 
 ## Kiln
@@ -137,7 +137,7 @@ else private, write to [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone h
 | [`kiln/`](kiln/apps/kiln/README.md) | Kiln, the browser (WebUSB) installer |
 | [`frames/`](frames/README.md) | One folder per device: its README, its Kiln recipe (`installer/`) and its data (`design/frame.json`) |
 | [`packages/`](packages/frame-card/README.md) | Code shared with glassworks.dev: the frame card and 3D renderer |
-| [`app/`](app/README.md) | S1 Kiosk, the Android app (GeckoView, ESPHome API, voice, Sendspin), with the Glassworks core in `dev.glassworks` |
+| [`app/`](frames/aqara-s1-plus/android/README.md) | S1 Kiosk, the Android app (GeckoView, ESPHome API, voice, Sendspin), with the Glassworks core in `dev.glassworks` |
 | `tools/` | Command-line installer, U-Boot/FEL build, boot patch, radio helper, Clarity, dev tools |
 | [`branding/`](branding/glass-tile/README.md) | Boot splash and animation, social preview |
 | [`docs/`](docs/README.md) | User guides, plus [research](docs/research/README.md) |
@@ -152,7 +152,7 @@ Built by [@aguilaair](https://github.com/aguilaair). It stands on the work of
 [microWakeWord](https://github.com/kahrendt/microWakeWord), [openWakeWord](https://github.com/dscripka/openWakeWord) and
 [Tango / ya-webadb](https://github.com/yume-chan/ya-webadb).
 
-The code in this repository is **MIT** ([LICENSE](LICENSE)), except the Glassworks core in `dev.glassworks`, which is **MPL-2.0** ([its README](app/kiosk/src/main/java/dev/glassworks/README.md#licence)). Third-party parts keep their licences. The main
+The code in this repository is **MIT** ([LICENSE](LICENSE)), except the Glassworks core in `dev.glassworks`, which is **MPL-2.0** ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)). Third-party parts keep their licences. The main
 ones are below. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists everything that ships, with versions
 and sources. On the panel, *Open source licences* in the hidden settings (tap the top-left corner five
 times) shows the same list with each licence's full text.

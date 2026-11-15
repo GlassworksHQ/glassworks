@@ -13,7 +13,7 @@ Bring-up notes that others can build on belong in the same PR as the work: in `f
 
 Glassworks is opinionated on purpose. Read [Glassworks Principles](docs/principles.md) first: what
 we build, what we don't, and the questions a new feature has to pass. New panes follow
-[What makes a pane](app/kiosk/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
+[What makes a pane](pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
 
 ## Issues
 
@@ -27,7 +27,7 @@ Small PRs against `main`. CI (`.github/workflows/pr.yml`) runs the app's unit te
 build, the installer's typecheck, tests and build, the install scripts' tests and the docs' links.
 
 ```sh
-cd app && ./gradlew test :kiosk:assembleDebug        # the app
+./gradlew test :kiosk:assembleDebug                 # the app
 npm install && npm run stage -w kiln && npm test     # the web installer, from the repo root
 tools/install/test/install-tests.sh                  # the install scripts
 python3 tools/check-doc-links.py                     # docs links

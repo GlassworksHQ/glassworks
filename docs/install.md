@@ -392,7 +392,7 @@ Linux and needs `sunxi-fel`, `fastboot`, `adb`, Docker (for the boot patch) and 
 ```sh
 # 0. Build U-Boot for the panel (once) and the kiosk app
 UBOOT_SRC=~/src/u-boot BL31=<bl31.bin> tools/fel/build-uboot.sh
-(cd app && ./gradlew :kiosk:assembleDebug)
+./gradlew :kiosk:assembleDebug
 
 # 1. FEL → boot U-Boot from RAM → back up → patch → vbmeta → splash → flash → verify → adb
 tools/install/fel-install.sh ~/s1-backup

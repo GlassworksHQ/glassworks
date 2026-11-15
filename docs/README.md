@@ -23,7 +23,7 @@ rules every part follows.
 | [legal.md](legal.md) | Legal notes: your own device, no copy protection bypassed, what is and isn't shipped, trademarks, licences ([third-party notices](../THIRD-PARTY-NOTICES.md)) |
 
 What changed in each release: [CHANGELOG.md](../CHANGELOG.md). The app itself is documented in
-[app/README.md](../app/README.md) and the boot branding in
+[app/README.md](../frames/aqara-s1-plus/android/README.md) and the boot branding in
 [branding/glass-tile](../branding/glass-tile/README.md).
 
 ## Design

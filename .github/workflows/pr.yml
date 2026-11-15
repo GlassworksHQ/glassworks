@@ -122,7 +122,7 @@ jobs:
           layout="$GITHUB_WORKSPACE/tools/release/android-layout.sh"
           esphome_api=$("$layout" file . esphome-api/test-requirements.txt)
           esphome_api=$(dirname "$esphome_api")
-          bluetooth_proxy=$("$layout" file . bluetooth-proxy/build.gradle.kts)
+          bluetooth_proxy=$("$layout" file . libs/bluetooth-proxy/build.gradle.kts)
           bluetooth_proxy=$(dirname "$bluetooth_proxy")
           python -m venv "$RUNNER_TEMP/esphome-venv"
           "$RUNNER_TEMP/esphome-venv/bin/pip" install --quiet --require-hashes --only-binary :all: \
@@ -269,7 +269,7 @@ jobs:
           # --rerun: Gradle doesn't see MWW_PYTHON, so a cached result must not stand in for a run.
           failed=""
           MWW_PYTHON="$RUNNER_TEMP/mww-venv/bin/python" ./gradlew --no-daemon \
-            :kiosk:testDebugUnitTest --tests sh.edm.s1kiosk.voice.MicroWakeWordClipTest --rerun \
+            :pane-assist:testDebugUnitTest --tests sh.edm.s1kiosk.voice.MicroWakeWordClipTest --rerun \
             || failed=1
           report=$("$GITHUB_WORKSPACE/tools/release/android-layout.sh" file . \
             build/test-results/testDebugUnitTest/TEST-sh.edm.s1kiosk.voice.MicroWakeWordClipTest.xml)

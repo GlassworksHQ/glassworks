@@ -19,7 +19,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.dirname(HERE))
 import apksize as A  # noqa: E402
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
-from pane_ids import pane_ids_in  # noqa: E402
+from pane_ids import main_sources, pane_ids_in  # noqa: E402
 
 PARTS = A.read_json(os.path.join(os.path.dirname(HERE), "parts.json"))
 
@@ -301,7 +301,7 @@ class Comment(unittest.TestCase):
 class Parts(unittest.TestCase):
     def test_every_pane_in_the_code_has_its_parts(self):
         # Ids written as literals and as constants (CameraPane.ID): a pane can't escape its size row (#117).
-        ids = pane_ids_in(os.path.join(ROOT, "app", "kiosk", "src", "main", "java"))
+        ids = pane_ids_in(main_sources(ROOT))
         self.assertIn("camera", ids)
         self.assertEqual(set(), ids - set(PARTS["panes"]), "panes in the code without parts in parts.json")
         self.assertEqual(set(PARTS["panes"]), ids)
