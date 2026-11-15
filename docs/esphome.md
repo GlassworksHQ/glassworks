@@ -504,11 +504,13 @@ usual `--ez camera_enabled true` on the main activity.
        The summary says so while an update waits.
      - On Android 12+ the session asks for no user action (`setRequireUserAction(USER_ACTION_NOT_REQUIRED)`,
        with the `UPDATE_PACKAGES_WITHOUT_USER_ACTION` permission), and the status is "Installing
-       1.2.3 without a tap". Android can still ask: when "Install unknown apps" isn't allowed, or
-       when the new APK targets too old an API for the device
-       ([frames/generic-android](../frames/generic-android/README.md#updates)). Then the status
-       becomes "Installing 1.2.3: waiting for a tap on the screen" (`STATUS_PENDING_USER_ACTION`),
+       1.2.3 without a tap". Android can still ask when the new APK targets too old an API for
+       the device ([frames/generic-android](../frames/generic-android/README.md#updates)). Then the
+       status becomes "Installing 1.2.3: waiting for a tap on the screen" (`STATUS_PENDING_USER_ACTION`),
        and the app shows Android's confirmation.
+     - If "Install unknown apps" isn't allowed for the app, Android doesn't ask: it refuses the
+       session (`createSession` throws), and the summary starts with "Install of 1.2.3 failed:
+       SecurityException: …". Allow it and install again.
   6. Any failure, or a phase stuck for 30 min (download) or 10 min (verify/install), ends with
      `in_progress` off and the reason on top of the summary.
 - A debug build can't update to a release: the keys differ, and the entity says so.

@@ -126,7 +126,7 @@ hostname.
   tests + review only). The join itself (`WifiProvisioner.connect`) has since been used on panels
   through the web installer's Wi-Fi step, which shares it.
 
-#### Joining the network on Android 10 (API 29) with targetSdk 34
+#### Joining the network on Android 10 (API 29) with targetSdk 35
 
 From AOSP `android10-release` `frameworks/opt/net/wifi` `WifiServiceImpl.java`:
 `addOrUpdateNetwork`, `enableNetwork`, `removeNetwork`, `reconnect` and `getConfiguredNetworks`

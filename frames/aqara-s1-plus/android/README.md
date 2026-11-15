@@ -112,7 +112,7 @@ echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties   # or set ANDROID_H
 # -> frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk
 ```
 
-Toolchain: Gradle 9.8.1 (wrapper), AGP 9.3.3, Kotlin 2.4.20, compileSdk 37.2, targetSdk 34, minSdk 26.
+Toolchain: Gradle 9.8.1 (wrapper), AGP 9.3.3, Kotlin 2.4.20, compileSdk 37.2, targetSdk 35, minSdk 26.
 The new toolchain is forced by GeckoView 159. Its AAR metadata requires compileSdk ≥ 37.2.
 Its transitive `androidx.core` 1.19 requires AGP ≥ 9.1, and it is built with Kotlin 2.4.
 Older AGP 8.x / Kotlin 1.9 setups fail at `checkDebugAarMetadata`.
