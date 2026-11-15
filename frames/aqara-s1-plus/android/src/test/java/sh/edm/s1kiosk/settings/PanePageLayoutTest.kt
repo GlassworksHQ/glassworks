@@ -89,4 +89,36 @@ class PanePageLayoutTest {
         assertEquals("Thread border router", Mockup.label(o, "Thread border router").text.toString())
         assertTrue(Mockup.label(o, "Thread border router").isShown)
     }
+
+    @Test
+    fun aLinkFollowsItsOwnLineWhenAnotherGroupHasOneOfTheSameName() {
+        // CodeRabbit on #301: refreshed links were found by title alone; the key is the group path and the title.
+        var first = "1a"
+        var second = "2a"
+        fun model() = KioskSettingsOverlay.Model(listOf(SettingsSection("p", "P", listOf(
+            SettingsItem.Group("First", listOf(SettingsItem.Link("Status", first) {})),
+            SettingsItem.Group("Second", listOf(SettingsItem.Link("Status", second) {})),
+        ))), "0.4.3")
+        val o = Mockup.show(KioskSettingsOverlay(Mockup.activity())).apply { reload = ::model }
+        o.show(model())
+        Mockup.idle()
+        first = "1b"; second = "2b"
+        o.refresh()
+        assertTrue(Mockup.label(o, "1b").isShown)
+        assertTrue(Mockup.label(o, "2b").isShown)
+    }
+
+    @Test
+    fun statesAndBlueprintsInAGroupAreDrawnByTheirOwnBuilders() {
+        // CodeRabbit on #301: a grouped States or Blueprints hit error("laid out by layOut").
+        val bp = dev.glassworks.pane.Blueprint("p", "panes/p/blueprints/x.yaml", "A blueprint", "What it does.")
+        val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+        o.show(KioskSettingsOverlay.Model(listOf(SettingsSection("p", "P", listOf(SettingsItem.Group("More", listOf(
+            SettingsItem.States("In Home Assistant") { listOf(SettingsItem.StateRow("Base power", "12 W")) },
+            SettingsItem.Blueprints(listOf(bp), { s -> dev.glassworks.pane.blueprintCard(listOf(bp), s, dev.glassworks.pane.BlueprintAccess.Admin(emptyList()), "http://homeassistant.local:8123", "v0.5.0") }, {}),
+        ))))), "0.4.3"))
+        Mockup.idle()
+        assertTrue(Mockup.label(o, "12 W").isShown)
+        assertTrue(Mockup.label(o, "A blueprint").isShown)
+    }
 }

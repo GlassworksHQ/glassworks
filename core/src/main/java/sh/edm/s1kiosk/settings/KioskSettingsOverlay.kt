@@ -409,8 +409,12 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     /** The open page's item called [title] in the model as it is now. */
-    private fun now(title: String): SettingsItem? =
-        model?.sections?.firstOrNull { it.id == current }?.let { flat(it.items) }?.firstOrNull { titleOf(it) == title }
+    private fun now(key: String): SettingsItem? {
+        fun find(items: List<SettingsItem>, prefix: String): SettingsItem? = items.firstNotNullOfOrNull { i ->
+            if (i is SettingsItem.Group) find(i.items, prefix + i.title + "/") else i.takeIf { prefix + SettingsChange.titleOf(it) == key }
+        }
+        return model?.sections?.firstOrNull { it.id == current }?.let { find(it.items, "") }
+    }
 
     private fun flat(items: List<SettingsItem>): List<SettingsItem> =
         items.flatMap { if (it is SettingsItem.Group) flat(it.items) else listOf(it) }
@@ -438,8 +442,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Native -> { addBlock(between(i)); open = null }
             is SettingsItem.States -> { addBlock(states(i)); open = null }
             is SettingsItem.Blueprints -> { addBlock(blueprints(i)); open = null }
-            is SettingsItem.Group -> { addBlock(card(i.title).also { c -> i.items.forEach { addRow(c, it) } }); open = null }
-            else -> addRow(open ?: card(null).also { addBlock(it); open = it }, i)
+            is SettingsItem.Group -> { addBlock(card(i.title).also { c -> i.items.forEach { addRow(c, it, i.title + "/") } }); open = null }
+            else -> addRow(open ?: card(null).also { addBlock(it); open = it }, i, "")
         }
     }
 
@@ -470,22 +474,28 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }, LinearLayout.LayoutParams(-1, -2))
     }
 
-    /** [i] at the end of [c], with a hairline above it unless it is the card's first row. */
-    private fun addRow(c: LinearLayout, i: SettingsItem) {
+    /**
+     * [i] at the end of [c], with a hairline above it unless it is the card's first row. [prefix]: the groups
+     * it sits in, `/`-joined, so a row finds itself again by the pane API's key ([SettingsChange.changeable]).
+     */
+    private fun addRow(c: LinearLayout, i: SettingsItem, prefix: String) {
         if (i is SettingsItem.Group) {
             c.addView(g.label(i.title).apply { tag = LABEL }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(18f); bottomMargin = px(4f) })
-            i.items.forEach { addRow(c, it) }
+            i.items.forEach { addRow(c, it, prefix + i.title + "/") }
             return
         }
         val last = c.getChildAt(c.childCount - 1)
         if (last != null && last.tag != LABEL) c.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)))
         c.addView(when (i) {
-            is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles -> between(i)
-            else -> item(i)
+            // In a group as at the top: each to its own builder.
+            is SettingsItem.States -> states(i)
+            is SettingsItem.Blueprints -> blueprints(i)
+            is SettingsItem.Status, is SettingsItem.Tiles -> between(i)
+            else -> item(i, prefix)
         }, LinearLayout.LayoutParams(-1, -2))
     }
 
-    private fun item(i: SettingsItem): View = when (i) {
+    private fun item(i: SettingsItem, prefix: String = ""): View = when (i) {
         is SettingsItem.Text -> follow(valueRow(i.title, shownOf(i), chevron = i.enabled(), dim = !i.enabled()) { if (i.enabled()) sheet.text(i) { build() } }) { shownOf(i) }
         is SettingsItem.Switch -> toggleRow(i)
         is SettingsItem.Slider -> sliderRow(i)
@@ -493,7 +503,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.TimeRange -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.range(i) { build() } }) { i.shown(i.value()) }
         // A link's line comes with the model, made again on each refresh: follow it (the Device page's radio mode).
         is SettingsItem.Link -> follow(row(i.title, i.detail, chevron = true, dim = i.detail.isEmpty()) { i.open(context) }) {
-            (now(i.title) as? SettingsItem.Link)?.detail ?: i.detail
+            (now(prefix + i.title) as? SettingsItem.Link)?.detail ?: i.detail
         }
         is SettingsItem.Note -> g.text(14.5f, MU).apply { text = i.text(); setLineSpacing(0f, 1.25f); setPadding(0, px(14f), 0, px(14f)) }
         is SettingsItem.Info -> infoRow(i)
