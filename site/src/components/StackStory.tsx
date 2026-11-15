@@ -110,7 +110,10 @@ function KilnCells() {
   );
 }
 
-export function StackStory() {
+/** The hero's status line: the latest release of the reference frame's app. */
+export type StoryRelease = { name: string; version: string; href: string };
+
+export function StackStory({ release }: { release: StoryRelease }) {
   const ref = useRef<HTMLElement>(null);
   const [p, setP] = useState(0);
 
@@ -223,7 +226,14 @@ export function StackStory() {
       <div className={s.sticky}>
         <div className={s.text}>
           <div className={s.hero} style={{ opacity: heroO, transform: `translateY(${-24 * (1 - heroO)}px)` }} inert={heroO < 0.5}>
-            <span className="label">Open source · MPL-2.0</span>
+            <span className={s.status}>
+              <span className={s.statusChip}>
+                <b>Open source</b> MPL-2.0
+              </span>
+              <a className={s.statusChip} href={release.href}>
+                {release.name} <b>{release.version}</b>
+              </a>
+            </span>
             <h1 className={s.h1}>The open core for Home Assistant wall panels.</h1>
             <p className={s.lede}>
               Dashboard, ESPHome device, setup and updates for any wall panel. Everything else is a pane: voice, music,

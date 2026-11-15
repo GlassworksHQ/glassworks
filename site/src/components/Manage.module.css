@@ -1,0 +1,414 @@
+/* The Manage page's parts: cards, rows, tiles and chips (direction A1, approved 2026-11-15). */
+.card {
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-tile);
+  margin-bottom: 18px;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.list {
+  padding: 6px 26px;
+}
+
+.lh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 0 12px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.lh h2 {
+  font-weight: 500;
+  font-size: 17px;
+  letter-spacing: -0.005em;
+}
+
+.lh > span,
+.lh > a {
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.lh > a:hover {
+  color: var(--fg);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--edge);
+  text-decoration: none;
+  min-height: 64px;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.rt {
+  flex: 1;
+  min-width: 0;
+}
+
+.rt > b {
+  display: block;
+  font-weight: 400;
+  font-size: 16.5px;
+}
+
+.rt > span:not(.chips) {
+  display: block;
+  color: var(--muted);
+  font-size: 14.5px;
+}
+
+.chev {
+  color: var(--faint);
+  font-size: 18px;
+  width: 14px;
+  text-align: center;
+  flex: none;
+}
+
+.row em {
+  font-style: normal;
+  color: var(--muted);
+  text-align: right;
+}
+
+a.row:hover .rt > b {
+  color: var(--ink-sky);
+}
+
+.fact {
+  min-height: 56px;
+}
+
+.fact .rt {
+  color: var(--muted);
+}
+
+.fact .rt svg {
+  width: 20px;
+  height: 20px;
+  margin-right: 6px;
+}
+
+.sq {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+  color: var(--fg);
+}
+
+.sq svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sq.lit {
+  background: var(--lit-gradient);
+  color: var(--night);
+}
+
+.thumb {
+  width: 92px;
+  height: 56px;
+  object-fit: contain;
+  flex: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1.4;
+  flex: none;
+}
+
+.chip b {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.chip code {
+  font-size: 11.5px;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.tile {
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-tile);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  text-decoration: none;
+}
+
+a.tile:hover {
+  background: var(--hover);
+}
+
+.tile small {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.tile b {
+  font-weight: 400;
+  font-size: 21px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.tile span {
+  color: var(--muted);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* tiles that are statements, not numbers: the "Why MPL-2.0" trio */
+.trio {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trio .tile b {
+  font-size: 18px;
+  font-weight: 500;
+  white-space: normal;
+}
+
+.trio .tile span {
+  white-space: normal;
+}
+
+.pagehead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin: 6px 0 18px;
+  flex-wrap: wrap;
+}
+
+.pageheadText {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.crumbs {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--faint);
+  flex-wrap: wrap;
+}
+
+.crumbs a {
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.crumbs a:hover {
+  color: var(--fg);
+}
+
+.h1 {
+  font-size: 32px;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.lede {
+  color: var(--muted);
+  font-size: 16px;
+  max-width: 64ch;
+}
+
+.cols2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.cols2 .card:last-child {
+  margin-bottom: 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 14.5px/1 var(--f-sans);
+  text-decoration: none;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--hover);
+}
+
+.btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* Kiln's button: ember is Kiln's colour only */
+.btnKiln {
+  background: var(--ember-gradient);
+  color: #1a0a0a;
+  border-color: transparent;
+}
+
+.btnKiln:hover {
+  background: var(--ember-gradient);
+  opacity: 0.9;
+}
+
+@media (max-width: 1180px) {
+  .tiles:not(.trio) {
+    grid-template-columns: repeat(min(var(--cols, 4), 2), minmax(0, 1fr));
+  }
+}
+
+/* phones: tiles collapse to rows, as on Manage */
+@media (max-width: 900px) {
+  .tiles:not(.trio) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    background: var(--glass);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-tile);
+    padding: 4px 20px;
+  }
+
+  .tiles:not(.trio) .tile {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--edge);
+    gap: 12px;
+  }
+
+  .tiles:not(.trio) .tile:last-child {
+    border-bottom: 0;
+  }
+
+  .tiles:not(.trio) .tile small {
+    color: var(--fg);
+    font-size: 15.5px;
+  }
+
+  .tiles:not(.trio) .tile b {
+    font-size: 14.5px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .tiles:not(.trio) .tile span {
+    display: none;
+  }
+
+  .trio {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .list {
+    padding: 4px 18px;
+  }
+
+  .row {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .fact {
+    align-items: center;
+  }
+
+  .chev {
+    display: none;
+  }
+
+  .thumb {
+    width: 64px;
+    height: 40px;
+  }
+
+  .sq {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .sq svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .cols2 {
+    grid-template-columns: 1fr;
+  }
+
+  .cols2 .card:last-child {
+    margin-bottom: 18px;
+  }
+
+  .h1 {
+    font-size: 28px;
+  }
+}

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { FrameCard } from "@/components/FrameCard";
-import { ClarityCardLine } from "@/components/clarity/Clarity";
+import { FrameRows } from "@/components/FrameRows";
+import { ListCard, PageHead, Row, Sq } from "@/components/Manage";
 import {
   RatingLabel,
   RatingValue,
@@ -23,36 +23,17 @@ export const metadata = pageMetadata({
 
 export default function DevicesPage() {
   return (
-    <div className={`wrap ${s.page}`}>
-      <header className={s.head}>
-        <span className="label">Catalog</span>
-        <h1 className={s.h1}>Devices</h1>
-        <p className={s.lede}>
-          Panels Glassworks runs on, or will. Each one is a frame.
-        </p>
-      </header>
-
-      <ul className={s.grid}>
-        {frames.map((f) => (
-          <li key={f.id}>
-            <FrameCard f={f}>
-              <ClarityCardLine frameId={f.id} />
-            </FrameCard>
-          </li>
-        ))}
-        <li>
-          <a href={links.org} className={s.add}>
-            <span className={s.addPlus} aria-hidden="true">
-              +
-            </span>
-            <h2 className={s.name}>Your panel</h2>
-            <p>
-              Any Android panel can be a frame. A guide to writing one comes
-              with the first release; until then, follow along on GitHub.
-            </p>
-          </a>
-        </li>
-      </ul>
+    <div className={s.page}>
+      <PageHead title="Frames" lede="Devices Glassworks runs on, or will." />
+      <ListCard id="frames" title="Devices" aside={<span>{frames.length} frames</span>}>
+        <FrameRows frames={frames} />
+        <Row
+          href={links.org}
+          lead={<Sq>+</Sq>}
+          title="Your panel"
+          sub="Any Android panel can be a frame. A porting guide is planned."
+        />
+      </ListCard>
 
       <section className={s.section} aria-labelledby="changes">
         <h2 id="changes" className={s.h2}>

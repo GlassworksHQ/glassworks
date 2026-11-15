@@ -1,117 +1,43 @@
-.header {
+/* The page column beside the sidebar, and its footer line. */
+.main {
+  margin-left: var(--side-w);
+  padding: 20px 44px 56px;
+  max-width: 1400px;
+}
+
+.foot {
   display: flex;
-  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
   gap: 16px;
-  padding-block: 22px;
-}
-
-.home {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  border-radius: 8px;
-}
-
-.mark {
-  width: 32px;
-  color: var(--fg);
-}
-
-.word {
-  font-size: 20px;
-  font-weight: 300;
-  letter-spacing: -0.025em;
-}
-
-.nav {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-}
-
-.nav a {
-  text-decoration: none;
-  color: var(--muted);
-  padding: 8px 12px;
-  border-radius: 999px;
-}
-
-.nav a:hover {
-  color: var(--fg);
-  background: var(--glass);
-}
-
-.gh {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--edge);
-}
-
-@media (max-width: 440px) {
-  .ghText {
-    display: none;
-  }
-
-  .nav {
-    gap: 2px;
-  }
-}
-
-.ghIcon {
-  width: 16px;
-  height: 16px;
-}
-
-.footer {
-  display: grid;
-  gap: 18px;
-  padding-block: 32px 48px;
-  margin-top: 40px;
-  border-top: 1px solid var(--edge);
+  padding: 26px 4px 0;
   color: var(--faint);
   font-size: 13px;
-}
-
-.footTop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
   flex-wrap: wrap;
 }
 
-.markSm {
-  width: 24px;
-  color: var(--fg);
+.foot a {
+  color: var(--muted);
 }
 
-.wordSm {
-  font-size: 15px;
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  color: var(--fg);
-}
-
-.footNav {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.footNav a {
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 30;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--bg);
   text-decoration: none;
 }
 
-.footNav a:hover {
-  color: var(--fg);
+.skip:focus {
+  top: 12px;
 }
 
-.legal {
-  max-width: 70ch;
+@media (max-width: 900px) {
+  .main {
+    margin-left: 0;
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px));
+  }
 }

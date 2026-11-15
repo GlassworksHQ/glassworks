@@ -2,7 +2,8 @@
  * Glassworks tokens. Kept in one file so it can move into a shared
  * @glassworks/brand package when Kiln is rebuilt (see planning/site.md).
  *
- * Daylight is the default; night applies with the OS dark setting.
+ * The theme follows the OS. The sidebar's toggle pins one with <html data-theme="light|dark">,
+ * so night is written twice below: once for the OS setting, once for the pin.
  * "Screen" tokens never change: the panel, app icon and hero tile are always night.
  */
 :root {
@@ -18,6 +19,8 @@
   --ok-ink: #047857;
   --work-ink: #b45309;
   --glow-a: 10%;
+  --hover: rgba(16, 20, 32, 0.05);
+  --code-bg: rgba(16, 20, 32, 0.05);
 
   /* light and heat (theme-independent) */
   --sky: #38bdf8;
@@ -48,10 +51,11 @@
   --gutter: max(16px, env(safe-area-inset-left, 0px));
   --gutter-r: max(16px, env(safe-area-inset-right, 0px));
   --measure: 1120px;
+  --side-w: 272px;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0a0b0f;
     --bg-2: #111319;
     --glass: rgba(255, 255, 255, 0.045);
@@ -63,8 +67,27 @@
     --ok-ink: #34d399;
     --work-ink: #fbbf24;
     --glow-a: 14%;
+    --hover: rgba(255, 255, 255, 0.06);
+    --code-bg: rgba(255, 255, 255, 0.05);
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0a0b0f;
+  --bg-2: #111319;
+  --glass: rgba(255, 255, 255, 0.045);
+  --edge: rgba(255, 255, 255, 0.08);
+  --fg: #f4f4f5;
+  --muted: #a1a1aa;
+  --faint: #6b6b74;
+  --ink-sky: #7dd3fc;
+  --ok-ink: #34d399;
+  --work-ink: #fbbf24;
+  --glow-a: 14%;
+  --hover: rgba(255, 255, 255, 0.06);
+  --code-bg: rgba(255, 255, 255, 0.05);
+  color-scheme: dark;
 }
 
 *,

@@ -3,8 +3,11 @@ import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/seo";
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { MarkDefs } from "@/components/Mark";
-import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { Shell } from "@/components/shell/Shell";
+import { Sidebar } from "@/components/shell/Sidebar";
+import { THEME_SCRIPT } from "@/components/shell/ThemeToggle";
+import chrome from "@/components/chrome.module.css";
 import "./globals.css";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "greek"] });
@@ -30,12 +33,22 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
+    // data-theme is set before paint from the visitor's pick, so React must not fight it
+    <html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <MarkDefs />
-        <SiteHeader />
-        <main>{children}</main>
-        <SiteFooter />
+        <a href="#content" className={chrome.skip}>
+          Skip to content
+        </a>
+        <Shell nav={<Sidebar />}>
+          <main id="content" className={chrome.main}>
+            {children}
+            <SiteFooter />
+          </main>
+        </Shell>
       </body>
     </html>
   );

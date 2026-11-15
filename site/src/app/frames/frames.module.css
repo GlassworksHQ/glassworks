@@ -1,88 +1,19 @@
 .page {
   display: grid;
-  gap: 56px;
-  padding-block: 32px 40px;
-}
-
-.head {
-  display: grid;
-  gap: 14px;
-}
-
-.h1 {
-  font-size: clamp(34px, 5vw, 50px);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-}
-
-.lede {
-  font-size: 17px;
-  color: var(--muted);
-  max-width: 56ch;
-}
-
-.grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.grid > li {
-  display: grid;
-}
-
-.name {
-  font-size: 18px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-.add {
-  display: grid;
-  gap: 10px;
-  align-content: center;
-  justify-items: start;
-  padding: 28px;
-  border-radius: var(--r-tile);
-  border: 1px dashed color-mix(in srgb, var(--fg) 24%, transparent);
-  text-decoration: none;
-  color: inherit;
-  min-height: 240px;
-}
-
-.add:hover {
-  border-color: var(--sky);
-}
-
-.add p {
-  font-size: 14px;
-  color: var(--muted);
-  max-width: 44ch;
-}
-
-.addPlus {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  font-weight: 300;
-  border: 1px solid var(--edge);
-  background: var(--glass);
+  gap: 18px;
 }
 
 .section {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+  margin-top: 8px;
 }
 
 .h2 {
-  font-size: clamp(24px, 3vw, 32px);
-  line-height: 1.15;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  padding: 0 4px;
 }
 
 .tableWrap {
@@ -184,10 +115,4 @@
   font-size: 13.5px;
   color: var(--faint);
   max-width: 70ch;
-}
-
-@media (max-width: 760px) {
-  .grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

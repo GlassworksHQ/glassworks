@@ -148,61 +148,13 @@
   background: color-mix(in srgb, var(--amber) 16%, transparent);
 }
 
-/* ---------- the chip near the top ---------- */
-
-.chip {
-  display: inline-flex;
-  gap: 9px;
-  align-items: center;
-  padding: 3px 14px 3px 3px;
-  border-radius: 999px;
-  border: 1px solid var(--edge);
-  background: var(--glass);
-  color: var(--fg);
-  text-decoration: none;
-}
-
-.chip:hover {
-  border-color: color-mix(in srgb, var(--sky) 40%, var(--edge));
-}
-
 .chip .word {
   font-size: 11px;
   color: var(--fg);
 }
 
-.chipDim {
-  font-size: 13px;
-  color: var(--faint);
-}
-
-.chipProv {
-  font-size: 13px;
-  color: var(--work-ink);
-}
-
-/* ---------- the catalog card's line ---------- */
-
-.card {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding-top: 14px;
-  border-top: 1px solid var(--edge);
-}
-
-.cardText {
-  display: grid;
-  gap: 1px;
-}
-
 .cardText .word {
   font-size: 11px;
-}
-
-.cardSub {
-  font-size: 13px;
-  color: var(--muted);
 }
 
 /* ---------- the panel ---------- */
@@ -518,13 +470,21 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  .badgeLight {
+  :root:not([data-theme="light"]) .badgeLight {
     display: none;
   }
 
-  .badgeDark {
+  :root:not([data-theme="light"]) .badgeDark {
     display: block;
   }
+}
+
+:root[data-theme="dark"] .badgeLight {
+  display: none;
+}
+
+:root[data-theme="dark"] .badgeDark {
+  display: block;
 }
 
 @media (max-width: 760px) {
