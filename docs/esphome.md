@@ -691,7 +691,7 @@ with the Python TFLite runtime that the patched model gives bit-identical output
 ```sh
 python3 -m venv /tmp/esphome-venv && /tmp/esphome-venv/bin/pip install aioesphomeapi==46.25.0
 MODELS_CACHE=/tmp/oww-models tools/voice/fetch-models.sh --no-push
-ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gradlew :kiosk:testDebugUnitTest
+ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gradlew test
 ```
 
 - `EspHomeApiTest`: runs the API server (plaintext and Noise) on the JVM against the real

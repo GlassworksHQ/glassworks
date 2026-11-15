@@ -81,8 +81,8 @@ class MicroDetectorTest {
  * from the same features, checked 2026-11-12). The models are fetched by [ModelFetcher.micro] into
  * `~/.cache/s1kiosk/microwakeword-<commit>` (or MWW_MODELS_DIR).
  *
- *     uv venv -p 3.12 /tmp/mww-venv && uv pip install -p /tmp/mww-venv/bin/python --require-hashes -r kiosk/mww-test-requirements.txt
- *     MWW_PYTHON=/tmp/mww-venv/bin/python ./gradlew :kiosk:testDebugUnitTest --tests '*MicroWakeWordClipTest*'
+ *     uv venv -p 3.12 /tmp/mww-venv && uv pip install -p /tmp/mww-venv/bin/python --require-hashes -r panes/assist/mww-test-requirements.txt
+ *     MWW_PYTHON=/tmp/mww-venv/bin/python ./gradlew :pane-assist:testDebugUnitTest --tests '*MicroWakeWordClipTest*'
  *
  * Skipped when MWW_PYTHON is not set. CI runs it (pr.yml, wake-word job) and fails if it skipped.
  */

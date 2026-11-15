@@ -11,7 +11,7 @@ import java.nio.ByteOrder
  * Patches the real melspectrogram.tflite (needs the models on the host):
  *
  *     MODELS_CACHE=/tmp/oww-models tools/voice/fetch-models.sh --no-push
- *     OWW_MODELS_DIR=/tmp/oww-models ./gradlew :kiosk:testDebugUnitTest
+ *     OWW_MODELS_DIR=/tmp/oww-models ./gradlew :pane-assist:testDebugUnitTest
  *
  * The patched copy is written next to the originals as melspectrogram.patched.tflite so it can be
  * checked with the Python TFLite runtime (allocate without resize, same outputs).
