@@ -3,17 +3,21 @@
 
 What it touches on the device:
   device     read-only (getprop, /proc, dumpsys, wm size).
-  synthetic  `am start` the app if it isn't running, then `am start --es open <page>` (one-off
-             navigation; the saved dashboard URL is not changed), `--es screen on` during each step's warm-up, and `input tap` on the test
-             page's tap target when --taps > 0.
+  hold       `am start --ez test_hold true --ei test_hold_s <s>`, the kiosk's test hold (#240): the
+             screen on, in the app's memory only (no setting changes), until it expires, the app
+             stops, or `hold --off` (`--ez test_hold false`). Then reads logcat for the kiosk's answer.
+  synthetic  `am start` the app if it isn't running, then the test hold, then `am start --es open
+             <page>` (one-off navigation; the saved dashboard URL is not changed), and `input tap` on
+             the test page's tap target when --taps > 0.
   coldstart  `input keyevent KEYCODE_WAKEUP` (the app's own wake intent would start it), then
              `am force-stop` the app. A home-app kiosk is relaunched by the system; otherwise
              `am start -W` starts it. Either way it comes back on the saved dashboard.
-  refstart   As coldstart; once the kiosk's own page has finished, `am start --es open` each
-             reference dashboard in turn (one-off; the saved URL is not changed), `--es screen on`
-             at each warm-up, `input tap` on its toggle when --taps > 0, and `input swipe` where the
-             page asks (only on our page, only for the run's nonce).
-  idle       `--es screen on` before each window; otherwise read-only.
+  refstart   As coldstart, with `input keyevent KEYCODE_WAKEUP` through the restart; once the kiosk's
+             own page has finished, the test hold again (the restart ended it), then each reference
+             dashboard in turn (opened by the fake Home Assistant; the saved URL is not changed),
+             `input tap` on its toggle when --taps > 0, and `input swipe` where the page asks (only
+             on our page, only for the run's nonce).
+  idle       The test hold before the sample; otherwise read-only.
 Everything it writes goes to --out on this machine. It records no URLs, hosts or tokens.
 """
 import argparse
@@ -44,9 +48,11 @@ class Device:
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
         return r.stdout
 
-    def wake(self):
-        subprocess.Popen(self.adb + ["shell", f"am start -n {self.component} --es screen on"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    def hold(self):
+        """The kiosk's test hold again, for TEST_HOLD_S from now: after a restart ended it, or before a
+        part that may outlast what is left of it. run.sh checked the kiosk takes it (cmd_hold). It
+        returns once adb has sent it, so it never lands in a view being measured."""
+        self.sh(f"am start -n {self.component} {HOLD_ON}")
 
     def nudge(self):
         """Android's own wake key, for while the kiosk is stopped or starting: the kiosk's intent
@@ -135,7 +141,7 @@ def cmd_synthetic(dev, a):
     if not dev.sh(f"pidof {dev.package}").strip():
         dev.sh(f"am start -n {dev.component}")
         C.sleep(20)
-    dev.wake()
+    dev.hold()
     lc = dev.logcat()
     dev.sh(f"am start -n {dev.component} --es open '{a.url}'")
     deadline = C.now() + a.timeout
@@ -160,9 +166,7 @@ def cmd_synthetic(dev, a):
             pl["mono"] = rec["mono"]
             seen.set()
             t = pl.get("t")
-            if t == "warmup":
-                dev.wake()
-            elif t == "measure":
+            if t == "measure":
                 measure_mono = rec["mono"]
             elif t == "step" and measure_mono is not None:
                 period, presents = dev.sf()
@@ -257,6 +261,34 @@ def cmd_panes(dev, a):
     sys.exit(0 if res["ok"] else 1)
 
 
+# The kiosk's test hold (#240): the screen on at day brightness, past night dimming and the idle
+# timeout, for TEST_HOLD_S. It lives in the app's memory, so it ends with the process: the runner sends
+# it again after every restart, and before each part. The app logs it as TEST_HOLD_RE.
+TEST_HOLD_S = 1800
+HOLD_ON = f"--ez test_hold true --ei test_hold_s {TEST_HOLD_S}"
+TEST_HOLD_RE = re.compile(r"test hold (?:on|renewed) for \d+ s")
+
+
+def cmd_hold(dev, a):
+    """The kiosk's test hold, checked: exit 0 once its log says the hold is on, 1 if it says nothing
+    within --timeout (an app before #240 ignores the extra). --off ends it, unchecked (exit trap)."""
+    if a.off:
+        dev.sh(f"am start -n {dev.component} --ez test_hold false")
+        return
+    mark = last_mono(dev.sh("logcat -d -v monotonic -t 1", timeout=60))
+    dev.sh(f"am start -W -n {dev.component} {HOLD_ON}", timeout=120)
+    end = C.now() + a.timeout
+    while True:
+        for line in dev.sh("logcat -d -v monotonic", timeout=120).splitlines():
+            rec = P.parse_logcat_line(line)
+            if rec and (mark is None or rec["mono"] > mark) and TEST_HOLD_RE.search(rec["msg"]):
+                print(json.dumps({"hold_s": TEST_HOLD_S, "said": rec["msg"]}))
+                return
+        if C.now() >= end:
+            sys.exit(1)
+        C.sleep(1)
+
+
 # Decoders, from logcat (refstart's note_media). MediaCodec and CCodec are Android's own; omx_vdec_aw
 # and omx_vdec are the Allwinner decoder's (the S1), read 2026-11-13 from the panel's logcat.
 MEDIA_TAGS = {"MediaCodec", "CCodec", "omx_vdec_aw", "omx_vdec"}
@@ -319,21 +351,15 @@ PAGE_RE = re.compile(r"GeckoView:(PageStart|PageStop) uri=(\S+)")
 # runs no animation frames and slows its timers, so nothing timed then is the panel's (smoke10: the
 # kiosk's 20 s night idle timeout held light's view switch back 22 s and stopped heavy).
 SLEEP_RE = re.compile(r"PowerManagerService.*Going to sleep|Going to sleep due to")
-# While a view opens, and between views, the runner sends the kiosk's own wake intent this often, so
-# its idle timeout (20 s at night on the S1) never turns the screen off. Not between a view's warm-up
-# and done: its taps and swipes are touches, which reset the timeout, and nothing extra lands there.
-KEEP_AWAKE_S = float(os.environ.get("GW_PERF_KEEP_AWAKE_S", "8"))     # the off-device test shortens it
-# A live view that hasn't been touched (no tap, swipe or wake) for this long gets the wake intent too:
-# normal views tap or swipe every few seconds, but a page stuck on a busy panel can outlast the
-# kiosk's idle timeout, and with the screen off nothing it measures is the panel's (#202, smoke 7:
-# heavy went 120 s without a gesture, and the screen went off).
-# 10 s, under the kiosk's 20 s night timeout with room for a slow `adb shell input` (2.4 to 4.7 s a
-# command on a busy S1): s1rtc5 run 1 (23:50) lost heavy's screen 16 to 20 s after its last tap, while
-# the page waited out its camera window before the swipes, and the wake came 14 s later (it was 30 s).
-LIVE_IDLE_WAKE_S = float(os.environ.get("GW_PERF_LIVE_IDLE_WAKE_S", "10"))
-# From the force-stop until the restart page is done (and through a recovery's restart), the wake key
-# this often, and once at the stop and once at the relaunch: s1rtc7 run 2 lost the screen 20.4 s after
-# the stop, before the kiosk's first frame, which then waited 280 s for the screen to come back.
+# Once the restart page is done, the kiosk's test hold keeps the screen on through the views (#240).
+# Before it, the wake intents every 8 s and a live view's after 10 s without a touch did, and still
+# lost it: s1rtc5 run 1 (23:50) lost heavy's screen 16 to 20 s after its last tap, while the page
+# waited out its camera window before the swipes.
+# From the force-stop until the restart page is done (and through a recovery's restart), the hold has
+# died with the app, so Android's wake key this often, and once at the stop and once at the relaunch:
+# s1rtc7 run 2 lost the screen 20.4 s after the stop, before the kiosk's first frame, which then
+# waited 280 s for the screen to come back. The kiosk's own intent would start the stopped app and
+# change the restart being measured.
 RESTART_WAKE_S = float(os.environ.get("GW_PERF_RESTART_WAKE_S", "8"))
 # The CPU clock each view ran at (detail, #244: the S1's power HAL held 1.2 of its 1.608 GHz): every
 # core's scaling_cur_freq this often while a view is open, and each core's cpuinfo_max_freq once.
@@ -433,32 +459,19 @@ def cmd_coldstart(dev, a):
             stop.wait(C.real(1.0))
 
     def keep_awake():
-        """The kiosk's wake intent, every KEEP_AWAKE_S, from the restart page's end until the last view
-        is done; while a view is live (between its warm-up and its done), only once nothing has touched
-        the panel for LIVE_IDLE_WAKE_S. Checked every second (or more often), so neither waits on the
-        other's period."""
-        last = last_nudge = 0.0
+        """Android's wake key through the restart (and a recovery's). After it, the test hold (hold)."""
+        last_nudge = 0.0
         relaunch_seen = False
-        while not stop.wait(C.real(min(1.0, KEEP_AWAKE_S, LIVE_IDLE_WAKE_S / 2, RESTART_WAKE_S / 2))):
-            if not st.get("restart_done_at") or st.get("recovering"):
-                # The restart (or a recovery's): the wake key, at once when the app comes back up.
-                relaunched = res["proc_mono"] is not None and not relaunch_seen
-                relaunch_seen = relaunch_seen or relaunched
-                if relaunched or C.now() - last_nudge >= RESTART_WAKE_S:
-                    last_nudge = C.now()
-                    dev.nudge()
-                    res["restart_wakes"] = res.get("restart_wakes", 0) + 1
+        while not stop.wait(C.real(min(1.0, RESTART_WAKE_S / 2))):
+            if st.get("restart_done_at") and not st.get("recovering"):
                 continue
-            if st.get("restart_done_at") and not st.get("live") and not st.get("break_after"):
-                if C.now() - last < KEEP_AWAKE_S:
-                    continue
-                last = C.now()
-                dev.wake()
-                res["wakes"] = res.get("wakes", 0) + 1
-            elif st.get("live") and C.now() - max(st.get("touched_at", 0), st.get("live_at", 0)) > LIVE_IDLE_WAKE_S:
-                dev.wake()
-                st["touched_at"] = C.now()
-                res.setdefault("live_wakes", []).append([st["current"][0] if st["current"] else None, round(C.now(), 1)])
+            # The wake key at once when the app comes back up, and every RESTART_WAKE_S.
+            relaunched = res["proc_mono"] is not None and not relaunch_seen
+            relaunch_seen = relaunch_seen or relaunched
+            if relaunched or C.now() - last_nudge >= RESTART_WAKE_S:
+                last_nudge = C.now()
+                dev.nudge()
+                res["restart_wakes"] = res.get("restart_wakes", 0) + 1
 
     def cpu_clock():
         """[view, time, [kHz per core]] every CPU_CLOCK_S while a view is open, from its open to its
@@ -476,6 +489,11 @@ def cmd_coldstart(dev, a):
                     continue
                 if khz:
                     res.setdefault("cpu_khz", []).append([cur[0], round(C.now(), 1), khz])
+
+    def hold():
+        """The restart ended the test hold: again, before the next view opens."""
+        dev.hold()
+        res["holds"] = res.get("holds", 0) + 1
 
     def quiet_for(secs, cap):
         """Wait until no new frame has been presented for `secs` (at most `cap` s). True if it went quiet."""
@@ -536,10 +554,8 @@ def cmd_coldstart(dev, a):
             cur = st["current"]
             if not cur or cur[1] != nonce:
                 return
-            st["touched_at"] = C.now()
             t0 = time.time()
             dev.sh(cmd)
-            st["touched_at"] = C.now()     # it reached the panel when `input` returned (seconds later)
             # When each gesture went over adb and how long `input` took on the panel, on this
             # computer's clock (fakeha.jsonl's): #202, smoke 5's heavy stalled during the taps. Real
             # seconds even on the tests' scaled clock, as fakeha.jsonl's are (CodeRabbit on #274).
@@ -573,8 +589,6 @@ def cmd_coldstart(dev, a):
             res["tiers"][tier] = {"nonce": nonce, "swipes": []}
         # Protocol 4: the frontend is already loaded on the start view. The fake Home Assistant hands
         # this command to the harness, which opens the view with HA's own navigation (no page load).
-        # The idle timeout starts again now: the view has its full 20 s (and KEEP_AWAKE_S after that).
-        dev.wake()
         q = urllib.parse.urlencode(dict({"view": tier, "nonce": nonce, "run": a.run, "vsync": a.vsync}, **extra))
         try:
             with urllib.request.urlopen(f"{a.url.rstrip('/')}/clarity/open?{q}", timeout=10) as r:
@@ -628,6 +642,7 @@ def cmd_coldstart(dev, a):
                 res["recoveries"][-1].update(back_s=round(C.now() - rv["at"], 1), launch=rv.get("launch") or "relaunched-by-system",
                                              **({"error": pl.get("message")} if pl.get("t") == "error" else {}))
                 st["no_memory"] = True        # RAM right after a restart isn't the views' peak
+                hold()
                 st["next_at"] = C.now()
                 print(f"  the kiosk is back after {res['recoveries'][-1]['back_s']} s; carrying on", file=sys.stderr)
             return False
@@ -695,9 +710,7 @@ def cmd_coldstart(dev, a):
         elif t == "warmup":
             entry["live_mono"] = rec["mono"]
             paused.set()  # no dumpsys while frames are measured, taps are timed or the page scrolls
-            dev.wake()
             st["live"] = True
-            st["live_at"] = C.now()
         elif t == "measure":
             st["measure_mono"] = rec["mono"]
             if pl.get("stage") == "updates":
@@ -845,6 +858,7 @@ def cmd_coldstart(dev, a):
             # Protocol 4: the kiosk came back to the reference dashboard and it is usable: open the
             # graded pages once the screen is still (the next_at branch below).
             res["own_page_state"] = "reference"
+            hold()
             st["next_at"] = C.now()
         if ref and st["current"] is None and st["engine_at"] and not st.get("restart_done_at") and not st["opened"] \
                 and not res.get("restart_page"):
@@ -968,12 +982,8 @@ def cmd_idle(dev, a):
         # A reference dashboard (no nonce: the harness only says it is usable, and the live updates
         # stay off), opened one-off as the graded pages are.
         dev.sh(f"am start -n {dev.component} --es open '{a.url}'")
-    end = C.now() + a.settle
-    while C.now() < end:
-        dev.wake()
-        C.sleep(min(KEEP_AWAKE_S, max(0, end - C.now())))
-    dev.wake()
-    C.sleep(3)
+    dev.hold()
+    C.sleep(a.settle + 3)
     pids = dev.pids(radio)
     ncpu = int(dev.sh("nproc").strip() or 1)
     # Where the log is now, so a screen that goes off in the window can be found in it afterwards.
@@ -983,20 +993,14 @@ def cmd_idle(dev, a):
     period, history = dev.sf()
     newest_before = max(history, default=0)
     presents = set()
-    t_end, woke = C.now() + a.window, C.now()
+    t_end = C.now() + a.window
     while C.now() < t_end:
         C.sleep(1.5)
-        if C.now() - woke >= KEEP_AWAKE_S:
-            # The kiosk's idle timeout (20 s at night) is shorter than the settle and the window:
-            # keep the screen on through the window too (s1v7: off 0.14 s before its end).
-            dev.wake()
-            woke = C.now()
         p, ts = dev.sf()
         period = p or period
         presents.update(t for t in ts if t > newest_before)
     after = cpu_snapshot(dev, pids)
     log = dev.sh("logcat -d -v monotonic", timeout=120)
-    dev.wake()
     mem = memory_sample(dev, radio)
     write_json(os.path.join(a.out, f"idle-{a.label}-{a.run}.json"), dict({
         "label": a.label, "run": a.run, "window_s": a.window, "ncpu": ncpu,
@@ -1043,7 +1047,8 @@ def memory_sample(dev, radio, summaries=True):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["device", "synthetic", "refstart", "coldstart", "idle", "panes"])
+    ap.add_argument("cmd", choices=["device", "hold", "synthetic", "refstart", "coldstart", "idle", "panes"])
+    ap.add_argument("--off", action="store_true", help="hold: end the test hold")
     ap.add_argument("--set", help="panes: the kiosk's pane extras, extra=true|false,...")
     ap.add_argument("--tries", type=int, default=3, help="panes: attempts")
     ap.add_argument("--serial", default=os.environ.get("ANDROID_SERIAL"))
@@ -1074,11 +1079,11 @@ def main():
     a = ap.parse_args()
     if a.timeout is None:
         # refstart: room for views that time out (VIEW_DEADLINE_S each) and the restarts after them.
-        a.timeout = {"coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
+        a.timeout = {"hold": 15, "coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
     os.makedirs(a.out, exist_ok=True)
     dev = Device(a.serial, a.package, a.activity)
     C.check_device(lambda name: dev.sh(f"getprop {name}"))
-    {"device": cmd_device, "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
+    {"device": cmd_device, "hold": cmd_hold, "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
      "idle": cmd_idle, "panes": cmd_panes}[a.cmd](dev, a)
 
 

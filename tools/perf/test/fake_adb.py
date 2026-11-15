@@ -66,8 +66,36 @@ def wall_minus_mono():
     return WALL_MINUS_MONO[0]
 
 
+def held():
+    return (state("test_hold.json") or 0) > C.now()
+
+
+def test_hold(cmd):
+    """The kiosk's test hold (#240), in its memory: the screen on until it ends, expires or the app
+    stops, logged as the kiosk logs it. FAKE_NO_TEST_HOLD: a kiosk before #240, which ignores it."""
+    if os.environ.get("FAKE_NO_TEST_HOLD"):
+        return
+    was = held()
+    if "--ez test_hold true" in cmd:
+        s = int(re.search(r"--ei test_hold_s (\d+)", cmd).group(1))
+        save("test_hold.json", C.now() + s)
+        save("awake_at.json", C.now())       # it wakes the screen
+        save("asleep.json", False)
+        said = f"test hold {'renewed' if was else 'on'} for {s} s"
+    elif was:
+        save("test_hold.json", None)
+        save("awake_at.json", C.now())       # the idle timeout counts from the end
+        said = "test hold off (ended)"
+    else:
+        return
+    save("hold_log.json", state("hold_log.json", []) + [[now(), said]])
+
+
 def shell(cmd):
-    if os.environ.get("FAKE_SCREEN_SLEEP_S") and ("KEYCODE_WAKEUP" in cmd or "--es screen on" in cmd
+    if cmd.startswith("am start") and "--ez test_hold " in cmd:
+        test_hold(cmd)
+        return "Starting: Intent\nStatus: ok\nComplete\n" if " -W " in cmd else "Starting: Intent\n"
+    if os.environ.get("FAKE_SCREEN_SLEEP_S") and ("KEYCODE_WAKEUP" in cmd
                                                    or cmd.startswith(("input swipe", "input tap"))):
         save("awake_at.json", C.now())       # what keeps the fake screen on (a wake, a touch)
         save("asleep.json", False)
@@ -115,6 +143,8 @@ def shell(cmd):
             # FAKE_VOICE_LOST: as S1 Kiosk 0.4.3, which saves voice_enabled asynchronously and exits
             # to restart at once, so the write is lost.
             save("intents.json", state("intents.json", []) + [dict(ez)])
+            if ("restart", "true") in ez:
+                save("test_hold.json", None)     # the hold dies with the process
             keep = {k: v for k, v in ez if k != "restart" and not (k == "voice_enabled" and os.environ.get("FAKE_VOICE_LOST"))}
             save("settings.json", dict(state("settings.json", {}), **keep))
         m = re.search(r"--es open '([^']+)'", cmd)
@@ -148,6 +178,7 @@ def shell(cmd):
             # One before the sample's window (an earlier night, not this sample's) and one in it.
             out.insert(0, f"{t - 600:10.3f}   1919   1920 I PowerManagerService: Going to sleep due to timeout (uid 1000)...")
             out.append(f"{t - 0.5:10.3f}   1919   1920 I PowerManagerService: Going to sleep due to device_admin (uid 1000)...")
+        out += [f"{at:10.3f}  31236  31236 I S1Kiosk.Screen: {said}" for at, said in state("hold_log.json", [])]
         if " -t 1" in cmd:
             out = [f"{t - 2:10.3f}      1      1 I old: the last line"]
         return "\n".join(out) + "\n"
@@ -232,6 +263,7 @@ def shell(cmd):
     if cmd.startswith("wm density"):
         return "Physical density: 240\n"
     if cmd.startswith("am force-stop"):
+        save("test_hold.json", None)         # the hold dies with the process
         save("stopped.json", True)
         save("session_up.json", False)
         if os.environ.get("FAKE_HOME_RELAUNCH"):
@@ -600,7 +632,7 @@ def screen_timeout(after_s):
         awake_at = state("awake_at.json")
         if awake_at is None:
             continue                     # unreadable: no evidence the screen has been idle
-        if not state("asleep.json") and C.now() - awake_at > after_s:
+        if not state("asleep.json") and not held() and C.now() - awake_at > after_s:
             save("asleep.json", True)
             line("PowerManagerService", "Going to sleep due to timeout (uid 1000)...", pid=1919)
 

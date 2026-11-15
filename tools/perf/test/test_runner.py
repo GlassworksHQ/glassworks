@@ -220,10 +220,10 @@ class Runner(unittest.TestCase):
         self.assertEqual(inputs, ["input keyevent KEYCODE_WAKEUP", "input swipe 720 612 720 108 300", "input tap 720 360"])
         self.assertEqual(sum(1 for c in shell if c == "input tap 720 360"), 12)    # 2 on each page and HLS copy (#202)
         self.assertEqual(sum(1 for c in shell if c.startswith("input swipe ")), 8)            # 2 on each page; none on a copy
-        forbidden = re.compile(r"(^|[;&|]\s*)(settings|svc|cmd|setprop|am broadcast|pm (?!path\b))|--ez ")   # no pane is switched without --pane-ram
+        forbidden = re.compile(r"(^|[;&|]\s*)(settings|svc|cmd|setprop|am broadcast|pm (?!path\b))|--ez (?!test_hold )")   # no pane is switched without --pane-ram
         self.assertEqual([c for c in shell if forbidden.search(c)], [])
         extras = {m for c in shell for m in re.findall(r"--e\w \w+", c)}
-        self.assertEqual(extras, {"--es open", "--es screen", "--es url"})
+        self.assertEqual(extras, {"--es open", "--es url", "--ez test_hold", "--ei test_hold_s"})
         opens = [re.search(r"--es open '([^']+)'", c).group(1) for c in shell if "--es open" in c]
         # The animation test page and the idle sample's page load; the graded views don't: they open
         # inside the loaded frontend, by navigation, on the runner's command to the fake HA.
@@ -257,8 +257,21 @@ class Runner(unittest.TestCase):
         self.assertEqual(self.rep["real_use"]["launch"], ["am-start"])
 
     def test_the_dashboard_comes_back_last(self):
-        starts = [c for c in self.commands if c.startswith("shell am start") and "screen on" not in c]
+        starts = [c for c in self.commands if c.startswith("shell am start") and "test_hold" not in c]
         self.assertTrue(starts[-1].startswith("shell am start -W"), starts[-3:])
+
+    def test_the_test_hold_comes_first_and_ends_last(self):
+        """#240: the kiosk's test hold keeps the screen on, set before anything else reaches the kiosk
+        and ended by the exit trap. No wake intent."""
+        am = [c for c in self.commands if c.startswith("shell am ")]
+        hold = "--ez test_hold true --ei test_hold_s 1800"
+        self.assertTrue(am[0].startswith("shell am start -W") and am[0].endswith(hold), am[:2])
+        self.assertTrue(am[-1].endswith("--ez test_hold false"), am[-2:])
+        self.assertEqual([c for c in self.commands if "--es screen" in c], [])
+        # Again after each restart, and before each part: the restart ended the last one.
+        stops = [i for i, c in enumerate(self.commands) if c.startswith("shell am force-stop")]
+        for i in stops:
+            self.assertTrue(any(c.endswith(hold) for c in self.commands[i + 1:]), self.commands[i])
 
 
 def fake_env(tmp, **extra):
@@ -853,17 +866,16 @@ class Restart(unittest.TestCase):
 
     def test_a_view_that_cant_finish_times_out_and_the_run_is_still_graded(self):
         """#202, smoke 7: heavy went live and never finished; the run used to wait 900 s and be dropped.
-        Now the view times out at the deadline, a live view nothing touches gets the wake intent so the
-        screen stays on, what heavy measured stands, and what it didn't fails: measured, not missing,
-        so the grade isn't provisional for it."""
-        p, c, _ = self.run_short(90, FAKE_HANG_LIVE="heavy", GW_PERF_STAGE_IDLE_S="12", GW_PERF_LIVE_IDLE_WAKE_S="2",
-                                 GW_PERF_KEEP_AWAKE_S="0.5")
+        Now the view times out at the deadline, the test hold keeps the screen on while nothing touches
+        it (the fake's sleeps 4 s after the last touch), what heavy measured stands, and what it didn't
+        fails: measured, not missing, so the grade isn't provisional for it."""
+        p, c, _ = self.run_short(90, FAKE_HANG_LIVE="heavy", GW_PERF_STAGE_IDLE_S="12", FAKE_SCREEN_SLEEP_S="4",
+                                 GW_PERF_RESTART_WAKE_S="1")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertIsNone(c["error"])
         self.assertEqual(c["timed_out"], ["heavy"])
         self.assertGreaterEqual(c["tiers"]["heavy"]["timed_out_s"], 12)     # usable, then nothing for 12 s
         self.assertEqual(c["tiers"]["heavy"]["timed_out_after"], "warmup")
-        self.assertIn("heavy", {w[0] for w in c["live_wakes"]})
         self.assertNotIn("screen_off", c)
         self.assertNotIn("recoveries", c)                     # heavy was run 1's last view: nothing to carry on to
         rep = self.build(self.last_out)
@@ -882,11 +894,12 @@ class Restart(unittest.TestCase):
         opened, so the summary was refused. Now the runner restarts the kiosk and opens the rest: the
         view that can't finish fails its own tasks and nothing else."""
         p, c, log = self.run_short(90, fallback="typical-hls", FAKE_HANG_LIVE="typical", GW_PERF_STAGE_IDLE_S="8",
-                                   GW_PERF_LIVE_IDLE_WAKE_S="2", GW_PERF_KEEP_AWAKE_S="0.5", GW_PERF_RECOVER_LAUNCH_S="1")
+                                   GW_PERF_RECOVER_LAUNCH_S="1")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertIsNone(c["error"])
         self.assertEqual(c["timed_out"], ["typical"])
         self.assertEqual(len(c["recoveries"]), 1)
+        self.assertEqual(c["holds"], 2)                      # the restart and the recovery's each ended one
         self.assertEqual((c["recoveries"][0]["after"], c["recoveries"][0]["launch"]), ("typical", "am-start"))
         self.assertTrue(c["tiers"]["heavy"].get("done"))                       # opened after the restart
         self.assertTrue(c["fallback"]["typical-hls"].get("done"))
@@ -918,11 +931,10 @@ class Restart(unittest.TestCase):
         """s1rtc7 run 2: the screen went off 20.4 s after the force-stop, before the kiosk's first
         frame (the S1's 20 s night timeout), and the restart then waited 280 s. Here the fake's
         screen sleeps 4 s after the last wake or touch, through a 9 s restart: the wake key from the
-        stop on keeps it on, and every later phase has its own nudge."""
+        stop on keeps it on, and the test hold after it (#240)."""
         # The fake's screen sleeps 4 s after the last wake or touch, and every nudge comes each second:
         # a 4x margin for a slow CI runner's adb stand-ins. The restart (9 s) outlasts the sleep twice.
-        nudged = dict(FAKE_SCREEN_SLEEP_S="4", FAKE_RESTART_SLOW="9", GW_PERF_RESTART_WAKE_S="1",
-                      GW_PERF_KEEP_AWAKE_S="1", GW_PERF_LIVE_IDLE_WAKE_S="1")
+        nudged = dict(FAKE_SCREEN_SLEEP_S="4", FAKE_RESTART_SLOW="9", GW_PERF_RESTART_WAKE_S="1")
         p, c, _ = self.run_short(90, **nudged)
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertIsNone(c["error"])
@@ -932,6 +944,10 @@ class Restart(unittest.TestCase):
         p, c, _ = self.run_short(90, **dict(nudged, GW_PERF_RESTART_WAKE_S="1000"))
         self.assertEqual(c["screen_off"][0]["during"], "the restart", c.get("screen_off"))
         self.assertIn("first the restart", c["error"])
+        # Without the hold (a kiosk before #240) it goes off in the views, which this run doesn't touch.
+        p, c, _ = self.run_short(90, **dict(nudged, FAKE_NO_TEST_HOLD="1"))
+        self.assertNotIn("the restart", {x["during"] for x in c.get("screen_off", [])}, c.get("screen_off"))
+        self.assertIn("the screen went off during the graded run", c["error"])
 
     def test_a_slow_view_that_keeps_going_isnt_cut_off(self):
         """Protocol 8 (#202, s1rtc4): heavy was usable after 43 s and still working at 300 s, before its
@@ -979,24 +995,19 @@ class Restart(unittest.TestCase):
         self.assertEqual(t["blocking_ms"]["median"], c["tiers"]["typical"]["timed_out_s"] * 1000)
         self.assertIsNone((t.get("usable_ms") or {}).get("median"))
 
-    def test_the_screen_is_kept_awake_while_views_open_but_not_while_live(self):
-        # In real time: it counts wakes against the moment the runner reads the warm-up line, so the
-        # runner's own delay is the margin (CI, 8 at a time, #268; as CpuClock).
-        p, c, log = self.run_short(120, FAKE_SLOW_VIEW="2.5", GW_PERF_KEEP_AWAKE_S="0.7", GW_PERF_TIME_SCALE="1")
+    def test_one_test_hold_after_the_restart_and_no_wake_intent(self):
+        """#240: the hold comes once the restart page is done, before the first view, and nothing
+        else wakes the screen while the views run."""
+        p, c, log = self.run_short(90)
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
-        self.assertGreaterEqual(c["wakes"], 6)                 # about 3 while each slow view opened
-        live = False
-        for line in log:
-            if line.startswith("page warmup"):
-                live, during = True, 0
-            elif line.startswith("page done"):
-                # The runner's own wake at the warm-up, and at most one that came in the moment before
-                # it read the warm-up line (that moment is in the warm-up second, before any window).
-                # Waking while live would be about five a view here (every 0.7 s for 3.5 s).
-                self.assertLessEqual(during, 2, "wakes while the view was live, besides the one at its warm-up")
-                live = False
-            elif live and "--es screen on" in line:
-                during += 1
+        self.assertEqual(c["holds"], 1)
+        holds = [i for i, x in enumerate(log) if "--ez test_hold true" in x]
+        stop = next(i for i, x in enumerate(log) if x.startswith("shell am force-stop"))
+        first_view = next(i for i, x in enumerate(log) if x.startswith("view "))
+        self.assertEqual(len(holds), 1)
+        self.assertLess(stop, holds[0])
+        self.assertLess(holds[0], first_view)
+        self.assertEqual([x for x in log if "--es screen" in x], [])
 
     def test_a_warm_up_view_that_is_also_graded_is_refused(self):
         with FakeHA() as ha:
@@ -1165,7 +1176,22 @@ class FailedColdStart(unittest.TestCase):
         self.assertIsNone(r["app_start_to_dashboard_ms"])
         with open(os.path.join(tmp, "state", "commands.log")) as f:
             shell = [c for c in f.read().splitlines() if c.startswith("shell am ")]
-        self.assertEqual(shell[-2:], ["shell am force-stop sh.edm.s1kiosk", "shell am start -n sh.edm.s1kiosk/.MainActivity"])
+        self.assertEqual(shell[-3:], ["shell am force-stop sh.edm.s1kiosk", "shell am start -n sh.edm.s1kiosk/.MainActivity",
+                                      "shell am start -n sh.edm.s1kiosk/.MainActivity --ez test_hold false"])
+
+
+class NoTestHold(unittest.TestCase):
+    def test_a_kiosk_without_the_test_hold_is_refused_before_anything_changes(self):
+        """#240: a kiosk that ignores `test_hold` would let the screen sleep partway. No fallback."""
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, FAKE_NO_TEST_HOLD="1")
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", port(86),
+                            "--restore-dashboard", RESTORE], env=env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("didn't take Clarity's test hold", p.stderr)
+        with open(os.path.join(state, "commands.log")) as f:
+            am = [c for c in f.read().splitlines() if c.startswith("shell am ")]
+        self.assertEqual([c for c in am if "test_hold" not in c], [])
 
 
 class ReusedOut(unittest.TestCase):
