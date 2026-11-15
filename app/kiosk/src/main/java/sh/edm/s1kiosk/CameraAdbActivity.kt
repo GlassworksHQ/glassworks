@@ -23,7 +23,7 @@ class CameraAdbActivity : Activity() {
         val i = intent
         if (i != null) {
             val c = KioskPrefs(this).camera
-            i.getStringExtra(CameraPrefs.KEY_USE)?.let { c.use = if (it == "snapshots" || it == CameraPrefs.USE_SNAPSHOTS) CameraUse.PRESENCE_AND_SNAPSHOTS else CameraUse.PRESENCE }
+            i.getStringExtra(CameraPrefs.KEY_USE)?.let { c.use = if (it in setOf("snapshots", "camera", CameraPrefs.USE_CAMERA, CameraPrefs.STORED_CAMERA)) CameraUse.PRESENCE_AND_SNAPSHOTS else CameraUse.PRESENCE }
             if (i.hasExtra(CameraPrefs.KEY_PRIVACY)) c.privacy = i.getBooleanExtra(CameraPrefs.KEY_PRIVACY, true)
             if (i.hasExtra(CameraPrefs.KEY_ONVIF)) c.onvif = i.getBooleanExtra(CameraPrefs.KEY_ONVIF, false)
             if (i.hasExtra(CameraPrefs.KEY_SENSITIVITY)) c.sensitivity = i.getIntExtra(CameraPrefs.KEY_SENSITIVITY, c.sensitivity)

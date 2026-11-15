@@ -59,7 +59,7 @@ class CameraPaneTest {
         override fun setMotion(active: Boolean) { motion += active }
     }
 
-    private inner class Rig(permitted: Boolean = true, ownSensor: Boolean = false, random: java.security.SecureRandom = java.security.SecureRandom()) {
+    private inner class Rig(permitted: Boolean = true, ownSensor: Boolean = false, random: java.security.SecureRandom = java.security.SecureRandom(), facts: CameraFacts? = null) {
         val prefs = CameraPrefs(file) { random }
         val camera = Camera()
         val stream = Stream()
@@ -78,6 +78,7 @@ class CameraPaneTest {
             FrameEgress({ now }, { _, _ -> }) {},
             permitted = { allowed }, ownSensor = { ownSensor }, toScreen = { n, r -> screen += n to r }, exec = exec,
             release = { releases++ },
+            facts = facts,
             presenceFactory = { source, onMotion, onProblem ->
                 CameraPresence(source, { prefs.sensitivity }, clock = { now }, post = { it.run() }, after = { _, _ -> },
                     onProblem = onProblem, onMotion = onMotion)
@@ -327,6 +328,23 @@ class CameraPaneTest {
         assertTrue("no entity carries it", r.pane.entities().none { e -> e.name.contains(password) || e.objectId.contains(password) })
     }
 
+    @Test fun homeAssistantSeesPresencePlusCameraWhileTheStoredValueStays() {
+        // Renamed on 2026-11-14 ("snapshots" read as leaving the stream out); panels keep their stored choice.
+        val r = Rig()
+        val select = r.pane.entities().filterIsInstance<sh.edm.esphome.SelectEntity>().single { it.objectId == "camera_use" }
+        fun choose(option: String) = select.command(ProtoMessage(ProtoWriter().fixed32(1, select.key, true).string(2, option).toByteArray()))
+        choose("Presence + camera")
+        assertEquals(CameraUse.PRESENCE_AND_SNAPSHOTS, r.prefs.use)
+        assertEquals("what Home Assistant shows", "Presence + camera", select.shownState())
+        assertEquals("stored as before, so panels keep their choice", "Presence + snapshots", file.getString(CameraPrefs.KEY_USE, null))
+        choose("Presence only")
+        assertEquals(CameraUse.PRESENCE, r.prefs.use)
+        choose("Presence + snapshots")
+        assertEquals("the old name is no option any more", CameraUse.PRESENCE, r.prefs.use)
+        file.edit().putString(CameraPrefs.KEY_USE, "Presence + snapshots").commit()
+        assertEquals("a panel's stored choice still reads", CameraUse.PRESENCE_AND_SNAPSHOTS, r.prefs.use)
+    }
+
     @Test fun applyNeverStartsTheStreamWithoutASignIn() {
         // The plan already asks for one (CameraPlan), and reconcile makes one; this pins apply's own guard.
         val r = Rig()
@@ -334,5 +352,19 @@ class CameraPaneTest {
         r.pane.apply(CameraPlan(detect = true, feedScreen = true, stream = true), signIn = null)
         assertNull(r.stream.running)
         assertEquals(0, r.stream.starts)
+    }
+
+    @Test fun theCameraTileSaysItsOwnRateWhileStreamingWithoutA15FpsRange() {
+        // CodeRabbit on #252: the camera's own rate (null) became 0, and the tile said "Not in use" mid-stream.
+        val own = object : CameraFacts {
+            override val lens = CameraFacts.Lens.FRONT
+            override fun frameRate(): Int? = null
+        }
+        val r = Rig(facts = own)
+        r.pane.start()
+        assertNull(r.pane.reading().frameRate)
+        val streaming = r.pane.reading().copy(watchers = listOf("192.0.2.20"), streaming = true)
+        assertEquals("Its own frame rate", CameraPage.tiles(streaming) { "14:31" }[1].detail)
+        assertEquals("no facts at all: nothing asked", 0, Rig().pane.reading().frameRate)
     }
 }

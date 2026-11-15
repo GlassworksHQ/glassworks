@@ -73,6 +73,7 @@ It will install as a normal app. It doesn't install from Kiln yet.
 | Diagnostics | Planned | Worked out: needs no special hardware. |
 | Bluetooth proxy | Depends on the device | Worked out: needs Bluetooth LE. |
 | Notifications | Planned | Worked out: needs no special hardware. |
+| Camera | Depends on the device | Worked out: needs a camera. |
 | Wall base | No | S1 only. |
 
 "Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).

@@ -105,7 +105,11 @@ class GlassworksRuntime(
                 now = android.os.SystemClock::elapsedRealtime,
             )
             // It requires a camera: without one in the frame's hardware it is CantRun (below), as every pane that lacks its own.
-            val camera = CameraDefinition(prefs.paneFile("camera"))
+            val camera = CameraDefinition(
+                prefs.paneFile("camera"),
+                granted = { app.checkSelfPermission(android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
+                pickers = { c -> sh.edm.s1kiosk.camera.CameraUseCards(c) },
+            )
             val bluetoothProxy = BluetoothProxyDefinition(prefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(app), ::BluetoothProxyPage)
             (listOf(AssistDefinition(prefs.paneFile("assist")), SendspinDefinition(prefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
                 paneFrame.paneDefinitions(app) + camera + DiagnosticsDefinition(prefs.paneFile("diagnostics")))

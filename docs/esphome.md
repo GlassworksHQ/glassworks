@@ -414,10 +414,10 @@ Presence comes from lighting-insensitive motion on the panel; no image leaves it
 
 | Entity | object_id | Category, default | What it does |
 |---|---|---|---|
-| camera `Camera` | `camera` | none, on | A still when Home Assistant asks, in *Presence + snapshots* only, and only over an encrypted connection; an empty image otherwise |
+| camera `Camera` | `camera` | none, on | A still when Home Assistant asks, in *Presence + camera* only, and only over an encrypted connection; an empty image otherwise |
 | binary_sensor `Camera presence` (occupancy) | `camera_presence` | none, on | Someone moving in view; ends 8 s after the last movement. Lighting changes don't count |
 | switch `Camera privacy` | `camera_privacy` | none, on | Closes the camera: no presence, no stills, no stream |
-| select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + snapshots` |
+| select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + camera` (snapshots for Home Assistant, and the stream if you turn it on) |
 | switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*; turned on, it runs with the panel's own sign-in; encrypted connections only |
 | number `Camera sensitivity` | `camera_sensitivity` | config, off | 1 (least) to 10 (most), default 5 |
 | switch `Camera pane` | `camera_pane` | config, off | The pane's on/off (#67) |
@@ -426,15 +426,25 @@ Presence comes from lighting-insensitive motion on the panel; no image leaves it
 the video of a session, and a client that signs in with Basic auth or WS-Security `PasswordText` sends
 the password in a form they can read. Turn it on only on a network you trust ([the limits](research/onvif-rtsp.md#result)).
 
+On the panel, *Settings → Camera* shows how the camera is doing, what it may do (Presence only or
+Presence + camera), Camera privacy and the stream switch, the stream's sign-in, the panel's address
+with the stream's RTSP and ONVIF URLs, and who watches now. First-boot setup has a Camera step under
+Panes that picks the use and asks Android for the camera. While images leave the panel (a still to
+Home Assistant, the stream to a viewer), Android 12 and later show their own camera indicator; on
+older Android the panel shows a small green dot in the top-right corner, over no content. The page's
+*Images out* tile says the same.
+
 **The stream's sign-in is made for each panel.** The first time the stream is turned on without one,
 the panel makes its own: the username `glassworks` and a random 20-character password (letters and
 digits without the ones that read alike, from `SecureRandom`). It is never a default shared between
 panels, and it never changes by itself; clear it and turn the stream on again for a new one. The
-stream never runs without a sign-in. The password is never logged, and no entity or diagnostic
-carries it. Use this sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate
-or UniFi Protect. A client that signs in wrong is refused: the device and media services answer with a
-SOAP `NotAuthorized` fault (Home Assistant then asks you to sign in again), the event service with a
-bare HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. The panel logs the
+stream never runs without a sign-in. The Camera page's *Sign-in* row shows the username; tap it to
+show the password, and again to hide it (editing it on the panel comes with the editable settings,
+#253). The password is never logged, never on the Manage page, and no entity or diagnostic carries
+it. Use this sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate or UniFi
+Protect. A client that signs in wrong is refused: the device and media services answer with a SOAP
+`NotAuthorized` fault (Home Assistant then asks you to sign in again), the event service with a bare
+HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. The panel logs the
 refusal once a minute per client.
 
 The camera's settings are set from adb until the Manage page edits settings (#178), through an

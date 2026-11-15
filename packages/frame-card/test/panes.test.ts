@@ -119,7 +119,7 @@ describe('the real frames', () => {
       timers: ['beta', false], 'time-zone': ['beta', true], 'wall-base': ['alpha', false], 'bluetooth-proxy': ['alpha', true],
       camera: ['no', true],
     });
-    expect(support('lululemon-mirror')).toMatchObject({ diagnostics: ['planned', true], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['planned', true] });
-    expect(support('generic-android')).toMatchObject({ diagnostics: ['planned', true], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['depends', true] });
+    expect(support('lululemon-mirror')).toMatchObject({ diagnostics: ['planned', true], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['planned', true], camera: ['planned', true] });
+    expect(support('generic-android')).toMatchObject({ diagnostics: ['planned', true], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['depends', true], camera: ['depends', true] });
   });
 });
