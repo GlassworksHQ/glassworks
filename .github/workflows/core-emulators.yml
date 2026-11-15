@@ -6,7 +6,7 @@
 # libraries there.
 #
 # Cost: three jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a
-# minute of tests). Only when Android code or this file changes. No secrets; GeckoView isn't in it (the
+# minute of tests). Only when Android code or this file changes, on pull requests and on pushes to main. No secrets; GeckoView isn't in it (the
 # runners' emulators are x86_64, and no frame builds an x86 GeckoView), so the engine is a fake.
 name: Core on emulators
 
@@ -27,6 +27,20 @@ on:
       - '.github/workflows/core-emulators.yml'
   push:
     branches: [main]
+    # The same paths as pull_request's.
+    paths:
+      - 'core/**'
+      - 'pane-api/**'
+      - 'libs/**'
+      - 'panes/**'
+      - 'engines/**'
+      - 'frames/*/android/**'
+      - 'frames/*/panes/**'
+      - 'testing/**'
+      - '*.gradle.kts'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - '.github/workflows/core-emulators.yml'
 
 permissions:
   contents: read
