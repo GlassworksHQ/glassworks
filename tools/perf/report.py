@@ -913,6 +913,14 @@ def task_phrase(task, s_):
         return (f"a camera takes {statistics.median(ff) / 1000:.1f} s to show its first frame and shows {shown:.0f}% of its frames"
                 + (f" ({failed} of {len(runs)} run(s) had a stream that showed no frame)" if failed else "")
                 + (f"; its stalls weren't measured in {na} of {len(runs)} run(s)" if na else ""))
+    if task == "blocking":
+        # Rubric 2: the wait after the draw, its own task; never the open's words (s1rtc10's headline
+        # read "the view takes 1.2 s to open" for a page held back by 2.9 s of blocking).
+        if med("blocking_ms") is None:
+            return "the blocking after the view is drawn wasn't measured"
+        return f"the main thread is blocked for {med('blocking_ms') / 1000:.1f} s after the view is drawn"
+    if task != "load":
+        raise ValueError(f"no words for task {task!r}")
     if med("load_ms") is not None:
         return f"the view takes {med('load_ms') / 1000:.1f} s to open"
     return "opening the view wasn't measured"
