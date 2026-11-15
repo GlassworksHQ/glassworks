@@ -6,16 +6,14 @@ import dev.glassworks.platform.AppBuild
 import dev.glassworks.platform.Platform
 
 /**
- * What the device says about itself over Improv (`RPC_REQUEST_INFO`): firmware, version, chip and name.
+ * What the device says about itself over Improv (`RPC_REQUEST_INFO`): firmware (the app's name), version, chip and name.
  * The name is its friendly name, as Home Assistant shows it.
  */
 object ImprovIdentity {
-    private const val FIRMWARE = "S1 Kiosk"
-
     /** Over BLE. The chip field is the maker, the model and `Build.HARDWARE`: "Aqara Panel Hub S1 Plus/sun50iw10p1". */
     fun ble(frame: Frame, build: AppBuild): List<String> =
-        listOf(FIRMWARE, build.versionName, "${frame.hardware.manufacturer} ${frame.hardware.model}/${Platform.hardware}", frame.friendlyName())
+        listOf(build.product, build.versionName, "${frame.hardware.manufacturer} ${frame.hardware.model}/${Platform.hardware}", frame.friendlyName())
 
     /** Over the adb socket (Improv serial). The chip field is the frame's chip: "Allwinner A133". */
-    fun serial(frame: Frame, build: AppBuild): List<String> = listOf(FIRMWARE, build.versionName, frame.hardware.chip, frame.friendlyName())
+    fun serial(frame: Frame, build: AppBuild): List<String> = listOf(build.product, build.versionName, frame.hardware.chip, frame.friendlyName())
 }

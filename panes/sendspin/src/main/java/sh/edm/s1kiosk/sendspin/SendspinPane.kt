@@ -25,7 +25,7 @@ class SendspinPane(ctx: PaneContext, haBase: () -> String?) : Pane {
         ctx.context, PrefsSsStore(ctx.context),
         SendspinPlayer.Identity(
             name = ctx.device.friendlyName, productName = ctx.device.model, manufacturer = ctx.device.manufacturer,
-            softwareVersion = "S1 Kiosk ${ctx.build.versionName}", macAddress = ctx.device.macAddress,
+            softwareVersion = "${ctx.build.product} ${ctx.build.versionName}", macAddress = ctx.device.macAddress,
         ),
         prefs, haBase, ctx.publishStates,
     )

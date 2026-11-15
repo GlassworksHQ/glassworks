@@ -49,7 +49,7 @@ class UpdateManager(
     private val root = runtime.frame.rootUpdates
     private val exec: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "s1-update").apply { isDaemon = true } }
-    val model = UpdateModel(runtime.build.versionName)
+    val model = UpdateModel(runtime.build.versionName, runtime.build.product)
     private val schedule = CheckSchedule()
     private var etag: String? = null
     private var cachedOffer: UpdateOffer? = null

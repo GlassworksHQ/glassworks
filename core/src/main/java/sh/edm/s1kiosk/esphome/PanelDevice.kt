@@ -203,9 +203,9 @@ class PanelDevice(
             friendlyName = frame.friendlyName(),
             macAddress = mac,
             esphomeVersion = ESPHOME_VERSION,
-            compilationTime = "S1 Kiosk ${runtime.build.versionName}",
+            compilationTime = "${runtime.build.product} ${runtime.build.versionName}",
             manufacturer = frame.hardware.manufacturer,
-            model = "${frame.hardware.model} (S1 Kiosk)",
+            model = "${frame.hardware.model} (${runtime.build.product})",
             voiceFeatures = voiceFeatures(),
             // Home Assistant's "Visit" link on the device page opens the Manage page (#33).
             webserverPort = OAuth.SIGNIN_PORT,

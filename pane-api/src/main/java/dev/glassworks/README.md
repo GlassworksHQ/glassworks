@@ -55,7 +55,7 @@ change until Glassworks v1.
 | Type | What it is |
 |---|---|
 | `Pane` | A feature: its Home Assistant entities, `start`/`stop`, and what it does when the panel changes. |
-| `PaneContext` | What the core gives a pane: the app context, `prefs(namespace)` for its settings, the device identity, the app's `build` (its version; a pane never reads the APK's `BuildConfig`), `publishStates()`, `emit()`, `entitiesChanged()` and `sendEvent()`. |
+| `PaneContext` | What the core gives a pane: the app context, `prefs(namespace)` for its settings, the device identity, the app's `build` (its version and its name, `product`, which a pane announces itself with; a pane never reads the APK's `BuildConfig`), `publishStates()`, `emit()`, `entitiesChanged()` and `sendEvent()`. |
 | `PanelEvent` | Things that happen on the panel: a setting changed, voice took the speaker, a timer changed or finished, Home Assistant subscribed. A pane raises one with `PaneContext.emit`. |
 | `EntityRegistry` | Builds the device's entity list from the core's entities and every pane's, and refuses two entities with the same object id. |
 | `PaneDefinition` | What the core knows about a pane for the whole process, also while it isn't running: its on/off, setup steps, settings sections and adb extras. |

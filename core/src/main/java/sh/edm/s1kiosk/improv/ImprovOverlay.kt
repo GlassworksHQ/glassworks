@@ -111,7 +111,7 @@ class ImprovOverlay(private val ctx: Context) {
                     WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                     WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 PixelFormat.TRANSLUCENT,
-            ).apply { title = "S1 Kiosk Wi-Fi setup" }
+            ).apply { title = "${ctx.glassworks.build.product} Wi-Fi setup" }
             if (runCatching { wm.addView(r, lp) }.onFailure { Log.w(TAG, "overlay addView failed", it) }.isSuccess) {
                 root = r
                 return true

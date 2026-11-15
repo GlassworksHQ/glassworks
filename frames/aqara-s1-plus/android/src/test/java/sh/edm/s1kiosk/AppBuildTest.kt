@@ -110,6 +110,33 @@ class AppBuildTest {
         assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", about.title())
     }
 
+    /**
+     * #23: an app on the core announces itself by its own name, which only [AppBuild.product] carries. The S1
+     * app hands in no name and keeps "S1 Kiosk" (the tests above).
+     */
+    @Test fun anotherAppAnnouncesItsOwnName() {
+        val other = build.copy(product = "Glassworks")
+        val r = KioskApp.runtime(AqaraS1Plus(), other)
+        assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.ble(r.frame, other).take(2))
+        assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.serial(r.frame, other).take(2))
+        assertEquals("Glassworks", UpdateManager(app, r) {}.also { stops += it::stop }.model.title)
+        val about = S1Settings.model(r, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {})
+            .sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
+        assertEquals("Glassworks 9.8.7 · test build f00ba47", about.title())
+
+        PanePrefs(app).paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
+        PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        val exec = ManualExecutor()
+        val mdns = RecordingMdns()
+        val device = PanelDevice(app, r, r::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,
+            apiBindAddress = InetAddress.getLoopbackAddress()).also { stops += it::stop }
+        device.start()
+        exec.runDue()
+        assertEquals("Glassworks 9.8.7", mdns.identities.single().compilationTime)
+        assertEquals("Panel Hub S1 Plus (Glassworks)", mdns.identities.single().model)
+        assertEquals("Glassworks 9.8.7", device.paneList().filterIsInstance<SendspinPane>().single().player.identity.softwareVersion)
+    }
+
     /** What the runtime's engine starts Gecko with. */
     @Suppress("UNCHECKED_CAST")
     private fun engineSettings(r: GlassworksRuntime): EngineSettings =
