@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.radio
 
+import dev.glassworks.platform.AppBuild
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import dev.glassworks.pane.PaneContext
@@ -43,7 +44,7 @@ class RadioPaneTest {
     @get:Rule val tmp = TemporaryFolder()
 
     private val app = RuntimeEnvironment.getApplication()
-    private val runtime = GlassworksRuntime(AqaraS1Plus())
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
     private val props = HelperProps()
     private val allow = MemoryAllowStore()
     private var stored: String? = "thread_router"
@@ -57,6 +58,7 @@ class RadioPaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = { published++ }, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000),
         )
         val controller = RadioController(
             props, load = { stored }, store = { stored = it }, inline = true, log = {},

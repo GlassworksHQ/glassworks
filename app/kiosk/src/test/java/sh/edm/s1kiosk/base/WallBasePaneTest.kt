@@ -4,6 +4,7 @@ import android.app.Application
 import dev.glassworks.pane.EntityRegistry
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -38,6 +39,7 @@ class WallBasePaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = {}, emit = {}, entitiesChanged = { changes++ }, sendEvent = { e, t -> sent += e to t },
+            build = AppBuild("1.0.0", 10000),
         ),
         WallBase.Config(BaseBackend.LOCALSERVICE),
         device,
@@ -130,6 +132,7 @@ class WallBasePaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000),
         ),
         config, device, init.cloud,
     )

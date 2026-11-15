@@ -17,6 +17,7 @@ import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SetupStep
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.screen.PresenceRelay
 import dev.glassworks.screen.ScreenPolicy
 import sh.edm.s1kiosk.discovery.HaDiscovery
@@ -41,6 +42,8 @@ import java.util.concurrent.Executors
 class GlassworksRuntime(
     /** The device this app runs on, made once with the runtime: the S1's, or the generic one (KioskApp). */
     val frame: Frame,
+    /** The APK's build ([KioskApp.build]): its version, for everything that reports or compares it. */
+    val build: AppBuild,
     /** The frame whose panes join the core's ([paneDefinitions]): [frame] in the app. Tests pass a fake one. */
     private val paneFrame: Frame = frame,
 ) {
@@ -61,7 +64,7 @@ class GlassworksRuntime(
      * (assets/extension). Its settings are read once, when MainActivity first opens a page.
      */
     val engine: Engine = GeckoEngine(
-        settings = { context -> KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging) } },
+        settings = { context -> KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug)) } },
         extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
         logTag = "S1Kiosk",
         generatedBy = "S1 Kiosk",

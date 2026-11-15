@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
 import android.app.Application
+import dev.glassworks.platform.AppBuild
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -29,7 +30,7 @@ import java.net.InetAddress
 class PanelNameTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
-    private val runtime = GlassworksRuntime(AqaraS1Plus())
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
     private val devices = ArrayList<PanelDevice>()
 
     @Before fun setUp() {

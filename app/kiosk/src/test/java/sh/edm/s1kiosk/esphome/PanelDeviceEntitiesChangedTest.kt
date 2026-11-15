@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.esphome
 
+import dev.glassworks.platform.AppBuild
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertEquals
@@ -25,7 +26,7 @@ class PanelDeviceEntitiesChangedTest {
         val app = RuntimeEnvironment.getApplication()
         KioskPrefs(app).wallBase.layout = ""
         KioskPrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
-        val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus()), onVoiceEvent = {})
+        val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), onVoiceEvent = {})
         try {
             device.initEntities(
                 DeviceIdentity(

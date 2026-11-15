@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.sendspin
 
 import android.app.Application
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -167,7 +168,7 @@ class SendspinRunsTest {
     /** Lazy, so a test can choose its sinks ([realSinks]) before the player makes one. */
     private val player by lazy {
         SendspinPlayer(
-            app, prefs, { null }, DEVICE,
+            app, prefs, { null }, DEVICE, AppBuild("1.0.0", 10000),
             connect = { _, _, hooks ->
                 val first = conns.isEmpty() && firstConnectThread == null
                 if (first && holdFirstConnect) {

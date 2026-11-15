@@ -15,6 +15,7 @@ import dev.glassworks.pane.SetupHost
 import dev.glassworks.pane.SetupOp
 import dev.glassworks.pane.SetupStep
 import dev.glassworks.pane.settingsOrder
+import dev.glassworks.platform.AppBuild
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,10 +47,10 @@ import java.util.concurrent.ScheduledExecutorService
 class FramePanesTest {
 
     private val app get() = RuntimeEnvironment.getApplication()
-    private val runtime = GlassworksRuntime(AqaraS1Plus())
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
 
     /** The S1's runtime with [frame]'s panes in place of the S1's own. */
-    private fun runtimeWith(frame: Frame) = GlassworksRuntime(AqaraS1Plus(), paneFrame = frame)
+    private fun runtimeWith(frame: Frame) = GlassworksRuntime(AqaraS1Plus(), paneFrame = frame, build = AppBuild("1.0.0", 10000))
 
     /**
      * A frame with one pane, "camera": one settings section, and a setup step for each of [steps]

@@ -8,6 +8,7 @@ import dev.glassworks.frame.friendlyName
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.settingsOrder
+import dev.glassworks.platform.AppBuild
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -56,7 +57,7 @@ class GenericFrameMockups {
             deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.AQARA_DETAIL) {},
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
         )
-        val sections = paneSections(GlassworksRuntime(frame).paneDefinitions(app))
+        val sections = paneSections(GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000)).paneDefinitions(app))
         o.show(KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), "0.4.3", sections.map { it.id }.toSet()))
         o.previewSection(section)
         Mockup.idle()
@@ -72,7 +73,7 @@ class GenericFrameMockups {
 
     private fun setup(frame: Frame, step: String): SetupOverlay {
         val a = Mockup.activity()
-        val s = SetupOverlay(a, GlassworksRuntime(frame).setupPanes(app), frame.friendlyName())
+        val s = SetupOverlay(a, GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000)).setupPanes(app), frame.friendlyName())
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(
             step = step, done = setOf(SetupFlow.WIFI), wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),

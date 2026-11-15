@@ -3,6 +3,7 @@ package sh.edm.s1kiosk.frame
 import android.app.Application
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -61,6 +62,7 @@ class TimeZonePaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000),
         ),
         TimeZonePrefs(KioskPrefs(app).paneFile("time-zone")),
         keeper,

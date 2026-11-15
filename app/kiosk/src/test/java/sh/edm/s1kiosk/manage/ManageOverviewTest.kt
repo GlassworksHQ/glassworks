@@ -10,6 +10,7 @@ import android.net.wifi.WifiManager
 import android.os.Process
 import android.os.SystemClock
 import dev.glassworks.manage.Tile
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,7 +42,7 @@ class ManageOverviewTest {
         override fun get(url: String, maxBytes: Int) = 0 to ""
     })
     private fun manage(context: Context = app, version: String = "0.4.3") =
-        S1Manage(context, GlassworksRuntime(AqaraS1Plus()), SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app), version)
+        S1Manage(context, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app), version)
     private val manage = manage()
 
     private fun wifi() = manage.status().tiles.single { it.label == "Wi-Fi" }

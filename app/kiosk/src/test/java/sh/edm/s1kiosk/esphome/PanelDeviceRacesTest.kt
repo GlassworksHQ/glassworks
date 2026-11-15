@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
 import android.net.wifi.WifiManager
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -72,7 +73,7 @@ class PanelDeviceRacesTest {
 
     @Before fun setUp() {
         app = RuntimeEnvironment.getApplication()
-        runtime = GlassworksRuntime(AqaraS1Plus())
+        runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
         // Panes that start real engines are off, and the wall base takes the backend that only
         // schedules a task on esphome-main (no UART, no Aqara cloud daemon).
         val prefs = KioskPrefs(app)

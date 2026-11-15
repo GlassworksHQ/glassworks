@@ -11,7 +11,6 @@ import android.net.Network
 import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.platform.Platform
-import sh.edm.s1kiosk.BuildConfig
 import sh.edm.s1kiosk.GlassworksRuntime
 import java.io.File
 import java.io.IOException
@@ -48,7 +47,7 @@ class UpdateManager(
     private val root = runtime.s1?.rootUpdates
     private val exec: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "s1-update").apply { isDaemon = true } }
-    val model = UpdateModel(BuildConfig.VERSION_NAME)
+    val model = UpdateModel(runtime.build.versionName)
     private val schedule = CheckSchedule()
     private var etag: String? = null
     private var cachedOffer: UpdateOffer? = null
@@ -166,7 +165,7 @@ class UpdateManager(
                 model.onChecked(result.offer)
                 problemCleared()
                 val o = result.offer
-                Log.i(TAG, "check ($reason): latest ${o?.version ?: "none"}, installed ${BuildConfig.VERSION_NAME}" +
+                Log.i(TAG, "check ($reason): latest ${o?.version ?: "none"}, installed ${runtime.build.versionName}" +
                     if (model.updateAvailable) " -> update available" else "")
             }
             is CheckResult.Failed -> {
@@ -434,7 +433,7 @@ class UpdateManager(
         c.connectTimeout = 15_000
         c.readTimeout = 30_000
         c.instanceFollowRedirects = true // https -> https only (HttpURLConnection never switches protocol)
-        c.setRequestProperty("User-Agent", "s1-kiosk/${BuildConfig.VERSION_NAME} (+https://github.com/${Releases.REPO})")
+        c.setRequestProperty("User-Agent", "s1-kiosk/${runtime.build.versionName} (+https://github.com/${Releases.REPO})")
         return c
     }
 

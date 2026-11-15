@@ -2,6 +2,7 @@ package dev.glassworks.bluetoothproxy
 
 import android.app.Application
 import dev.glassworks.pane.PaneContext
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -33,6 +34,7 @@ class BluetoothProxyPaneTest {
     private val ctx = PaneContext(
         RuntimeEnvironment.getApplication(), prefs = { throw IllegalArgumentException(it) }, identity,
         publishStates = {}, emit = {}, entitiesChanged = { rebuilds++ }, sendEvent = { _, _ -> },
+        build = AppBuild("1.0.0", 10000),
     )
 
     /** Records what each scanner it hands out is asked, in order. */

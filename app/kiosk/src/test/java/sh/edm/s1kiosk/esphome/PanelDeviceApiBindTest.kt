@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
 import android.app.Application
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.fail
@@ -39,7 +40,7 @@ class PanelDeviceApiBindTest {
         val port = ApiServer.DEFAULT_PORT
         assumeTrue("port $port is in use on this machine", portFree(port))
 
-        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus()), onVoiceEvent = {})
+        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), onVoiceEvent = {})
         try {
             device.startInternal()
             Socket().use { s ->
@@ -57,7 +58,7 @@ class PanelDeviceApiBindTest {
         val lan = lanAddress()
         assumeTrue("this machine has no non-loopback IPv4 address", lan != null)
         val mdns = RecordingMdns()
-        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus()),
+        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)),
             onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = ManualExecutor(), mdns = mdns, apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress())
         try {

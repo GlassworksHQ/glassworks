@@ -15,7 +15,7 @@ val s1VersionCode: Int? = s1Version?.let { v ->
 }
 
 // A test build's commit: -Ps1TestBuild=28c157d or S1_TEST_BUILD (.github/workflows/test-build.yml sets it).
-// Shown next to the version (AppVersion.label); releases leave it empty. It never changes versionName or versionCode.
+// Shown next to the version (AppBuild.shown); releases leave it empty. It never changes versionName or versionCode.
 val s1TestBuild: String = ((findProperty("s1TestBuild") as String?) ?: System.getenv("S1_TEST_BUILD")).orEmpty().trim()
     .also { if (!Regex("^[0-9a-f]{0,40}$").matches(it)) throw GradleException("S1_TEST_BUILD '$it' must be a commit hash") }
 

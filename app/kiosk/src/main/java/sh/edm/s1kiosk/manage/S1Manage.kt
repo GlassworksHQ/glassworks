@@ -35,7 +35,6 @@ import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
 import org.json.JSONObject
 import sh.edm.s1kiosk.AdminReceiver
-import sh.edm.s1kiosk.BuildConfig
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.MainActivity
@@ -51,7 +50,6 @@ import sh.edm.s1kiosk.auth.WsHaSocket
 import sh.edm.s1kiosk.esphome.PanelDevice
 import sh.edm.s1kiosk.settings.CoreSettings
 import sh.edm.s1kiosk.setup.SetupState
-import sh.edm.s1kiosk.update.AppVersion
 import sh.edm.s1kiosk.update.UpdateManager
 import java.io.File
 import java.io.IOException
@@ -65,8 +63,8 @@ import java.util.Locale
  */
 class S1Manage(
     context: Context, private val runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, private val prefs: KioskPrefs,
-    /** The version the page shows ([AppVersion.shown]); a test passes a test build's. */
-    private val version: String = AppVersion.shown,
+    /** The version the page shows ([dev.glassworks.platform.AppBuild.shown]); a test passes a test build's. */
+    private val version: String = runtime.build.shown,
 ) {
     private val app = context.applicationContext
     private val dir = File(app.filesDir, "manage")
@@ -135,7 +133,7 @@ class S1Manage(
 
         override fun diagnostics(): String = buildString {
             val s = status()
-            appendLine("Version: S1 Kiosk ${s.version} (${BuildConfig.VERSION_CODE})")
+            appendLine("Version: S1 Kiosk ${s.version} (${runtime.build.versionCode})")
             appendLine("Frame: ${runtime.frame.board}, Android ${Build.VERSION.RELEASE}, ${Build.MODEL}")
             appendLine("Device up: ${SystemClock.elapsedRealtime() / 1000} s; app up ${s.uptimeMs / 1000} s")
             appendLine("Home Assistant: ${s.haBase ?: "none"}; panel signed in: ${HaAuth.signedIn}; added: ${prefs.haSeen}")

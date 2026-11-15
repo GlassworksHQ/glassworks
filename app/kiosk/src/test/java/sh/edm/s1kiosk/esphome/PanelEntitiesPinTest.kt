@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.esphome
 
+import dev.glassworks.platform.AppBuild
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertEquals
@@ -56,7 +57,7 @@ class PanelEntitiesPinTest {
     @Test fun everyPaneOffKeepsTheSameEntities() {
         if (System.getProperty("s1.regenGolden") == "true") return
         val app = RuntimeEnvironment.getApplication()
-        GlassworksRuntime(AqaraS1Plus()).paneDefinitions(app).forEach { it.switch?.on = false }
+        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).paneDefinitions(app).forEach { it.switch?.on = false }
         assertEquals(javaClass.getResourceAsStream("/$GOLDEN")?.bufferedReader()?.readText(), describe(realEntityList()))
     }
 
@@ -69,7 +70,7 @@ class PanelEntitiesPinTest {
     private fun realEntityList(backend: BaseBackend = BaseBackend.LOCALSERVICE): List<ApiEntity> {
         val app = RuntimeEnvironment.getApplication()
         KioskPrefs(app).wallBase.backend = backend.pref
-        val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus()), onVoiceEvent = {})
+        val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), onVoiceEvent = {})
         try {
             val identity = DeviceIdentity(
                 name = "aqara-s1-plus-000001", friendlyName = "Aqara S1 Plus", macAddress = "02:00:00:00:00:01",

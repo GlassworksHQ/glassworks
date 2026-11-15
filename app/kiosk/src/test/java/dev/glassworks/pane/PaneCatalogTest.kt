@@ -5,6 +5,7 @@
 package dev.glassworks.pane
 
 import android.app.Application
+import dev.glassworks.platform.AppBuild
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -47,7 +48,7 @@ class PaneCatalogTest {
     }
 
     private val definitionIds by lazy {
-        GlassworksRuntime(AqaraS1Plus()).paneDefinitions(RuntimeEnvironment.getApplication()).map { it.id }
+        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).paneDefinitions(RuntimeEnvironment.getApplication()).map { it.id }
     }
 
     /**

@@ -135,9 +135,10 @@ class KioskPrefs(private val context: Context) : ScreenSettings {
         get() = sp.getString(KEY_SECURE_HOSTS, "") ?: ""
         set(v) { sp.edit().putString(KEY_SECURE_HOSTS, v.trim()).commit() }
 
-    var remoteDebugging: Boolean
-        get() = sp.getBoolean(KEY_REMOTE_DEBUG, BuildConfig.DEBUG)
-        set(v) { sp.edit().putBoolean(KEY_REMOTE_DEBUG, v).commit() }
+    /** Gecko remote debugging. Unset, it follows the build type: [debugBuild] is the app's [dev.glassworks.platform.AppBuild.debug]. */
+    fun remoteDebugging(debugBuild: Boolean): Boolean = sp.getBoolean(KEY_REMOTE_DEBUG, debugBuild)
+
+    fun setRemoteDebugging(on: Boolean) { sp.edit().putBoolean(KEY_REMOTE_DEBUG, on).commit() }
 
     // ---- HA page tweaks (applied by the built-in web extension)
 

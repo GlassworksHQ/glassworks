@@ -53,7 +53,6 @@ import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
 import sh.edm.s1kiosk.improv.ImprovController
 import sh.edm.s1kiosk.improv.ImprovWifiStatus
-import sh.edm.s1kiosk.update.AppVersion
 import org.json.JSONObject
 import kotlin.system.exitProcess
 
@@ -645,7 +644,7 @@ class MainActivity : Activity() {
             needsRestart = true
         }
         if (intent.hasExtra("remote_debug")) {
-            prefs.remoteDebugging = intent.getBooleanExtra("remote_debug", false)
+            prefs.setRemoteDebugging(intent.getBooleanExtra("remote_debug", false))
             needsRestart = true
         }
         if (intent.hasExtra("hide_header") || intent.hasExtra("hide_sidebar")) {
@@ -776,7 +775,7 @@ class MainActivity : Activity() {
     /** The menu's sections as they are now: each pane's page reads its running pane (#212). */
     private fun settingsModel(): KioskSettingsOverlay.Model {
         val core = CoreSettings(
-            prefs, AppVersion.shown,
+            prefs, glassworks.build.shown,
             status = { glassworks.screen.statusLine() + " · voice=" + glassworks.voiceState },
             deviceSettings = deviceSettingsLink,
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) { Licences.show(this) },
@@ -787,7 +786,7 @@ class MainActivity : Activity() {
             ),
         )
         val paneSections = paneSections(panes, glassworks::runningPane)
-        return KioskSettingsOverlay.Model(settingsOrder(core.sections(), paneSections), AppVersion.shown, paneSections.map { it.id }.toSet())
+        return KioskSettingsOverlay.Model(settingsOrder(core.sections(), paneSections), glassworks.build.shown, paneSections.map { it.id }.toSet())
     }
 
     private var restartWaitingSince = 0L

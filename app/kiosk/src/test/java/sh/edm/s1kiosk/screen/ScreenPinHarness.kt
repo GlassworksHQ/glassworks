@@ -7,6 +7,7 @@ import android.hardware.SensorManager
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.screen.ScreenPolicy
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -53,7 +54,7 @@ class ScreenPinHarness {
         if (::screen.isInitialized) detach()
         ShadowPowerManager.reset()
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(screenOn)
-        screen = GlassworksRuntime(AqaraS1Plus()).screen
+        screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).screen
         screen.start(context)
         screen.onKeepScreenOn = { keepOnCalls += it }
         screen.onBrightness = { brightnessCalls += it }

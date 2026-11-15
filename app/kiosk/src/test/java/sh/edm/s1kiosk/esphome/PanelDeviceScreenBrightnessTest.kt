@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.esphome
 
 import android.app.Application
 import android.os.Looper
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +24,7 @@ class PanelDeviceScreenBrightnessTest {
 
     @Test fun autoBrightnessBackOnBeforeALightReadingDoesNotReportTheSavedManualValue() {
         val app = RuntimeEnvironment.getApplication()
-        val runtime = GlassworksRuntime(AqaraS1Plus())
+        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
         val device = PanelDevice(app, runtime, onVoiceEvent = {})
         try {
             device.initEntities(

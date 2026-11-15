@@ -8,6 +8,7 @@ import android.app.Application
 import android.content.Context
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -73,6 +74,7 @@ class CameraPaneTest {
                 app, prefs = { file },
                 DeviceIdentity("test", "Test", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
                 publishStates = { publishes++ }, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+                build = AppBuild("1.0.0", 10000),
             ),
             prefs, camera, { byteArrayOf(1) }, stream,
             FrameEgress({ now }, { _, _ -> }) {},

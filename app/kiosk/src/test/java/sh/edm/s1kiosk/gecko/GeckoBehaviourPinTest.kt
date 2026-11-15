@@ -119,7 +119,7 @@ class GeckoBehaviourPinTest {
         configured(p)
         p.zoom = 1.25f
         p.extraSecureHosts = "192.0.2.20, panel.example"
-        p.remoteDebugging = true
+        p.setRemoteDebugging(true)
     }).use { h ->
         val lines = File(h.app.filesDir, "geckoview-config.yaml").readLines()
         assertEquals("  dom.securecontext.allowlist: \"192.0.2.10,192.0.2.20,panel.example\"", lines[2])

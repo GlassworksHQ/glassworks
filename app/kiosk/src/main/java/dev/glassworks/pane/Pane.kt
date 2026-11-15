@@ -6,6 +6,7 @@ package dev.glassworks.pane
 
 import android.content.Context
 import android.content.SharedPreferences
+import dev.glassworks.platform.AppBuild
 import sh.edm.esphome.ApiEntity
 import sh.edm.esphome.ApiServer
 import sh.edm.esphome.DeviceIdentity
@@ -60,6 +61,8 @@ class PaneContext(
      */
     val prefs: (namespace: String) -> SharedPreferences,
     val device: DeviceIdentity,
+    /** The app's build: its version, for a pane that reports it (a protocol field, a user agent). */
+    val build: AppBuild,
     /** Pushes every entity state to Home Assistant. Safe from any thread, also while the device stops. */
     val publishStates: () -> Unit,
     /** Raises [event] to every pane, this one included. Safe from any thread. */

@@ -43,7 +43,6 @@ import java.util.concurrent.TimeUnit
 import sh.edm.esphome.*
 import sh.edm.esphome.DeviceIdentity
 import sh.edm.esphome.android.EspHomeMdns
-import sh.edm.s1kiosk.BuildConfig
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.MainActivity
@@ -228,7 +227,7 @@ class PanelDevice internal constructor(
             friendlyName = frame.friendlyName(),
             macAddress = mac,
             esphomeVersion = ESPHOME_VERSION,
-            compilationTime = "S1 Kiosk ${BuildConfig.VERSION_NAME}",
+            compilationTime = "S1 Kiosk ${runtime.build.versionName}",
             manufacturer = frame.hardware.manufacturer,
             model = "${frame.hardware.model} (S1 Kiosk)",
             voiceFeatures = voiceFeatures(),
@@ -270,7 +269,7 @@ class PanelDevice internal constructor(
     internal fun initEntities(identity: DeviceIdentity) {
         this.identity = identity
         val paneContext = PaneContext(
-            ctx, prefs::paneFile, identity,
+            ctx, prefs::paneFile, identity, runtime.build,
             publishStates = { runCatching { exec.execute { server?.publishStates() } } },
             emit = ::emit,
             entitiesChanged = { runCatching { exec.execute { rebuildEntities() } } },
@@ -336,7 +335,7 @@ class PanelDevice internal constructor(
         val gate = stillGate(hub, { pane?.stillPolicy() ?: def.prefs.policy.copy(privacy = true) }, egress)
         val stream = CameraStream(
             ctx, hub, egress,
-            identity = { CameraIdentity(identity.friendlyName, "Glassworks ${BuildConfig.VERSION_NAME}", identity.macAddress) },
+            identity = { CameraIdentity(identity.friendlyName, "Glassworks ${runtime.build.versionName}", identity.macAddress) },
             host = ::ipAddress,
             snapshot = gate,
         )
@@ -655,7 +654,7 @@ class PanelDevice internal constructor(
         TextSensorEntity("ip_address", "IP address", "mdi:ip-network", EntityCategory.DIAGNOSTIC, get = ::ipAddress),
         TextSensorEntity(
             "app_version", "App version", "mdi:new-box", EntityCategory.DIAGNOSTIC,
-            disabledByDefault = true, get = { BuildConfig.VERSION_NAME },
+            disabledByDefault = true, get = { runtime.build.versionName },
         ),
         // --- app updates (GitHub Releases; update/UpdateManager.kt)
         UpdateEntity(
