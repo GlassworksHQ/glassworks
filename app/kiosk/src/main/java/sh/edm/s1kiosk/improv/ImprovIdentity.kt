@@ -9,7 +9,7 @@ import sh.edm.s1kiosk.BuildConfig
  * What the device says about itself over Improv (`RPC_REQUEST_INFO`): firmware, version, chip and name.
  * The name is its friendly name, as Home Assistant shows it.
  */
-internal object ImprovIdentity {
+object ImprovIdentity {
     private const val FIRMWARE = "S1 Kiosk"
 
     /** Over BLE. The chip field is the maker, the model and `Build.HARDWARE`: "Aqara Panel Hub S1 Plus/sun50iw10p1". */

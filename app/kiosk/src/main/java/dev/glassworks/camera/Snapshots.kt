@@ -121,7 +121,7 @@ fun snapshotCamera(still: StillCamera, policy: () -> CameraPolicy, egress: Frame
         .apply { authOnly = true }
 
 /** What [snapshotCamera] answers Home Assistant with: a still when [policy] allows one, else nothing. */
-internal fun stillGate(still: StillCamera, policy: () -> CameraPolicy, egress: FrameEgress): () -> ByteArray? = {
+fun stillGate(still: StillCamera, policy: () -> CameraPolicy, egress: FrameEgress): () -> ByteArray? = {
     // Asked again after the capture: privacy turned on while the camera worked must still win.
     if (!policy().stillsMayLeave) null else still.jpeg()?.takeIf { policy().stillsMayLeave }?.also { egress.still() }
 }

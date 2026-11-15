@@ -23,9 +23,10 @@ import java.util.concurrent.TimeUnit
  *
  * It samples once every [PERIOD_S] seconds on the [device] thread. A value goes to Home Assistant
  * only when it moved past its metric's band since the last one sent. The entities' getters only read
- * the last values, so the core's own state pushes cost nothing here.
+ * the last values, so the core's own state pushes cost nothing here. The primary constructor is public
+ * for tests, which pass a fake [Probe].
  */
-class DiagnosticsPane internal constructor(
+class DiagnosticsPane(
     private val ctx: PaneContext,
     /** The frame names a thermal zone for the CPU: there is a temperature entity. */
     val hasTemperature: Boolean,
@@ -144,8 +145,8 @@ class DiagnosticsPane internal constructor(
         ctx.publishStates()
     }
 
-    /** Takes one sample and publishes what moved past its band. Device thread. */
-    internal fun tick() {
+    /** Takes one sample and publishes what moved past its band. Device thread. Public for tests. */
+    fun tick() {
         val cpuStart = SystemClock.currentThreadTimeMillis()
         val cur = probe.sample()
         var changed = false

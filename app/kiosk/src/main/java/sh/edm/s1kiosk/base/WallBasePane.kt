@@ -31,13 +31,13 @@ class WallBasePane(
     override val id = "wall-base"
 
     private val prefs = WallBasePrefs(ctx.prefs(id))
-    /** What [WallBase] reports to; internal so a test can play the base. */
-    internal val baseListener: WallBase.Listener = Listener()
+    /** What [WallBase] reports to; public so a test can play the base. */
+    val baseListener: WallBase.Listener = Listener()
     private val base = WallBase(ctx.context, BaseLayout.decode(prefs.layout) ?: BaseLayout.NONE, baseListener, config)
     /** The backend and transport [start] opens: the frame's at first, then what the settings ask for, also while off (#67). */
     @Volatile private var wanted: WallBase.Config = config
-    /** The backend and transport it runs; internal so a test can see what the frame built. */
-    internal val config: WallBase.Config get() = base.config
+    /** The backend and transport it runs; public so a test can see what the frame built. */
+    val config: WallBase.Config get() = base.config
 
     /** The layout whose entities Home Assistant has (set before [PaneContext.entitiesChanged]). */
     @Volatile private var layout: BaseLayout = base.tracker.applied()
