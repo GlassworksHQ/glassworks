@@ -30,6 +30,8 @@ git_ -C "$old" add -A; git_ -C "$old" commit -qm old
 put "$old/app/kiosk/$apk"
 put "$old/kiln/node_modules/x/$apk"   # pruned
 check "old: Gradle root" app "$layout" gradle-root "$old"
+both="$tmp/both"; put "$both/app/settings.gradle.kts"; put "$both/settings.gradle.kts"
+check "both settings files: app wins" app "$layout" gradle-root "$both"
 # shellcheck disable=SC2016 # $1… are bash -c's arguments
 check "old: APK from the Gradle root" "./kiosk/$apk" bash -c 'cd "$1/app" && "$2" file . "$3"' _ "$old" "$layout" "$apk"
 check "old: a library file from the repo root" "$old/app/libs/esphome-api/test-requirements.txt" "$layout" file "$old" esphome-api/test-requirements.txt
@@ -58,12 +60,15 @@ put frames/aqara-s1-plus/design/frame.json y; put README.md y; put frames/aqara-
 git_ add -A; git_ commit -qm "not android"
 check "changed: frame design, docs, a look-alike folder: nothing" "" "$layout" changed HEAD~1
 for f in frames/aqara-s1-plus/android/src/main/A.kt frames/x/panes/radio/B.kt core/C.kt pane-api/D.kt engines/gecko/E.kt \
-         panes/voice/F.kt libs/improv/G.kt build.gradle.kts gradle.properties gradlew gradle/wrapper/gradle-wrapper.properties \
+         panes/voice/F.kt libs/improv/G.kt build.gradle.kts gradle.properties gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties \
          .github/workflows/pr.yml tools/release/android-layout.sh; do
   put "$f"; git_ add -A; git_ commit -qm "$f"
   check "changed: $f" "$f" "$layout" changed HEAD~1 HEAD
 done
 fails_with "changed: an unknown base fails" "fatal:" "$layout" changed 0000000000000000000000000000000000000000
+fails_with "changed: a base that looks like an option is a revision" "fatal:" "$layout" changed "--output=$tmp/written"
+[ ! -e "$tmp/written" ] || { echo "FAIL changed: git took --output= as an option"; fails=$((fails + 1)); }
+fails_with "usage" "gradle-root [<repo>]" "$layout" nonsense
 
 # Failures that must not pass silently.
 fails_with "no Gradle root" "no settings.gradle.kts" "$layout" gradle-root "$tmp"

@@ -56,7 +56,9 @@ jobs:
 
       # app/ today, the repo root after #21's move (tools/release/android-layout.sh).
       - name: Gradle root
-        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+        run: |
+          root=$(tools/release/android-layout.sh gradle-root)
+          echo "GRADLE_ROOT=$root" >> "$GITHUB_ENV"
 
       # Same toolchain as release.yml.
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
@@ -118,8 +120,10 @@ jobs:
         working-directory: ${{ env.GRADLE_ROOT }}
         run: |
           layout="$GITHUB_WORKSPACE/tools/release/android-layout.sh"
-          esphome_api=$(dirname "$("$layout" file . esphome-api/test-requirements.txt)")
-          bluetooth_proxy=$(dirname "$("$layout" file . bluetooth-proxy/build.gradle.kts)")
+          esphome_api=$("$layout" file . esphome-api/test-requirements.txt)
+          esphome_api=$(dirname "$esphome_api")
+          bluetooth_proxy=$("$layout" file . bluetooth-proxy/build.gradle.kts)
+          bluetooth_proxy=$(dirname "$bluetooth_proxy")
           python -m venv "$RUNNER_TEMP/esphome-venv"
           "$RUNNER_TEMP/esphome-venv/bin/pip" install --quiet --require-hashes --only-binary :all: \
             -r "$esphome_api/test-requirements.txt"
@@ -144,8 +148,10 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - name: Gradle root (app/ today, the repo root after #21's move)
-        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+      - name: "Gradle root (app/ today, the repo root after #21's move)"
+        run: |
+          root=$(tools/release/android-layout.sh gradle-root)
+          echo "GRADLE_ROOT=$root" >> "$GITHUB_ENV"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
@@ -225,9 +231,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Gradle root (app/ today, the repo root after #21's move)
+      - name: "Gradle root (app/ today, the repo root after #21's move)"
         if: steps.changed.outputs.run == 'true'
-        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+        run: |
+          root=$(tools/release/android-layout.sh gradle-root)
+          echo "GRADLE_ROOT=$root" >> "$GITHUB_ENV"
 
       - name: LiteRT venv (hashed wheels)
         if: steps.changed.outputs.run == 'true'
@@ -296,7 +304,7 @@ jobs:
           persist-credentials: false
       - name: tools/install.sh off-device tests
         run: tools/install/test/install-tests.sh
-      - name: The Android layout helper, in both layouts of #21's move
+      - name: "The Android layout helper, in both layouts of #21's move"
         run: tools/release/test/android-layout-test.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -394,7 +402,9 @@ jobs:
 
       # This branch's: app/ today, the repo root after #21's move (tools/release/android-layout.sh).
       - name: Gradle root
-        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+        run: |
+          root=$(tools/release/android-layout.sh gradle-root)
+          echo "GRADLE_ROOT=$root" >> "$GITHUB_ENV"
 
       # Same toolchain as the app job and release.yml.
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
@@ -460,7 +470,8 @@ jobs:
             SISDK_DIR="$RUNNER_TEMP/sisdk-base" tools/size/radio-bundle.sh "$RUNNER_TEMP/base" "$bundle" || bundle=""
           fi
           layout="$PWD/tools/release/android-layout.sh"
-          cd "$RUNNER_TEMP/base/$("$layout" gradle-root "$RUNNER_TEMP/base")"
+          root=$("$layout" gradle-root "$RUNNER_TEMP/base") || exit 1   # fail, not build from base/
+          cd "$RUNNER_TEMP/base/$root"
           for abi in $ABIS; do
             b="$bundle"; [ "$abi" = armeabi-v7a ] || b=""
             if [ "$abi" = armeabi-v7a ] && [ -z "$bundle" ]; then

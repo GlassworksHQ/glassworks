@@ -54,7 +54,9 @@ jobs:
 
       # app/ today, the repo root after #21's move (tools/release/android-layout.sh).
       - name: Gradle root
-        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+        run: |
+          root=$(tools/release/android-layout.sh gradle-root)
+          echo "GRADLE_ROOT=$root" >> "$GITHUB_ENV"
 
       - name: ABIs, one APK each (every frame's abis, tools/release/frame-abis.sh)
         run: |

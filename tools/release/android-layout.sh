@@ -20,10 +20,17 @@ set -euo pipefail
 # Every place a Gradle module, or what builds it, can live in either layout (#21 move plan, S-ci).
 # frames/<id>/design etc. aren't Android code; :(glob) so * stays inside one folder.
 ANDROID_ROOTS=(app libs core pane-api engines panes ':(glob)frames/*/android/**' ':(glob)frames/*/panes/**'
-  settings.gradle.kts build.gradle.kts gradle.properties gradlew gradle
+  settings.gradle.kts build.gradle.kts gradle.properties gradlew gradlew.bat gradle
   .github/workflows/pr.yml tools/release/android-layout.sh)
 
-usage() { sed -n '9,17s/^# \{0,1\}//p' "$0" >&2; exit 2; }
+usage() {
+  cat >&2 <<'USAGE'
+android-layout.sh gradle-root [<repo>]     the Gradle root relative to <repo>: app or .
+android-layout.sh file <dir> <path>        the one file under <dir> whose path ends in /<path>
+android-layout.sh changed <base> [<head>]  the files under every Android root that differ
+USAGE
+  exit 2
+}
 
 case "${1:-}" in
   gradle-root)
@@ -45,6 +52,8 @@ case "${1:-}" in
     esac ;;
   changed)
     [ $# -ge 2 ] && [ $# -le 3 ] || usage
-    git diff --no-renames --name-only "$2" "${3:-HEAD}" -- "${ANDROID_ROOTS[@]}" ;;
+    # --end-of-options: a revision that starts with - is a revision, not an option (a bare -- would
+    # make git read the revisions as paths).
+    git diff --no-renames --name-only --end-of-options "$2" "${3:-HEAD}" -- "${ANDROID_ROOTS[@]}" ;;
   *) usage ;;
 esac
