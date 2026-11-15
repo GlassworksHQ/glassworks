@@ -109,15 +109,16 @@ class GenericFrameTest {
     @Test fun aTabletRunsThePanesItsHardwareAllows() {
         val runtime = generic()
         val definitions = runtime.paneDefinitions(app)
-        assertEquals("the S1 frame's own panes aren't there", listOf("assist", "sendspin", "radio", "bluetooth-proxy", "diagnostics"), definitions.map { it.id })
+        assertEquals("the S1 frame's own panes aren't there", listOf("assist", "sendspin", "radio", "bluetooth-proxy", "camera", "diagnostics"), definitions.map { it.id })
         assertEquals(listOf("radio"), definitions.filterIsInstance<CantRun>().map { it.id })
         assertFalse("setup asks nothing about a radio", runtime.setupSteps(app).any { it.id == "radio" })
         assertFalse(runtime.setupPanes(app).any { it.choice.title == "Radio" })
 
         val (_, device) = run(runtime)
         val built = device.paneList().map { it.id }
-        assertEquals(listOf("sendspin", "assist", "timers", "bluetooth-proxy", "diagnostics"), built)
+        assertEquals(listOf("sendspin", "assist", "timers", "bluetooth-proxy", "camera", "diagnostics"), built)
         assertFalse("no radio entities in Home Assistant", device.entityList().any { it.objectId.startsWith("radio_") })
+        assertTrue("a tablet with a camera has the camera pane's on/off (the S1 doesn't)", device.entityList().any { it.objectId == "camera_pane" })
     }
 
     @Test fun theManagePageSaysTheRadioCantRunAndWhy() {
@@ -134,7 +135,7 @@ class GenericFrameTest {
     @Test fun aDeviceWithoutAMicrophoneHasNoAssist() {
         features(PackageManager.FEATURE_AUDIO_OUTPUT)
         val runtime = generic()
-        assertEquals(listOf("assist", "radio", "bluetooth-proxy"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
+        assertEquals(listOf("assist", "radio", "bluetooth-proxy", "camera"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
         val (id, device) = run(runtime)
         assertEquals("no voice features although Assist's switch is on", 0, id.voiceFeatures)
         assertFalse(device.paneList().any { it.id == "assist" })
