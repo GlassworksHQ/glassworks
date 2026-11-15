@@ -107,6 +107,7 @@ dependencies {
     implementation(project(":engine-gecko"))
     implementation(project(":pane-diagnostics"))
     implementation(project(":pane-bluetooth-proxy"))
+    implementation(project(":pane-camera"))
     implementation(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy")) // the Bluetooth proxy pane's engine (#121)
