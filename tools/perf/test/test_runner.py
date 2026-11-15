@@ -937,8 +937,10 @@ class Restart(unittest.TestCase):
         """Protocol 8 (#202, s1rtc4): heavy was usable after 43 s and still working at 300 s, before its
         swipes. The usable deadline covers only a view that never became usable; one that keeps
         saying what it does runs every task."""
+        # In real time, as CpuClock: the 1.2 s stages against the 5 s stage deadline are the margin,
+        # and on the compressed clock a busy CPU's delay counts five times (CI, 8 at a time, #268).
         p, c, _ = self.run_short(90, FAKE_STAGE_DELAY="1.2", FAKE_STAGE_VIEW="heavy", GW_PERF_VIEW_DEADLINE_S="4",
-                                 GW_PERF_STAGE_IDLE_S="5")
+                                 GW_PERF_STAGE_IDLE_S="5", GW_PERF_TIME_SCALE="1")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertIsNone(c["error"])
         self.assertNotIn("timed_out", c)
@@ -978,7 +980,9 @@ class Restart(unittest.TestCase):
         self.assertIsNone((t.get("usable_ms") or {}).get("median"))
 
     def test_the_screen_is_kept_awake_while_views_open_but_not_while_live(self):
-        p, c, log = self.run_short(120, FAKE_SLOW_VIEW="2.5", GW_PERF_KEEP_AWAKE_S="0.7")
+        # In real time: it counts wakes against the moment the runner reads the warm-up line, so the
+        # runner's own delay is the margin (CI, 8 at a time, #268; as CpuClock).
+        p, c, log = self.run_short(120, FAKE_SLOW_VIEW="2.5", GW_PERF_KEEP_AWAKE_S="0.7", GW_PERF_TIME_SCALE="1")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertGreaterEqual(c["wakes"], 6)                 # about 3 while each slow view opened
         live = False

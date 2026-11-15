@@ -47,10 +47,12 @@ def modules(which):
 
 def weight(node, src):
     """How long a test likely takes, from its source: each run.sh run counts, a --pane-ram frame's
-    (aqara-s1-plus, many samples) three times; a perfrun-only test counts 1."""
+    (aqara-s1-plus, many samples) three times; a perfrun-only test counts 1, and five times when it
+    runs in real time (GW_PERF_TIME_SCALE="1", the tests that measure the runner's own delay)."""
     text = ast.get_source_segment(src, node) or ""
     runs = sum(1 for n in ast.walk(node) if isinstance(n, ast.Name) and n.id == "RUN")
-    return 1 + runs * (3 if "aqara-s1-plus" in text else 1)
+    real = 5 if 'GW_PERF_TIME_SCALE="1"' in text else 1
+    return real + runs * (3 if "aqara-s1-plus" in text else 1)
 
 
 def units(mods):
