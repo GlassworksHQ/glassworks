@@ -13,7 +13,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowPowerManager
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 
 /** Log filters and `dumpsys power` readers know the screen's logcat and wake-lock tags: both stay as they were. */
@@ -24,7 +24,7 @@ class ScreenTagsTest {
         val context = RuntimeEnvironment.getApplication()
         ShadowLog.clear()
         ShadowPowerManager.reset()
-        val screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen
+        val screen = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen
         screen.start(context)
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(false)
         screen.wake("test")

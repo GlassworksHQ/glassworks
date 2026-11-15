@@ -11,7 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.net.InetAddress
 
@@ -20,7 +20,7 @@ import java.net.InetAddress
 @Config(sdk = [34], application = Application::class)
 class DeviceHostTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+    private val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val exec = ManualExecutor()
     private val heard = ArrayList<String>()
     private var host: DeviceHost? = null

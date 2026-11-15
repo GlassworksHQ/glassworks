@@ -13,7 +13,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.ApiServer
 import dev.glassworks.esphome.Msg
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.io.IOException
 import java.net.ConnectException
@@ -40,7 +40,7 @@ class PanelDeviceApiBindTest {
         val port = ApiServer.DEFAULT_PORT
         assumeTrue("port $port is in use on this machine", portFree(port))
 
-        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val device = PanelDevice(RuntimeEnvironment.getApplication(), runtime, runtime::devicePanes)
         try {
             device.startInternal()
@@ -59,7 +59,7 @@ class PanelDeviceApiBindTest {
         val lan = lanAddress()
         assumeTrue("this machine has no non-loopback IPv4 address", lan != null)
         val mdns = RecordingMdns()
-        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val device = PanelDevice(RuntimeEnvironment.getApplication(), runtime, runtime::devicePanes,
             onApiHello = { _, _ -> }, exec = ManualExecutor(), mdns = mdns, apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress())

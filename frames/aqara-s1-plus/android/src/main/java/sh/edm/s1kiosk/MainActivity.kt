@@ -191,7 +191,7 @@ class MainActivity : Activity() {
             onShowingChanged = { timerOverlay.voiceShowing(it) } // a timer set by voice flies out of the orb
         }
         timerOverlay = TimerOverlay(this, glassworks.orbs)
-        notificationOverlay = NotificationOverlay(this, runtime.notifications, notificationImages(), orbs = glassworks.orbs).apply {
+        notificationOverlay = NotificationOverlay(this, runtime.s1Panes.notifications, notificationImages(), orbs = glassworks.orbs).apply {
             screenOn = { glassworks.screen.screenOn }
             onPage = { url -> if (url != null) openInPage(url) else backToDashboard() }
             onDoNotDisturb = { on -> panePrefs.notifications.doNotDisturb = on }
@@ -252,20 +252,20 @@ class MainActivity : Activity() {
                 screenBrightness = if (b < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else b
             }
         }
-        runtime.notifications.addListener(notificationListener)
-        runtime.notifications.onOpenList = {
+        runtime.s1Panes.notifications.addListener(notificationListener)
+        runtime.s1Panes.notifications.onOpenList = {
             handler.post {
                 if (settingsOverlay.isShowing) settingsOverlay.hide()
                 notificationOverlay.openList()
             }
         }
-        runtime.notifications.onReveal = { handler.post { if (settingsOverlay.isShowing) settingsOverlay.hide() } }
+        runtime.s1Panes.notifications.onReveal = { handler.post { if (settingsOverlay.isShowing) settingsOverlay.hide() } }
         glassworks.screen.onStateChanged = {
             pushState()
             timerOverlay.refresh()
-            notificationOverlay.update(runtime.notifications.state)
+            notificationOverlay.update(runtime.s1Panes.notifications.state)
         }
-        glassworks.onVoiceUi = { voiceOverlay.update(runtime.voiceUi, panePrefs.voice.overlay) }
+        glassworks.onVoiceUi = { voiceOverlay.update(runtime.s1Panes.voiceUi, panePrefs.voice.overlay) }
         // Images leaving the panel (#117): the dot follows, on the main thread (PanelDevice posts each change).
         glassworks.onCameraLeaving = { cameraDot.show(glassworks.cameraLeaving) }
         cameraDot.show(glassworks.cameraLeaving)
@@ -1110,9 +1110,9 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         HaAuth.removeListener(authListener)
-        runtime.notifications.removeListener(notificationListener)
-        runtime.notifications.onOpenList = null
-        runtime.notifications.onReveal = null
+        runtime.s1Panes.notifications.removeListener(notificationListener)
+        runtime.s1Panes.notifications.onOpenList = null
+        runtime.s1Panes.notifications.onReveal = null
         HaAuth.threadJoin.removeListener(threadJoinListener)
         SetupSignals.removeListener(setupSignalListener)
         wifiStatus.observe(null)

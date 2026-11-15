@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.io.File
 import java.lang.reflect.Modifier
@@ -48,7 +48,7 @@ class PaneCatalogTest {
     }
 
     private val definitionIds by lazy {
-        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(RuntimeEnvironment.getApplication()).map { it.id }
+        KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(RuntimeEnvironment.getApplication()).map { it.id }
     }
 
     /**

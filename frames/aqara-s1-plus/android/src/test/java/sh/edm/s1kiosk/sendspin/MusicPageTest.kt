@@ -11,6 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.sendspin.SendspinSession.Phase
 import sh.edm.s1kiosk.sendspin.SendspinSession.Status
@@ -53,7 +54,7 @@ class MusicPageTest {
         )
         val pane = SendspinPane(ctx, haBase = { null })
         // The app's own definition, with the runtime's settings worker.
-        val definition = sh.edm.s1kiosk.GlassworksRuntime(sh.edm.s1kiosk.frame.AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).single { it.id == "sendspin" }
+        val definition = sh.edm.s1kiosk.KioskApp.runtime(sh.edm.s1kiosk.frame.AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).single { it.id == "sendspin" }
         val volume = definition.settings(pane).single().items.filterIsInstance<SettingsItem.Slider>().single()
         val answered = java.util.Collections.synchronizedList(ArrayList<Int>())
         val all = java.util.concurrent.CountDownLatch(50)

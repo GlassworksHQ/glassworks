@@ -21,7 +21,7 @@ import sh.edm.s1kiosk.frame.AqaraS1Plus
 class PaneExtrasTest {
 
     private val app get() = RuntimeEnvironment.getApplication()
-    private val extras by lazy { GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).intentExtras() }
+    private val extras by lazy { KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).intentExtras() }
 
     @Test
     fun theSameExtrasAsBefore() {

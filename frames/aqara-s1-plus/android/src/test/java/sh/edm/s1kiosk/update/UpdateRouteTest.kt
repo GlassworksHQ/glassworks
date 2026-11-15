@@ -13,10 +13,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.GlassworksRuntime
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import sh.edm.s1kiosk.KioskApp
 
 /**
  * Which way an update installs, from the frame's [RootUpdates] (Frame.rootUpdates): the S1's root update
@@ -49,7 +49,7 @@ class UpdateRouteTest {
     /** A manager on [frame], started, once its first pass on the update thread is done. */
     private fun started(frame: Frame): UpdateManager {
         val ready = CountDownLatch(1)
-        val m = UpdateManager(app, GlassworksRuntime(frame, AppBuild("1.0.0", 10000, debug = false))) { ready.countDown() }
+        val m = UpdateManager(app, KioskApp.runtime(frame, AppBuild("1.0.0", 10000, debug = false))) { ready.countDown() }
         managers += m
         m.start()
         assertTrue("the update thread started", ready.await(5, TimeUnit.SECONDS))

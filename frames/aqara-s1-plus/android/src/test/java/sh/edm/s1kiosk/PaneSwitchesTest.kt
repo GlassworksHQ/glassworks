@@ -19,7 +19,7 @@ import sh.edm.s1kiosk.frame.AqaraS1Plus
 @Config(sdk = [34], application = Application::class)
 class PaneSwitchesTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val definitions = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+    private val definitions = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
 
     @Test fun withoutBluetoothLeTheBluetoothProxyHasNoCard() {
         org.robolectric.Shadows.shadowOf(app.packageManager).setSystemFeature(android.content.pm.PackageManager.FEATURE_BLUETOOTH_LE, false)

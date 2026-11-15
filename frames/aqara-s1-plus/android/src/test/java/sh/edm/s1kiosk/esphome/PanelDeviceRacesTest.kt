@@ -23,6 +23,7 @@ import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowPowerManager
 import dev.glassworks.esphome.EspHomeLog
 import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.auth.HaAuth
@@ -75,7 +76,7 @@ class PanelDeviceRacesTest {
 
     @Before fun setUp() {
         app = RuntimeEnvironment.getApplication()
-        runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         // Panes that start real engines are off, and the wall base takes the backend that only
         // schedules a task on esphome-main (no UART, no Aqara cloud daemon).
         val prefs = KioskPrefs(app)

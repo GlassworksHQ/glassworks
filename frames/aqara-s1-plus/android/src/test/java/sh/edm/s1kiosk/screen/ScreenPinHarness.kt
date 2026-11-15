@@ -14,7 +14,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.SensorEventBuilder
 import org.robolectric.shadows.ShadowPowerManager
 import org.robolectric.shadows.ShadowSensor
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.time.Duration
@@ -54,7 +54,7 @@ class ScreenPinHarness {
         if (::screen.isInitialized) detach()
         ShadowPowerManager.reset()
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(screenOn)
-        screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen
+        screen = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen
         screen.start(context)
         screen.onKeepScreenOn = { keepOnCalls += it }
         screen.onBrightness = { brightnessCalls += it }

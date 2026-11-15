@@ -11,7 +11,7 @@ import dev.glassworks.pane.PaneContext
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.TextSensorEntity
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
@@ -157,7 +157,7 @@ class PaneFixtures(private val app: Application) {
     fun model(running: List<Pane>, off: Set<String> = emptySet(), link: () -> HaLink = { HaLink.CONNECTED }): () -> KioskSettingsOverlay.Model {
         KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel" }
         val radio = radioDefinition(app, FixedReadout(coordinator, running = true, allowedNow = "192.0.2.20"))
-        val definitions = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { if (it.id == "radio") radio else it }
+        val definitions = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { if (it.id == "radio") radio else it }
         definitions.forEach { d -> d.switch?.on = d.id !in off }
         val byId = running.associateBy { it.id }
         return { MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = definitions, running = { byId[it] }, link = link) }

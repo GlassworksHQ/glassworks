@@ -20,7 +20,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
@@ -64,7 +64,7 @@ class GenericFrameMockups {
             deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.AQARA_DETAIL) {},
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
         )
-        val sections = paneSections(GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app))
+        val sections = paneSections(KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app))
         o.show(KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), "0.4.3", sections.map { it.id }.toSet()))
         o.previewSection(section)
         Mockup.idle()
@@ -78,7 +78,7 @@ class GenericFrameMockups {
             override fun postForm(url: String, body: String) = 0 to ""
             override fun get(url: String, maxBytes: Int) = 0 to ""
         })
-        val runtime = GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false))
         val m = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app))
         val f = ManageFixture().apply { statusFn = { m.status() } }
         return f.Browser().also { it.signInWithHa() }
@@ -92,7 +92,7 @@ class GenericFrameMockups {
 
     private fun setup(frame: Frame, step: String): SetupOverlay {
         val a = Mockup.activity()
-        val s = SetupOverlay(a, GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false)).setupPanes(app), frame.friendlyName())
+        val s = SetupOverlay(a, KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).setupPanes(app), frame.friendlyName())
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(
             step = step, done = setOf(SetupFlow.WIFI), wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),

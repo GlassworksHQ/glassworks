@@ -67,7 +67,7 @@ interface RadioReadout {
 /**
  * The radio pane ([RadioPane]) for the whole process: the setup step (docs/onboarding.md, "Radio"),
  * the settings menu's Radio section, and the requests both send to the [RadioController]. Built once
- * by the app (GlassworksRuntime.paneDefinitions).
+ * by the app (S1Panes.paneDefinitions).
  */
 class RadioDefinition(
     /** The radio namespace's settings (`kiosk.xml`), the step's two flags included. */

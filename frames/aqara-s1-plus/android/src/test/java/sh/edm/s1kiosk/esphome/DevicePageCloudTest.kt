@@ -12,7 +12,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraCloud
@@ -40,7 +40,7 @@ class DevicePageCloudTest {
             else -> ""
         }
     })
-    private val runtime = GlassworksRuntime(AqaraS1Plus(cloud), build = AppBuild("1.0.0", 10000, debug = false))
+    private val runtime = KioskApp.runtime(AqaraS1Plus(cloud), build = AppBuild("1.0.0", 10000, debug = false))
     private lateinit var device: PanelDevice
 
     @Before fun setUp() {

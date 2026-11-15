@@ -72,7 +72,7 @@ class GenericFrameTest {
 
     @After fun tearDown() = devices.forEach { runCatching { it.stop() } }
 
-    private fun generic() = GlassworksRuntime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false))
+    private fun generic() = KioskApp.runtime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false))
 
     /** Starts the device the way KioskService does, and returns what it announced and the panes it built. */
     private fun run(runtime: GlassworksRuntime): Pair<DeviceIdentity, PanelDevice> {
@@ -106,7 +106,7 @@ class GenericFrameTest {
     }
 
     @Test fun theS1StillAnnouncesItselfAsAnS1() {
-        val (id, _) = run(GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)))
+        val (id, _) = run(KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)))
         assertEquals("aqara-s1-plus-a1b2c3", id.name)
         assertEquals("Aqara S1 Plus", id.friendlyName)
         assertEquals("Aqara", id.manufacturer)
@@ -154,7 +154,7 @@ class GenericFrameTest {
         panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, true).commit()
         for ((runtime, name, product, maker) in listOf(
             Quad(generic(), "Pixel Tablet", "Pixel Tablet (S1 Kiosk)", "Google"),
-            Quad(GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), "Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara"),
+            Quad(KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), "Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara"),
         )) {
             val (_, device) = run(runtime)
             val hello = (device.paneList().single { it.id == "sendspin" } as SendspinPane).player.hello()
@@ -194,7 +194,7 @@ class GenericFrameTest {
 
         val paneJson = RepoFiles.sources(atLeast = 8) { it.name == "pane.json" }
             .map { JSONObject(it.readText()) }.associate { it.getString("id") to words(it.getJSONArray("requires")) }
-        val definitions = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+        val definitions = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
         for (d in definitions) assertEquals(d.id, paneJson.getValue(d.id), d.requires.map { it.id }.toSet())
         // The other way: a pane.json that requires something has a definition that gates it, or rides with one.
         val ridesWith = mapOf("timers" to "assist")

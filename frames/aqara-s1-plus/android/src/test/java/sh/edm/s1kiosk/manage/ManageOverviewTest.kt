@@ -24,7 +24,7 @@ import org.robolectric.shadows.ShadowNetworkInfo
 import org.robolectric.shadows.ShadowSystemClock
 import org.robolectric.shadows.ShadowWifiInfo
 import org.robolectric.util.ReflectionHelpers
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
@@ -42,7 +42,7 @@ class ManageOverviewTest {
         override fun get(url: String, maxBytes: Int) = 0 to ""
     })
     private fun manage(context: Context = app, version: String = "0.4.3") =
-        S1Manage(context, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app), version)
+        S1Manage(context, KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app), version)
     private val manage = manage()
 
     private fun wifi() = manage.status().tiles.single { it.label == "Wi-Fi" }

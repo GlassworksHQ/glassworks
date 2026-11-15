@@ -301,8 +301,9 @@ through its definition (below), which uses the same typed class.
 
 A running `Pane` exists only while the device runs, but the setup screen decides on its first frame
 and the settings menu opens at any time. So a pane also has a `PaneDefinition`, made once per
-process. The app makes the core's (`GlassworksRuntime.paneDefinitions`), and the frame adds its own
-(`Frame.paneDefinitions`). The definition's `id` is the pane's.
+process. The app makes its own (`AppParts.paneDefinitions`, the S1's in `S1Panes`) and places the
+frame's (`Frame.paneDefinitions`) among them; the runtime marks the ones the frame can't run `CantRun`.
+The definition's `id` is the pane's.
 
 | Member | What it is |
 |---|---|
