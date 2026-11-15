@@ -202,7 +202,7 @@ old sign-in, polled `GetProfiles` about 59 times until it was adopted again. Bot
 | Device and media (`GetDeviceInformation`, `GetProfiles`, …) | HTTP 400, SOAP 1.2 fault `s:Sender` / `ter:NotAuthorized` | `is_auth_error()` is true: "auth failed" in the config flow, a reauth flow at setup |
 | Events (`PullMessages`, `Renew`, `CreatePullPointSubscription`, …) | HTTP 401 with the Digest and Basic challenge, no body | a `TransportError` 401: the pull loop waits 60 s instead of 0.75 s; reauth at setup |
 | RTSP (`DESCRIBE`, `SETUP`) | `RTSP/1.0 401` with the challenge | |
-| Digest with the right password on a nonce the panel forgot | HTTP 401, challenge with `stale=true` | the client signs in again once |
+| Digest with the right password on a nonce the panel forgot or that is over 12 h old (the SOAP services and the snapshot) | HTTP 401, challenge with `stale=true` | the client signs in again once |
 
 A wrong sign-in in the events now costs about two requests a minute, not one every 0.75 s: a pull
 each minute, and its one retry when the client answers the 401's Digest challenge (aiohttp's

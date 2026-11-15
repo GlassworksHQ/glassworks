@@ -183,6 +183,29 @@ class OnvifServerTest {
         assertEquals("the absolute form of another one", 400, profiles(digestWith(nonce, uri = "http://192.0.2.41:${s.localPort}/onvif/device_service")).status)
     }
 
+    @Test fun `the snapshot answers an aged digest nonce with a fresh challenge marked stale`() {
+        val s = newServer()
+        val path = "/onvif/snapshot.jpg"
+        val challenge = s.handle("GET", path, emptyMap(), ByteArray(0))
+        assertEquals(401, challenge.status)
+        val nonce = Regex("nonce=\"([^\"]+)\"").find(challenge.headers.first { it.second.startsWith("Digest") }.second)!!.groupValues[1]
+        fun get(n: String): OnvifServer.HttpResponse {
+            val ha1 = OnvifXml.md5Hex("$user:Glassworks:$pass")
+            val ha2 = OnvifXml.md5Hex("GET:$path")
+            val resp = OnvifXml.md5Hex("$ha1:$n:00000001:abc:auth:$ha2")
+            val auth = "Digest username=\"$user\", realm=\"Glassworks\", nonce=\"$n\", uri=\"$path\", qop=auth, nc=00000001, cnonce=\"abc\", response=\"$resp\""
+            return s.handle("GET", path, mapOf("authorization" to auth), ByteArray(0))
+        }
+        assertEquals("a fresh nonce", 200, get(nonce).status)
+        now += 12 * 3600_000L + 1
+        val aged = get(nonce)
+        assertEquals(401, aged.status)
+        assertTrue("stale=true, so the client signs in again once", aged.headers.first { it.second.startsWith("Digest") }.second.contains("stale=true"))
+        val wrong = s.handle("GET", path, mapOf("authorization" to "Basic " + OnvifBase64.encode("$user:wrong".toByteArray())), ByteArray(0))
+        assertEquals(401, wrong.status)
+        assertTrue("a wrong password isn't stale", wrong.headers.none { it.second.contains("stale=true") })
+    }
+
     @Test fun `a digest nonce lives 12 h, then the client signs in again`() {
         val s = newServer()
         fun profiles(headers: Map<String, String>) = s.handle("POST", "/onvif/media_service", headers, soap("<trt:GetProfiles/>", "").toByteArray())
