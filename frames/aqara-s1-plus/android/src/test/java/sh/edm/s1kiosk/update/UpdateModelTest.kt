@@ -133,6 +133,28 @@ class UpdateModelTest {
         assertTrue(m.statusText().contains("cancelled"))
     }
 
+    @Test fun waitingForTapOnlyWhileInstallingAndOnlyOnce() {
+        val m = UpdateModel("1.2.0")
+        assertFalse("no attempt", m.onWaitingForTap())
+        m.onChecked(offer("1.3.0"))
+        val a = m.beginInstall(0)!!
+        assertFalse("still downloading", m.onWaitingForTap())
+        assertEquals("Downloading 1.3.0: 0%", m.statusText())
+        m.onVerifying(a, 1_000)
+        assertFalse("still verifying", m.onWaitingForTap())
+        assertEquals("Verifying 1.3.0", m.statusText())
+
+        m.onInstalling(a, 2_000, "Installing 1.3.0")
+        assertTrue(m.onWaitingForTap())
+        assertEquals("Installing 1.3.0: waiting for a tap on the screen", m.statusText())
+        assertFalse("same text again: nothing to publish", m.onWaitingForTap())
+        assertEquals("Installing 1.3.0: waiting for a tap on the screen", m.statusText())
+
+        assertTrue(m.onFailed(a, "package installer: cancelled"))
+        assertFalse("the attempt ended", m.onWaitingForTap())
+        assertTrue(m.statusText().startsWith("Install of 1.3.0 failed"))
+    }
+
     @Test fun installNoteOnlyWhileAnUpdateWaits() {
         val m = UpdateModel("1.2.0")
         m.installNote = UpdateManager.NO_HELPER_NOTE
