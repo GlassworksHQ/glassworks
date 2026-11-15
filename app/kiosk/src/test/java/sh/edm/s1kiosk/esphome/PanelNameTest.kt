@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.esphome
 
 import android.app.Application
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -18,7 +19,6 @@ import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.sendspin.SendspinPrefs
 import sh.edm.s1kiosk.voice.VoicePrefs
-import java.io.File
 import java.net.InetAddress
 
 /**
@@ -70,8 +70,7 @@ class PanelNameTest {
     }
 
     @Test fun theFrameIsNamedAsItsFrameJson() {
-        val repo = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "frames").isDirectory }
-        val json = JSONObject(File(repo, "frames/aqara-s1-plus/design/frame.json").readText())
+        val json = JSONObject(RepoFiles.file("frames/aqara-s1-plus/design/frame.json").readText())
         val frame = AqaraS1Plus()
         assertEquals(json.getString("id"), frame.board)
         assertEquals(json.getString("name"), frame.displayName)

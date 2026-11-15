@@ -18,6 +18,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | `kiln/` | Kiln, the WebUSB installer (FEL → fastboot → boot patch → adb), served at s1.edm.sh. The page in `src/`, protocol modules in `packages/`, the Next.js app in `apps/kiln` | TypeScript, Vite, Next.js, Rust→WASM |
 | `frames/<id>/` | Everything about one frame: its README, its Kiln recipe (`installer/`), its design data (`design/frame.json`, `recovery.json`) and its research notes (`research/`) | TypeScript, JSON, Markdown |
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup | TypeScript, React |
+| `testing/` | Test helpers every Gradle module's tests share: `RepoFiles`, which finds source files across all modules from the repo root | Kotlin |
 | `tools/fel`, `tools/install` | FEL boot, U-Boot board files and patches, the CLI installer | bash |
 | `tools/root`, `tools/radio` | Init services in the patched boot image: root helper, update and bundle services | `/system/bin/sh` (mksh), C |
 | `docs/` | User guides; `docs/research/` holds the general engineering notes and the index of every note | Markdown |

@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.testing.RepoFiles
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertEquals
@@ -96,10 +97,7 @@ class BaseLayoutEntitiesPinTest {
         return null
     }
 
-    private fun goldenFile(): File {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        return File(root, "app/kiosk/src/test/resources/$GOLDEN")
-    }
+    private fun goldenFile(): File = RepoFiles.inModule("src/test/resources/$GOLDEN")
 
     private companion object {
         const val GOLDEN = "panel-entities-base.golden.txt"

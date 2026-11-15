@@ -7,6 +7,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import dev.glassworks.testing.RepoFiles
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 import java.io.File
@@ -24,8 +25,8 @@ object Mockup {
 
     /** Robolectric runs without the app's resources: read Inter from the source tree, as the app does from res/font. */
     fun interFromSources() {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        Inter.load = { File(root, "app/kiosk/src/main/res/font/inter.ttf").readBytes() }
+        val font = RepoFiles.inModule("src/main/res/font/inter.ttf")
+        Inter.load = { font.readBytes() }
     }
 
     fun activity(): Activity = Robolectric.buildActivity(Activity::class.java).setup().get()

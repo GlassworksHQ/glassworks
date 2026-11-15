@@ -25,11 +25,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowChoreographer
 import org.robolectric.shadows.ShadowLog
-import sh.edm.s1kiosk.ui.Inter
 import sh.edm.s1kiosk.TimerBoard
 import sh.edm.s1kiosk.TimerBoard.Entry
 import sh.edm.s1kiosk.TimerOverlay
 import sh.edm.s1kiosk.VoiceOverlay
+import sh.edm.s1kiosk.ui.Mockup
 import sh.edm.s1kiosk.voice.VoiceUi
 import java.io.File
 import java.time.Duration
@@ -56,8 +56,7 @@ class TimerMockups {
         // Screenshots of end states: view animations (slide, fade) finish at once.
         android.animation.ValueAnimator::class.java.getMethod("setDurationScale", Float::class.javaPrimitiveType).invoke(null, 0f)
         ShadowLog.stream = System.out
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        Inter.load = { File(root, "app/kiosk/src/main/res/font/inter.ttf").readBytes() }
+        Mockup.interFromSources()
     }
 
     @After fun tearDown() {

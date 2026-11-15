@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -33,11 +34,9 @@ class ContinuityMockups {
 
     @Before fun interFromSources() = Mockup.interFromSources()
 
-    private val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-
     /** The boot's last frame as the screen shows it: part2 at its trim offset on flat #0a0b0f. */
     private fun bootFrame(): Bitmap {
-        val zip = ZipFile(File(root, "branding/glass-tile/bootanimation.zip"))
+        val zip = ZipFile(RepoFiles.file("branding/glass-tile/bootanimation.zip"))
         val png = zip.getInputStream(zip.getEntry("part2/frame_0000.png")).use { it.readBytes() }
         val part = BitmapFactory.decodeByteArray(png, 0, png.size)
         val b = Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888)
@@ -79,7 +78,7 @@ class ContinuityMockups {
         val a = Mockup.activity()
         val o = LoadingOverlay(a, AqaraS1Plus.BOOT_REST)
         // Robolectric here runs without the app's resources: the PNG the app ships, read from its source.
-        val shipped = BitmapFactory.decodeFile(File(root, "app/kiosk/src/main/res/drawable-nodpi/boot_rest.png").path)
+        val shipped = BitmapFactory.decodeFile(RepoFiles.inModule("src/main/res/drawable-nodpi/boot_rest.png").path)
         o.loadRest = { android.graphics.drawable.BitmapDrawable(a.resources, shipped).apply { setTargetDensity(shipped.density) } }
         a.setContentView(o, ViewGroup.LayoutParams(-1, -1))
         o.show(LoadingOverlay.State.Connecting("Starting up", "", host = false))

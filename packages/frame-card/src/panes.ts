@@ -1,6 +1,6 @@
 // The pane catalog (issue 231): every pane in the app, from its pane.json and icon.svg, and what a frame
 // says about running it. Kiln and glassworks.dev read it here; the files live next to each pane's code
-// in app/kiosk/src/main/java, and scripts/panes.mjs collects them into panes.generated.ts.
+// in its module's src/main/java, and scripts/panes.mjs collects them into panes.generated.ts.
 import { ships, type FrameDesign, type Stage, type Support } from './frame';
 import { PANE_FILES } from './panes.generated';
 

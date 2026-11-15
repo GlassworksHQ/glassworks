@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -224,10 +225,7 @@ class PrefsPinTest {
         }
     }
 
-    private fun goldenFile(): File {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        return File(root, "app/kiosk/src/test/resources/$GOLDEN")
-    }
+    private fun goldenFile(): File = RepoFiles.inModule("src/test/resources/$GOLDEN")
 
     private companion object {
         const val GOLDEN = "prefs.golden.txt"

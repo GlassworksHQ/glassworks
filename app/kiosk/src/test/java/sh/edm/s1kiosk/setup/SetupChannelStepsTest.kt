@@ -3,6 +3,7 @@ package sh.edm.s1kiosk.setup
 import android.app.Application
 import dev.glassworks.pane.SetupStep
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.testing.RepoFiles
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -158,10 +159,7 @@ class SetupChannelStepsTest {
         else -> a == b
     }
 
-    private fun transcriptFile(): File {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        return File(root, "kiln/packages/setup-channel/test/s1-kiosk-transcript.json")
-    }
+    private fun transcriptFile(): File = File(RepoFiles.root, "kiln/packages/setup-channel/test/s1-kiosk-transcript.json")
 
     private companion object {
         const val IP = "192.0.2.10"

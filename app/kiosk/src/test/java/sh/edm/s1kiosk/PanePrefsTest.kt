@@ -12,6 +12,7 @@ import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.testing.RepoFiles
 import java.io.File
 import java.lang.reflect.Proxy
 import java.util.concurrent.Executors
@@ -207,12 +208,12 @@ class PanePrefsTest {
 
     /** The packages of the panes: none of them may reach the core's settings. */
     @Test fun panePackagesDoNotUseTheCoreFacade() {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        val src = File(root, "app/kiosk/src/main/java/sh/edm/s1kiosk")
-        val users = listOf("sendspin", "voice", "base", "radio", "timers")
-            .flatMap { File(src, it).walk().filter { f -> f.extension == "kt" }.toList() }
-            .filter { it.readText().contains("KioskPrefs") }
-            .map { it.relativeTo(src).path }
+        // in whichever module each package sits (RepoFiles); a package the scan stops finding fails, not passes
+        val packages = listOf("sendspin", "voice", "base", "radio", "timers").map { "sh/edm/s1kiosk/$it" }
+        val sources = RepoFiles.sources(atLeast = 40, inModules = RepoFiles.appModules) { f -> f.extension == "kt" && packages.any { RepoFiles.inPackage(f, it) } }
+        val missing = packages.filter { p -> sources.none { RepoFiles.inPackage(it, p) } }
+        assertTrue("the scan found no sources in $missing", missing.isEmpty())
+        val users = sources.filter { it.readText().contains("KioskPrefs") }.map(RepoFiles::packagePath)
         assertTrue("pane code uses KioskPrefs: $users", users.isEmpty())
     }
 

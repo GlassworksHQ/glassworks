@@ -3,6 +3,7 @@ package sh.edm.s1kiosk
 import android.app.Application
 import android.content.Intent
 import dev.glassworks.camera.CameraUse
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -40,7 +41,7 @@ class CameraAdbActivityTest {
     }
 
     @Test fun onlyAdbMayStartIt() {
-        val manifest = File("src/main/AndroidManifest.xml").readText()
+        val manifest = File(RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
         val decl = Regex("""<activity[^>]*android:name="\.CameraAdbActivity"[^>]*/>""").find(manifest)!!.value
         assertTrue(decl, decl.contains("""android:permission="android.permission.WRITE_SECURE_SETTINGS""""))
     }

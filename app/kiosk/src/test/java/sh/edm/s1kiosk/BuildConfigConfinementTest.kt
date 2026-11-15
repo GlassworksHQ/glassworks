@@ -1,9 +1,9 @@
 package sh.edm.s1kiosk
 
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Only [KioskApp] reads the APK's BuildConfig (#21, S-version). It hands the values in once as
@@ -12,15 +12,11 @@ import java.io.File
  * file that reads it can't move out. Files that stay in `:kiosk` (the frame, S1Manage) could read it,
  * but none needs to, so they get no exception either and a new read fails now rather than at the split.
  * The scan matches the text, as `EngineConfinementTest` does, so a comment or a fully qualified name
- * trips it too.
+ * trips it too. It covers every module but the libraries, wherever they sit ([RepoFiles]).
  */
 class BuildConfigConfinementTest {
-    private val appRoot: File = generateSequence(File("").absoluteFile) { it.parentFile }
-        .first { File(it, "libs").isDirectory && File(it, "kiosk/src/main").isDirectory }
-    private val main = File(appRoot, "kiosk/src/main/java")
-
     /** The one file that reads it. */
-    private val reader = File(main, "sh/edm/s1kiosk/KioskApp.kt")
+    private val reader = "sh/edm/s1kiosk/KioskApp.kt"
 
     /**
      * The import, or a bare `BuildConfig.` (same package or a wildcard import), also with the dot on the next
@@ -31,21 +27,19 @@ class BuildConfigConfinementTest {
     /** The 1-based lines of [text] where a read starts. The whole text is scanned, so a read split over lines counts. */
     private fun reads(text: String): List<Int> = use.findAll(text).map { m -> text.substring(0, m.range.first).count { it == '\n' } + 1 }.toList()
 
-    private fun sources(): List<File> = main.walkTopDown().filter { it.isFile && (it.extension == "kt" || it.extension == "java") }.toList()
-
     @Test
     fun `only KioskApp reads the APK's BuildConfig`() {
-        assertTrue("scan found no sources", sources().size > 100)
-        val found = sources().filter { it != reader }.flatMap { f ->
+        val sources = RepoFiles.code(atLeast = 100, inModules = RepoFiles.appModules)
+        val found = sources.filter { RepoFiles.packagePath(it) != reader }.flatMap { f ->
             val lines = f.readLines()
-            reads(f.readText()).map { n -> "${f.relativeTo(appRoot).path}:$n: ${lines[n - 1].trim()}" }
+            reads(f.readText()).map { n -> "${RepoFiles.rel(f)}:$n: ${lines[n - 1].trim()}" }
         }
         assertTrue("BuildConfig outside KioskApp; use glassworks.build or PaneContext.build:\n${found.joinToString("\n")}", found.isEmpty())
     }
 
     @Test
     fun `the scan sees the file that hands the build in`() {
-        assertTrue(reads(reader.readText()).isNotEmpty())
+        assertTrue(reads(RepoFiles.source(reader).readText()).isNotEmpty())
     }
 
     @Test
