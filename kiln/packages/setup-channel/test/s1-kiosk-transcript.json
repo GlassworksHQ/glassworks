@@ -173,7 +173,7 @@
     "reply": {
       "id": 4,
       "ok": false,
-      "error": "Zigbee coordinator (TCP) needs the root helper (init service s1kiosk_radio is not installed; see docs/radio.md). Still in Off."
+      "error": "Zigbee coordinator (TCP) needs the root helper (init service s1kiosk_radio is not installed; see frames/aqara-s1-plus/docs/radio.md). Still in Off."
     }
   },
   {
