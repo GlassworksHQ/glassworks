@@ -29,6 +29,7 @@ lockfile swap). Its `package.json` lists `kiln` (the page), `kiln/packages/*`, `
 | `packages/brand` | The Glassworks tokens, mark, and Kiln's favicon (the small cut of its ember-floor mark) and app icon, generated from glassworks.dev by `sync.mjs`. Don't edit `src/` |
 | `packages/fel`, `fastboot`, `adb`, `bootpatch`, `setup-channel`, `improv-serial` | Protocol modules: TypeScript source, each with its own tests. Not published (`"private": true`) |
 | `packages/app-adb` | S1 Kiosk over adb, the same on every frame: install, permissions, start with the Home Assistant URL, its version, its device admin. The S1's provisioning and the Mirror's recipe both use it; the S1's command sequence is pinned (`frames/aqara-s1-plus/installer/test/adb-commands-pin.test.ts`) |
+| `packages/ext4` | Android sparse images and ext4 in the browser: stream a sparse image into OPFS, edit its ext4 (files, owners, SELinux labels), build a fresh ext4, stream it back out for fastboot. Checked against e2fsprogs in CI. See its [README](packages/ext4/README.md) |
 | `packages/kiln-core` | The step engine: `InstallFlow`, the `FlowUi` contract, the `Recipe` types, backups |
 | `../frames/aqara-s1-plus/installer` | The S1 recipe (`s1Plus`), provisioning, the signing-key switch, the app's Improv socket |
 | `../frames/lululemon-mirror/installer` | The Mirror's recipe: adb only, no root. Read-only checks, S1 Kiosk's legacy APK, the home screen through Android's chooser, undo. Test only for now (`/lululemon-mirror?apk=local`) |

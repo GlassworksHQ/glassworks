@@ -366,8 +366,14 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+      - name: e2fsprogs, which checks the ext4 images @glassworks/ext4 writes
+        run: |
+          command -v e2fsck debugfs mke2fs || { sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends e2fsprogs > /dev/null; }
+          e2fsck -V
       - run: npm run typecheck
       - run: npm test
+        env:
+          GW_EXT4_TOOLS: require
       - name: The page s1.edm.sh serves builds
         run: npm run build -w kiln
       - name: Kiln (Next.js) builds
