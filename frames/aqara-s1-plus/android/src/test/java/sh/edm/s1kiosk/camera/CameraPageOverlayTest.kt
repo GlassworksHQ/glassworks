@@ -11,6 +11,7 @@ import dev.glassworks.camera.CameraReadout
 import dev.glassworks.camera.CameraUse
 import dev.glassworks.camera.CameraUsePickers
 import dev.glassworks.pane.Pane
+import dev.glassworks.pane.SettingsChange
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -85,43 +86,32 @@ class CameraPageOverlayTest {
     private fun onScreen(o: KioskSettingsOverlay, text: String) =
         all(o).filterIsInstance<android.widget.TextView>().any { it.text.toString().contains(text) }
 
-    /** Opens the sign-in's sheet from its row ("glassworks · password hidden"), then presses Show. */
-    private fun show(o: KioskSettingsOverlay) {
+    /** Opens the sign-in's sheet from its row ("glassworks · password set"). */
+    private fun open(o: KioskSettingsOverlay) {
         val row = all(o).filterIsInstance<android.widget.TextView>().first { it.text.toString().startsWith("glassworks ·") }
         generateSequence(row as android.view.View) { it.parent as? android.view.View }.first { it.isClickable }.performClick()
         Mockup.idle()
-        Mockup.label(o, "Show").performClick()
+    }
+
+    /** The maintainer, 2026-11-15: the stored password never shows on the panel, and there is no Show. */
+    @Test fun theStoredPasswordNeverShowsAndANewOneCanBeSet() {
+        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
+        def.prefs.signIn = "glassworks" to "made-up-pass-1234"
+        val o = menu(def, pane())
+        assertEquals(true, onScreen(o, "glassworks · password set"))
+        open(o)
+        val fields = all(o).filterIsInstance<android.widget.EditText>().filter { it.isShown }
+        val password = fields.single { it.hint?.toString() == SettingsChange.NEW_PASSWORD }
+        assertEquals("the field starts empty", "", password.text.toString())
+        assertEquals("no Show button", false, all(o).filterIsInstance<android.widget.TextView>().any { it.isShown && it.text.toString() == "Show" })
+        assertEquals("not anywhere on screen", false, onScreen(o, "made-up-pass-1234"))
+
+        password.setText("made-up-new-5678")
+        all(o).filterIsInstance<android.widget.TextView>().single { it.isShown && it.text.toString() == "Save" }.performClick()
         Mockup.idle()
-    }
-
-    @Test fun thePasswordShowsOnlyOnShow() {
-        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
-        def.prefs.signIn = "glassworks" to "made-up-pass-1234"
-        val o = menu(def, pane())
-        assertEquals("hidden at first", false, onScreen(o, "made-up-pass-1234"))
-        assertEquals(true, onScreen(o, "glassworks · password hidden"))
-        show(o)
-        assertEquals("shown on Show", true, onScreen(o, "made-up-pass-1234"))
-        o.back(); Mockup.idle()
-        assertEquals("hidden when the sheet closes", false, onScreen(o, "made-up-pass-1234"))
-    }
-
-    @Test fun aRevealedPasswordHidesWhenTheScreenGoesOffOrAfterAMinute() {
-        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
-        def.prefs.signIn = "glassworks" to "made-up-pass-1234"
-        val o = menu(def, pane())
-        show(o)
-        assertEquals(true, onScreen(o, "made-up-pass-1234"))
-        o.screenChanged(on = true)
-        assertEquals("the screen staying on changes nothing", true, onScreen(o, "made-up-pass-1234"))
-        o.screenChanged(on = false)
-        assertEquals("hidden when the screen goes off", false, onScreen(o, "made-up-pass-1234"))
-
-        Mockup.label(o, "Show").performClick()
-        assertEquals("Show is back, and shows it again", true, onScreen(o, "made-up-pass-1234"))
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(KioskSettingsOverlay.REVEAL_MS - 1_000, java.util.concurrent.TimeUnit.MILLISECONDS)
-        assertEquals("still shown just before the minute", true, onScreen(o, "made-up-pass-1234"))
-        org.robolectric.shadows.ShadowLooper.idleMainLooper(2_000, java.util.concurrent.TimeUnit.MILLISECONDS)
-        assertEquals("hidden after it", false, onScreen(o, "made-up-pass-1234"))
+        assertEquals("glassworks" to "made-up-new-5678", def.prefs.signIn)
+        assertEquals("the new one doesn't show either", false, onScreen(o, "made-up-new-5678"))
+        open(o)
+        assertEquals("the sheet opens empty again", false, onScreen(o, "made-up-new-5678"))
     }
 }

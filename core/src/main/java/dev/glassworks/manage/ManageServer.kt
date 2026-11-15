@@ -286,8 +286,9 @@ class ManageServer(
     }
 
     /**
-     * A sign-in's dialog: a user name and a password, or Clear. The password is passed on to the item's
-     * save and nowhere else: not to the Log, not back into the page when it didn't save.
+     * A sign-in's dialog: a user name and a new password, or Clear. The password is passed on to the item's
+     * save and nowhere else: not to the Log, not back into the page when it didn't save. No route reads a
+     * stored password back (maintainer, 2026-11-15).
      */
     private fun changeSignIn(req: HttpRequest, s: Session, viewer: ManagePages.Viewer, page: String,
                              key: String, what: String, item: SettingsItem.SignIn): HttpResponse {
@@ -300,28 +301,6 @@ class ManageServer(
         event(if (problem == null) "${who(s)} $did" else "${who(s)} couldn't change $what: $problem")
         if (problem == null) return HttpResponse.seeOther(page)
         return settingsPage(host.status(), viewer, page.removePrefix("/"), ManagePages.Dialog.Edit(key, problem), code = 422)!!
-    }
-
-    /**
-     * `/settings/reveal`, POST: a sign-in's password, on its dialog, because the person asked (Show). Only for
-     * a browser signed in with Home Assistant. The Log says who looked, never what they saw; the page is
-     * no-store, as every page is.
-     */
-    private fun revealSignIn(req: HttpRequest, s: Session, viewer: ManagePages.Viewer): HttpResponse {
-        val status = host.status()
-        val id = req.form["section"].orEmpty()
-        val section = status.sections.firstOrNull { it.id == id } ?: return HttpResponse.seeOther("/")
-        val page = "/" + (status.panes.firstOrNull { it.sectionId == id }?.id ?: id)
-        val key = req.form["key"].orEmpty()
-        val item = SettingsChange.find(section, key) as? SettingsItem.SignIn ?: return HttpResponse.seeOther("$page?done=gone")
-        val what = "${section.title} › ${key.replace("/", " › ")}"
-        if (s.with != SignedInWith.HOME_ASSISTANT) {
-            event("${who(s)}: refused to show $what's password: needs a Home Assistant sign-in")
-            return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Edit(key, ManagePages.NEEDS_HA_REVEAL), code = 403)!!
-        }
-        val password = runCatching { item.reveal() }.getOrNull()
-        event("${who(s)} showed $what's password")
-        return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Edit(key, revealed = password))!!
     }
 
     /** [SettingsChange.change] on the panel's main thread; its answer, or [PENDING] when it takes longer than a page should wait. */
@@ -367,7 +346,6 @@ class ManageServer(
                 is PanelCode.Check.Locked -> html(429, rebootDialog(host.status(), viewer, lockedText()))
             }
             "/settings" -> changeSetting(req, s, viewer)
-            "/settings/reveal" -> revealSignIn(req, s, viewer)
             "/security/signout" -> {
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }

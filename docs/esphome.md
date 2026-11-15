@@ -419,7 +419,7 @@ Presence comes from lighting-insensitive motion on the panel; no image leaves it
 | binary_sensor `Camera presence` (occupancy) | `camera_presence` | none, on | Someone moving in view; ends 8 s after the last movement. Lighting changes don't count |
 | switch `Camera privacy` | `camera_privacy` | none, on | Closes the camera: no presence, no stills, no stream |
 | select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + camera` (snapshots for Home Assistant, and the stream if you turn it on) |
-| switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*; turned on, it runs with the panel's own sign-in; encrypted connections only |
+| switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*; runs only once you set its sign-in on the Camera page; encrypted connections only |
 | number `Camera sensitivity` | `camera_sensitivity` | config, off | 1 (least) to 10 (most), default 5 |
 | switch `Camera pane` | `camera_pane` | config, off | The pane's on/off (#67) |
 
@@ -440,26 +440,23 @@ The Camera page also offers two [blueprints](blueprints.md): *Lights on at the p
 it's dark) and *Snapshot when away* (the panel's picture to your phone when it sees movement and nobody
 is home; it needs *Presence + camera*). Neither has run on a panel yet (2026-11-15).
 
-**The stream's sign-in is made for each panel.** The first time the stream is turned on without one,
-the panel makes its own: the username `glassworks` and a random 20-character password (letters and
-digits without the ones that read alike, from `SecureRandom`). It is never a default shared between
-panels, and it never changes by itself; clear it and turn the stream on again for a new one. The
-stream never runs without a sign-in. The Camera page's *Sign-in* row shows the username; tap it and
-press **Show** to read the password. It hides again after a minute, when the screen goes off or when
-you close it. You can change the username and password there, or **Clear** them (with the stream on,
-the panel makes a new one). The Manage page has the same row and **Show**, for a browser signed in
-with Home Assistant. The password is never logged, and no entity or diagnostic carries it. Use this
-sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate or UniFi Protect. A
+**You set the stream's sign-in, and the panel never shows its password.** The stream never runs
+without a sign-in, and there is no default. Turn the stream on, then open the Camera page's *Sign-in*
+row and type a user name (it starts as `glassworks`) and a password of your own. Until you do, the
+page's status line says the stream has no sign-in. The password is write-only: once saved, no screen,
+page, entity, log or diagnostic shows it, so keep it where you keep other passwords. To change it,
+type a new one; leave the field empty to keep the stored one and change only the user name. **Clear**
+removes both and closes the stream until you set a new one. The Manage page has the same row. Use
+this sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate or UniFi Protect. A
 client that signs in wrong is refused: the device and media services answer with a SOAP
 `NotAuthorized` fault (Home Assistant then asks you to sign in again), the event service with a bare
 HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. The panel logs the
 refusal once a minute per client.
 
-The camera's settings are set from adb until the Manage page edits settings (#178), through an
-activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
+The camera's settings can also be set from adb, through an activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
 the stream): `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
-`--es camera_stream_sign_in 'user:password'` sets your own sign-in in place of the panel's, and an
-empty value clears it (the next time the stream turns on, a new one is made). The pane's on/off is the
+`--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
+it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity.
 
 ### App updates

@@ -264,7 +264,6 @@ class MainActivity : Activity() {
             pushState()
             timerOverlay.refresh()
             notificationOverlay.update(runtime.notifications.state)
-            settingsOverlay.screenChanged(glassworks.screen.screenOn) // a revealed stream password doesn't outlast the screen
         }
         glassworks.onVoiceUi = { voiceOverlay.update(runtime.voiceUi, panePrefs.voice.overlay) }
         // Images leaving the panel (#117): the dot follows, on the main thread (PanelDevice posts each change).

@@ -119,9 +119,10 @@ setup and two Protect notes (read 2026-11-14):
 **What Glassworks changes** (each ported file lists its own changes in its header):
 
 - With no sign-in set, both servers refuse every request that needs a user. Upstream let everyone
-  in. A username with a blank password counts as no sign-in. Since 2026-11-14 (maintainer) the pane
-  makes each panel its own sign-in the first time the stream turns on, so the stream never runs
-  without one; there is still no default shared between panels.
+  in. A username with a blank password counts as no sign-in. The stream never runs without a
+  sign-in, and there is no default shared between panels. From 2026-11-14 the pane made each panel its
+  own; since 2026-11-15 (maintainer) the person sets it, because the panel no longer shows a password
+  once it is saved.
 - XML with a DTD is refused before it is parsed, in SOAP and in WS-Discovery: parsing runs before
   any sign-in, and Android's parser ignores upstream's `disallow-doctype-decl` flag, so an entity
   bomb or an external entity would otherwise reach it. An entity resolver refuses the rest.

@@ -5,17 +5,12 @@
 package dev.glassworks.camera
 
 import android.content.SharedPreferences
-import java.security.SecureRandom
 
 /**
  * The camera pane's settings, in the file `PaneContext.prefs("camera")` gives it. Panels keep these
  * keys: never rename them. The stream's password is never logged.
  */
-class CameraPrefs(
-    private val sp: SharedPreferences,
-    /** Makes the stream's password ([StreamSignIn]); a test passes its own. */
-    private val random: () -> SecureRandom = { SecureRandom() },
-) {
+class CameraPrefs(private val sp: SharedPreferences) {
 
     /** The pane is on ([CameraDefinition.switch] writes it). Off until someone turns it on. */
     val enabled: Boolean get() = sp.getBoolean(KEY_ENABLED, false)
@@ -44,24 +39,17 @@ class CameraPrefs(
         get() = sp.getInt(KEY_SENSITIVITY, CameraPresence.DEFAULT_SENSITIVITY).coerceIn(1, 10)
         set(v) { sp.edit().putInt(KEY_SENSITIVITY, v.coerceIn(1, 10)).apply() }
 
-    /** The stream's sign-in, or null until both parts are set. */
+    /**
+     * The stream's sign-in, or null until both parts are set. Only the person sets it, and no surface
+     * shows the password again (maintainer, 2026-11-15): the panel never makes one it couldn't show.
+     */
     var signIn: Pair<String, String>?
         get() {
-            val user = sp.getString(KEY_STREAM_USER, null)?.takeIf { it.isNotBlank() } ?: return null
-            val pass = sp.getString(KEY_STREAM_PASSWORD, null)?.takeIf { it.isNotEmpty() } ?: return null
-            return user to pass
+            val user = sp.getString(KEY_STREAM_USER, null)?.takeIf { it.isNotBlank() }
+            val pass = sp.getString(KEY_STREAM_PASSWORD, null)?.takeIf { it.isNotEmpty() }
+            return if (user != null && pass != null) user to pass else null
         }
         set(v) { sp.edit().putString(KEY_STREAM_USER, v?.first).putString(KEY_STREAM_PASSWORD, v?.second).commit() }
-
-    /**
-     * The stream's sign-in, made now if there is none ([StreamSignIn]): the first time the stream is
-     * turned on, and again only after someone cleared it. True when it was made by this call.
-     */
-    @Synchronized fun ensureSignIn(): Boolean {
-        if (signIn != null) return false
-        signIn = StreamSignIn.generate(random())
-        return true
-    }
 
     val policy: CameraPolicy get() = CameraPolicy(privacy, use, onvif)
 
@@ -73,6 +61,9 @@ class CameraPrefs(
         const val KEY_SENSITIVITY = "camera_sensitivity"
         const val KEY_STREAM_USER = "camera_stream_user"
         const val KEY_STREAM_PASSWORD = "camera_stream_password"
+
+        /** The user name the sign-in sheet starts with while none is set: easy to type into Home Assistant or Protect. */
+        const val DEFAULT_USER = "glassworks"
 
         /** The keys the running pane reacts to. */
         val KEYS = setOf(KEY_USE, KEY_PRIVACY, KEY_ONVIF, KEY_SENSITIVITY, KEY_STREAM_USER, KEY_STREAM_PASSWORD)

@@ -66,6 +66,7 @@ object CameraPage {
         r.problem == CameraPane.NOT_ALLOWED -> "$NOT_ALLOWED_LINE." to Tone.PROBLEM
         r.problem != null -> r.problem to Tone.PROBLEM
         r.privacy -> "Camera privacy is on · the camera is closed" to Tone.QUIET
+        r.onvif && !r.signedIn -> NO_SIGN_IN to Tone.PROBLEM
         r.watchers.isNotEmpty() -> "Camera in use · streaming to ${viewers(r.watchers.size)} · images leave the panel" to Tone.OK
         r.leaving -> "Camera in use · sending images to Home Assistant" to Tone.OK
         !r.detecting -> "The camera is closed · the panel's own sensor wakes the screen" to Tone.QUIET
@@ -120,9 +121,9 @@ object CameraPage {
     fun streamDetail(privacy: Boolean, use: CameraUse): String =
         streamRefusal(privacy, use) ?: "For Frigate, go2rtc, Home Assistant's ONVIF integration and UniFi Protect."
 
-    /** The username, never the password: the sign-in's Show has that. None yet: made when the stream turns on. */
+    /** The user name, never the password: no surface shows that. */
     fun signIn(signIn: Pair<String, String>?): String =
-        signIn?.let { "${it.first} · password hidden" } ?: SIGN_IN_NOT_MADE
+        signIn?.let { "${it.first} · password set" } ?: SIGN_IN_NOT_SET
 
     fun address(a: StreamAddress?): String =
         a?.let { "${it.host} · RTSP port ${it.rtspPort}, ONVIF port ${it.onvifPort}" } ?: "The panel has no address yet"
@@ -143,6 +144,7 @@ object CameraPage {
     const val NOT_ALLOWED_LINE = "Android hasn't allowed the camera. Allow it in setup, or in Android's app settings"
     const val NEEDS_CAMERA = "Needs ${CameraPrefs.USE_CAMERA}."
     const val PRIVACY_ON = "Camera privacy is on."
-    const val SIGN_IN_NOT_MADE = "Made for this panel when the stream is turned on"
+    const val SIGN_IN_NOT_SET = "Not set · the stream starts once you set one"
+    const val NO_SIGN_IN = "The stream is on but has no sign-in · set one under ONVIF stream"
     const val PRIVACY_DETAIL = "Closes the camera. Presence, snapshots and the stream stop."
 }

@@ -219,19 +219,18 @@ sealed interface SettingsItem {
     ) : SettingsItem
 
     /**
-     * A sign-in: a user name and a password, saved together (the camera stream's, #252; the panel makes one
-     * per device). The password is hidden: the row says [shown] of [isSet], and a surface reads [reveal] only
-     * when the person asks to see it (Show), so it can be typed into Protect, Home Assistant's ONVIF or Frigate.
-     * Never in a log, an entity or the diagnostics. `save` gets the pair, or null for Clear;
+     * A sign-in: a user name and a password, saved together (the camera stream's, #252). The password is
+     * write-only: no surface ever shows it again, so the row says [shown] of [isSet] and the person types a
+     * new one to change it. Never in a log, an entity, the diagnostics or a response. `save` gets the user
+     * name and the new password, or null for the password to keep the stored one; or null for Clear.
      * [SettingsChange.signIn] checks it first.
      */
     class SignIn(
         val title: String,
         val isSet: () -> Boolean,
         val user: () -> String? = { null },
-        val reveal: () -> String? = { null },
         val shown: (Boolean) -> String = { if (it) "Set" else "Not set" },
-        val save: (Pair<String, String>?, done: (String?) -> Unit) -> Unit,
+        val save: (Pair<String, String?>?, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
     /** Opens something else: another app's settings, the licences. */
@@ -243,7 +242,7 @@ sealed interface SettingsItem {
     /**
      * A name and a status line under it (the app's version, what plays now). Read again while the page is
      * open. [fixable]: the line says what's missing that the person can set (amber). A secret is never an
-     * Info: a password the person may read is a [SignIn], shown on request.
+     * Info: a password is a [SignIn], which never shows it.
      */
     class Info(
         val title: () -> String,

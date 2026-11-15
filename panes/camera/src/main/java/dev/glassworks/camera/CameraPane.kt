@@ -133,8 +133,7 @@ class CameraPane(
     @Synchronized fun reconcile() {
         if (!running) return
         val allowed = permitted()
-        // The stream never runs without a sign-in: turned on without one, it gets this panel's own.
-        if (policy.onvif && policy.stillsMayLeave && prefs.ensureSignIn()) log("stream sign-in made for this panel")
+        // The stream never runs without a sign-in: turned on without one, it waits until the person sets one.
         val signIn = prefs.signIn
         val next = CameraPlan.of(policy, allowed, ownSensor(), signIn != null)
         if (!allowed && !policy.privacy) problem = NOT_ALLOWED

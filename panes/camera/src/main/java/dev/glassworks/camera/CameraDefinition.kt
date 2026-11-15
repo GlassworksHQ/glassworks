@@ -9,6 +9,7 @@ import dev.glassworks.frame.Capability
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.PaneSwitch
+import dev.glassworks.pane.SettingsChange
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.pane.SetupStep
@@ -90,13 +91,20 @@ class CameraDefinition(
                             val no = CameraPage.streamRefusal(prefs.privacy, prefs.use)
                             if (on && no != null) done(no) else { prefs.onvif = on; done(null) }
                         },
-                        // The username; the password only on Show, on the panel and on the Manage page with a Home
-                        // Assistant sign-in, and editable on both (maintainer, 2026-11-14; #242). Cleared while the
-                        // stream runs, the pane makes a new one for this panel (CameraPrefs.ensureSignIn).
+                        // The user name shows; the password is write-only on every surface (maintainer, 2026-11-15).
+                        // Cleared, the stream closes until someone sets a new one.
                         SettingsItem.SignIn(
-                            "Sign-in", isSet = { prefs.signIn != null }, user = { prefs.signIn?.first }, reveal = { prefs.signIn?.second },
+                            "Sign-in", isSet = { prefs.signIn != null }, user = { prefs.signIn?.first ?: CameraPrefs.DEFAULT_USER },
                             shown = { CameraPage.signIn(prefs.signIn) },
-                        ) { v, done -> prefs.signIn = v; done(null) },
+                        ) { v, done ->
+                            // An empty field keeps the stored password; if it was cleared since the sheet opened, there is none to keep.
+                            val kept = prefs.signIn?.second
+                            when {
+                                v == null -> { prefs.signIn = null; done(null) }
+                                v.second == null && kept == null -> done(SettingsChange.TYPE_PASSWORD)
+                                else -> { prefs.signIn = v.first to (v.second ?: kept!!); done(null) }
+                            }
+                        },
                         SettingsItem.Info({ "Address" }, { CameraPage.address(read().address) }),
                         SettingsItem.Info({ "Stream" }, { CameraPage.stream(read()) }),
                         SettingsItem.Info({ "ONVIF device" }, { CameraPage.device(read()) }),
