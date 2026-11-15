@@ -91,8 +91,11 @@ with the tokens, rather than a styled kit.
 
 ## Deploy
 
-Static output on Vercel, with `glassworks.dev` pointed at it from Cloudflare DNS. The Vercel project
-builds from the repo root's npm workspace with `site` as its Root Directory.
+Static output on Vercel, with `glassworks.dev` pointed at it from Cloudflare DNS. The project's Root
+Directory is `site`, with "Include files outside the root directory" on (the build reads the root's
+`package.json` and lockfile, `packages/`, `frames/` and `tools/perf`). `vercel.json` installs and
+builds from the repo root, the npm workspace root: `npm ci`, then `npm run build -w site`. Kiln's
+project works the same way (`kiln/apps/kiln/vercel.json`).
 
 Vercel does not build on pushes (`git.deploymentEnabled: false` in `vercel.json`), so branches and
 PRs get no preview. The maintainer deploys production. Until 2026-11-15 the site was its own repo,
