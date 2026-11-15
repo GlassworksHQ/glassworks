@@ -1090,10 +1090,10 @@ class MainActivity : Activity() {
         private const val REQ_STARTUP = 1
         private const val REQ_GECKO = 2
         private const val RETRY_MS = 10_000L
-        /** The connecting screen waits this long after the page loaded for the page to say it's drawn. */
-        internal const val READY_FALLBACK_MS = 15_000L
-        /** ... and this long while Home Assistant's frontend says it is still loading. */
-        internal const val LAUNCH_FALLBACK_MS = 45_000L
+        /** The connecting screen waits this long after the page loaded for the page to say it's drawn. Public for tests. */
+        const val READY_FALLBACK_MS = 15_000L
+        /** ... and this long while Home Assistant's frontend says it is still loading. Public for tests. */
+        const val LAUNCH_FALLBACK_MS = 45_000L
         private const val SETUP_TICK_MS = 2_000L
         private const val SETTINGS_TICK_MS = 2_000L
     }
