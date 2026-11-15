@@ -162,6 +162,53 @@ authorized adb key is the physical authorization. That means it needs adb turned
 kiosks, signage and other single-purpose devices. S1 Kiosk's `ImprovSerialServer.kt` is the full
 example.
 
+## Compared with the Improv spec
+
+What the [Improv Wi-Fi](https://www.improv-wifi.com/) spec defines, and what each side here does:
+this library on the device, and [`improv-serial`](../../kiln/packages/improv-serial/README.md) in
+the browser. Checked on 2026-11-15 against the [BLE spec](https://www.improv-wifi.com/ble/) at
+revision 2.4 and the [serial spec](https://www.improv-wifi.com/serial/) as published that day.
+"Since" is this library's version; `improv-serial` isn't on npm yet. The adb transport is ours, not
+the spec's: it carries Improv Serial unchanged.
+
+Status words:
+
+- **Supported**: works today, since the version given.
+- **Partial**: works, with the gaps named.
+- **Planned**: we mean to do it; the issue is linked.
+- **Not yet**: no decision either way.
+- **Not planned**: we won't, for the reason given.
+
+**Count for improv (device)** (BLE 2.4 and the serial spec): 15 supported, 1 partial, 0 planned, 2 not yet, 2 not planned.
+
+**Count for improv-serial (browser)** (the same specs): 7 supported, 0 partial, 0 planned, 4 not yet, 9 not planned.
+
+| Feature | Spec | improv (device) | improv-serial (browser) | Since | Notes |
+|---|---|---|---|---|---|
+| BLE: GATT service and characteristics | Service `…8000`; state, error, RPC command, RPC result, capabilities | Supported | Not planned: Kiln reaches the device over USB; HA's `improv_ble` and improv-wifi.com are the BLE clients | 0.1.0 | |
+| BLE: service data advertisement | `4677` service data with state and capabilities (rev 2.0) | Supported | Not planned: BLE | 0.1.0 | Legacy or extended advertising |
+| BLE: authorization | Authorization required, authorized, a timeout | Supported | Not planned: BLE | 0.1.0 | The app does the physical step (`session.authorize`). Two minutes by default |
+| BLE: commands over 20 bytes | Split over several writes | Supported | Not planned: BLE | 0.1.0 | Reassembled; results sized to the MTU |
+| BLE: send Wi-Fi settings | 0x01, redirect URL in the result | Supported | Not planned: BLE | 0.1.0 | |
+| BLE: identify | 0x02 | Supported | Not planned: BLE | 0.1.0 | Your `identify()` |
+| BLE: device info | 0x03 (rev 2.1) | Supported | Not planned: BLE | 0.1.0 | |
+| BLE: scan networks | 0x04 (rev 2.2) | Supported | Not planned: BLE | 0.1.0 | One result of triples, strongest first, cut to fit |
+| BLE: errors | 0x00–0x05, 0xFF | Supported | Not planned: BLE | 0.1.0 | |
+| Serial: framing | `IMPROV`, version 1, type, length, checksum | Supported | Supported | 0.1.0 | Over a UART, a socket or adb |
+| Serial: state packet | Ready, provisioning, provisioned | Supported | Supported | 0.1.0 | |
+| Serial: error packet | 0x00–0x03, 0x05, 0xFF; 0x00 again when a command arrives | Partial: no 0x00 reset when a command arrives | Supported | 0.1.0 | The device sends errors 0x01–0x03 but never clears them with 0x00, as the spec asks. Over BLE it does |
+| Serial: send Wi-Fi settings | 0x01, redirect URL in the result | Supported | Supported | 0.1.0 | |
+| Serial: request current state | 0x02 | Supported | Supported | 0.1.0 | Sends the redirect URL too when provisioned |
+| Serial: device info | 0x03 | Supported | Supported | 0.1.0 | |
+| Serial: scan networks | 0x04, one result per network, then an empty one | Supported | Supported | 0.1.0 | The browser drops duplicates and sorts by signal |
+| Serial: "stopped" state | 0x00: provisioning unavailable, for example Wi-Fi off | Not planned: the device turns Wi-Fi on itself | Not yet | | The browser has no name for 0x00 and shows the number |
+| Serial: network state | 0x07 (online, Wi-Fi, Ethernet, Thread, cellular, URLs) | Not yet | Not yet | | The device answers "unknown command", which the spec allows |
+| Hostname | BLE 0x05 (rev 2.3), serial 0x05; error 0x05 | Not planned: an Android app can't set the system's hostname | Not yet | | |
+| Device name | BLE 0x06 (rev 2.4), serial 0x06 | Not yet | Not yet | | An app could rename itself; no decision |
+
+Beyond the spec, `WifiProvisioner` joins the network on Android 10 and later ([Joining Wi-Fi](#joining-wi-fi)).
+`tools/check-parity-tables.py` checks the status words and both counts.
+
 ## Gradle
 
 On Maven Central as `dev.glassworks:improv` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is

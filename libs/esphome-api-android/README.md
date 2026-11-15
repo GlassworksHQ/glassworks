@@ -53,6 +53,9 @@ It publishes `<name>._esphomelib._tcp` with the TXT records ESPHome uses: `frien
 `api_encryption` when a key is set, or `api_encryption_supported` plus `api_provisioning=zero-psk`
 while HA can still provision one.
 
+What it advertises, next to what ESPHome does, is in esphome-api's
+[comparison with ESPHome](../esphome-api/README.md#device-info-and-discovery).
+
 ## Gradle
 
 On Maven Central as `dev.glassworks:esphome-api-android` ([changelog](CHANGELOG.md)). The first release,
