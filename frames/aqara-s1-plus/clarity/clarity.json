@@ -594,12 +594,12 @@
  ],
  "notes": {
   "good": "Light dashboards feel good: taps, live updates and opening a view are quick, and scrolling is fluid.",
-  "limits": "Bigger dashboards slow down: typical blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change.",
+  "limits": "Bigger dashboards slow down: typical without a camera blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change.",
   "causes": [
    "The likely limit is the browser's main thread: it stays busy (78% of a core on typical with a camera playing), and the page draws too few frames.",
    "Memory isn't the limit (904 of 988 MB)."
   ],
-  "text": "Light dashboards feel good: taps, live updates and opening a view are quick, and scrolling is fluid. Bigger dashboards slow down: typical blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change. The likely limit is the browser's main thread: it stays busy (78% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (904 of 988 MB).",
+  "text": "Light dashboards feel good: taps, live updates and opening a view are quick, and scrolling is fluid. Bigger dashboards slow down: typical without a camera blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change. The likely limit is the browser's main thread: it stays busy (78% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (904 of 988 MB).",
   "rubric": 2
  },
  "webrtc_transport": {

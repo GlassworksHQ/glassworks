@@ -2,9 +2,9 @@
 
 Allwinner QUAD-CORE R818 EVB2, Android 10 (API 29), armeabi-v7a, 4 cores, 1976 MB RAM, app pre-v1.
 
-**Aqara S1 Plus: Clarity D, a good wall panel for light dashboards. Held back by typical dashboards: the main thread is blocked for 2.9 s after the view is drawn.**
+**Aqara S1 Plus: Clarity D, a good wall panel for light dashboards. Held back by typical dashboards without a camera: the main thread is blocked for 2.9 s after the view is drawn.**
 
-Light dashboards feel good: taps, live updates and opening a view are quick, and scrolling is fluid. Bigger dashboards slow down: typical blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change. The likely limit is the browser's main thread: it stays busy (78% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (904 of 988 MB).
+Light dashboards feel good: taps, live updates and opening a view are quick, and scrolling is fluid. Bigger dashboards slow down: typical without a camera blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change. The likely limit is the browser's main thread: it stays busy (78% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (904 of 988 MB).
 
 The grade comes only from the reference dashboards this test ships (light, typical without and with a camera, heavy), so it doesn't depend on your Home Assistant. Background load (panes, the radio, heat) still reaches it.
 
@@ -31,9 +31,9 @@ typical cameras over WebRTC, run 1 (detail): decoder not reported, 451 frames de
 typical cameras over WebRTC, run 2 (detail): decoder not reported, 450 frames decoded, 0 dropped, 0 freezes (0.0 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 409 for 450 frames, stalls by them up to 0.0 s.
 typical cameras over WebRTC, run 3 (detail): decoder not reported, 450 frames decoded, 0 dropped, 0 freezes (0.0 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 381 for 450 frames, stalls by them up to 0.0 s.
 typical cameras over HLS, the fallback (detail, not graded; slow by the camera bars): run 1: first frame 6012 ms, 100 % shown, stalls 0 ms, slow; run 2: first frame 4833 ms, 100 % shown, stalls 0 ms, slow; run 3: first frame 4957 ms, 100 % shown, stalls 0 ms, slow.
-heavy cameras over WebRTC, run 1 (detail): decoder not reported, 401 frames decoded, 0 dropped, freezes n/a (the receiver's counts cover 6.7 of the window's 30.1 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 202 for 401 frames, stalls by them up to 22.2 s.
-heavy cameras over WebRTC, run 2 (detail): decoder not reported, 392 frames decoded, 0 dropped, freezes n/a (the receiver's counts cover 6.5 of the window's 30.1 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 186 for 392 frames, stalls by them up to 24.8 s.
-heavy cameras over WebRTC, run 3 (detail): decoder not reported, 369 frames decoded, 1 dropped, freezes n/a (the receiver's counts cover 6.1 of the window's 30.2 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 198 for 369 frames, stalls by them up to 23.7 s.
+heavy cameras over WebRTC, run 1 (detail): decoder not reported, 401 frames decoded, 0 dropped, freezes n/a (the receiver's counts cover 6.7 s of the window's 30.1 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 202 for 401 frames, stalls by them up to 22.2 s.
+heavy cameras over WebRTC, run 2 (detail): decoder not reported, 392 frames decoded, 0 dropped, freezes n/a (the receiver's counts cover 6.5 s of the window's 30.1 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 186 for 392 frames, stalls by them up to 24.8 s.
+heavy cameras over WebRTC, run 3 (detail): decoder not reported, 369 frames decoded, 1 dropped, freezes n/a (the receiver's counts cover 6.1 s of the window's 30.2 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 198 for 369 frames, stalls by them up to 23.7 s.
 heavy cameras over HLS, the fallback (detail, not graded; slow by the camera bars): run 1: first frame 5409 ms, 40 % shown, stalls 21878 ms, slow; run 2: first frame 6504 ms, 39 % shown, stalls 20155 ms, slow; run 3: first frame 6241 ms, 48 % shown, stalls 20733 ms, slow.
 
 Order of the pages (it turns each run): light, typical-nocam, typical, heavy; typical-nocam, typical, heavy, light; typical, heavy, light, typical-nocam.
@@ -47,7 +47,7 @@ Order of the pages (it turns each run): light, typical-nocam, typical, heavy; ty
 
 ## RAM on the reference dashboards (not graded)
 
-PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each graded run, and between the graded pages. The peak is the largest of those samples: they are taken between tasks, not inside them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed; the VmHWM line below catches it.
+PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each graded run, and between the graded pages. The peak is the largest of the between-page samples only (the idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed; the VmHWM line below catches it.
 
 | Process | Idle (median of runs) | Peak, sampled between the graded pages |
 |---|---|---|

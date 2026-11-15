@@ -954,7 +954,9 @@ def headline(name, g, ref):
     for t, phrases in hb:
         if phrases:
             # "typical dashboards", "typical dashboards with a camera" (rubric v10, #205).
-            label = "typical dashboards with a camera" if t == "typical" else f"{LABEL.get(t, t)} dashboards"
+            # And "without a camera" for typical-nocam: its numbers aren't typical-with-a-camera's (#255's review).
+            label = {"typical": "typical dashboards with a camera",
+                     "typical-nocam": "typical dashboards without a camera"}.get(t, f"{LABEL.get(t, t)} dashboards")
             out += f" {lead} {label}: " + "; ".join(phrases) + "."
     if g["capped_by_start"]:
         out += f" A slow restart ({g['start']['value'] / 1000:.1f} s) caps it at {G.START_CAP}."
@@ -1663,10 +1665,14 @@ def webrtc_detail(c):
             if cbs else "")
     # Receiver counts that leave more of the window out than a stall can hide in (#265): their freezes
     # are n/a there too, as the stalls are, and the counts say the time they cover (#255's review).
-    spans = [s.get("span_ms") for s in c.get("detail") or [] if (s.get("webrtc") or {}).get("inbound") and s.get("span_ms") is not None]
-    short = (c.get("uncovered_ms") or 0) > CAMERA_UNCOVERED_MAX_MS and spans and c.get("window_ms")
+    # From the spans themselves, of the streams that played (as camera_run's uncovered_ms), so a run in
+    # which a stream never played, with no uncovered_ms, still gets it (#255's review).
+    spans = [s["span_ms"] for s in c.get("detail") or [] if (s.get("webrtc") or {}).get("inbound")
+             and s.get("span_ms") is not None and s.get("first_frame_ms") is not None and s.get("shown_pct") is not None]
+    window = c.get("window_ms")
+    short = bool(spans and window and window - min(spans) > CAMERA_UNCOVERED_MAX_MS)
     freezes = ("freezes n/a" if short else f"{total('freezes')} freezes ({total('freeze_s', '{:.1f}')} s)")
-    covered = (f" (the receiver's counts cover {min(spans) / 1000:.1f} of the window's {c['window_ms'] / 1000:.1f} s)"
+    covered = (f" (the receiver's counts cover {min(spans) / 1000:.1f} s of the window's {window / 1000:.1f} s)"
                if short else "")
     return (f"decoder {', '.join(decs)}" + (f" ({', '.join(hw)})" if hw else "")
             + f", {total('frames_decoded')} frames decoded, {total('frames_dropped')} dropped, "
@@ -1905,9 +1911,10 @@ def ram_markdown(ram):
         return []
     out = ["", "## RAM on the reference dashboards (not graded)", "",
            "PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each "
-           "graded run, and between the graded pages. The peak is the largest of those samples: they are taken between "
-           "tasks, not inside them (a dumpsys would disturb what a task measures), so a short peak inside a task can be "
-           "missed; the VmHWM line below catches it.", ""]
+           "graded run, and between the graded pages. The peak is the largest of the between-page samples only (the "
+           "idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside "
+           "them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed; the VmHWM "
+           "line below catches it.", ""]
     idle, peak = ram.get("reference_idle"), ram.get("graded_peak")
     roles = sorted(set((idle or {}).get("by_role_pss_kb", {})) | set((peak or {}).get("by_role_pss_kb", {})))
     if idle or peak:

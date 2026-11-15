@@ -543,7 +543,7 @@ class HeldBack(unittest.TestCase):
         self.assertEqual(G.next_limits(g), [{"page": "typical-nocam", "needs": "fluid", "tasks": ["blocking"]}])
         ref = {"tiers": {"typical-nocam": {"load_ms": {"median": 1241}, "blocking_ms": {"median": 2862.0}}}}
         h = R.headline("Aqara S1 Plus", g, ref)
-        self.assertIn("Held back by typical dashboards: the main thread is blocked for 2.9 s after the view is drawn.", h)
+        self.assertIn("Held back by typical dashboards without a camera: the main thread is blocked for 2.9 s after the view is drawn.", h)
         self.assertNotIn("to open", h)
 
     def test_every_task_has_its_own_words(self):
@@ -709,12 +709,30 @@ class ReceiverSpanShort(unittest.TestCase):
                 st["webrtc"] = {"inbound": True, "frames_decoded": 100, "frames_dropped": 0, "freezes": 0, "freeze_s": 0.0}
             return R.camera_run(line, "heavy")
         short = R.webrtc_detail(run([6600, 6600, 6700, 6700]))
-        self.assertIn("freezes n/a (the receiver's counts cover 6.6 of the window's 30.0 s)", short)
+        self.assertIn("freezes n/a (the receiver's counts cover 6.6 s of the window's 30.0 s)", short)
         self.assertNotIn("0 freezes", short)
         whole = R.webrtc_detail(run([30043] * 4))
         self.assertIn("0 freezes (0.0 s)", whole)
         self.assertNotIn("freezes n/a", whole)
         self.assertNotIn("receiver's counts cover", whole)
+
+    def test_freezes_n_a_when_a_stream_never_played_and_the_rest_are_short(self):
+        """#255's review: with a stream that never played the run is not whole and has no uncovered_ms;
+        the freezes still go n/a, from the played streams' spans. The one that never played (its span
+        the window's) doesn't count, as in camera_run."""
+        line = self.line([30043, 6600, 6700, 6700])
+        for st in line["streams"]:
+            st["webrtc"] = {"inbound": True, "frames_decoded": 100, "frames_dropped": 0, "freezes": 0, "freeze_s": 0.0}
+        line["streams"][0].update(first_frame_ms=None, shown_pct=None)
+        run = R.camera_run(line, "heavy")
+        self.assertNotIn("uncovered_ms", run)
+        self.assertIn("freezes n/a (the receiver's counts cover 6.6 s of the window's 30.0 s)", R.webrtc_detail(run))
+        # Only the stream that never played is short: the played ones cover the window.
+        line = self.line([6600, 30043, 30043, 30043])
+        for st in line["streams"]:
+            st["webrtc"] = {"inbound": True, "frames_decoded": 100, "frames_dropped": 0, "freezes": 0, "freeze_s": 0.0}
+        line["streams"][0].update(first_frame_ms=None, shown_pct=None)
+        self.assertIn("0 freezes (0.0 s)", R.webrtc_detail(R.camera_run(line, "heavy")))
 
     def test_a_short_span_is_not_measured(self):
         # s1rtc9, heavy run 2: three streams' counts covered 6821 ms of 30043.
@@ -1828,6 +1846,8 @@ class PaneOnAlone(unittest.TestCase):
         # #255's review: the peak is sampled between pages, and the report says so where it's shown.
         self.assertIn("| Process | Idle (median of runs) | Peak, sampled between the graded pages |", md)
         self.assertIn("a short peak inside a task can be missed", md)
+        # The peak is from the between-page samples only (the idle median can be above it): as the code does.
+        self.assertIn("The peak is the largest of the between-page samples only (the idle samples aren't in it", md)
         self.assertNotIn("Peak during the graded tasks", md)
         self.assertIn("- app_pss_peak (sampled between pages): ", md)
         self.assertTrue(ram["budget"]["ok"])
