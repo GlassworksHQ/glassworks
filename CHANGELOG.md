@@ -8,6 +8,12 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Change the panel's settings from the Manage page.** Every setting in the panel's own menu is on
+  the Manage page too, in the same order and words, and you can change it there: switches, sliders,
+  addresses, times and choices, and each pane's on/off (that one needs a Home Assistant sign-in). The
+  panel checks each value as its own controls would. The open settings menu on the panel follows a
+  change made in the browser. A few parts only the panel can draw yet (the radio's roles, the time
+  zone picker, the wall base's relays, the Bluetooth proxy's devices) say "On the panel".
 - **On a device that isn't an Aqara S1, the app runs as that device.** On a tablet, for example, it
   names itself after the device in Home Assistant ("Pixel Tablet", `pixel-tablet-a1b2c3`) with its
   own maker and model. It runs the panes the device's hardware allows: Voice and Music with a
@@ -23,6 +29,10 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **The panel and the Manage page look the same.** Both read one set of Glassworks colours and
+  shapes: the status chips, switches, rows and dialogs match, and the Manage page's menu folds the
+  panes you turned off under "Off · N", as the panel does. On the panel, hairlines and tile corners
+  move to the brand's values.
 - **Music Assistant and Improv use the panel's own name.** The Music Assistant player and the Wi-Fi
   setup over Bluetooth now say what the device is, "Aqara S1 Plus" on the S1 (the name Home Assistant
   shows), instead of "Glassworks Panel". So an S1 and a tablet no longer show up under the same name.

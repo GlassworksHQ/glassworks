@@ -27,8 +27,6 @@ import dev.glassworks.manage.SessionStore
 import dev.glassworks.manage.Tile
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
-import dev.glassworks.pane.paneSections
-import dev.glassworks.pane.settingsOrder
 import dev.glassworks.platform.WifiLink
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
@@ -49,7 +47,7 @@ import sh.edm.s1kiosk.auth.ThreadJoin
 import sh.edm.s1kiosk.auth.TokenResult
 import sh.edm.s1kiosk.auth.WsHaSocket
 import sh.edm.s1kiosk.esphome.PanelDevice
-import sh.edm.s1kiosk.settings.CoreSettings
+import sh.edm.s1kiosk.settings.S1Settings
 import sh.edm.s1kiosk.setup.SetupState
 import sh.edm.s1kiosk.update.AppVersion
 import sh.edm.s1kiosk.update.UpdateManager
@@ -107,11 +105,9 @@ class S1Manage(
 
         override fun status(): PanelStatus {
             val defs = runtime.paneDefinitions(app)
-            val core = CoreSettings(prefs, version, status = { runtime.screen.statusLine() },
-                deviceSettings = null, licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {})
-            // The panes' sections as the panel's menu has them, each with its on/off (#67) as the master.
-            val panes = defs.flatMap { d -> runCatching { paneSections(listOf(d), runtime::runningPane) }.onFailure { Log.w(TAG, "${d.id}'s settings failed", it) }.getOrDefault(emptyList()) }
-            val sections = settingsOrder(core.sections(), panes)
+            // The panel menu's own model (#242): the same sections, items and saves.
+            val model = S1Settings.model(runtime, prefs, defs, S1Settings.hasDeviceSettings(runtime, app), fullScreen = ::fullScreen, version = version)
+            val panes = model.sections.filter { it.id in model.panes }
             return PanelStatus(
                 name = name,
                 frame = if (runtime.s1 != null) "S1 Plus" else runtime.frame.friendlyName(),
@@ -121,9 +117,9 @@ class S1Manage(
                 haBase = prefs.haBase,
                 tiles = listOf(haTile(), wifiTile(), engineTile(), memoryTile()),
                 panes = defs.map { d -> s1PaneRow(d.id, panes.firstOrNull { it.id == d.id }) },
-                sections = sections.filter { it.id != "about" },
+                sections = model.sections,
+                // After the About section's own items (the version, the licences).
                 about = listOf(
-                    "Glassworks Panel" to "S1 Kiosk $version",
                     "Frame" to runtime.frame.hardware.let { "${it.manufacturer} ${it.model}" },
                     "Android" to Build.VERSION.RELEASE,
                     "Engine" to runtime.engine.name.ifEmpty { "Unknown" },
@@ -131,6 +127,11 @@ class S1Manage(
                     "Source" to "github.com/GlassworksHQ/glassworks",
                 ),
             )
+        }
+
+        /** On the main thread, as the panel's menu changes settings. */
+        override fun onMain(f: () -> Unit) {
+            if (Looper.myLooper() == Looper.getMainLooper()) f() else Handler(Looper.getMainLooper()).post(f)
         }
 
         override fun diagnostics(): String = buildString {
@@ -158,7 +159,13 @@ class S1Manage(
         }
     }
 
-    private fun itemLines(items: List<SettingsItem>): List<String> = items.flatMap { i ->
+    /** Full screen changed: the running dashboard follows, as the adb extras make it ([MainActivity] pushes its config). */
+    private fun fullScreen() {
+        runtime.commandSink?.invoke(Intent().putExtra("hide_header", prefs.hideHeader).putExtra("hide_sidebar", prefs.hideSidebar))
+    }
+
+    /** A section's items as the diagnostics file lists them. */
+    internal fun itemLines(items: List<SettingsItem>): List<String> = items.flatMap { i ->
         fun v(f: () -> Any?) = runCatching { f()?.toString().orEmpty() }.getOrDefault("?")
         when (i) {
             is SettingsItem.Text -> listOf("${i.title}: ${v(i.value)}")
@@ -170,6 +177,8 @@ class S1Manage(
             is SettingsItem.Note -> listOf(v(i.text))
             is SettingsItem.Group -> listOf("${i.title}:") + itemLines(i.items).map { "  $it" }
             is SettingsItem.Choice -> listOf("${i.title}: ${v(i.value)}")
+            // Its password is shown on request only (Show), never here: whether one is set.
+            is SettingsItem.SignIn -> listOf("${i.title}: ${v { i.shown(i.isSet()) }}")
             is SettingsItem.Status -> listOf(v(i.text))
             is SettingsItem.States -> listOf("${i.title}:") + runCatching { i.rows() }.getOrDefault(emptyList()).map { "  ${it.name}: ${it.value}" }
             is SettingsItem.Tiles -> runCatching { i.tiles() }.getOrDefault(emptyList()).map { "${it.name}: ${it.value} ${it.unit}".trim() }
