@@ -59,6 +59,12 @@ class PanelManageMockups {
         pair("dashboard-edit-address", "dashboard", "?edit=Home+Assistant") { it.previewEdit("Home Assistant") }
         pair("assist-edit-wake-word", "assist", "?edit=Listening%2FWake+word") { it.previewEdit("Wake word") }
         File(out, "overview-manage.html").writeBytes(b.get("/").body)
+        // The panel's Overview, scrolled to the radio's row: the same line as the Manage page's.
+        val ov = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+        ov.overview = KioskSettingsOverlay.Overview(f.statusFn!!, f.actions)
+        ov.show(model()); Mockup.idle(); Mockup.layout(ov)
+        ov.previewScrollTo(Mockup.label(ov, f.statusFn!!().panes.first { it.id == "radio" }.state.detail), alignBottom = true)
+        Mockup.idle(); Mockup.save("parity/overview-panel", ov)
         // A switch that asks first: the radio's off.
         o.previewSection("radio"); o.previewConfirm("radio"); Mockup.idle(); Mockup.save("parity/radio-confirm-panel", o)
         File(out, "radio-confirm-manage.html").writeBytes(b.post("/settings", mapOf("csrf" to b.csrf(), "section" to "radio", "key" to "on", "value" to "off")).body)
