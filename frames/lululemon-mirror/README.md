@@ -96,13 +96,20 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-Not available yet. As planned, it installs by flashing system and userdata over fastboot from a computer, not from Kiln.
+Not available yet. **Test only, today**, at `/lululemon-mirror?apk=local` in Kiln ([its recipe](installer)). Nothing of it has run on a real Mirror yet.
 
-**That erases lululemon's software for good.** There is no way to back up the stock image first, so there is no way back.
+**Over fastboot, from lululemon's software or the community image (#40):**
 
-Check before flashing: fastboot must report MSM8916 and the expected partition sizes. If anything differs, stop.
+1. You download `system.img` from the [Glass Panes](https://github.com/git-nimrod/glass-panes) release, the community image by [git-nimrod](https://github.com/git-nimrod), and select it in Kiln. Kiln checks its size and SHA-256.
+2. Kiln adds S1 Kiosk, the Glassworks boot animation and the screen's rotation to the image, in your browser, and makes a fresh userdata that lets only your browser's adb key in. Nothing is uploaded. What changes, and why: [image-patch.md](research/image-patch.md).
+3. You open the Mirror's back and hold its button as it powers on: fastboot. Kiln checks the partition sizes the image is made for, and stops if they differ.
+4. Kiln writes system and userdata, restarts the Mirror, and finishes over adb: Home Assistant's address, the Wi-Fi, S1 Kiosk as the only home screen.
 
-**Test only, today:** on a Mirror that already runs the community image, Kiln can install S1 Kiosk's legacy build over adb, from an APK file on your computer: `/lululemon-mirror?apk=local` ([its recipe](installer)). It changes nothing else on the Mirror. Making S1 Kiosk the home screen needs a choice on the Mirror, in Android's list of home screens: S1 Kiosk, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
+**That erases lululemon's software for good.** The Mirror's bootloader can't read anything back, so there is no backup, and no way to restore lululemon's software. Kiln says so and waits for your confirmation before it writes. The way back from Glassworks is the plain Glass Panes image, which Kiln can write too (Way back).
+
+The boot logo before Android starts stays lululemon's: it lives in the signed bootloader, which nothing here can change.
+
+**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs S1 Kiosk's legacy build from an APK file on your computer. It changes nothing else on the Mirror. Making S1 Kiosk the home screen needs a choice on the Mirror, in Android's list of home screens: S1 Kiosk, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
 
 ## Panes
 

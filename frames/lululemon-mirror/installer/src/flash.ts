@@ -1,0 +1,167 @@
+// The Mirror in fastboot (its locked LK, reached with the button inside its back): what Kiln reads
+// before writing, the images it builds for it, the writes, and the first boot over adb with Kiln's
+// own key. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
+// lululemon's software: the screens say so before anything is written (#40).
+import type { PanelShell } from '@glassworks/adb';
+import { ACT, PKG, Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
+import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
+import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
+import type { Check } from './recipe';
+
+/** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
+export const MIRROR_FASTBOOT: USBDeviceFilter = { vendorId: 0x18d1, productId: 0xd00d };
+
+/** The partition the Glass Panes `system.img` is made for: 314,554 blocks of 4 KiB. */
+export const SYSTEM_BYTES = 1_288_413_184;
+/** The Glass Panes `userdata.sparse` fills this; a unit with another size still gets a fresh one its size. */
+export const USERDATA_BYTES = 5_583_458_304;
+
+/** What the recipe needs of @glassworks/fastboot. */
+export interface FastbootLike {
+  getvar(name: string): Promise<string>;
+  partitionSize(name: string): Promise<number>;
+  flashBlob(partition: string, blob: Blob, onProgress?: (x: number) => void): Promise<void>;
+  reboot(): Promise<void>;
+}
+
+export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[] }
+
+const optional = async (fb: FastbootLike, name: string) => { try { return await fb.getvar(name); } catch { return undefined; } };
+
+/**
+ * Read-only: is this the Mirror's LK, with the partitions the images are made for? The sizes are
+ * the hard check (a wrong one stops the install). Product and the download size are only shown:
+ * Kiln hasn't read this LK's answers yet.
+ */
+export async function checkFastboot(fb: FastbootLike): Promise<FastbootReport> {
+  const size = async (p: string) => { try { return await fb.partitionSize(p); } catch { return undefined; } };
+  const system = await size('system'), userdata = await size('userdata');
+  const product = await optional(fb, 'product'), max = await optional(fb, 'max-download-size'), secure = await optional(fb, 'secure');
+  const mb = (n?: number) => (n === undefined ? 'not reported' : `${(n / 1024 / 1024).toFixed(0)} MiB (${n} bytes)`);
+  const checks: Check[] = [
+    { what: 'System partition', found: mb(system), ok: system === SYSTEM_BYTES, need: `${SYSTEM_BYTES} bytes, the size the Glass Panes image is made for` },
+    { what: 'Userdata partition', found: mb(userdata), ok: !!userdata && userdata >= 1024 ** 3 && userdata % 4096 === 0, need: 'at least 1 GiB, whole 4 KiB blocks' },
+  ];
+  const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`];
+  return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info };
+}
+
+/** Writes both images, system first, then restarts the Mirror. `onProgress(part, 0..1)`. */
+export async function flashImages(fb: FastbootLike, images: { system: Blob; userdata: Blob },
+  onProgress: (part: 'system' | 'userdata', x: number) => void = () => {}): Promise<void> {
+  await fb.flashBlob('system', images.system, (x) => onProgress('system', x));
+  await fb.flashBlob('userdata', images.userdata, (x) => onProgress('userdata', x));
+  await fb.reboot();
+}
+
+/** The person's file isn't the published `system.img`: wrong, or not fully downloaded. */
+export class WrongImage extends Error {}
+
+export type PrepareStep = 'check' | 'patch' | 'system' | 'userdata';
+
+export interface Loaded { disk: Disk; sha256: string }
+
+/**
+ * Reads the person's `system.img` into `store`, hashing every byte on the way, and refuses it unless
+ * it is the Glass Panes one: the size first (instant), then the SHA-256 (as it is read). `store`
+ * should read unwritten bytes as zeros (a new OPFS file).
+ */
+export async function loadSystem(file: Blob, store: Store, onProgress: (x: number) => void = () => {},
+  want: { name: string; size: number; sha256: string } = GLASS_PANES.system): Promise<Loaded> {
+  const again = `Download ${want.name} again from the Glass Panes release, then select the new file.`;
+  if (file.size !== want.size) throw new WrongImage(`This file is ${file.size.toLocaleString('en')} bytes; the Glass Panes ${want.name} is ${want.size.toLocaleString('en')}. It's another file, or the download stopped early. ${again}`);
+  const sha = new Sha256();
+  let loaded: Disk;
+  try {
+    ({ disk: loaded } = await readSparse(file.stream(), (h) => new Disk(store, h.blockSize, h.blocks, { zeroed: true }),
+      { onBytes: (b) => sha.update(b), onProgress: (n) => onProgress(n / file.size) }));
+  } catch (e) {
+    throw new WrongImage(`This file isn't a readable ${want.name} (${(e as Error).message}). ${again}`);
+  }
+  const sha256 = hex(sha.digest());
+  if (sha256 !== want.sha256) throw new WrongImage(`This file's SHA-256 is ${sha256}, not the published ${want.sha256}: the file is damaged or isn't the Glass Panes ${want.name}. ${again}`);
+  return { disk: loaded, sha256 };
+}
+
+/**
+ * The two images Kiln flashes, written as sparse images to the sinks: the loaded system image with
+ * S1 Kiosk and the rest (patchSystem), and a fresh userdata the partition's size with this browser's
+ * adb key (buildUserdata).
+ */
+export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number },
+  sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
+  onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
+  onProgress('patch', 0);
+  await patchSystem(await Ext4.open(loaded.disk), o);
+  onProgress('patch', 1);
+  await writeSparse(loaded.disk, sinks.system, { onProgress: (b) => onProgress('system', b / loaded.disk.blocks) });
+  const ud = new Disk(new MemoryStore(), 4096, Math.floor(o.userdataBytes / 4096), { zeroed: true });
+  await buildUserdata(ud, { adbKey: o.adbKey, time: o.time });
+  await writeSparse(ud, sinks.userdata, { onProgress: (b) => onProgress('userdata', b / ud.blocks) });
+}
+
+/** Launchers the image ships, hidden on the first boot so S1 Kiosk is the only home screen: no chooser to tap. */
+export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'];
+
+export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; wifi?: boolean; rotation?: string }
+
+/**
+ * The Mirror's first start on Glassworks, over adb with Kiln's own key: checks it is the patched
+ * image, grants what adb can, hides the other launchers, starts S1 Kiosk with Home Assistant's
+ * address, and gives it the Wi-Fi.
+ */
+export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: string; wifi?: { ssid: string; password: string }; onStep?: StepFn;
+  sleep?: (ms: number) => Promise<void> }): Promise<FirstBoot> {
+  const r = new Steps(p, o.onStep);
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
+  r.step('Checking the Mirror started Glassworks');
+  const fp = (await r.run('getprop ro.build.fingerprint')).trim();
+  if (fp !== GLASS_PANES.fingerprint) throw new Error(`the Mirror runs ${fp || 'something unknown'}, not the image Kiln wrote`);
+  const app = await kioskVersion(p);
+  if (!app) throw new Error(`S1 Kiosk (${PKG}) isn't on the Mirror after the install`);
+  const rotation = (await r.try('getprop ro.sf.hwrotation')).trim() || undefined;
+  r.detail(`S1 Kiosk ${app.name ?? app.code}, ro.sf.hwrotation=${rotation ?? 'unset'}`);
+  await grantPermissions(r);
+
+  r.step('Make S1 Kiosk the only home screen');
+  const hidden: string[] = [];
+  for (const pkg of OTHER_HOMES) {
+    if (!(await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`)) continue;
+    const out = await r.try(`pm hide ${pkg}`);
+    if (/true/.test(out)) hidden.push(pkg);
+    r.detail(`${pkg}: ${out.trim() || 'no answer'}`);
+  }
+
+  r.step('Start S1 Kiosk');
+  await startApp(r, o);
+  await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
+  r.detail(`home: ${ACT}`);
+
+  let wifi: boolean | undefined;
+  if (o.wifi) {
+    r.step(`Wi-Fi ${o.wifi.ssid}`);
+    wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
+    r.detail(wifi ? 'joined' : 'S1 Kiosk didn\'t confirm it joined: set the Wi-Fi in its settings');
+  }
+  return { app, hidden, ...(wifi !== undefined ? { wifi } : {}), ...(rotation ? { rotation } : {}) };
+}
+
+/** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */
+export const GLASS_PANES_USERDATA = {
+  name: 'userdata.sparse',
+  url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/userdata.sparse',
+  size: 154_944_572,
+  sha256: '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908',
+} as const;
+
+/** Checks a downloaded file against its published size and SHA-256, streaming. */
+export async function checkDownload(file: Blob, want: { name: string; size: number; sha256: string }, onProgress: (x: number) => void = () => {}): Promise<void> {
+  const again = `Download ${want.name} again from the Glass Panes release.`;
+  if (file.size !== want.size) throw new WrongImage(`This file is ${file.size.toLocaleString('en')} bytes, not ${want.size.toLocaleString('en')}: it isn't ${want.name}, or the download stopped early. ${again}`);
+  const sha = new Sha256();
+  const r = file.stream().getReader();
+  let n = 0;
+  for (;;) { const { done, value } = await r.read(); if (done) break; sha.update(value); n += value.length; onProgress(n / file.size); }
+  const got = hex(sha.digest());
+  if (got !== want.sha256) throw new WrongImage(`This file's SHA-256 is ${got}, not the published ${want.sha256}. ${again}`);
+}

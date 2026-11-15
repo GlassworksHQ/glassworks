@@ -33,7 +33,7 @@ lockfile swap). Its `package.json` lists `kiln` (the page), `kiln/packages/*`, `
 | `packages/kiln-core` | The step engine: `InstallFlow`, the `FlowUi` contract, the `Recipe` types, backups |
 | `workers/refract` | Refract, the Cloudflare Worker at `refract.glassworks.dev`: streams an allowlist of other projects' GitHub release files (the Mirror's image) to Kiln with CORS headers, storing nothing. Not a root workspace: its own lockfile and CI job (`refract`), so wrangler and workerd stay out of the root `npm ci`. See its [README](workers/refract/README.md) |
 | `../frames/aqara-s1-plus/installer` | The S1 recipe (`s1Plus`), provisioning, the signing-key switch, the app's Improv socket |
-| `../frames/lululemon-mirror/installer` | The Mirror's recipe: adb only, no root. Read-only checks, S1 Kiosk's legacy APK, the home screen through Android's chooser, undo. Test only for now (`/lululemon-mirror?apk=local`) |
+| `../frames/lululemon-mirror/installer` | The Mirror's recipe, test only for now (`/lululemon-mirror?apk=local`). Over fastboot (#40): the Glass Panes image checked and patched (`image.ts`), a fresh userdata with this browser's key, the fastboot checks, the writes and the first boot (`flash.ts`). Over adb on a Mirror already on the community image: S1 Kiosk's legacy APK, the home screen through Android's chooser, undo (`recipe.ts`) |
 | `../frames/*/design` | Each frame's design data: `frame.json` (catalog fields, the 3D model in mm) and `recovery.json`. Kiln's picker reads it; format and how the website reads it in [frames/README.md](../frames/README.md) |
 | `../packages/frame-card` | The frame card and 3D device mockup, shared with glassworks.dev ([README](../packages/frame-card/README.md)). Kiln's picker wraps it in a radio item |
 

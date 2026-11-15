@@ -45,8 +45,16 @@ describe('the switch', () => {
     expect(embers()).toEqual([]);
   });
 
-  it('with it, the APK comes from this computer, labelled test only', async () => {
+  it('with it, Kiln installs Glassworks over fastboot by default', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
+    render(<MirrorWizard />);
+    await screen.findByText('Install Glassworks on the Mirror.');
+    expect(screen.getByText('Test only')).toBeTruthy();
+    expect(embers()).toEqual(['Continue']);
+  });
+
+  it('with &mode=app, the app alone over adb, its APK from this computer, labelled test only', async () => {
+    history.replaceState(null, '', '/lululemon-mirror?apk=local&mode=app');
     render(<MirrorWizard />);
     await screen.findByText('Install a test build on the Mirror.');
     expect(screen.getByText('Test only')).toBeTruthy();

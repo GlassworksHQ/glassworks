@@ -4,11 +4,14 @@
 // (frames/<id>/installer). The same "try" (never fails) vs "run" (must succeed) split as
 // frames/aqara-s1-plus/tools/install.sh.
 import type { PanelShell } from '@glassworks/adb';
+import { ImprovSerialClient } from 'improv-serial';
 
 /** The app's id. The boot helpers and every installed panel use it: never change it. */
 export const PKG = 'sh.edm.s1kiosk';
 export const ACT = `${PKG}/.MainActivity`;
 export const ADMIN = `${PKG}/.AdminReceiver`;
+/** The app's ImprovAdbServer socket (ImprovSerialServer.SOCKET). */
+export const IMPROV_SOCKET = 'localabstract:s1kiosk_improv';
 
 /** A step heading, or with an empty step, a detail line under it. */
 export type StepFn = (step: string, detail?: string) => void;
@@ -114,3 +117,27 @@ export async function dropAdmin(p: PanelShell, sleep: (ms: number) => Promise<vo
 }
 
 export { apkInfo, apkPackage, axmlAttribute, zipEntry, zipNames, type ApkInfo } from './apk';
+
+/**
+ * Gives the app a Wi-Fi network over its Improv socket, once it listens (it starts with the app).
+ * True when the app says it joined. The password goes only into the Improv packet: never into a
+ * command line, a log line or an error.
+ */
+export async function sendWifi(p: PanelShell, ssid: string, password: string, sleep: (ms: number) => Promise<void>, waitMs = 90_000): Promise<boolean> {
+  if (!p.openStream) return false;
+  const until = Date.now() + waitMs;
+  while (Number.parseInt((await p.run(`grep -c ' @s1kiosk_improv$' /proc/net/unix`)).out.trim(), 10) <= 0) {
+    if (Date.now() > until) return false;
+    await sleep(1500);
+  }
+  const c = new ImprovSerialClient(await p.openStream(IMPROV_SOCKET), { deviceLabel: 'device' });
+  try {
+    await c.requestState(5000);
+    await c.provision(ssid, password);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await c.close().catch(() => {});
+  }
+}

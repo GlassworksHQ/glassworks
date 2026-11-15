@@ -69,7 +69,11 @@ export class Disk {
   /** Blocks known to be all zeros (the sparse image says FILL 0 for them). A subset of `care`. */
   readonly zero: Bitset;
 
-  constructor(readonly store: Store, readonly blockSize: number, readonly blocks: number) {
+  /**
+   * `zeroed`: the store reads unwritten bytes as zeros (a new OPFS file, a MemoryStore), so zero
+   * fills only mark the blocks and don't write gigabytes of zeros.
+   */
+  constructor(readonly store: Store, readonly blockSize: number, readonly blocks: number, readonly o: { zeroed?: boolean } = {}) {
     this.care = new Bitset(blocks);
     this.zero = new Bitset(blocks);
   }
@@ -96,7 +100,7 @@ export class Disk {
   async zeroFill(block: number, count: number): Promise<void> {
     this.check(block, count);
     const chunk = new Uint8Array(Math.min(count, 256) * this.blockSize);
-    for (let b = block; b < block + count; b += 256) {
+    for (let b = block; !this.o.zeroed && b < block + count; b += 256) {
       const n = Math.min(256, block + count - b);
       await this.store.write(b * this.blockSize, n === 256 ? chunk : chunk.subarray(0, n * this.blockSize));
     }

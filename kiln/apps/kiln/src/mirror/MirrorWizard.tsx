@@ -11,7 +11,13 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BuiltOn, stepCredits } from '../components/Credit';
 import { Shell, useBrowserChip } from '../components/Shell';
 import type { RailMark, RailStep } from '../wizard/state';
+import { Fastboot } from '@glassworks/fastboot';
+import { MIRROR_FASTBOOT } from '@glassworks/lululemon-mirror-installer';
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from './demo';
+import { FlashSession } from './flash';
+import { FLASH_DEMOS, flashDemo, type FlashDemo } from './flashDemo';
+import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
+import { workerImages } from './images';
 import { MirrorSession, mirrorMode, type MirrorState } from './session';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the S1's do. */
@@ -21,16 +27,37 @@ const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLI
  * The adb key loads as the page opens, so Connect can ask for the device inside its click with no
  * await in front (WebUSB shows its list only during the click), as the S1's session does.
  */
-export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbKey) => Promise<PanelShell>): () => Promise<PanelShell> {
+export function adbKeyHolder(loadKey: () => Promise<AdbKey>) {
   let key: AdbKey | undefined;
   const ready = loadKey().then((k) => { key = k; });
-  ready.catch(() => {}); // a click reports it, below
-  return () => (key ? connect(key) : ready.then(() => { throw new Error('Kiln was still making its key for this browser. Click Connect again.'); }));
+  ready.catch(() => {}); // a click reports it (connectWith)
+  return {
+    key: () => key,
+    connectWith: <T,>(connect: (key: AdbKey) => Promise<T>) => (): Promise<T> =>
+      (key ? connect(key) : ready.then(() => { throw new Error('Kiln was still making its key for this browser. Click Connect again.'); })),
+  };
 }
 
-function realSession(on: boolean): MirrorSession {
-  const connect = on ? keyedConnect(loadOrCreateAdbKey, (k) => Panel.connect(k)) : () => Promise.reject(new Error('off'));
-  return new MirrorSession({ connect }, on);
+export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbKey) => Promise<PanelShell>): () => Promise<PanelShell> {
+  return adbKeyHolder(loadKey).connectWith(connect);
+}
+
+/** The page's two paths on one adb key: the app over adb (MirrorSession), or Glassworks over fastboot (FlashSession). */
+function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession } {
+  if (!on) {
+    const mirror = new MirrorSession({ connect: () => Promise.reject(new Error('off')) }, false);
+    return { mirror, flash: new FlashSession({ images: workerImages(), requestFastboot: () => Promise.reject(new Error('off')), requestAdb: () => Promise.reject(new Error('off')), adbKey: () => undefined, apk: () => undefined }) };
+  }
+  const keys = adbKeyHolder(loadOrCreateAdbKey);
+  const mirror = new MirrorSession({ connect: keys.connectWith((k) => Panel.connect(k)) }, true);
+  const flash = new FlashSession({
+    images: workerImages(),
+    requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
+    requestAdb: keys.connectWith((k) => Panel.connect(k)),
+    adbKey: () => keys.key()?.publicKey,
+    apk: () => mirror.apkBytes(),
+  });
+  return { mirror, flash };
 }
 
 /** Install or undo, then Done. The rail's steps and where the person is on them. */
@@ -237,18 +264,52 @@ function Failed({ s, session }: { s: MirrorState; session: MirrorSession }) {
   );
 }
 
+const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
+
+/**
+ * With ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
+ * already runs the community image (`&mode=app`). Each screen links to the other.
+ */
 export function MirrorWizard() {
-  const [session] = useState(() => {
-    const m = mirrorMode(location.search, DEMO_ON, MIRROR_DEMOS);
-    return { m, s: m.demo ? undefined : realSession(m.on) };
+  const [start] = useState(() => {
+    const m = mirrorMode(location.search, DEMO_ON, DEMOS);
+    const flashFirst = m.demo ? m.demo.startsWith('flash-') : new URLSearchParams(location.search).get('mode') !== 'app';
+    return { m, flashFirst, real: m.demo ? undefined : realSessions(m.on) };
   });
-  const [demo, setDemo] = useState<MirrorSession>();
-  useEffect(() => { if (session.m.demo) void mirrorDemo(session.m.demo as MirrorDemo).then(setDemo); }, [session]);
-  const live = session.s ?? demo;
-  return live ? <Screens session={live} /> : null;
+  const [demo, setDemo] = useState<{ mirror: MirrorSession; flash?: FlashSession }>();
+  const [flashMode, setFlashMode] = useState(start.flashFirst);
+  useEffect(() => {
+    const d = start.m.demo;
+    if (!d) return;
+    if (d.startsWith('flash-')) void flashDemo(d as FlashDemo).then(setDemo);
+    else void mirrorDemo(d as MirrorDemo).then((mirror) => setDemo({ mirror }));
+  }, [start]);
+  const live = start.real ?? demo;
+  if (!live) return null;
+  if (live.mirror.state.screen !== 'off' && flashMode && live.flash) return <Flash flash={live.flash} mirror={live.mirror} toApp={() => setFlashMode(false)} />;
+  return <Screens session={live.mirror} toFlash={live.flash && live.mirror.state.screen !== 'off' ? () => setFlashMode(true) : undefined} />;
 }
 
-export function Screens({ session }: { session: MirrorSession }) {
+export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: MirrorSession; toApp?: () => void }) {
+  const s = useSyncExternalStore(flash.subscribe, flash.get, flash.get);
+  const ms = useSyncExternalStore(mirror.subscribe, mirror.get, mirror.get);
+  const chip = useBrowserChip();
+  useEffect(() => { document.title = s.screen === 'adb' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln'; }, [s.screen]);
+  useEffect(() => {
+    if (s.screen !== 'working') return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    addEventListener('beforeunload', warn);
+    return () => removeEventListener('beforeunload', warn);
+  }, [s.screen]);
+  return (
+    <Shell steps={flashRail(s)} level={flashLevel(s)} error={s.screen === 'error'} chip={chip}>
+      <FlashScreens f={flash} s={s} m={mirror} ms={ms} />
+      {toApp && s.screen === 'image' && <p className="small">Already runs the Glass Panes image? <button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
+    </Shell>
+  );
+}
+
+export function Screens({ session, toFlash }: { session: MirrorSession; toFlash?: () => void }) {
   const s = useSyncExternalStore(session.subscribe, session.get, session.get);
   const chip = useBrowserChip();
   useEffect(() => {
@@ -269,6 +330,7 @@ export function Screens({ session }: { session: MirrorSession }) {
         : s.screen === 'working' ? <Working s={s} />
         : s.screen === 'done' ? <Done {...p} />
         : <Failed {...p} />}
+      {toFlash && s.screen === 'pick' && <p className="small">A Mirror with lululemon&apos;s software? <button type="button" className="link" onClick={toFlash}>Install Glassworks over fastboot</button></p>}
     </Shell>
   );
 }

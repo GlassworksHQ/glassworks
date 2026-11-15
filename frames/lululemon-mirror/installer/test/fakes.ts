@@ -7,6 +7,8 @@ import type { PanelShell } from '@glassworks/adb';
 export const MIRROR_KIOSK = 'com.nimrod.mirrorkiosk/.MainActivity';
 export const LAUNCHER3 = 'com.android.launcher3/.Launcher';
 const OURS = 'sh.edm.s1kiosk/.MainActivity';
+/** The Glass Panes image's build fingerprint (image.ts GLASS_PANES). */
+const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys';
 const PKG = 'sh.edm.s1kiosk';
 
 export interface FakeMirrorOptions {
@@ -147,3 +149,25 @@ export class FakeMirror implements PanelShell {
       'Preferred Activities User 0:', '  Schemes:', ...sms, '', ...home, '', 'App verification status:', ''].join('\n');
   }
 }
+
+/** The Mirror's first start on the patched image, as adb sees it. */
+export class FirstBootMirror implements PanelShell {
+  cmds: string[] = [];
+  hidden = new Set<string>();
+  constructor(private readonly fp: string = FINGERPRINT, private readonly app = true) {}
+  async run(cmd: string) {
+    this.cmds.push(cmd);
+    const ok = (out = '') => ({ out, code: 0 });
+    if (cmd === 'getprop sys.boot_completed') return ok('1\n');
+    if (cmd === 'getprop ro.build.fingerprint') return ok(`${this.fp}\n`);
+    if (cmd === 'getprop ro.sf.hwrotation') return ok('270\n');
+    if (cmd === 'dumpsys package sh.edm.s1kiosk') return ok(this.app ? '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n' : '');
+    if (cmd === 'pm list packages com.android.launcher3') return ok('package:com.android.launcher3\n');
+    if (cmd.startsWith('pm list packages')) return ok('');
+    const m = /^pm hide (\S+)$/.exec(cmd);
+    if (m) { this.hidden.add(m[1]!); return ok(`Package ${m[1]} new hidden state: true\n`); }
+    return ok();
+  }
+  async push() {}
+}
+

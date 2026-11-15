@@ -89,7 +89,20 @@ for this browser, so there's no shared key (#29).
 
 What a fresh `userdata` loses: the community kiosk (good), its shared adb key (good), the Mirror's
 Wi-Fi, and the screen rotation (handled by `ro.sf.hwrotation` above). After the first boot, Kiln
-gives S1 Kiosk the Wi-Fi and the Home Assistant URL over adb, as it does on the S1.
+gives S1 Kiosk the Wi-Fi (over its Improv socket) and the Home Assistant URL over adb, as it does on
+the S1.
+
+### The first boot: S1 Kiosk as the only home screen
+
+The image ships Launcher3 (`com.android.launcher3`) as a home app, and the Mirror has no touchscreen
+to answer Android's chooser. adb's shell can't disable another app on Android 6, but it holds
+`MANAGE_USERS` (read 2026-11-15, [home-app.md](home-app.md)), which `pm hide` needs. So on the first
+boot Kiln runs `pm hide com.android.launcher3` (and `com.cyanogenmod.trebuchet` if present), and S1
+Kiosk is the only home app left: Android opens it with no chooser. **Untested** on the unit. The way
+back (the plain Glass Panes image) brings the launcher back, because it comes with a fresh userdata.
+
+The boot logo before Android stays lululemon's: it lives in the signed `aboot`/splash path that the
+locked bootloader checks, and option A writes only `system` and `userdata`.
 
 ## How to reproduce
 

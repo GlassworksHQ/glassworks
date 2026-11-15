@@ -7,8 +7,7 @@ export {
   type ByteStream, type DeviceInfo, type Packet, type WifiNetwork,
 } from 'improv-serial';
 
-/** The kiosk app's ImprovAdbServer socket (ImprovSerialServer.SOCKET). */
-export const IMPROV_SOCKET = 'localabstract:s1kiosk_improv';
+export { IMPROV_SOCKET } from '@glassworks/app-adb';
 
 export class ImprovSerialClient extends Client {
   constructor(io: ByteStream) {

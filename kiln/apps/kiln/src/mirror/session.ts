@@ -95,6 +95,9 @@ export class MirrorSession {
 
   setHaUrl(haUrl: string) { this.set({ haUrl }); }
 
+  /** The picked APK's bytes when it is S1 Kiosk (the flash path builds it into the image). */
+  apkBytes(): Uint8Array | undefined { return this.apk; }
+
   /** Must run inside the click: the browser's device list opens before its first await. */
   async connect(): Promise<void> {
     this.set({ connecting: true, connectError: undefined });

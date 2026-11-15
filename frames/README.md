@@ -15,7 +15,7 @@ and glassworks.dev read them from here.
 | Frame | Status | Installer | Design |
 |---|---|---|---|
 | [`aqara-s1-plus`](aqara-s1-plus) | Beta | yes | `frame.json`, `recovery.json` |
-| [`lululemon-mirror`](lululemon-mirror) | Planned | test only: adb onto the community image (`/lululemon-mirror?apk=local`) | `frame.json` only (no recovery drawing yet) |
+| [`lululemon-mirror`](lululemon-mirror) | Planned | test only: over fastboot with the community image, or adb onto it (`/lululemon-mirror?apk=local`) | `frame.json` only (no recovery drawing yet) |
 | [`generic-android`](generic-android) | Planned | not yet | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
 
 Every device glassworks.dev lists has a frame here, planned ones included. The site's URL for a frame is
