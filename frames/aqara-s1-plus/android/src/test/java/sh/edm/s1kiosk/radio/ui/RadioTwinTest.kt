@@ -25,7 +25,7 @@ import sh.edm.s1kiosk.radio.radioDefinition
  * ([RadioFollowUp.card]), asks the same questions first ([RadioFollowUp.ask]), and never shows a secret.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], application = Application::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "w960dp-h480dp-land-hdpi")
 class RadioTwinTest {
     private val app = RuntimeEnvironment.getApplication()
 
@@ -117,6 +117,111 @@ class RadioTwinTest {
         var answer: String? = "none"
         zr.getValue(RadioFollowUp.Action.ROUTER_JOIN.label).run { answer = it }
         assertEquals("no radio: says so, once", NOT_RUNNING, answer)
+    }
+
+    /** #269 verifier: Off isn't a role. Picking it asks nothing (the page's switch does that) and is refused. */
+    @Test fun offIsNotARoleAndAsksNothing() {
+        val d = def(facts(RadioMode.THREAD_ROUTER, thread = threadStates[3], stored = true))
+        val role = RadioTwin.items(d).filterIsInstance<SettingsItem.Choice>().single { it.title == RadioTwin.ROLE }
+        assertNull(role.confirm(RadioMode.OFF.id))
+        assertNull(role.confirm("nonsense"))
+    }
+
+    /** #269 verifier: drawing the page writes nothing, not even the picker's "choosing". */
+    @Test fun readingTheTwinChangesNothing() {
+        val d = def(facts(RadioMode.ZIGBEE_TCP))
+        d.choosing = true
+        repeat(3) { RadioTwin.items(d) }
+        assertTrue(d.choosing)
+    }
+
+    /**
+     * #269 verifier: one radio request at a time, as on the panel's card. A second role while the first waits
+     * for the radio, or a second Leave before the status says the first ran its course, is answered "busy"
+     * and sends nothing.
+     */
+    @Test fun oneRequestAtATime() {
+        val sent = ArrayList<RadioFollowUp.Request>()
+        val answers = ArrayList<(String?) -> Unit>()
+        val send = RadioTwin.Send { r, done -> sent += r; answers += done }
+        val d = def(facts(RadioMode.THREAD_ROUTER, thread = threadStates[3], stored = true))
+        fun role() = RadioTwin.items(d, send).filterIsInstance<SettingsItem.Choice>().single { it.title == RadioTwin.ROLE }
+        fun leave() = RadioTwin.items(d, send).filterIsInstance<SettingsItem.Action>().single { it.title == RadioFollowUp.Action.THREAD_LEAVE.label }
+        val got = ArrayList<String?>()
+        role().save(RadioMode.ZIGBEE_TCP.id) { got += it }
+        role().save(RadioMode.THREAD.id) { got += it }
+        leave().run { got += it }
+        assertEquals("one request reached the radio", 1, sent.size)
+        assertEquals(listOf(RadioTwin.BUSY, RadioTwin.BUSY), got)
+        answers.single()(null) // the radio answered the first
+        got.clear()
+        leave().run { got += it }
+        leave().run { got += it }
+        assertEquals(listOf(RadioFollowUp.Request.Mode(RadioMode.ZIGBEE_TCP), RadioFollowUp.Request.Act(RadioFollowUp.Action.THREAD_LEAVE)), sent)
+        assertEquals("the first Leave answered once the radio took it, the second is busy", listOf(null, RadioTwin.BUSY), got)
+    }
+
+    /** A request the radio refused frees the way at once. */
+    @Test fun aRefusedRequestDoesntBlockTheNext() {
+        val d = def(facts(RadioMode.THREAD_ROUTER, thread = threadStates[3], stored = true))
+        val leave = RadioTwin.items(d).filterIsInstance<SettingsItem.Action>().single()
+        val got = ArrayList<String?>()
+        leave.run { got += it }
+        leave.run { got += it }
+        assertEquals("no radio here: refused twice, never busy", listOf(NOT_RUNNING, NOT_RUNNING), got)
+    }
+
+    /**
+     * #269 verifier: both ways against the panel's own radio view, in every mode. Each card word in the twin is
+     * shown by RadioSectionView, and each word the view shows is in the twin or one of the view's own (the role
+     * tiles' header, the status pill, the dataset and "How does this work?" disclosures, the Off legend), so a
+     * field either side drops fails here.
+     */
+    @Test fun theTwinAndThePanelsViewSayTheSame() {
+        val cases = RadioMode.entries.filter { it != RadioMode.THREAD_ROUTER }.map { facts(it) } +
+            facts(RadioMode.ZIGBEE_ROUTER, status = "ok Zigbee router (repeater): in a network", stored = true) +
+            threadStates.map { facts(RadioMode.THREAD_ROUTER, thread = it, stored = it?.dataset) }
+        for (f in cases) {
+            val what = "${f.mode} ${f.thread} ${f.status}"
+            val view = RadioSectionView(sh.edm.s1kiosk.ui.Mockup.activity()).apply { onAsk = { _, _ -> }; onRun = { _, _ -> } }
+            val root = android.widget.LinearLayout(view.panel.context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                addView(view.tiles); addView(view.panel)
+            }
+            (view.panel.context as android.app.Activity).setContentView(root)
+            view.bind(f)
+            sh.edm.s1kiosk.ui.Mockup.idle()
+            val shown = texts(root)
+            val twin = RadioTwin.items(def(f))
+            val twinWords = twin.flatMap { i ->
+                words(listOf(i)) + ((i as? SettingsItem.Choice)?.options()?.map { it.second } ?: emptyList())
+            }.toSet()
+            val own = setOf(RadioTwin.ROLE, RadioTwin.JOIN_HA_DETAIL, RadioTwin.PICK) + RadioMode.entries.map(RadioStep::shortName) +
+                RadioFollowUp.Action.entries.map(RadioTwin::short) + RadioFollowUp.Health.entries.map { it.label }
+            val onPanelMissing = twinWords.filter { it !in shown && it !in own && !(it in RadioStep.OPTIONS.map { o -> o.title }) }
+            assertTrue("$what: the twin says $onPanelMissing, which the panel's view doesn't show", onPanelMissing.isEmpty())
+            val viewOwn = VIEW_OWN + RadioMode.entries.map(RoleStyle::header) + RadioFollowUp.Health.entries.map { it.label }
+            val twinMissing = shown.filter { it !in twinWords && it !in viewOwn && !it.startsWith(RadioFollowUp.DATASET_DISCLOSURE) && !it.startsWith("How does this work?") }
+            assertTrue("$what: the panel's view shows $twinMissing, which the twin doesn't have", twinMissing.isEmpty())
+        }
+    }
+
+    private val VIEW_OWN = setOf(
+        // The role picker's tiles (RadioTechPicker): the twin's Role row and its list.
+        "Zigbee", "For ZHA or Zigbee2MQTT", "Coordinator", "Repeater β", "Thread", "For Matter over Thread", "Border router",
+        // Off's legend under "The radio is off".
+        "β  experimental",
+    )
+
+    private fun texts(v: android.view.View): List<String> {
+        val out = ArrayList<String>()
+        fun walk(x: android.view.View) {
+            if (!x.isShown) return
+            if (x is android.widget.TextView) x.text?.toString()?.trim()?.takeIf { t -> t.any { it.isLetterOrDigit() } }?.let(out::add)
+            if (x is android.view.ViewGroup) for (c in 0 until x.childCount) walk(x.getChildAt(c))
+        }
+        walk(v)
+        return out
     }
 
     @Test fun turnedOnFromTheBrowserItOffersTheRoles() {
