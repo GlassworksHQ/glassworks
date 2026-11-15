@@ -116,6 +116,9 @@ subprojects {
         }
         pluginManager.withPlugin("com.android.library") {
             extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+                // AGP writes the library's own compileSdk (37.2) here by default, which stops any app below
+                // it. The libraries need nothing above API 23 to compile against (lib-consumer-check.sh).
+                defaultConfig.aarMetadata.minCompileSdk = 23
                 // A default exclude, in libraries too. The androidTest APK gets two (this library's and
                 // esphome-api's): the same text, so keep one.
                 packaging.resources.excludes.remove("/META-INF/LICENSE")

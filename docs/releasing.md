@@ -380,11 +380,15 @@ check skips any other tag (`Releases.tagVersion`). So a library tag never makes 
    ```
 
 3. [`libs-release.yml`](../.github/workflows/libs-release.yml) uploads the release (below). While
-   `MANUAL_PUBLISH` is `'true'`, open [Deployments](https://central.sonatype.com/publishing/deployments)
+   `MANUAL_PUBLISH` is `'true'` (it must be exactly `'true'` or `'false'`; the job fails on anything
+   else), open [Deployments](https://central.sonatype.com/publishing/deployments)
    on the Central Portal, check the files, and press **Publish**. It's on Maven Central 10 to 30
    minutes later.
-4. Publish the draft GitHub release that the workflow made:
-   `gh release edit libs/esphome-api/v0.1.0 --draft=false --latest=false`.
+4. Once the Portal shows the deployment as **Published**, publish the draft GitHub release that the
+   workflow made:
+   `gh release edit libs/esphome-api/v0.1.0 --draft=false --latest=false`. If you publish it from
+   GitHub's web page instead, **untick "Set as the latest release"**: panels on 0.4.3 read
+   `releases/latest`, which must stay the S1 app's release.
 
 Release `esphome-api` before `esphome-api-android`: the workflow refuses a library whose
 `dev.glassworks` dependency isn't on Maven Central yet. Once a few releases have gone out cleanly,
@@ -403,8 +407,8 @@ The job runs in the `maven-central` environment, which deploys only from `libs/*
    `tools/release/check-lib-artifact.sh`: the jar or AAR, sources, KDoc, POM and licence, and no
    class under the old `sh.edm` packages.
 4. Signs it and uploads it to the Central Portal (`publishToMavenCentral`). It then polls the Portal
-   until the deployment is validated, and fails if the Portal refuses it. (The plugin validates only
-   deployments it publishes itself.)
+   for up to 60 minutes until the deployment is validated, and fails if the Portal refuses it. (The
+   plugin validates only deployments it publishes itself.)
 5. Makes the GitHub release `<name> <version>`, with the changelog section as notes and
    `--latest=false`, so `releases/latest` stays the S1 app's release.
 
@@ -414,8 +418,33 @@ Every PR that touches `libs/`, the Gradle build or these scripts runs a dry run 
 ```sh
 ./gradlew publishToMavenLocal                        # no key: unsigned
 tools/release/check-lib-artifact.sh esphome-api      # and esphome-api-android, improv
-tools/release/lib-consumer-check.sh                  # a fresh minSdk 23 app builds against them
+tools/release/lib-consumer-check.sh                  # fresh apps build against them (below)
 ```
+
+`lib-consumer-check.sh` builds two minSdk 23 Android apps, at compileSdk 37.2 and at compileSdk 23
+(the AARs' `minCompileSdk`), and a JVM app on Kotlin 2.0.21, the oldest Kotlin the READMEs promise. It
+needs the android-23 and android-37.2 SDK platforms.
+
+### If the validation wait times out
+
+The bundle is already on the Portal when the 60-minute wait gives up. **Don't re-run the workflow**:
+it would upload the same version again, and the Portal rejects a duplicate. Instead:
+
+Open [Deployments](https://central.sonatype.com/publishing/deployments) and look at the deployment.
+
+- **Failed:** drop it there, and make no GitHub release. A version is used up only once it's
+  published. Fix the cause, and if that needs a new commit, release it as the next patch version.
+- **Validated** (or still validating: wait until it is):
+  1. Press **Publish**, and wait until the Portal shows the deployment as **Published**. If it
+     shows it as failed instead, follow the failed case above.
+  2. Make the GitHub release by hand, as the workflow's last step would (here for esphome-api 0.1.0):
+
+     ```sh
+     { printf 'Maven Central: `dev.glassworks:%s:%s`\n\n' esphome-api 0.1.0
+       tools/release/changelog-section.sh 0.1.0 libs/esphome-api/CHANGELOG.md; } > /tmp/notes.md
+     gh release create libs/esphome-api/v0.1.0 --verify-tag --latest=false \
+       --title "esphome-api 0.1.0" --notes-file /tmp/notes.md
+     ```
 
 ### Rotate the token or the signing key
 

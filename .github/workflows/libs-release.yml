@@ -28,12 +28,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  MANUAL_PUBLISH: 'true'
+  MANUAL_PUBLISH: 'true'   # exactly 'true' or 'false'; the first step fails on anything else
 
 jobs:
   release:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 100   # tests and build, then up to 60 minutes of the Portal's validation
     environment: maven-central
     permissions:
       contents: write   # the GitHub release
@@ -42,6 +42,15 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      # The steps below test `= true` only, so a typo such as 'True' or 'yes' would silently mean automatic,
+      # irreversible publishing. Refuse it instead.
+      - name: MANUAL_PUBLISH is true or false
+        run: |
+          case "$MANUAL_PUBLISH" in
+            true|false) echo "MANUAL_PUBLISH=$MANUAL_PUBLISH" ;;
+            *) echo "::error::MANUAL_PUBLISH is '$MANUAL_PUBLISH': set it to exactly 'true' or 'false'"; exit 1 ;;
+          esac
 
       - name: Library and version from the tag
         id: tag
@@ -167,7 +176,7 @@ jobs:
           import base64, json, os, sys, time, urllib.request
           token = base64.b64encode(f"{os.environ['MAVEN_CENTRAL_USERNAME']}:{os.environ['MAVEN_CENTRAL_PASSWORD']}".encode()).decode()
           url = f"https://central.sonatype.com/api/v1/publisher/status?id={os.environ['DEPLOYMENT']}"
-          for _ in range(120):  # 30 minutes
+          for _ in range(240):  # 60 minutes
               req = urllib.request.Request(url, method='POST', headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
               status = json.load(urllib.request.urlopen(req))
               state = status.get('deploymentState')
@@ -179,7 +188,7 @@ jobs:
               if state not in ('PENDING', 'VALIDATING'):
                   sys.exit(f'::error::unexpected deployment state {state}')
               time.sleep(15)
-          sys.exit('::error::the Portal did not validate the deployment within 30 minutes')
+          sys.exit('::error::the Portal did not validate the deployment within 60 minutes. The bundle is uploaded: see docs/releasing.md "If the validation wait times out"')
           PY
 
       - name: GitHub release

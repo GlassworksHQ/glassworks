@@ -175,8 +175,8 @@ dependencies {
 }
 ```
 
-An Android library (AAR), minSdk 23 (Android 6). A Kotlin build needs Kotlin 2.0 or newer; a Java
-build needs nothing more.
+An Android library (AAR), minSdk 23 (Android 6). Your app can compile against any compileSdk from 23
+up. A Kotlin build needs Kotlin 2.0 or newer; a Java build needs Java 17 (so compileSdk 30 or newer).
 
 ## Tests
 

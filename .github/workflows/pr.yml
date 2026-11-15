@@ -9,8 +9,9 @@
 #            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy is
 #            linted only (an emulator has no Bluetooth to scan with)
 #   libs-publish  a dry run of the Maven Central release (#153, docs/releasing.md "Libraries"): every
-#            published library to mavenLocal, unsigned, its files checked, then a fresh minSdk 23 app
-#            built against them. Only when libs/, the Gradle build or these scripts change
+#            published library to mavenLocal, unsigned, its files checked, then fresh apps built
+#            against them (minSdk 23 at compileSdk 37.2 and 23, and Kotlin 2.0.21 on the JVM). Only when
+#            libs/, the Gradle build, the licence files or these scripts change
 #   wake-word  MicroWakeWordClipTest: the four real microWakeWord models (LiteRT in a hash-locked
 #            Python venv) behind the Kotlin pipeline, over a synthesised clip (#184). Only when the
 #            Android code or this file changes
@@ -206,7 +207,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         # Fails closed like the root job's: without a base commit, or when git diff fails, it runs.
         run: |
-          paths="libs build.gradle.kts settings.gradle.kts gradle.properties gradle tools/release/check-lib-artifact.sh
+          paths="libs build.gradle.kts settings.gradle.kts gradle.properties gradle LICENSE THIRD-PARTY-NOTICES.md tools/release/check-lib-artifact.sh
             tools/release/lib-consumer-check.sh .github/workflows/pr.yml .github/workflows/libs-release.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); running the dry run."
@@ -231,9 +232,10 @@ jobs:
         if: steps.changed.outputs.run == 'true'
         with:
           packages: platform-tools
-      - name: Android SDK platform
+      # 23: lib-consumer-check.sh builds an app at compileSdk 23, the AARs' minCompileSdk.
+      - name: Android SDK platforms
         if: steps.changed.outputs.run == 'true'
-        run: sdkmanager --install "platforms;android-37.2"
+        run: sdkmanager --install "platforms;android-37.2" "platforms;android-23"
 
       # No secrets here, so nothing is signed (the root build.gradle.kts signs only with a key).
       - name: Publish to mavenLocal

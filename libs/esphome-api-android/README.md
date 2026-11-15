@@ -66,6 +66,7 @@ dependencies {
 }
 ```
 
-An Android library (AAR), minSdk 23 (Android 6). It brings in `dev.glassworks:esphome-api`. A Kotlin
-build needs Kotlin 2.0 or newer; a Java build needs nothing more. The module's manifest adds
+An Android library (AAR), minSdk 23 (Android 6). It brings in `dev.glassworks:esphome-api`. Your app
+can compile against any compileSdk from 23 up. A Kotlin build needs Kotlin 2.0 or newer; a Java build
+needs Java 17 (so compileSdk 30 or newer). The module's manifest adds
 `INTERNET`, which the API server's socket needs.
