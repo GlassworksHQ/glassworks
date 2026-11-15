@@ -5,6 +5,7 @@
 package dev.glassworks.pane
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -128,6 +129,24 @@ class SettingsChangeTest {
         assertEquals(listOf("on", "Who may connect/IP addresses"), SettingsChange.changeable(s).map { it.first })
         assertTrue(SettingsChange.find(s, "Who may connect/IP addresses") === allow)
         assertNull(SettingsChange.find(s, "IP addresses"))
-        assertTrue(SettingsChange.needsHomeAssistant("on"))
+    }
+
+    /**
+     * Maintainer, 2026-11-15: pane switches on the Manage page. A pane's on/off needs a Home Assistant sign-in
+     * by default; with [SettingsChange.CODE_MAY_SWITCH_PANES] a code sign-in may flip a plain one, but never one
+     * the panel asks about first (the radio's off).
+     */
+    @Test fun aPanesOnOffNeedsHomeAssistantAndOneThatAsksFirstAlways() {
+        val plain = SettingsItem.Switch("Voice", "", { true }) { _, d -> d(null) }
+        val radio = SettingsItem.Switch("Radio", "", { true }, confirm = { on -> if (on) null else SettingsItem.Confirm("Turn the radio off?", "", "Turn off") }) { _, d -> d(null) }
+        val other = SettingsItem.Switch("Brightness", "", { true }) { _, d -> d(null) }
+        for (on in listOf(true, false)) {
+            assertTrue(SettingsChange.needsHomeAssistant("on", plain, on))
+            assertTrue(SettingsChange.needsHomeAssistant("on", radio, on))
+            assertFalse("a plain pane switch, with the flag", SettingsChange.needsHomeAssistant("on", plain, on, codeMaySwitchPanes = true))
+            assertFalse("a core setting never needs it", SettingsChange.needsHomeAssistant("Brightness", other, on))
+        }
+        assertTrue("the radio's off asks first", SettingsChange.needsHomeAssistant("on", radio, false, codeMaySwitchPanes = true))
+        assertFalse("its on doesn't", SettingsChange.needsHomeAssistant("on", radio, true, codeMaySwitchPanes = true))
     }
 }

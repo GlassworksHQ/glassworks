@@ -370,8 +370,10 @@ one, its switch says On or Off. Status colours mean status only, and every name 
 **A pane's section has its on/off.** `paneSections` gives each pane's section a `master`, the
 switch at the top right of its page, made from the pane's setup card (`setupChoice`), else from its
 `switch`, unless the pane gives its own (the radio's asks before turning off). `unavailable` says, in
-a few words, why the pane can't run on this panel: the nav greys it with "Can't run" and its page says
-why, without a switch.
+a few words, why the pane can't run now (the radio without its root helper): the nav greys it with
+"Can't run" and its page says why, without a switch. A pane whose `requires` the frame doesn't
+`provide` is `CantRun`: it has no section, so the rail, the Manage page and setup don't show it at all
+(#23; maintainer, 2026-11-15).
 
 **Every pane's page shows its state (#212).** No page says the pane has no settings.
 
@@ -420,7 +422,7 @@ The default is on for the S1's panes, as before the switch.
 | Time zone (`time-zone`) | `time_zone_enabled` | `keep_time_zone` | no |
 | Diagnostics (`diagnostics`) | `diagnostics_enabled` | `diagnostics` | no |
 | Bluetooth proxy (`bluetooth-proxy`) | `bluetooth_proxy_enabled` (off by default) | `bluetooth_proxy` | yes, unless the panel has no Bluetooth LE |
-| Camera (`camera`) | `camera_enabled` (off by default) | `camera_pane` | no; on a panel without a camera it can't run, with no on/off |
+| Camera (`camera`) | `camera_enabled` (off by default) | `camera_pane` | no; on a panel without a camera it isn't shown |
 
 The radio has no `PaneSwitch`: its on/off is its mode (`Off`), and its card and settings switch are
 its own. Timers have none either: they come only from voice.
@@ -449,7 +451,8 @@ dialog. Each change is a POST to `/settings` (CSRF token, `Origin` check) with t
 key and the value, applied with `SettingsChange.change` on the thread `ManageHost.onMain` gives (the
 main thread on Android), so a change from the browser takes the panel's own path. A `Switch` that
 asks first on the panel asks here too. A pane's `master` needs a Home Assistant sign-in: in Home
-Assistant it is an `authOnly` switch. `Link` and `Native` say "On the panel". A pane's row
+Assistant it is an `authOnly` switch. `SettingsChange.CODE_MAY_SWITCH_PANES` lets a code sign-in flip a
+plain one; one that asks first (the radio's off) always needs Home Assistant. `Link` and `Native` say "On the panel". A pane's row
 (`manage.paneRow`) takes its name and on/off from its section: the title, `unavailable` for Can't run,
 the `master` switch (#67) for Off; its chip is `chipWord` and `chipTone`, as on the rail. Off panes
 fold under "Off · N" in the nav, as in the rail. `PanelManageParityTest` walks every item the menu

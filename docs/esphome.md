@@ -410,7 +410,7 @@ poll as a safety net.
 
 ### Camera entities
 
-Only on a panel with a camera (#117). On one without, such as the S1, the pane can't run, as every pane that lacks its hardware (#23): its page says why, and it has no on/off and no entities. The pane is off until you turn it on.
+Only on a panel with a camera (#117). On one without, such as the S1, the pane isn't shown, as every pane that lacks its hardware (#23): no page, no on/off and no entities. The pane is off until you turn it on.
 Presence comes from lighting-insensitive motion on the panel; no image leaves it in *Presence only*.
 
 | Entity | object_id | Category, default | What it does |

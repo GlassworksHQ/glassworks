@@ -264,7 +264,7 @@ class ManageServer(
         val key = req.form["key"].orEmpty()
         val item = SettingsChange.find(section, key) ?: return HttpResponse.seeOther("$page?done=gone")
         val what = "${section.title} › " + if (key == SettingsChange.MASTER) "on/off" else key.replace("/", " › ")
-        if (SettingsChange.needsHomeAssistant(key) && s.with != SignedInWith.HOME_ASSISTANT) {
+        if (s.with != SignedInWith.HOME_ASSISTANT && SettingsChange.needsHomeAssistant(key, item, req.form["value"] == "on")) {
             event("${who(s)}: refused to change $what: needs a Home Assistant sign-in")
             return settingsPage(status, viewer, page.removePrefix("/"), problem = ManagePages.NEEDS_HA, code = 403)!!
         }

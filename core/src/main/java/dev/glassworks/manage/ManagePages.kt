@@ -33,7 +33,7 @@ class ManagePages(private val zone: TimeZone = TimeZone.getDefault(), private va
 
     /**
      * The signed-in browser, for the nav's foot and the forms' CSRF field. [homeAssistant]: it signed in with
-     * Home Assistant, which a pane's on/off needs ([SettingsChange.needsHomeAssistant]).
+     * Home Assistant, which a pane's on/off may need ([SettingsChange.needsHomeAssistant]).
      */
     class Viewer(val who: String, val csrf: String, val homeAssistant: Boolean = true)
 
@@ -150,12 +150,13 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
                 notice: String? = null): String {
         val heading = sec?.heading ?: title
         val why = sec?.let { runCatching { it.unavailable() }.getOrNull() }
-        val master = sec?.master?.takeIf { why == null }?.let { m -> toggle(v, sec.id, SettingsChange.MASTER, m, heading, locked = !v.homeAssistant) }.orEmpty()
+        val locked = sec?.master?.let { m -> !v.homeAssistant && SettingsChange.needsHomeAssistant(SettingsChange.MASTER, m, !runCatching { m.value() }.getOrDefault(false)) } == true
+        val master = sec?.master?.takeIf { why == null }?.let { m -> toggle(v, sec.id, SettingsChange.MASTER, m, heading, locked = locked) }.orEmpty()
         val head = """<div class="phr">${if (state != null) """<span class="crumb">Panes ›</span>""" else ""}<h1 class="ph">${esc(heading)}</h1>""" +
             """${state?.let { """<span class="pchip">${chip(it)}</span>""" }.orEmpty()}$master</div>"""
         val lines = listOfNotNull(
             why?.let { """<p class="sub">${esc("This pane can't run on this panel: $it.")}</p>""" },
-            if (master.isNotEmpty() && !v.homeAssistant) """<p class="sub">${esc(NEEDS_HA)}</p>""" else null,
+            if (master.isNotEmpty() && locked) """<p class="sub">${esc(NEEDS_HA)}</p>""" else null,
             problem?.let { """<p class="err" role="alert">${esc(it)}</p>""" },
             if (restart) """<div class="banner"><i class="dot work"></i><span>${esc(SettingsChange.RESTART_TEXT)}</span>${action(v, "/action/restart", "Restart now", "pill primary")}</div>""" else null,
         ).joinToString("")

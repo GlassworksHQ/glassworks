@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import dev.glassworks.frame.Capability
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.CantRun
-import dev.glassworks.pane.PaneState
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
@@ -123,13 +122,13 @@ class GenericFrameTest {
         assertTrue("a tablet with a camera has the camera pane's on/off (the S1 doesn't)", device.entityList().any { it.objectId == "camera_pane" })
     }
 
-    @Test fun theManagePageSaysTheRadioCantRunAndWhy() {
+    @Test fun theManagePageLeavesOutTheRadio() {
         val tokens = HaTokenClient(object : HttpPoster {
             override fun postForm(url: String, body: String) = 0 to ""
             override fun get(url: String, maxBytes: Int) = 0 to ""
         })
         val status = S1Manage(app, generic(), SignInServer(0, { null }, tokens, { _, _ -> }), tokens, prefs).status()
-        assertEquals(PaneState(PaneState.Kind.CANT_RUN, "it has no Silicon Labs radio"), status.panes.single { it.id == "radio" }.state)
+        assertTrue("a pane the tablet can't run isn't shown (#23)", status.panes.none { it.id == "radio" } && status.sections.none { it.id == "radio" })
         assertEquals("Pixel Tablet", status.frame)
         assertEquals("Google Pixel Tablet", status.about.toMap()["Frame"])
     }

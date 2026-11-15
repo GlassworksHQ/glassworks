@@ -28,23 +28,21 @@ class PaneSwitchesTest {
 
     @Test fun everyPaneSectionHasItsOnOffAtTheTop() {
         val sections = paneSections(definitions)
-        assertEquals(listOf("assist", "sendspin", "notifications", "radio", "bluetooth-proxy", "wall-base", "time-zone", "camera", "diagnostics"), sections.map { it.id })
-        // The S1 has no camera: its page is CantRun's, without an on/off (#23).
-        assertEquals(listOf("Voice", "Music", "Notifications", "Zigbee / Thread radio", "Bluetooth proxy", "Wall base", "Time zone", null, "Diagnostics"), sections.map { it.master?.title })
+        // The S1 has no camera: no camera section (#23).
+        assertEquals(listOf("assist", "sendspin", "notifications", "radio", "bluetooth-proxy", "wall-base", "time-zone", "diagnostics"), sections.map { it.id })
+        assertEquals(listOf("Voice", "Music", "Notifications", "Zigbee / Thread radio", "Bluetooth proxy", "Wall base", "Time zone", "Diagnostics"), sections.map { it.master?.title })
         // No device runs here: a page that shows the running pane says so (#212); the radio, the Bluetooth proxy
         // and notifications (off by default, so its page is its off note) have their own.
         val waiting = sections.filter { s -> s.items.singleOrNull().let { it is SettingsItem.Note && it.text() == NOT_RUNNING } }
         assertEquals(listOf("assist", "sendspin", "wall-base", "time-zone", "diagnostics"), waiting.map { it.id })
     }
 
-    @Test fun theS1sCameraCantRun() {
-        // No camera in the S1's hardware: CantRun, as every pane that lacks its own (#23): one page, no on/off, no entity.
+    @Test fun theS1sCameraIsHidden() {
+        // No camera in the S1's hardware: CantRun, as every pane that lacks its own (#23): no page, no on/off, no entity.
         val camera = definitions.single { it.id == "camera" }
         assertTrue(camera is dev.glassworks.pane.CantRun)
         assertEquals(null, camera.switch)
-        val page = paneSections(definitions).single { it.id == "camera" }
-        assertEquals("it has no camera", page.unavailable())
-        assertEquals(listOf("Needs a camera."), page.items.map { (it as SettingsItem.Note).text() })
+        assertTrue(paneSections(definitions).none { it.id == "camera" })
     }
 
     @Test fun withACameraTheOffPageSaysTheCameraStaysClosed() {

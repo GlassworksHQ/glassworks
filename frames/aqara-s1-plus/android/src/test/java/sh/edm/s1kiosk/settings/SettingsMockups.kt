@@ -55,13 +55,16 @@ class SettingsMockups {
         return o
     }
 
-    /** Made up: a pane that can't run on this panel, to show how the menu says so (on the S1 the camera can't run either: settings-21). */
+    /**
+     * Made up: a pane that can't run now for a reason found while it runs (the radio without its root helper), to
+     * show how the menu says so. A pane the frame lacks the hardware for isn't shown at all (#23).
+     */
     private val cantRun = object : dev.glassworks.pane.PaneDefinition {
         override val id = "example"
         override fun settings() = listOf(dev.glassworks.pane.SettingsSection(
             "example", "Example pane", listOf(dev.glassworks.pane.SettingsItem.Note { "An example pane's settings." }),
             master = dev.glassworks.pane.SettingsItem.Switch("Example pane", "", { false }) { _, d -> d(null) },
-            unavailable = { "it needs a camera, and this panel has none" },
+            unavailable = { "its helper isn't installed" },
         ))
     }
 
@@ -98,13 +101,6 @@ class SettingsMockups {
         shot("settings-18-wall-base", menu(radioRunning = true), "wall-base")
         shot("settings-19-time-zone", menu(radioRunning = true), "time-zone")
         shot("settings-20-diagnostics", menu(radioRunning = true), "diagnostics")
-        // #117: the camera pane on the S1, which has no camera: CantRun, as the app builds it (#23), greyed in
-        // the rail with its page saying why, and no on/off.
-        val noCamera = dev.glassworks.pane.CantRun.unless(
-            dev.glassworks.camera.CameraDefinition(KioskPrefs(RuntimeEnvironment.getApplication()).paneFile("camera")),
-            sh.edm.s1kiosk.frame.AqaraS1Plus().provides,
-        )
-        shot("settings-21-camera-cant-run", menu(radioRunning = true, extra = listOf(noCamera)), "camera")
         shot("settings-16-screen-scrolled", menu(radioRunning = true), "screen") { o ->
             Mockup.layout(o)
             o.previewScrollTo(Mockup.label(o, "Brightness"), alignBottom = true)

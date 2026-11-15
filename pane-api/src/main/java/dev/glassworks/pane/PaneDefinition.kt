@@ -54,25 +54,19 @@ interface PaneDefinition {
 }
 
 /**
- * [definition] on a frame without the hardware it [PaneDefinition.requires] (#23, #235): one page that says
- * why ([reason]) and nothing that could start it, so no on/off, setup card, setup step or extra. The shell
- * builds no [Pane] for it.
+ * [definition] on a frame without the hardware it [PaneDefinition.requires] (#23): not shown anywhere
+ * (maintainer, 2026-11-15: "if the pane can't run it should just be hidden"). No settings section, so
+ * neither the panel's rail nor the Manage page lists it, and nothing that could start it: no on/off,
+ * setup card, setup step or extra. The shell builds no [Pane] for it.
  */
-class CantRun(private val definition: PaneDefinition, private val reason: String) : PaneDefinition {
+class CantRun(private val definition: PaneDefinition) : PaneDefinition {
     override val id get() = definition.id
     override val requires get() = definition.requires
 
-    override fun settings(running: Pane?): List<SettingsSection> {
-        val own = definition.settings(null).firstOrNull()
-        val title = own?.title ?: definition.switch?.title ?: id
-        val needs = "Needs ${requires.joinToString(" and ") { it.noun }}."
-        return listOf(SettingsSection(id, title, listOf(SettingsItem.Note { needs }), own?.heading ?: title, unavailable = { reason }))
-    }
-
     companion object {
-        /** [definition] as it is on a frame that [provides] what it needs, else [CantRun] with the first thing missing. */
+        /** [definition] as it is on a frame that [provides] what it needs, else [CantRun]. */
         fun unless(definition: PaneDefinition, provides: Set<Capability>): PaneDefinition =
-            (definition.requires - provides).firstOrNull()?.let { CantRun(definition, it.missing) } ?: definition
+            if (provides.containsAll(definition.requires)) definition else CantRun(definition)
     }
 }
 

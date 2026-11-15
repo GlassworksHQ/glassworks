@@ -114,7 +114,8 @@ class S1Manage(
                 uptimeMs = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime(),
                 haBase = prefs.haBase,
                 tiles = listOf(haTile(), wifiTile(), engineTile(), memoryTile()),
-                panes = defs.map { d -> s1PaneRow(d.id, panes.firstOrNull { it.id == d.id }) },
+                // The panes the panel's rail lists, no more: one the frame can't run has no section, so it isn't shown (#23).
+                panes = defs.mapNotNull { d -> panes.firstOrNull { it.id == d.id }?.let { s1PaneRow(d.id, it) } },
                 sections = model.sections,
                 // After the About section's own items (the version, the licences).
                 about = listOf(

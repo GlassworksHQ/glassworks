@@ -16,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** #23: a pane needs what its definition `requires`; on a frame without it, it can't run and nothing can start it. */
+/** #23: a pane needs what its definition `requires`; on a frame without it, it is hidden and nothing can start it. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class CantRunTest {
@@ -40,7 +40,8 @@ class CantRunTest {
     @Test fun aFrameWithTheHardwareRunsThePaneAsItIs() =
         assertSame(radio, CantRun.unless(radio, setOf(Capability.SILABS_RADIO, Capability.SPEAKER)))
 
-    @Test fun aFrameWithoutItGetsAPageThatSaysWhyAndNothingThatStartsIt() {
+    /** Maintainer, 2026-11-15: "if the pane can't run it should just be hidden". No page, no switch, nothing to start it. */
+    @Test fun aFrameWithoutItHidesThePaneAndOffersNothingThatStartsIt() {
         val d = CantRun.unless(radio, setOf(Capability.SPEAKER, Capability.MICROPHONE))
         assertTrue(d is CantRun)
         assertEquals("radio", d.id)
@@ -48,12 +49,7 @@ class CantRunTest {
         assertNull("no card on setup's Panes step", d.setupChoice)
         assertEquals("setup waits for none of its steps", emptyList<SetupStep>(), d.setupSteps)
         assertEquals(emptyList<IntentExtra>(), d.extras)
-        val page = d.settings(null).single()
-        assertEquals("Radio", page.title)
-        assertEquals("Zigbee / Thread radio", page.heading)
-        assertEquals("it has no Silicon Labs radio", page.unavailable())
-        assertEquals("Needs a Silicon Labs radio.", (page.items.single() as SettingsItem.Note).text())
-        assertEquals(PaneState(PaneState.Kind.CANT_RUN, "it has no Silicon Labs radio"), paneState(paneSections(listOf(d)).single()))
+        assertEquals("no settings section: not on the rail or the Manage page", emptyList<SettingsSection>(), paneSections(listOf(d)))
     }
 
     @Test fun aDeviceHasWhatItsFeaturesSay() {

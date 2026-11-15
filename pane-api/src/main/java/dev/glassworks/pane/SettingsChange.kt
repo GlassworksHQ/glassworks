@@ -45,10 +45,22 @@ object SettingsChange {
     }
 
     /**
-     * A pane's on/off needs a Home Assistant sign-in on the Manage page: in Home Assistant it is an
-     * `authOnly` switch ([PaneSwitch.entity]), which only a connection with the panel's key may change.
+     * Whether a browser signed in with the panel's code may turn a pane on or off on the Manage page. False:
+     * only a Home Assistant sign-in may, as in Home Assistant, where a pane's switch is `authOnly`
+     * ([PaneSwitch.entity]). The maintainer's call (asked 2026-11-15).
      */
-    fun needsHomeAssistant(key: String): Boolean = key == MASTER
+    const val CODE_MAY_SWITCH_PANES = false
+
+    /**
+     * Whether setting [item] at [key] to [on] needs a Home Assistant sign-in on the Manage page: a pane's
+     * on/off ([MASTER]) that the panel asks about first ([SettingsItem.Switch.confirm], the radio's off)
+     * always does, any other pane's on/off unless [codeMaySwitchPanes].
+     */
+    fun needsHomeAssistant(key: String, item: SettingsItem, on: Boolean, codeMaySwitchPanes: Boolean = CODE_MAY_SWITCH_PANES): Boolean {
+        if (key != MASTER) return false
+        val asks = (item as? SettingsItem.Switch)?.let { runCatching { it.confirm(on) }.getOrNull() } != null
+        return asks || !codeMaySwitchPanes
+    }
 
     fun titleOf(i: SettingsItem): String = when (i) {
         is SettingsItem.Text -> i.title
