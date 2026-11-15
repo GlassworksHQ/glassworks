@@ -18,6 +18,8 @@ reaches them through `adb reverse`:
 """
 import argparse
 import base64
+import hashlib
+import time
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -64,7 +66,7 @@ PAGE = """<!doctype html>
  try {{
   const ws = new WebSocket("{other_ws}/socket");
   ws.onopen = () => document.getElementById("ws").textContent = "OPEN";
-  ws.onerror = () => document.getElementById("ws").textContent = "blocked";
+  ws.onerror = () => document.getElementById("ws").textContent = "blocked"; // the server answers it: an allowed socket opens
  }} catch (e) {{ document.getElementById("ws").textContent = "blocked (" + e.name + ")"; }}
 </script>
 </body></html>
@@ -77,6 +79,8 @@ FRAME = """<!doctype html><html><head><meta charset="utf-8"></head>
 
 def handler(home, other, is_home):
     class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"  # a WebSocket's 101 needs it; every other answer has a Content-Length
+
         def log_message(self, fmt, *args):
             print(f"[{'home' if is_home else 'other'}] {self.address_string()} {fmt % args}", flush=True)
 
@@ -93,6 +97,19 @@ def handler(home, other, is_home):
 
         def do_GET(self):
             path = self.path.split("?")[0]
+            key = self.headers.get("Sec-WebSocket-Key")
+            if path == "/socket" and key:
+                # A real WebSocket handshake, so a socket the lockdown let through shows OPEN, not a false "blocked".
+                accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()).decode()
+                self.send_response(101)
+                self.send_header("Upgrade", "websocket")
+                self.send_header("Connection", "Upgrade")
+                self.send_header("Sec-WebSocket-Accept", accept)
+                self.end_headers()
+                self.wfile.flush()
+                time.sleep(2)
+                self.close_connection = True
+                return
             if path in ("/", "/index.html") and is_home:
                 other_ws = other.replace("http://", "ws://")
                 self.send(200, "text/html; charset=utf-8", PAGE.format(home=home, other=other, other_ws=other_ws).encode())

@@ -40,7 +40,22 @@ Three things to find out:
    The POMs differ in what they pull in: 144 wants kotlin-stdlib 2.2.10, androidx.core 1.17.0 and its own
    `geckoview-exoplayer2`; 159 wants kotlin-stdlib 2.4.20, androidx.core 1.19.1 and media3 1.11.1.
 
-2. **APK size** (2026-11-15, verified: `curl -sI` on maven.mozilla.org, then `unzip -lv` on the APK).
+2. **APK size** (2026-11-15, verified). The AARs' sizes from maven.mozilla.org, then the test APK's parts:
+   ```
+   $ B=https://maven.mozilla.org/maven2/org/mozilla/geckoview
+   $ for a in geckoview-arm64-v8a geckoview-armeabi-v7a; do for v in 143.0.20251003115653 144.0.20251027123126 159.0.20261102144711; do
+       echo "$a $v: $(curl -sI $B/$a/$v/$a-$v.aar | grep -i '^content-length')"; done; done
+   geckoview-arm64-v8a 143.0.20251003115653: content-length: 84425311
+   geckoview-arm64-v8a 144.0.20251027123126: content-length: 84723838
+   geckoview-arm64-v8a 159.0.20261102144711: content-length: 91498586
+   geckoview-armeabi-v7a 143.0.20251003115653: content-length: 81859634
+   geckoview-armeabi-v7a 144.0.20251027123126: content-length: 82222403
+   geckoview-armeabi-v7a 159.0.20261102144711: content-length: 88751103
+   $ unzip -lv engines/engine-gecko-legacy/test-app/build/outputs/apk/debug/kiosk-legacy-debug.apk \
+       | awk 'NR>3 && $1 ~ /^[0-9]+$/ {n=$8; c=$3; if (n ~ /^lib\//) L+=c; else if (n ~ /omni.ja/) O+=c; else if (n ~ /\.dex$/) D+=c; else R+=c}
+              END {printf "lib/ %.1f MB, omni.ja %.1f MB, dex %.1f MB, rest %.1f MB\n", L/1e6, O/1e6, D/1e6, R/1e6}'
+   lib/ 77.3 MB, omni.ja 13.1 MB, dex 12.1 MB, rest 2.2 MB
+   ```
 
    | AAR | 143 | 144 | 159 |
    |---|---|---|---|
@@ -87,8 +102,15 @@ Three things to find out:
    (`hw.gpu.enabled=no`) and again with `-gpu host` (`eglCodecCommon: glUtilsParamSize: unknow param` in logcat).
    Untested whether that is the emulator's GLES or GeckoView 144 on Android 6; the Mirror's Adreno 306 decides.
 
-6. **Memory on API 23** (2026-11-15, verified, `ps`, RSS) with the dashboard open: main process 271 MB,
-   `:tab7` (the one content process) 277 MB, `:gpu` 129 MB, `:crashhelper` 61 MB. The legacy engine sets
+6. **Memory on API 23** (2026-11-15, verified) with the dashboard open about a minute:
+   ```
+   $ adb -s emulator-5600 shell ps | grep s1kiosk        (columns: user pid ppid vsize rss …)
+   u0_a55  3118 917 3445024 271080 … sh.edm.s1kiosk.legacy
+   u0_a55  3135 917  948624  60928 … sh.edm.s1kiosk.legacy:crashhelper
+   u0_a55  3168 917 3492172 276932 … sh.edm.s1kiosk.legacy:tab7
+   u0_a55  3201 917 1179600 128744 … sh.edm.s1kiosk.legacy:gpu
+   ```
+   RSS: main process 271 MB, `:tab7` (the one content process) 277 MB, `:gpu` 129 MB, `:crashhelper` 61 MB. The legacy engine sets
    `dom.ipc.processCount=1`, `dom.ipc.processPrelaunch.enabled=false` and `fission.autostart=false`, so there is
    one content process and no spare one. RSS counts shared pages in each process, so the sum overstates the total.
 
