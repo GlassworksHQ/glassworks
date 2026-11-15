@@ -45,14 +45,13 @@ class HaBlueprintClientTest {
             "GlassworksHQ/doorbell-panels.yaml": {"metadata": {"name": "Doorbell on Glassworks panels", "domain": "automation",
               "source_url": "https://raw.githubusercontent.com/GlassworksHQ/glassworks/v0.5.0/panes/notifications/blueprints/doorbell-panels.yaml"}},
             "homeassistant/motion_light.yaml": {"metadata": {"name": "Motion-activated Light", "domain": "automation"}},
-            "broken.yaml": {"error": "Invalid blueprint"}}""")
+            "GlassworksHQ/ask-panels.yaml": {"error": "Invalid blueprint"}}""") // HA can't load it: not offered as there
         val urls = ArrayList<String>()
         val a = HaBlueprintClient { url -> urls += url; ha }.check("http://homeassistant.local:8123/lovelace/0", "AT")
         assertEquals(listOf("ws://homeassistant.local:8123/api/websocket"), urls)
         assertEquals(BlueprintAccess.Admin(listOf(
             HaBlueprint("GlassworksHQ/doorbell-panels.yaml", "https://raw.githubusercontent.com/GlassworksHQ/glassworks/v0.5.0/panes/notifications/blueprints/doorbell-panels.yaml"),
             HaBlueprint("homeassistant/motion_light.yaml", null),
-            HaBlueprint("broken.yaml", null),
         )).inHa.toSet(), (a as BlueprintAccess.Admin).inHa.toSet())
         assertEquals("reads only", listOf("auth", "auth/current_user", "blueprint/list"), ha.sent.map { it.getString("type") })
         assertEquals("automation", ha.sent.last().getString("domain"))

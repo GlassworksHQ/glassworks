@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * The panes' Blueprints cards (pane.json's `blueprints`, from the app's [Blueprint.ASSET]): the list, and
  * what the panel's own Home Assistant sign-in may do with them ([BlueprintAccess]). The check only reads
  * and runs on its own thread; [access] answers at once with the last answer and starts a new check when
- * that one is older than [FRESH_MS], so a page that is open picks up an import within seconds.
+ * that one is older than [FRESH_MS], so a page that is open picks up an import within seconds. An answer
+ * is about one Home Assistant and one sign-in ([context]): when either changes, it is Checking again.
  * MainActivity and the Manage page each keep one.
  */
 class PanelBlueprints(
@@ -34,28 +35,36 @@ class PanelBlueprints(
     private val haBase: () -> String?,
     /** The check itself; blocks. Runs on this class's thread. */
     private val check: () -> BlueprintAccess,
+    /** What an answer is about: the dashboard's Home Assistant and the panel's sign-in. */
+    private val context: () -> Any? = haBase,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
+    private class Answer(val context: Any?, val access: BlueprintAccess, val at: Long)
+
     private val byPane: Map<String, List<Blueprint>> by lazy {
         runCatching(catalog).onFailure { Log.w(TAG, "no blueprint list", it) }.getOrDefault(emptyList()).groupBy { it.pane }
     }
 
-    @Volatile private var last: BlueprintAccess = BlueprintAccess.Checking
-    @Volatile private var checkedAt: Long? = null
+    @Volatile private var answer: Answer? = null
     private val checking = AtomicBoolean(false)
     private val exec = Executors.newSingleThreadExecutor { r -> Thread(r, "gw-blueprints").apply { isDaemon = true } }
 
-    /** The last answer; a new check starts when it is older than [FRESH_MS] (or there is none yet). */
+    /**
+     * The last answer for this [context]; a new check starts when it is older than [FRESH_MS], or there is
+     * none for this context yet (Checking until it answers).
+     */
     fun access(): BlueprintAccess {
-        val at = checkedAt
-        if ((at == null || clock() - at > FRESH_MS) && checking.compareAndSet(false, true)) {
+        val now = context()
+        val a = answer?.takeIf { it.context == now }
+        if ((a == null || clock() - a.at > FRESH_MS) && checking.compareAndSet(false, true)) {
             exec.execute {
-                last = runCatching(check).getOrElse { BlueprintAccess.Off(HaBlueprintClient.UNREACHABLE) }
-                checkedAt = clock()
+                val about = context()
+                val access = runCatching(check).getOrElse { BlueprintAccess.Off(HaBlueprintClient.UNREACHABLE) }
+                answer = Answer(about, access, clock())
                 checking.set(false)
             }
         }
-        return last
+        return a?.access ?: BlueprintAccess.Checking
     }
 
     /** [pane]'s Blueprints card, or null when it has none. [open] takes a link the panel opens in its dashboard. */
@@ -78,6 +87,7 @@ class PanelBlueprints(
                 catalog = { app.assets.open(Blueprint.ASSET).use { Blueprint.parse(it.readBytes().toString(Charsets.UTF_8)) } },
                 ref = BlueprintLinks.ref(build),
                 haBase = { prefs.haBase },
+                context = { prefs.haBase to (if (HaAuth.signedIn) HaAuth.signedInBase else null) },
                 check = check@{
                     HaAuth.init(app)
                     if (!HaAuth.signedIn) return@check BlueprintAccess.Off(NOT_SIGNED_IN)

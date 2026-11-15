@@ -48,8 +48,10 @@ class HaBlueprintClient(private val connect: (url: String) -> HaSocket) {
 
         ws.send(JSONObject().put("id", 2).put("type", "blueprint/list").put("domain", "automation").toString())
         val list = result(ws, 2) ?: return BlueprintAccess.Off(UNEXPECTED)
-        val inHa = list.keys().asSequence().map { path ->
-            HaBlueprint(path, list.optJSONObject(path)?.optJSONObject("metadata")?.optString("source_url")?.ifEmpty { null })
+        // A file Home Assistant can't load ({"error": …}) can't make an automation: it counts as not there.
+        val inHa = list.keys().asSequence().mapNotNull { path ->
+            val meta = list.optJSONObject(path)?.optJSONObject("metadata") ?: return@mapNotNull null
+            HaBlueprint(path, meta.optString("source_url").ifEmpty { null })
         }.toList()
         return BlueprintAccess.Admin(inHa)
     }

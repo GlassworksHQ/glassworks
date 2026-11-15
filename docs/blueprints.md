@@ -33,7 +33,7 @@ sign-in (the QR code from setup):
 
 | The panel's sign-in | The card |
 |---|---|
-| An administrator | **Add to Home Assistant** opens Home Assistant's import dialog in the dashboard, with the blueprint filled in. Press Preview, then Import blueprint. Back on the card, one that Home Assistant has shows *In Home Assistant* and **Create automation**, which opens Home Assistant's blueprint list filtered to it: tap the row to start an automation |
+| An administrator | **Add to Home Assistant** opens Home Assistant's import dialog in the dashboard, with the blueprint filled in. Press Preview, then Import blueprint. Back on the card, one that Home Assistant has shows *In Home Assistant* and **Create automation**, which opens Home Assistant's blueprint list filtered to it: tap the row to start an automation. These links use Home Assistant's `my` integration, which `default_config` loads; without it, add `my:` to `configuration.yaml` |
 | Not an administrator | **Add from your phone** shows a QR code. Scan it with a phone signed in to Home Assistant as an administrator: the Home Assistant app opens the same import dialog. Home Assistant's blueprint pages are for administrators only, so the panel's own dashboard can't open them |
 | Not signed in, or Home Assistant can't be reached | The buttons are off, and one line says why |
 

@@ -125,6 +125,8 @@ class AssetsLint(unittest.TestCase):
         """The kiosk's own assets (the GeckoView extension, the baseline profile, the licences) are the
         core's; GeckoView's omni.ja is the engine's."""
         self.assertEqual(self.lint("assets/dexopt/baseline.prof", "assets/licenses/LICENSE", "assets/blueprints.json")["lint"], [])
+        # A file entry is that file only: a stray copy beside it isn't the core's.
+        self.assertEqual(len(self.lint("assets/blueprints.json.bak")["lint"]), 1)
 
     def test_the_radio_bundle_is_the_radios(self):
         """The release's armeabi-v7a APK carries the signed radio bundle at assets/radio-bundle/, where

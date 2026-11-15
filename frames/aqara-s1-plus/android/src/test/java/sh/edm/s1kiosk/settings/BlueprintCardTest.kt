@@ -151,4 +151,20 @@ class BlueprintCardTest {
         assertEquals("checked again once old", 2, checks.get())
         assertEquals(2, p.item("notifications") {}!!.list.size)
     }
+
+    @Test fun panelBlueprintsForgetsTheAnswerWhenHomeAssistantOrTheSignInChanges() {
+        var context: Any? = "A"
+        val p = PanelBlueprints(
+            catalog = { listOf(doorbell) }, ref = "v0.5.0", haBase = { ha },
+            check = { BlueprintAccess.Admin(listOf(HaBlueprint("GlassworksHQ/doorbell-panels.yaml", null))) }, context = { context },
+        )
+        fun settle() = repeat(200) { if (p.access() !is BlueprintAccess.Checking) return; Thread.sleep(5) }
+        p.access(); settle()
+        assertTrue(p.access() is BlueprintAccess.Admin)
+        // Another Home Assistant, or signed out: A's blueprints say nothing about it.
+        context = "B"
+        assertEquals(BlueprintAccess.Checking, p.access())
+        settle()
+        assertTrue(p.access() is BlueprintAccess.Admin)
+    }
 }
