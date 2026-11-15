@@ -634,7 +634,10 @@ public class ApiServer(
         @Volatile var authenticated = false
         /** Set when the key changed: only the disconnect handshake is processed from now on. */
         @Volatile private var retired = false
-        /** A DisconnectRequest is on its way ([askToDisconnect]). */
+        /**
+         * A DisconnectRequest is on its way ([askToDisconnect]). Never cleared: every path that sets it
+         * ends in [close], and clearing it would bring back a request and a thread per call.
+         */
         private val disconnecting = AtomicBoolean()
         private val remote = socket.remoteSocketAddress?.toString() ?: "?"
         /** Handshake done and the writer running: messages can be sent, and the keepalive applies. */
@@ -775,7 +778,7 @@ public class ApiServer(
          */
         private fun askToDisconnect(graceMs: Long) {
             if (!disconnecting.compareAndSet(false, true)) return
-            Thread({
+            val thread = Thread({
                 try {
                     if (send(listOf(Frame(Msg.DISCONNECT_REQUEST, ByteArray(0))), wait = true, timeoutMs = disconnectWriteMs)) {
                         Thread.sleep(graceMs)
@@ -784,7 +787,15 @@ public class ApiServer(
                 } finally {
                     close()
                 }
-            }, "esphome-disc-$id").apply { isDaemon = true; start() }
+            }, "esphome-disc-$id").apply { isDaemon = true }
+            try {
+                thread.start()
+            } catch (t: Throwable) {
+                // No thread (out of memory, thread limit): close now, or the flag stays set with nothing
+                // left to close the connection.
+                close()
+                throw t
+            }
         }
 
         /**
