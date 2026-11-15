@@ -24,6 +24,9 @@ import dev.glassworks.diagnostics.DiagnosticsPane
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.nodeName
+import dev.glassworks.notifications.NotificationScreen
+import dev.glassworks.notifications.NotificationSounds
+import dev.glassworks.notifications.NotificationsPane
 import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.EntityRegistry
 import dev.glassworks.pane.Pane
@@ -275,6 +278,7 @@ class PanelDevice internal constructor(
             emit = ::emit,
             entitiesChanged = { runCatching { exec.execute { rebuildEntities() } } },
             sendEvent = { entity, type -> runCatching { exec.execute { server?.sendEvent(entity, type) } } },
+            fireEvent = { event -> runCatching { exec.execute { server?.sendHomeAssistantEvent(event) } } },
         )
         val assistPane = AssistPane(
             paneContext,
@@ -296,6 +300,22 @@ class PanelDevice internal constructor(
                 schedule = { ms, action -> exec.schedule({ action() }, ms, TimeUnit.MILLISECONDS) },
                 play = { chimes().chime() },
                 silence = { synchronized(this) { chimePlayer }?.cancel() },
+            ),
+            NotificationsPane(
+                paneContext, prefs.notifications, runtime.notifications,
+                screen = object : NotificationScreen {
+                    override fun wake() = ui { screen.wake("notification") }
+                    override fun hold() = ui { screen.hold("notification") }
+                    override fun release() = ui { screen.release("notification") }
+                },
+                play = { sound, done ->
+                    val pcm = NotificationSounds.pcm(sound)
+                    if (pcm == null) done() else chimes().run { begin(pcm.rate, 2, 1); write(pcm.data); end(done) }
+                },
+                silence = { synchronized(this) { chimePlayer }?.cancel() },
+                schedule = { ms, action -> exec.schedule({ action() }, ms, TimeUnit.MILLISECONDS) },
+                haBase = { prefs.haBase },
+                now = android.os.SystemClock::elapsedRealtime,
             ),
         ) + frame.panes(paneContext, exec) + RadioPane(paneContext, runtime, panelIp = ::ipAddress) +
             runtime.paneDefinitions(ctx).filterIsInstance<BluetoothProxyDefinition>().map { it.pane(paneContext, exec) } +
