@@ -1758,8 +1758,8 @@ Frame statistics are defined once, in `tools/perf/page/stats.js` and `tools/perf
 **Clarity v2: D** (s1rtc10, 2de8ac20, 3 of 3 runs, protocol 2, rubric 2, the S1 Kiosk build before
 its first release (`pre-v1`), camera video over the LAN (`lan-udp`), measured 2026-11-15 UTC; not
 provisional): "a good wall panel for light dashboards. Held back by typical dashboards: the main
-thread is blocked for 2.9 s after the view is drawn." Typical opens in 1.2 s (drawn, good) and is
-usable at 5.1 s; the 2.9 s of blocking between them (poor, over 600 ms) is what stops it at fluid.
+thread is blocked for 2.9 s after the view is drawn." Typical without its camera (`typical-nocam`) opens in 1.2 s
+(drawn, good) and is usable at 5.1 s; the 2.9 s of blocking between them (poor, over 600 ms) is what stops it at fluid.
 Light blocks for 233 ms (needs improvement, which fluid accepts). A restart takes 14.3 s, which
 would cap it at C. The published report is
 [frames/aqara-s1-plus/clarity/report.md](../frames/aqara-s1-plus/clarity/report.md), and its

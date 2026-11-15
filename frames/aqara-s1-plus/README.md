@@ -105,8 +105,8 @@ announcements, with a calm full-screen overlay while you talk.
 **Status: beta.**
 
 **Clarity v2: D**, a good wall panel for light dashboards (measured 2026-11-15 UTC, 3 of 3 runs, not
-provisional). Typical dashboards hold it back: their view is drawn in 1.2 s, but the main thread then stays
-blocked for 2.9 s. The report is in
+provisional). Typical dashboards hold it back: without a camera their view is drawn in 1.2 s, but the main
+thread then stays blocked for 2.9 s. The report is in
 [clarity/report.md](clarity/report.md), and the summary the site grades in
 [clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)). The Clarity
 badge shows the grade once glassworks.dev publishes it.
