@@ -59,20 +59,21 @@ licensed upstream, and whether it reaches browsers.
    Same script: code lines (whitespace-normalised, 24 chars or more) identical to upstream, and
    string literals of 12 chars or more found upstream:
    ```
-   fel/src/protocol.ts     lines 0/104   hex 91/91  strings 2/4  'SPL: bad length in the eGON header', 'SPL: checksum check failed'
-   fel/src/felDevice.ts    lines 0/86    hex 1/1    strings 1/5  'SPL: bad thunk size'
+   fel/src/protocol.ts     lines 0/104   hex 91/91  strings 3/3  'SPL: bad length in the eGON header', 'SPL: checksum check failed', 'SPL: eGON header is not found'
+   fel/src/felDevice.ts    lines 0/86    hex 1/1    strings 1/4  'SPL: bad thunk size'
    fel/src/a133.ts         lines 0/4     hex 2/4    strings 0/1
-   fel/src/transport.ts    lines 0/49    hex 0/0    strings 0/5
+   fel/src/transport.ts    lines 0/49    hex 0/0    strings 0/3
    fel/src/uboot.ts        lines 0/16    hex 0/0    strings 0/2
-   fel/test/fakes.ts       lines 0/190   hex 2/7    strings 0/20
+   fel/test/fakes.ts       lines 0/190   hex 2/7    strings 0/13
    bootpatch/src/wasm/src/lib.rs  lines 26/72  (Rust; is_raw_arm32 and detect_bcj_filter)
-   bootpatch/src/cpio.ts   lines 0/197   strings 16/26  'Record new entry', '.backup/.rmlist', 'verifyatboot', ...
-   bootpatch/src/magisk.ts lines 0/125   strings 18/32  '- Stock boot image detected', 'extract .backup/.magisk config.orig', ...
-   bootpatch/src/bootimg.ts lines 0/145  strings 2/15   'Corrupted boot image!', 'SEANDROIDENFORCE'
+   bootpatch/src/cpio.ts   lines 0/197   strings 17/23  '.backup/.rmlist', 'verifyatboot', 'fileencryption', ...
+   bootpatch/src/magisk.ts lines 0/125   strings 18/29  '- Stock boot image detected', 'extract .backup/.magisk config.orig', ...
+   bootpatch/src/bootimg.ts lines 0/145  strings 2/12   'Corrupted boot image!', 'SEANDROIDENFORCE'
    bootpatch/src/index.ts  lines 0/50    strings 3/9    '- Unpacking boot image', '- Repacking boot image', ...
    bootpatch/src/{compress,overlay,vbmeta}.ts  no overlap
    ```
-   Zero identical lines in the TypeScript is expected for a translation from C or Rust. The strings and
+   (Counts as given by the current `overlap.py`, which takes whole string literals and skips template
+   strings with `${`. A first, rougher version gave slightly different string counts.) Zero identical lines in the TypeScript is expected for a translation from C or Rust. The strings and
    the side-by-side reading below show what was translated.
 
 4. **Side-by-side reading** (2026-11-15, read)

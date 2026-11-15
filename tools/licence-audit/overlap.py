@@ -21,6 +21,8 @@ import sys
 
 SUFFIXES = {'.c', '.h', '.S', '.rs', '.cpp', '.hpp', '.sh'}
 # A whole 32-bit literal: not part of a longer hex number.
+# One whole string literal per match: '...', "..." or `...` on one line, escapes skipped over.
+LITERAL = re.compile(r"'((?:[^'\\\n]|\\.)*)'|\"((?:[^\"\\\n]|\\.)*)\"|`((?:[^`\\\n]|\\.)*)`")
 HEX32 = re.compile(r'(?<![0-9a-fx])0x[0-9a-f]{8}(?![0-9a-f])')
 
 
@@ -46,7 +48,8 @@ def main() -> None:
     same = [line for line in lines if line in up_lines]
     hexw = set(HEX32.findall(ours.lower()))
     uphex = set(HEX32.findall(up.lower()))
-    strs = sorted(set(re.findall(r"""['"`]([^'"`\n${}]{12,})['"`]""", ours)))
+    literals = (a or b or c for a, b, c in LITERAL.findall(ours))
+    strs = sorted({x for x in literals if len(x) >= 12 and '${' not in x})
     shared = [s for s in strs if s in up]
 
     print(f'{sys.argv[1]}: code lines {len(same)}/{len(lines)} identical; '
