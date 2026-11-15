@@ -15,11 +15,13 @@ const nextConfig: NextConfig = {
   // The site reads frames/*/design, frames/*/clarity/clarity.json and the Markdown the docs and blog
   // publish (src/lib/docs/sources.ts, src/lib/blog/posts.ts), with the images beside it. A function
   // may render a doc again on revalidation, so those go into the server bundles; nothing else from the
-  // repo does (a published report.json is a few hundred kB).
+  // repo does (a published report.json is a few hundred kB). `npm run check:trace` checks after a build
+  // that each docs route carries every published file.
   outputFileTracingIncludes: {
     "*": [
       "../{README.md,CHANGELOG.md}",
       "../docs/**/*.{md,png,jpg,jpeg,webp,gif,svg}",
+      "../frames/README.md",
       "../frames/*/{README.md,docs/**,research/**}",
       "../{libs,kiln/packages,packages}/*/README.md",
       "../kiln/apps/kiln/README.md",

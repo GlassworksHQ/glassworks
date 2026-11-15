@@ -706,6 +706,9 @@ jobs:
       - name: Builds as Vercel builds it
         if: steps.changed.outputs.run == 'true'
         run: npm run build -w site
+      - name: Each docs route carries the Markdown and images it renders
+        if: steps.changed.outputs.run == 'true'
+        run: npm run check:trace -w site
       - name: SEO check (sitemap, titles, descriptions, canonicals, preview images)
         if: steps.changed.outputs.run == 'true'
         run: npm run check:seo -w site

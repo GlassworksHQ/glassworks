@@ -25,6 +25,7 @@ npm run lint -w site
 npm run typecheck -w site
 npm run build -w site        # every route is static; this is what Vercel runs
 npm run check:seo -w site    # after a build: every page has a title, description, canonical and preview
+npm run check:trace -w site  # after a build: each docs route's bundle has every published file
 npm run brand -w site        # regenerate public/brand/ after a frame.json or libraries.json change
 ```
 
