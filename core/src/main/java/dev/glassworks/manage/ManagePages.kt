@@ -34,8 +34,11 @@ class ManagePages(private val zone: TimeZone = TimeZone.getDefault(), private va
     /** Where a page sits in the nav: a fixed page or a settings section / pane by id. */
     data class Place(val path: String, val title: String)
 
-    /** The signed-in browser, for the nav's foot and the forms' CSRF field. */
-    class Viewer(val who: String, val csrf: String)
+    /**
+     * The signed-in browser, for the nav's foot and the forms' CSRF field. [homeAssistant]: it signed in with
+     * Home Assistant (a blueprints card says what the panel's code can't do).
+     */
+    class Viewer(val who: String, val csrf: String, val homeAssistant: Boolean = true)
 
     // ------------------------------------------------------------------ sign in
 

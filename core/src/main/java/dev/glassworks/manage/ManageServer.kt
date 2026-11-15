@@ -203,7 +203,7 @@ class ManageServer(
     // ------------------------------------------------------------------ signed in
 
     private fun signedIn(req: HttpRequest, s: Session): HttpResponse {
-        val viewer = ManagePages.Viewer(who(s), s.csrf)
+        val viewer = ManagePages.Viewer(who(s), s.csrf, homeAssistant = s.with == SignedInWith.HOME_ASSISTANT)
         if (req.method == "POST") {
             if (!csrfOk(req, s)) return HttpResponse.text(403, "This form has expired. Go back and try again.")
             return posted(req, s, viewer)
