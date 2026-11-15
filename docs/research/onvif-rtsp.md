@@ -128,7 +128,7 @@ setup and two Protect notes (read 2026-11-14):
 - The RTSP server binds its port before it counts as running, so a port clash throws and a later
   start can still bind.
 - Nothing listens until the pane starts the servers, and the pane starts them only while
-  `onvif_stream` is on, the camera is in Presence + snapshots, and privacy is off
+  `onvif_stream` is on, the camera is in Presence + camera, and privacy is off
   (`CameraPolicy.streamMayRun`).
 
 **Limits we accept, and what bounds them** (2026-11-14):
