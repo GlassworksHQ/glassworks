@@ -28,7 +28,8 @@ class TestBuildLabelTest {
         val raw = setOf("KioskApp.kt", "update/UpdateManager.kt", "esphome/PanelDevice.kt", "S1Panes.kt", "sendspin/SendspinPane.kt",
             "improv/ImprovController.kt", "improv/ImprovSerialServer.kt", "improv/ImprovIdentity.kt", "radio/RadioPane.kt")
             .map { "sh/edm/s1kiosk/$it" }.toSet() +
-            "dev/glassworks/pane/Blueprints.kt" // the release tag `v<versionName>` a blueprint's link points at, not a label
+            "dev/glassworks/pane/Blueprints.kt" + // the release tag `v<versionName>` a blueprint's link points at, not a label
+            "dev/glassworks/generic/GenericApp.kt" // the generic app's KioskApp (#23)
         val found = RepoFiles.sources(atLeast = 100, inModules = RepoFiles.appModules) { it.extension == "kt" }
             .filter { it.readText().let { s -> "BuildConfig.VERSION_NAME" in s || "build.versionName" in s } }.map(RepoFiles::packagePath).filter { it !in raw }
         assertTrue("show AppBuild.shown, not the raw versionName, in: $found", found.isEmpty())

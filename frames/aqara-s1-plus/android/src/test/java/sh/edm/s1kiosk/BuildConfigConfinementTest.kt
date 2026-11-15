@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Only [KioskApp] reads the APK's BuildConfig (#21, S-version). It hands the values in once as
+ * Only each app's Application ([KioskApp], the generic app's GenericApp) reads its APK's BuildConfig (#21, S-version). It hands the values in once as
  * [GlassworksRuntime.build], and everything else gets them from there or from
  * [dev.glassworks.pane.PaneContext.build]. A library module has no access to the APK's BuildConfig, so a
  * file that reads it can't move out. Files that stay in `:kiosk` (the frame, S1Manage) could read it,
@@ -15,14 +15,14 @@ import org.junit.Test
  * trips it too. It covers every module but the libraries, wherever they sit ([RepoFiles]).
  */
 class BuildConfigConfinementTest {
-    /** The one file that reads it. */
-    private val reader = "sh/edm/s1kiosk/KioskApp.kt"
+    /** The one file per app that reads it: S1 Kiosk's, and the generic app's (#23). */
+    private val readers = setOf("sh/edm/s1kiosk/KioskApp.kt", "dev/glassworks/generic/GenericApp.kt")
 
     /**
      * The import, or a bare `BuildConfig.` (same package or a wildcard import), also with the dot on the next
      * line. Not another library's, such as GeckoView's.
      */
-    private val use = Regex("""sh\.edm\.s1kiosk\.BuildConfig\b|(?<![\w.])BuildConfig\s*\.""")
+    private val use = Regex("""(sh\.edm\.s1kiosk|dev\.glassworks\.generic_android)\.BuildConfig\b|(?<![\w.])BuildConfig\s*\.""")
 
     /** The 1-based lines of [text] where a read starts. The whole text is scanned, so a read split over lines counts. */
     private fun reads(text: String): List<Int> = use.findAll(text).map { m -> text.substring(0, m.range.first).count { it == '\n' } + 1 }.toList()
@@ -30,7 +30,7 @@ class BuildConfigConfinementTest {
     @Test
     fun `only KioskApp reads the APK's BuildConfig`() {
         val sources = RepoFiles.code(atLeast = 100, inModules = RepoFiles.appModules)
-        val found = sources.filter { RepoFiles.packagePath(it) != reader }.flatMap { f ->
+        val found = sources.filter { RepoFiles.packagePath(it) !in readers }.flatMap { f ->
             val lines = f.readLines()
             reads(f.readText()).map { n -> "${RepoFiles.rel(f)}:$n: ${lines[n - 1].trim()}" }
         }
@@ -38,8 +38,8 @@ class BuildConfigConfinementTest {
     }
 
     @Test
-    fun `the scan sees the file that hands the build in`() {
-        assertTrue(reads(RepoFiles.source(reader).readText()).isNotEmpty())
+    fun `the scan sees the files that hand the build in`() {
+        for (reader in readers) assertTrue(reader, reads(RepoFiles.source(reader).readText()).isNotEmpty())
     }
 
     @Test

@@ -44,7 +44,26 @@ A Glassworks **frame**: the device definition for the Generic Android. Its data 
 
 ## Status
 
-**Status: planned.** It needs Android 8.0 or newer: S1 Kiosk's `minSdk` is 26. S1 Kiosk runs as this frame on any device that isn't an Aqara S1 (`Build.HARDWARE` other than `sun50iw10p1`). It names itself after the device, and runs the panes the device's features allow. Not yet run on a device.
+**Status: planned.** The frame has its own app, **Glassworks** (`dev.glassworks.generic_android`, built from
+[`android/`](android)), for Android 8.0 or newer (`minSdk` 26; Android 6 and 7 get the separate legacy build,
+#198). It hasn't run on a device yet. S1 Kiosk also runs as this frame on any device that isn't an Aqara S1
+(`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
+device's features allow.
+
+The app is the Glassworks core with a fixed base set of panes: Assist (with its timers) and Sendspin. A pane
+the device has no hardware for (no microphone, no speaker) is hidden: it isn't in the settings, on the Manage
+page, in setup or in Home Assistant. The screen follows Android's standard proximity sensor (near means under
+5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
+no proximity sensor; then the screen goes off after the idle time and wakes on a touch.
+
+| | S1 Kiosk on a tablet | Glassworks for generic Android |
+|---|---|---|
+| applicationId | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
+| Home Assistant's model | "Pixel Tablet (S1 Kiosk)" | "Pixel Tablet (Glassworks)" |
+| Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin |
+| Presence and light | None | Android's proximity and light sensors |
+
+The two are separate apps with their own data and keys, so both can be installed on one device.
 
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
 
@@ -59,7 +78,9 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-It will install as a normal app. It doesn't install from Kiln yet.
+It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet. To try a
+branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
+([test-build.yml](../../.github/workflows/test-build.yml)).
 
 ## Updates
 
@@ -124,6 +145,22 @@ While it is device owner, the app can't be uninstalled until you undo it. The de
 are Android's documented behaviour (Android 6.0 and later); they haven't been tried on a generic
 device yet.
 
+## Signing
+
+The app has its own release key, never S1 Kiosk's: Android updates an app only with an APK signed by the same
+key, so this key is what lets every later version install in place over the one before. The build reads it
+from the environment only, as S1 Kiosk's reads its `S1_*` variables:
+
+| Variable | What |
+|---|---|
+| `GENERIC_KEYSTORE_FILE` | The keystore (`.jks`) |
+| `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS`, `GENERIC_KEY_PASSWORD` | Its password, the key's alias and the key's password |
+| `GENERIC_REQUIRE_RELEASE_SIGNING=true` | Fail the build when no key is set, instead of an unsigned APK |
+
+None set: the release APK is unsigned. Some but not all set: the build fails. No release key exists yet; the
+maintainer makes it before the first release, keeps it out of the repo, and from then on never changes it.
+Test builds sign with a key made for each run ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
+
 ## Panes
 
 | Pane | Support | Note |
@@ -148,3 +185,4 @@ None yet. A note about this device goes in `research/` ([how](../../docs/researc
 ## Files
 
 - [`design/frame.json`](design/frame.json): the catalog data and the 3D model
+- [`android/`](android): the app (`:generic-android`), Glassworks for generic Android

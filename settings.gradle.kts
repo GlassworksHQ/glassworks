@@ -20,6 +20,9 @@ dependencyResolutionManagement {
 rootProject.name = "s1-kiosk"
 include(":kiosk")
 project(":kiosk").projectDir = file("frames/aqara-s1-plus/android")
+// Glassworks for generic Android (#23): its own app, dev.glassworks.generic_android.
+include(":generic-android")
+project(":generic-android").projectDir = file("frames/generic-android/android")
 
 // Reusable libraries extracted from the app (each has its own README).
 include(":esphome-api")
