@@ -8,7 +8,7 @@ import sh.edm.s1kiosk.KioskPrefs
 import java.util.Locale
 
 /**
- * The settings sections the app has itself, before and after the panes': Dashboard, Screen, Log and
+ * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Log and
  * About (#63). Network and Security have nothing yet. Durations and the night window are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
@@ -24,6 +24,8 @@ class CoreSettings(
     private val licences: SettingsItem.Link,
     /** What the running app does when a setting it follows live changes. */
     private val live: Live = Live(),
+    /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"); null leaves the row out. */
+    private val account: () -> String? = { null },
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -35,12 +37,13 @@ class CoreSettings(
     )
 
     fun sections(): Map<SettingsPlace, SettingsSection> = mapOf(
-        SettingsPlace.DASHBOARD to SettingsSection("dashboard", "Dashboard", listOf(
+        SettingsPlace.DASHBOARD to SettingsSection("dashboard", DASHBOARD_TITLE, listOfNotNull(
             text(
                 "Home Assistant", "Found automatically", TextKind.ADDRESS,
                 value = { prefs.urlSetting.takeIf { it != KioskPrefs.AUTO }.orEmpty() },
                 shown = { it.ifBlank { found() } }, restartsApp = true,
             ) { prefs.urlSetting = it.ifBlank { KioskPrefs.AUTO } },
+            account()?.let { SettingsItem.Info(title = { ACCOUNT_TITLE }, detail = { account().orEmpty() }) },
             switch("Full screen", "Hide Home Assistant's header and sidebar", { prefs.hideHeader }) {
                 prefs.hideHeader = it
                 prefs.hideSidebar = it
@@ -113,6 +116,9 @@ class CoreSettings(
         SettingsItem.Switch(title, detail, value) { v, done -> save(v); done(null) }
 
     companion object {
+        /** The dashboard's page: where Home Assistant is and how its dashboard shows. */
+        const val DASHBOARD_TITLE = "Home Assistant & dashboard"
+        const val ACCOUNT_TITLE = "Dashboard sign-in"
         const val LICENCES_TITLE = "Open source licences"
         const val LICENCES_DETAIL = "The open-source software in the app and the radio package"
 

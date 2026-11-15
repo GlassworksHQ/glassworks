@@ -82,19 +82,25 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
     private fun nav(s: PanelStatus, current: String, viewer: Viewer): String {
         fun item(path: String, title: String, chip: String = "", grey: Boolean = false) =
             """<a class="ni${if (path == current) " on" else ""}${if (grey) " grey" else ""}" href="${esc(path)}"${if (path == current) " aria-current=\"page\"" else ""}><span class="nt">${esc(title)}</span>$chip</a>"""
-        fun pane(p: PaneRow) = item("/" + p.id, p.title, chip(p.state), grey = p.state.kind == PaneState.Kind.CANT_RUN)
-        // The core's own sections: every one that isn't a pane's or a page of its own (Log, About).
-        val core = s.sections.filter { sec -> s.panes.none { it.sectionId == sec.id } && sec.id !in OWN_PAGES }
-        // As the panel's rail (#243): each pane's chip after its name; panes that are off fold under "Off · N".
-        val (off, on) = s.panes.partition { it.state.kind == PaneState.Kind.OFF }
-        val panes = on.joinToString("") { pane(it) } + if (off.isEmpty()) "" else
-            """<details class="off"${if (off.any { "/" + it.id == current }) " open" else ""}><summary>Off · ${off.size}</summary>${off.joinToString("") { pane(it) }}</details>"""
+        fun pane(p: SettingsNav.Item) = item("/" + p.id, p.title, p.state?.let(::navDot).orEmpty(), grey = p.state?.kind == PaneState.Kind.CANT_RUN)
+        // The panel's sidebar (settingsNav), with the Security page this surface adds; each pane's status dot at
+        // the row's end, as on the panel (maintainer 2026-11-15: one look).
+        val n = settingsNav(s.sections, s.panes, OWN_PAGES)
+        val panes = n.panes.joinToString("") { pane(it) } + if (n.off.isEmpty()) "" else
+            """<details class="off"${if (n.off.any { "/" + it.id == current }) " open" else ""}><summary>Off · ${n.off.size}</summary>${n.off.joinToString("") { pane(it) }}</details>"""
         return """<div class="brand">${PageShell.mark(Look.DONE, "bm")}<div><b>${esc(s.name)}</b><small>${esc(if (s.name == "Glassworks Panel") s.frame else "Glassworks Panel · ${s.frame}")}</small></div></div>
 <nav>${item("/", "Overview")}""" +
-            (if (core.isNotEmpty()) """<h3>Panel</h3>${core.joinToString("") { item("/" + it.id, it.title) }}""" else "") +
-            (if (s.panes.isNotEmpty()) "<h3>Panes</h3>$panes" else "") +
-            """<h3>System</h3>${item("/log", "Log")}${item("/security", "Security")}${item("/about", "About")}</nav>
-<form class="who" method="post" action="/manage/signout">${csrf(viewer)}<span><i class="dot ok"></i><span class="nm" title="${esc(viewer.who)}">Signed in · ${esc(viewer.who)}</span></span><button type="submit">Sign out</button></form>"""
+            (if (n.panel.isNotEmpty()) """<h3>Panel</h3>${n.panel.joinToString("") { item("/" + it.id, it.title) }}""" else "") +
+            (if (n.panes.isNotEmpty() || n.off.isNotEmpty()) "<h3>Panes</h3>$panes" else "") +
+            """<h3>System</h3>${n.system.joinToString("") { item("/" + it.id, it.title) }}</nav>
+${foot(viewer)}"""
+    }
+
+    /** The sidebar's foot, where the panel has Done: who is signed in, and Sign out. */
+    private fun foot(viewer: Viewer): String {
+        val who = if (viewer.homeAssistant) viewer.who else SIGNED_IN_WITH_CODE
+        val line = if (viewer.homeAssistant) "Signed in · $who" else who
+        return """<form class="who" method="post" action="/manage/signout">${csrf(viewer)}<span><i class="dot ok"></i><span class="nm" title="${esc(who)}">${esc(line)}</span></span><button type="submit">Sign out</button></form>"""
     }
 
     /** The page: the nav, the phone's header, [main], and [overlay] over it all (a dialog). */
@@ -114,10 +120,18 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
     private fun action(v: Viewer, path: String, label: String, cls: String = "pill") =
         """<form method="post" action="${esc(path)}">${csrf(v)}<button class="$cls" type="submit">${esc(label)}</button></form>"""
 
+    /** A pane's dot in the nav, in its status colour, as the panel's sidebar draws it; its word is for screen readers. */
+    private fun navDot(state: PaneState): String {
+        val label = state.chipWord ?: return ""
+        return """<i class="dot ${tone(state)}" role="img" aria-label="status ${esc(label)}"></i>"""
+    }
+
+    private fun tone(state: PaneState) = when (state.chipTone) { ChipTone.OK -> "ok"; ChipTone.PROBLEM -> "bad"; ChipTone.QUIET -> "off" }
+
     /** The pane's chip: its word ([chipWord]) and dot ([chipTone]), the same as the panel's rail (#243). */
     private fun chip(state: PaneState): String {
         val label = state.chipWord ?: return ""
-        val tone = when (state.chipTone) { ChipTone.OK -> "ok"; ChipTone.PROBLEM -> "bad"; ChipTone.QUIET -> "off" }
+        val tone = tone(state)
         return """<span class="chip" aria-label="status ${esc(label)}"><i class="dot $tone"></i>${esc(label)}</span>"""
     }
 
@@ -132,12 +146,13 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
         val panes = s.panes.joinToString("") { p ->
             """<a class="row" href="/${esc(p.id)}"><div><b>${esc(p.title)}</b><span>${esc(p.state.detail)}</span></div>${chip(p.state)}<i class="chev" aria-hidden="true">›</i></a>"""
         }
-        val buttons = action(v, "/action/reload", "Reload dashboard") + action(v, "/action/restart", "Restart app") +
-            (if (actions.canReboot) action(v, "/action/reboot", "Reboot") else "") + action(v, "/action/update", "Check for updates")
+        val buttons = OverviewAction.entries.joinToString("") { a ->
+            action(v, "/action/${a.key}", a.label) + if (a == OverviewAction.RESTART && actions.canReboot) action(v, "/action/reboot", "Reboot") else ""
+        }
         val main = """<section class="card hero">${PageShell.mark(Look.DONE, "hm")}<div class="ht"><h1><i class="dot ok"></i>Running</h1>
 <p class="meta">Glassworks ${esc(s.version)} · up ${esc(duration(s.uptimeMs))}</p></div><div class="acts">$buttons</div></section>
 <section class="tiles">$tiles</section>""" +
-            (if (s.panes.isNotEmpty()) """<section class="card list"><div class="lh"><b>Panes</b><span>${s.panes.size} in this frame</span></div>$panes</section>""" else "")
+            (if (s.panes.isNotEmpty()) """<section class="card list"><div class="lh"><b>Panes</b><span>${esc(panesSummary(s.panes))}</span></div>$panes</section>""" else "")
         return frame(s, "/", "Overview", v, main, notice)
     }
 
@@ -416,7 +431,10 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
 
     companion object {
         /** Sections drawn on a page of their own under "System" in the nav, not under "Panel". */
-        val OWN_PAGES = setOf("log", "security", "about")
+        val OWN_PAGES = mapOf("log" to "Log", "security" to "Security", "about" to "About")
+
+        /** The sidebar's foot for a browser signed in with the code the panel showed. */
+        const val SIGNED_IN_WITH_CODE = "Signed in with the panel's code"
 
         /** A sign-in's Show on the page of a browser signed in with the panel's code. */
 
@@ -469,7 +487,7 @@ a.tile{text-decoration:none}a.tile:hover{background:var(--hover)}.tile small{col
 .grp .lh{border-bottom:1px solid var(--edge)}.grp:not(:first-child) .lh{padding-top:22px}
 .chip{display:inline-flex;align-items:center;gap:${Tokens.Chip.GAP}px;padding:${Tokens.Chip.PAD_V}px ${Tokens.Chip.PAD_END}px ${Tokens.Chip.PAD_V}px ${Tokens.Chip.PAD_START}px;border-radius:999px;border:1px solid var(--edge);background:var(--glass);font-size:${Tokens.Chip.TEXT}px;line-height:1.35;color:var(--muted);white-space:nowrap;flex:none}
 .chip .dot{width:${Tokens.Chip.DOT}px;height:${Tokens.Chip.DOT}px}
-.ni .nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ni .chip{margin-left:8px}
+.ni .nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ni .dot{margin-left:10px}
 details.off summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
 details.off summary::-webkit-details-marker{display:none}details.off summary::after{content:"›";font-size:18px;letter-spacing:0;transition:transform .15s}details.off[open] summary::after{transform:rotate(90deg)}
 .phr{display:flex;align-items:center;gap:14px;margin:0 0 6px}.phr .ph{flex:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

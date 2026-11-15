@@ -64,6 +64,18 @@ class ManageServerTest {
         assertTrue("others still get the QR sign-in", f.Browser().get("/").text().contains("QR /"))
     }
 
+    @Test fun aCodeSessionsFootSaysItSignedInWithThePanelsCode() {
+        // Maintainer 2026-11-15: where the panel has Done, the Manage page says who is signed in, in the Security page's words.
+        val b = f.Browser()
+        b.get("/")
+        b.post("/manage/code", mapOf("next" to "/"))
+        b.post("/manage/code", mapOf("next" to "/", "code" to f.shown.last()!!.code))
+        val foot = b.get("/").text().substringAfter("<form class=\"who\"").substringBefore("</form>")
+        assertTrue(foot, foot.contains(">${ManagePages.SIGNED_IN_WITH_CODE}</span>"))
+        assertTrue(foot.contains("Sign out"))
+        assertFalse(foot.contains("Code sign-in"))
+    }
+
     @Test fun aSignInStartedBeforeHasAddressChangedIsRefused() {
         val b = f.Browser()
         b.get("/")

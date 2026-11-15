@@ -7,6 +7,7 @@ import dev.glassworks.manage.ManagePage
 import sh.edm.s1kiosk.KioskPrefs
 import dev.glassworks.web.HttpServer
 import sh.edm.s1kiosk.glassworks
+import sh.edm.s1kiosk.manage.S1Manage
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -33,7 +34,9 @@ object HaAuth {
     private val cache = AccessTokenCache()
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private var server: HttpServer? = null
-    private var manage: ManagePage? = null
+    /** The Manage page while the server runs: the settings menu's Overview shows and does what its Overview does. */
+    var manage: ManagePage? = null
+        private set
 
     /**
      * "Join Home Assistant's Thread network" (ThreadJoin): the panel's own token first, else a one-off
@@ -60,9 +63,25 @@ object HaAuth {
     /** The HA base URL the stored token belongs to, if signed in. */
     val signedInBase: String? get() = if (::prefs.isInitialized) prefs.auth?.haBase else null
 
+    /** The stored sign-in, if any (its token is redacted from toString). */
+    val stored: StoredAuth? get() = if (::prefs.isInitialized) prefs.auth else null
+
     /** Listener gets the new signed-in state on the main thread. */
     fun addListener(l: (Boolean) -> Unit) { listeners += l }
     fun removeListener(l: (Boolean) -> Unit) { listeners -= l }
+
+    /**
+     * Asks [base]'s Home Assistant who the panel's stored sign-in is (`auth/current_user`) and answers
+     * with the name, or null, on a thread of its own: the page's token refreshes don't wait for it.
+     */
+    fun askAccount(base: String, done: (String?) -> Unit) {
+        accessToken(force = false) { a ->
+            val token = (a as? Access.Ok)?.accessToken ?: return@accessToken done(null)
+            Thread({
+                done(S1Manage.Gateway(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.name)
+            }, "ha-account").apply { isDaemon = true }.start()
+        }
+    }
 
     private fun notifyChanged() {
         val v = signedIn

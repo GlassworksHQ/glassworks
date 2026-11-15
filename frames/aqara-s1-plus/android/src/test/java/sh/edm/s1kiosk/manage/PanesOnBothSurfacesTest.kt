@@ -94,7 +94,7 @@ class PanesOnBothSurfacesTest {
                 assertFalse("${frame.name}: no $id in Manage's nav or Overview", overview.contains("href=\"/$id\""))
                 assertFalse("${frame.name}: no setup card for $id", frame.runtime.setupPanes(app).any { it.steps.any { st -> st.id == id } })
             }
-            assertTrue(overview.contains("${rail.size} in this frame"))
+            assertTrue(overview.contains(dev.glassworks.manage.panesSummary(status.panes)))
             // Hidden everywhere else, the diagnostics file still says why each one is missing.
             val lacks = mapOf("camera" to "camera", "radio" to "silabs-radio")
             for (id in frame.hidden) {

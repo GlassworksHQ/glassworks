@@ -10,7 +10,9 @@ import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.text.TextUtils
 import android.view.View
+import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.brand.Tokens
 
@@ -80,6 +82,22 @@ class Glass(val context: Context) {
 
     /** A dot in a status colour. */
     fun dot(color: Int) = View(context).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) } }
+
+    /**
+     * A pane's status chip, as on the Manage page (#243): a pill with a hairline edge on glass, a dot in the
+     * status colour [color], the [word] in the muted colour.
+     */
+    fun statusChip(word: String, color: Int) = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = surface(999f, S1)
+        val k = Tokens.Chip
+        setPadding(px(k.PAD_START.toFloat()), px(k.PAD_V.toFloat()), px(k.PAD_END.toFloat()), px(k.PAD_V.toFloat()))
+        addView(dot(color), LinearLayout.LayoutParams(px(k.DOT.toFloat()), px(k.DOT.toFloat())).apply { marginEnd = px(k.GAP.toFloat()) })
+        // A backstop: a word longer than any of today's shortens, so the name beside it keeps its room.
+        addView(text(k.TEXT.toFloat(), MU).apply { text = word; setSingleLine(); ellipsize = TextUtils.TruncateAt.END; maxWidth = px(CHIP_WORD_MAX_DP) })
+        contentDescription = "status $word"
+    }
 
     /** A sky-to-violet pill switch. [onChange] runs when it is tapped. */
     fun toggle(on: Boolean, onChange: (Boolean) -> Unit = {}) = Toggle(context, on, onChange)
@@ -156,6 +174,12 @@ class Glass(val context: Context) {
     }
 
     companion object {
+        /**
+         * The widest a chip's word gets (#249): "Can't run", the longest today, is about 53 dp at 12 sp; a
+         * longer word shortens with an ellipsis.
+         */
+        const val CHIP_WORD_MAX_DP = 64f
+
         // The brand's screen ink and glass, from the one source the Manage page reads too ([Tokens], #243).
         val BG = Tokens.Screen.bg.argb
         /** Glass on night: cards ([Tokens.Screen.glass]), tiles and buttons (raised), hairlines (edge). */

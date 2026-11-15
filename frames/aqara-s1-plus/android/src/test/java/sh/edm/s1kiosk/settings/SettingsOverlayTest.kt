@@ -55,6 +55,8 @@ class SettingsOverlayTest {
         return v
     }
 
+    private fun views(o: View) = generateSequence(listOf(o)) { l -> l.flatMap { v -> (v as? ViewGroup)?.let { g -> List(g.childCount) { g.getChildAt(it) } }.orEmpty() }.ifEmpty { null } }.flatten()
+
     private fun shown(o: View, text: String) = runCatching { Mockup.label(o, text).isShown }.getOrDefault(false)
 
     private fun editor(o: View): EditText? = generateSequence(listOf(o)) { level ->
@@ -298,7 +300,7 @@ class SettingsOverlayTest {
     @Test
     fun aPaneThatCantRunIsGreyedWithItsReason() {
         val o = one(listOf(SettingsItem.Note { "body" }), master = SettingsItem.Switch("Test", "", { true }) { _, done -> done(null) }, unavailable = "it needs a part")
-        assertTrue(shown(o, "Can't run")) // in the rail
+        assertTrue(views(o).any { it.contentDescription == "status Can't run" && it.isShown }) // the sidebar's dot
         assertTrue(shown(o, "This pane can't run on this panel: it needs a part."))
         assertFalse(generateSequence(listOf<View>(o)) { l -> l.flatMap { v -> (v as? ViewGroup)?.let { g -> List(g.childCount) { g.getChildAt(it) } }.orEmpty() }.ifEmpty { null } }
             .flatten().any { it.contentDescription == "Test on" && it.isShown }) // no switch for what can't run
@@ -345,26 +347,115 @@ class SettingsOverlayTest {
     }
 
     @Test
-    fun theRailFitsWithThePanesOpen() {
-        // Root's panel run: with Voice, Music and Radio open, About was clipped under Done. The fixture's
-        // radio is off, so it folds under "Off · 1" (#212) while an on pane is picked.
-        val o = open()
-        o.previewSection("voice")
+    fun theSidebarScrollsAndDoneStaysReachable() {
+        // The approved layout lists every group open: at the S1's 480 dp it runs past the screen. The list
+        // scrolls to its last row, and Done stays on screen under it.
+        val many = (1..8).map { n -> SettingsSection("p$n", "Pane $n", listOf(SettingsItem.Note { "" }), master = SettingsItem.Switch("x", "", { true }) { _, d -> d(null) }) }
+        val o = open(model = { a -> MenuFixture.model(a, radioDefinition(a, FixedReadout(null, running = true))).let { m -> m.copy(sections = m.sections + many, panes = m.panes + many.map { it.id }) } })
         Mockup.layout(o)
-        assertTrue(shown(o, "About"))
-        assertTrue(o.railFits)
+        assertFalse("the list doesn't fit", o.railFits)
+        fun inMenu(v: View) = android.graphics.Rect(0, 0, v.width, v.height).also { o.offsetDescendantRectToMyCoords(v, it) }
+        val done = inMenu(Mockup.label(o, "Done"))
+        assertTrue("Done on screen: $done", done.top >= 0 && done.bottom <= o.height)
+        val about = Mockup.label(o, "About")
+        val list = generateSequence(about as View) { it.parent as? View }.first { it is android.widget.ScrollView } as android.widget.ScrollView
+        fun port() = android.graphics.Rect(list.scrollX, list.scrollY, list.scrollX + list.width, list.scrollY + list.height).also { o.offsetDescendantRectToMyCoords(list, it) }
+        assertTrue("About starts out of view", inMenu(about).top >= port().bottom)
+        list.scrollTo(0, list.getChildAt(0).height) // as far as it goes
+        val shown = inMenu(about)
+        assertTrue("About scrolls into view: $shown in ${port()}, Done $done", port().contains(shown) && port().bottom <= done.top)
+        // A page picked from elsewhere (the Overview's list) brings its row into view.
+        list.scrollTo(0, 0)
+        o.previewSection("p8")
+        Mockup.idle(); Mockup.layout(o)
+        assertTrue("the picked row in view", port().contains(inMenu(Mockup.label(o, "Pane 8"))))
     }
 
     @Test
-    fun theRailGroupsThePanes() {
+    fun theSidebarListsPanelPanesAndSystem() {
         val o = open()
         o.previewSection("dashboard")
         Mockup.idle()
-        assertTrue(shown(o, "Panes")) // folded: one row
-        assertFalse(shown(o, "Voice"))
-        o.previewSection("radio")
+        for (t in listOf("Panel", "Panes", "System", "Voice", "Music", "Log", "About")) assertTrue(t, shown(o, t))
+        assertFalse("no Overview without its source", shown(o, "Overview"))
+    }
+
+    /** The menu with the Manage page's Overview, as MainActivity opens it. */
+    private fun withOverview(f: dev.glassworks.manage.ManageFixture = dev.glassworks.manage.ManageFixture()): KioskSettingsOverlay {
+        val a = Mockup.activity()
+        val m = MenuFixture.model(a, radioDefinition(a, FixedReadout(null, running = true)))
+        val panes = m.sections.filter { it.id in m.panes }.map { dev.glassworks.manage.paneRow(it.id, it) }
+        val o = KioskSettingsOverlay(a).apply { overview = KioskSettingsOverlay.Overview({ f.status.copy(panes = panes, sections = m.sections) }, f.actions) }
+        a.setContentView(o, ViewGroup.LayoutParams(-1, -1))
+        o.show(m)
         Mockup.idle()
-        assertTrue(shown(o, "Voice")); assertTrue(shown(o, "Music")); assertTrue(shown(o, "Panes ›"))
+        return o
+    }
+
+    @Test
+    fun itOpensOnTheOverviewAndItsPanesOpenTheirPages() {
+        val o = withOverview()
+        for (t in listOf("Running", "Home Assistant", "Wi-Fi", "Engine", "Memory", "Glassworks 0.9.2 · up 3 days, 4 h")) assertTrue(t, shown(o, t))
+        row(o, "Music").performClick() // the Panes card's row
+        Mockup.idle()
+        assertFalse(shown(o, "Wi-Fi"))
+        o.previewSection("about")
+        o.hide(); Mockup.idle()
+        o.show(MenuFixture.model(o.context, radioDefinition(o.context, FixedReadout(null, running = true))))
+        Mockup.idle()
+        assertTrue("opened again: the Overview", shown(o, "Wi-Fi"))
+    }
+
+    @Test
+    fun aRefreshKeepsTheRowsATapMayBeOn() {
+        // CodeRabbit on #299: drawn anew on each tick, the sidebar and the Overview cancelled a tap in progress.
+        val f = dev.glassworks.manage.ManageFixture()
+        var uptime = 60_000L
+        var rssi = "−52 dBm"
+        val a = Mockup.activity()
+        val m = MenuFixture.model(a, radioDefinition(a, FixedReadout(null, running = true)))
+        val o = KioskSettingsOverlay(a).apply {
+            reload = { m }
+            overview = KioskSettingsOverlay.Overview({
+                f.status.copy(uptimeMs = uptime, tiles = f.status.tiles.map { if (it.label == "Wi-Fi") it.copy(detail = rssi) else it })
+            }, f.actions)
+        }
+        a.setContentView(o, ViewGroup.LayoutParams(-1, -1))
+        o.show(m)
+        Mockup.idle()
+        val voice = row(o, "Voice")
+        val wifi = Mockup.label(o, "−52 dBm")
+        uptime = 3 * 60 * 60_000L
+        rssi = "−61 dBm"
+        o.refresh()
+        assertTrue("the sidebar's row is the same view", row(o, "Voice") === voice)
+        assertTrue("the tile's line is the same view, changed", wifi.text == "−61 dBm" && wifi.isShown)
+        assertTrue(shown(o, "Glassworks 0.9.2 · up 3 h, 0 min"))
+    }
+
+    @Test
+    fun withoutItsSourceTheMenuOpensOnItsFirstPageNotTheOverview() {
+        // CodeRabbit on #299: the Manage page stopped between two openings (HaAuth.stopServer).
+        val o = withOverview()
+        o.hide(); Mockup.idle()
+        o.overview = null
+        o.show(MenuFixture.model(o.context, radioDefinition(o.context, FixedReadout(null, running = true))))
+        Mockup.idle()
+        assertFalse(shown(o, "Wi-Fi"))
+        assertTrue("the first section's page", shown(o, "Full screen"))
+    }
+
+    @Test
+    fun theOverviewsButtonsRunTheManagePagesActions() {
+        val f = dev.glassworks.manage.ManageFixture()
+        val o = withOverview(f)
+        Mockup.label(o, "Check for updates").performClick()
+        Mockup.idle()
+        assertEquals(listOf("update"), f.ran.toList())
+        assertTrue(shown(o, dev.glassworks.manage.OverviewAction.UPDATE.started))
+        Mockup.label(o, "Reload dashboard").performClick()
+        Mockup.idle()
+        assertEquals(listOf("update", "reload"), f.ran.toList())
     }
 
     @Test
@@ -395,8 +486,8 @@ class SettingsOverlayTest {
         Mockup.idle()
         assertTrue(shown(o, "B")); assertTrue(shown(o, "C")); assertTrue(shown(o, "Off · 1"))
         assertFalse("folded", shown(o, "A"))
-        val rail = generateSequence(Mockup.label(o, "B") as View) { it.parent as? View }.first { it is sh.edm.s1kiosk.ui.GroupedRail } as ViewGroup
-        val order = List(rail.childCount) { rail.getChildAt(it).contentDescription?.toString() }
+        val rail = generateSequence(Mockup.label(o, "B") as View) { it.parent as? View }.first { it.parent is android.widget.ScrollView } as ViewGroup
+        val order = List(rail.childCount) { rail.getChildAt(it).let { v -> v.contentDescription?.toString() ?: (v as android.widget.TextView).text.toString() } }
         assertEquals(listOf("Panes", "B", "C", "Off: 1 panes"), order)
         // Tapping the fold opens its first pane, and the fold stays open while it is picked.
         rail.getChildAt(3).performClick()

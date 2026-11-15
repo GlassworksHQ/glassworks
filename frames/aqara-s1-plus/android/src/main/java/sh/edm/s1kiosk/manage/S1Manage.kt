@@ -10,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import dev.glassworks.frame.friendlyName
 import dev.glassworks.manage.HaGateway
 import dev.glassworks.manage.HaSignIn
 import dev.glassworks.manage.HaUser
@@ -49,6 +48,7 @@ import sh.edm.s1kiosk.auth.ThreadJoin
 import sh.edm.s1kiosk.auth.TokenResult
 import sh.edm.s1kiosk.auth.WsHaSocket
 import sh.edm.s1kiosk.esphome.PanelDevice
+import sh.edm.s1kiosk.settings.CoreSettings
 import sh.edm.s1kiosk.settings.PanelBlueprints
 import sh.edm.s1kiosk.settings.S1Settings
 import sh.edm.s1kiosk.setup.SetupState
@@ -94,13 +94,13 @@ class S1Manage(
 
     override fun http(port: Int) = HttpServer(port, server::handle, log = { Log.d(TAG, it) })
 
-    /** What the Manage page shows now; tests read it. */
-    internal fun status(): PanelStatus = host.status()
+    /** What the Manage page shows now: its Overview, and the panel menu's. */
+    override fun status(): PanelStatus = host.status()
 
     /** The diagnostics file before redaction; tests read it. */
     internal fun diagnostics(): String = host.diagnostics()
 
-    internal val actions: PanelActions get() = host.actions
+    override val actions: PanelActions get() = host.actions
 
     override fun startLog() = tail.start()
 
@@ -120,7 +120,7 @@ class S1Manage(
             val panes = model.sections.filter { it.id in model.panes }
             return PanelStatus(
                 name = name,
-                frame = if (runtime.s1 != null) "S1 Plus" else runtime.frame.friendlyName(),
+                frame = model.frame,
                 version = version,
                 // The app's, as the line it sits on is the app's: the device's is in the diagnostics (#263).
                 uptimeMs = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime(),
@@ -188,7 +188,9 @@ class S1Manage(
             is SettingsItem.Slider -> listOf("${i.title}: ${v { i.shown(i.value()) }}")
             is SettingsItem.Duration -> listOf("${i.title}: ${v { i.shown(i.value()) }}")
             is SettingsItem.TimeRange -> listOf("${i.title}: ${v { i.shown(i.value()) }}")
-            is SettingsItem.Info -> listOf("${v(i.title)}: ${v(i.detail)}")
+            // Who the dashboard is signed in as stays on the screens: the file says whether it is set.
+            is SettingsItem.Info -> if (v(i.title) == CoreSettings.ACCOUNT_TITLE) listOf("${CoreSettings.ACCOUNT_TITLE}: set")
+                else listOf("${v(i.title)}: ${v(i.detail)}")
             is SettingsItem.Note -> listOf(v(i.text))
             is SettingsItem.Group -> listOf("${i.title}:") + itemLines(i.items).map { "  $it" }
             is SettingsItem.Choice -> listOf("${i.title}: ${v(i.value)}")
@@ -325,7 +327,8 @@ class S1Manage(
 
         override fun currentUser(haBase: String, accessToken: String): HaUser? {
             val url = HaThreadClient.websocketUrl(haBase) ?: return null
-            val ws = try { connect(url) } catch (e: IOException) { return null }
+            // Any failure to connect is an unknown user: the lookup's own thread must not die of it.
+            val ws = try { connect(url) } catch (e: Exception) { return null }
             try {
                 if (next(ws)?.optString("type") != "auth_required") return null
                 ws.send(JSONObject().put("type", "auth").put("access_token", accessToken).toString())

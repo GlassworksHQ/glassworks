@@ -38,14 +38,15 @@ object Mockup {
 
     fun idle() = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
 
-    fun layout(v: View) {
-        v.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(H, View.MeasureSpec.EXACTLY))
-        v.layout(0, 0, W, H)
+    /** Lays [v] out at [w] by [h] px: the S1's 1440x720 unless told (the Pixel Tablet's 1280x800 at mdpi). */
+    fun layout(v: View, w: Int = W, h: Int = H) {
+        v.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
+        v.layout(0, 0, w, h)
     }
 
-    fun save(name: String, v: View) {
-        layout(v)
-        val b = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
+    fun save(name: String, v: View, w: Int = W, h: Int = H) {
+        layout(v, w, h)
+        val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         v.draw(Canvas(b))
         val out = File(dir!!).apply { mkdirs() }
         File(out, "$name.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
