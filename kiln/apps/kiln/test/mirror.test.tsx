@@ -142,6 +142,23 @@ describe('the test install', () => {
     expect(s.state).toMatchObject({ screen: 'pick', flow: undefined, result: undefined, connectError: /went away: USB transfer failed/ });
   });
 
+  it('reading the Mirror again twice reads it once, and never lands on a running install', async () => {
+    const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith('sh.edm.s1kiosk/')) });
+    const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+    await s.connect();
+    await s.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    const reads = () => m.cmds.filter((c) => c === 'getprop ro.build.version.sdk').length;
+    const before = reads();
+    await Promise.all([s.again(), s.again()]);
+    expect(reads() - before).toBe(1);
+    const late = s.again(); // still reading when the install starts
+    const install = s.install();
+    await late;
+    expect(s.state.screen).toBe('working');
+    await install;
+    expect(s.state.screen).toBe('done');
+  });
+
   it('a refused install ends on the error screen with the reason', async () => {
     const s = await mirrorDemo('error', true);
     expect(s.state).toMatchObject({ screen: 'error' });

@@ -107,9 +107,19 @@ export class MirrorSession {
     }
   }
 
-  private async check(): Promise<void> {
-    const report = await checkMirror(this.panel!);
-    this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
+  private checking?: Promise<void>;
+
+  /** One read of the Mirror at a time: repeated clicks share it, and it never lands on a running install. */
+  private check(): Promise<void> {
+    this.checking ??= (async () => {
+      try {
+        const report = await checkMirror(this.panel!);
+        if (this.state.screen !== 'working') this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
+      } finally {
+        this.checking = undefined;
+      }
+    })();
+    return this.checking;
   }
 
   /** Why Install can't start, or undefined when it can. */
