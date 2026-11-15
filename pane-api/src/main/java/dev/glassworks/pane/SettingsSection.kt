@@ -141,9 +141,26 @@ enum class SettingsPlace { DASHBOARD, SCREEN, DEVICE, NETWORK, PANES, LOG, SECUR
  * Device page ([dev.glassworks.frame.Frame.deviceSection]) and Network,
  * then [panes] in definition order, then Log, Security and About. Sections without items are left out.
  */
-fun settingsOrder(core: Map<SettingsPlace, SettingsSection>, panes: List<SettingsSection>): List<SettingsSection> =
-    SettingsPlace.entries.flatMap { p -> if (p == SettingsPlace.PANES) panes else listOfNotNull(core[p]) }
+fun settingsOrder(core: Map<SettingsPlace, SettingsSection>, panes: List<SettingsSection>): List<SettingsSection> {
+    val sections = SettingsPlace.entries.flatMap { p -> if (p == SettingsPlace.PANES) panes else listOfNotNull(core[p]) }
+    // A link to a section that isn't here (its pane can't run on this frame) would open nothing: left out.
+    val ids = sections.map { it.id }.toSet()
+    fun live(items: List<SettingsItem>): List<SettingsItem> = items.mapNotNull { i ->
+        when {
+            i is SettingsItem.Link && i.section != null && i.section !in ids -> null
+            i is SettingsItem.Group -> SettingsItem.Group(i.title, live(i.items))
+            else -> i
+        }
+    }
+    fun dead(items: List<SettingsItem>): Boolean = items.any { i ->
+        (i is SettingsItem.Link && i.section != null && i.section !in ids) || (i is SettingsItem.Group && dead(i.items))
+    }
+    return sections.map { s ->
+        if (!dead(s.items)) s
+        else SettingsSection(s.id, s.title, live(s.items), s.heading, s.master, s.status, s.unavailable, s.source, s.covers)
+    }
         .filter { it.items.isNotEmpty() }
+}
 
 /**
  * A row in a [SettingsSection]. Values are read when the menu opens. Each change applies on its own,

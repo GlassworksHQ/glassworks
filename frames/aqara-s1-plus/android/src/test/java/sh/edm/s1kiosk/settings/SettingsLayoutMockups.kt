@@ -62,7 +62,7 @@ class SettingsLayoutMockups {
         val byId = running.associateBy { it.id }
         fun model() = MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = defs, running = { byId[it] }).let { m ->
             // The frame's Device page, after Screen, as S1Settings puts it.
-            val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props).section(app) { byId[it] }
+            val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app) { byId[it] }
                 else frame.deviceSection(app) { byId[it] }
             val at = m.sections.indexOfFirst { it.id == "screen" } + 1
             m.copy(frame = frameName, sections = m.sections.toMutableList().apply { if (device != null) add(at, device) })

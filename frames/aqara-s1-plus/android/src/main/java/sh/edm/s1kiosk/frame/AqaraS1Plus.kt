@@ -22,8 +22,11 @@ import sh.edm.s1kiosk.base.WallBasePane
 import sh.edm.s1kiosk.base.WallBasePrefs
 import java.util.concurrent.ScheduledExecutorService
 
-/** The Aqara Panel Hub S1 Plus, the frame this app is built for. Chosen on its hardware only ([orElse]). */
-class AqaraS1Plus : Frame {
+/**
+ * The Aqara Panel Hub S1 Plus, the frame this app is built for. Chosen on its hardware only ([orElse]).
+ * [aqaraCloud]: Aqara's cloud daemon, the one instance the wall base pane and the Device page share (a test passes a fake).
+ */
+class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
     override val board = "aqara-s1-plus"
 
     override val namedBy = NamedBy.FRAME
@@ -43,8 +46,6 @@ class AqaraS1Plus : Frame {
     /** The A133's zones are `cpu_thermal_zone`, `gpu_thermal_zone` and `ddr_thermal_zone` (read 2026-11-12). */
     override val cpuThermalZone = "cpu_thermal_zone"
 
-    private val aqaraCloud = AqaraCloud()
-
     /** The time zone that Aqara resets at every boot and the root helper puts back, and the wall base. */
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = listOf(
         TimeZonePane(ctx, TimeZonePrefs(ctx.prefs("time-zone"))),
@@ -57,7 +58,9 @@ class AqaraS1Plus : Frame {
         return listOf(WallBaseDefinition(prefs.paneFile("wall-base")), TimeZoneDefinition(prefs.paneFile("time-zone")))
     }
 
-    override fun deviceSection(context: Context, running: (String) -> Pane?) = S1Device(aqaraCloud).section(context, running)
+    private val device by lazy { S1Device(aqaraCloud) }
+
+    override fun deviceSection(context: Context, running: (String) -> Pane?) = device.section(context, running)
 
     override val rootUpdates: RootUpdates = RootUpdateInstaller()
 

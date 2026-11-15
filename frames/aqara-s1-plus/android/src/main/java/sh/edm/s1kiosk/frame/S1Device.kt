@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.frame
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.SettingsItem
@@ -11,6 +12,9 @@ import sh.edm.s1kiosk.radio.RadioHelper
 import sh.edm.s1kiosk.radio.RadioMode
 import sh.edm.s1kiosk.radio.ShellProps
 import sh.edm.s1kiosk.radio.SysProps
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 
 /**
  * The S1's Device page ([dev.glassworks.frame.Frame.deviceSection]): what belongs to the device and to no
@@ -18,7 +22,26 @@ import sh.edm.s1kiosk.radio.SysProps
  * pane still applies it), the cloud daemon's state, which of Aqara's apps are turned off
  * (tools/debloat/debloat.sh), and the radio's mode, which opens the Radio pane.
  */
-class S1Device(private val cloud: AqaraCloud, private val props: SysProps = ShellProps) {
+class S1Device(
+    private val cloud: AqaraCloud,
+    private val props: SysProps = ShellProps,
+    /** Where `getprop` runs: never on the main thread, which builds this page every couple of seconds. */
+    private val reader: Executor = Executors.newSingleThreadExecutor { r -> Thread(r, "s1-device").apply { isDaemon = true } },
+    private val clock: () -> Long = SystemClock::elapsedRealtime,
+) {
+    private val values = ConcurrentHashMap<String, String>()
+    private val readAt = ConcurrentHashMap<String, Long>()
+
+    /** [key]'s last value from [read], read again on [reader] when older than [STALE_MS]; null until the first read lands. */
+    private fun cached(key: String, read: () -> String): String? {
+        val now = clock()
+        val last = readAt[key]
+        if (last == null || now - last > STALE_MS) {
+            readAt[key] = now
+            reader.execute { values[key] = read() }
+        }
+        return values[key]
+    }
 
     fun section(context: Context, running: (String) -> Pane?): SettingsSection {
         val wallBase = PanePrefs(context).wallBase
@@ -36,12 +59,12 @@ class S1Device(private val cloud: AqaraCloud, private val props: SysProps = Shel
     /** What the wall base pane says of the daemon (`aqara_cloud`), else init's word for it. */
     private fun daemon(running: (String) -> Pane?): String =
         running("wall-base")?.entities()?.firstOrNull { it.objectId == "aqara_cloud" }?.shownState()?.takeIf { it.isNotBlank() && it != "unknown" }
-            ?: cloud.daemonState().ifBlank { "Unknown" }
+            ?: cached("daemon", cloud::daemonState)?.ifBlank { null } ?: "Unknown"
 
     /** The radio pane's `Radio mode`, else the mode the root helper was asked for. */
     private fun radioMode(running: (String) -> Pane?): String =
         running("radio")?.entities()?.firstOrNull { it.objectId == "radio_mode" }?.shownState()?.takeIf { it.isNotBlank() }
-            ?: RadioMode.fromId(props.get(RadioHelper.PROP_MODE))?.label ?: RadioMode.OFF.label
+            ?: cached("radio") { props.get(RadioHelper.PROP_MODE) }?.let { RadioMode.fromId(it)?.label ?: RadioMode.OFF.label } ?: "Unknown"
 
     /** The app can see Aqara's apps (Android 10 lets it); on another firmware none is there and the row is left out. */
     private fun appsReadable(context: Context): Boolean = AQARA_APPS.keys.any { state(context, it) != null }
@@ -68,9 +91,10 @@ class S1Device(private val cloud: AqaraCloud, private val props: SysProps = Shel
         const val DAEMON_TITLE = "Aqara cloud daemon"
         const val APPS_TITLE = "Aqara apps"
         const val RADIO_TITLE = "Radio mode"
+        const val STALE_MS = 5_000L
 
         /** tools/debloat/debloat.sh's list and its launcher, in its order, with a name for each. */
-        val AQARA_APPS = linkedMapOf(
+        val AQARA_APPS = mapOf(
             "com.aqara.inhome.manager" to "Cloud manager",
             "com.lumi.ota" to "Firmware updater",
             "com.aqara.inhome.vassistant" to "Voice assistant",

@@ -63,7 +63,7 @@ class DevicePageTest {
         override fun set(name: String, value: String) { values[name] = value }
     }
 
-    private fun s1(): SettingsSection = S1Device(AqaraCloud(run = { "" }), props).section(app) { null }
+    private fun s1(): SettingsSection = S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app) { null }
 
     /** Installs [pkg] for the package manager, turned off when [off]. */
     private fun install(pkg: String, off: Boolean) {
@@ -83,6 +83,29 @@ class DevicePageTest {
         assertEquals("opens the Radio pane", "radio", radio.section)
         assertEquals("Thread border router", radio.detail)
         assertEquals("init said nothing", "Unknown", s.items.filterIsInstance<SettingsItem.Info>().single { it.title() == "Aqara cloud daemon" }.detail())
+    }
+
+    @Test fun getpropRunsOffTheCallingThreadAtMostEveryFiveSeconds() {
+        // #303 verifier: the page is built on the main thread every couple of seconds; getprop forks a process.
+        val queued = ArrayList<Runnable>()
+        var now = 0L
+        var reads = 0
+        val counting = object : SysProps {
+            override fun get(name: String): String { reads++; return props.get(name) }
+            override fun set(name: String, value: String) {}
+        }
+        val device = S1Device(AqaraCloud(run = { "" }), counting, reader = { queued += it }, clock = { now })
+        fun radio() = device.section(app) { null }.items.filterIsInstance<SettingsItem.Link>().single().detail
+        assertEquals("not read yet", "Unknown", radio())
+        assertEquals("nothing ran on the caller's thread", 0, reads)
+        queued.toList().forEach { it.run() }; queued.clear()
+        assertEquals("Thread border router", radio())
+        now += S1Device.STALE_MS
+        radio()
+        assertEquals("within five seconds: no new read", 0, queued.size)
+        now += 1
+        radio()
+        assertEquals("then one", 1, queued.size)
     }
 
     @Test fun aqaraAppsTheAppCantSeeAreLeftOut() {
