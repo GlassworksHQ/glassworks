@@ -39,7 +39,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/esphome.md#timers-on-screen",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"13.5\" r=\"7.5\"/><path d=\"M12 13.5V9.5M9.5 2.5h5\"/></svg>",
-    "source": "frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/timers"
+    "source": "panes/timers/src/main/java/sh/edm/s1kiosk/timers"
   },
   {
     "id": "radio",
