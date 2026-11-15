@@ -31,7 +31,8 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 ABI_RE = re.compile(r"^(armeabi-v7a|arm64-v8a|x86|x86_64)$")
 KINDS = ("dex", "native", "assets", "other")
 # Why a base APK is missing (the size job's --base-missing): fixed words, so the comment only says these.
-BASE_MISSING = {"no-base-commit": "there is no base commit", "base-build-failed": "the base didn't build"}
+BASE_MISSING = {"no-base-commit": "there is no base commit", "base-build-failed": "the base didn't build",
+                "not-built": "this check builds no base"}
 # The comment's limits: a report can't make it long, whatever it holds.
 MAX_ROWS, MAX_FINDINGS = 40, 20
 
