@@ -48,6 +48,7 @@ CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frame
 5. **Plain CSS with the tokens in `src/app/globals.css`**, CSS modules per page and component, no UI
    kit. A new web-only layout needs a mockup the maintainer approves first.
 6. **ESLint runs on TypeScript 6's API.** typescript-eslint can't use the root's TypeScript 7, so
-   `site/package.json` has `typescript` as the npm alias `@typescript/typescript6`, and
-   `eslint.config.mjs` points typescript-eslint at it. `tsc` and `next build` use the root's
-   TypeScript 7.
+   `site/package.json` has `typescript@6`, nested in `site/node_modules`, and `eslint.config.mjs`
+   points typescript-eslint at it. Don't use the `@typescript/typescript6` alias: its dependency
+   hoists to the root and takes every workspace's `tsc`. A bare `tsc` inside `site/` is 6; the
+   `typecheck` script runs the root's TypeScript 7 by path. Don't add a script that calls bare `tsc`.

@@ -10,7 +10,7 @@
     "lint": "eslint",
     "brand": "node scripts/brand/generate.mjs",
     "brand:raster": "node scripts/brand/raster.mjs",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && node ../node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
     "@glassworks/frame-card": "0.0.0",
@@ -26,6 +26,6 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "opentype.js": "^2.0.0",
-    "typescript": "npm:@typescript/typescript6@6.0.2"
+    "typescript": "6.0.3"
   }
 }
