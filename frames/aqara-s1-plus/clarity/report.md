@@ -31,9 +31,9 @@ typical cameras over WebRTC, run 1 (detail): decoder not reported, 451 frames de
 typical cameras over WebRTC, run 2 (detail): decoder not reported, 450 frames decoded, 0 dropped, 0 freezes (0.0 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 409 for 450 frames, stalls by them up to 0.0 s.
 typical cameras over WebRTC, run 3 (detail): decoder not reported, 450 frames decoded, 0 dropped, 0 freezes (0.0 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 381 for 450 frames, stalls by them up to 0.0 s.
 typical cameras over HLS, the fallback (detail, not graded; slow by the camera bars): run 1: first frame 6012 ms, 100 % shown, stalls 0 ms, slow; run 2: first frame 4833 ms, 100 % shown, stalls 0 ms, slow; run 3: first frame 4957 ms, 100 % shown, stalls 0 ms, slow.
-heavy cameras over WebRTC, run 1 (detail): decoder not reported, 401 frames decoded, 0 dropped, 0 freezes (0.0 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 202 for 401 frames, stalls by them up to 22.2 s.
-heavy cameras over WebRTC, run 2 (detail): decoder not reported, 392 frames decoded, 0 dropped, 0 freezes (0.0 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 186 for 392 frames, stalls by them up to 24.8 s.
-heavy cameras over WebRTC, run 3 (detail): decoder not reported, 369 frames decoded, 1 dropped, 0 freezes (0.0 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 198 for 369 frames, stalls by them up to 23.7 s.
+heavy cameras over WebRTC, run 1 (detail): decoder not reported, 401 frames decoded, 0 dropped, freezes n/a (the receiver's counts cover 6.7 of the window's 30.1 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 202 for 401 frames, stalls by them up to 22.2 s.
+heavy cameras over WebRTC, run 2 (detail): decoder not reported, 392 frames decoded, 0 dropped, freezes n/a (the receiver's counts cover 6.5 of the window's 30.1 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 186 for 392 frames, stalls by them up to 24.8 s.
+heavy cameras over WebRTC, run 3 (detail): decoder not reported, 369 frames decoded, 1 dropped, freezes n/a (the receiver's counts cover 6.1 of the window's 30.2 s), candidate host/None; the page's frame callbacks (detail, how busy the page was): 198 for 369 frames, stalls by them up to 23.7 s.
 heavy cameras over HLS, the fallback (detail, not graded; slow by the camera bars): run 1: first frame 5409 ms, 40 % shown, stalls 21878 ms, slow; run 2: first frame 6504 ms, 39 % shown, stalls 20155 ms, slow; run 3: first frame 6241 ms, 48 % shown, stalls 20733 ms, slow.
 
 Order of the pages (it turns each run): light, typical-nocam, typical, heavy; typical-nocam, typical, heavy, light; typical, heavy, light, typical-nocam.
@@ -47,9 +47,9 @@ Order of the pages (it turns each run): light, typical-nocam, typical, heavy; ty
 
 ## RAM on the reference dashboards (not graded)
 
-PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each graded run, and between the graded pages (the largest of those is the peak during the graded tasks).
+PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each graded run, and between the graded pages. The peak is the largest of those samples: they are taken between tasks, not inside them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed; the VmHWM line below catches it.
 
-| Process | Idle (median of runs) | Peak during the graded tasks |
+| Process | Idle (median of runs) | Peak, sampled between the graded pages |
 |---|---|---|
 | crashhelper | 7.6 MB (7.4 to 7.6, n=3) | 8 MB |
 | gpu | 231 MB (231 to 240, n=3) | 243 MB |
@@ -62,7 +62,7 @@ PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashbo
 Peak RSS of the app's processes since they started (VmHWM, summed): 1394 MB, from 10 sample(s) between pages.
 
 Budgets (frames/<id>/budgets.json):
-- app_pss_peak: 904 MB against 988 MB: ok
+- app_pss_peak (sampled between pages): 904 MB against 988 MB: ok
 - device_available_min: 692 MB against 296 MB: ok
 
 Not measured on their own: bluetooth-proxy (it scans only while Home Assistant listens, and Clarity's reference run has no Home Assistant listening, so on by itself it would measure an idle pane; measured by hand with HA listening (#121)); radio (its on/off is the radio mode, which Clarity leaves as it is so the panel's Zigbee or Thread network stays up); timers (it comes only with the voice assistant and has no switch of its own, so it is inside assist's share).

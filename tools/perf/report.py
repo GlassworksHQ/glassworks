@@ -1661,9 +1661,16 @@ def webrtc_detail(c):
     busy = (f"; the page's frame callbacks (detail, how busy the page was): {sum(x.get('callbacks') or 0 for x in cbs)} "
             f"for {total('frames_decoded')} frames, stalls by them up to {max((x.get('stall_total_ms') or 0) for x in cbs) / 1000:.1f} s"
             if cbs else "")
+    # Receiver counts that leave more of the window out than a stall can hide in (#265): their freezes
+    # are n/a there too, as the stalls are, and the counts say the time they cover (#255's review).
+    spans = [s.get("span_ms") for s in c.get("detail") or [] if (s.get("webrtc") or {}).get("inbound") and s.get("span_ms") is not None]
+    short = (c.get("uncovered_ms") or 0) > CAMERA_UNCOVERED_MAX_MS and spans and c.get("window_ms")
+    freezes = ("freezes n/a" if short else f"{total('freezes')} freezes ({total('freeze_s', '{:.1f}')} s)")
+    covered = (f" (the receiver's counts cover {min(spans) / 1000:.1f} of the window's {c['window_ms'] / 1000:.1f} s)"
+               if short else "")
     return (f"decoder {', '.join(decs)}" + (f" ({', '.join(hw)})" if hw else "")
             + f", {total('frames_decoded')} frames decoded, {total('frames_dropped')} dropped, "
-            f"{total('freezes')} freezes ({total('freeze_s', '{:.1f}')} s), candidate {', '.join(cand) or 'n/a'}{restarts}{busy}")
+            f"{freezes}{covered}, candidate {', '.join(cand) or 'n/a'}{restarts}{busy}")
 
 
 def by_cpu(khz):
@@ -1898,11 +1905,13 @@ def ram_markdown(ram):
         return []
     out = ["", "## RAM on the reference dashboards (not graded)", "",
            "PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each "
-           "graded run, and between the graded pages (the largest of those is the peak during the graded tasks).", ""]
+           "graded run, and between the graded pages. The peak is the largest of those samples: they are taken between "
+           "tasks, not inside them (a dumpsys would disturb what a task measures), so a short peak inside a task can be "
+           "missed; the VmHWM line below catches it.", ""]
     idle, peak = ram.get("reference_idle"), ram.get("graded_peak")
     roles = sorted(set((idle or {}).get("by_role_pss_kb", {})) | set((peak or {}).get("by_role_pss_kb", {})))
     if idle or peak:
-        out += ["| Process | Idle (median of runs) | Peak during the graded tasks |", "|---|---|---|"]
+        out += ["| Process | Idle (median of runs) | Peak, sampled between the graded pages |", "|---|---|---|"]
         for r in roles:
             pk = (peak or {}).get("by_role_pss_kb", {}).get(r)
             pk = "n/a" if pk is None else f"{pk / 1024:.0f} MB"
@@ -1917,7 +1926,9 @@ def ram_markdown(ram):
         out += ["", "Budgets (frames/<id>/budgets.json):"]
         for k, c in b["checks"].items():
             val = "n/a" if c["value_kb"] is None else f"{c['value_kb'] / 1024:.0f} MB"
-            out.append(f"- {k}: {val} against {c['budget_kb'] / 1024:.0f} MB: {budget_word(c['ok'])}")
+            # A peak here is the sampled one above (between pages), not a maximum inside the tasks.
+            what = " (sampled between pages)" if "peak" in k else ""
+            out.append(f"- {k}{what}: {val} against {c['budget_kb'] / 1024:.0f} MB: {budget_word(c['ok'])}")
     if ram.get("panes"):
         out += ["", "Each pane on by itself against every pane off, on the typical reference dashboard (median of runs; "
                     "the tolerance is twice the noisier set's estimated standard deviation; `:boot` left out). Only samples "

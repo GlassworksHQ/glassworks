@@ -700,6 +700,22 @@ class ReceiverSpanShort(unittest.TestCase):
             st.update(span_ms=span, source="webrtc+rvfc", gaps_source="webrtc (bound)", max_gap_ms=216.9)
         return line
 
+    def test_the_webrtc_detail_says_freezes_n_a_when_the_counts_miss_the_window(self):
+        """#255's review: s1rtc10's heavy detail said "0 freezes" from counts that covered about 6.5 s of
+        30; the stalls were n/a, the freezes must be too, with the time the counts cover."""
+        def run(spans):
+            line = self.line(spans)
+            for st in line["streams"]:
+                st["webrtc"] = {"inbound": True, "frames_decoded": 100, "frames_dropped": 0, "freezes": 0, "freeze_s": 0.0}
+            return R.camera_run(line, "heavy")
+        short = R.webrtc_detail(run([6600, 6600, 6700, 6700]))
+        self.assertIn("freezes n/a (the receiver's counts cover 6.6 of the window's 30.0 s)", short)
+        self.assertNotIn("0 freezes", short)
+        whole = R.webrtc_detail(run([30043] * 4))
+        self.assertIn("0 freezes (0.0 s)", whole)
+        self.assertNotIn("freezes n/a", whole)
+        self.assertNotIn("receiver's counts cover", whole)
+
     def test_a_short_span_is_not_measured(self):
         # s1rtc9, heavy run 2: three streams' counts covered 6821 ms of 30043.
         run = R.camera_run(self.line([6821, 6821, 6821, 24465]), "heavy")
@@ -1807,7 +1823,13 @@ class PaneOnAlone(unittest.TestCase):
         self.assertEqual(ram["pane_budget"]["assist"]["ok"], False)          # 30 MB against 20 MB, three samples each
         self.assertEqual(ram["panes_not_switched"], [{"id": "radio", "why": "its mode"}])
         self.assertEqual(ram["panes_waiting"], [])                            # kept in glassworks.perf/4, empty since #67
-        self.assertIn("Not measured on their own: radio (its mode).", "\n".join(R.ram_markdown(ram)))
+        md = "\n".join(R.ram_markdown(ram))
+        self.assertIn("Not measured on their own: radio (its mode).", md)
+        # #255's review: the peak is sampled between pages, and the report says so where it's shown.
+        self.assertIn("| Process | Idle (median of runs) | Peak, sampled between the graded pages |", md)
+        self.assertIn("a short peak inside a task can be missed", md)
+        self.assertNotIn("Peak during the graded tasks", md)
+        self.assertIn("- app_pss_peak (sampled between pages): ", md)
         self.assertTrue(ram["budget"]["ok"])
         self.assertIsNone(R.reference_ram({}, [], "sh.edm.s1kiosk", budgets, 2_000_000))
         # F6: a run that failed may have stopped mid-page; its samples aren't the peak.
