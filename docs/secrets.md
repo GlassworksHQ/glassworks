@@ -42,18 +42,25 @@ panel then needs setting up again: sign in, give it the API key, pair Sendspin. 
 
 ## When the key is gone
 
-If the key is gone for good (the Keystore lost it, says its entry is corrupted or permanently
-invalidated, a backup was restored onto another device), the panel makes a new key and treats the
-secret as not set: signed out, no API key, not paired. It removes the unreadable value, logs it once
-under `S1Kiosk.Secrets` without the value, and asks for it again through its usual setup. It never
-crashes over it.
+If the key store says the key is gone for good (its entry is corrupted or permanently invalidated),
+the panel makes a new key and treats the secrets as not set: signed out, no API key, not paired. It
+removes the unreadable values, logs it once under `S1Kiosk.Secrets` without the values, and asks for
+them again through its usual setup. It never crashes over it.
+
+If the key's entry is simply absent (wiped by the system or a vendor bug), the panel can't tell that
+from a lookup that failed for a moment, so at first it treats it as an outage (below): the values stay
+and read as not set, the ESPHome API stays locked and Sendspin hands out no pairing token. The panel
+reads as signed out, so the usual next step is the Home Assistant sign-in (the QR code). Storing that
+sign-in makes a new key, once two lookups and the key store's own list all find none. From then on the
+old values fail their check: each is removed as it is next read, the ESPHome API becomes unprovisioned
+for Home Assistant to give it a new key, and Sendspin pairs again.
 
 Only the key store's own word counts as "gone for good": error codes 7 (key not found), 8 (blob
 corrupted), 17 (permanently invalidated) and Keymaster's -33 (invalid key blob), read from AOSP
 Android 10's `KeyStore.java` on 2026-11-15, or a ciphertext whose tag doesn't match. Any other key
 store error is treated as an outage (below), because Android 10 reports passing failures with the
-same exception types. A fresh sign-in or pairing still replaces a value that stays unreadable once the
-key store can seal again. Opening a secret never makes a key: Android 10 answers "no key" when a lookup
+same exception types. A fresh sign-in still replaces a value that stays unreadable once the key store
+can seal again. Opening a secret never makes a key: Android 10 answers "no key" when a lookup
 fails for a moment, and making a key under the same name deletes the one there. Only sealing makes
 one, and only after a second lookup on a freshly loaded key store also finds none. A key store that
 fails both lookups and then works at once can still cost the key (not seen; untested on a panel).

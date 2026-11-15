@@ -124,6 +124,25 @@ class KeystoreSecretsTest {
         assertEquals("made-up-user" to "made-up-camera-pass-7", PanePrefs(app).camera.signIn)
     }
 
+    /** The key's entry is simply absent: an outage at first; the next sign-in makes a new key, and the old values go. */
+    @Test fun anAbsentKeyRecoversThroughTheNextSignIn() {
+        KioskPrefs(app); PrefsSsStore(app)
+        FakeAndroidKeyStore.keys.clear() // wiped by the system
+        val prefs = KioskPrefs(app)
+        assertNull("reads as signed out", prefs.auth)
+        val store = prefs.noiseKeyStore as dev.glassworks.esphome.ReadableNoiseKeyStore
+        assertTrue("the ESPHome API stays locked for now", store.read() is dev.glassworks.esphome.StoredKey.Unreadable)
+        assertTrue("nothing made yet", FakeAndroidKeyStore.keys.isEmpty())
+        prefs.auth = StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token")
+        assertEquals("the sign-in made a new key", setOf(SecretStore.KEY_ALIAS), FakeAndroidKeyStore.keys.keys)
+        assertEquals("made-up-new-token", KioskPrefs(app).auth?.refreshToken)
+        assertTrue("the old API key is gone: unprovisioned", store.read() is dev.glassworks.esphome.StoredKey.Absent)
+        assertTrue(dev.glassworks.esphome.NoiseKeys(KioskPrefs(app).noiseKeyStore).provisionable)
+        val ss = PrefsSsStore(app)
+        assertTrue("Sendspin can pair again", ss.secretsReadable())
+        assertFalse(ss.identity().privateKey.contentEquals(identity))
+    }
+
     /** A cause-less error from getKey that a freshly loaded key store doesn't repeat is passing: the key and its secrets stay. */
     @Test fun aBareErrorThatDoesNotRepeatKeepsTheKey() {
         KioskPrefs(app); PrefsSsStore(app)
