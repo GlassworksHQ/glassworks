@@ -4,10 +4,11 @@
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
 import { fmtSize } from '@glassworks/kiln-core';
-import type { MirrorPhase } from '@glassworks/lululemon-mirror-installer';
+import { credits, type MirrorPhase } from '@glassworks/lululemon-mirror-installer';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import Link from 'next/link';
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { BuiltOn, stepCredits } from '../components/Credit';
 import { Shell, useBrowserChip } from '../components/Shell';
 import type { RailMark, RailStep } from '../wizard/state';
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from './demo';
@@ -111,6 +112,7 @@ function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
       <h2 id="h">Install a test build on the Mirror.</h2>
       <p className="lede">Kiln installs an APK file from this computer: S1 Kiosk&apos;s legacy build for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
       <Inputs s={s} session={session} />
+      <BuiltOn credits={stepCredits('lululemon-mirror', credits)} />
       <p className="small">On the Mirror, USB debugging is on. Plug it into this computer, click Connect and pick it in the browser&apos;s list. Then the Mirror asks to allow USB debugging for this browser: choose <b>Allow</b>. It has no touchscreen, so use a USB mouse.</p>
       {s.connecting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list, then choose Allow on the Mirror&apos;s screen…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
@@ -213,6 +215,7 @@ function Done({ s, session }: { s: MirrorState; session: MirrorSession }) {
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{title}</h2>
       <p className="lede">{body}</p>
+      <BuiltOn credits={stepCredits('lululemon-mirror', credits)} />
       <div className="foot">
         <Log s={s} />
         <button type="button" className="btn ghost" onClick={() => void session.again()}>Read the Mirror again</button>
