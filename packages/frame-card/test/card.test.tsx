@@ -44,6 +44,13 @@ describe('DeviceModel', () => {
     expect(example.textContent).toMatch(/Living room/);
   });
 
+  it('loads the render lazily unless the model is the page\'s priority', () => {
+    const img = (priority?: boolean) => render(<DeviceModel id="s1" model={s1.model} label="S1" screen="/r/render.webp" priority={priority} />).querySelector('img')!;
+    expect(img().getAttribute('loading')).toBe('lazy');
+    expect(img(true).getAttribute('loading')).toBe('eager');
+    expect(img(true).getAttribute('fetchpriority')).toBe('high');
+  });
+
   it('draws a portrait frame on a taller stage when asked', () => {
     expect(stage(render(<DeviceModel id="mirror" model={mirror.model} label="Mirror" aspect={0.8} />))).toEqual({ aspect: '0.8', viewBox: '0 0 100 125' });
   });

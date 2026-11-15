@@ -15,8 +15,9 @@ const PAINT_VARS = {
 /**
  * `aspect` is the stage's width / height: 2 by default, as on Kiln's cards; a taller stage, e.g. 0.8, suits a portrait frame's own page.
  * `screen` is the URL of the frame's render (frame.json `render`) to show on the glass; without it, an example dashboard.
+ * The render loads lazily; `priority` loads it at once, for a model that is a page's largest paint.
  */
-export function DeviceModel({ id, model, label, aspect = 2, screen }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string }) {
+export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean }) {
   const stage = useRef<HTMLDivElement>(null);
   const g = useMemo(() => geometry(model, aspect), [model, aspect]);
   // --u = 1% of the stage width, for the depth and perspective lengths
@@ -48,7 +49,7 @@ export function DeviceModel({ id, model, label, aspect = 2, screen }: { id: stri
         </svg>
         <div className={s.device} aria-hidden="true">
           <div className={s.front}>
-            <div className={s.screen}>{screen ? <img className={s.render} src={screen} alt="" /> : <Dashboard layout={g.layout} />}</div>
+            <div className={s.screen}>{screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />}</div>
             <div className={s.glare} />
           </div>
         </div>

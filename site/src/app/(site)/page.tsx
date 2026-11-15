@@ -1,7 +1,7 @@
 import { StackStory } from "@/components/StackStory";
 import Link from "next/link";
 import { ListCard, Tile, Tiles, manage as m } from "@/components/Manage";
-import { FrameRows } from "@/components/FrameRows";
+import { FrameGrid } from "@/components/FrameGrid";
 import { PaneRows } from "@/components/PaneRows";
 import { frames } from "@/lib/frames";
 import { release } from "@/lib/release";
@@ -58,9 +58,7 @@ export default async function Home() {
         <PaneRows panes={panes} />
       </ListCard>
 
-      <ListCard id="devices" title="Devices" aside={<span>{frames.length} frames</span>}>
-        <FrameRows frames={frames} />
-      </ListCard>
+      <FrameGrid id="devices" title="Devices" aside={<Link href="/frames">All frames ›</Link>} frames={frames} />
 
       <section aria-labelledby="why">
         <div className={styles.whyHead}>

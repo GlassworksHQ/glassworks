@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { FrameRows } from "@/components/FrameRows";
-import { ListCard, PageHead, Row, Sq } from "@/components/Manage";
+import { AddCard, FrameGrid } from "@/components/FrameGrid";
+import { PageHead } from "@/components/Manage";
 import {
   RatingLabel,
   RatingValue,
@@ -25,15 +25,11 @@ export default function DevicesPage() {
   return (
     <div className={s.page}>
       <PageHead title="Frames" lede="Devices Glassworks runs on, or will." />
-      <ListCard id="frames" title="Devices" aside={<span>{frames.length} frames</span>}>
-        <FrameRows frames={frames} />
-        <Row
-          href={links.org}
-          lead={<Sq>+</Sq>}
-          title="Your panel"
-          sub="Any Android panel can be a frame. A porting guide is planned."
-        />
-      </ListCard>
+      <FrameGrid id="frames" title="Devices" aside={<span>{frames.length} frames</span>} frames={frames}>
+        <AddCard href={links.org} title="Your panel">
+          Any Android panel can be a frame. A porting guide is planned.
+        </AddCard>
+      </FrameGrid>
 
       <section className={s.section} aria-labelledby="changes">
         <h2 id="changes" className={s.h2}>

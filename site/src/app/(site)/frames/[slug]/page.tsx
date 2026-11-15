@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { HeroModel } from "@/components/FrameCard";
 import { RatingLabel, RatingValue, SpecLabel, paneIcon } from "@/components/DeviceBits";
 import { Chip, FactRow, ListCard, Row, Sq, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
 import { BookGlyph, KilnGlyph } from "@/components/Glyphs";
@@ -123,11 +123,7 @@ async function Device({ params }: { params: Params }) {
           </div>
           <p className={s.how}>{install ? d.install.how : `Not in Kiln yet. ${d.install.how}`}</p>
         </div>
-        {d.render && (
-          <div className={s.render}>
-            <Image src={`/frames/${d.id}/render.webp`} alt={`${d.name} running Glassworks`} fill sizes="(max-width: 900px) 100vw, 40vw" priority unoptimized />
-          </div>
-        )}
+        <HeroModel f={d} />
       </header>
 
       {d.notice && <p className={s.notice}>{d.notice}</p>}

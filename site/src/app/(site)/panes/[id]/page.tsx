@@ -5,7 +5,9 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PaneBlueprints } from "@/components/Blueprints";
 import { paneIcon } from "@/components/DeviceBits";
-import { Chip, ListCard, PageHead, Row, Sq, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
+import { Chip, ListCard, Row, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
+import { PaneLift } from "@/components/PaneLift";
+import { TiltStage } from "@/components/TiltStage";
 import { frameById, frames } from "@/lib/frames";
 import { paneSeo, ships } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
@@ -64,29 +66,24 @@ async function Pane({ params }: { params: Params }) {
           ]),
         ]}
       />
-      <PageHead
-        crumbs={
-          <>
+      <header className={`${m.card} ${s.hero}`}>
+        <div className={s.heroText}>
+          <nav className={m.crumbs} aria-label="Breadcrumb">
             <Link href="/panes">Panes</Link>
             <span aria-hidden="true">/</span>
             <span aria-current="page">{p.name}</span>
-          </>
-        }
-        title={
-          <span className={s.title}>
-            <Sq lit>
-              <Icon />
-            </Sq>
-            {p.name}
+          </nav>
+          <span className={s.chips}>
+            <StageChip support={p.status} />
+            {frame && <Chip>Frame pane</Chip>}
           </span>
-        }
-        lede={p.does}
-      >
-        <span className={s.chips}>
-          <StageChip support={p.status} />
-          {frame && <Chip>Frame pane</Chip>}
-        </span>
-      </PageHead>
+          <h1 className={s.h1}>{p.name}</h1>
+          <p className={m.lede}>{p.does}</p>
+        </div>
+        <TiltStage className={s.stage}>
+          <PaneLift Icon={Icon} frame={Boolean(frame)} lifted />
+        </TiltStage>
+      </header>
 
       <Tiles cols={3}>
         <Tile label="Needs" value={p.requires} />
