@@ -237,7 +237,7 @@ must never be covered above its menus, and tells each about screen changes, Back
 its own end.
 
 These types live in the S1 app module (`:kiosk`) until S-shell part 2 frees them, then move to core:
-[`DeviceHost.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/esphome/DeviceHost.kt),
+[`DeviceHost.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/esphome/DeviceHost.kt),
 [`PaneOverlay.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/PaneOverlay.kt) (with
 `OverlayHost`) and [`AppParts.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/AppParts.kt).
 
