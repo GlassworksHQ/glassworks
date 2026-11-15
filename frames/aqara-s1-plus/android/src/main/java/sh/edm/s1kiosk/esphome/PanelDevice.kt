@@ -57,7 +57,7 @@ import sh.edm.s1kiosk.dashboard.DashboardOptions
 import sh.edm.s1kiosk.dashboard.Dashboards
 import sh.edm.s1kiosk.dashboard.StableChange
 import sh.edm.s1kiosk.discovery.HaUrls
-import sh.edm.s1kiosk.radio.RadioPane
+import sh.edm.s1kiosk.radio.RadioDefinition
 import sh.edm.s1kiosk.sendspin.SendspinPane
 import sh.edm.s1kiosk.setup.SetupSignals
 import sh.edm.s1kiosk.timers.TimersPane
@@ -115,11 +115,6 @@ class PanelDevice internal constructor(
 
         init { EspHomeLog.tag = ESPHOME_LOG_TAG }
 
-        /**
-         * The product's name, on the panel's own pages (the QR pages, Manage). Home Assistant gets the
-         * device's own names instead ([dev.glassworks.frame.DeviceName], #260).
-         */
-        const val PRODUCT_NAME = "Glassworks Panel"
         /** Reported ESPHome version (recent, so HA doesn't treat the device as outdated). */
         const val ESPHOME_VERSION = "2026.10.2"
         /** Same flags as an ESPHome voice_assistant with a media player (Voice PE): no SPEAKER. */
@@ -318,7 +313,8 @@ class PanelDevice internal constructor(
                 haBase = { prefs.haBase },
                 now = android.os.SystemClock::elapsedRealtime,
             ),
-        ) + frame.panes(paneContext, exec) + RadioPane(paneContext, runtime, panelIp = ::ipAddress) +
+        ) + frame.panes(paneContext, exec) +
+            runtime.paneDefinitions(ctx).filterIsInstance<RadioDefinition>().mapNotNull { it.pane(paneContext, panelIp = ::ipAddress) } +
             runtime.paneDefinitions(ctx).filterIsInstance<BluetoothProxyDefinition>().map { it.pane(paneContext, exec) } +
             listOfNotNull(cameraPane(paneContext, identity)) +
             DiagnosticsPane(paneContext, frame.cpuThermalZone, runtime.engine::isContentProcess, exec)

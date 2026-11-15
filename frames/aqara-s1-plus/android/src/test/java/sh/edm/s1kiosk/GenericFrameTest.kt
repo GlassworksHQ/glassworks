@@ -7,10 +7,13 @@ import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.CantRun
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
+import java.io.File
+import java.net.InetAddress
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -35,8 +38,6 @@ import sh.edm.s1kiosk.manage.S1Manage
 import sh.edm.s1kiosk.sendspin.SendspinPane
 import sh.edm.s1kiosk.sendspin.SendspinPrefs
 import sh.edm.s1kiosk.settings.SettingsMenu
-import java.io.File
-import java.net.InetAddress
 
 /**
  * #23, minimal part: the app runs the S1's frame only on the S1's hardware. Any other device runs the
@@ -89,6 +90,10 @@ class GenericFrameTest {
         val generic = GenericAndroid(app)
         assertTrue(AqaraS1Plus.orElse("sun50iw10p1") { generic } is AqaraS1Plus)
         for (hw in listOf("tangorpro", "qcom", "robolectric", "")) assertEquals(hw, generic, AqaraS1Plus.orElse(hw) { generic })
+    }
+
+    @Test fun aTabletInstallsUpdatesWithPackageInstaller() {
+        assertNull(GenericAndroid(app).rootUpdates)
     }
 
     @Test fun aTabletAnnouncesItselfAsWhatItIs() {

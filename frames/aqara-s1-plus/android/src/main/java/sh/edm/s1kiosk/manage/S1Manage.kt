@@ -18,6 +18,7 @@ import dev.glassworks.manage.LogEntry
 import dev.glassworks.manage.LogcatTail
 import dev.glassworks.manage.ManageHost
 import dev.glassworks.manage.ManageLog
+import dev.glassworks.manage.ManagePage
 import dev.glassworks.manage.ManageServer
 import dev.glassworks.manage.PaneRow
 import dev.glassworks.manage.paneRow
@@ -32,6 +33,7 @@ import dev.glassworks.platform.WifiLink
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
+import dev.glassworks.web.PageShell
 import org.json.JSONObject
 import sh.edm.s1kiosk.AdminReceiver
 import sh.edm.s1kiosk.GlassworksRuntime
@@ -64,7 +66,7 @@ class S1Manage(
     context: Context, private val runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, private val prefs: KioskPrefs,
     /** The version the page shows ([dev.glassworks.platform.AppBuild.shown]); a test passes a test build's. */
     private val version: String = runtime.build.shown,
-) {
+) : ManagePage {
     private val app = context.applicationContext
     private val dir = File(app.filesDir, "manage")
     val log = ManageLog(File(dir, "log"))
@@ -86,7 +88,7 @@ class S1Manage(
         event = { msg -> Log.i(TAG, msg); runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) } },
     )
 
-    fun http(port: Int) = HttpServer(port, server::handle, log = { Log.d(TAG, it) })
+    override fun http(port: Int) = HttpServer(port, server::handle, log = { Log.d(TAG, it) })
 
     /** What the Manage page shows now; tests read it. */
     internal fun status(): PanelStatus = host.status()
@@ -96,14 +98,14 @@ class S1Manage(
 
     internal val actions: PanelActions get() = host.actions
 
-    fun startLog() = tail.start()
+    override fun startLog() = tail.start()
 
-    fun stopLog() = tail.stop()
+    override fun stopLog() = tail.stop()
 
     private inner class Host : ManageHost {
         override val actions: PanelActions = Actions()
 
-        override val name = PanelDevice.PRODUCT_NAME
+        override val name = PageShell.PRODUCT_NAME
 
         override fun status(): PanelStatus {
             val defs = runtime.paneDefinitions(app)

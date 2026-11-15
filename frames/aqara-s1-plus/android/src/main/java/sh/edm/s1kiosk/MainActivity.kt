@@ -55,6 +55,8 @@ import kotlin.system.exitProcess
 
 class MainActivity : Activity() {
 
+    /** The S1 app's runtime, for the panes' shared state the activity shows (notifications, the voice overlay). */
+    private val runtime get() = (application as KioskApp).glassworks
     private lateinit var prefs: KioskPrefs
     private lateinit var panePrefs: PanePrefs
     private lateinit var loadingOverlay: LoadingOverlay
@@ -188,7 +190,7 @@ class MainActivity : Activity() {
             onShowingChanged = { timerOverlay.voiceShowing(it) } // a timer set by voice flies out of the orb
         }
         timerOverlay = TimerOverlay(this, glassworks.orbs)
-        notificationOverlay = NotificationOverlay(this, glassworks.notifications, notificationImages(), orbs = glassworks.orbs).apply {
+        notificationOverlay = NotificationOverlay(this, runtime.notifications, notificationImages(), orbs = glassworks.orbs).apply {
             screenOn = { glassworks.screen.screenOn }
             onPage = { url -> if (url != null) openInPage(url) else backToDashboard() }
             onDoNotDisturb = { on -> panePrefs.notifications.doNotDisturb = on }
@@ -249,21 +251,21 @@ class MainActivity : Activity() {
                 screenBrightness = if (b < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else b
             }
         }
-        glassworks.notifications.addListener(notificationListener)
-        glassworks.notifications.onOpenList = {
+        runtime.notifications.addListener(notificationListener)
+        runtime.notifications.onOpenList = {
             handler.post {
                 if (settingsOverlay.isShowing) settingsOverlay.hide()
                 notificationOverlay.openList()
             }
         }
-        glassworks.notifications.onReveal = { handler.post { if (settingsOverlay.isShowing) settingsOverlay.hide() } }
+        runtime.notifications.onReveal = { handler.post { if (settingsOverlay.isShowing) settingsOverlay.hide() } }
         glassworks.screen.onStateChanged = {
             pushState()
             timerOverlay.refresh()
-            notificationOverlay.update(glassworks.notifications.state)
+            notificationOverlay.update(runtime.notifications.state)
             settingsOverlay.screenChanged(glassworks.screen.screenOn) // a revealed stream password doesn't outlast the screen
         }
-        glassworks.onVoiceUi = { voiceOverlay.update(glassworks.voiceUi, panePrefs.voice.overlay) }
+        glassworks.onVoiceUi = { voiceOverlay.update(runtime.voiceUi, panePrefs.voice.overlay) }
         // Images leaving the panel (#117): the dot follows, on the main thread (PanelDevice posts each change).
         glassworks.onCameraLeaving = { cameraDot.show(glassworks.cameraLeaving) }
         cameraDot.show(glassworks.cameraLeaving)
@@ -1092,9 +1094,9 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         HaAuth.removeListener(authListener)
-        glassworks.notifications.removeListener(notificationListener)
-        glassworks.notifications.onOpenList = null
-        glassworks.notifications.onReveal = null
+        runtime.notifications.removeListener(notificationListener)
+        runtime.notifications.onOpenList = null
+        runtime.notifications.onReveal = null
         HaAuth.threadJoin.removeListener(threadJoinListener)
         SetupSignals.removeListener(setupSignalListener)
         wifiStatus.observe(null)

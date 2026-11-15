@@ -126,7 +126,7 @@ class PanePrefsTest {
         yield(drive(SendspinPane(ctx, haBase = { null }), SendspinPrefs.KEY_FLAC))
         yield(drive(assist(), VoicePrefs.KEY_MIC_GAIN, start = false))
         yield(drive(WallBasePane(ctx, WallBase.Config(BaseBackend.LOCALSERVICE), device, AqaraCloud()), start = false))
-        yield(drive(RadioPane(ctx, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), panelIp = { null }), start = false))
+        yield(drive(RadioPane(ctx, sh.edm.s1kiosk.radio.RunningRadio(), panelIp = { null }), start = false))
         yield(drive(TimersPane(ctx, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen, schedule = { _, _ -> device.submit {} }, play = {}, silence = {})))
         yield(drive(BluetoothProxyPane(ctx, NoRadio, device)))
     }

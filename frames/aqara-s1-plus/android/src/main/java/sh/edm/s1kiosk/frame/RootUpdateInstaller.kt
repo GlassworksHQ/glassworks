@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.frame
 
 import android.os.SystemClock
 import android.util.Log
+import dev.glassworks.frame.RootUpdates
 import sh.edm.s1kiosk.radio.ShellProps
 import sh.edm.s1kiosk.radio.SysProps
 import sh.edm.s1kiosk.update.UpdateHelper
@@ -15,14 +16,14 @@ import sh.edm.s1kiosk.update.UpdateManager
 class RootUpdateInstaller(
     private val props: SysProps = ShellProps,
     private val now: () -> Long = SystemClock::elapsedRealtime,
-) {
-    fun present(): Boolean = props.get(UpdateHelper.PROP_VERSION).trim().toIntOrNull()?.let { it >= 1 } == true
+) : RootUpdates {
+    override fun present(): Boolean = props.get(UpdateHelper.PROP_VERSION).trim().toIntOrNull()?.let { it >= 1 } == true
 
     /**
      * At start: why the install the service did while this process was replaced failed, or null.
      * Success shows as the new installed version, so it is only logged.
      */
-    fun lastFailure(): String? {
+    override fun lastFailure(): String? {
         val st = UpdateHelper.parseStatus(props.get(UpdateHelper.PROP_STATUS)) ?: return null
         when (st.state) {
             "ok" -> Log.i(TAG, "last root install: ok ${st.detail}")
@@ -37,7 +38,7 @@ class RootUpdateInstaller(
      * replaces the app, which kills this process: the new version reads the result ([lastFailure]).
      * Returns why it failed, or null.
      */
-    fun install(version: String, installing: (String) -> Unit, over: () -> Boolean): String? {
+    override fun install(version: String, installing: (String) -> Unit, over: () -> Boolean): String? {
         props.set(UpdateHelper.PROP_STATUS, "requested")
         props.set("ctl.start", UpdateHelper.SERVICE)
         installing("Installing $version (root update service)")
