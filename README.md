@@ -137,6 +137,7 @@ else private, write to [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone h
 | [`kiln/`](kiln/apps/kiln/README.md) | Kiln, the browser (WebUSB) installer |
 | [`frames/`](frames/README.md) | One folder per device: its README, its Kiln recipe (`installer/`) and its data (`design/frame.json`) |
 | [`packages/`](packages/frame-card/README.md) | Code shared with glassworks.dev: the frame card and 3D renderer |
+| [`site/`](site/README.md) | [glassworks.dev](https://www.glassworks.dev), the project site, and the brand's badges and banners |
 | [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android/README.md) | S1 Kiosk, the Android app (GeckoView, ESPHome API, voice, Sendspin), with the Glassworks core in `dev.glassworks` |
 | `tools/` | Command-line installer, U-Boot/FEL build, boot patch, radio helper, Clarity, dev tools |
 | [`branding/`](branding/glass-tile/README.md) | Boot splash and animation, social preview |

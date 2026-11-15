@@ -178,11 +178,10 @@ All read from [GlassworksHQ/glassworks.dev](https://github.com/GlassworksHQ/glas
 
 ## How the website reads it
 
-glassworks.dev takes each frame's `design/frame.json` and the card that draws it
-([`packages/frame-card`](../packages/frame-card/README.md)) from this repo, at one pinned commit, so
-there is one copy of each. The recommendation, a git submodule, and the alternatives are in
-[that package's README](../packages/frame-card/README.md#how-glassworksdev-takes-it). The site's
-`devices.ts` entries and `MODELS` table then give way to these files.
+glassworks.dev ([`site/`](../site/README.md)) reads each frame's `design/frame.json` and the card
+that draws it ([`packages/frame-card`](../packages/frame-card/README.md)) from this repo at build
+time, so there is one copy of each, and a frame change and its page change in one PR. How is in
+[that package's README](../packages/frame-card/README.md#how-glassworksdev-takes-it).
 
 When frames move to their own repos (#35), the site points at each frame's released `frame.json`
 instead.

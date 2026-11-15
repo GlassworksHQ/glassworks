@@ -3,8 +3,8 @@
 
 Usage: tools/check-doc-links.py [files...]
   default: README.md, docs/**/*.md, frames/**/*.md, and the Markdown in every Android module root
-  (app/**, libs/**, core/**, pane-api/**, engines/**, panes/**) and testing/**, so a module's README stays checked
-  wherever the module moves (#21). Build output and node_modules are skipped.
+  (app/**, libs/**, core/**, pane-api/**, engines/**, panes/**), testing/** and site/**, so a module's README
+  stays checked wherever the module moves (#21). Build output and node_modules are skipped.
 Exits 1 and lists each broken link. External (http/https/mailto) links are not fetched.
 Anchors follow GitHub's heading slugs, plus explicit <a name/id="..."> tags.
 """
@@ -14,8 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 # Folders whose Markdown is checked, besides README.md. frames/ holds frames/<id>/android and /panes.
-DOC_ROOTS = ('docs', 'frames', 'app', 'libs', 'core', 'pane-api', 'engines', 'panes', 'testing')
-SKIP = {'node_modules', 'build', '.gradle', '.kotlin'}
+DOC_ROOTS = ('docs', 'frames', 'app', 'libs', 'core', 'pane-api', 'engines', 'panes', 'testing', 'site')
+SKIP = {'node_modules', 'build', '.gradle', '.kotlin', '.next'}
 LINK = re.compile(r'(?<!!)\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)|!\[[^\]]*\]\(\s*<?([^)\s>]+)>?[^)]*\)'
                   r'|<(?:a|img)\b[^>]*?\b(?:href|src)="([^"]+)"')
 HEADING = re.compile(r'^(#{1,6})\s+(.*?)\s*#*\s*$')
