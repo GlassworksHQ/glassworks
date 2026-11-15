@@ -15,6 +15,14 @@ below as the release notes.
   never writes to Home Assistant. If the panel's Home Assistant user isn't an administrator, a QR code
   lets you add it from your phone. The Manage page has the same card, with links that open Home
   Assistant in a new tab. The doorbell blueprint moved to `panes/notifications/blueprints/`.
+- **The panel's settings open on an Overview, laid out like the Manage page.** Tap the top-left
+  corner five times and the menu shows whether the panel runs, its version and how long it has run,
+  with Reload dashboard, Restart app and Check for updates. Tiles show Home Assistant, Wi-Fi, the
+  engine and memory, and a list shows every pane with its state. The sidebar groups the pages under
+  Panel, Panes and System, and Done stays at the bottom. "Dashboard" is now "Home Assistant &
+  dashboard", on the panel and the Manage page, and it says which Home Assistant account the
+  dashboard is signed in as. On the Manage page, a browser signed in with the panel's code says so
+  at the foot of the sidebar.
 - **On Android 12 and newer, app updates from Home Assistant install without a tap.** On a device
   that isn't an Aqara S1, such as a tablet, pressing Install in Home Assistant now updates the app
   with nobody at the screen, once "Install unknown apps" is allowed for it. If Android still asks,

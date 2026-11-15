@@ -7,6 +7,7 @@ import dev.glassworks.manage.ManagePage
 import sh.edm.s1kiosk.KioskPrefs
 import dev.glassworks.web.HttpServer
 import sh.edm.s1kiosk.glassworks
+import sh.edm.s1kiosk.manage.S1Manage
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -33,7 +34,9 @@ object HaAuth {
     private val cache = AccessTokenCache()
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private var server: HttpServer? = null
-    private var manage: ManagePage? = null
+    /** The Manage page while the server runs: the settings menu's Overview shows and does what its Overview does. */
+    var manage: ManagePage? = null
+        private set
 
     /**
      * "Join Home Assistant's Thread network" (ThreadJoin): the panel's own token first, else a one-off
@@ -64,7 +67,40 @@ object HaAuth {
     fun addListener(l: (Boolean) -> Unit) { listeners += l }
     fun removeListener(l: (Boolean) -> Unit) { listeners -= l }
 
+    /** The Home Assistant user the dashboard is signed in as, once asked ([account]). Forgotten when the sign-in changes. */
+    @Volatile private var accountName: String? = null
+    @Volatile private var accountAskedAt = 0L
+
+    /**
+     * Who the dashboard is signed in as: "Signed in as Alex", "Signed in" until Home Assistant has said, or
+     * "Not signed in". Asks Home Assistant (`auth/current_user`) once per sign-in, off the main thread, and
+     * again a minute after an ask that got no name.
+     */
+    fun account(): String {
+        if (!signedIn) return NOT_SIGNED_IN
+        accountName?.let { return "Signed in as $it" }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (accountAskedAt == 0L || now - accountAskedAt > 60_000) {
+            accountAskedAt = now
+            val base = signedInBase
+            accessToken(force = false) { a ->
+                val token = (a as? Access.Ok)?.accessToken ?: return@accessToken
+                if (base == null) return@accessToken
+                // Not on the auth thread: the page's token refreshes wait for it.
+                Thread({
+                    S1Manage.Gateway(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.let { accountName = it.name }
+                }, "ha-account").apply { isDaemon = true }.start()
+            }
+        }
+        return SIGNED_IN
+    }
+
+    const val SIGNED_IN = "Signed in"
+    const val NOT_SIGNED_IN = "Not signed in"
+
     private fun notifyChanged() {
+        accountName = null
+        accountAskedAt = 0L
         val v = signedIn
         main.post { listeners.forEach { runCatching { it(v) } } }
     }

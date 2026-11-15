@@ -823,6 +823,7 @@ class MainActivity : Activity() {
         // Resolved once per opening: the model is made again on each refresh tick (#235 N4).
         deviceSettings = S1Settings.hasDeviceSettings(glassworks, this)
         settingsOverlay.reload = ::settingsModel
+        settingsOverlay.overview = HaAuth.manage?.let { m -> KioskSettingsOverlay.Overview(m::status, m.actions) }
         settingsOverlay.show(settingsModel())
         handler.removeCallbacks(settingsTick)
         handler.postDelayed(settingsTick, 500)

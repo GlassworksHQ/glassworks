@@ -421,10 +421,7 @@ class ManageServer(
         ) + PageShell.securityHeaders(), Redact.text(text).toByteArray(Charsets.UTF_8))
     }
 
-    private fun notice(done: String?): String? = when (done) {
-        "reload" -> "Reloading the dashboard."
-        "restart" -> "The app is restarting. The panel shows the dashboard again in a few seconds."
-        "update" -> "Checking for updates. Home Assistant's update card shows what it finds."
+    private fun notice(done: String?): String? = OverviewAction.entries.firstOrNull { it.key == done }?.started ?: when (done) {
         "reboot" -> "The panel is rebooting. This page comes back in about a minute."
         "signedout" -> "That browser is signed out."
         "failed" -> "That didn't work. The Log says why."

@@ -10,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import dev.glassworks.frame.friendlyName
 import dev.glassworks.manage.HaGateway
 import dev.glassworks.manage.HaSignIn
 import dev.glassworks.manage.HaUser
@@ -94,13 +93,13 @@ class S1Manage(
 
     override fun http(port: Int) = HttpServer(port, server::handle, log = { Log.d(TAG, it) })
 
-    /** What the Manage page shows now; tests read it. */
-    internal fun status(): PanelStatus = host.status()
+    /** What the Manage page shows now: its Overview, and the panel menu's. */
+    override fun status(): PanelStatus = host.status()
 
     /** The diagnostics file before redaction; tests read it. */
     internal fun diagnostics(): String = host.diagnostics()
 
-    internal val actions: PanelActions get() = host.actions
+    override val actions: PanelActions get() = host.actions
 
     override fun startLog() = tail.start()
 
@@ -120,7 +119,7 @@ class S1Manage(
             val panes = model.sections.filter { it.id in model.panes }
             return PanelStatus(
                 name = name,
-                frame = if (runtime.s1 != null) "S1 Plus" else runtime.frame.friendlyName(),
+                frame = model.frame,
                 version = version,
                 // The app's, as the line it sits on is the app's: the device's is in the diagnostics (#263).
                 uptimeMs = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime(),

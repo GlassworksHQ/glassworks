@@ -77,7 +77,7 @@ class SettingsMenuTest {
 
     @Test
     fun sectionsFollowTheManagePagesNav() {
-        // #33: Dashboard, Screen, Network, the panes, then Log, Security, About. Empty ones are left out.
+        // #33: Home Assistant & dashboard, Screen, Network, the panes, then Log, Security, About. Empty ones are left out.
         fun s(id: String, n: Int = 1) = SettingsSection(id, id, List(n) { SettingsItem.Note { "" } })
         val core = mapOf(
             SettingsPlace.ABOUT to s("about"), SettingsPlace.LOG to s("log"), SettingsPlace.DASHBOARD to s("dashboard"),
@@ -92,7 +92,7 @@ class SettingsMenuTest {
     @Test
     fun theS1sSectionsInOrder() {
         assertEquals(listOf("dashboard", "screen", "voice", "sendspin", "radio", "log", "about"), menu().map { it.id })
-        assertEquals(listOf("Dashboard", "Screen", "Voice", "Music", "Radio", "Log", "About"), menu().map { it.title })
+        assertEquals(listOf("Home Assistant & dashboard", "Screen", "Voice", "Music", "Radio", "Log", "About"), menu().map { it.title })
         assertEquals("Zigbee / Thread radio", menu().first { it.id == "radio" }.heading)
     }
 
@@ -125,7 +125,7 @@ class SettingsMenuTest {
     @Test
     fun theSectionsAsDrawn() {
         val m = menu().associate { it.id to titles(it.items) }
-        assertEquals(listOf("Home Assistant", "Full screen", "Zoom", "Secure hosts"), m["dashboard"])
+        assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts"), m["dashboard"])
         assertEquals(
             listOf(
                 "Wake when someone's near", "Presence range", "Turn off when idle", "At night", "At night, turn off after",
@@ -135,6 +135,21 @@ class SettingsMenuTest {
         )
         assertEquals(listOf("info", CoreSettings.LICENCES_TITLE), m["about"])
         assertEquals(listOf("info"), m["log"]) // the screen and sensor line moved here from About
+    }
+
+    @Test
+    fun theDashboardPageSaysWhoItIsSignedInAs() {
+        // Maintainer 2026-11-15: which Home Assistant account the dashboard uses, on the Home Assistant & dashboard page.
+        val core = CoreSettings(
+            KioskPrefs(RuntimeEnvironment.getApplication()), "0.4.3", status = { "" }, deviceSettings = null,
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { "Signed in as Alex" },
+        )
+        val page = core.sections().getValue(SettingsPlace.DASHBOARD)
+        assertEquals(CoreSettings.DASHBOARD_TITLE, page.title)
+        val row = page.items.filterIsInstance<SettingsItem.Info>().single()
+        assertEquals(CoreSettings.ACCOUNT_TITLE, row.title())
+        assertEquals("Signed in as Alex", row.detail())
+        assertEquals("not signed in on this test's panel", sh.edm.s1kiosk.auth.HaAuth.NOT_SIGNED_IN, sh.edm.s1kiosk.auth.HaAuth.account())
     }
 
     @Test

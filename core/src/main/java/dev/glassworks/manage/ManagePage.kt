@@ -16,4 +16,10 @@ interface ManagePage {
 
     /** Stops keeping the page's log. */
     fun stopLog()
+
+    /** What the page's Overview shows now; the panel's settings menu opens on the same Overview. */
+    fun status(): PanelStatus
+
+    /** The Overview's actions, the same on the page and in the panel's menu. */
+    val actions: PanelActions
 }

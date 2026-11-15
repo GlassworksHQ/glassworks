@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
+import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
 import dev.glassworks.frame.systemSettings
 import dev.glassworks.pane.PaneDefinition
@@ -13,6 +14,8 @@ import dev.glassworks.pane.settingsOrder
 import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.Licences
+import sh.edm.s1kiosk.auth.HaAuth
+import sh.edm.s1kiosk.frame.AqaraS1Plus
 
 /**
  * The panel's settings: the one model the menu ([KioskSettingsOverlay]) and the Manage page both draw
@@ -47,13 +50,17 @@ object S1Settings {
                 presenceRange = { runtime.screen.applyPresenceRange() },
                 brightness = { runtime.screen.refreshBrightness() },
             ),
+            account = HaAuth::account,
         )
         // One pane's failure leaves the others' pages.
         val sections = panes.flatMap { d ->
             runCatching { paneSections(listOf(d), blueprints, runtime::runningPane) }.onFailure { Log.w(TAG, "${d.id}'s settings failed", it) }.getOrDefault(emptyList())
         }
-        return KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), version, sections.map { it.id }.toSet())
+        return KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), version, sections.map { it.id }.toSet(), frameName(runtime))
     }
+
+    /** The frame's name in words: "S1 Plus", or the device's ("Google Pixel Tablet"). */
+    fun frameName(runtime: Glassworks): String = if (runtime.frame is AqaraS1Plus) "S1 Plus" else runtime.frame.friendlyName()
 
     /** Whether [context]'s frame has its own settings app, for [model]. */
     fun hasDeviceSettings(runtime: Glassworks, context: Context): Boolean = runtime.frame.systemSettings(context) != null

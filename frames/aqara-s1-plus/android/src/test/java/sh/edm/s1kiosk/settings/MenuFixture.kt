@@ -42,12 +42,14 @@ object MenuFixture {
         live: CoreSettings.Live = CoreSettings.Live(),
         running: (String) -> Pane? = { null },
         blueprints: (String) -> SettingsItem.Blueprints? = { null },
+        account: String = "Signed in as Wall panel",
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
             deviceSettings = if (deviceSettings) SettingsItem.Link(SettingsMenu.AQARA_TITLE, SettingsMenu.AQARA_DETAIL) {} else null,
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             live = live,
+            account = { account },
         )
         val sections = paneSections(panes, blueprints, running)
         return KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), version, sections.map { it.id }.toSet())

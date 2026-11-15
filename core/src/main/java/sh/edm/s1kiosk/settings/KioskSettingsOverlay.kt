@@ -20,17 +20,17 @@ import android.widget.TextView
 import dev.glassworks.pane.BLUEPRINTS
 import dev.glassworks.pane.BlueprintAction
 import dev.glassworks.pane.BlueprintSurface
+import dev.glassworks.manage.PanelActions
+import dev.glassworks.manage.PanelStatus
+import dev.glassworks.manage.SettingsNav
+import dev.glassworks.manage.paneRow
+import dev.glassworks.manage.settingsNav
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
-import dev.glassworks.pane.chipWord
-import dev.glassworks.pane.ChipTone
-import dev.glassworks.pane.chipTone
-import dev.glassworks.pane.PaneState
 import dev.glassworks.pane.SettingsChange
 import dev.glassworks.pane.SettingsChange.couldNot
 import dev.glassworks.pane.SettingsChange.hhmm
 import dev.glassworks.pane.SettingsChange.parseRange
-import dev.glassworks.pane.paneState
 import sh.edm.s1kiosk.setup.Backdrop
 import sh.edm.s1kiosk.ui.Glass
 import sh.edm.s1kiosk.ui.Glass.Companion.AMBER
@@ -40,7 +40,6 @@ import sh.edm.s1kiosk.ui.Glass.Companion.MU
 import sh.edm.s1kiosk.ui.Glass.Companion.ROSE
 import sh.edm.s1kiosk.ui.Glass.Companion.TX
 import sh.edm.s1kiosk.ui.GlassSlider
-import sh.edm.s1kiosk.ui.GroupedRail
 import sh.edm.s1kiosk.ui.Inter
 import sh.edm.s1kiosk.ui.QrCode
 import sh.edm.s1kiosk.ui.StackView
@@ -48,16 +47,13 @@ import sh.edm.s1kiosk.ui.TileView
 import sh.edm.s1kiosk.ui.Wrap
 
 /**
- * The kiosk settings menu, as drawn in #63. Left: the mark, "Settings" and the rail ([GroupedRail], the
- * same as setup's): the core's Dashboard, Screen and Network, then a Panes group with each pane's
- * section, then Log, Security and About, in the order [Model.sections] has them
- * (dev.glassworks.pane.settingsOrder, #33's nav), and Done. A pane that can't run is greyed; panes that
- * are off fold under "Off · N" at the end of the group (#212). A pane's status dot follows its name, so
- * every name starts at the same x. Right: the section that is picked, in a glass card: a pane's on/off
- * at top right
- * ([SettingsSection.master]), then its rows, each a name with its value under it. A switch applies when
- * tapped, a slider when let go, a duration or a time window when picked, a typed value on Save. A change
- * that only takes effect at start shows #33's banner with Restart now.
+ * The kiosk settings menu, in the Manage page's layout (approved 2026-11-15). Left: the sidebar
+ * ([SettingsSidebar], from the same [settingsNav] as the Manage page's): Overview, Panel, Panes and System,
+ * and Done at the foot. Right: the page picked. The Overview ([OverviewPage]) is the Manage page's, from its
+ * [PanelStatus] and [PanelActions]; it is where the menu opens. A section's page has its title with the
+ * pane's on/off at top right ([SettingsSection.master]), then its rows. A switch applies when tapped, a
+ * slider when let go, a duration or a time window when picked, a typed value on Save. A change that only
+ * takes effect at start shows #33's banner with Restart now.
  *
  * A full-screen overlay in MainActivity's window, above the setup screen. Main thread only.
  */
@@ -66,9 +62,17 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     data class Model(
         val sections: List<SettingsSection>,
         val version: String,
-        /** The ids of the panes' sections: the rail's Panes group, and "Panes ›" before the heading. */
+        /** The ids of the panes' sections: the sidebar's Panes. */
         val panes: Set<String> = emptySet(),
+        /** The frame's name in words ("S1 Plus"), under "Settings". */
+        val frame: String = "",
     )
+
+    /** What the Overview shows and does: the Manage page's own ([dev.glassworks.manage.ManageHost]). */
+    class Overview(val status: () -> PanelStatus, val actions: PanelActions)
+
+    /** The Overview's source; without one the menu has no Overview and opens on its first section. */
+    var overview: Overview? = null
 
     /** "Restart now": a change waits for the app to start again. */
     var onRestart: (() -> Unit)? = null
@@ -90,51 +94,47 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     /** A change that needs a restart was made since the app started. */
     private var restartPending = false
 
-    /** Tighter than setup's: with the Panes group open the whole list fits above Done at 960x480 dp (#63 round 2). */
-    private val nav = GroupedRail(context).apply { rowDp = 35f; childDp = 30f; gapDp = 2f; onTap = { id -> select(id) } }
-    private val navScroll = ScrollView(context)
-    private val rail = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(px(8f), 0, 0, 0)
-            addView(StackView(context), LinearLayout.LayoutParams(px(22f), px(21f)).apply { marginEnd = px(13f) })
-            addView(g.heading(24f).apply { text = "Settings" })
-        }, LinearLayout.LayoutParams(-1, px(40f)))
-        addView(navScroll.apply {
-            isVerticalScrollBarEnabled = false
-            isVerticalFadingEdgeEnabled = true // with the Panes group open the rail can run past Done
-            setFadingEdgeLength(px(28f))
-            overScrollMode = View.OVER_SCROLL_NEVER
-            addView(nav, LayoutParams(-1, -2))
-        }, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = px(16f) })
-        addView(g.ghost("Done").apply { setPadding(0, px(12f), 0, px(12f)); setOnClickListener { hide() } },
-            LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
+    private val sidebar = SettingsSidebar(context).apply {
+        onTap = { id -> select(id) }
+        foot.addView(g.primary("Done").apply { setPadding(0, px(12f), 0, px(12f)); setOnClickListener { hide() } }, FrameLayout.LayoutParams(-1, -2))
     }
 
-    private val crumb = g.text(17f, FA).apply { text = "Panes ›" }
-    private val title = g.heading(28f).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
+    /** Wide screens get a wider sidebar: about a fifth of the width. */
+    private val sideWidth = (resources.configuration.screenWidthDp * 0.22f).coerceIn(200f, 300f)
+    /** A tall screen (a tablet) puts the Overview's tiles two to a row; the S1's 480 dp put them in one. */
+    private val overviewPage = OverviewPage(context, if (resources.configuration.screenHeightDp >= 600) 2 else 4).apply { onPane = { id -> select(id) } }
+
+    private val title = g.heading(32f).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
     /** The pane's on/off, at top right ([SettingsSection.master]). */
     private val masterSlot = FrameLayout(context)
     private val unavailable = g.text(15f, MU).apply { setLineSpacing(0f, 1.2f) }
     private val problem = g.text(15f, ROSE).apply { setLineSpacing(0f, 1.2f) }
     private val banner = Banner()
-    private val rows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    private val page = LinearLayout(context).apply {
+    /** The section's rows, in a card: the same padding on every side, nothing above the first row. */
+    private val rows = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(px(34f), px(26f), px(34f), px(24f))
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(crumb, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(12f) })
-            addView(title, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(masterSlot, LinearLayout.LayoutParams(-2, -2).apply { marginStart = px(16f) })
-        }, LinearLayout.LayoutParams(-1, -2))
-        addView(unavailable, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
-        addView(problem, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
-        addView(banner.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(16f) })
-        addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(14f) })
+        background = g.surface(dev.glassworks.brand.Tokens.R_TILE.toFloat())
+        val p = px(OverviewPage.CARD_PAD)
+        setPadding(px(OverviewPage.CARD_PAD + 4f), p, px(OverviewPage.CARD_PAD + 4f), p)
+    }
+    private val head = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(masterSlot, LinearLayout.LayoutParams(-2, -2).apply { marginStart = px(16f) })
+    }
+    /** A section's page: its head, what stands in its way, then its rows. */
+    private val sectionPage = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(head, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(6f) })
+        addView(unavailable, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
+        addView(problem, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
+        addView(banner.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
+        addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+    }
+    private val page = FrameLayout(context).apply {
+        val tall = resources.configuration.screenHeightDp >= 600
+        setPadding(px(if (tall) 36f else 28f), px(if (tall) 28f else 20f), px(if (tall) 36f else 28f), px(20f))
     }
     /** A page taller than the card fades at the edge it continues past, and shows its scroll bar (#63 D5). */
     private val scroll = ScrollView(context).apply {
@@ -164,21 +164,22 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         elevation = 24 * g.dp // above the setup screen (20 dp) and the voice overlay (16 dp)
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(px(36f), px(36f), px(35f), px(30f))
-            addView(rail, LinearLayout.LayoutParams(px(216f), -1).apply { marginEnd = px(22f) })
-            addView(FrameLayout(context).apply {
-                background = g.surface(34f)
-                addView(scroll, LayoutParams(-1, -1))
-            }, LinearLayout.LayoutParams(0, -1, 1f))
+            addView(sidebar.apply { setPadding(px(12f), px(18f), px(12f), px(14f)) }, LinearLayout.LayoutParams(px(sideWidth), -1))
+            addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(px(1f).coerceAtLeast(1), -1))
+            addView(scroll, LinearLayout.LayoutParams(0, -1, 1f))
         }, LayoutParams(-1, -1))
         addView(sheet.view, LayoutParams(-1, -1))
         visibility = View.GONE
     }
 
-    /** Shows the menu for [m], on the section it was on, else the first. Values are read again. */
+    /**
+     * Shows the menu for [m]. Opened, it starts on the Overview (the first section without one); shown
+     * again while open, it stays on its page. Values are read again.
+     */
     fun show(m: Model) {
         model = m
-        if (m.sections.none { it.id == current }) current = m.sections.firstOrNull()?.id
+        if (!isShowing) { overviewPage.reset(); if (overview != null) current = SettingsNav.OVERVIEW }
+        if (current != SettingsNav.OVERVIEW && m.sections.none { it.id == current }) current = firstPage(m)
         sheet.close()
         build()
         if (!isShowing) {
@@ -204,8 +205,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
     }
 
-    /** The rail fits without scrolling (tests). */
-    val railFits: Boolean get() = nav.height <= navScroll.height
+    /** The sidebar's list fits without scrolling (tests). */
+    val railFits: Boolean get() = sidebar.fits
+
+    private fun firstPage(m: Model): String? = if (overview != null) SettingsNav.OVERVIEW else m.sections.firstOrNull()?.id
 
     fun hide() {
         if (!isShowing) return
@@ -225,8 +228,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             val s = next.sections.firstOrNull { it.id == current }
             // The page changed under the person (a base mounted, the pane turned off from Home Assistant,
             // the device started): draw it again from the new model. Otherwise only its values move.
-            if (s == null || shape(s) != builtShape) {
-                if (s == null) current = next.sections.firstOrNull()?.id
+            if (current != SettingsNav.OVERVIEW && (s == null || shape(s) != builtShape)) {
+                if (s == null) current = firstPage(next)
                 // The same page drawn again stays where the person had scrolled it.
                 val y = if (s != null) scroll.scrollY else 0
                 build()
@@ -239,6 +242,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         live.forEach { it() }
         bindRail()
         bindMaster()
+        if (current == SettingsNav.OVERVIEW) bindOverview()
     }
 
     /** The shape the open page was drawn from ([shape]). */
@@ -318,9 +322,19 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     private fun build() {
         val m = model ?: return
         bindRail()
+        if (current == SettingsNav.OVERVIEW) {
+            showPage(overviewPage)
+            builtShape = emptyList()
+            masterSlot.removeAllViews(); masterToggle = null
+            rows.removeAllViews(); live.clear()
+            natives.values.forEach { n -> (n.view.parent as? ViewGroup)?.removeView(n.view); n.reset() }
+            bindOverview()
+            scroll.scrollTo(0, 0)
+            return
+        }
         val s = m.sections.firstOrNull { it.id == current } ?: return
+        showPage(sectionPage)
         builtShape = shape(s)
-        crumb.visibility = if (s.id in m.panes) View.VISIBLE else View.GONE
         title.text = s.heading
         val why = s.unavailable()
         unavailable.text = why?.let { "This pane can't run on this panel: $it." }
@@ -338,23 +352,22 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         scroll.scrollTo(0, 0)
     }
 
-    /** The rail: core sections on their own, the panes' under Panes; a pane that can't run is greyed, one that is off folds. */
+    private fun showPage(v: View) {
+        if (page.getChildAt(0) === v) return
+        page.removeAllViews()
+        page.addView(v, LayoutParams(-1, -2))
+    }
+
+    /** The sidebar, from the same [settingsNav] as the Manage page's: each pane's state from its section ([paneRow]). */
     private fun bindRail() {
         val m = model ?: return
-        nav.bind(m.sections.map { s ->
-            val pane = s.id in m.panes
-            // Every pane's state from paneState, as the Manage page's nav (#243): its chip after its name, Off
-            // folds (off wins over can't run), Can't run greys. Status colours mean status only.
-            val state = if (pane) paneState(s) else null
-            GroupedRail.Row(
-                s.id, s.title, group = if (pane) PANES else null,
-                dim = state?.kind == PaneState.Kind.CANT_RUN,
-                off = state?.kind == PaneState.Kind.OFF,
-                chip = state?.chipWord?.let { word ->
-                    GroupedRail.Chip(word, when (state.chipTone) { ChipTone.OK -> Glass.GREEN; ChipTone.PROBLEM -> ROSE; ChipTone.QUIET -> FA })
-                },
-            )
-        }, mapOf(PANES to "Panes"), current)
+        val panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }
+        sidebar.bind(settingsNav(m.sections, panes), current, overview != null, m.frame)
+    }
+
+    private fun bindOverview() {
+        val o = overview ?: return
+        runCatching { o.status() }.onSuccess { overviewPage.bind(it, o.actions) }
     }
 
     private var masterToggle: Glass.Toggle? = null
@@ -439,7 +452,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 is SettingsItem.Blueprints -> { rows.addView(blueprints(i), LinearLayout.LayoutParams(-1, -2)); continue }
                 else -> {}
             }
-            if (divided && under !is SettingsItem.Status && under !is SettingsItem.Tiles) {
+            if (divided && under != null && under !is SettingsItem.Status && under !is SettingsItem.Tiles) {
                 rows.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)))
             }
             rows.addView(item(i), LinearLayout.LayoutParams(-1, -2))
@@ -1079,7 +1092,6 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         const val REVEAL_MS = 60_000L
         const val RESTART_TEXT = SettingsChange.RESTART_TEXT
         const val OFF_BY_DEFAULT = SettingsChange.OFF_BY_DEFAULT
-        private const val PANES = "panes"
 
     }
 }
