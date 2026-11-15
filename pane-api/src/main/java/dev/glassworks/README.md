@@ -243,7 +243,7 @@ not an IANA id). The time zone pane offers it on its page.
 ### Entities that change, and events
 
 A pane's entity list may change while the panel runs. The wall base
-([`WallBasePane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt)) adds relays, buttons and power
+([`WallBasePane.kt`](../../../../../../frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt)) adds relays, buttons and power
 sensors when a switch base is mounted. The pane then calls `ctx.entitiesChanged()`. The core builds
 the device's list again from its own entities and every pane's `entities()`, and gives it to Home
 Assistant, which reconnects and lists the entities again. `entities()` must return the new list from

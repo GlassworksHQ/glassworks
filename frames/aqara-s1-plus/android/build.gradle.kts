@@ -109,6 +109,7 @@ dependencies {
     implementation(project(":pane-assist"))
     implementation(project(":pane-timers"))
     implementation(project(":pane-sendspin"))
+    implementation(project(":aqara-s1-plus-wall-base"))
     implementation(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy")) // the Bluetooth proxy pane's engine (#121)
