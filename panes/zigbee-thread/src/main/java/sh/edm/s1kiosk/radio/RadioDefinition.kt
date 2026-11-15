@@ -125,6 +125,9 @@ class RadioDefinition(
      */
     @Volatile var choosing = false
 
+    /** The Manage page's radio requests, one at a time as on the panel's card (#269). */
+    internal val twinGuard = RadioTwin.Guard()
+
     /**
      * Setup's radio step is being answered: from its Continue (or "Change the mode") until its
      * follow-up's Continue. The controller stores the mode before the helper answers, so without this the

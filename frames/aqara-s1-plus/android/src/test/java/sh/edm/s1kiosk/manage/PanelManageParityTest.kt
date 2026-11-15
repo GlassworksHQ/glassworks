@@ -25,6 +25,11 @@ import sh.edm.s1kiosk.auth.HttpPoster
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.frame.TimeZoneDefinition
+import sh.edm.s1kiosk.radio.RadioMode
+import sh.edm.s1kiosk.radio.ui.RadioFollowUp
+import sh.edm.s1kiosk.radio.ui.RadioStep
+import sh.edm.s1kiosk.radio.ui.RoleStyle
+import sh.edm.s1kiosk.radio.ui.RadioTwin
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
 import sh.edm.s1kiosk.settings.PaneFixtures
 import sh.edm.s1kiosk.settings.S1Settings
@@ -52,12 +57,15 @@ class PanelManageParityTest {
     private val panelOnly = emptyMap<String, String>()
 
     /**
-     * Twins whose panel view draws the same facts in its own words (#269), by section: the words test is
-     * skipped for their items, and the test named here checks the twin against the view's model instead.
+     * Words a twin says that its panel view says in its own way (#269), by section. Everything else in a twin
+     * must be on the panel's view, and everything its view shows must be in the twin, so a row either side
+     * drops fails here. The radio's view picks its role from tiles under a header; its twin is one Role row.
      */
-    private val ownWords = mapOf(
-        "radio" to "roles as tiles and a header, from RadioFollowUp.card, as the twin is (RadioTwinTest)",
-    )
+    private fun twinOwn(section: String, word: String): Boolean = section == "radio" &&
+        (word == RadioTwin.ROLE || RadioMode.entries.any { RadioStep.shortName(it) == word })
+
+    /** What a panel view draws that its twin leaves to its own rows, by section, each with why. */
+    private fun viewOwn(section: String, text: String): Boolean = section == "radio" && text in RADIO_VIEW_OWN
 
     /** Every item and its key, a native view's twin too: its items' keys are their titles, as if they sat in the section (#269). */
     private fun walk(items: List<SettingsItem>, prefix: String = "", f: (SettingsItem, String) -> Unit) = walkTwins(items, prefix) { i, k, _ -> f(i, k) }
@@ -90,10 +98,22 @@ class PanelManageParityTest {
         else -> listOf(SettingsChange.titleOf(i))
     }
 
+    /** The radio view's own words: everything else it draws must be in its twin (#269 verifier). */
+    private val RADIO_VIEW_OWN: Set<String> = setOf(
+        // The role picker's tiles (RadioTechPicker): the twin's Role row and its list of roles.
+        "Zigbee", "For ZHA or Zigbee2MQTT", "Coordinator", "Repeater β", "Thread", "For Matter over Thread", "Border router",
+        // The longer explanation, left out on purpose (RadioTwin).
+        "How does this work?  ›",
+    ) +
+        // How the role is doing, in the card's header and pill: the page's chip says it on the Manage page.
+        RadioMode.entries.map(RoleStyle::header) + RadioFollowUp.Health.entries.map { it.label }
+
     /** Every word a twin's items say, a group's items' too, with each tile's unit and line. */
     private fun twinWords(items: List<SettingsItem>): Set<String> = items.flatMap { i ->
         words(i) + when (i) {
             is SettingsItem.Group -> twinWords(i.items)
+            // Its list's names: the panel can show them all at once (the Zigbee stack's two).
+            is SettingsItem.Choice -> i.options().map { it.second }
             is SettingsItem.Tiles -> i.tiles().flatMap { listOf(it.unit, it.detail) }
             else -> emptyList()
         }
@@ -171,7 +191,7 @@ class PanelManageParityTest {
             }
             walkTwins(sec.items) { item, key, inTwin ->
                 for (w in words(item)) {
-                    if (!(inTwin && sec.id in ownWords)) assertTrue("${sec.id}: the panel shows \"$w\"", onPanel(w))
+                    if (!(inTwin && twinOwn(sec.id, w))) assertTrue("${sec.id}: the panel shows \"$w\"", onPanel(w))
                     assertTrue("${sec.id}: the Manage page shows \"$w\"", page.contains(esc(w)))
                 }
                 if (item is SettingsItem.Native) natives += sec.id
@@ -182,7 +202,8 @@ class PanelManageParityTest {
                     // the twin drops fails here.
                     val twin = twinWords(SettingsChange.twinOf(item))
                     val view = o.previewNative(item.key)?.view ?: error("${sec.id}: the panel drew no ${item.key}")
-                    for (t in shownTexts(view)) assertTrue("${sec.id}: the panel's view shows \"$t\", so its twin must have it ($twin)", t in twin)
+                    val missing = shownTexts(view).filter { it !in twin && !viewOwn(sec.id, it) }
+                    assertTrue("${sec.id}: the panel's view shows $missing, so its twin must have them too ($twin)", missing.isEmpty())
                 } else if (item is SettingsItem.Native) {
                     drawnOnlyThere += sec.id
                     assertTrue("${sec.id}: a native view (${item.key}) the Manage page can't draw yet must be listed in panelOnly", sec.id in panelOnly)
