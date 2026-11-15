@@ -18,8 +18,8 @@ export default function TrademarksPage() {
         <span className="label">Policy</span>
         <h1 className={s.h1}>Trademarks</h1>
         <p className={s.lede}>
-          The code is MPL-2.0: use it, change it, ship it. The name is
-          different. These rules keep &ldquo;Glassworks&rdquo; meaning the real
+          The code is MIT, and the Glassworks core (<code>dev.glassworks</code>)
+          is MPL-2.0: use it, change it, ship it. The name is different. These rules keep &ldquo;Glassworks&rdquo; meaning the real
           thing.
         </p>
       </header>

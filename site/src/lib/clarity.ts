@@ -185,7 +185,8 @@ const medianOf = (xs: (number | null | undefined)[]) => median(xs.filter((v): v 
  * its first frame and share of frames shown, in words. Null when no camera run was recorded.
  */
 function cameraNow(page: Page): string | null {
-  const runs = [...(page.camera?.runs ?? [])].sort((a, b) => (a.first_frame_ms ?? Infinity) - (b.first_frame_ms ?? Infinity));
+  const key = (r: CameraRun) => (r.timed_out ? Infinity : (r.first_frame_ms ?? Infinity));
+  const runs = [...(page.camera?.runs ?? [])].sort((a, b) => key(a) - key(b));
   if (!runs.length) return null;
   const r = runs[Math.floor(runs.length / 2)];
   if (r.timed_out) return "didn't finish";

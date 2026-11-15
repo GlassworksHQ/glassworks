@@ -152,7 +152,8 @@ export function StackStory() {
     if (!el) return;
     const span = el.offsetHeight - window.innerHeight;
     const mid = STEPS[0] + ((i + 0.5) / STEP_COUNT) * (STEPS[1] - STEPS[0]);
-    window.scrollTo({ top: el.offsetTop + span * mid, behavior: "smooth" });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: el.offsetTop + span * mid, behavior: reduce ? "instant" : "smooth" });
   };
 
   const e = ease(EXPLODE[0], EXPLODE[1], p); // 0 assembled → 1 exploded
@@ -221,7 +222,7 @@ export function StackStory() {
     <section ref={ref} className={s.story} aria-label="Glassworks, and how it's built">
       <div className={s.sticky}>
         <div className={s.text}>
-          <div className={s.hero} style={{ opacity: heroO, transform: `translateY(${-24 * (1 - heroO)}px)` }} aria-hidden={heroO < 0.5}>
+          <div className={s.hero} style={{ opacity: heroO, transform: `translateY(${-24 * (1 - heroO)}px)` }} inert={heroO < 0.5}>
             <span className="label">Open source · MPL-2.0</span>
             <h1 className={s.h1}>The open core for Home Assistant wall panels.</h1>
             <p className={s.lede}>
@@ -241,7 +242,7 @@ export function StackStory() {
             </span>
           </div>
 
-          <div className={s.steps} style={{ opacity: storyO }} aria-hidden={storyO < 0.5}>
+          <div className={s.steps} style={{ opacity: storyO }} inert={storyO < 0.5}>
             <span className="label">How it&rsquo;s built</span>
             <h2 className={s.h2}>A frame holds panes, and Kiln installs it.</h2>
             <ol className={s.list}>

@@ -117,6 +117,7 @@ for (const [out, w, h, html] of jobs) {
   await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false });
   await send("Page.navigate", { url: pathToFileURL(file).href });
   await sleep(900);
+  await send("Runtime.evaluate", { expression: "document.fonts.ready.then(() => true)", awaitPromise: true });
   const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: w, height: h, scale: 1 } });
   writeFileSync(join(root, out), Buffer.from(shot.result.data, "base64"));
   console.log(`  ${out}`);
