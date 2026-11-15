@@ -19,7 +19,7 @@ class PanelDeviceLifecycleTest {
 
     @Test fun aStartupThatRunsAfterStopStartsNothing() {
         val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
-        val device = PanelDevice(RuntimeEnvironment.getApplication(), runtime, onVoiceEvent = {})
+        val device = PanelDevice(RuntimeEnvironment.getApplication(), runtime, runtime::devicePanes)
         device.stop()
 
         device.startInternal()

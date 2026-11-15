@@ -78,7 +78,7 @@ class GenericFrameTest {
     private fun run(runtime: GlassworksRuntime): Pair<DeviceIdentity, PanelDevice> {
         val exec = ManualExecutor()
         val mdns = RecordingMdns()
-        val device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,
+        val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress())
         devices += device
         device.start()

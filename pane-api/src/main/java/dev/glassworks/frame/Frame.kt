@@ -76,8 +76,8 @@ interface Frame {
     fun paneDefinitions(context: Context): List<PaneDefinition> = emptyList()
 
     /**
-     * The panes only this device has, for its own hardware and settings. The shell builds them once per
-     * device run, next to its own, and runs them like any other. [device] is the shell's device thread.
+     * The panes only this device has, for its own hardware and settings. The app builds them once per
+     * device run, among its own, and the device runs them like any other. [device] is the device's thread.
      */
     fun panes(ctx: PaneContext, device: ScheduledExecutorService): List<Pane>
 }

@@ -26,6 +26,7 @@ import dev.glassworks.screen.ScreenPolicy
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.discovery.HaDiscovery
+import sh.edm.s1kiosk.esphome.DeviceHost
 import sh.edm.s1kiosk.esphome.PanelDevice
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.manage.S1Manage
@@ -38,6 +39,7 @@ import sh.edm.s1kiosk.setup.SetupState
 import sh.edm.s1kiosk.update.UpdateManager
 import sh.edm.s1kiosk.voice.AssistDefinition
 import sh.edm.s1kiosk.voice.OrbBakes
+import sh.edm.s1kiosk.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceUi
 import java.util.concurrent.Executors
 
@@ -173,6 +175,25 @@ class GlassworksRuntime(
 
     override fun managePage(context: Context, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
         S1Manage(context, this, signIn, tokens, prefs)
+
+    override val mainActivity = MainActivity::class.java
+
+    override fun paneFile(context: Context, namespace: String) = PanePrefs.file(context, namespace)
+
+    /** The S1 app's panes for the panel's device ([PanelDevice]), in order. */
+    fun devicePanes(host: DeviceHost): List<Pane> = S1Panes.forDevice(this, host)
+
+    /** A voice event from the assistant (main thread): the voice overlay, the voice state and the screen follow it. */
+    fun onVoiceEvent(e: VoiceEvent) {
+        voiceUi = voiceUi.on(e)
+        try { onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("S1Kiosk.Voice", "voice overlay failed", t) }
+        if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return // texts only, no state change
+        voiceState = voiceUi.state
+        Log.i("S1Kiosk.Voice", "voice: $voiceState")
+        // Talking to the panel counts as activity: wake the screen and keep it on.
+        if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) screen.wake("voice")
+        screen.onStateChanged?.invoke()
+    }
 
     private companion object {
         const val TAG = "S1Kiosk"

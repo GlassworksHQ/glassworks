@@ -25,7 +25,7 @@ class PanelDeviceScreenBrightnessTest {
     @Test fun autoBrightnessBackOnBeforeALightReadingDoesNotReportTheSavedManualValue() {
         val app = RuntimeEnvironment.getApplication()
         val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
-        val device = PanelDevice(app, runtime, onVoiceEvent = {})
+        val device = PanelDevice(app, runtime, runtime::devicePanes)
         try {
             device.initEntities(
                 DeviceIdentity(

@@ -1,7 +1,7 @@
 package sh.edm.s1kiosk.voice
 
 /** Tiny log facade: android.util.Log on the device, stdout in JVM unit tests. */
-internal object VoiceLog {
+object VoiceLog {
     private const val TAG = "S1Voice"
     private val onAndroid = System.getProperty("java.vendor")?.contains("Android") == true
 
@@ -11,4 +11,4 @@ internal object VoiceLog {
         if (onAndroid) { android.util.Log.w(TAG, msg, t); Unit } else println("W/$TAG: $msg ${t ?: ""}")
 }
 
-internal fun nowMs(): Long = System.nanoTime() / 1_000_000L
+fun nowMs(): Long = System.nanoTime() / 1_000_000L

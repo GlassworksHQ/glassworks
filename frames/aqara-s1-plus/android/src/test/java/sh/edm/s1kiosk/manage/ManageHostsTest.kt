@@ -48,7 +48,7 @@ class ManageHostsTest {
         panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
         panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
         val exec = ManualExecutor()
-        return PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = RecordingMdns(), apiPort = 0,
+        return PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = RecordingMdns(), apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress()).also { it.start(); exec.runDue(); runtime.device = it }
     }
 

@@ -26,7 +26,8 @@ class PanelDeviceEntitiesChangedTest {
         val app = RuntimeEnvironment.getApplication()
         PanePrefs(app).wallBase.layout = ""
         PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
-        val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), onVoiceEvent = {})
+        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        val device = PanelDevice(app, runtime, runtime::devicePanes)
         try {
             device.initEntities(
                 DeviceIdentity(

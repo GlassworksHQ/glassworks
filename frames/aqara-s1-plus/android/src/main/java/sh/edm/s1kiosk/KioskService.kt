@@ -25,7 +25,6 @@ import sh.edm.s1kiosk.improv.ImprovController
 import sh.edm.s1kiosk.improv.ImprovSerialServer
 import sh.edm.s1kiosk.manage.CodeOverlay
 import sh.edm.s1kiosk.setup.SetupChannelServer
-import sh.edm.s1kiosk.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceUi
 
 /**
@@ -78,7 +77,7 @@ class KioskService : Service() {
         discovery = d
         glassworks.discovery = d
         d.start()
-        device = PanelDevice(this, runtime, { e -> main.post { onVoiceEvent(e) } }, d::onApiHello).also {
+        device = PanelDevice(this, runtime, runtime::devicePanes, d::onApiHello).also {
             it.start()
             runtime.device = it
         }
@@ -87,17 +86,6 @@ class KioskService : Service() {
         ImprovSerialServer.start(glassworks.frame, glassworks.build)
         SetupChannelServer.start(this, glassworks)
         Log.i("S1Kiosk", "KioskService started")
-    }
-
-    private fun onVoiceEvent(e: VoiceEvent) {
-        runtime.voiceUi = runtime.voiceUi.on(e)
-        try { glassworks.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("S1Kiosk.Voice", "voice overlay failed", t) }
-        if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return // texts only, no state change
-        glassworks.voiceState = runtime.voiceUi.state
-        Log.i("S1Kiosk.Voice", "voice: ${glassworks.voiceState}")
-        // Talking to the panel counts as activity: wake the screen and keep it on.
-        if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) glassworks.screen.wake("voice")
-        glassworks.screen.onStateChanged?.invoke()
     }
 
     override fun onDestroy() {

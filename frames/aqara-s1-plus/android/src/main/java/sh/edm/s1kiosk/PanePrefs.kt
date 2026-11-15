@@ -20,10 +20,7 @@ import sh.edm.s1kiosk.voice.VoicePrefs
 class PanePrefs(private val context: Context) {
 
     /** The file that holds the settings of the pane with id [namespace] ([dev.glassworks.pane.PaneContext.prefs]). */
-    fun paneFile(namespace: String): SharedPreferences = context.getSharedPreferences(
-        PANE_FILES[namespace] ?: throw IllegalArgumentException("No settings file for pane '$namespace'"),
-        Context.MODE_PRIVATE,
-    )
+    fun paneFile(namespace: String): SharedPreferences = file(context, namespace)
 
     val sendspin = SendspinPrefs(paneFile("sendspin"))
     val voice = VoicePrefs(paneFile("assist"))
@@ -36,6 +33,12 @@ class PanePrefs(private val context: Context) {
     val notifications = NotificationsPrefs(paneFile("notifications"))
 
     companion object {
+        /** The file that holds the settings of the pane with id [namespace]. */
+        fun file(context: Context, namespace: String): SharedPreferences = context.getSharedPreferences(
+            PANE_FILES[namespace] ?: throw IllegalArgumentException("No settings file for pane '$namespace'"),
+            Context.MODE_PRIVATE,
+        )
+
         /**
          * The settings file of each pane, by pane id. Every pane's settings stay in `kiosk.xml`, where
          * they were before panes: panels update in place, so no stored value may move.

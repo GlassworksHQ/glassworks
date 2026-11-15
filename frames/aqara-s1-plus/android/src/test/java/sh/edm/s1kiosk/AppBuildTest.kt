@@ -78,7 +78,7 @@ class AppBuildTest {
         panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
         val exec = ManualExecutor()
         val mdns = RecordingMdns()
-        val device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,
+        val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress()).also { stops += it::stop }
         device.start()
         exec.runDue()

@@ -19,12 +19,13 @@ class TestBuildLabelTest {
     /**
      * Every place that shows the app's version shows [AppBuild.shown], so a test build says so there too
      * (the Manage page, the settings' About). The raw versionName stays only where a version is compared or
-     * sent as a protocol field: updates, HA's DeviceInfo and version entity, Sendspin, Improv, user agents.
+     * sent as a protocol field: updates, HA's DeviceInfo and version entity, the camera's ONVIF identity, Sendspin, Improv,
+     * user agents.
      * A merge that brings `build.versionName` (or `BuildConfig.VERSION_NAME`) into a page fails here.
      */
     @Test fun pagesShowTheLabelNotTheRawVersion() {
         // The S1 app and the Glassworks core both, in every module: a core page must not read the raw version either.
-        val raw = setOf("KioskApp.kt", "update/UpdateManager.kt", "esphome/PanelDevice.kt", "sendspin/SendspinPlayer.kt",
+        val raw = setOf("KioskApp.kt", "update/UpdateManager.kt", "esphome/PanelDevice.kt", "S1Panes.kt", "sendspin/SendspinPlayer.kt",
             "improv/ImprovController.kt", "improv/ImprovSerialServer.kt", "improv/ImprovIdentity.kt", "radio/RadioPane.kt")
             .map { "sh/edm/s1kiosk/$it" }.toSet() +
             "dev/glassworks/pane/Blueprints.kt" // the release tag `v<versionName>` a blueprint's link points at, not a label

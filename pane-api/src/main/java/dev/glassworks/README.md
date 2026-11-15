@@ -221,6 +221,14 @@ reacts to `TimersChanged` and `TimerFinished`. The voice assistant
 ([`AssistPane.kt`](../../../../../../panes/assist/src/main/java/sh/edm/s1kiosk/voice/AssistPane.kt)) is the pane that raises those: it calls
 `ctx.emit(PanelEvent.TimerFinished(name))`, and `SpeakerClaimed` while it listens and talks.
 
+**Who builds the pane.** The app does, once per device run. The panel's device (`PanelDevice`) hands the
+app a `DeviceHost`: the pane context, the device's thread, the speaker's players and chime player, the
+panel's address, and hooks for its stop and for cancelling a voice run. The app builds its panes from it in
+the order they start and list their entities, the frame's own panes included (the S1's:
+[`S1Panes.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/S1Panes.kt)). The device drops
+the ones the frame can't run (`CantRun`), then starts, stops and lists the rest. A pane that needs
+something from the device takes it in its constructor; it never reaches for the device itself.
+
 Every pane also has a **`pane.json` and an `icon.svg`** in its folder, next to its `PaneDefinition` (or its
 `Pane`, for a pane without a definition of its own, like timers). They describe it to Kiln and glassworks.dev:
 `id`, `name`, `does` (one line), `requires` (hardware words), `status`, `frame` for a frame pane, and
@@ -490,7 +498,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `systemSettingsIntents()` | The device's own settings screens, best first. `Frame.systemSettings(context)` picks the first that resolves. |
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
-| `panes(ctx, device)` | The panes only this device has. The shell builds them with its own, once per device run, and runs them like any other. |
+| `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
 
 The app makes one frame at start, and `GlassworksRuntime` holds it. The device shell
 (`PanelDevice`) reads only these members; `PanelDeviceFrameTest` fails if it reaches past them.

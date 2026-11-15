@@ -49,7 +49,7 @@ class PanelDevicePaneSwitchesTest {
         switch("sendspin").on = false
         panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
         panePrefs.voice.wakeWord = "" // voice turned on here downloads no wake word model
-        device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = mdns,
+        device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = mdns,
             apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress())
         device.start()
         exec.runDue()
@@ -76,7 +76,7 @@ class PanelDevicePaneSwitchesTest {
         device.stop()
         set("diagnostics", false)
         val second = ManualExecutor()
-        device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = second, mdns = RecordingMdns(),
+        device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = second, mdns = RecordingMdns(),
             apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress())
         device.start()
         second.runDue()
@@ -101,7 +101,7 @@ class PanelDevicePaneSwitchesTest {
             val second = ManualExecutor()
             var once = true
             second.afterSchedule = { if (once) { once = false; switch("wall-base").on = false } }
-            device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = second, mdns = RecordingMdns(),
+            device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = second, mdns = RecordingMdns(),
                 apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress())
             device.start()
             second.runDue()
@@ -125,7 +125,7 @@ class PanelDevicePaneSwitchesTest {
         EspHomeLog.sink = EspHomeLog.Sink { level, tag, msg, t -> logged += msg; sink.log(level, tag, msg, t) }
         try {
             val second = ManualExecutor()
-            device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = second, mdns = RecordingMdns(),
+            device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = second, mdns = RecordingMdns(),
                 apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress())
             device.start()
             second.runDue()
