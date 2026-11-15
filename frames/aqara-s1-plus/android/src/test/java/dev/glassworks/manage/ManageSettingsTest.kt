@@ -246,7 +246,8 @@ class ManageSettingsTest {
         assertFalse("About has its own page under System", panel.contains("href=\"/about\""))
     }
 
-    @Test fun everyPaneHasItsChipAfterItsNameAndOffPanesFold() {
+    @Test fun everyPaneHasItsDotAfterItsNameAndOffPanesFold() {
+        // Maintainer 2026-11-15: the nav looks as the panel's sidebar does, a status dot at each pane's row end.
         f.statusFn = {
             f.status.copy(panes = listOf(
                 PaneRow("assist", "Voice", PaneState(PaneState.Kind.RUNNING, "Wake word"), null),
@@ -256,11 +257,11 @@ class ManageSettingsTest {
         }
         val page = signedIn().get("/").text()
         val nav = page.substringAfter("<aside class=\"side\">").substringBefore("</aside>")
-        assertTrue(nav.contains("<span class=\"nt\">Voice</span><span class=\"chip\" aria-label=\"status Running\"><i class=\"dot ok\"></i>Running</span>"))
-        assertTrue(nav.contains("<span class=\"nt\">Radio</span><span class=\"chip\" aria-label=\"status Problem\"><i class=\"dot bad\"></i>Problem</span>"))
+        assertTrue(nav.contains("<span class=\"nt\">Voice</span><i class=\"dot ok\" role=\"img\" aria-label=\"status Running\"></i></a>"))
+        assertTrue(nav.contains("<span class=\"nt\">Radio</span><i class=\"dot bad\" role=\"img\" aria-label=\"status Problem\"></i></a>"))
         val fold = nav.substringAfter("<details class=\"off\">")
         assertTrue(fold.startsWith("<summary>Off · 1</summary>"))
-        assertTrue(fold.contains("<span class=\"nt\">Music</span><span class=\"chip\" aria-label=\"status Off\"><i class=\"dot off\"></i>Off</span>"))
+        assertTrue(fold.contains("<span class=\"nt\">Music</span><i class=\"dot off\" role=\"img\" aria-label=\"status Off\"></i></a>"))
     }
 
     private fun esc(s: String) = dev.glassworks.web.PageShell.esc(s)

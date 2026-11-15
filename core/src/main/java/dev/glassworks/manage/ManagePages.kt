@@ -82,8 +82,9 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
     private fun nav(s: PanelStatus, current: String, viewer: Viewer): String {
         fun item(path: String, title: String, chip: String = "", grey: Boolean = false) =
             """<a class="ni${if (path == current) " on" else ""}${if (grey) " grey" else ""}" href="${esc(path)}"${if (path == current) " aria-current=\"page\"" else ""}><span class="nt">${esc(title)}</span>$chip</a>"""
-        fun pane(p: SettingsNav.Item) = item("/" + p.id, p.title, p.state?.let(::chip).orEmpty(), grey = p.state?.kind == PaneState.Kind.CANT_RUN)
-        // The panel's sidebar (settingsNav), with the Security page this surface adds; each pane's chip after its name (#243).
+        fun pane(p: SettingsNav.Item) = item("/" + p.id, p.title, p.state?.let(::navDot).orEmpty(), grey = p.state?.kind == PaneState.Kind.CANT_RUN)
+        // The panel's sidebar (settingsNav), with the Security page this surface adds; each pane's status dot at
+        // the row's end, as on the panel (maintainer 2026-11-15: one look).
         val n = settingsNav(s.sections, s.panes, OWN_PAGES)
         val panes = n.panes.joinToString("") { pane(it) } + if (n.off.isEmpty()) "" else
             """<details class="off"${if (n.off.any { "/" + it.id == current }) " open" else ""}><summary>Off · ${n.off.size}</summary>${n.off.joinToString("") { pane(it) }}</details>"""
@@ -119,10 +120,18 @@ ${foot(viewer)}"""
     private fun action(v: Viewer, path: String, label: String, cls: String = "pill") =
         """<form method="post" action="${esc(path)}">${csrf(v)}<button class="$cls" type="submit">${esc(label)}</button></form>"""
 
+    /** A pane's dot in the nav, in its status colour, as the panel's sidebar draws it; its word is for screen readers. */
+    private fun navDot(state: PaneState): String {
+        val label = state.chipWord ?: return ""
+        return """<i class="dot ${tone(state)}" role="img" aria-label="status ${esc(label)}"></i>"""
+    }
+
+    private fun tone(state: PaneState) = when (state.chipTone) { ChipTone.OK -> "ok"; ChipTone.PROBLEM -> "bad"; ChipTone.QUIET -> "off" }
+
     /** The pane's chip: its word ([chipWord]) and dot ([chipTone]), the same as the panel's rail (#243). */
     private fun chip(state: PaneState): String {
         val label = state.chipWord ?: return ""
-        val tone = when (state.chipTone) { ChipTone.OK -> "ok"; ChipTone.PROBLEM -> "bad"; ChipTone.QUIET -> "off" }
+        val tone = tone(state)
         return """<span class="chip" aria-label="status ${esc(label)}"><i class="dot $tone"></i>${esc(label)}</span>"""
     }
 
@@ -486,7 +495,7 @@ a.tile{text-decoration:none}a.tile:hover{background:var(--hover)}.tile small{col
 .grp .lh{border-bottom:1px solid var(--edge)}.grp:not(:first-child) .lh{padding-top:22px}
 .chip{display:inline-flex;align-items:center;gap:${Tokens.Chip.GAP}px;padding:${Tokens.Chip.PAD_V}px ${Tokens.Chip.PAD_END}px ${Tokens.Chip.PAD_V}px ${Tokens.Chip.PAD_START}px;border-radius:999px;border:1px solid var(--edge);background:var(--glass);font-size:${Tokens.Chip.TEXT}px;line-height:1.35;color:var(--muted);white-space:nowrap;flex:none}
 .chip .dot{width:${Tokens.Chip.DOT}px;height:${Tokens.Chip.DOT}px}
-.ni .nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ni .chip{margin-left:8px}
+.ni .nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ni .dot{margin-left:10px}
 details.off summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
 details.off summary::-webkit-details-marker{display:none}details.off summary::after{content:"›";font-size:18px;letter-spacing:0;transition:transform .15s}details.off[open] summary::after{transform:rotate(90deg)}
 .phr{display:flex;align-items:center;gap:14px;margin:0 0 6px}.phr .ph{flex:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
