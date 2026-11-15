@@ -198,35 +198,40 @@ class CameraSetupTest {
         assertFalse(r.def.prefs.onvif)
     }
 
-    @Test fun theSignInShowsTheUsernameAndThePasswordOnlyOnRequest() {
+    @Test fun theSignInShowsTheUsernameAndNeverThePassword() {
         val r = Rig(allowed = true)
         r.def.switch.on = true
         val section = paneSections(listOf(r.def)).single()
         val signIn = section.items.filterIsInstance<SettingsItem.Group>().single { it.title == "ONVIF stream" }.items
             .filterIsInstance<SettingsItem.SignIn>().single()
         assertFalse(signIn.isSet())
-        assertEquals(CameraPage.SIGN_IN_NOT_MADE, signIn.shown(false))
+        assertEquals(CameraPage.SIGN_IN_NOT_SET, signIn.shown(false))
+        assertEquals("the sheet starts with the usual user name", "glassworks", signIn.user())
         r.def.prefs.signIn = "glassworks" to "made-up-pass-1234"
         assertTrue(signIn.isSet())
         assertTrue(signIn.shown(true).startsWith("glassworks"))
         assertFalse(signIn.shown(true).contains("made-up-pass-1234"))
-        assertEquals("only Show reads it", "made-up-pass-1234", signIn.reveal())
+        val read = SettingsItem.SignIn::class.java.methods.filter { it.parameterCount == 0 && it.returnType == Function0::class.java }
+        assertTrue(read.size >= 2)
+        for (m in read) assertFalse("${m.name} never gives it", ((m.invoke(signIn) as () -> Any?)()).toString().contains("made-up-pass-1234"))
         // Editable, through the shared checks (#242): a new one saves, Clear removes it.
         var answer: String? = "none"
         dev.glassworks.pane.SettingsChange.signIn(signIn, "viewer", "made-up-new-5678") { answer = it }
         assertEquals(null, answer)
         assertEquals("viewer" to "made-up-new-5678", r.def.prefs.signIn)
+        dev.glassworks.pane.SettingsChange.signIn(signIn, "viewer2", "") { answer = it }
+        assertEquals("an empty password keeps the stored one", "viewer2" to "made-up-new-5678", r.def.prefs.signIn)
         dev.glassworks.pane.SettingsChange.clear(signIn) { answer = it }
         assertEquals(null, r.def.prefs.signIn)
         r.def.prefs.signIn = "glassworks" to "made-up-pass-1234"
 
-        // The Manage page draws the same item, and shows the username without the password until Show.
+        // The Manage page draws the same item, and shows the user name, never the password.
         val page = dev.glassworks.manage.ManagePages().section(
             dev.glassworks.manage.ManageFixture().status, dev.glassworks.manage.ManagePages.Viewer("someone", "csrf"),
             "/camera", "Camera", null, section,
         )
         assertTrue(page.contains("glassworks"))
-        assertFalse("never on the Manage page until Show", page.contains("made-up-pass-1234"))
+        assertFalse("never on the Manage page", page.contains("made-up-pass-1234"))
     }
 
     @Test fun theAddressIsReadOncePerPage() {

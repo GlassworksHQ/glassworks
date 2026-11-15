@@ -117,23 +117,22 @@ object SettingsChange {
     /**
      * Saves a sign-in's [user] and [password] after the checks a stream's sign-in needs (RTSP and ONVIF
      * put them in `user:password`): a name with no colon or spaces, a password, both within their length.
-     * An empty [password] keeps the one stored, so the name can change alone. The password is never in
-     * what [done] says.
+     * An empty [password] keeps the one stored, so the name can change alone; with none stored it is
+     * refused. The password is never in what [done] says.
      */
     fun signIn(item: SettingsItem.SignIn, user: String, password: String, done: (String?) -> Unit) {
         val u = user.trim()
-        val pass = password.ifEmpty { runCatching { item.reveal() }.getOrNull().orEmpty() }
         val problem = when {
             u.isEmpty() -> "Type a user name."
             u.length > USER_MAX -> "Use at most $USER_MAX characters for the user name."
             u.any { it == ':' || it.isWhitespace() || it.code < 0x20 } -> "A user name can't have a colon or spaces."
-            pass.isEmpty() -> "Type a password."
-            pass.length > PASSWORD_MAX -> "Use at most $PASSWORD_MAX characters for the password."
-            pass.any { it.code < 0x20 || it.code == 0x7f } -> "That password has characters a sign-in can't take."
+            password.isEmpty() && !runCatching { item.isSet() }.getOrDefault(false) -> "Type a password."
+            password.length > PASSWORD_MAX -> "Use at most $PASSWORD_MAX characters for the password."
+            password.any { it.code < 0x20 || it.code == 0x7f } -> "That password has characters a sign-in can't take."
             else -> null
         }
         if (problem != null) return done(problem)
-        try { item.save(u to pass, done) } catch (e: Throwable) { done(COULD_NOT_SIGN_IN) }
+        try { item.save(u to password.ifEmpty { null }, done) } catch (e: Throwable) { done(COULD_NOT_SIGN_IN) }
     }
 
     /** Clear: the sign-in is removed. */
@@ -188,6 +187,8 @@ object SettingsChange {
 
     /** A sign-in's save that threw: no exception text, which could hold what was typed. */
     const val COULD_NOT_SIGN_IN = "That sign-in didn't save."
+    /** A set sign-in's password field: the stored one never shows, so it takes a new one. */
+    const val NEW_PASSWORD = "Set a new password · leave empty to keep it"
 
     const val CANT_NOW = "This can't change now."
     const val CANT_HERE = "This can't be changed here."

@@ -42,6 +42,11 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **The camera stream's password is never shown again once saved.** The panel's settings and the
+  Manage page no longer have a Show button for it, and the panel no longer makes a password for you.
+  You type your own when you turn the stream on, so you know it for Home Assistant's ONVIF
+  integration, Frigate or Protect. To change it, type a new one; **Clear** removes it and closes the
+  stream until you set another.
 - **Generic Android: the launch screen shows the Glassworks mark instead of a plain app icon.** On
   Android 12 and newer, such as a tablet, the screen Android shows while the app starts is the
   Glassworks stack on the app's dark background, and it fades into the connecting screen. Where the
@@ -125,11 +130,8 @@ below as the release notes.
   wake its screen when someone walks up, using motion that ignores lights switching on, dusk and TV
   light; no image leaves the panel for that (*Presence only*). With *Presence + camera* you can also
   let Home Assistant take snapshots, and turn on an ONVIF and RTSP stream (ports 8554 and 8000) for
-  Home Assistant's ONVIF integration, Frigate or UniFi Protect. The first time you turn the stream
-  on, the panel makes its own sign-in: the username `glassworks` and a random password, never shared
-  between panels. You can change it on the panel and on the Manage page; the password shows only
-  when you press Show (on the Manage page, only after signing in with Home Assistant), and it hides
-  again after a minute or when the screen goes off. Everything is off until you turn it on, and
+  Home Assistant's ONVIF integration, Frigate or UniFi Protect. The stream needs a sign-in you
+  set yourself, on the panel or on the Manage page. Everything is off until you turn it on, and
   *Camera privacy* closes the camera. The camera has its own page in the panel's settings, with the
   panel's address and the stream's URLs, and a Camera step in setup that asks Android for the
   camera. Whenever images leave the panel, Android 12 and later show their own camera indicator, and

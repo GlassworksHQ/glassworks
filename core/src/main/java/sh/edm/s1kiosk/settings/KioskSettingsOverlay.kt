@@ -261,17 +261,6 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     /** The page's read-only rows ([SettingsItem.States]) that read their values again on [refresh]. */
     private val live = ArrayList<() -> Unit>()
 
-    /** What shows a revealed secret now (a sign-in's Show): each hides it when called. */
-    private val concealers = ArrayList<() -> Unit>()
-
-    /** Hides every revealed secret (the camera stream's password). */
-    fun conceal() = concealers.toList().forEach { it() }
-
-    /** The screen went off or on (MainActivity): off, nothing revealed stays for the next person. */
-    fun screenChanged(on: Boolean) {
-        if (!on) conceal()
-    }
-
     /** Previews (the mock-ups): a section's page, an open editor or picker, a native view, the restart banner. */
     fun previewSection(id: String) { current = id; build() }
     fun previewEdit(title: String, typed: String? = null) {
@@ -802,26 +791,13 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_DONE) { onSave?.invoke(); true } else false }
         }
         val field = edit()
-        /** A sign-in's password ([signIn]): empty until Show, emptied and hidden again when the sheet closes. */
+        /** A sign-in's new password ([signIn]): always empty when the sheet opens, emptied when it closes. */
         val password = edit()
-        /** Hides a password shown with Show: after [REVEAL_MS], when the screen goes off ([conceal]), or when the sheet closes. */
-        private val hideTimer = Runnable { concealShown() }
-        private val concealer: () -> Unit = { concealShown() }
-        /** The open sheet is a sign-in that is set: hidden again, its Show comes back. */
-        private var showable = false
-        private fun concealShown() {
-            hidePassword()
-            if (showable) showButton.visibility = View.VISIBLE
-        }
-        private fun hidePassword() {
-            removeCallbacks(hideTimer)
-            concealers.remove(concealer)
+        private fun clearPassword() {
             password.setText("")
             password.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             password.typeface = Inter.typeface(context, Inter.REGULAR, 18f) // the password type sets monospace
         }
-        /** Shows the stored password, on request only. */
-        private val showButton = g.plain("Show")
         private val passwordRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -868,8 +844,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             (field.parent as? android.view.ViewGroup)?.removeView(field)
             passwordRow.removeAllViews()
             (passwordRow.parent as? android.view.ViewGroup)?.removeView(passwordRow)
-            showable = false
-            hidePassword()
+            clearPassword()
             clearButton.visibility = View.GONE
             onClear = null
             body.removeAllViews()
@@ -926,8 +901,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
 
         /**
-         * A user name and a password, saved together after [SettingsChange.signIn]'s checks. While one is set:
-         * Show puts the stored password in its field, an empty field keeps it, and Clear removes it.
+         * A user name and a password, saved together after [SettingsChange.signIn]'s checks. The stored password
+         * never comes back: while one is set, the field takes a new one, an empty field keeps it, and Clear removes it.
          */
         fun signIn(i: SettingsItem.SignIn, after: () -> Unit) {
             val fields = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -936,21 +911,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             open(i.title, "", fields, "Save")
             fields.addView(field, LinearLayout.LayoutParams(-1, -2))
             passwordRow.addView(password, LinearLayout.LayoutParams(0, -2, 1f))
-            if (set) {
-                password.hint = "Password · leave empty to keep it"
-                showButton.visibility = View.VISIBLE
-                showable = true
-                showButton.setOnClickListener {
-                    password.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-                    password.typeface = Inter.typeface(context, Inter.REGULAR, 18f)
-                    password.setText(runCatching { i.reveal() }.getOrNull().orEmpty())
-                    showButton.visibility = View.GONE
-                    // Not for the next person at a hallway panel: hidden after a minute or when the screen goes off.
-                    concealers += concealer
-                    postDelayed(hideTimer, REVEAL_MS)
-                }
-                passwordRow.addView(showButton, LinearLayout.LayoutParams(-2, -2).apply { marginStart = px(6f) })
-            } else password.hint = "Password"
+            password.hint = if (set) SettingsChange.NEW_PASSWORD else "Password"
             fields.addView(passwordRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
             field.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             field.hint = "User name"
@@ -1068,15 +1029,13 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         fun close() {
             if (view.visibility != View.VISIBLE) return
             onSave = null
-            hidePassword()
+            clearPassword()
             hideKeyboard()
             view.visibility = View.GONE
         }
     }
 
     companion object {
-        /** How long a revealed secret stays shown without another tap. */
-        const val REVEAL_MS = 60_000L
         const val RESTART_TEXT = SettingsChange.RESTART_TEXT
         const val OFF_BY_DEFAULT = SettingsChange.OFF_BY_DEFAULT
         private const val PANES = "panes"

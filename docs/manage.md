@@ -40,11 +40,12 @@ the new value within a couple of seconds. The page doesn't follow the panel on i
 the sliders' included, are the ones from when it was drawn, so reload it to see a change made on the
 panel or in Home Assistant. Each change goes in the Log with who made it.
 
-A sign-in (a camera stream's user name and password, which the panel makes for you) says Set or Not
-set. Open it and press **Show** to read the password, to type it into Protect, Home Assistant's ONVIF
-integration or Frigate. Show needs a Home Assistant sign-in, and the Log records who looked, never the
-password. You can change the user name and password, or **Clear** them. Leave the password empty to
-keep it.
+A sign-in (a camera stream's user name and password) says Set or Not set. Its password is write-only:
+no page, on the panel or here, shows it again once it is saved. Open it to change the user name, to
+type a new password, or to **Clear** both. Leave the password empty to keep the stored one. Write the
+password down when you set it: Protect, Home Assistant's ONVIF integration and Frigate need it, and
+the panel can't give it back. Forgot it? Set a new one, and type the new one into those too. The Log
+records who set or cleared it, never the password.
 
 **Either sign-in can turn panes on and off**, as on the panel. A switch the panel asks about first,
 such as turning the radio off, asks the same question here, and nothing changes until you answer it.
@@ -123,11 +124,9 @@ manage a panel. Whether other users get a say is open (#124).
   also answer for Home Assistant and sign in as an administrator. This is a choice: most Home Assistant
   installs on a home network are `http://`, the panel's own dashboard sign-in crosses the same way, and
   the code on the panel is there for whoever would rather not.
-- **A camera password you show.** **Show** on a camera's sign-in sends its password to your browser
-  over the same plain HTTP, as the page sends everything else. Only a Home Assistant sign-in can ask,
-  and the Log records who did. To keep it off the network, read it on the panel's own screen instead.
-  The page with the password isn't cached, but a browser's Back button can still show it again from
-  memory: close the tab when you're done.
+- **A camera password you type here.** Setting a camera's password from this page sends it to the
+  panel over the same plain HTTP, as every form does. To keep it off the network, set it on the
+  panel's own screen instead. The panel never sends a stored password back.
 - **Nothing limits how often a signed-in browser changes settings.** Each change needs the session and
   its form token, and goes in the Log, but there is no rate limit on them: a signed-in browser (or
   someone holding its cookie) can change settings as fast as it likes.

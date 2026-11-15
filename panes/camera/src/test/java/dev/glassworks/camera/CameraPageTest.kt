@@ -30,7 +30,8 @@ class CameraPageTest {
         val snap = watching.copy(use = CameraUse.PRESENCE_AND_SNAPSHOTS, leaving = true)
         assertEquals("Camera in use · sending images to Home Assistant" to CameraPage.Tone.OK, status(snap))
         assertEquals("Now", CameraPage.tiles(snap, time)[2].value)
-        val stream = snap.copy(onvif = true, streaming = true, watchers = listOf("192.0.2.20", "192.0.2.25"))
+        assertEquals("the stream waits for a sign-in", CameraPage.NO_SIGN_IN to CameraPage.Tone.PROBLEM, status(snap.copy(onvif = true)))
+        val stream = snap.copy(onvif = true, signedIn = true, streaming = true, watchers = listOf("192.0.2.20", "192.0.2.25"))
         assertEquals("Camera in use · streaming to 2 viewers · images leave the panel", status(stream).first)
         assertEquals("192.0.2.20 · 192.0.2.25", CameraPage.watching(stream))
         assertEquals("Stream to 2 viewers", CameraPage.tiles(stream, time)[2].detail)
@@ -92,9 +93,9 @@ class CameraPageTest {
 
     @Test fun theSignInNeverShowsAndSaysHowToSetIt() {
         val made = "glassworks" to "made-up-pass-1234"
-        assertEquals("glassworks · password hidden", CameraPage.signIn(made))
+        assertEquals("glassworks · password set", CameraPage.signIn(made))
         assertFalse("the row never says the password", CameraPage.signIn(made).contains(made.second))
-        assertEquals(CameraPage.SIGN_IN_NOT_MADE, CameraPage.signIn(null))
+        assertEquals(CameraPage.SIGN_IN_NOT_SET, CameraPage.signIn(null))
         assertFalse("no repository path on the panel", CameraPage.signIn(null).contains("/"))
     }
 

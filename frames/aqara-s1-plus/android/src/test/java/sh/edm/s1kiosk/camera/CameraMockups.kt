@@ -220,18 +220,18 @@ class CameraMockups {
         shot("camera-01c-stream-needs-camera", menu(Rig().someoneWalksUp()), scrollTo = "Privacy", bottom = false)
         shot("camera-02-snapshots-sending", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS }.someoneWalksUp().stillLeft()))
         val streaming = Rig(watching = listOf("192.0.2.20", "192.0.2.25")) {
-            it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true; it.signIn = "glassworks" to "mXk7qEwR3hTz9cVa4nPd" // made up, in the generated shape
+            it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true; it.signIn = "glassworks" to "made-up-pass-1234"
         }.someoneWalksUp()
         shot("camera-03-onvif-streaming", menu(streaming))
         shot("camera-03b-onvif-addresses", menu(streaming), scrollTo = "Sign-in", bottom = false)
-        shot("camera-03c-sign-in-shown", menu(streaming), scrollTo = "Sign-in", bottom = false) { o ->
-            // The sign-in's sheet after Show (#242): hidden again after a minute, when the screen goes off or the sheet closes.
-            val row = Mockup.label(o, "glassworks · password hidden")
+        shot("camera-03c-sign-in-sheet", menu(streaming), scrollTo = "Sign-in", bottom = false) { o ->
+            // The sign-in's sheet: the password is write-only, so its field is empty and takes a new one.
+            val row = Mockup.label(o, "glassworks · password set")
             generateSequence(row as View) { it.parent as? View }.first { it.isClickable }.performClick()
             Mockup.idle()
-            Mockup.label(o, "Show").performClick()
         }
-        shot("camera-04-stream-off-sign-in-not-made", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS }.someoneWalksUp()), scrollTo = "Sign-in", bottom = false)
+        shot("camera-04-stream-off-sign-in-not-set", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS }.someoneWalksUp()), scrollTo = "Sign-in", bottom = false)
+        shot("camera-04b-stream-on-no-sign-in", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true }.someoneWalksUp()))
         shot("camera-05-privacy-on", menu(Rig { it.privacy = true }))
         shot("camera-05b-privacy-stream-refused", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.privacy = true }), scrollTo = "Privacy", bottom = false)
         shot("camera-06-not-allowed", menu(Rig(allowed = false)))
