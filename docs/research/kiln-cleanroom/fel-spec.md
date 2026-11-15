@@ -113,8 +113,10 @@ ARMv7-A/R (DDI 0406C), sections A5 and A8.
 
 Rules for a routine:
 - It is written to the scratch area with FEL writes and started with an execute at `0x21000`.
-- The boot ROM calls it in ARM state, Supervisor mode, with `lr` set to return into the ROM. It
-  must return with `bx lr`, and it must keep `sp` and `r4`..`r11` intact (the AAPCS).
+- The boot ROM calls it in ARM state, Supervisor mode, with `lr` set to return into the ROM. A
+  routine that completes must return with `bx lr`, keeping `sp` and `r4`..`r11` intact (the AAPCS).
+  The warm-reset routine is the exception: it never returns, it waits in its `WFI` loop until the
+  chip resets.
 - Parameters go in the uploaded bytes (e.g. literal words after the code). The host reads results
   back with a FEL read. Everything stays inside `0x21000`..`0x213ff`.
 - The fake boot ROM in the tests runs routines in a small interpreter,

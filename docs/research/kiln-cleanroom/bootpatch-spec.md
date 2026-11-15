@@ -198,9 +198,11 @@ the SHA-1 of all of `I`'s bytes, in lower-case hex.
      each listed name (that exact entry, not what is under it), then put the restored entries back,
      replacing what is there.
 
-   Kiln's overlay files from the earlier patch were never listed, so they survive this step. The
-   repatch vectors show the result: patching a patched image gives the same image as patching the
-   stock one.
+   Kiln's overlay files from the earlier patch were never listed, so they survive this step. So
+   patching a patched image with **the same overlay files** gives the same image as patching the
+   stock one, which the repatch vectors check. With different overlay files the results differ: a
+   file the earlier patch added and the new overlay omits stays in the ramdisk. The CLI does the
+   same, and the golden case `repatch-noanim-from-anim` pins it on the real image.
 3. **Config values.**
    - SHA1: from the old config if there was one (the first line starting `SHA1=`, CR stripped, value
      after `=`, maybe empty), else `S`.
