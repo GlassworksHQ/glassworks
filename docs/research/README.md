@@ -227,6 +227,7 @@ This page is the index of every note. Notes about one device live with its frame
 | [camera-presence.md](camera-presence.md) | Which detector wakes the screen from a camera: ML Kit and a person model weighed, then the maintainer's lighting-insensitive motion detector chosen (#117) |
 | [onvif-rtsp.md](onvif-rtsp.md) | What HA's ONVIF integration and UniFi Protect need from a camera, the libraries weighed, the maintainer's tested RTSP and ONVIF server that Glassworks ports, and HA's pull loop on a refused sign-in, with a lab to rerun it (#117) |
 | [kiln-gpl-code.md](kiln-gpl-code.md) | Which code in Kiln's MIT page comes from GPL projects: sunxi-tools in `kiln/packages/fel`, Magisk in `kiln/packages/bootpatch`, checked word by word and against the live site, with the options (open, a maintainer decision) |
+| [kiln-cleanroom/](kiln-cleanroom/README.md) | The clean-room rewrite of Kiln's GPL-derived FEL and boot patch code (#355): the rules, a behaviour spec for each package, and the black-box test vectors |
 | [pane-blueprints.md](pane-blueprints.md) | How a pane's blueprints reach Home Assistant without the panel writing to it: HA's admin-only blueprint API, the import and list links, the name an import gets, and HA's own check of the four blueprints, with a script to rerun it |
 | [legacy-engine.md](legacy-engine.md) | The frozen GeckoView 144 on Android 6–7 (API 23–25): what runs, the API diff against 159, APK size per ABI, and the lockdown to the panel's Home Assistant, verified on emulators (#198) |
 

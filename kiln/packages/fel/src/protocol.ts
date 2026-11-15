@@ -2,6 +2,9 @@
 // chip. Each is a port of sunxi-tools (fel_lib.c, fel.c, thunks/fel-to-spl-thunk.h); the comments
 // say where from, so they can be checked word for word.
 import type { SwapBuffer } from './a133';
+import { FEL_TO_SPL_THUNK } from './thunk';
+
+export { FEL_TO_SPL_THUNK };
 
 export const AW_USB_READ = 0x11;
 export const AW_USB_WRITE = 0x12;
@@ -106,18 +109,6 @@ export const STACKINFO_CODE = words([
 ]);
 export const STACKINFO_RESULT_OFFSET = 0x24;
 
-/** thunks/fel-to-spl-thunk.h: swap buffers, verify the eGON checksum, run the SPL, swap back. */
-export const FEL_TO_SPL_THUNK: readonly number[] = [
-  0xea000015, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-  0xffffffff, 0xe1a00000, 0xe28f40e8, 0xe4940004, 0xe4941004, 0xe4946004, 0xe3560000, 0x012fff1e,
-  0xe5902000, 0xe5913000, 0xe2566004, 0xe4812004, 0xe4803004, 0x1afffff9, 0xeafffff3, 0xe59f80b0,
-  0xe24f0044, 0xe520d004, 0xe1a0d000, 0xe10f2000, 0xe92d4004, 0xe38220c0, 0xe121f002, 0xee112f10,
-  0xe3120004, 0x03120a01, 0x1a000013, 0xebffffe5, 0xe59f706c, 0xe1a00008, 0xe5905010, 0xe4902004,
-  0xe2555004, 0xe0877002, 0x1afffffb, 0xe598200c, 0xe0577082, 0x1a00000b, 0xe59f2048, 0xe5882008,
-  0xee072f9a, 0xee102f10, 0xe202280f, 0xe3520806, 0xce072f95, 0xe12fff38, 0xea000004, 0xe59f2028,
-  0xe5882008, 0xea000002, 0xe59f2020, 0xe5882008, 0xebffffcc, 0xe8bd4004, 0xe121f002, 0xe59dd000,
-  0xe12fff1e, 0x5f0a6c39, 0x4c45462e, 0x3f3f3f2e, 0x4441422e,
-];
 
 /** Thunk + spl_addr + the swap table including its zero terminator (fel.c). */
 export function splThunk(splAddr: number, swaps: readonly SwapBuffer[]): Uint8Array {

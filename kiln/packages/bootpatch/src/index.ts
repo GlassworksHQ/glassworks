@@ -4,7 +4,8 @@
 import { describeBootImage, findBytes, parseBootImage, repackBootImage, sha1Hex } from './bootimg';
 import { loadCompressor } from './compress';
 import { CPIO_MAGISK, Cpio } from './cpio';
-import { checkBinaryPatches, extractMagiskPayload, magiskPatchRamdisk } from './magisk';
+import { extractMagiskPayload, type MagiskBinaries } from './apk';
+import { checkBinaryPatches, magiskPatchRamdisk } from './magisk';
 
 export interface OverlayFile { path: string; mode: number; data: Uint8Array }  // e.g. 'overlay.d/sbin/x', 0o700
 export interface PatchInput {
@@ -19,7 +20,7 @@ export { vbmetaFlags, withVbmetaFlags } from './vbmeta';
 export { readBootlogo, replaceBootlogo } from './bootlogo';
 export { s1Overlay, type S1OverlayInputs } from './overlay';
 export { loadCompressor } from './compress';
-export { zipEntries, type ZipEntry } from './magisk';
+export { zipEntries, type ZipEntry, type MagiskBinaries } from './apk';
 
 function unpackRamdisk(boot: ReturnType<typeof parseBootImage>, gunzip: (d: Uint8Array) => Uint8Array, unxz: (d: Uint8Array) => Uint8Array | null): Uint8Array {
   switch (boot.ramdiskFormat) {
@@ -34,6 +35,14 @@ function unpackRamdisk(boot: ReturnType<typeof parseBootImage>, gunzip: (d: Uint
   }
 }
 
+/** patchBoot with the Magisk binaries already taken out of the APK (the vectors use synthetic ones). */
+export interface PatchImageInput {
+  boot: Uint8Array;
+  magisk: MagiskBinaries;
+  overlay: OverlayFile[];
+  preinitDevice?: string;         // default 'cache'
+}
+
 /**
  * Magisk v31.1 boot_patch.sh (KEEPVERITY=true KEEPFORCEENCRYPT=true, PREINITDEVICE) followed by the
  * wrapper's overlay pass, in one in-memory cpio and one repack (equivalent: the cpio is canonical).
@@ -41,6 +50,11 @@ function unpackRamdisk(boot: ReturnType<typeof parseBootImage>, gunzip: (d: Uint
  * and PREINITDEVICE win over `preinitDevice` (as in the CLI).
  */
 export async function patchBoot(input: PatchInput): Promise<PatchResult> {
+  const magisk = await extractMagiskPayload(input.magiskApk, await loadCompressor());
+  return patchBootImage({ boot: input.boot, magisk, overlay: input.overlay, preinitDevice: input.preinitDevice });
+}
+
+export async function patchBootImage(input: PatchImageInput): Promise<PatchResult> {
   const log: string[] = [];
   const say = (s: string) => log.push(s);
   const comp = await loadCompressor();
@@ -50,8 +64,7 @@ export async function patchBoot(input: PatchInput): Promise<PatchResult> {
   describeBootImage(boot).forEach(say);
   const cpio = Cpio.load(unpackRamdisk(boot, comp.gunzip, comp.unxz), say);
 
-  const payload = await extractMagiskPayload(input.magiskApk, comp);
-  const { status, config } = magiskPatchRamdisk(cpio, payload, {
+  const { status, config } = magiskPatchRamdisk(cpio, input.magisk, {
     bootSha1: await sha1Hex(input.boot),
     preinitDevice: input.preinitDevice ?? 'cache',
   }, comp, say);

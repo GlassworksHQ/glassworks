@@ -119,6 +119,10 @@ function load(): Source[] {
   for (const slug of md("docs/research", ["README.md", "TEMPLATE.md"])) {
     add({ file: `docs/research/${slug}.md`, url: `/docs/notes/${slug}`, section: "notes" });
   }
+  add({ file: "docs/research/kiln-cleanroom/README.md", url: "/docs/notes/kiln-cleanroom", section: "notes", label: "Kiln clean-room rewrite" });
+  for (const slug of ["fel-spec", "bootpatch-spec"]) {
+    add({ file: `docs/research/kiln-cleanroom/${slug}.md`, url: `/docs/notes/kiln-cleanroom/${slug}`, section: "notes" });
+  }
   add({ file: "docs/onboarding.md", url: "/docs/notes/onboarding", section: "notes" });
   return out;
 }
