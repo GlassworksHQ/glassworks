@@ -118,6 +118,31 @@ class VoiceEngineSwitchTest {
         assertEquals(0f, levels.last())
     }
 
+    /** A level, and the thread that reported it. */
+    private data class Level(val value: Float, val thread: String)
+
+    /**
+     * Muting or stopping closes the microphone, so no frame brings the level down: the engine reports 0
+     * itself (CodeRabbit on #362). The thread tells that reset apart from a silent frame, which also reads 0.
+     */
+    @Test
+    fun mutingOrStoppingTheMicrophoneReportsTheLevelDown() {
+        val e = engine()
+        eventually("Hey Jarvis loaded") { phraseHeard() == "Hey Jarvis" } // the run is starting: frames stream
+        val levels = CopyOnWriteArrayList<Level>()
+        e.onMicLevel = { levels += Level(it, Thread.currentThread().name) }
+        val loud = ShortArray(1280) { (3277 * kotlin.math.sin(2 * Math.PI * 440 * it / 16_000.0)).toInt().toShort() }
+        e.onMicFrame(loud)
+        assertTrue("a level above 0", levels.single().value > 0.5f)
+        e.setMuted(false)
+        e.setMuted(true)
+        eventually("muting reports 0 from the engine's thread") { levels.any { it == Level(0f, "voice-main") } }
+        e.onMicFrame(loud)
+        levels.clear()
+        e.stop()
+        assertEquals(listOf(Level(0f, Thread.currentThread().name)), levels.toList())
+    }
+
     @Test
     fun aWordThatFailsToLoadStopsTheOldOneAndSaysWhy() {
         nabuFails = true

@@ -100,6 +100,34 @@ class Owners(unittest.TestCase):
         self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.frame.TimeZoneKeeper", PARTS), ("pane", "time-zone"))
         self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.esphome.PanelDevice", PARTS), ("core", None))
 
+    def test_the_voice_package_is_split_between_the_assist_pane_and_the_core(self):
+        """#352: sh.edm.s1kiosk.voice has classes in panes/assist and in core. Each counts for its module, so a
+        class added to the pane must be listed in parts.json, and the core's players stay the core's."""
+        decl = re.compile(r"^(?:(?:public|internal|data|sealed|enum|abstract|open|fun|annotation)\s+)*(?:class|object|interface)\s+(\w+)", re.M)
+        top_level = re.compile(r"^(?:(?:private|internal|public)\s+)?(?:fun|val|var|const val)\s", re.M)
+
+        def classes(module):
+            d = os.path.join(ROOT, module, "src/main/java/sh/edm/s1kiosk/voice")
+            out = set()
+            for f in sorted(os.listdir(d)):
+                if f.endswith(".kt"):
+                    text = open(os.path.join(d, f), encoding="utf-8").read()
+                    out |= set(decl.findall(text))
+                    if top_level.search(text):
+                        out.add(f[:-3] + "Kt")  # Kotlin's class for a file's top-level functions
+            return out
+
+        pane, core = classes("panes/assist"), classes("core")
+        self.assertGreaterEqual(len(pane), 10, pane)
+        self.assertGreaterEqual(len(core), 5, core)
+        for name in sorted(pane):
+            self.assertEqual(A.owner_of_class(f"sh.edm.s1kiosk.voice.{name}", PARTS), ("pane", "assist"), name)
+            self.assertEqual(A.owner_of_class(f"sh.edm.s1kiosk.voice.{name}$1", PARTS), ("pane", "assist"), name)
+        for name in sorted(core):
+            self.assertEqual(A.owner_of_class(f"sh.edm.s1kiosk.voice.{name}", PARTS), ("core", None), name)
+        self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.esphome.UrlPlayer", PARTS), ("core", None))
+        self.assertEqual(PARTS["libraries"]["media3"]["used_by"], ["core", "engine"])
+
     def test_a_pane_with_no_code_is_noted(self):
         self.assertIn("radio", self.b["panes_without_code"])
         self.assertNotIn("assist", self.b["panes_without_code"])
