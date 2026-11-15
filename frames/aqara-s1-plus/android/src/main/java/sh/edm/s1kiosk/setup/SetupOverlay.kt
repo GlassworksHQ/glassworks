@@ -591,8 +591,8 @@ class SetupOverlay(
         primary.setOnClickListener { advance() }
     }
 
-    /** How long Continue on Panes waits for every card in all ([BUDGET_MS]; tests shorten it). */
-    internal var panesBudgetMs = BUDGET_MS
+    /** How long Continue on Panes waits for every card in all ([BUDGET_MS]; tests shorten it). Public for tests. */
+    var panesBudgetMs = BUDGET_MS
 
     /** "Add it by hand" was tapped on the Home Assistant step that is done. */
     private var manualShown = false
