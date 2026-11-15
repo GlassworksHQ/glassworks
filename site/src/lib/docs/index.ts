@@ -78,7 +78,12 @@ async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
     const full = SOURCES.find((o) => o.file === s.file && !o.cut);
     const link = (href: string): Link => {
       const site = href.match(/^https?:\/\/(?:www\.)?glassworks\.dev(\/[^#]*)?(#.*)?$/);
-      if (site) return { href: (site[1] || "/") + (site[2] ?? ""), kind: "site" };
+      if (site) {
+        // a full glassworks.dev link to a doc: its #anchor is checked like a relative one's
+        const [url, hash] = [site[1] || "/", site[2]?.slice(1)];
+        if (hash && BUILDING && ids.has(url) && !ids.get(url)!.has(decodeURIComponent(hash))) errors.push(`${s.file}: ${href}: ${url} has no #${hash}`);
+        return { href: url + (site[2] ?? ""), kind: "site" };
+      }
       if (/^(https?:)?\/\//.test(href)) return { href, kind: "external" };
       if (/^(mailto|tel):/.test(href)) return { href, kind: "site" };
       if (href.startsWith("#")) {

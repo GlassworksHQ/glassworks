@@ -16,6 +16,7 @@ type Sub = { title: string; url: string; excerpt: string };
 type Data = { url: string; excerpt: string; meta: { title?: string; section?: string }; sub_results: Sub[] };
 type Pagefind = {
   options: (o: { baseUrl: string }) => Promise<void>;
+  destroy: () => Promise<void>;
   search: (q: string) => Promise<{ results: { data: () => Promise<Data> }[] } | null>;
 };
 type Hit = { title: string; url: string; excerpt: string; where?: string };
@@ -111,6 +112,16 @@ export function SearchDialog() {
     document.getElementById(`search-hit-${at}`)?.scrollIntoView({ block: "nearest" });
   }, [at, results]);
 
+  /* Pagefind keeps a failed start for good: a retry needs a fresh instance, and destroy() also
+     drops its options */
+  const retry = async () => {
+    try {
+      await pf.current?.destroy();
+      await pf.current?.options({ baseUrl: "/" });
+    } catch {}
+    setAttempt((n) => n + 1);
+  };
+
   const current = results.q === q && !("failed" in results) ? results.groups : [];
   const failed = results.q === q && "failed" in results;
   const flat = current.flatMap((g) => g.hits);
@@ -168,7 +179,7 @@ export function SearchDialog() {
           {failed && (
             <p className={s.note}>
               Search failed.{" "}
-              <button type="button" className={s.retry} onClick={() => setAttempt((n) => n + 1)}>
+              <button type="button" className={s.retry} onClick={retry}>
                 Try again
               </button>
             </p>
