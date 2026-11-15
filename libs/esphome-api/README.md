@@ -211,7 +211,7 @@ entity types marked Supported or Partial are exactly the ones the server lists.
 | Deep sleep flag | `has_deep_sleep` | Not planned: a microcontroller power mode | | |
 | Device capabilities | `DeviceCapabilitiesResponse` (149, 150) | Partial: voice and Sendspin blocks only | 0.1.0 | No `bluetooth_proxy` block. The proxy flags go in DeviceInfo, which HA still reads ([#337](https://github.com/GlassworksHQ/glassworks/issues/337)) |
 | Time from Home Assistant | `GetTimeRequest`, `GetTimeResponse` (36, 37) | Partial: the time zone only | 0.1.0 | `onTimeZone` gets the `timezone` string, which ESPHome deprecated in 2026.9 for `parsed_timezone` ([#337](https://github.com/GlassworksHQ/glassworks/issues/337)). The epoch is ignored: Android keeps its own clock |
-| mDNS discovery | `_esphomelib._tcp`, TXT `friendly_name`, `version`, `mac`, `network`, `board`, `api_encryption`, `api_encryption_supported`, `api_provisioning` | Supported (android) | Unreleased (esphome-api-android 0.1.0) | `EspHomeMdns`. Without Android, advertise it yourself ([Use](#use)) |
+| mDNS discovery | `_esphomelib._tcp`, TXT `friendly_name`, `version`, `mac`, `network`, `board`, `api_encryption`, `api_encryption_supported`, `api_provisioning` | Supported (android) | esphome-api-android 0.1.0 | `EspHomeMdns`. Without Android, advertise it yourself ([Use](#use)) |
 | Firmware mDNS records | TXT `platform`, `config_hash`, `ota_signed`, `package_import_url` | Not planned: they describe an ESPHome firmware build (chip, YAML hash, signed OTA, dashboard import) | | |
 
 ### Entities
@@ -296,13 +296,12 @@ not planned. They aren't counted above.
 
 ## Gradle
 
-On Maven Central as `dev.glassworks:esphome-api` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is
-not out yet: until it is, use the module from this repository (`implementation(project(":esphome-api"))`).
+On Maven Central as `dev.glassworks:esphome-api` ([changelog](CHANGELOG.md)).
 
 ```kotlin
 repositories { mavenCentral() }
 dependencies {
-    implementation("dev.glassworks:esphome-api:0.1.0")
+    implementation("dev.glassworks:esphome-api:0.1.1")
 }
 ```
 

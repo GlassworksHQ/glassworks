@@ -5,10 +5,9 @@ What changed in each release of `dev.glassworks:esphome-api` on Maven Central. V
 cut from `libs/esphome-api/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.1.1] - 2026-11-15
 
-Additions only, so the next release is 0.1.1: a store, server or app built against 0.1.0 works
-unchanged.
+Additions and fixes only: a store, server or app built against 0.1.0 works unchanged.
 
 ### Added
 - **A stored key that can't be read now locks the server.** A store that implements the new
