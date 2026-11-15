@@ -17,7 +17,7 @@ export function generateStaticParams() {
 
 export async function generateMetadata(props: PageProps<"/docs/[...slug]">): Promise<Metadata> {
   const doc = await getDoc(urlOf((await props.params).slug));
-  if (!doc) return {};
+  if (!doc) notFound();
   return pageMetadata({ title: doc.title, description: doc.summary, path: doc.url as SitePath, type: "article", modified: doc.updated });
 }
 

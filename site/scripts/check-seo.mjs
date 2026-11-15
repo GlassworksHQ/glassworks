@@ -11,7 +11,9 @@
  *   - two pages share a title or a description;
  *   - a JSON-LD block doesn't parse;
  *   - robots.txt doesn't allow crawling and name the sitemap;
- *   - an unknown address doesn't say noindex (the 404, and an unknown frame or pane).
+ *   - an unknown address, plain or under any dynamic route (an unknown doc, post, frame or pane), doesn't
+ *     answer 404 with the noindex 404 page. With Partial Prefetching such a page can answer 200 (the
+ *     route's App Shell) before notFound() runs, so the status is checked, not only the robots tag.
  * Set SEO_BASE_URL to check a running site instead (e.g. http://localhost:3000).
  */
 import { spawn } from "node:child_process";
@@ -145,15 +147,20 @@ try {
     if (res.status !== 200 || !type.startsWith("image/png")) fail(img, `answers ${res.status} ${type}`);
   }
 
-  /* unknown addresses stay out of the index */
-  for (const p of ["/no-such-page", "/frames/no-such-frame", "/panes/no-such-pane"]) {
+  /* unknown addresses get the 404 page, with a 404 status: a plain one, and one under every dynamic route */
+  const unknown = [
+    "/no-such-page",
+    ...Object.keys(manifest.dynamicRoutes).map((r) => r.replace(/\[(?:\.\.\.)?[^\]]+\]/g, "no-such-page")),
+  ];
+  for (const p of unknown) {
     const res = await get(p);
+    if (res.status !== 404) fail(p, `answers ${res.status}, not 404`);
+    if (!(res.headers.get("content-type") ?? "").startsWith("text/html")) continue;
     const html = await res.text();
     // the robots meta is a comma-separated list: "noindex", "noindex, follow" …
     const robotsMeta = html.match(/<meta name="robots" content="([^"]*)"/)?.[1] ?? "";
-    const noindex = robotsMeta.split(",").some((d) => d.trim().toLowerCase() === "noindex");
-    if (res.status === 200 && !noindex) fail(p, "200 without noindex");
-    if (res.status !== 200 && res.status !== 404) fail(p, `answers ${res.status}`);
+    if (!robotsMeta.split(",").some((d) => d.trim().toLowerCase() === "noindex")) fail(p, "no noindex");
+    if (!html.includes("<title>Page not found")) fail(p, "isn't the 404 page");
   }
 
   if (errors.length) {

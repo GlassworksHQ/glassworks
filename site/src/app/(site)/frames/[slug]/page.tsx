@@ -25,7 +25,7 @@ export function generateStaticParams() {
 export async function generateMetadata(props: PageProps<"/frames/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;
   const d = frameById(slug);
-  if (!d) return {};
+  if (!d) notFound();
   return pageMetadata({
     ...frameSeo(d),
     path: `/frames/${d.id}`,

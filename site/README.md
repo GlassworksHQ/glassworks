@@ -143,9 +143,11 @@ git checkout origin/main                  # or the commit to deploy
 npx vercel link                           # once per clone: pick the site's project (Root Directory: site)
 npx vercel pull --yes --environment=production
 npx vercel build --prod
-npx vercel deploy --prebuilt --prod
+npx vercel deploy --prebuilt --prod --archive=tgz
 ```
 
+`--archive=tgz` uploads the build as one archive. File by file, the prebuilt output (about 2,400 files) hits the free plan's upload limit.
+
 A preview, which also shows draft blog posts: `npx vercel pull --yes --environment=preview`, then
-`npx vercel build` and `npx vercel deploy --prebuilt`, without `--prod`. Run every command from the
+`npx vercel build` and `npx vercel deploy --prebuilt --archive=tgz`, without `--prod`. Run every command from the
 clone's root, where `vercel link` put `.vercel/`.
