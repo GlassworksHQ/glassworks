@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:improv` on Maven Central. Versio
 cut from `libs/improv/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.1.0] - 2026-11-15
 
 ### Added
 - **First release on Maven Central.** The device side of Improv Wi-Fi for Android: the protocol,

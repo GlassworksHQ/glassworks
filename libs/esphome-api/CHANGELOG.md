@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:esphome-api` on Maven Central. V
 cut from `libs/esphome-api/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.1.0] - 2026-11-15
 
 ### Added
 - **First release on Maven Central.** The device side of the ESPHome native API in Kotlin: the
