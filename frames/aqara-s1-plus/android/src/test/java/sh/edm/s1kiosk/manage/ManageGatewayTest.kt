@@ -4,6 +4,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import sh.edm.s1kiosk.auth.HaGatewayClient
 import sh.edm.s1kiosk.auth.HaSocket
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.UrlConnectionPoster
@@ -31,7 +32,7 @@ class ManageGatewayTest {
         override fun close() {}
     }
 
-    private fun gateway(ha: FakeHa) = S1Manage.Gateway(HaTokenClient(UrlConnectionPoster())) { ha }
+    private fun gateway(ha: FakeHa) = HaGatewayClient(HaTokenClient(UrlConnectionPoster())) { ha }
 
     @Test fun anAdministrator() {
         val ha = FakeHa(true, JSONObject().put("id", "u1").put("name", "Alex").put("is_owner", false).put("is_admin", true))
