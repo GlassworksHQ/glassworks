@@ -42,14 +42,16 @@ panel then needs setting up again: sign in, give it the API key, pair Sendspin. 
 
 ## When the key is gone
 
-If the key no longer opens a secret (the Keystore lost it, a vendor bug, a backup restored onto
-another device), the panel treats the secret as not set: signed out, no API key, not paired. It
+If the key no longer opens a secret (the Keystore lost it, its entry can't be read any more, a vendor
+bug, a backup restored onto another device), the panel makes a new key and treats the secret as not set: signed out, no API key, not paired. It
 removes the unreadable value, logs it once under `S1Kiosk.Secrets` without the value, and asks for it
 again through its usual setup. It never crashes over it.
 
-If the Keystore can't be reached at all, sealed secrets read as not set but stay, and a new secret is
-written unsealed so the panel keeps working. It is sealed the next time the app starts with a
-working Keystore.
+If the Keystore can't be reached at all, sealed secrets read as not set for now, and nothing replaces
+them: the panel doesn't store a new Sendspin identity, pairing key or pairing list, and a change to a
+sealed secret isn't saved. Sendspin uses a stand-in identity it never stores until the Keystore is
+back. A secret that had no sealed value yet is written unsealed so the panel keeps working, and is
+sealed the next time the app starts with a working Keystore.
 
 Nothing on the panel goes into a backup or a device-to-device transfer (`allowBackup="false"` and
 the data extraction rules), because a sealed secret is useless without this panel's key.
@@ -78,7 +80,9 @@ It doesn't protect them from:
 
 `SecretStore` (`core`, `dev.glassworks.secrets`) seals and opens a value. `SecretPrefs` wraps a
 SharedPreferences file and seals the keys it is given; code reads and writes through it as through any
-SharedPreferences. `KeystoreKey` (`dev.glassworks.platform`) holds the Android Keystore calls. The
-S1 app lists its secrets in `KioskPrefs.SECRETS` and in `PrefsSsStore`; a new secret in one of those
-files goes in that list. Never log a secret, and keep the file and key names: panels update in place
+SharedPreferences; `canRead` says when a sealed value can't be opened now, so a caller doesn't replace
+it. `KeystoreKey` (`dev.glassworks.platform`) holds the Android Keystore calls. The S1 app lists its
+secrets in `SecretFiles.SECRETS`, and `SecretFiles.open` is the only way to open those files
+(`KeystoreSecretsTest` fails the build otherwise); a new secret goes in that list. Tests run the real
+Keystore code over `FakeAndroidKeyStore` (`testing/`). Never log a secret, and keep the file and key names: panels update in place
 (`PrefsPinTest`).

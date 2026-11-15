@@ -99,15 +99,27 @@ class SecretPrefsTest {
         assertNull("reads as not set", p.getString("token", null))
         assertFalse(p.contains("token"))
         assertEquals("but kept", sealed, stored("token"))
+        assertFalse("callers can tell it may come back", p.canRead("token"))
+        assertTrue(p.canRead("psk"))
+        p.edit().putString("token", "made-up-typed-meanwhile").commit()
+        assertEquals("a sealed value is never replaced with plaintext", sealed, stored("token"))
         p.edit().putString("psk", "made-up-psk").commit()
         assertEquals("a new one is kept unsealed so the panel keeps working", "made-up-psk", stored("psk"))
-        assertEquals(1, warnings.size)
-        assertFalse(warnings.single().contains("made-up"))
+        assertEquals("one line per reason", 3, warnings.size)
+        assertFalse(warnings.any { it.contains("made-up") })
         key = first
         val back = prefs()
         assertEquals("made-up-token", back.getString("token", null))
         assertTrue("sealed once the key store is back", SecretStore.isSealed(stored("psk")!!))
         assertEquals("made-up-psk", back.getString("psk", null))
+    }
+
+    @Test fun getAllHandsOutSecretsOpened() {
+        raw.edit().putString("host", "192.0.2.10").commit()
+        prefs().edit().putString("token", "made-up-token").commit()
+        assertEquals(mapOf("host" to "192.0.2.10", "token" to "made-up-token"), prefs().all)
+        key = null
+        assertEquals("a secret that doesn't open now is left out", mapOf("host" to "192.0.2.10"), prefs().all)
     }
 
     @Test fun aListenerReadsTheOpenedValue() {

@@ -39,6 +39,14 @@ class SecretStoreTest {
         assertEquals("not base64", SecretStore.Opened.Lost, store.open(SecretStore.MARK + "%%%", "kiosk/camera_stream_password"))
     }
 
+    @Test fun onlyTheMarkFollowedByAnIvAndATagCountsAsSealed() {
+        assertTrue(SecretStore.isSealed(store.seal("", "x/y")!!))
+        assertFalse("a password that starts like one", SecretStore.isSealed(SecretStore.MARK + "hunter2"))
+        assertFalse("too short for an IV and a tag", SecretStore.isSealed(SecretStore.MARK + Base64.getEncoder().encodeToString(ByteArray(27))))
+        assertTrue(SecretStore.isSealed(SecretStore.MARK + Base64.getEncoder().encodeToString(ByteArray(28))))
+        assertFalse(SecretStore.isSealed("made-up-plaintext"))
+    }
+
     @Test fun aSecretOpensOnlyUnderTheKeyItWasStoredUnder() {
         val sealed = store.seal("made-up-key", "kiosk/api_key")!!
         assertEquals(SecretStore.Opened.Lost, store.open(sealed, "auth/refresh_token"))
