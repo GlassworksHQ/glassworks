@@ -1,9 +1,12 @@
 // The pane catalog (#231): the generated list matches the pane files, the words line up, and a frame's
 // rating of a pane is its own when it gives one and is worked out otherwise.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { MODULE_ROOTS, modules, paneFiles } from '../scripts/panes.mjs';
 import { CAPABILITIES, PANES, PANE_ALIASES, PANE_IDS, capabilityText, framePanes, isCapability, isPaneAlias, paneById, paneSupport, type FrameDesign, type PaneInfo } from '../src';
 
 const script = fileURLToPath(new URL('../scripts/panes.mjs', import.meta.url));
@@ -16,13 +19,33 @@ describe('the pane list', () => {
   });
 
   it('has every pane file once: not empty, no id twice, and the same ids as the files', () => {
-    const java = fileURLToPath(new URL('../../../app/kiosk/src/main/java', import.meta.url));
-    const files = readdirSync(java, { recursive: true }).map(String).filter((f) => f.split(/[\\/]/).pop() === 'pane.json');
-    const ids = files.map((f) => (JSON.parse(readFileSync(`${java}/${f}`, 'utf8')) as { id: string }).id);
+    const files = paneFiles();
+    expect(files.length).toBeGreaterThanOrEqual(8);
+    const ids = files.map((f) => (JSON.parse(readFileSync(f, 'utf8')) as { id: string }).id);
     expect(PANE_IDS.length).toBeGreaterThan(0);
     expect(new Set(PANE_IDS).size).toBe(PANE_IDS.length);
     expect([...PANE_IDS].sort()).toEqual([...ids].sort());
     expect(PANE_IDS).toContain(PANE_ALIASES.base);
+  });
+
+  it('looks in every module, wherever it sits, and finds the app', () => {
+    // the same roots as the app's tests (testing/kotlin/dev/glassworks/testing/RepoFiles.kt), so both see the same panes
+    const kotlin = readFileSync(fileURLToPath(new URL('../../../testing/kotlin/dev/glassworks/testing/RepoFiles.kt', import.meta.url)), 'utf8');
+    const search = /val SEARCH = listOf\(([^)]*)\)/.exec(kotlin)?.[1];
+    expect(search?.split(',').map((s) => s.trim().replace(/"/g, ''))).toEqual(MODULE_ROOTS);
+    const found = modules().map((m) => m.split(/[\\/]/).slice(-2).join('/'));
+    expect(found).toContain('app/kiosk');
+  });
+
+  it('fails, not passes empty, when it finds no pane file', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'panes-'));
+    try {
+      mkdirSync(join(repo, 'app/kiosk/src/main/java'), { recursive: true });
+      expect(() => paneFiles(repo)).toThrow(/no pane\.json/);
+      expect(() => paneFiles(join(repo, 'nothing-here'))).toThrow(/no pane\.json/);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it('says every requirement in the capability words', () => {

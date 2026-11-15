@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.voice
 
 import android.app.Application
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,8 +80,7 @@ class WakeWordsTest {
 
     @Test
     fun theHostScriptPinsTheSameCommitAndHashes() {
-        val repo = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "tools/voice").isDirectory && File(it, "app/kiosk").isDirectory }
-        val script = File(repo, "tools/voice/fetch-models.sh").readText()
+        val script = RepoFiles.file("tools/voice/fetch-models.sh").readText()
         assertTrue("MWW_COMMIT", script.contains("MWW_COMMIT=\"${WakeWords.MODELS_COMMIT}\""))
         for (m in WakeWords.MICRO) assertTrue(m.id, script.contains("\"${m.id}.tflite ${m.sha256}\""))
     }

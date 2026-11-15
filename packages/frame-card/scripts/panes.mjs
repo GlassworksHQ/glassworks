@@ -2,7 +2,9 @@
 /**
  * Writes packages/frame-card/src/panes.generated.ts from every pane's pane.json and icon.svg (#231).
  *
- * Reads:  app/kiosk/src/main/java/**\/pane.json and the icon.svg beside each (read-only).
+ * Reads:  <module>/src/main/java/**\/pane.json and the icon.svg beside each (read-only), in every Gradle
+ *         module under MODULE_ROOTS (app/kiosk and app/libs/* today; core, pane-api, engines/*, panes/*
+ *         and frames/<id>/android after the split, #21). Finding no pane is an error, not an empty list.
  * Writes: packages/frame-card/src/panes.generated.ts, nothing else.
  *
  *   node packages/frame-card/scripts/panes.mjs          (or: npm run panes -w @glassworks/frame-card)
@@ -12,28 +14,64 @@
  * and glassworks.dev, Vite in the tests) takes it without JSON or SVG loaders. test/panes.test.ts fails
  * when the file is older than the pane files. Same input, same bytes.
  */
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = join(HERE, '../../..');
-const SOURCES = join(REPO, 'app/kiosk/src/main/java');
 export const OUT = join(HERE, '../src/panes.generated.ts');
 
 /* shipping stages first, then the rest, as the frame catalog orders frames */
 const ORDER = { stable: 0, beta: 1, alpha: 2, development: 3, planned: 4 };
 
+/** Where Gradle modules are looked for, from the repo root; `*` is one folder level (as the app's RepoFiles). */
+export const MODULE_ROOTS = ['app', 'libs', 'core', 'pane-api', 'engines', 'panes', 'frames/*/android', 'frames/*/panes'];
+/** Folders never walked into: build output, caches, and a module's own sources. */
+const SKIP = new Set(['build', '.gradle', '.kotlin', 'node_modules', 'src', '.git']);
+
+const isDir = (p) => existsSync(p) && statSync(p).isDirectory();
+
+/** Every module folder (one with src/main) under MODULE_ROOTS in [repo]. */
+export function modules(repo = REPO) {
+  const tops = MODULE_ROOTS.flatMap((pattern) =>
+    pattern.split('/').reduce(
+      (dirs, part) =>
+        part === '*'
+          ? dirs.flatMap((d) => readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => join(d, e.name)).sort())
+          : dirs.map((d) => join(d, part)).filter(isDir),
+      [repo],
+    ),
+  );
+  const found = [];
+  const walk = (dir) => {
+    if (isDir(join(dir, 'src/main'))) found.push(dir);
+    for (const e of readdirSync(dir, { withFileTypes: true })) if (e.isDirectory() && !SKIP.has(e.name)) walk(join(dir, e.name));
+  };
+  tops.forEach(walk);
+  return [...new Set(found)].sort();
+}
+
+/** Every pane.json in every module's src/main/java, as absolute paths. Throws when there is none. */
+export function paneFiles(repo = REPO) {
+  const files = modules(repo).flatMap((m) => {
+    const java = join(m, 'src/main/java');
+    if (!isDir(java)) return [];
+    return readdirSync(java, { recursive: true })
+      .map(String)
+      .filter((f) => f.split(/[\\/]/).pop() === 'pane.json')
+      .map((f) => join(java, f));
+  });
+  if (files.length === 0) throw new Error(`no pane.json in any module's src/main/java under ${MODULE_ROOTS.join(', ')} in ${repo}`);
+  return files.sort();
+}
+
 /** Every pane: general panes first, then frame panes; within each, by stage and then by name. */
 export function readPanes(repo = REPO) {
-  const root = join(repo, 'app/kiosk/src/main/java');
-  const files = readdirSync(root, { recursive: true })
-    .map(String)
-    .filter((f) => f.endsWith('pane.json') && f.split(/[\\/]/).pop() === 'pane.json');
-  return files
+  return paneFiles(repo)
     .map((f) => {
-      const dir = dirname(join(root, f));
-      const data = JSON.parse(readFileSync(join(root, f), 'utf8'));
+      const dir = dirname(f);
+      const data = JSON.parse(readFileSync(f, 'utf8'));
       const icon = readFileSync(join(dir, 'icon.svg'), 'utf8').trim();
       return { ...data, icon, source: relative(repo, dir).split('\\').join('/') };
     })
@@ -61,6 +99,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     }
   } else {
     writeFileSync(OUT, want);
-    console.log(`wrote ${relative(REPO, OUT)} (${readPanes().length} panes from ${relative(REPO, SOURCES)})`);
+    console.log(`wrote ${relative(REPO, OUT)} (${readPanes().length} panes from ${modules().map((m) => relative(REPO, m)).join(', ')})`);
   }
 }

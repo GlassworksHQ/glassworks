@@ -6,6 +6,7 @@ package dev.glassworks.camera
 
 import android.app.Application
 import android.widget.TextView
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,7 +25,7 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class CameraWordingTest {
-    private val repo = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "app/kiosk/src/main").isDirectory }
+    private val repo = RepoFiles.root
 
     @Test fun theCardsSayPresencePlusCamera() {
         val cards = CameraUseCards(RuntimeEnvironment.getApplication())
@@ -41,11 +42,11 @@ class CameraWordingTest {
 
     @Test fun noUserFacingTextSaysPresencePlusSnapshots() {
         val old = "Presence + snapshots"
-        val files = File(repo, "app/kiosk/src/main").walkTopDown().filter { it.isFile && it.extension in setOf("kt", "xml", "json") }.toList() +
+        val files = RepoFiles.sources(atLeast = 200) { it.extension in setOf("kt", "xml", "json") } +
             File(repo, "docs").walkTopDown().filter { it.isFile && it.extension == "md" }.toList() +
             listOf(File(repo, "CHANGELOG.md"), File(repo, "README.md"))
         val found = files.flatMap { f ->
-            f.readLines().withIndex().filter { (_, l) -> old in l && "STORED_CAMERA =" !in l }.map { (i, l) -> "${f.relativeTo(repo)}:${i + 1}: ${l.trim()}" }
+            f.readLines().withIndex().filter { (_, l) -> old in l && "STORED_CAMERA =" !in l }.map { (i, l) -> "${RepoFiles.rel(f)}:${i + 1}: ${l.trim()}" }
         }
         assertEquals("only the stored value may keep the old words", emptyList<String>(), found)
     }

@@ -1,10 +1,10 @@
 package sh.edm.s1kiosk.base
 
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.util.Collections
@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit
 /**
  * The real [UartBaseLink] (TCP transport) against `tools/bracket/base_emulator.py`, the emulator
  * Aqara's bracket_cli accepted on the panel (frames/aqara-s1-plus/research/base-protocol.md). Needs only a plain python3;
- * uses BRACKET_PYTHON, else ESPHOME_PYTHON, else `python3`. Skipped if none runs.
+ * uses BRACKET_PYTHON, else ESPHOME_PYTHON, else `python3`. Skipped if none runs; fails if the
+ * emulator isn't in the repo.
  */
 class UartBaseLinkEmulatorTest {
 
@@ -43,13 +44,11 @@ class UartBaseLinkEmulatorTest {
     fun driverAgainstEmulator() {
         val py = python()
         assumeTrue("no python3 to run base_emulator.py", py != null)
-        val script = listOf("../../tools/bracket/base_emulator.py", "../tools/bracket/base_emulator.py", "tools/bracket/base_emulator.py")
-            .map(::File).firstOrNull { it.isFile }
-        assumeTrue("tools/bracket/base_emulator.py not found from ${File(".").absolutePath}", script != null)
+        val script = RepoFiles.file("tools/bracket/base_emulator.py")
         // Picked on 127.0.0.1, where the emulator listens: on macOS a wildcard pick can be a port
         // another process holds there (#113).
         val port = ServerSocket(0, 0, InetAddress.getLoopbackAddress()).use { it.localPort }
-        val emu = ProcessBuilder(py, "-I", "-u", script!!.absolutePath, "--port", port.toString(), "--report-interval", "1", "--no-hello")
+        val emu = ProcessBuilder(py, "-I", "-u", script.absolutePath, "--port", port.toString(), "--report-interval", "1", "--no-hello")
             .redirectErrorStream(true).start()
         val emuLog = Collections.synchronizedList(ArrayList<String>())
         Thread { emu.inputStream.bufferedReader().forEachLine { emuLog += it } }.apply { isDaemon = true; start() }

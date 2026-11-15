@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.update
 
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -8,7 +9,7 @@ import java.io.File
 
 /** #263: a test build says so next to its version; a release shows only its version. */
 class TestBuildLabelTest {
-    private val repo = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, ".github/workflows").isDirectory }
+    private val repo = RepoFiles.root
 
     @Test fun aTestBuildSaysSo() = assertEquals("0.4.3 · test build 28c157d", AppVersion.label("0.4.3", "28c157d"))
 
@@ -21,13 +22,12 @@ class TestBuildLabelTest {
      * A merge that brings `BuildConfig.VERSION_NAME` back into a page fails here.
      */
     @Test fun pagesShowTheLabelNotTheRawVersion() {
-        // The S1 app and the Glassworks core both: a core page must not read the raw version either.
-        val main = File(repo, "app/kiosk/src/main/java")
+        // The S1 app and the Glassworks core both, in every module: a core page must not read the raw version either.
         val raw = setOf("update/AppVersion.kt", "update/UpdateManager.kt", "esphome/PanelDevice.kt", "sendspin/SendspinPlayer.kt",
             "improv/ImprovController.kt", "improv/ImprovSerialServer.kt", "improv/ImprovIdentity.kt", "radio/RadioPane.kt")
             .map { "sh/edm/s1kiosk/$it" }.toSet()
-        val found = main.walkTopDown().filter { it.isFile && it.extension == "kt" && "BuildConfig.VERSION_NAME" in it.readText() }
-            .map { it.relativeTo(main).path }.filter { it !in raw }.toList()
+        val found = RepoFiles.sources(atLeast = 100, inModules = RepoFiles.appModules) { it.extension == "kt" }
+            .filter { "BuildConfig.VERSION_NAME" in it.readText() }.map(RepoFiles::packagePath).filter { it !in raw }
         assertTrue("show AppVersion.shown, not BuildConfig.VERSION_NAME, in: $found", found.isEmpty())
     }
 
@@ -35,6 +35,6 @@ class TestBuildLabelTest {
     @Test fun onlyTestBuildsPassTheirCommit() {
         assertTrue(File(repo, ".github/workflows/test-build.yml").readText().contains("S1_TEST_BUILD: \${{ env.SHORT_SHA }}"))
         assertFalse(File(repo, ".github/workflows/release.yml").readText().contains("S1_TEST_BUILD"))
-        assertTrue(File(repo, "app/kiosk/build.gradle.kts").readText().contains("buildConfigField(\"String\", \"TEST_BUILD\""))
+        assertTrue(File(RepoFiles.s1App, "build.gradle.kts").readText().contains("buildConfigField(\"String\", \"TEST_BUILD\""))
     }
 }

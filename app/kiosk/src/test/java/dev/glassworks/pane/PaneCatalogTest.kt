@@ -5,6 +5,7 @@
 package dev.glassworks.pane
 
 import android.app.Application
+import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -28,14 +29,14 @@ import java.util.jar.JarFile
  * "Registered" is every [PaneDefinition] the runtime makes (the S1's), plus every concrete class that
  * implements [Pane] (found in the compiled classes). Timers is a pane without a definition of its own:
  * Assist's on/off covers it.
+ *
+ * The files are found in every module's `src/main/java`, wherever the module sits ([RepoFiles]).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class PaneCatalogTest {
 
-    private val appRoot = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "kiosk/src/main").isDirectory }
-    private val main = File(appRoot, "kiosk/src/main/java")
-    private val repo = appRoot.parentFile
+    private val repo = RepoFiles.root
 
     private class Entry(val json: File, val data: JSONObject) {
         val id: String = data.getString("id")
@@ -43,7 +44,7 @@ class PaneCatalogTest {
     }
 
     private val entries by lazy {
-        main.walkTopDown().filter { it.isFile && it.name == "pane.json" }.sortedBy { it.path }.map { Entry(it, JSONObject(it.readText())) }.toList()
+        RepoFiles.sources(atLeast = 8) { it.name == "pane.json" }.map { Entry(it, JSONObject(it.readText())) }
     }
 
     private val definitionIds by lazy {
@@ -79,9 +80,9 @@ class PaneCatalogTest {
      */
     private fun idOf(c: Class<*>): String {
         val simple = c.name.substringAfterLast('.').substringAfterLast('$')
-        val dir = File(main, c.name.substringBeforeLast('.').replace('.', File.separatorChar))
-        val file = dir.listFiles().orEmpty().filter { it.extension == "kt" }.singleOrNull { Regex("""\bclass\s+$simple\b""").containsMatchIn(it.readText()) }
-            ?: error("${c.name}: no single source file in $dir declares it")
+        val dirs = RepoFiles.packageDirs(c.name.substringBeforeLast('.').replace('.', '/'))
+        val file = dirs.flatMap { it.listFiles().orEmpty().toList() }.filter { it.extension == "kt" }.singleOrNull { Regex("""\bclass\s+$simple\b""").containsMatchIn(it.readText()) }
+            ?: error("${c.name}: no single source file in ${dirs.map(RepoFiles::rel)} declares it")
         val text = file.readText()
         val refs = Regex("""override val id = ([^\n/]+)""").findAll(text).map { it.groupValues[1].trim() }.toList()
         assertEquals("${file.name}: one `override val id` per Pane file", 1, refs.size)
@@ -91,7 +92,7 @@ class PaneCatalogTest {
         return Regex("""const val ID = "([^"]+)"""").find(text)?.groupValues?.get(1) ?: error("${file.name}: `$ref` without a const val ID")
     }
 
-    private fun rel(f: File) = f.relativeTo(repo).path
+    private fun rel(f: File) = RepoFiles.rel(f)
 
     @Test
     fun theScanFindsTheKnownPanes() {
@@ -112,7 +113,7 @@ class PaneCatalogTest {
         assertTrue("pane.json for no registered pane: $orphans", orphans.isEmpty())
         val withoutIcon = entries.filter { !it.icon.isFile }.map { rel(it.json) }
         assertTrue("pane.json without an icon.svg beside it: $withoutIcon", withoutIcon.isEmpty())
-        val strayIcons = main.walkTopDown().filter { it.isFile && it.name == "icon.svg" && !File(it.parentFile, "pane.json").isFile }.map(::rel).toList()
+        val strayIcons = RepoFiles.sources(atLeast = 0) { it.name == "icon.svg" && !File(it.parentFile, "pane.json").isFile }.map(::rel)
         assertTrue("icon.svg without a pane.json beside it: $strayIcons", strayIcons.isEmpty())
     }
 

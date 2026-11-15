@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk
 
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -70,7 +71,7 @@ class BootSplashTest {
 
     @Test
     fun manifestMatches() {
-        val m = File("src/main/AndroidManifest.xml").readText()
+        val m = File(RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
         val block = m.substringAfter("android:name=\".BootSplashActivity\"").substringBefore("</activity>")
         assertTrue("splash ships disabled", "android:enabled=\"false\"" in block)
         assertTrue("direct-boot aware", "android:directBootAware=\"true\"" in block)

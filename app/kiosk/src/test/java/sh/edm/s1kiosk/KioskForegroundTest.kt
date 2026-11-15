@@ -2,6 +2,7 @@ package sh.edm.s1kiosk
 
 import android.content.pm.ServiceInfo
 import dev.glassworks.platform.PlatformApi
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
@@ -150,7 +151,7 @@ class KioskForegroundTest {
 
     /** Android 10 throws when startForeground passes a type the manifest does not declare. */
     @Test fun theManifestDeclaresEveryTypeTheServiceStartsWith() {
-        val manifest = File("src/main/AndroidManifest.xml").readText()
+        val manifest = File(RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
         val declared = Regex("""android:name="\.KioskService"[^>]*android:foregroundServiceType="([^"]+)"""")
             .find(manifest)!!.groupValues[1].split("|").toSet()
         assertEquals(setOf("microphone", "location", "connectedDevice", "camera"), declared)

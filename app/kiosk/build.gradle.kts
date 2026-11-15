@@ -107,6 +107,9 @@ android {
         }
         sourceSets.getByName("main").assets.srcDir(dir)
     }
+
+    // RepoFiles, the tests' way to find files across every module from the repo root (#21).
+    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("../testing/kotlin"))
 }
 
 dependencies {
@@ -157,9 +160,15 @@ tasks.withType<Test>().configureEach {
         .withPathSensitivity(PathSensitivity.NONE)
     // ContentScriptReadyTest runs the web extension's content.js under node: a change to it re-runs the tests.
     inputs.dir("src/main/assets/extension").withPropertyName("webExtension").withPathSensitivity(PathSensitivity.RELATIVE)
-    // PaneCatalogTest reads each pane's pane.json and icon.svg, which no compile task takes in (#231).
-    inputs.files(fileTree("src/main/java") { include("**/pane.json", "**/icon.svg") }).withPropertyName("paneCatalog")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
+    // PaneCatalogTest reads each pane's pane.json and icon.svg, which no compile task takes in (#231), in
+    // every module RepoFiles searches (testing/kotlin), so a pane in another module counts too (#21).
+    val paneModules = listOf("app", "libs", "core", "pane-api", "engines", "panes", "frames")
+    inputs.files(paneModules.map { dir ->
+        fileTree(rootProject.file("../$dir")) {
+            include("**/src/main/java/**/pane.json", "**/src/main/java/**/icon.svg")
+            exclude("**/build/**", "**/node_modules/**")
+        }
+    }).withPropertyName("paneCatalog").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Open source licences screen (hidden settings → "Open source licences"): the repo's
