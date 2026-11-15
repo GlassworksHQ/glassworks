@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Read one eMMC partition to a host file, from our FEL-booted U-Boot in fastboot mode.
-# Uses 'oem run' + the 'upload' command added by tools/fel/uboot/patches/0002 ("fastboot get_staged").
+# Uses 'oem run' + the 'upload' command added by frames/aqara-s1-plus/tools/fel/uboot/patches/0002 ("fastboot get_staged").
 # Read-only: nothing is written to the panel.
 #
-#   tools/install/fb-read-partition.sh <partition> <out-file>
+#   frames/aqara-s1-plus/tools/install/fb-read-partition.sh <partition> <out-file>
 #
 # Partitions up to the 512 MiB fastboot buffer (CONFIG_FASTBOOT_BUF_ADDR/SIZE in the defconfig).
 set -euo pipefail

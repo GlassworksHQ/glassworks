@@ -109,7 +109,7 @@ open class RepoTree(findRoot: () -> File) {
     /** The one module file at [path] below its module folder (`src/main/res/font/inter.ttf`, `src/test/resources/x.golden.txt`). */
     fun inModule(path: String): File = one(path, modules.map { File(it, path) })
 
-    /** A file at [path] from the repo root (`CHANGELOG.md`, `tools/bracket/base_emulator.py`). Fails if it isn't there. */
+    /** A file at [path] from the repo root (`CHANGELOG.md`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`). Fails if it isn't there. */
     fun file(path: String): File = File(root, path).also { if (!it.exists()) throw AssertionError("$path is not in the repo at $root") }
 
     /** [f]'s path from the repo root, with `/`, for messages. */

@@ -1,6 +1,6 @@
 // The whole install flow against simulated hardware: FEL boot ROM -> our U-Boot's fastboot holding the
 // panel's real 4.5.80 partitions -> the real patcher -> flash + verify -> adb provisioning.
-// With the goldens, the flashed boot/vbmeta/splash must equal what tools/install/fel-install.sh wrote.
+// With the goldens, the flashed boot/vbmeta/splash must equal what frames/aqara-s1-plus/tools/install/fel-install.sh wrote.
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';

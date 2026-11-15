@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Panel side of the signing-key switch (debug build -> release build) in tools/install.sh and the web
+# Panel side of the signing-key switch (debug build -> release build) in frames/aqara-s1-plus/tools/install.sh and the web
 # installer (frames/aqara-s1-plus/installer/src/switch.ts). Android won't update an app across
 # signing keys, so the switch is uninstall + install, which deletes the app's data and the Wi-Fi
 # networks it saved. With root this script carries the data across; the installers re-send Wi-Fi

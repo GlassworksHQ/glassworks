@@ -53,7 +53,7 @@ class WallBaseDefinition(file: SharedPreferences) : PaneDefinition {
     override val extras = listOf(
         // auto|uart|localservice
         IntentExtra.string("base_backend") { prefs.backend = it },
-        // "" (/dev/ttyS3) or tcp:host:port (tools/bracket/base_emulator.py)
+        // "" (/dev/ttyS3) or tcp:host:port (frames/aqara-s1-plus/tools/bracket/base_emulator.py)
         IntentExtra.string("base_transport") { prefs.transport = it },
     )
 }

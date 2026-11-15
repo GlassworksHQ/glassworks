@@ -274,7 +274,7 @@ class RadioV4Test {
         assertTrue(e?.message.orEmpty().contains("wrong SHA-256"))
     }
 
-    /** Against Silicon Labs' real zip when this computer has it (tools/radio/build-zigbeed.sh's cache); never committed. */
+    /** Against Silicon Labs' real zip when this computer has it (frames/aqara-s1-plus/tools/radio/build-zigbeed.sh's cache); never committed. */
     @Test
     fun realZipMatchesEveryPin() {
         val zip = File(System.getenv("SISDK_ZIP") ?: "/tmp/zigbeed-sisdk-build/debian-bookworm.zip")

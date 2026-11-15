@@ -2,17 +2,17 @@
 # Patch a stock S1 Plus boot.img with Magisk + the S1 Kiosk root helper, entirely on the host.
 # No adb and no panel needed, so it works for factory panels (stock boot read over FEL fastboot).
 #
-#   tools/root/patch-boot-magisk.sh <stock-boot.img> <out-boot.img>
+#   frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh <stock-boot.img> <out-boot.img>
 #
 # Runs Magisk's own boot_patch.sh in an arm64 Linux container (Docker): the arm64 magiskboot does
 # the work, and the panel's armeabi-v7a magiskinit/magisk/init-ld are the payload. Then it adds:
-#   overlay.d/s1kiosk_radio.rc           init service (tools/radio/s1kiosk_radio.rc)
+#   overlay.d/s1kiosk_radio.rc           init service (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.rc)
 #   overlay.d/sbin/s1kiosk_radio.sh      root helper   -> ${MAGISKTMP}/s1kiosk_radio.sh
-#   overlay.d/sbin/{otbr-agent,ot-ctl}   Thread stack  (tools/radio/build-otbr.sh)
-#   overlay.d/s1kiosk_firstboot.rc       one-shot first-boot provisioning (tools/root/s1kiosk_firstboot.*)
+#   overlay.d/sbin/{otbr-agent,ot-ctl}   Thread stack  (frames/aqara-s1-plus/tools/radio/build-otbr.sh)
+#   overlay.d/s1kiosk_firstboot.rc       one-shot first-boot provisioning (frames/aqara-s1-plus/tools/root/s1kiosk_firstboot.*)
 #   overlay.d/sbin/s1kiosk_firstboot.sh
 #   overlay.d/sbin/s1kiosk_adb_keys      this computer's adb public key, authorized on first boot so a
-#                                        factory panel (no adb) can continue with tools/install.sh
+#                                        factory panel (no adb) can continue with frames/aqara-s1-plus/tools/install.sh
 #                                        (ADB_PUBKEY=<file>, default ~/.android/adbkey.pub; none = skip)
 #   overlay.d/s1kiosk_netwatch.rc        network watchdog (cycles Wi-Fi if the link wedges)
 #   overlay.d/sbin/s1kiosk_netwatch.sh
@@ -20,8 +20,8 @@
 #   overlay.d/sbin/s1kiosk_update.sh
 #   overlay.d/s1kiosk_bundle.rc          root install service for signed radio bundles (started by the app)
 #   overlay.d/sbin/s1kiosk_bundle.sh
-#   overlay.d/sbin/s1kiosk_verify        Ed25519 checker (tools/root/build-verify.sh)
-#   overlay.d/sbin/s1kiosk_bundle.pub    the project's radio bundle public key (tools/root/s1kiosk_bundle.pub)
+#   overlay.d/sbin/s1kiosk_verify        Ed25519 checker (frames/aqara-s1-plus/tools/root/build-verify.sh)
+#   overlay.d/sbin/s1kiosk_bundle.pub    the project's radio bundle public key (frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub)
 #   overlay.d/s1kiosk_branding.rc        boot animation, bind-mounted over /system/media/bootanimation.zip
 #   overlay.d/sbin/s1kiosk_bootanimation.zip   (BOOT_ANIMATION=<zip>, default branding/glass-tile; none = stock)
 # Nothing is flashed here; see frames/aqara-s1-plus/research/root.md.
@@ -37,14 +37,14 @@ IN=${1:?stock boot.img}; OUT=${2:?output boot.img}
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RADIO="$HERE/../radio"
 ADB_PUBKEY=${ADB_PUBKEY:-$HOME/.android/adbkey.pub}
-BOOT_ANIMATION=${BOOT_ANIMATION:-$HERE/../../branding/glass-tile/bootanimation.zip}
+BOOT_ANIMATION=${BOOT_ANIMATION:-$HERE/../../../../branding/glass-tile/bootanimation.zip}
 
 for b in otbr-agent ot-ctl; do
-  [ -x "$RADIO/out/$b" ] || { echo "missing $RADIO/out/$b: run OTBR_RUNTIME_DIR=/data/s1kiosk/radio/run tools/radio/build-otbr.sh"; exit 1; }
+  [ -x "$RADIO/out/$b" ] || { echo "missing $RADIO/out/$b: run OTBR_RUNTIME_DIR=/data/s1kiosk/radio/run frames/aqara-s1-plus/tools/radio/build-otbr.sh"; exit 1; }
 done
 grep -q '/data/s1kiosk/radio/run' "$RADIO/out/BUILD-INFO.txt" ||
   { echo "otbr was built with the wrong OTBR_RUNTIME_DIR (need /data/s1kiosk/radio/run)"; exit 1; }
-[ -x "$HERE/out/s1kiosk_verify" ] || { echo "missing $HERE/out/s1kiosk_verify: run tools/root/build-verify.sh"; exit 1; }
+[ -x "$HERE/out/s1kiosk_verify" ] || { echo "missing $HERE/out/s1kiosk_verify: run frames/aqara-s1-plus/tools/root/build-verify.sh"; exit 1; }
 grep -qE '^[0-9a-f]{64}$' "$HERE/s1kiosk_bundle.pub" || { echo "$HERE/s1kiosk_bundle.pub is not a 32-byte hex public key"; exit 1; }
 [ "$(head -c 8 "$IN")" = "ANDROID!" ] || { echo "$IN is not an Android boot image"; exit 1; }
 
@@ -82,7 +82,7 @@ PY
 fi
 cp "$IN" "$W/p/boot.img"
 
-# DEVELOPMENT ONLY: DEV_SU_HOURS=<n> adds tools/root/dev/s1kiosk_devsu.{rc,sh}: adb shell root for n hours
+# DEVELOPMENT ONLY: DEV_SU_HOURS=<n> adds frames/aqara-s1-plus/tools/root/dev/s1kiosk_devsu.{rc,sh}: adb shell root for n hours
 # after each boot, plus the adb key authorized every boot. Never for a normal install.
 DEV_CPIO=""
 if [ -n "${DEV_SU_HOURS:-}" ]; then

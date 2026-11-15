@@ -56,7 +56,7 @@ object ApkCheck {
 }
 
 /**
- * Contract with the root install service in the boot image (tools/root/s1kiosk_update.{rc,sh},
+ * Contract with the root install service in the boot image (frames/aqara-s1-plus/tools/root/s1kiosk_update.{rc,sh},
  * frames/aqara-s1-plus/research/root.md). The app writes [PENDING_PATH] (private dir, only the kiosk uid can
  * write it), sets [PROP_STATUS] to `requested` and `ctl.start`s [SERVICE]; the service installs
  * that file and nothing else, then reports in [PROP_STATUS].

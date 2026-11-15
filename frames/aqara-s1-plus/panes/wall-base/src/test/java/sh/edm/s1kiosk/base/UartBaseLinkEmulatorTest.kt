@@ -13,7 +13,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * The real [UartBaseLink] (TCP transport) against `tools/bracket/base_emulator.py`, the emulator
+ * The real [UartBaseLink] (TCP transport) against `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, the emulator
  * Aqara's bracket_cli accepted on the panel (frames/aqara-s1-plus/research/base-protocol.md). Needs only a plain python3;
  * uses BRACKET_PYTHON, else ESPHOME_PYTHON, else `python3`. Skipped if none runs; fails if the
  * emulator isn't in the repo.
@@ -44,7 +44,7 @@ class UartBaseLinkEmulatorTest {
     fun driverAgainstEmulator() {
         val py = python()
         assumeTrue("no python3 to run base_emulator.py", py != null)
-        val script = RepoFiles.file("tools/bracket/base_emulator.py")
+        val script = RepoFiles.file("frames/aqara-s1-plus/tools/bracket/base_emulator.py")
         // Picked on 127.0.0.1, where the emulator listens: on macOS a wildcard pick can be a port
         // another process holds there (#113).
         val port = ServerSocket(0, 0, InetAddress.getLoopbackAddress()).use { it.localPort }

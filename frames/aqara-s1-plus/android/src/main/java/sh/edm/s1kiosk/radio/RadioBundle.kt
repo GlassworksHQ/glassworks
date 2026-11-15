@@ -5,7 +5,7 @@ import java.io.InputStream
 
 /**
  * The signed radio bundle this APK ships (assets/radio-bundle/, built and signed by the release
- * workflow with tools/radio/make-bundle.py) and its installation on the panel (frames/aqara-s1-plus/docs/radio.md "Radio
+ * workflow with frames/aqara-s1-plus/tools/radio/make-bundle.py) and its installation on the panel (frames/aqara-s1-plus/docs/radio.md "Radio
  * bundles"). The app is only the courier: it stages the files in its private dir and starts the root
  * service [RadioHelper.BUNDLE_SERVICE], which checks the Ed25519 signature against the key baked into
  * the boot image, refuses older versions, installs, and restarts the radio helper. The app never

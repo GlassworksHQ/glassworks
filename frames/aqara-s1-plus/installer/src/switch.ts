@@ -1,6 +1,6 @@
 // Moving a panel from one signing key to another (in practice: a debug build to a release build)
 // without it losing its Wi-Fi, and keeping S1 Kiosk's data where the installer has root. Same steps
-// as tools/install.sh's switch; the panel side is tools/install/s1kiosk-switch.sh.
+// as frames/aqara-s1-plus/tools/install.sh's switch; the panel side is frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh.
 //
 // Why this is needed: Android won't update an app across signing keys, so the only way is uninstall
 // + install. Uninstalling deletes the app's data, and on Android 10 also every Wi-Fi network the app
@@ -16,7 +16,7 @@
 // The Wi-Fi password never goes into a command line, a log line or an error message.
 import type { PanelShell } from '@glassworks/adb';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
-import switchScript from '../../../../tools/install/s1kiosk-switch.sh?raw';
+import switchScript from '../../tools/install/s1kiosk-switch.sh?raw';
 
 const PKG = 'sh.edm.s1kiosk';
 const ACT = `${PKG}/.MainActivity`;

@@ -17,14 +17,14 @@
 #            Android code or this file changes
 #   web     the npm workspaces from the repo root (job id kept, as branch protection names it):
 #            Kiln, its packages, the frame recipes and packages/*: typecheck, tests, both builds
-#   scripts  tools/install.sh's off-device tests, the perf test's rubric, report and grade
+#   scripts  frames/aqara-s1-plus/tools/install.sh's off-device tests, the perf test's rubric, report and grade
 #            (tools/perf), the docs' relative links, and that every glassworks.dev brand image the
 #            Markdown uses is live (a 404 fails; an unreachable site only warns)
 #   perf-webrtc  Clarity's WebRTC camera (#202): the fake's peer and TURN relay under the hash-locked
 #            venv, HA's real frontend (the pinned build, 117 MB) playing it in the runner's Chrome, and
 #            the relay in the runner's Firefox (Gecko, the panel's engine)
 #   root     the root side (radio helper, bundle checks, s1kiosk_verify) in a 32-bit ARM container
-#            under QEMU. Slow, so it runs only when tools/root, tools/radio or this file changes
+#            under QEMU. Slow, so it runs only when frames/aqara-s1-plus/tools/root, frames/aqara-s1-plus/tools/radio or this file changes
 #   Android code: every Gradle module and build file in either layout of #21's move, the Gradle root
 #            (app/ or the repo root) and APKs found by name: tools/release/android-layout.sh
 #   size     builds the release APKs (one per frame ABI) of this branch and of its base, splits them into the
@@ -373,8 +373,8 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - name: tools/install.sh off-device tests
-        run: tools/install/test/install-tests.sh
+      - name: frames/aqara-s1-plus/tools/install.sh off-device tests
+        run: frames/aqara-s1-plus/tools/install/test/install-tests.sh
       - name: "The Android layout helper, in both layouts of #21's move"
         run: tools/release/test/android-layout-test.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -439,7 +439,7 @@ jobs:
         # Fails closed like the branding job's: without a base commit to compare with (none, a
         # force-pushed or garbage-collected one) or when git diff fails, the tests run.
         run: |
-          paths="tools/root tools/radio .github/workflows/pr.yml"
+          paths="frames/aqara-s1-plus/tools/root frames/aqara-s1-plus/tools/radio .github/workflows/pr.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); running the root-side tests."
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -449,7 +449,7 @@ jobs:
           elif [ -n "$changed" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Nothing under tools/root or tools/radio changed; skipping the root-side tests."
+            echo "Nothing under frames/aqara-s1-plus/tools/root or frames/aqara-s1-plus/tools/radio changed; skipping the root-side tests."
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -460,11 +460,11 @@ jobs:
 
       - name: Build and self-test s1kiosk_verify
         if: steps.changed.outputs.run == 'true'
-        run: tools/root/build-verify.sh
+        run: frames/aqara-s1-plus/tools/root/build-verify.sh
 
       - name: Root-side tests
         if: steps.changed.outputs.run == 'true'
-        run: tools/radio/test/run.sh
+        run: frames/aqara-s1-plus/tools/radio/test/run.sh
 
   size:
     runs-on: ubuntu-24.04
@@ -497,12 +497,12 @@ jobs:
 
       # The release's armeabi-v7a APK carries the signed radio bundle (release.yml), so this one does
       # too: the same files, signed with a throwaway key (tools/size/radio-bundle.sh, docs/size.md).
-      # The sisdk runtime is reproducible and checked against tools/radio/sisdk-runtime.sha256 either
+      # The sisdk runtime is reproducible and checked against frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256 either
       # way; the cache only saves rebuilding it.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/sisdk-cache
-          key: sisdk-${{ hashFiles('tools/radio/build-sisdk-runtime.sh', 'tools/radio/sisdk-runtime.sha256', 'tools/radio/sisdk/**') }}
+          key: sisdk-${{ hashFiles('frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh', 'frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256', 'frames/aqara-s1-plus/tools/radio/sisdk/**') }}
 
       - name: Radio bundle, as the release builds it
         run: SISDK_DIR="$HOME/sisdk-cache" tools/size/radio-bundle.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/bundle-head"
@@ -540,7 +540,7 @@ jobs:
           git worktree add -q "$RUNNER_TEMP/base" "$BASE"
           # The base's own bundle when its inputs differ (this script, on the base's files).
           bundle="$RUNNER_TEMP/bundle-head"
-          if ! git diff --quiet "$BASE" HEAD -- tools/radio kiln/assets.lock.json; then
+          if ! git diff --quiet "$BASE" HEAD -- frames/aqara-s1-plus/tools/radio kiln/assets.lock.json; then
             bundle="$RUNNER_TEMP/bundle-base"
             SISDK_DIR="$RUNNER_TEMP/sisdk-base" tools/size/radio-bundle.sh "$RUNNER_TEMP/base" "$bundle" || bundle=""
           fi

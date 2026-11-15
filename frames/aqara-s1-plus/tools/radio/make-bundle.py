@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Build and sign an S1 Kiosk radio bundle (docs/radio.md "Radio bundles").
 
-    tools/radio/make-bundle.py --version 30200 --key KEY.pem --out OUTDIR \\
-        --file s1kiosk_radio.sh=tools/radio/s1kiosk_radio.sh:0700 \\
-        --file otbr-agent=tools/radio/out/otbr-agent:0700 \\
-        --dir sisdk=tools/radio/out/sisdk \\
+    frames/aqara-s1-plus/tools/radio/make-bundle.py --version 30200 --key KEY.pem --out OUTDIR \\
+        --file s1kiosk_radio.sh=frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700 \\
+        --file otbr-agent=frames/aqara-s1-plus/tools/radio/out/otbr-agent:0700 \\
+        --dir sisdk=frames/aqara-s1-plus/tools/radio/out/sisdk \\
         [--firmware ID=PATH-IN-BUNDLE:APP-VERSION:LABEL ...]
 
 Writes OUTDIR/radio-bundle/{manifest,manifest.sig,<files>} (the layout the app ships as an APK asset
 and the panel's s1kiosk_bundle.sh installs). KEY.pem is the project's Ed25519 private key (PKCS#8 PEM,
 GitHub secret S1_RADIO_BUNDLE_KEY in CI); it is only read by `openssl pkeyutl -sign`. --pubkey FILE
-checks the result against a public key (tools/root/s1kiosk_bundle.pub) afterwards.
+checks the result against a public key (frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub) afterwards.
 
 The manifest format is the one s1kiosk_bundle.sh parses (its header): version must only go up, so CI
 uses the app's versionCode. The script refuses to package Silicon Labs' zigbeed binary (MSLA object
@@ -31,7 +31,7 @@ PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*(/[A-Za-z0-9][A-Za-z0-9._+-]*
 MODES = {"0600", "0644", "0700", "0755"}
 FW_ID_RE = re.compile(r"^[a-z0-9-]{1,16}$")
 APP_RE = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
-# Silicon Labs zigbeed 8.2.2 armhf (tools/radio/build-zigbeed.sh): must never end up in a bundle.
+# Silicon Labs zigbeed 8.2.2 armhf (frames/aqara-s1-plus/tools/radio/build-zigbeed.sh): must never end up in a bundle.
 MSLA_SHA256 = {"a66d45842a770e1c449a55208a6d2a3b36786eb1c94bf10d3c3aac317274e3bb"}
 MAX_FILES = 200
 MAX_TOTAL = 96 * 1024 * 1024

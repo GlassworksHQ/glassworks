@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Builds tools/root/out/s1kiosk_verify: a static 32-bit ARM (armeabi-v7a userspace) Ed25519 checker
+# Builds frames/aqara-s1-plus/tools/root/out/s1kiosk_verify: a static 32-bit ARM (armeabi-v7a userspace) Ed25519 checker
 # for the boot image (overlay.d/sbin/s1kiosk_verify), used by s1kiosk_bundle.sh and the radio
 # helper's loader to accept only radio bundles signed with the project's key (docs/radio.md
-# "Radio bundles"). Source: tools/root/verify/s1kiosk_verify.c.
+# "Radio bundles"). Source: frames/aqara-s1-plus/tools/root/verify/s1kiosk_verify.c.
 #
-#   tools/root/build-verify.sh            # build + self-test (Docker, linux/arm/v7 under emulation)
+#   frames/aqara-s1-plus/tools/root/build-verify.sh            # build + self-test (Docker, linux/arm/v7 under emulation)
 #
 # Third-party input, fetched at build time and hash-checked (nothing vendored):
 #   Monocypher 4.0.3  https://monocypher.org/download/monocypher-4.0.3.tar.gz
@@ -13,7 +13,7 @@
 #   License: CC0-1.0 or BSD-2-Clause (the binary carries the BSD notice in out/NOTICE.s1kiosk_verify).
 # Toolchain: Alpine 3.20 (musl, gcc) in an arm32v7 container, so the result is static and needs nothing
 # from Android. Self-test: RFC 8032 test vectors 1-3, a tampered message, a tampered signature, and a
-# message signed here with OpenSSL (the same tool tools/radio/make-bundle.py uses).
+# message signed here with OpenSSL (the same tool frames/aqara-s1-plus/tools/radio/make-bundle.py uses).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/out"

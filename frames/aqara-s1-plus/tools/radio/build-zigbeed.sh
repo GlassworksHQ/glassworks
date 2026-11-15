@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # build-zigbeed.sh - RESEARCH/TEST BUNDLE (the product path is the radio bundle's sisdk/ runtime from
-# tools/radio/build-sisdk-runtime.sh plus the panel's own download of zigbeed; docs/radio.md): package Silicon Labs' prebuilt zigbeed (EmberZNet 8.2.2, EZSP v18,
+# frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh plus the panel's own download of zigbeed; docs/radio.md): package Silicon Labs' prebuilt zigbeed (EmberZNet 8.2.2, EZSP v18,
 # Simplicity SDK 2025.6.3) so it runs on the Aqara S1 panel (Android 10, 32-bit ARM userspace)
 # next to Aqara's own cpcd 4.3.3 and the stock multi-PAN RCP. Goal: Zigbee2MQTT's `ember` adapter
 # (needs EZSP 13-19) without reflashing the radio. See frames/aqara-s1-plus/research/zigbee2mqtt.md.
@@ -39,7 +39,7 @@
 #  3. Ubuntu 22.04 arm-linux-gnueabihf cross runtime (libc6-armhf-cross, libstdc++6-armhf-cross,
 #     libgcc-s1-armhf-cross): LGPL-2.1+ (glibc), GPL-3.0+ with the GCC Runtime Library Exception.
 #
-# Usage:  tools/radio/build-zigbeed.sh            # fetch (cached), assemble, smoke test
+# Usage:  frames/aqara-s1-plus/tools/radio/build-zigbeed.sh            # fetch (cached), assemble, smoke test
 # Knobs:  SMOKE=0 skips the arm32v7 smoke test.  CPC_SOCKET_DIR (default /dev/shm, Aqara's cpcd).
 
 set -euo pipefail
@@ -48,7 +48,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP_BASE=/tmp
 BUILD_DIR="${ZIGBEED_BUILD:-$TMP_BASE/zigbeed-sisdk-build}"
 OUT_DIR="${ZIGBEED_OUT:-$TMP_BASE/zigbeed-sisdk}"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 mkdir -p "$BUILD_DIR" "$OUT_DIR"
 BUILD_DIR="$(cd "$BUILD_DIR" && pwd -P)"; OUT_DIR="$(cd "$OUT_DIR" && pwd -P)"
 for d in "$BUILD_DIR" "$OUT_DIR"; do
@@ -174,7 +174,7 @@ for l in ld-linux-armhf.so.3 libc.so.6 libm.so.6 libstdc++.so.6 libgcc_s.so.1; d
   cp -L "$S/$l" "$OUT/lib/$l"
 done
 cp x/usr/share/doc/zigbeed/copyright "$OUT/LICENSE.zigbeed-MSLA.txt"
-install -m 0755 "$W/zigbeed.sh" "$OUT/zigbeed.sh"   # = tools/radio/sisdk/zigbeed.sh
+install -m 0755 "$W/zigbeed.sh" "$OUT/zigbeed.sh"   # = frames/aqara-s1-plus/tools/radio/sisdk/zigbeed.sh
 {
   echo "zigbeed-sisdk bundle (prototype), built $(date -u +%FT%TZ)"
   echo "zigbeed: EmberZNet 8.2.2 (EZSP 18), Simplicity SDK $SISDK_TAG debian-bookworm.zip sha256 $DEB_ZIP_SHA256"

@@ -12,7 +12,7 @@
 #   - adding android:sharedUserId: Android refuses the update;
 #   - a renamed component that something outside the APK names. AdminReceiver: device admin is
 #     granted to the component, so a rename silently drops it (no lockNow, no silent updates).
-#     MainActivity, ImprovActivity: started by name by tools/install.sh, the web installer and the
+#     MainActivity, ImprovActivity: started by name by frames/aqara-s1-plus/tools/install.sh, the web installer and the
 #     docs. BootReceiver: autostart. The Kotlin package rename (Glassworks migration step 7) must keep
 #     these names, e.g. by keeping these classes where they are.
 # Needs aapt2 (and apksigner for --signed) from the newest Android build-tools under $ANDROID_HOME

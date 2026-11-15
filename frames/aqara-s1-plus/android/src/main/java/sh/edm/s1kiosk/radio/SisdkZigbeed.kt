@@ -17,7 +17,7 @@ import java.util.zip.ZipFile
  * The binary is Silicon Labs MSLA object code: this project never ships or hosts it. The panel fetches
  * it from Silicon Labs' own GitHub release when the stack is chosen, extracts `usr/local/bin/zigbeed`
  * from the armhf .deb, and hands it to the root helper, which installs it only if its SHA-256 is the
- * pinned one (the same pin is in tools/radio/s1kiosk_radio.sh). Everything here runs as the app, so the
+ * pinned one (the same pin is in frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh). Everything here runs as the app, so the
  * parsing of downloaded data never runs as root; the hashes are checked at each step anyway.
  *
  * Only the 253 KB .deb is fetched (an HTTP range of the zip, which stores it uncompressed at a pinned

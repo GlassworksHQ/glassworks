@@ -4,10 +4,10 @@
 # frames/aqara-s1-plus/research/zigbee2mqtt.md). The zigbeed binary itself is NOT here and must never be: it is Silicon
 # Labs MSLA object code, downloaded by the panel from Silicon Labs' release (pinned SHA-256).
 #
-#   tools/radio/build-sisdk-runtime.sh            # -> tools/radio/out/sisdk (SISDK_OUT=<dir> to change)
+#   frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh            # -> frames/aqara-s1-plus/tools/radio/out/sisdk (SISDK_OUT=<dir> to change)
 #
 # Output:
-#   zigbeed.sh               tools/radio/sisdk/zigbeed.sh (runs zigbeed through the bundled loader)
+#   zigbeed.sh               frames/aqara-s1-plus/tools/radio/sisdk/zigbeed.sh (runs zigbeed through the bundled loader)
 #   lib/libcpc.so.3          built here from cpc-daemon v4.3.3 (Aqara's cpcd is 4.3.3.0 and libcpc refuses
 #                            a daemon whose version differs; zigbeed 8.2.2 imports only the 7 base API-v3
 #                            calls, all in 4.3.3 with the same soname)
@@ -30,9 +30,9 @@
 #
 # Reproducible: the builder is ubuntu:22.04 pinned by digest, always linux/amd64 (emulated on an ARM
 # computer, like CI), and its packages come from a fixed Ubuntu archive snapshot (snapshot.ubuntu.com,
-# $SNAPSHOT). The result must match the committed tools/radio/sisdk-runtime.sha256, or the script fails
+# $SNAPSHOT). The result must match the committed frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256, or the script fails
 # (that is what the release workflow's signing job relies on). After a deliberate change (new snapshot,
-# new cpc-daemon pin): SISDK_UPDATE_HASHES=1 tools/radio/build-sisdk-runtime.sh, and commit the file.
+# new cpc-daemon pin): SISDK_UPDATE_HASHES=1 frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh, and commit the file.
 # BUILD ONLY: never talks to a device.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,7 +48,7 @@ PLATFORM=linux/amd64
 SNAPSHOT=20261101T000000Z                         # Ubuntu archive snapshot the packages come from
 BUILDER_IMAGE=aqara-s1-sisdk-builder:jammy-$SNAPSHOT-amd64
 HASHES="$HERE/sisdk-runtime.sha256"
-# What zigbeed 8.2.2 imports from libcpc (objdump -T, tools/radio/build-zigbeed.sh checks it against the
+# What zigbeed 8.2.2 imports from libcpc (objdump -T, frames/aqara-s1-plus/tools/radio/build-zigbeed.sh checks it against the
 # real binary when it has one).
 ZIGBEED_CPC_IMPORTS="cpc_close_endpoint cpc_init cpc_open_endpoint cpc_read_endpoint cpc_restart cpc_set_endpoint_option cpc_write_endpoint"
 

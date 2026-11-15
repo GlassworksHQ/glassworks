@@ -1,6 +1,6 @@
-// The Aqara Panel Hub S1 Plus for Kiln: tools/install/fel-install.sh's device-specific steps. FEL on
+// The Aqara Panel Hub S1 Plus for Kiln: frames/aqara-s1-plus/tools/install/fel-install.sh's device-specific steps. FEL on
 // the A133 boots our U-Boot from RAM, fastboot shows the S1 Plus layout, the patched boot carries the
-// root helper, radio and update services, and provisioning is tools/install.sh (provision.ts).
+// root helper, radio and update services, and provisioning is frames/aqara-s1-plus/tools/install.sh (provision.ts).
 import { isMagiskPatched, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags } from '@glassworks/bootpatch';
 import { bootUboot, checkChip } from '@glassworks/fel';
 import type { FlashStep, Recipe } from '@glassworks/kiln-core';

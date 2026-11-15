@@ -34,7 +34,7 @@ class TimeZonePaneTest {
         override fun set(name: String, value: String) { p[name] = value }
         override fun sleep(ms: Long) {}
 
-        /** One check of the root helper v4 (tools/radio/s1kiosk_radio.sh tz_check), as it treats the property. */
+        /** One check of the root helper v4 (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh tz_check), as it treats the property. */
         fun helper() {
             val want = p[TimeZoneKeeper.PROP].orEmpty()
             val have = p["persist.sys.timezone"].orEmpty()

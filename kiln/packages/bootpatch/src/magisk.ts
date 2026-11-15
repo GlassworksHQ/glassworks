@@ -1,5 +1,5 @@
 // Magisk v31.1: read boot_patch.sh's inputs out of the APK, and reproduce boot_patch.sh's ramdisk
-// steps (scripts/boot_patch.sh, run by tools/root/patch-boot-magisk.sh with KEEPVERITY=true
+// steps (scripts/boot_patch.sh, run by frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh with KEEPVERITY=true
 // KEEPFORCEENCRYPT=true, outside Android so BOOTMODE=false).
 
 import type { Compressor } from './compress';

@@ -5,10 +5,10 @@
 #
 # BUILD ONLY. This script never talks to the device (no adb, no serial).
 #
-# Output: tools/radio/out/{otbr-agent,ot-ctl}  -- fully static glibc ARM EABI5 (armhf) ELF,
+# Output: frames/aqara-s1-plus/tools/radio/out/{otbr-agent,ot-ctl}  -- fully static glibc ARM EABI5 (armhf) ELF,
 #         no bionic / libc++ dependencies. Plus BUILD-INFO.txt with pins, options and runtime paths.
-#         PROFILE=br writes the border-router build to tools/radio/out/br/ instead (see PROFILE below).
-# Cache : tools/radio/.build/  (sources, build trees). Both dirs are gitignored.
+#         PROFILE=br writes the border-router build to frames/aqara-s1-plus/tools/radio/out/br/ instead (see PROFILE below).
+# Cache : frames/aqara-s1-plus/tools/radio/.build/  (sources, build trees). Both dirs are gitignored.
 # Needs : Docker on the host (tested: Docker 29, Apple Silicon). Builder image is derived from
 #         arm64v8/ubuntu:22.04 and uses Ubuntu's gcc-arm-linux-gnueabihf cross toolchain;
 #         the smoke test runs the binaries in arm32v7/ubuntu:22.04.
@@ -69,8 +69,8 @@
 # The runtime dir must exist (mkdir -p /data/local/tmp/otbr); the settings subdir is created.
 # ---------------------------------------------------------------------------------------------
 #
-# Usage:  tools/radio/build-otbr.sh            # fetch (if needed), build, smoke-test
-#         CLEAN=1 tools/radio/build-otbr.sh    # wipe build trees first (keeps fetched sources)
+# Usage:  frames/aqara-s1-plus/tools/radio/build-otbr.sh            # fetch (if needed), build, smoke-test
+#         CLEAN=1 frames/aqara-s1-plus/tools/radio/build-otbr.sh    # wipe build trees first (keeps fetched sources)
 # Knobs (environment, all optional):
 #   PROFILE           agent = minimal Thread agent (no border routing/REST/mDNS), out/      [agent]
 #                     br    = border router for Home Assistant's OTBR integration, out/br/:

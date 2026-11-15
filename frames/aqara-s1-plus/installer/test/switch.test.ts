@@ -1,7 +1,7 @@
 // The signing-key switch (debug build -> release) and the Wi-Fi-keeping undo, on a simulated panel.
-// The panel-side script's Wi-Fi commands run for real (tools/install/s1kiosk-switch.sh against the
+// The panel-side script's Wi-Fi commands run for real (frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh against the
 // fixture WifiConfigStore.xml); its data copy/restore is simulated here and tested in
-// tools/install/test/install-tests.sh.
+// frames/aqara-s1-plus/tools/install/test/install-tests.sh.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -14,9 +14,9 @@ import {
 } from '../src/switch';
 
 const REPO = join(__dirname, '../../../..');
-const FIX = join(REPO, 'tools/install/test/fixtures');
+const FIX = join(REPO, 'frames/aqara-s1-plus/tools/install/test/fixtures');
 const fixture = (f: string) => readFileSync(join(FIX, f), 'utf8');
-const SCRIPT = join(REPO, 'tools/install/s1kiosk-switch.sh');
+const SCRIPT = join(REPO, 'frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh');
 /** The fixture's (fake) password for "Home & Garden", as the app must receive it. */
 const PSK = 'fixture <not> "real" & fake';
 const MISMATCH = 'Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package sh.edm.s1kiosk signatures do not match previously installed version; ignoring!]\n';

@@ -10,7 +10,7 @@
 # otbr-agent/ot-ctl and the Silicon Labs Zigbee runtime (never Silicon Labs' zigbeed itself). Its key
 # lets code run as root on every panel, so it is kept away from everything else:
 #   inputs       builds the Silicon Labs runtime (no secrets); its output must match the committed
-#                tools/radio/sisdk-runtime.sha256
+#                frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256
 #   sign-bundle  the only job that can read S1_RADIO_BUNDLE_KEY (an environment secret of the
 #                `radio-signing` environment). Signs only commits on main, takes nothing from the other
 #                job without checking it against committed hashes, runs no third-party action
@@ -62,13 +62,13 @@ jobs:
           tools/release/changelog-section.sh "$VERSION" > "$RUNNER_TEMP/notes.md"
           cat "$RUNNER_TEMP/notes.md"
 
-      - name: Silicon Labs runtime (no zigbeed), checked against tools/radio/sisdk-runtime.sha256
-        run: tools/radio/build-sisdk-runtime.sh
+      - name: Silicon Labs runtime (no zigbeed), checked against frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256
+        run: frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sisdk-runtime
-          path: tools/radio/out/sisdk/
+          path: frames/aqara-s1-plus/tools/radio/out/sisdk/
           if-no-files-found: error
           retention-days: 1
 
@@ -100,8 +100,8 @@ jobs:
           # they are set here, not taken from the other job).
           cd "$RUNNER_TEMP/sisdk"
           find . -type f | LC_ALL=C sort | xargs sha256sum > "$RUNNER_TEMP/sisdk.sha256"
-          diff "$RUNNER_TEMP/sisdk.sha256" "$GITHUB_WORKSPACE/tools/radio/sisdk-runtime.sha256" ||
-            { echo "::error::the Silicon Labs runtime does not match tools/radio/sisdk-runtime.sha256"; exit 1; }
+          diff "$RUNNER_TEMP/sisdk.sha256" "$GITHUB_WORKSPACE/frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256" ||
+            { echo "::error::the Silicon Labs runtime does not match frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256"; exit 1; }
           find . -type f -exec chmod 0644 {} +
           chmod 0755 zigbeed.sh lib/ld-linux-armhf.so.3
           # otbr-agent/ot-ctl: the pinned border-router build the web installer ships (kiln/assets.lock.json).
@@ -130,10 +130,10 @@ jobs:
           printf '%s\n' "$S1_RADIO_BUNDLE_KEY" > "$RUNNER_TEMP/radio-bundle.pem"
           IFS=. read -r major minor patch <<< "$VERSION"
           code=$((major * 10000 + minor * 100 + patch))   # = the APK's versionCode: only ever goes up
-          python3 tools/radio/make-bundle.py --version "$code" --app-version "$VERSION" \
+          python3 frames/aqara-s1-plus/tools/radio/make-bundle.py --version "$code" --app-version "$VERSION" \
             --key "$RUNNER_TEMP/radio-bundle.pem" \
-            --out "$RUNNER_TEMP/signed" --pubkey tools/root/s1kiosk_bundle.pub \
-            --file s1kiosk_radio.sh=tools/radio/s1kiosk_radio.sh:0700 \
+            --out "$RUNNER_TEMP/signed" --pubkey frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub \
+            --file s1kiosk_radio.sh=frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700 \
             --file "otbr-agent=$RUNNER_TEMP/radio-in/otbr-agent:0700" \
             --file "ot-ctl=$RUNNER_TEMP/radio-in/ot-ctl:0700" \
             --dir "sisdk=$RUNNER_TEMP/sisdk"

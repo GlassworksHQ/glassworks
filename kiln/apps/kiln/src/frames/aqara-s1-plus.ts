@@ -32,7 +32,7 @@ export const s1PlusUi = {
   help: {
     recovery: `${DOCS}/install.md#troubleshooting`,
     undo: `${DOCS}/install.md#undo`,
-    undoCli: 'tools/install/fel-install.sh --undo ~/s1-backup',
+    undoCli: 'frames/aqara-s1-plus/tools/install/fel-install.sh --undo ~/s1-backup',
     drivers: `${DOCS}/install.md#1--check-this-browser`,
     learn: `${DOCS}/install.md`,
   },

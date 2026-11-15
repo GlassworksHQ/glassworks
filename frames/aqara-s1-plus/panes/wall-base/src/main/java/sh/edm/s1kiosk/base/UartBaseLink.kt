@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 /**
  * [BaseLink] that talks to the wall base directly: the UART protocol ([BracketProtocol] /
  * [BracketSession]) on `/dev/ttyS3`, or, for testing, on a TCP connection to
- * `tools/bracket/base_emulator.py` ([transport] = `tcp:host:port`).
+ * `frames/aqara-s1-plus/tools/bracket/base_emulator.py` ([transport] = `tcp:host:port`).
  *
  * Pure JVM on purpose (Android bits are injected), so the JVM tests run it against the emulator.
  *

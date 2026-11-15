@@ -2,23 +2,23 @@
 # End-to-end install on an Aqara Panel Hub S1 Plus (factory or already installed), with only the PCB
 # FEL button and a USB-C cable: no UART, no adb needed beforehand.
 #
-#   tools/install/fel-install.sh [backup-dir]
-#   tools/install/fel-install.sh --undo <backup-dir>    restore that backup's stock boot, vbmeta, splash
+#   frames/aqara-s1-plus/tools/install/fel-install.sh [backup-dir]
+#   frames/aqara-s1-plus/tools/install/fel-install.sh --undo <backup-dir>    restore that backup's stock boot, vbmeta, splash
 #
 #   1. wait for FEL (you hold the PCB button while plugging in), check the SoC is an A133
-#   2. boot our U-Boot from RAM (tools/fel/fel-boot.sh); it starts USB fastboot by itself
+#   2. boot our U-Boot from RAM (frames/aqara-s1-plus/tools/fel/fel-boot.sh); it starts USB fastboot by itself
 #   3. check the partition layout is the S1 Plus one
 #   4. back up the panel's own partitions to <backup-dir> (boot read twice and compared)
-#   5. patch boot on this computer (tools/root/patch-boot-magisk.sh: Magisk + S1 helper + this
+#   5. patch boot on this computer (frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh: Magisk + S1 helper + this
 #      computer's adb key, authorized on first boot)
 #   6. vbmeta: if its flags are not 3 (verification off), flash the panel's own vbmeta with flags 3,
 #      the configuration proven on the reference panel; verified by read-back
 #   7. splash: the panel's own boot-resource (`bootloader` partition) with BOOTLOGO.BMP swapped for
 #      branding/glass-tile/bootlogo.bmp, in place (BRANDING=none keeps stock); verified by read-back
 #   8. flash boot (with the boot animation), verify by read-back, reboot
-#   9. wait for adb (authorized by the first-boot service), then point you to tools/install.sh
+#   9. wait for adb (authorized by the first-boot service), then point you to frames/aqara-s1-plus/tools/install.sh
 #
-# Needs: sunxi-fel, fastboot, adb, docker, and a U-Boot build (tools/fel/build-uboot.sh).
+# Needs: sunxi-fel, fastboot, adb, docker, and a U-Boot build (frames/aqara-s1-plus/tools/fel/build-uboot.sh).
 # Undo: --undo <backup-dir> (FEL again, then boot, vbmeta and the splash partition from the backup,
 #       each verified by read-back).
 #       It refuses a backup whose boot is already Magisk-patched (a re-run's backup), or whose splash
@@ -36,12 +36,12 @@ MODE=install
 if [ "${1:-}" = --undo ]; then MODE=undo; UNDO=${2:?usage: fel-install.sh --undo <backup-dir>}; fi
 OUT=${1:-$PWD/s1-backup-$(date +%Y%m%d-%H%M%S)}
 BACKUP_PARTS="boot vbmeta vbmeta_system vbmeta_vendor dtbo misc recovery env bootloader"
-BRANDING=${BRANDING:-$HERE/../../branding/glass-tile/bootlogo.bmp}   # none = keep the stock splash
+BRANDING=${BRANDING:-$HERE/../../../../branding/glass-tile/bootlogo.bmp}   # none = keep the stock splash
 
 say() { printf '\n== %s\n' "$*"; }
 die() { printf '\nERROR: %s\n' "$*" >&2; exit 1; }
 for t in "$FEL" "$FB" "$ADB" docker shasum python3; do command -v "$t" >/dev/null || die "missing tool: $t"; done
-[ -f "$UBUILD/u-boot-sunxi-with-spl.bin" ] || die "no U-Boot build in $UBUILD (tools/fel/build-uboot.sh)"
+[ -f "$UBUILD/u-boot-sunxi-with-spl.bin" ] || die "no U-Boot build in $UBUILD (frames/aqara-s1-plus/tools/fel/build-uboot.sh)"
 
 # Is this boot image Magisk-patched? (looks for .backup/.magisk in the gzip'd ramdisk of a v0-v2 header)
 is_magisk() { python3 - "$1" <<'PY'
@@ -67,7 +67,7 @@ if [ "$MODE" = undo ]; then
   ! is_magisk "$UNDO/boot.img" || die "$UNDO/boot.img is Magisk-patched (a re-run backup); use the first install's backup"
   # A stock boot alone doesn't make it the original: boot put back without its splash, then installed
   # again, gives a backup whose splash is ours, and undo would write ours back as Aqara's (#106).
-  splash=$(python3 "$HERE/../branding/set-bootlogo.py" --ours "$UNDO/bootloader.img" "$HERE/../../branding/bootlogos.json") ||
+  splash=$(python3 "$HERE/../../../../tools/branding/set-bootlogo.py" --ours "$UNDO/bootloader.img" "$HERE/../../../../branding/bootlogos.json") ||
     die "could not check the splash in $UNDO/bootloader.img. Nothing was changed."
   case "$splash" in ours*) die "$UNDO/bootloader.img holds our splash (${splash#ours }), not Aqara's: this backup was taken after an install. Nothing was changed.
        Use the backup from your first install. Without one, put back only boot and vbmeta by hand (the
@@ -148,7 +148,7 @@ say "7/9 Splash"
 if [ "$BRANDING" = none ]; then
   echo "BRANDING=none: stock splash kept"
 else
-  python3 "$HERE/../branding/set-bootlogo.py" "$OUT/bootloader.img" "$BRANDING" "$OUT/bootloader.branded.img"
+  python3 "$HERE/../../../../tools/branding/set-bootlogo.py" "$OUT/bootloader.img" "$BRANDING" "$OUT/bootloader.branded.img"
   if cmp -s "$OUT/bootloader.img" "$OUT/bootloader.branded.img"; then
     echo "splash already in place: unchanged"
   else
@@ -176,5 +176,5 @@ done
 adb_ shell 'echo "android up: $(getprop ro.build.version.release), boot_completed=$(getprop sys.boot_completed)"' ||
   die "adb not authorized yet: check the panel screen for a USB debugging prompt"
 echo
-echo "Done. Next: tools/install.sh --url http://<home-assistant>:8123/<dashboard>"
+echo "Done. Next: frames/aqara-s1-plus/tools/install.sh --url http://<home-assistant>:8123/<dashboard>"
 echo "Backup: $OUT (keep it: it is your undo)"

@@ -2,9 +2,9 @@
 # Build U-Boot (SPL + proper) for the Aqara Panel Hub S1 Plus, to run from FEL (RAM only).
 #
 #   UBOOT_SRC=~/src/u-boot  BL31=~/src/trusted-firmware-a/build/sun50i_a133/release/bl31.bin \
-#     tools/fel/build-uboot.sh
+#     frames/aqara-s1-plus/tools/fel/build-uboot.sh
 #
-# Copies this repo's board files (tools/fel/uboot/) into the U-Boot tree, then builds inside an
+# Copies this repo's board files (frames/aqara-s1-plus/tools/fel/uboot/) into the U-Boot tree, then builds inside an
 # arm64 Ubuntu container (macOS host tools for U-Boot/libfdt don't build cleanly).
 # Output: $UBOOT_SRC/build-s1/u-boot-sunxi-with-spl.bin
 set -euo pipefail

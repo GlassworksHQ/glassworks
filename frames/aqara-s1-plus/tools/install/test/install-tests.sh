@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Off-device tests of tools/install.sh's signing-key switch and Wi-Fi-keeping --undo, of the panel
-# side (tools/install/s1kiosk-switch.sh) and of tools/install/improv-send.py. A fake `adb` simulates
+# Off-device tests of frames/aqara-s1-plus/tools/install.sh's signing-key switch and Wi-Fi-keeping --undo, of the panel
+# side (frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh) and of frames/aqara-s1-plus/tools/install/improv-send.py. A fake `adb` simulates
 # the panel (PackageManager, device admin, root, dumpsys wifi, Improv); nothing talks to a real one.
 # Runs on the host (macOS or Linux, bash + python3), in a few seconds:
 #
-#   tools/install/test/install-tests.sh
+#   frames/aqara-s1-plus/tools/install/test/install-tests.sh
 #
 # The Wi-Fi password in the fixtures is fake. The tests check that it reaches the new app and
 # appears nowhere else: not in install.sh's output, not in any adb command line.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../../.." && pwd)"
+REPO="$(cd "$HERE/../../../../.." && pwd)"
 FIX="$HERE/fixtures"
 PASS=0; FAILS=0
 ok() { PASS=$((PASS + 1)); echo "ok   $*"; }
@@ -146,11 +146,11 @@ panel() { # [wifi fixture]
   printf debug > "$T/installed"; printf 0 > "$T/disabled"; printf 1 > "$T/root"; printf 1 > "$T/admin"
   printf '%s' "$FIX/${1:-dumpsys-wifi-kiosk.txt}" > "$T/wifi-dump"
 }
-inst() { "$REPO/tools/install.sh" --apk "$APK" --no-models --no-debloat "$@" </dev/null 2>&1; }
+inst() { "$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat "$@" </dev/null 2>&1; }
 
 echo "== s1kiosk-switch.sh (panel side)"
 panel
-SW="$REPO/tools/install/s1kiosk-switch.sh"
+SW="$REPO/frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh"
 cp "$SW" "$T/panel/s1kiosk-switch.sh"
 out=$(S1_WIFI_STORES="$FIX/WifiConfigStore.xml" sh "$SW" wifi-list)
 check "wifi-list: only kiosk-saved networks, no secrets" test "$out" = $'1 psk &quot;Home &amp; Garden&quot;\n2 open &quot;Cafe&quot;'
@@ -175,7 +175,7 @@ mkdir -p "$T/panel/work"; touch "$T/panel/work/complete"
 check "restore refuses when PackageManager disagrees" bash -c '! "$@" restore 2>/dev/null' _ env PATH="$T/pbin:$PATH" S1_CE="$T/panel/ce" S1_WORK="$T/panel/work" sh "$SW"
 
 echo "== improv-send.py against a fake S1 Kiosk"
-python3 - "$REPO/tools/install/improv-send.py" <<'EOF' && ok "improv-send: sends ssid + password, exit 0; wrong password exit 3; never prints it" || no "improv-send"
+python3 - "$REPO/frames/aqara-s1-plus/tools/install/improv-send.py" <<'EOF' && ok "improv-send: sends ssid + password, exit 0; wrong password exit 3; never prints it" || no "improv-send"
 import os, socket, subprocess, sys, threading
 sys.path.insert(0, os.path.dirname(sys.argv[1]))
 import importlib.util
@@ -299,7 +299,7 @@ check "...nor a development build" hasnt "$out" "development build"
 
 echo "== install.sh --dry-run: de-bloat disables the launcher in the same run"
 panel; printf release > "$T/installed"
-out=$("$REPO/tools/install.sh" --apk "$APK" --no-models --dry-run </dev/null 2>&1)
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --dry-run </dev/null 2>&1)
 check "one debloat call with --launcher" has "$out" "debloat.sh disable --launcher"
 check "...no separate disable-launcher" hasnt "$out" "disable-launcher"
 
@@ -312,17 +312,17 @@ check "no uninstall" hasnt "$(cat "$T/adb.log")" "pm uninstall"
 
 echo "== install.sh --undo keeps the panel on its Wi-Fi"
 panel
-out=$("$REPO/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
 log=$(cat "$T/adb.log")
 check "exit 0" test $rc -eq 0
 check "disables instead of uninstalling" bash -c 'grep -q "shell pm disable-user --user 0 sh.edm.s1kiosk" <<<"$1" && ! grep -q "pm uninstall sh.edm.s1kiosk" <<<"$1"' _ "$log"
 check "says why" has "$out" "it saved the panel's Wi-Fi \"Home & Garden\""
 panel dumpsys-wifi-other.txt
-out=$("$REPO/tools/install.sh" --undo </dev/null 2>&1)
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1)
 check "someone else's network: uninstalls" has "$(cat "$T/adb.log")" "shell pm uninstall sh.edm.s1kiosk"
 check "and says it is removed" has "$out" "S1 Kiosk is removed"
 panel
-out=$("$REPO/tools/install.sh" --undo --dry-run </dev/null 2>&1)
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo --dry-run </dev/null 2>&1)
 check "dry run: shows the disable" has "$out" "+ adb shell pm disable-user --user 0 sh.edm.s1kiosk"
 check "dry run: changes nothing" test "$(cat "$T/installed") $(cat "$T/disabled")" = "debug 0"
 
@@ -355,7 +355,7 @@ STUB
 : > "$T/ub/u-boot-sunxi-with-spl.bin"
 printf 'not a boot image' > "$T/undo/boot.img"; printf 'vbmeta' > "$T/undo/vbmeta.img"
 (cd "$T/undo" && shasum -a 256 boot.img vbmeta.img > SHA256SUMS)
-fel_undo() { : > "$T/tools.log"; PATH="$T/fbin:$PATH" UBOOT_BUILD="$T/ub" "$REPO/tools/install/fel-install.sh" --undo "$T/undo" </dev/null 2>&1; }
+fel_undo() { : > "$T/tools.log"; PATH="$T/fbin:$PATH" UBOOT_BUILD="$T/ub" "$REPO/frames/aqara-s1-plus/tools/install/fel-install.sh" --undo "$T/undo" </dev/null 2>&1; }
 out=$(fel_undo); rc=$?
 check "no bootloader.img: refused" test "$rc" -ne 0
 check "and says why" has "$out" "has no bootloader.img: the backup is incomplete. Nothing was changed."
