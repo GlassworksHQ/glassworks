@@ -46,8 +46,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Shell nav={<Sidebar />}>
           <main id="content" className={chrome.main}>
             {children}
-            <SiteFooter />
           </main>
+          <SiteFooter />
         </Shell>
       </body>
     </html>

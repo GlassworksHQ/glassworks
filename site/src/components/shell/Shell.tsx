@@ -41,7 +41,10 @@ export function Shell({ nav, children }: { nav: ReactNode; children: ReactNode }
       >
         {nav}
       </aside>
-      {children}
+      {/* while the drawer covers the page, the page can't take focus */}
+      <div className={s.page} inert={open}>
+        {children}
+      </div>
     </>
   );
 }

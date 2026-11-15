@@ -1,15 +1,18 @@
 /* The page column beside the sidebar, and its footer line. */
 .main {
   margin-left: var(--side-w);
-  padding: 20px 44px 56px;
+  padding: 20px 44px 26px;
   max-width: 1400px;
 }
 
+/* the footer sits in the page column, under <main> */
 .foot {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 26px 4px 0;
+  margin-left: var(--side-w);
+  max-width: 1400px;
+  padding: 0 48px 40px;
   color: var(--faint);
   font-size: 13px;
   flex-wrap: wrap;
@@ -36,8 +39,13 @@
 }
 
 @media (max-width: 900px) {
+  .foot {
+    margin-left: 0;
+    padding: 0 max(20px, env(safe-area-inset-right, 0px)) 32px max(20px, env(safe-area-inset-left, 0px));
+  }
+
   .main {
     margin-left: 0;
-    padding: 16px max(16px, env(safe-area-inset-right, 0px)) 40px max(16px, env(safe-area-inset-left, 0px));
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px));
   }
 }

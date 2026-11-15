@@ -160,6 +160,10 @@ a.group:hover {
   display: none;
 }
 
+.page {
+  display: contents;
+}
+
 @media (max-width: 900px) {
   .top {
     display: flex;

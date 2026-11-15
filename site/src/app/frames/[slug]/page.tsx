@@ -59,7 +59,7 @@ async function Device({ params }: { params: Params }) {
     .map((p) => ({ p, ...support(d, p.id) }))
     .sort((a, b) => RANK[a.support] - RANK[b.support] || a.p.name.localeCompare(b.p.name, "en"));
   const runs = rows.filter((r) => r.support !== "no");
-  const missing = rows.filter((r) => r.support === "no").map((r) => r.p.name);
+  const notRunning = rows.filter((r) => !ships(r.support)).map((r) => r.p.name);
   const running = rows.filter((r) => ships(r.support)).length;
 
   return (
@@ -127,7 +127,7 @@ async function Device({ params }: { params: Params }) {
         <Tile
           label="Panes"
           value={`${live ? running : runs.length} of ${rows.length}`}
-          sub={!live ? "Planned" : missing.length ? `All but ${missing.join(", ")}` : "All of them"}
+          sub={!live ? "Planned" : notRunning.length ? `All but ${notRunning.join(", ")}` : "All of them"}
         />
         <Tile label="Updates" value={ratingText("updates", d.ratings.updates.value)} sub={d.ratings.updates.detail} />
       </Tiles>
