@@ -1,0 +1,113 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.secrets
+
+import android.content.SharedPreferences
+import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * The settings file [raw] (named [file]) with its [secrets] sealed by [store]: the same file and the
+ * same keys, so panels keep their settings across the update (PrefsPinTest). Code reads and writes
+ * through it as through any SharedPreferences; only the stored text of a secret changes.
+ *
+ * - **Plaintext from an earlier version** is sealed in place when this is made, all of the file's
+ *   secrets in one commit. A commit replaces the whole file at once, so a crash leaves either the old
+ *   plaintext or the sealed values, and both read back. Running it again finds nothing to do.
+ * - **A secret that no longer opens** (the key was lost: a restored backup, a vendor bug) reads as not
+ *   set and is removed, so the panel asks for it again through its usual setup. It is logged once,
+ *   without the value.
+ * - **No key store now**: a sealed secret reads as not set but stays, and a new one is stored as
+ *   plaintext so the panel keeps working; it is sealed the next time this is made with a key store.
+ */
+class SecretPrefs(
+    private val raw: SharedPreferences,
+    private val file: String,
+    private val secrets: Set<String>,
+    private val store: SecretStore,
+    private val warn: (String) -> Unit = { Log.w(SecretStore.TAG, it) },
+) : SharedPreferences {
+    /** Sealed text to its value: the key store is a binder call away, and settings are read often. */
+    private val opened = ConcurrentHashMap<String, String>()
+    private val warned = AtomicBoolean()
+    private val listeners = HashMap<SharedPreferences.OnSharedPreferenceChangeListener, SharedPreferences.OnSharedPreferenceChangeListener>()
+
+    init { sealPlaintext() }
+
+    private fun scope(key: String) = "$file/$key"
+
+    private fun warnOnce(message: String) { if (warned.compareAndSet(false, true)) warn(message) }
+
+    private fun sealPlaintext() {
+        val all = raw.all
+        val plain = secrets.mapNotNull { k -> (all[k] as? String)?.takeIf { !SecretStore.isSealed(it) }?.let { k to it } }
+        if (plain.isEmpty()) return
+        val e = raw.edit()
+        for ((k, v) in plain) e.putString(k, store.seal(v, scope(k)) ?: return)
+        e.commit()
+    }
+
+    /** The value of the secret [key] stored as [stored], or null when it doesn't open. */
+    private fun open(key: String, stored: String): String? {
+        if (!SecretStore.isSealed(stored)) return stored
+        opened[stored]?.let { return it }
+        return when (val o = store.open(stored, scope(key))) {
+            is SecretStore.Opened.Value -> o.text.also { opened[stored] = it }
+            SecretStore.Opened.Lost -> {
+                warnOnce("$file/$key was sealed with a key this panel no longer has; it is removed and needs setting again")
+                synchronized(this) { if (raw.getString(key, null) == stored) raw.edit().remove(key).commit() }
+                null
+            }
+            SecretStore.Opened.Unavailable -> { warnOnce("The key store isn't available; $file/$key reads as not set for now"); null }
+        }
+    }
+
+    override fun getString(key: String, defValue: String?): String? {
+        val v = raw.getString(key, defValue)
+        if (key !in secrets || v == null || v === defValue) return v
+        return open(key, v) ?: defValue
+    }
+
+    override fun contains(key: String): Boolean =
+        if (key in secrets) (raw.all[key] as? String)?.let { open(key, it) } != null else raw.contains(key)
+
+    override fun getAll(): Map<String, *> = raw.all
+    override fun getStringSet(key: String, defValues: Set<String>?): Set<String>? = raw.getStringSet(key, defValues)
+    override fun getInt(key: String, defValue: Int) = raw.getInt(key, defValue)
+    override fun getLong(key: String, defValue: Long) = raw.getLong(key, defValue)
+    override fun getFloat(key: String, defValue: Float) = raw.getFloat(key, defValue)
+    override fun getBoolean(key: String, defValue: Boolean) = raw.getBoolean(key, defValue)
+
+    override fun edit(): SharedPreferences.Editor = Editor(raw.edit())
+
+    /** The listener hears this file, not [raw], so it reads secrets opened. */
+    override fun registerOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener) {
+        val p = synchronized(listeners) { listeners.getOrPut(l) { SharedPreferences.OnSharedPreferenceChangeListener { _, k -> l.onSharedPreferenceChanged(this, k) } } }
+        raw.registerOnSharedPreferenceChangeListener(p)
+    }
+
+    override fun unregisterOnSharedPreferenceChangeListener(l: SharedPreferences.OnSharedPreferenceChangeListener) {
+        synchronized(listeners) { listeners.remove(l) }?.let(raw::unregisterOnSharedPreferenceChangeListener)
+    }
+
+    private inner class Editor(private val e: SharedPreferences.Editor) : SharedPreferences.Editor {
+        override fun putString(key: String, value: String?): SharedPreferences.Editor {
+            val sealed = if (key in secrets && value != null) store.seal(value, scope(key)) else null
+            if (key in secrets && value != null && sealed == null) warnOnce("The key store isn't available; $file/$key is stored unsealed until it is")
+            e.putString(key, sealed ?: value)
+            return this
+        }
+        override fun putStringSet(key: String, values: Set<String>?): SharedPreferences.Editor { e.putStringSet(key, values); return this }
+        override fun putInt(key: String, value: Int): SharedPreferences.Editor { e.putInt(key, value); return this }
+        override fun putLong(key: String, value: Long): SharedPreferences.Editor { e.putLong(key, value); return this }
+        override fun putFloat(key: String, value: Float): SharedPreferences.Editor { e.putFloat(key, value); return this }
+        override fun putBoolean(key: String, value: Boolean): SharedPreferences.Editor { e.putBoolean(key, value); return this }
+        override fun remove(key: String): SharedPreferences.Editor { e.remove(key); return this }
+        override fun clear(): SharedPreferences.Editor { e.clear(); return this }
+        override fun commit(): Boolean = e.commit()
+        override fun apply() = e.apply()
+    }
+}

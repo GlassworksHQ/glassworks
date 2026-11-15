@@ -6,17 +6,19 @@ import android.net.Uri
 import android.util.Base64
 import dev.glassworks.screen.ScreenSettings
 import dev.glassworks.esphome.NoiseKeyStore
+import dev.glassworks.secrets.SecretStore
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.auth.StoredAuth
 
 /**
  * The panel's core settings (SharedPreferences, private to the app). The app decides where each pane's
- * settings live (PanePrefs in the S1 app). Secrets: the ESPHome API encryption key (`kiosk.xml`, which
- * Home Assistant provisions) and the HA refresh token (`auth.xml`, see [auth]). Neither is ever logged.
+ * settings live (PanePrefs in the S1 app). Secrets (the ESPHome API encryption key in `kiosk.xml`,
+ * which Home Assistant provisions, and the HA refresh token in `auth.xml`, see [auth]) are sealed
+ * with the Keystore key ([SecretFiles]) and never logged.
  */
-class KioskPrefs(context: Context) : ScreenSettings {
-    private val sp = context.getSharedPreferences("kiosk", Context.MODE_PRIVATE)
-    private val authSp = context.getSharedPreferences("auth", Context.MODE_PRIVATE)
+class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()) : ScreenSettings {
+    private val sp = SecretFiles.open(context, "kiosk", secrets)
+    private val authSp = SecretFiles.open(context, "auth", secrets)
 
     fun registerListener(l: SharedPreferences.OnSharedPreferenceChangeListener) =
         sp.registerOnSharedPreferenceChangeListener(l)

@@ -2,6 +2,8 @@ package sh.edm.s1kiosk.sendspin
 
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.secrets.SecretStore
+import sh.edm.s1kiosk.SecretFiles
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -17,8 +19,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /** [SsStore] in the app's private SharedPreferences (`sendspin.xml`). Secrets are never logged. */
-class PrefsSsStore(context: Context) : SsStore {
-    private val sp = context.applicationContext.getSharedPreferences("sendspin", Context.MODE_PRIVATE)
+class PrefsSsStore(context: Context, secrets: SecretStore = SecretStore.keystore()) : SsStore {
+    /** The identity's private key, the pairing key and the records' keys are sealed ([SecretPrefs]). */
+    private val sp = SecretFiles.open(context.applicationContext, "sendspin", secrets)
     @Volatile private var cachedIdentity: SsIdentity? = null
 
     @Synchronized override fun identity(): SsIdentity {
