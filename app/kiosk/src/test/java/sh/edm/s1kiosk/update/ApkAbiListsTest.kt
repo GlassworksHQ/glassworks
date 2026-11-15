@@ -24,6 +24,7 @@ class ApkAbiListsTest {
     /** Every frame's `abis`, in frame-id order, each once. */
     private val frameAbis: List<String> = File(repo, "frames").listFiles().orEmpty()
         .map { File(it, "design/frame.json") }.filter { it.isFile }.sortedBy { it.parentFile.parentFile.name }
+        .also { if (it.isEmpty()) throw AssertionError("no frames/<id>/design/frame.json in $repo") }
         .flatMap { f -> JSONObject(f.readText()).getJSONArray("abis").let { a -> List(a.length()) { a.getString(it) } } }
         .distinct()
 

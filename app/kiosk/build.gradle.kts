@@ -160,15 +160,34 @@ tasks.withType<Test>().configureEach {
         .withPathSensitivity(PathSensitivity.NONE)
     // ContentScriptReadyTest runs the web extension's content.js under node: a change to it re-runs the tests.
     inputs.dir("src/main/assets/extension").withPropertyName("webExtension").withPathSensitivity(PathSensitivity.RELATIVE)
-    // PaneCatalogTest reads each pane's pane.json and icon.svg, which no compile task takes in (#231), in
-    // every module RepoFiles searches (testing/kotlin), so a pane in another module counts too (#21).
-    val paneModules = listOf("app", "libs", "core", "pane-api", "engines", "panes", "frames")
-    inputs.files(paneModules.map { dir ->
-        fileTree(rootProject.file("../$dir")) {
-            include("**/src/main/**/pane.json", "**/src/main/**/icon.svg") // all of src/main, as RepoFiles.sources
-            exclude("**/build/**", "**/node_modules/**")
+    // The pane catalog (#231), the confinement scans, goldens, the font and the repo files the tests read.
+    readsRepoFiles(rootProject.file(".."))
+}
+
+/**
+ * What tests read from the repo beyond their own module (RepoFiles, testing/kotlin): every module's src/main
+ * and build file under RepoFiles' search roots, and the repo files that tests open. Declared as inputs, so a
+ * change to any of them re-runs the tests instead of taking them UP-TO-DATE or FROM-CACHE: a pane.json or
+ * icon.svg, which no compile task takes in (#231), and, after #21's split, another module's sources that a
+ * confinement scan in this module reads. Relative paths keep the build cache relocatable. Every module's
+ * test task calls it once there are several (#21).
+ */
+fun Test.readsRepoFiles(repo: File) {
+    val roots = listOf("app", "libs", "core", "pane-api", "engines", "panes", "frames") // RepoFiles.SEARCH, by top folder
+    inputs.files(roots.map { dir ->
+        fileTree(File(repo, dir)) {
+            include("**/src/main/**", "**/build.gradle.kts")
+            exclude("**/build/**", "**/node_modules/**", "**/.gradle/**")
         }
-    }).withPropertyName("paneCatalog").withPathSensitivity(PathSensitivity.RELATIVE)
+    }).withPropertyName("repoModules").withPathSensitivity(PathSensitivity.RELATIVE)
+    val files = listOf(
+        "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
+        "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",
+        "tools/bracket/base_emulator.py",
+    )
+    inputs.files(files.map { File(repo, it) }, fileTree(File(repo, "LICENSES")), fileTree(File(repo, "docs")) { include("**/*.md") },
+        fileTree(File(repo, "frames")) { include("*/README.md") })
+        .withPropertyName("repoFiles").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Open source licences screen (hidden settings → "Open source licences"): the repo's

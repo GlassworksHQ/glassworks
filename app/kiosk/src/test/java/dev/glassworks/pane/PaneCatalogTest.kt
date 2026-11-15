@@ -113,7 +113,7 @@ class PaneCatalogTest {
         assertTrue("pane.json for no registered pane: $orphans", orphans.isEmpty())
         val withoutIcon = entries.filter { !it.icon.isFile }.map { rel(it.json) }
         assertTrue("pane.json without an icon.svg beside it: $withoutIcon", withoutIcon.isEmpty())
-        val strayIcons = RepoFiles.sources(atLeast = 0) { it.name == "icon.svg" && !File(it.parentFile, "pane.json").isFile }.map(::rel)
+        val strayIcons = RepoFiles.sources(atLeast = 8) { it.name == "icon.svg" }.filter { !File(it.parentFile, "pane.json").isFile }.map(::rel)
         assertTrue("icon.svg without a pane.json beside it: $strayIcons", strayIcons.isEmpty())
     }
 
