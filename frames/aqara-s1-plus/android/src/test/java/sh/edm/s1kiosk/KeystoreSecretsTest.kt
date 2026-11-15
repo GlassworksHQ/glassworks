@@ -59,7 +59,7 @@ class KeystoreSecretsTest {
     private fun appCamera(): CameraDefinition {
         ShadowBuild.setManufacturer("Google"); ShadowBuild.setModel("Pixel Tablet"); ShadowBuild.setHardware("tangorpro")
         shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_CAMERA_ANY, true)
-        val runtime = GlassworksRuntime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false))
         return runtime.paneDefinitions(app).single { it.id == "camera" } as CameraDefinition
     }
 
@@ -109,16 +109,47 @@ class KeystoreSecretsTest {
         KioskPrefs(app); PrefsSsStore(app)
         val sealed = onDisk()
         val key = FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS)
-        FakeAndroidKeyStore.hidden.set(1)
+        FakeAndroidKeyStore.hidden.set(2)
         assertNull("opening: reads as signed out for now", KioskPrefs(app).auth)
         assertEquals("opening never makes a key", key, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
         assertEquals(sealed, onDisk())
+        FakeAndroidKeyStore.hidden.set(0)
         assertEquals(token, KioskPrefs(app).auth?.refreshToken)
-        FakeAndroidKeyStore.hidden.set(1)
-        PanePrefs(app).camera.signIn = "made-up-user" to "made-up-new-pass"
-        assertEquals("sealing asks again before it makes a key", key, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
+        // Both lookups answer "no key"; the key store still lists it (containsAlias), so none is made.
+        FakeAndroidKeyStore.hidden.set(2)
+        assertTrue("not stored now", runCatching { PanePrefs(app).camera.signIn = "made-up-user" to "made-up-new-pass" }.isFailure)
+        assertEquals("sealing never replaces a key the key store still lists", key, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
+        assertEquals(sealed, onDisk())
         assertEquals(token, KioskPrefs(app).auth?.refreshToken)
-        assertEquals("made-up-user" to "made-up-new-pass", PanePrefs(app).camera.signIn)
+        assertEquals("made-up-user" to "made-up-camera-pass-7", PanePrefs(app).camera.signIn)
+    }
+
+    /** A cause-less error from getKey that a freshly loaded key store doesn't repeat is passing: the key and its secrets stay. */
+    @Test fun aBareErrorThatDoesNotRepeatKeepsTheKey() {
+        KioskPrefs(app); PrefsSsStore(app)
+        val sealed = onDisk()
+        val key = FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS)
+        FakeAndroidKeyStore.bare.set(1)
+        assertNull("reads as signed out for now", KioskPrefs(app).auth)
+        assertEquals("the same key", key, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
+        assertEquals("nothing removed", sealed, onDisk())
+        assertEquals(token, KioskPrefs(app).auth?.refreshToken)
+    }
+
+    /** `--es api_key` during an outage isn't stored, so `--ez api_encryption true` with it isn't applied either. */
+    @Test fun anAdbKeyThatCantBeStoredLeavesEncryptionAsItWas() {
+        for (f in files) File(dir, "$f.xml").delete()
+        KioskPrefs(app)
+        FakeAndroidKeyStore.down = true
+        val prefs = KioskPrefs(app)
+        val key = java.util.Base64.getEncoder().encodeToString(ByteArray(32) { 7 })
+        assertTrue(applyApiKeyExtras(prefs, key, encryption = true)!!.contains("not stored"))
+        assertFalse("encryption isn't turned on without its key", prefs.apiEncryption)
+        assertFalse("nothing in the clear", File(dir, "kiosk.xml").let { it.exists() && key in it.readText() })
+        FakeAndroidKeyStore.down = false
+        assertNull(applyApiKeyExtras(prefs, key, encryption = true))
+        assertTrue(prefs.apiEncryption)
+        assertArrayEquals(ByteArray(32) { 7 }, KioskPrefs(app).noiseKeyStore.load())
     }
 
     /** The key store comes back between "can it be read?" and the read: the identity must not be made again. */

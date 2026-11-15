@@ -148,6 +148,13 @@ class SecretPrefsTest {
         assertEquals(sealed, stored("token"))
     }
 
+    @Test fun aSetUnderASecretKeyIsRefused() {
+        val p = prefs()
+        assertTrue("only strings are sealed", runCatching { p.edit().putStringSet("token", setOf("made-up-token")) }.isFailure)
+        assertNull(raw.all["token"])
+        assertTrue("other keys take sets", p.edit().putStringSet("hosts", setOf("192.0.2.10")).commit())
+    }
+
     @Test fun getAllHandsOutSecretsOpened() {
         raw.edit().putString("host", "192.0.2.10").commit()
         prefs().edit().putString("token", "made-up-token").commit()

@@ -723,11 +723,10 @@ class MainActivity : Activity() {
         }
         // The panes' extras (their on/off, then their own settings): their definitions.
         if (panes.intentExtras().applyFrom(intent)) needsRestart = true
-        intent.getStringExtra("api_key")?.let { key ->
-            if (KioskPrefs.decodeApiKey(key) != null) prefs.apiKey = key
-            else Log.w(TAG, "api_key must be base64 of exactly 32 bytes; ignored")
-        }
-        if (intent.hasExtra("api_encryption")) prefs.apiEncryption = intent.getBooleanExtra("api_encryption", false)
+        applyApiKeyExtras(
+            prefs, intent.getStringExtra("api_key"),
+            if (intent.hasExtra("api_encryption")) intent.getBooleanExtra("api_encryption", false) else null,
+        )?.let { Log.w(TAG, it) }
         if (intent.hasExtra("auto_brightness")) {
             prefs.autoBrightness = intent.getBooleanExtra("auto_brightness", true)
             glassworks.screen.refreshBrightness()

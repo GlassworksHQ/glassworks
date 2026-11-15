@@ -38,6 +38,9 @@ object FakeAndroidKeyStore {
     /** The next [hidden] lookups answer "no key" although there is one, as Android 10 does when a check fails. */
     val hidden = java.util.concurrent.atomic.AtomicInteger()
 
+    /** The next [bare] lookups throw a cause-less UnrecoverableKeyException, as Android 10 does for code 17, without the key being gone. */
+    val bare = java.util.concurrent.atomic.AtomicInteger()
+
     /** Stands in for android.security.KeyStoreException, which the app reads by its getErrorCode(). */
     class Error(private val code: Int) : Exception("key store error $code") { fun getErrorCode(): Int = code }
 
@@ -55,7 +58,7 @@ object FakeAndroidKeyStore {
 
     fun uninstall() {
         Security.removeProvider(provider.name)
-        keys.clear(); down = false; unrecoverable = null; hidden.set(0)
+        keys.clear(); down = false; unrecoverable = null; hidden.set(0); bare.set(0)
     }
 
     class Store : KeyStoreSpi() {
@@ -67,6 +70,7 @@ object FakeAndroidKeyStore {
         override fun engineGetKey(alias: String, password: CharArray?): Key? {
             if (down || !keys.containsKey(alias)) return null
             if (hidden.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) return null
+            if (bare.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) throw UnrecoverableKeyException("User changed or deleted their auth credentials")
             when (val code = unrecoverable) {
                 null -> {}
                 17 -> throw UnrecoverableKeyException("User changed or deleted their auth credentials")

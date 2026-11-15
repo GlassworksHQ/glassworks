@@ -60,7 +60,8 @@ ESPHome device built with `api: encryption:` and no key in YAML:
   plaintext and zero-PSK clients again, like a panel with no key. Use it to start over, never on a
   network you don't trust.
 - Manual key, as before: `$A --es api_key $(openssl rand -base64 32) --ez api_encryption true`
-  (applied live; all sessions are dropped). Then enter the same key in HA.
+  (applied live; all sessions are dropped). Then enter the same key in HA. If the panel's key store
+  is down, the key isn't stored and `api_encryption` stays as it was.
 
 Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-).
 

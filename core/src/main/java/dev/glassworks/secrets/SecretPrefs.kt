@@ -166,7 +166,11 @@ class SecretPrefs(
             }
             return this
         }
-        override fun putStringSet(key: String, values: Set<String>?): SharedPreferences.Editor { e.putStringSet(key, values); return this }
+        override fun putStringSet(key: String, values: Set<String>?): SharedPreferences.Editor {
+            // Only strings are sealed: a set under a secret key would go to disk in the clear.
+            if (key in secrets) error("$file/$key is a secret: store it as a string")
+            e.putStringSet(key, values); return this
+        }
         override fun putInt(key: String, value: Int): SharedPreferences.Editor { e.putInt(key, value); return this }
         override fun putLong(key: String, value: Long): SharedPreferences.Editor { e.putLong(key, value); return this }
         override fun putFloat(key: String, value: Float): SharedPreferences.Editor { e.putFloat(key, value); return this }

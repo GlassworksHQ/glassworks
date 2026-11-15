@@ -199,9 +199,10 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
         set(v) = sp.edit().putBoolean("api_encryption", v).apply()
 
     /** 32-byte Noise PSK, base64. */
+    /** Setting it throws IllegalStateException when it wasn't stored (the key store is down). */
     var apiKey: String
         get() = sp.getString("api_key", "") ?: ""
-        set(v) = sp.edit().putString("api_key", v.trim()).apply()
+        set(v) { if (!sp.edit().putString("api_key", v.trim()).commit()) throw IllegalStateException("The API key can't be stored right now") }
 
     /** The active Noise key: [apiKey] while [apiEncryption] is on, else null (unprovisioned). */
     fun effectiveApiKey(): ByteArray? = if (apiEncryption) decodeApiKey(apiKey) else null
