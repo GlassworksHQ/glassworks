@@ -115,7 +115,7 @@ class NoiseKeysTest {
     }
 
     /** The device's key store is down: a key is stored but `load()` can't give it. */
-    private class OutageStore(var key: ByteArray?, var down: Boolean) : NoiseKeyStore {
+    private class OutageStore(var key: ByteArray?, var down: Boolean) : ReadableNoiseKeyStore {
         override fun load(): ByteArray? = if (down) null else key?.copyOf()
         override fun save(key: ByteArray?): Boolean { if (down) return false; this.key = key?.copyOf(); return true }
         override fun read(): StoredKey = when {
@@ -168,7 +168,7 @@ class NoiseKeysTest {
     @Test
     fun theLockComesFromOneRead() {
         var state: StoredKey = StoredKey.Unreadable
-        val store = object : NoiseKeyStore {
+        val store = object : ReadableNoiseKeyStore {
             override fun load(): ByteArray? = null // stale: never consulted for the lock
             override fun save(key: ByteArray?) = false
             override fun read() = state
@@ -179,5 +179,36 @@ class NoiseKeysTest {
         assertTrue(keys.unlock())
         assertArrayEquals(k1, keys.active)
         assertFalse(keys.provisionable)
+    }
+
+    /** HA can't set a key while one is stored but unreadable, even where saving would work. */
+    @Test
+    fun aLockedDeviceTakesNoNewKey() {
+        var saves = 0
+        val store = object : ReadableNoiseKeyStore {
+            override fun load(): ByteArray? = null
+            override fun save(key: ByteArray?): Boolean { saves++; return true }
+            override fun read() = StoredKey.Unreadable
+        }
+        val keys = NoiseKeys(store)
+        assertFalse(keys.handleSetKey(field(k2)).success)
+        assertFalse("not even an empty one (a clear)", keys.handleSetKey(ByteArray(0)).success)
+        assertEquals("nothing reached the store", 0, saves)
+        assertTrue(keys.locked)
+    }
+
+    /** A store written for 0.1.0 (load and save only) works as before: present or absent, never locked. */
+    @Test
+    fun aPlainStoreIsReadWithLoad() {
+        val keys = NoiseKeys(object : NoiseKeyStore {
+            override fun load(): ByteArray? = k1.copyOf()
+            override fun save(key: ByteArray?) = true
+        })
+        assertArrayEquals(k1, keys.active)
+        assertFalse(keys.locked)
+        assertFalse(NoiseKeys(object : NoiseKeyStore {
+            override fun load(): ByteArray? = null
+            override fun save(key: ByteArray?) = true
+        }).locked)
     }
 }

@@ -26,9 +26,9 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * A software stand-in for Android's `AndroidKeyStore` provider, which Robolectric doesn't have, so the
  * app's real Keystore code (KeystoreKey, SecretStore.keystore()) runs in a JVM test. Keys are plain AES
- * keys in memory. [down] makes the key store fail to load (an outage); [unrecoverable] makes reading a
- * key fail as Android does, with the key store's error code in the cause ([Error]): 17
- * (KEY_PERMANENTLY_INVALIDATED) is gone for good, 4 (SYSTEM_ERROR) passes. [install] before a test, [uninstall] after it.
+ * keys in memory. [down] is an outage as Android 10 shows one: lookups answer "no key" and making a key
+ * fails. [unrecoverable] makes reading the key fail as Android 10 does: 17 (KEY_PERMANENTLY_INVALIDATED)
+ * as a bare UnrecoverableKeyException, any other code with the key store's error ([Error]) as its cause. [install] before a test, [uninstall] after it.
  */
 object FakeAndroidKeyStore {
     val keys = ConcurrentHashMap<String, SecretKey>()
@@ -59,16 +59,23 @@ object FakeAndroidKeyStore {
     }
 
     class Store : KeyStoreSpi() {
-        override fun engineLoad(stream: InputStream?, password: CharArray?) { if (down) throw java.io.IOException("key store down") }
+        // As Android 10's AndroidKeyStoreSpi (AOSP android-10.0.0_r1, read 2026-11-15): load() only binds
+        // to the key store service; getKey() asks contains() first, which is false when the service
+        // fails, so an outage answers "no key"; then the key's characteristics, whose failure is an
+        // UnrecoverableKeyException with the error as its cause, except 17, which comes back bare.
+        override fun engineLoad(stream: InputStream?, password: CharArray?) {}
         override fun engineGetKey(alias: String, password: CharArray?): Key? {
-            if (down) throw KeyStoreException("key store down")
-            if (keys.containsKey(alias) && hidden.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) return null
-            val code = unrecoverable
-            if (code != null && keys.containsKey(alias)) throw UnrecoverableKeyException("Failed to obtain information about key").apply { initCause(Error(code)) }
+            if (down || !keys.containsKey(alias)) return null
+            if (hidden.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) return null
+            when (val code = unrecoverable) {
+                null -> {}
+                17 -> throw UnrecoverableKeyException("User changed or deleted their auth credentials")
+                else -> throw UnrecoverableKeyException("Failed to obtain information about key").apply { initCause(Error(code)) }
+            }
             return keys[alias]
         }
         override fun engineDeleteEntry(alias: String) { keys.remove(alias) }
-        override fun engineContainsAlias(alias: String) = keys.containsKey(alias) && hidden.get() == 0
+        override fun engineContainsAlias(alias: String) = !down && keys.containsKey(alias) && hidden.get() == 0
         override fun engineAliases(): Enumeration<String> = Collections.enumeration(keys.keys.toList())
         override fun engineSize() = keys.size
         override fun engineIsKeyEntry(alias: String) = keys.containsKey(alias)

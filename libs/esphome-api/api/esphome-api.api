@@ -91,6 +91,7 @@ public final class dev/glassworks/esphome/ApiServer {
 	public final fun getBluetooth ()Ldev/glassworks/esphome/BluetoothProxyHandler;
 	public final fun getEncrypted ()Z
 	public final fun getHasSubscriber ()Z
+	public final fun getKeyed ()Z
 	public final fun getLocalPort ()I
 	public final fun getOnClientHello ()Lkotlin/jvm/functions/Function2;
 	public final fun getOnCommand ()Lkotlin/jvm/functions/Function0;
@@ -355,7 +356,6 @@ public final class dev/glassworks/esphome/MemoryKeyStore : dev/glassworks/esphom
 	public fun <init> ([B)V
 	public synthetic fun <init> ([BILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun load ()[B
-	public fun read ()Ldev/glassworks/esphome/StoredKey;
 	public fun save ([B)Z
 }
 
@@ -443,12 +443,7 @@ public final class dev/glassworks/esphome/NoiseCipher {
 
 public abstract interface class dev/glassworks/esphome/NoiseKeyStore {
 	public abstract fun load ()[B
-	public abstract fun read ()Ldev/glassworks/esphome/StoredKey;
 	public abstract fun save ([B)Z
-}
-
-public final class dev/glassworks/esphome/NoiseKeyStore$DefaultImpls {
-	public static fun read (Ldev/glassworks/esphome/NoiseKeyStore;)Ldev/glassworks/esphome/StoredKey;
 }
 
 public final class dev/glassworks/esphome/NoiseKeys {
@@ -536,6 +531,10 @@ public final class dev/glassworks/esphome/RawAdvertisement {
 }
 
 public final class dev/glassworks/esphome/RawAdvertisement$Companion {
+}
+
+public abstract interface class dev/glassworks/esphome/ReadableNoiseKeyStore : dev/glassworks/esphome/NoiseKeyStore {
+	public abstract fun read ()Ldev/glassworks/esphome/StoredKey;
 }
 
 public final class dev/glassworks/esphome/SelectEntity : dev/glassworks/esphome/ApiEntity {

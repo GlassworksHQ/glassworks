@@ -101,17 +101,25 @@ class SecretPrefsTest {
         assertEquals("but kept", sealed, stored("token"))
         assertFalse("callers can tell it may come back", p.canRead("token"))
         assertTrue(p.canRead("psk"))
-        p.edit().putString("token", "made-up-typed-meanwhile").commit()
-        assertEquals("a sealed value is never replaced with plaintext", sealed, stored("token"))
-        p.edit().putString("psk", "made-up-psk").commit()
-        assertEquals("a new one is kept unsealed so the panel keeps working", "made-up-psk", stored("psk"))
-        assertEquals("one line per reason", 3, warnings.size)
+        assertFalse(p.edit().putString("token", "made-up-typed-meanwhile").commit())
+        assertEquals("a sealed value is never replaced", sealed, stored("token"))
+        assertFalse("fail closed: a secret never sealed isn't stored in the clear either",
+            p.edit().putString("psk", "made-up-psk").putString("host", "192.0.2.10").commit())
+        assertNull(stored("psk"))
+        assertNull("the whole edit", stored("host"))
+        assertEquals("one line per reason", 2, warnings.size)
         assertFalse(warnings.any { it.contains("made-up") })
         key = first
-        val back = prefs()
-        assertEquals("made-up-token", back.getString("token", null))
-        assertTrue("sealed once the key store is back", SecretStore.isSealed(stored("psk")!!))
-        assertEquals("made-up-psk", back.getString("psk", null))
+        assertEquals("made-up-token", prefs().getString("token", null))
+    }
+
+    /** No key store on the device at all (a JVM test; never Android 6+): nothing to wait for, so secrets are stored as before. */
+    @Test fun aDeviceWithNoKeyStoreStoresSecretsAsBefore() {
+        val none = SecretStore({ null }, { null }, present = { false })
+        val p = SecretPrefs(raw, "secrets-test", secrets, none) { warnings += it }
+        assertTrue(p.edit().putString("psk", "made-up-psk").commit())
+        assertEquals("made-up-psk", stored("psk"))
+        assertEquals("made-up-psk", p.getString("psk", null))
     }
 
     @Test fun anEditThatWouldDropAnUnreadableSecretWritesNothing() {

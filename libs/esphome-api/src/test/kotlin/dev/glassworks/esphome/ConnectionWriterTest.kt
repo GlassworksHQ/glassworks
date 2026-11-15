@@ -203,7 +203,7 @@ class ConnectionWriterTest {
     @Test
     fun aLockedKeyLetsNobodyInUntilItReadsAgain() {
         var down = true
-        val store = object : NoiseKeyStore {
+        val store = object : ReadableNoiseKeyStore {
             override fun load(): ByteArray? = if (down) null else ByteArray(32) { (it + 1).toByte() }
             override fun save(key: ByteArray?) = false
             override fun read(): StoredKey = if (down) StoredKey.Unreadable else StoredKey.Present(load()!!)
@@ -212,6 +212,7 @@ class ConnectionWriterTest {
         val s = server(keys = NoiseKeys(store)).apply { onKeyActivated = { activated.countDown() } }
         assertFalse("not provisionable", s.provisionable)
         assertFalse(s.encrypted)
+        assertTrue("still advertised as keyed, so HA tries Noise", s.keyed)
         Socket(InetAddress.getLoopbackAddress(), s.localPort).use { c ->
             c.soTimeout = 10_000
             // A plaintext hello, as an unprovisioned device would take: closed without an answer.

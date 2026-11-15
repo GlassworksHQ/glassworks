@@ -62,10 +62,24 @@ class KeystoreKey(private val alias: String, private val warn: (String) -> Unit)
     } catch (e: UnrecoverableKeyException) {
         // Android wraps every key store error in this one, a passing one too. Only an entry that is
         // gone for good is replaced (signed out, paired again); anything else is an outage.
-        if (!lostForGood(e)) throw e
-        warn("The secrets key can't be read any more (${errorCode(e)}); made a new one, so secrets need setting again")
+        if (!lostForGood(e) && !(e.cause == null && causelessAgain())) throw e
+        warn("The secrets key can't be read any more (${errorCode(e) ?: "invalidated"}); made a new one, so secrets need setting again")
         store.deleteEntry(alias)
         make()
+    }
+
+    /**
+     * Android 10's getKey turns KEY_PERMANENTLY_INVALIDATED (17) into a bare UnrecoverableKeyException
+     * with no cause (read 2026-11-15, AOSP android-10.0.0_r1: `AndroidKeyStoreSpi.engineGetKey` catches the
+     * KeyPermanentlyInvalidatedException that `AndroidKeyStoreProvider.getKeyCharacteristics` throws for
+     * 17 and rethrows only its message). Every other failure on that path keeps the key store's error as
+     * the cause. So a cause-less one is taken as 17 only when a freshly loaded key store gives it again.
+     */
+    private fun causelessAgain(): Boolean = try {
+        KeyStore.getInstance(PROVIDER).apply { load(null) }.getKey(alias, null)
+        false
+    } catch (e: UnrecoverableKeyException) {
+        e.cause == null
     }
 
     private fun make(): SecretKey = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, PROVIDER).run {
@@ -81,6 +95,9 @@ class KeystoreKey(private val alias: String, private val warn: (String) -> Unit)
 
     companion object {
         private const val PROVIDER = "AndroidKeyStore"
+
+        /** This device has the Android Keystore provider (every Android 6+ device; a plain JVM test has none). */
+        fun present(): Boolean = java.security.Security.getProvider(PROVIDER) != null
 
         /**
          * The key store's error codes that mean a key is gone for good (read 2026-11-15 from AOSP

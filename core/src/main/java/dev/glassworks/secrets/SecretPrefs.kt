@@ -19,9 +19,11 @@ import java.util.concurrent.ConcurrentHashMap
  * - **A secret that no longer opens** (the key was lost: a restored backup, a vendor bug) reads as not
  *   set and is removed, so the panel asks for it again through its usual setup. It is logged once,
  *   without the value.
- * - **No key store now**: a sealed secret reads as not set but stays, and nothing replaces it ([canRead]
- *   tells a caller not to make a new one). A secret with no sealed value yet is stored as plaintext so
- *   the panel keeps working; it is sealed the next time this is made with a key store.
+ * - **No key store now** (an outage): a sealed secret reads as not set but stays, and nothing replaces
+ *   it ([canRead] tells a caller not to make a new one). No secret is written either, not even one that
+ *   was never sealed: an edit that would store one fails whole (fail closed, maintainer 2026-11-15).
+ * - **No key store at all** ([SecretStore.present] false, never on Android 6+): secrets are stored as
+ *   they were before the secret store.
  */
 class SecretPrefs(
     private val raw: SharedPreferences,
@@ -39,7 +41,7 @@ class SecretPrefs(
     private val listeners = HashMap<SharedPreferences.OnSharedPreferenceChangeListener, SharedPreferences.OnSharedPreferenceChangeListener>()
 
     /** Each is logged once per file object, so a long outage doesn't fill the log. */
-    private enum class Warning { LOST, CANT_READ, CANT_SEAL, KEPT_SEALED, NOT_SAVED }
+    private enum class Warning { LOST, CANT_READ, CANT_SEAL, NOT_SEALED, KEPT_SEALED, NOT_SAVED }
 
     /** A secret as it reads now ([secret]). */
     sealed interface Secret {
@@ -144,16 +146,24 @@ class SecretPrefs(
     private inner class Editor(private val e: SharedPreferences.Editor) : SharedPreferences.Editor {
         /** Secrets this edit drops (a remove, a null put) or replaces with plaintext; all of them on [clear]. */
         private val drops = HashSet<String>()
+        /** A secret this edit would store unsealed during an outage: the edit is refused whole. */
+        private var refused: String? = null
 
         override fun putString(key: String, value: String?): SharedPreferences.Editor {
             if (key !in secrets) { e.putString(key, value); return this }
             if (value == null) return remove(key)
             val sealed = store.seal(value, scope(key))
-            if (sealed == null) {
-                warnOnce(Warning.CANT_SEAL, "The key store isn't available; $file/$key is stored unsealed until it is")
-                drops += key
-            } else drops -= key
-            e.putString(key, sealed ?: value)
+            when {
+                sealed != null -> { drops -= key; e.putString(key, sealed) }
+                // Fail closed (maintainer, 2026-11-15): during an outage no secret is stored in the
+                // clear, not even one that was never sealed.
+                store.present() -> refused = key
+                else -> {
+                    warnOnce(Warning.CANT_SEAL, "This device has no key store; $file/$key is stored unsealed")
+                    drops += key
+                    e.putString(key, value)
+                }
+            }
             return this
         }
         override fun putStringSet(key: String, values: Set<String>?): SharedPreferences.Editor { e.putStringSet(key, values); return this }
@@ -166,6 +176,10 @@ class SecretPrefs(
 
         /** No secret this edit drops or overwrites with plaintext is one that is sealed and can't be read now. */
         private fun allowed(): Boolean {
+            refused?.let { k ->
+                warnOnce(Warning.NOT_SEALED, "The key store isn't available; $file/$k isn't stored until it is")
+                return false
+            }
             val held = drops.firstOrNull { k -> stored(k)?.let(SecretStore::isSealed) == true && !canRead(k) } ?: return true
             warnOnce(Warning.KEPT_SEALED, "The key store isn't available; $file/$held keeps its sealed value and the change isn't saved")
             return false

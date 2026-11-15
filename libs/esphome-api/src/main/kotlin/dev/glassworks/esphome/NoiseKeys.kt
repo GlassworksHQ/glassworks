@@ -12,17 +12,23 @@ public interface NoiseKeyStore {
 
     /** Persists [key] (null = clear) synchronously. Returns false if it could not be written. */
     public fun save(key: ByteArray?): Boolean
-
-    /**
-     * One read of the stored key that also tells "no key" from "a key I can't read now" (the device's
-     * key store is down). [NoiseKeys] decides from it alone, so an outage that ends between two calls
-     * can't make a device with a key look unprovisioned. The default, from [load], suits a store that is
-     * always readable.
-     */
-    public fun read(): StoredKey = load()?.let { StoredKey.Present(it) } ?: StoredKey.Absent
 }
 
-/** What a [NoiseKeyStore] holds, from one read ([NoiseKeyStore.read]). */
+/**
+ * A [NoiseKeyStore] that can hold a key it can't read for a while (a device key store that is down),
+ * and says so. [NoiseKeys] then locks instead of treating the device as unprovisioned. Optional: a plain
+ * [NoiseKeyStore] is read with [NoiseKeyStore.load]. Added in 0.1.1; [NoiseKeyStore] is unchanged.
+ */
+public interface ReadableNoiseKeyStore : NoiseKeyStore {
+    /**
+     * One read of the stored key that also tells "no key" from "a key I can't read now". [NoiseKeys]
+     * decides from it alone, so an outage that ends between two calls can't make a device with a key
+     * look unprovisioned.
+     */
+    public fun read(): StoredKey
+}
+
+/** What a [ReadableNoiseKeyStore] holds, from one read ([ReadableNoiseKeyStore.read]). Added in 0.1.1. */
 public sealed interface StoredKey {
     /** The stored key. */
     public class Present(
@@ -74,7 +80,11 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
     private val lock = Any()
 
     /** Key used for new connections; null = unprovisioned. */
-    private val first = store.read()
+    /** One read: [ReadableNoiseKeyStore.read], or Present/Absent from [NoiseKeyStore.load] for a plain store. */
+    private fun read(): StoredKey = (store as? ReadableNoiseKeyStore)?.read()
+        ?: store.load()?.let { StoredKey.Present(it) } ?: StoredKey.Absent
+
+    private val first = read()
 
     @Volatile internal var active: ByteArray? = (first as? StoredKey.Present)?.key?.takeIf(::isUsableKey)?.copyOf()
         private set
@@ -108,7 +118,7 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
      */
     internal fun unlock(): Boolean = synchronized(lock) {
         if (!locked) return false
-        when (val r = store.read()) {
+        when (val r = read()) {
             is StoredKey.Present -> r.key.takeIf(::isUsableKey)?.let { k -> active = k.copyOf(); saved = k.copyOf() }
             StoredKey.Absent -> {}
             StoredKey.Unreadable -> return false
@@ -150,7 +160,7 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
      */
     internal fun replace(key: ByteArray?): Boolean = synchronized(lock) {
         // No key read because the store can't read it now: not a removed key. Keep what is active.
-        if (key == null && store.read() is StoredKey.Unreadable) {
+        if (key == null && read() is StoredKey.Unreadable) {
             if (active == null) locked = true
             return false
         }

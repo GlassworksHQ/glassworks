@@ -7,12 +7,18 @@ publish the matching section below as the release notes.
 
 ## [Unreleased]
 
+Additions only, so the next release is 0.1.1: a store, server or app built against 0.1.0 works
+unchanged.
+
 ### Added
-- **A stored key that can't be read now locks the server.** A `NoiseKeyStore` can say its key is
-  stored but unreadable, in the same read that would give the key (`read()`: `StoredKey.Present`,
-  `Absent` or `Unreadable`; the default comes from `load()`). The server then lets nobody in and isn't
-  provisionable, and reads the key again on each connection and every minute. A device with a key
-  never falls back to plaintext because its storage is down.
+- **A stored key that can't be read now locks the server.** A store that implements the new
+  `ReadableNoiseKeyStore` can say its key is stored but unreadable, in the same read that would give
+  the key (`read()`: `StoredKey.Present`, `Absent` or `Unreadable`). The server then lets nobody in and
+  isn't provisionable, and reads the key again on each connection and every minute. A device with a
+  key never falls back to plaintext because its storage is down. `NoiseKeyStore` is unchanged; a plain
+  one is read with `load()` as before.
+- **`ApiServer.keyed`**: the device has a key, active or unreadable now. Advertise it as
+  `api_encryption`, so a client tries Noise while the key can't be read.
 
 ## [0.1.0] - 2026-11-15
 

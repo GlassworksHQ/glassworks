@@ -58,21 +58,23 @@ fails for a moment, and making a key under the same name deletes the one there. 
 one, and only after a second lookup on a freshly loaded key store also finds none. A key store that
 fails both lookups and then works at once can still cost the key (not seen; untested on a panel).
 
-If the Keystore can't be reached at all, sealed secrets read as not set for now, and nothing replaces
-or removes them. The app tries them again on each use, so they come back as soon as the Keystore does.
-Until then:
+If the Keystore can't be reached, sealed secrets read as not set for now, and nothing replaces or
+removes them. **No secret is written either**, not even one the panel never had (fail closed). The app
+tries again on each use, so everything comes back as soon as the Keystore does. A secret the running
+app already read stays in its memory and keeps working. Until then:
 
 | What | During the outage |
 |---|---|
-| Home Assistant sign-in | The dashboard can't sign in. A new sign-in fails on the phone with "The panel can't store the sign-in right now", and signing out keeps the stored token and says it failed |
-| ESPHome API | A key is stored but can't be read: the API lets nobody in (no plaintext, no zero-PSK provisioning) and isn't advertised as provisionable. It reads the key again on each connection and every minute. A new key from Home Assistant is refused |
-| Sendspin | It plays under a stand-in identity it never stores, hands out no pairing token, and keeps the stored pairings. The same running app reads the real identity once the Keystore is back |
-| Camera password | A change isn't saved, and the Camera page says "The panel can't store the sign-in right now" |
+| Home Assistant sign-in | The dashboard can't sign in. A new sign-in, a first one too, fails on the phone with "The panel can't store the sign-in right now". Signing out keeps the stored token and says it failed |
+| ESPHome API, with a key | The key can't be read: the API lets nobody in (no plaintext, no zero-PSK provisioning), still advertises `api_encryption` (so Home Assistant tries Noise and fails, never plaintext) and isn't provisionable. It reads the key again on each connection and every minute, and advertises again once it can. A new key from Home Assistant is refused |
+| ESPHome API, never given a key | It stays unprovisioned as before (plaintext and zero-PSK), but a key from Home Assistant is refused: Home Assistant hears it wasn't set, and nothing is stored in the clear |
+| Sendspin | Started during the outage, it plays under a stand-in identity it never stores, hands out no pairing token, and keeps the stored pairings. The same running app reads the real identity once the Keystore is back |
+| Camera password | A change or a clear isn't saved, and the Camera page says "The panel can't store the sign-in right now", an empty password field too |
 
-A change that would replace or drop an unreadable secret is refused whole, with the other settings in
-the same change, so nothing is half written. A secret that had no sealed value yet is written unsealed
-so the panel keeps working, and is sealed the next time the app starts with a working Keystore. Each
-kind of problem is logged once under `S1Kiosk.Secrets`, without the value.
+A change that would write a secret, or replace or drop an unreadable one, is refused whole, with the
+other settings in the same change, so nothing is half written. Each kind of problem is logged once
+under `S1Kiosk.Secrets`, without the value. A device with no Keystore at all (never one with Android 6
+or later) stores its secrets as they were before the secret store.
 
 Nothing on the panel goes into a backup or a device-to-device transfer (`allowBackup="false"` and
 the data extraction rules), because a sealed secret is useless without this panel's key.

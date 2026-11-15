@@ -28,6 +28,13 @@ class SecretStore(
     private val key: () -> SecretKey?,
     /** The key to open with: never a new one, since a value sealed before can't open with it. */
     private val existing: () -> SecretKey?,
+    /**
+     * The device has a key store at all. When it has one but [key] gives none, that is an outage, and a
+     * secret isn't stored ([SecretPrefs] refuses it). Without one (no AndroidKeyStore provider: never on
+     * Android 6 and later, always in a JVM test), there is nothing to wait for, and secrets are stored as
+     * before the secret store.
+     */
+    val present: () -> Boolean = { true },
 ) {
     /** One key for both (a test's software key). */
     constructor(key: () -> SecretKey?) : this(key, key)
@@ -94,6 +101,6 @@ class SecretStore(
             runCatching { Base64.getDecoder().decode(stored.substring(MARK.length)).size >= IV_BYTES + TAG_BITS / 8 }.getOrDefault(false)
 
         /** The store for this app, with its key in the Android Keystore. */
-        fun keystore(): SecretStore = KeystoreKey(KEY_ALIAS) { Log.w(TAG, it) }.let { SecretStore(it::orNew, it::existing) }
+        fun keystore(): SecretStore = KeystoreKey(KEY_ALIAS) { Log.w(TAG, it) }.let { SecretStore(it::orNew, it::existing, KeystoreKey::present) }
     }
 }

@@ -55,6 +55,12 @@ class CameraPrefs(private val sp: SharedPreferences) {
             if (!sp.edit().putString(KEY_STREAM_USER, v?.first).putString(KEY_STREAM_PASSWORD, v?.second).commit()) throw IllegalStateException(NOT_SAVED)
         }
 
+    /**
+     * A password is stored but the app's key store can't read it now (an outage): the sign-in is set,
+     * though [signIn] reads null. Saving with an empty password then can't keep it, and says so.
+     */
+    val signInUnreadable: Boolean get() = (sp as? dev.glassworks.secrets.SecretPrefs)?.canRead(KEY_STREAM_PASSWORD) == false
+
     val policy: CameraPolicy get() = CameraPolicy(privacy, use, onvif)
 
     companion object {

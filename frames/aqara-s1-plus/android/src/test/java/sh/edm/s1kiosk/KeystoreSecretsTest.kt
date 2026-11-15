@@ -136,6 +136,70 @@ class KeystoreSecretsTest {
         assertArrayEquals("and the same store reads it now", identity, ss.identity().privateKey)
     }
 
+    /** Fail closed (maintainer, 2026-11-15): during an outage no secret is stored, not even one never sealed. */
+    @Test fun anOutageStoresNoSecretNeverSealedEither() {
+        for (f in files) File(dir, "$f.xml").delete() // a panel set up from scratch: nothing stored yet
+        KioskPrefs(app); PrefsSsStore(app) // the key store is made
+        FakeAndroidKeyStore.down = true
+        val prefs = KioskPrefs(app)
+        assertTrue(runCatching { prefs.auth = StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token") }.exceptionOrNull() is SignInNotStored)
+        assertFalse("Home Assistant hears the key wasn't set", prefs.noiseKeyStore.save(ByteArray(32) { 9 }))
+        assertFalse(prefs.apiEncryption)
+        val keys = dev.glassworks.esphome.NoiseKeys(prefs.noiseKeyStore)
+        assertTrue("unprovisioned stays unprovisioned", keys.provisionable)
+        val def = CameraDefinition(PanePrefs(app).paneFile("camera")).apply { switch.on = true }
+        val item = def.settings().single().items.filterIsInstance<dev.glassworks.pane.SettingsItem.Group>().flatMap { it.items }
+            .filterIsInstance<dev.glassworks.pane.SettingsItem.SignIn>().single()
+        var answer: String? = "none"
+        item.save("made-up-user" to "made-up-first-pass") { answer = it }
+        assertEquals(dev.glassworks.camera.CameraPrefs.NOT_SAVED, answer)
+        val disk = files.filter { File(dir, "$it.xml").exists() }.joinToString { File(dir, "$it.xml").readText() }
+        for (v in listOf("made-up-new-token", "made-up-first-pass", "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=")) assertFalse("nothing in the clear: $v", v in disk)
+    }
+
+    @Test fun anEmptyCameraPasswordDuringAnOutageSaysNotSaved() {
+        KioskPrefs(app); PanePrefs(app)
+        val def = CameraDefinition(PanePrefs(app).paneFile("camera")).apply { switch.on = true }
+        FakeAndroidKeyStore.down = true
+        val item = def.settings().single().items.filterIsInstance<dev.glassworks.pane.SettingsItem.Group>().flatMap { it.items }
+            .filterIsInstance<dev.glassworks.pane.SettingsItem.SignIn>().single()
+        assertTrue("still set, though unreadable now", item.isSet())
+        var answer: String? = "none"
+        dev.glassworks.pane.SettingsChange.signIn(item, "made-up-user2", "") { answer = it }
+        assertEquals("not \"Type a password\": there is one, it just can't be read now", dev.glassworks.camera.CameraPrefs.NOT_SAVED, answer)
+        FakeAndroidKeyStore.down = false
+        assertEquals("made-up-user" to "made-up-camera-pass-7", PanePrefs(app).camera.signIn)
+    }
+
+    /**
+     * Home Assistant asks for a Sendspin pairing token (SendspinTokenSource): none while the identity can't
+     * be read, as after a boot during an outage. (An identity already read stays in memory and is real.)
+     */
+    @Test fun noPairingTokenDuringAnOutage() {
+        KioskPrefs(app); PrefsSsStore(app)
+        val ctx = dev.glassworks.pane.PaneContext(
+            app, PanePrefs(app)::paneFile,
+            dev.glassworks.esphome.DeviceIdentity("test", "Test", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
+            publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000, debug = false),
+        )
+        FakeAndroidKeyStore.down = true
+        val pane = sh.edm.s1kiosk.sendspin.SendspinPane(ctx, haBase = { null })
+        val server = dev.glassworks.esphome.ApiServer(0, { ctx.device }, emptyList<dev.glassworks.esphome.ApiEntity>(), null as ByteArray?)
+        pane.bind(server)
+        pane.start()
+        try {
+            val tokens = server.sendspin!!
+            val during = tokens.pairingToken()
+            assertEquals(dev.glassworks.esphome.SendspinApi.STATUS_NOT_READY, during.first)
+            assertNull("no token for a stand-in identity", during.second)
+            FakeAndroidKeyStore.down = false
+            assertEquals(dev.glassworks.esphome.SendspinApi.STATUS_OK, tokens.pairingToken().first)
+        } finally {
+            pane.stop()
+        }
+    }
+
     @Test fun aKeyEntryThatFailsForAMomentIsKept() {
         KioskPrefs(app); PrefsSsStore(app)
         val sealed = onDisk()
@@ -228,7 +292,7 @@ class KeystoreSecretsTest {
         val sealed = onDisk().getValue("kiosk")
         FakeAndroidKeyStore.down = true
         val prefs = KioskPrefs(app)
-        assertTrue(prefs.noiseKeyStore.read() is dev.glassworks.esphome.StoredKey.Unreadable)
+        assertTrue((prefs.noiseKeyStore as dev.glassworks.esphome.ReadableNoiseKeyStore).read() is dev.glassworks.esphome.StoredKey.Unreadable)
         assertFalse("Home Assistant hears the key wasn't set", prefs.noiseKeyStore.save(ByteArray(32) { 9 }))
         assertFalse(prefs.noiseKeyStore.save(null))
         assertEquals("api_encryption and the key as they were", sealed, onDisk().getValue("kiosk"))

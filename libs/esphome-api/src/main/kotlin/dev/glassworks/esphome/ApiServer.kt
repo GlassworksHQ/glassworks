@@ -436,6 +436,13 @@ public class ApiServer(
     public val encrypted: Boolean get() = keys?.hasKey == true
 
     /**
+     * True when the device has a key, active or stored but unreadable now ([NoiseKeys.locked]). Advertise
+     * this as `api_encryption`: a keyed device stays a keyed device, so a client tries Noise and fails
+     * instead of trying plaintext while the key can't be read. Added in 0.1.1.
+     */
+    public val keyed: Boolean get() = keys?.let { it.hasKey || it.locked } == true
+
+    /**
      * Applies a key change made outside the API, such as in the device's own settings: [key] is the
      * new 32-byte key, already saved by the caller, or null to remove it. Every open session is dropped,
      * as ESPHome does when a key is activated. Does nothing on a plaintext-only server.
