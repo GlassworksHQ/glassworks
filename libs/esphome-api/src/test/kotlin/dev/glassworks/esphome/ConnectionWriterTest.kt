@@ -71,6 +71,15 @@ class ConnectionWriterTest {
     private fun awaitBlocked(sock: StoppableSocket) =
         assertTrue("the stuck client's socket never blocked a write\n${serverThreads()}", sock.blocked.await(10, TimeUnit.SECONDS))
 
+    /** The socket closes before the connection leaves the list, so a closed socket alone isn't enough. */
+    private fun awaitNoConnections(s: ApiServer) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (s.connectionCount > 0) {
+            assertTrue("still connected\n${serverThreads()}", System.nanoTime() < deadline)
+            Thread.sleep(10)
+        }
+    }
+
     /** Waits until no thread named [name] runs: each one waits on a lock or has ended. */
     private fun awaitIdle(name: String) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
@@ -272,6 +281,23 @@ class ConnectionWriterTest {
         }
     }
 
+    /** A client that never takes the request is still dropped, even if it keeps sending (#223). */
+    @Test
+    fun aDisconnectRequestNobodyReadsStillClosesTheConnection() {
+        val s = server(keys = NoiseKeys(MemoryKeyStore())).apply { disconnectWriteMs = 1_000 }
+        val (c, sock) = stuckClient(s)
+        c.use {
+            s.replaceKey(ByteArray(32) { 1 })
+            awaitBlocked(sock)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (s.connectionCount > 0 && System.nanoTime() < deadline) {
+                try { c.send(Msg.PING_REQUEST) } catch (_: java.io.IOException) { break }
+                Thread.sleep(100)
+            }
+            awaitNoConnections(s)
+        }
+    }
+
     /** An Error on the writer closes the connection, so a caller waiting for a write isn't left hanging (#223). */
     @Test
     fun anErrorOnTheWriterClosesTheConnection() {
@@ -282,7 +308,7 @@ class ConnectionWriterTest {
             // The reader waits for this answer to be written before it closes.
             c.send(Msg.DISCONNECT_REQUEST)
             assertTrue("the connection stayed open\n${serverThreads()}", c.closedByServer())
-            assertEquals(0, s.connectionCount)
+            awaitNoConnections(s)
         }
     }
 

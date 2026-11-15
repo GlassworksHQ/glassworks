@@ -23,8 +23,8 @@ unchanged.
 ### Fixed
 - **A client that is slow to read still gets the DisconnectRequest.** When the entities or the key
   change, the server waits for its request to be written before the 2 s (or 500 ms) for the answer
-  start, so the socket no longer closes with the request unsent. `setEntities` and `replaceKey` still
-  return at once.
+  start, so the socket no longer closes with the request unsent. A client that doesn't take it within
+  10 s is dropped anyway. `setEntities` and `replaceKey` still return at once.
 - **An `Error` while writing to a client closes that connection.** Before, a caller waiting for a
   write (the camera, the answers to Disconnect and to a new key) waited until the keepalive dropped
   the client, up to 150 s.

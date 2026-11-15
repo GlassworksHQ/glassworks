@@ -1,6 +1,7 @@
 package dev.glassworks.esphome
 
 import java.util.ArrayDeque
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -26,14 +27,18 @@ internal class Outbox(private val maxBytes: Int) {
     /** Queues [frames], all or none. False if closed or if they don't fit. */
     fun offer(frames: List<Frame>): Boolean = enqueue(frames) >= 0
 
-    /** Like [offer], then waits until the writer has written them. False if the connection closed first. */
-    fun offerAndWait(frames: List<Frame>): Boolean {
+    /**
+     * Like [offer], then waits until the writer has written them. False if they didn't fit, or if the
+     * connection closed or [timeoutMs] passed first.
+     */
+    fun offerAndWait(frames: List<Frame>, timeoutMs: Long = Long.MAX_VALUE): Boolean {
         val seq = enqueue(frames)
         if (seq < 0) return false
+        var left = TimeUnit.MILLISECONDS.toNanos(timeoutMs)
         lock.withLock {
             while (writtenSeq < seq) {
-                if (closed) return false
-                changed.await()
+                if (closed || left <= 0) return false
+                left = changed.awaitNanos(left)
             }
         }
         return true

@@ -254,6 +254,12 @@ public class ApiServer(
          * the writer is sending doesn't count, so a client that stops reading can hold about twice this.
          */
         internal const val MAX_QUEUED_BYTES = 512 * 1024
+        /**
+         * How long a DisconnectRequest may wait to be written before the connection closes anyway. The
+         * keepalive can't bound it: a retired connection ignores what its client sends, but still counts
+         * it as traffic.
+         */
+        internal const val DISCONNECT_WRITE_MS = 10_000L
     }
 
     /** The device's voice assistant, or null for none (voice messages are then ignored). */
@@ -335,6 +341,7 @@ public class ApiServer(
     @Volatile private var actionThread: java.util.concurrent.ExecutorService? = null
     /** [CAMERA_STREAM_MS]; shorter in tests. Set before [start]. */
     @Volatile internal var cameraStreamMs = CAMERA_STREAM_MS
+    @Volatile internal var disconnectWriteMs = DISCONNECT_WRITE_MS
     @Volatile private var voiceConn: Connection? = null
     private val bluetoothLock = Any()
     @Volatile private var bluetoothConn: Connection? = null
@@ -714,17 +721,18 @@ public class ApiServer(
         }
 
         /**
-         * Queues [frames] for the writer; with [wait], returns once they are written (only on this
-         * connection's own threads). False if the connection is closed, or was full and is now closed.
+         * Queues [frames] for the writer; with [wait], returns once they are written or [timeoutMs] has
+         * passed (only on this connection's own threads). False if the connection is closed, or was full
+         * or too slow and is now closed.
          */
-        fun send(frames: List<Frame>, wait: Boolean = false): Boolean {
+        fun send(frames: List<Frame>, wait: Boolean = false, timeoutMs: Long = Long.MAX_VALUE): Boolean {
             if (!isOpen || !ready) return false
-            if (if (wait) outbox.offerAndWait(frames) else outbox.offer(frames)) {
+            if (if (wait) outbox.offerAndWait(frames, timeoutMs) else outbox.offer(frames)) {
                 onQueued?.let { queued -> frames.forEach { queued(it.type) } }
                 return true
             }
             if (isOpen) {
-                EspHomeLog.w("[$id] $remote is not reading: ${MAX_QUEUED_BYTES / 1024} KiB waiting to be sent; closing")
+                EspHomeLog.w("[$id] $remote is not reading: messages waited too long or filled the queue (${MAX_QUEUED_BYTES / 1024} KiB); closing")
                 close()
             }
             return false
@@ -753,12 +761,12 @@ public class ApiServer(
 
         /**
          * Sends a DisconnectRequest and closes [graceMs] after it is written, or on the client's answer.
-         * The wait for the write runs on a thread of its own, so the caller doesn't wait for a slow client;
-         * one that never reads is dropped by the keepalive.
+         * The wait for the write runs on a thread of its own, so the caller doesn't wait for a slow client.
+         * If the request isn't written within [disconnectWriteMs], the connection closes without it.
          */
         private fun askToDisconnect(graceMs: Long) {
             Thread({
-                if (send(listOf(Frame(Msg.DISCONNECT_REQUEST, ByteArray(0))), wait = true)) {
+                if (send(listOf(Frame(Msg.DISCONNECT_REQUEST, ByteArray(0))), wait = true, timeoutMs = disconnectWriteMs)) {
                     try { Thread.sleep(graceMs) } catch (_: InterruptedException) {}
                 }
                 close()
