@@ -296,8 +296,7 @@ not planned. They aren't counted above.
 
 ## Gradle
 
-On Maven Central as `dev.glassworks:esphome-api` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is
-not out yet: until it is, use the module from this repository (`implementation(project(":esphome-api"))`).
+On Maven Central as `dev.glassworks:esphome-api` ([changelog](CHANGELOG.md)).
 
 ```kotlin
 repositories { mavenCentral() }

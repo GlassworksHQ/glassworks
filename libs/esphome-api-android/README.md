@@ -58,9 +58,7 @@ What it advertises, next to what ESPHome does, is in esphome-api's
 
 ## Gradle
 
-On Maven Central as `dev.glassworks:esphome-api-android` ([changelog](CHANGELOG.md)). The first release,
-0.1.0, is not out yet: until it is, use the module from this repository
-(`implementation(project(":esphome-api-android"))`).
+On Maven Central as `dev.glassworks:esphome-api-android` ([changelog](CHANGELOG.md)).
 
 ```kotlin
 repositories { mavenCentral() }

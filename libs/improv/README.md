@@ -211,8 +211,7 @@ Beyond the spec, `WifiProvisioner` joins the network on Android 10 and later ([J
 
 ## Gradle
 
-On Maven Central as `dev.glassworks:improv` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is
-not out yet: until it is, use the module from this repository (`implementation(project(":improv"))`).
+On Maven Central as `dev.glassworks:improv` ([changelog](CHANGELOG.md)).
 
 ```kotlin
 repositories { mavenCentral() }
