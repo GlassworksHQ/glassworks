@@ -843,7 +843,7 @@ class MainActivity : Activity() {
     override fun onBackPressed() {
         // The topmost layer only: the menu's own (a picker, a dialog, then the menu), then a setup preview.
         if (::settingsOverlay.isInitialized && settingsOverlay.isShowing) { settingsOverlay.back(); return }
-        if (overlays.any { it.back() }) return
+        if (overlays.asReversed().any { it.back() }) return
         if (setupPreview) { closeSetupPreview(); return }
         page?.goBack()
     }
@@ -1079,8 +1079,6 @@ class MainActivity : Activity() {
         glassworks.screen.onKeepScreenOn = null
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
-        glassworks.onVoiceUi = null
-        glassworks.onCameraLeaving = null
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()

@@ -2,7 +2,7 @@ package sh.edm.s1kiosk
 
 import android.app.Activity
 import android.view.View
-import android.view.ViewGroup
+import android.widget.FrameLayout
 
 /**
  * A pane's layer over the dashboard in the app's activity: the voice orb, the timers, the notifications,
@@ -13,7 +13,7 @@ interface PaneOverlay {
     val view: View
 
     /** How the activity lays [view] out in its full-screen frame. */
-    val layoutParams: ViewGroup.LayoutParams
+    val layoutParams: FrameLayout.LayoutParams
 
     /** Above the settings menu and the Thread join screen, never covered (the camera's privacy dot). */
     val aboveMenus: Boolean get() = false

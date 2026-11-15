@@ -147,11 +147,13 @@ class S1Panes : AppParts {
             object : PaneOverlay {
                 override val view = voice
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
+                override fun destroy() { runtime.onVoiceUi = null }
             },
             object : PaneOverlay {
                 override val view = dot
                 override val layoutParams = dot.layoutParams()
                 override val aboveMenus = true
+                override fun destroy() { runtime.onCameraLeaving = null }
             },
         )
     }
