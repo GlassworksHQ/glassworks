@@ -23,6 +23,13 @@ android {
     }
 }
 
+// WakeWordCatalogTest reads the host script, which no compile task takes in: a change to it re-runs the tests.
+// The root build declares repo inputs for the Glassworks modules only, not for libs/.
+tasks.withType<Test>().configureEach {
+    inputs.file(rootProject.file("tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
+        .withPathSensitivity(PathSensitivity.NONE)
+}
+
 dependencies {
     // VoiceAssistantController implements its VoiceAssistantHandler, and WakeWordCatalog returns its WakeWordInfo.
     api(project(":esphome-api"))

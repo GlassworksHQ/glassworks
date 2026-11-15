@@ -16,7 +16,9 @@ public interface VoiceInput : WakeWordCatalog {
 
     /**
      * The level (0 to 1, -55 dBFS to -15 dBFS) of each microphone frame sent to Home Assistant, after the
-     * gain, for an orb or a meter; 0 when the stream stops. On the microphone's thread.
+     * gain, for an orb or a meter; 0 when the stream stops. On the microphone's thread. [VoiceEngine]
+     * reports it; an input that has no levels (a test's fake) keeps this default, which reads null and
+     * ignores what is set.
      */
     public var onMicLevel: ((Float) -> Unit)?
         get() = null

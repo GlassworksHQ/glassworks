@@ -15,10 +15,10 @@
 </p>
 
 <p align="center">
-  <a href="../../LICENSE">
+  <a href="NOTICE">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-license-mit-on-dark.svg">
-      <img alt="License: MIT" src="https://www.glassworks.dev/brand/badge-license-mit-on-light.svg" height="30">
+      <img alt="License: MIT, with one ported file under Apache-2.0 and BSD-3-Clause" src="https://www.glassworks.dev/brand/badge-license-mit-on-light.svg" height="30">
     </picture>
   </a>
   <picture>
@@ -44,8 +44,9 @@ response, announcements, continued conversations and voice timers.
 
 It has no Pane API and no S1 classes (#152). The Glassworks `assist` pane wraps it with settings,
 entities, the overlay and the speaker. Package `dev.glassworks.voice`, MIT licensed, except
-`MicroFrontend.kt`, a port under Apache-2.0 and BSD-3-Clause (see
-[THIRD-PARTY-NOTICES](../../THIRD-PARTY-NOTICES.md)). minSdk 23.
+`MicroFrontend.kt`, a port under Apache-2.0 and BSD-3-Clause ([NOTICE](NOTICE)). The AAR carries all
+three texts (`META-INF/LICENSE`, `LICENSE-APACHE-2.0`, `LICENSE-BSD-3-CLAUSE`) and the NOTICE, and the
+POM lists all three. minSdk 23.
 
 ## Use it in your own app
 

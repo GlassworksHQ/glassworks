@@ -40,6 +40,10 @@ class AssistPaneTest {
     private val events = ArrayList<PanelEvent>()
     private val heard = ArrayList<VoiceEvent>()
     private var chimes = 0
+    /** What the core's player was asked to play, its last onDone, and its stops: AssistPane adapts it to the library's UrlPlayer. */
+    private val played = ArrayList<List<String>>()
+    private var playDone: ((Boolean) -> Unit)? = null
+    private var playerStops = 0
     private val speaker = FakeSpeaker()
     private val input = FakeInput()
     private var created: Triple<VoiceConfig, String, (String) -> Unit>? = null
@@ -55,8 +59,8 @@ class AssistPaneTest {
             build = AppBuild("1.0.0", 10000, debug = false),
         ),
         player = object : UrlPlayer {
-            override fun play(urls: List<String>, onDone: (Boolean) -> Unit) {}
-            override fun stop() {}
+            override fun play(urls: List<String>, onDone: (Boolean) -> Unit) { played += urls; playDone = onDone }
+            override fun stop() { playerStops++ }
         },
         speaker = speaker,
         resolveUrl = { it },
@@ -483,6 +487,23 @@ class AssistPaneTest {
         fun varint(v: Int) { var x = v; while (x >= 0x80) { o.write((x and 0x7F) or 0x80); x = x ushr 7 }; o.write(x) }
         o.write(0); varint(payload.size); varint(type); o.write(payload)
         return o.toByteArray()
+    }
+
+    /** The library's controller plays through the core's player (#152: AssistPane's adapter), and hears its end and its stop. */
+    @Test
+    fun anAnnouncementPlaysOnTheCoresPlayerAndItsEndAndStopGetThrough() {
+        val p = started()
+        val server = dev.glassworks.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
+        p.bind(server)
+        server.voice!!.onAnnounce("http://homeassistant.local:8123/api/tts_proxy/a.mp3", "Dinner is ready", "", false)
+        assertEquals(listOf(listOf("http://homeassistant.local:8123/api/tts_proxy/a.mp3")), played)
+        assertEquals(VoiceEvent.Speaking, heard.last())
+        playDone!!(true)
+        assertEquals(VoiceEvent.Idle, heard.last())
+        server.voice!!.onAnnounce("http://homeassistant.local:8123/api/tts_proxy/b.mp3", "Again", "", false)
+        assertEquals(0, playerStops)
+        p.cancel()
+        assertEquals(1, playerStops)
     }
 
     /** The overlay's orb reads VoiceLevels.mic, which the engine now reports through onMicLevel (#152). */

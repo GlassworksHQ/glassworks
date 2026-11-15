@@ -165,13 +165,15 @@ and HA's device page stays short. So every entity has a place:
 Protocols, written so anyone can use them: `esphome-api`, `esphome-api-android`, `improv`,
 `bluetooth-proxy`, `sendspin`, `voice`.
 
-- **One protocol per library**, with no Glassworks dependency. Someone building something else
-  should be able to take it as it is.
+- **One protocol per library**, with no pane or core dependency: a library may use another library
+  (`voice` and `sendspin` use `esphome-api`), never the Pane API, the core or an app. Someone building
+  something else should be able to take it as it is. `LibraryBoundaryTest` checks this.
 - **Plain Kotlin where possible.** JVM libraries have no Android imports, so a JVM test can drive
   them.
 - **Tested against the reference.** `esphome-api` is checked against `aioesphomeapi`, and Sendspin
   against a real server. If the reference disagrees, the reference wins.
-- MIT.
+- MIT. Code ported from elsewhere keeps its own licence and ships it in the artifact: `voice`'s
+  `MicroFrontend.kt` is Apache-2.0 and BSD-3-Clause.
 
 ### Kiln (`kiln/`)
 

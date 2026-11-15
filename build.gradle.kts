@@ -67,6 +67,16 @@ subprojects {
 subprojects {
     pluginManager.withPlugin("com.vanniktech.maven.publish") {
         val repo = "https://github.com/GlassworksHQ/glassworks"
+        // Code ported from elsewhere keeps its licence: `extraLicenses` in the library's gradle.properties,
+        // `<SPDX id>|<upstream copyright line>` entries split by `;` (libs/voice: MicroFrontend.kt). Each is
+        // listed in the POM and shipped as META-INF/LICENSE-<ID>, beside libs/<name>/NOTICE.
+        val extraLicenses = (findProperty("extraLicenses") as String?).orEmpty().split(';').filter { it.isNotBlank() }.map { entry ->
+            val (id, copyright) = entry.split('|', limit = 2).map { it.trim() }.also {
+                if (it.size != 2 || it[1].isEmpty()) throw GradleException("$path: extraLicenses entry '$entry' is not '<SPDX id>|<copyright line>'")
+            }
+            val url = licenceUrls[id] ?: throw GradleException("$path: extraLicenses names $id, which licenceUrls doesn't know")
+            Triple(id, copyright, url)
+        }
         extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
             coordinates("dev.glassworks", project.name, project.version.toString())
             publishToMavenCentral(automaticRelease = false)
@@ -81,6 +91,12 @@ subprojects {
                         name.set("MIT")
                         url.set("https://opensource.org/license/mit")
                         distribution.set("repo")
+                    }
+                    for ((id, _, licenceUrl) in extraLicenses) license {
+                        name.set(id)
+                        url.set(licenceUrl)
+                        distribution.set("repo")
+                        comments.set("Ported code in this library; see META-INF/NOTICE")
                     }
                 }
                 developers {
@@ -163,15 +179,20 @@ subprojects {
                 apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
             }
         }
-        // The licence in the jar, and in the AAR's classes.jar, as META-INF/LICENSE. Apps drop that path
-        // when they package (AGP's default excludes), so it never reaches an APK.
+        // The licence in the jar, and in the AAR's classes.jar, as META-INF/LICENSE, with any extraLicenses
+        // and the NOTICE beside it. Apps drop those paths when they package (AGP's default excludes), so they
+        // never reach an APK.
         val licence = tasks.register<LicenceResources>("licenceResources") {
             licence.set(rootProject.file("LICENSE"))
+            extras.set(extraLicenses.map { (id, copyright, _) -> "$id|$copyright" })
+            licenceTexts.set(rootProject.layout.projectDirectory.dir("LICENSES"))
+            layout.projectDirectory.file("NOTICE").asFile.takeIf { it.isFile }?.let { notice.set(it) }
             outputDir.set(layout.buildDirectory.dir("generated/licence"))
         }
         pluginManager.withPlugin("java-library") {
             extensions.getByType<SourceSetContainer>()["main"].resources.srcDir(licence)
         }
+
         pluginManager.withPlugin("com.android.library") {
             extensions.configure<com.android.build.api.dsl.LibraryExtension> {
                 // AGP writes the library's own compileSdk (37.2) here by default, which stops any app below
@@ -181,10 +202,24 @@ subprojects {
                 // esphome-api's): the same text, so keep one.
                 packaging.resources.excludes.remove("/META-INF/LICENSE")
                 packaging.resources.pickFirsts.add("/META-INF/LICENSE")
+                // The same for a library's NOTICE (extraLicenses), also a default exclude.
+                packaging.resources.excludes.remove("/META-INF/NOTICE")
+                packaging.resources.pickFirsts.add("/META-INF/NOTICE")
             }
             extensions.configure<com.android.build.api.variant.LibraryAndroidComponentsExtension> {
                 onVariants { it.sources.resources?.addGeneratedSourceDirectory(licence, LicenceResources::outputDir) }
             }
+        }
+    }
+}
+
+// An app built from these modules (the S1 app) gets its licence texts from its own licence pages (assets/
+// licenses, THIRD-PARTY-NOTICES), not from the libraries' META-INF: drop the extraLicenses files as AGP
+// drops META-INF/LICENSE and NOTICE by default.
+subprojects {
+    pluginManager.withPlugin("com.android.application") {
+        extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
+            packaging.resources.excludes += "/META-INF/LICENSE-*"
         }
     }
 }
@@ -215,13 +250,37 @@ abstract class ReadmeSnippets : DefaultTask() {
     }
 }
 
+/** The licence URLs a library's POM may name in `extraLicenses`, by SPDX id. */
+val licenceUrls = mapOf(
+    "Apache-2.0" to "https://www.apache.org/licenses/LICENSE-2.0",
+    "BSD-3-Clause" to "https://opensource.org/license/bsd-3-clause",
+)
+
+/**
+ * META-INF/LICENSE (the repo's MIT licence), and for each of [extras] (`<SPDX id>|<copyright line>`)
+ * META-INF/LICENSE-<ID> from LICENSES/<id>.txt under that copyright line (in place of a template's
+ * `Copyright (c) <year> <owner>.` line), and META-INF/NOTICE from [notice].
+ */
 abstract class LicenceResources : DefaultTask() {
     @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val licence: RegularFileProperty
+    @get:Input abstract val extras: ListProperty<String>
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE) abstract val licenceTexts: DirectoryProperty
+    @get:Optional @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val notice: RegularFileProperty
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun copy() {
-        licence.get().asFile.copyTo(outputDir.file("META-INF/LICENSE").get().asFile, overwrite = true)
+        val metaInf = outputDir.dir("META-INF").get().asFile
+        metaInf.deleteRecursively()
+        licence.get().asFile.copyTo(File(metaInf, "LICENSE"))
+        for (entry in extras.get()) {
+            val (id, copyright) = entry.split('|', limit = 2)
+            val text = licenceTexts.file("$id.txt").get().asFile.readText()
+            val template = Regex("""^Copyright \(c\) <year> <owner>\.\s*\n""")
+            val body = if (template.containsMatchIn(text)) text.replaceFirst(template, "$copyright\n") else "$copyright\n\n$text"
+            File(metaInf, "LICENSE-${id.uppercase()}").writeText(body)
+        }
+        if (notice.isPresent) notice.get().asFile.copyTo(File(metaInf, "NOTICE"))
     }
 }
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Checks what `./gradlew :<name>:publishToMavenLocal` put in mavenLocal before it goes to Maven Central
 # (pr.yml libs-publish, libs-release.yml): the jar or AAR, the sources and KDoc jars and the POM; the
-# licence in the jar and in the POM; the org, not a person, as developer; no class left under the old
-# sh.edm packages (#153: a rename after publishing breaks every user). Reads files only.
+# licence in the jar and in the POM, and each of the library's extraLicenses (gradle.properties) and its
+# NOTICE, in both too; the org, not a person, as developer; no class left under the old sh.edm packages
+# (#153: a rename after publishing breaks every user). Reads files only.
 #   tools/release/check-lib-artifact.sh <name> [<maven-repo>]    e.g. esphome-api ~/.m2/repository
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
@@ -31,6 +32,22 @@ fi
 has() { grep -qx -- "$2" <<<"$1"; }
 classes_list=$(unzip -Z1 "$classes"); sources_list=$(unzip -Z1 "$base-sources.jar"); javadoc_list=$(unzip -Z1 "$base-javadoc.jar")
 has "$classes_list" 'META-INF/LICENSE' || fail "no META-INF/LICENSE in the classes jar"
+# Ported code's licences: `extraLicenses=<SPDX id>|<copyright>;…` in gradle.properties, and libs/<name>/NOTICE.
+extra=$(sed -n 's/^extraLicenses=//p' "$props")
+extra_ids=()
+if [ -n "$extra" ]; then
+  IFS=';' read -r -a entries <<<"$extra"
+  for e in "${entries[@]}"; do
+    id=${e%%|*}; copyright=${e#*|}
+    extra_ids+=("$id")
+    f="META-INF/LICENSE-$(tr '[:lower:]' '[:upper:]' <<<"$id")"
+    has "$classes_list" "$f" || fail "no $f in the classes jar (extraLicenses names $id)"
+    unzip -p "$classes" "$f" | grep -qF -- "$copyright" || fail "$f lacks its copyright line: $copyright"
+  done
+fi
+if [ -f "$repo/libs/$name/NOTICE" ]; then
+  has "$classes_list" 'META-INF/NOTICE' || fail "no META-INF/NOTICE in the classes jar (libs/$name/NOTICE exists)"
+fi
 has "$javadoc_list" 'index.html' || fail "the KDoc jar has no index.html"
 grep -q '\.kt$' <<<"$sources_list" || fail "the sources jar has no Kotlin sources"
 if grep -q '^sh/edm/.*[^/]$' <<<"$classes_list"$'\n'"$sources_list"; then
@@ -41,6 +58,9 @@ pom=$(cat "$base.pom")
 for want in '<groupId>dev.glassworks</groupId>' "<artifactId>$name</artifactId>" "<version>$v</version>" \
     '<description>' '<name>MIT</name>' '<url>https://github.com/GlassworksHQ</url>' '<connection>scm:git:'; do
   grep -qF "$want" <<<"$pom" || fail "the POM lacks $want"
+done
+for id in "${extra_ids[@]+"${extra_ids[@]}"}"; do
+  grep -qF "<name>$id</name>" <<<"$pom" || fail "the POM's licenses lack $id (extraLicenses)"
 done
 if grep -q '<email>' <<<"$pom"; then fail "the POM names an email: developers are the org only"; fi
 echo "$name $v: jar, sources, KDoc, POM and licence look right"

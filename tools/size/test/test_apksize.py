@@ -94,8 +94,8 @@ class Owners(unittest.TestCase):
 
     def test_a_panes_classes_outside_its_package(self):
         """The verifier's note 6: classes only a pane uses, outside its package, are that pane's."""
-        for name in ("sh.edm.s1kiosk.esphome.VoiceAssistantController", "sh.edm.s1kiosk.esphome.VoiceAssistantController$start$1",
-                     "sh.edm.s1kiosk.esphome.UrlPlayer", "sh.edm.s1kiosk.esphome.WakeWordCatalog"):
+        for name in ("sh.edm.s1kiosk.VoiceOverlay", "sh.edm.s1kiosk.VoiceOverlay$show$1",
+                     "dev.glassworks.voice.VoiceAssistantController", "dev.glassworks.voice.WakeWordCatalog"):
             self.assertEqual(A.owner_of_class(name, PARTS), ("pane", "assist"), name)
         self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.frame.TimeZoneKeeper", PARTS), ("pane", "time-zone"))
         self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.esphome.PanelDevice", PARTS), ("core", None))

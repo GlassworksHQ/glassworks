@@ -361,9 +361,15 @@ The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): 
 but have no release yet. Each has its own semver version, in `version=` in
 `libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
 release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
-developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. The
-libraries bundle no third-party code; their dependencies come from Maven Central with their own
-licences. They're built for Kotlin 2.1 with kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can
+developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. Their
+dependencies come from Maven Central with their own licences.
+
+Ported code keeps its own licence. `voice`'s `MicroFrontend.kt` is a port of TensorFlow Lite Micro's
+audio frontend (Apache-2.0) and kissfft (BSD-3-Clause). A library lists such licences in its
+`gradle.properties` as `extraLicenses=<SPDX id>|<upstream copyright line>;…`, and explains the port in
+`libs/<name>/NOTICE`. The build then adds each licence to the POM, and ships it in the jar as
+`META-INF/LICENSE-<ID>` (from `LICENSES/<id>.txt`, under the copyright line), with `META-INF/NOTICE`.
+`check-lib-artifact.sh` checks both. They're built for Kotlin 2.1 with kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can
 use them.
 
 `bluetooth-proxy` isn't published yet. It's alpha, and GATT connections will change its API. To publish
