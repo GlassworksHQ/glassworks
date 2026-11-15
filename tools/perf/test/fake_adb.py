@@ -289,11 +289,12 @@ def page_log(obj, split=True, record=True):
         line(PAGE_TAG, l)
 
 
-def line(tag, msg, pid=4242):
+def line(tag, msg, pid=4242, at=None):
+    """One logcat line, stamped now or `at`."""
     if tag == PAGE_TAG:
         msg = msg.encode()[:PAGE_LINE_BYTES].decode(errors="ignore")
     with LOCK:
-        print(f"{now():10.3f}  {pid}  {pid + 1} I {tag}: {msg}", flush=True)
+        print(f"{now() if at is None else at:10.3f}  {pid}  {pid + 1} I {tag}: {msg}", flush=True)
 
 
 def noise(every):
@@ -504,9 +505,9 @@ def dashboard():
     line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
     save("session_up.json", True)
     a = now()
-    paint(a + 0.2, a + 1.2)  # the screen paints whether or not anyone reads logcat
     saved = state("saved_url.json") or os.environ.get("FAKE_SAVED_URL")
     if saved and "/clarity-" in saved and not os.environ.get("FAKE_RESTART_PAGE_LOST"):
+        paint(a + 0.2, a + 1.2)  # the screen paints whether or not anyone reads logcat
         # Protocol 4: the kiosk was pointed at a reference dashboard; it comes back to it, and the
         # harness (no nonce: restart mode) says when it was usable, then done.
         line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
@@ -530,7 +531,12 @@ def dashboard():
         return
     line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
     C.sleep(0.8)
-    line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
+    # It paints on for 0.4 s after its load event, timed from the event, not from `a`: on the 0.2 clock,
+    # a fake 80 ms late on a busy CI machine put PageStop after the last frame (settle page-stop, not
+    # quiet-gap). Saved before the line, as coldstart ends this logcat as soon as it reads PageStop.
+    stop = now()
+    paint(a + 0.2, stop + 0.4)
+    line("GeckoSession", "handleMessage GeckoView:PageStop uri=null", at=stop)
     if os.environ.get("FAKE_OWN_RELOAD"):
         # A sign-in redirect: the kiosk loads its page a second time, this long after the first stopped.
         C.sleep(float(os.environ.get("FAKE_OWN_RELOAD_DELAY", "0.5")))
