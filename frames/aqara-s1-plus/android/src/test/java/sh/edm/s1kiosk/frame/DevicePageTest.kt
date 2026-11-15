@@ -140,7 +140,7 @@ class DevicePageTest {
     }
 
     @Test fun theListIsDebloatShs() {
-        val sh = RepoFiles.file("tools/debloat/debloat.sh").readText()
+        val sh = RepoFiles.file("frames/aqara-s1-plus/tools/debloat/debloat.sh").readText()
         val safe = Regex("""(?m)^\s+(com\.[a-z0-9_.]+)\s+#""").findAll(sh).map { it.groupValues[1] }.toList()
         val launcher = Regex("""(?m)^LAUNCHER=(\S+)""").find(sh)!!.groupValues[1]
         assertEquals(safe + launcher, S1Device.AQARA_APPS.keys.toList())
