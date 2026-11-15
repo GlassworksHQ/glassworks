@@ -606,7 +606,7 @@ class SettingsOverlayTest {
         var zone = "Europe/London"
         val used = ArrayList<String>()
         fun model() = KioskSettingsOverlay.Model(listOf(SettingsSection("test", "Test", listOf(
-            zone.let { z -> SettingsItem.Action("Home Assistant's time zone", { "like $z" }, "Use it") { done -> used += z; done(null) } },
+            zone.let { z -> SettingsItem.Action("Home Assistant's time zone", { "like $z" }, if (z == "Europe/London") "Use it" else "Use Dublin") { done -> used += z; done(null) } },
         ))), "0.4.3", setOf("test"))
         val o = open(model = { model() }).apply { reload = ::model }
         assertTrue(shown(o, "like Europe/London"))
@@ -614,7 +614,8 @@ class SettingsOverlayTest {
         o.refresh()
         Mockup.idle()
         assertTrue("the new line", shown(o, "like Europe/Dublin"))
-        Mockup.label(o, "Use it").performClick()
+        assertTrue("the new button word", shown(o, "Use Dublin") && !shown(o, "Use it"))
+        Mockup.label(o, "Use Dublin").performClick()
         settle()
         assertEquals(listOf("Europe/Dublin"), used)
     }

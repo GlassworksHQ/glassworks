@@ -771,8 +771,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * A name, its line, and a button at the end (#269); one that asks first asks in the sheet. Its line and
-     * its run are the model's action as it is now: a reload can bring the same title with another detail and
+     * A name, its line, and a button at the end (#269); one that asks first asks in the sheet. Its line, its
+     * button's word and its run are the model's action as it is now: a reload can bring the same title with another detail and
      * run (Home Assistant's zone changed; CodeRabbit on #331). Done, the page is drawn again from the model:
      * what the action changed shows at once.
      */
@@ -799,7 +799,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             setPadding(0, px(10f), 0, px(10f))
             addView(texts(i.title, i.detail(), TX), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
             addView(button)
-        }) { current().detail() }
+        }) { val a = current(); if (button.text != a.label) button.text = a.label; a.detail() }
     }
 
     /** The name with the value on its right, the slider under them; saved when let go. */
