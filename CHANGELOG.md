@@ -34,6 +34,11 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **Generic Android: the launch screen shows the Glassworks mark instead of a plain app icon.** On
+  Android 12 and newer, such as a tablet, the screen Android shows while the app starts is the
+  Glassworks stack on the app's dark background, and it fades into the connecting screen. Where the
+  app also stands in for the launcher before the first unlock, that screen no longer names the
+  Aqara S1. The S1 is unchanged.
 - **The panel and the Manage page look the same.** Both read one set of Glassworks colours and
   shapes: the status chips, switches, rows and dialogs match, and the Manage page's menu folds the
   panes you turned off under "Off · N", as the panel does. On the panel, hairlines and tile corners
