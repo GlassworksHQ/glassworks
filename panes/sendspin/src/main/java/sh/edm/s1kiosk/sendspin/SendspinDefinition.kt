@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.sendspin
 
+import dev.glassworks.sendspin.SendspinSession
 import dev.glassworks.frame.Capability
 import android.content.SharedPreferences
 import dev.glassworks.pane.IntentExtra
@@ -67,7 +68,7 @@ class SendspinDefinition(
 
         /** The stream's format. The player offers only 48 kHz stereo, so the server sends that: the codec is the choice. */
         fun audio(s: SendspinSession.Status): String =
-            if (s.phase != SendspinSession.Phase.PLAYING || s.codec == null) "Not playing" else "${s.codec.uppercase()} · 48 kHz · stereo"
+            s.codec.let { codec -> if (s.phase != SendspinSession.Phase.PLAYING || codec == null) "Not playing" else "${codec.uppercase()} · 48 kHz · stereo" }
     }
 
     override val extras = listOf(

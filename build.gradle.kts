@@ -37,7 +37,7 @@ extra["s1Abi"] = s1Abi
 // The test settings of every Glassworks module (not the libraries in libs/, which test on their own):
 // -Ps1MockupDir writes the *Mockups PNGs (a module without mockups then runs none, not fails), and
 // -Ps1RegenGolden=true rewrites the pin tests' goldens. The repo files the tests read are inputs (#21).
-val libraries = setOf(":esphome-api", ":esphome-api-android", ":improv", ":bluetooth-proxy")
+val libraries = setOf(":esphome-api", ":esphome-api-android", ":improv", ":bluetooth-proxy", ":sendspin")
 subprojects {
     if (path in libraries) return@subprojects
     tasks.withType<Test>().configureEach {

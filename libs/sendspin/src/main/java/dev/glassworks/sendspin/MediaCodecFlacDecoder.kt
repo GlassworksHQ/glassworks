@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
 import android.media.AudioFormat
 import android.media.MediaCodec

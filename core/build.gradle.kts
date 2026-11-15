@@ -28,6 +28,7 @@ dependencies {
     api(project(":glassworks-pane-api"))
     api(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
+    implementation(project(":sendspin")) // WsClient, for Home Assistant's websocket API (HaThreadClient)
     // QR code on the sign-in screen (encoder only, pure Java, Apache-2.0).
     implementation("com.google.zxing:core:3.5.3")
 

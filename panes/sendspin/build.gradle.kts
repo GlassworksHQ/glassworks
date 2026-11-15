@@ -27,6 +27,7 @@ extensions.configure<com.android.build.api.dsl.LibraryExtension> {
 dependencies {
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
+    api(project(":sendspin")) // the engine; SendspinPane.player exposes it
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")

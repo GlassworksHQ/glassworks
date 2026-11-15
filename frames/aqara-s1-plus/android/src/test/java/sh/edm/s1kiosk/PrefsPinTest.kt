@@ -21,7 +21,7 @@ import sh.edm.s1kiosk.base.BaseLayout
 import sh.edm.s1kiosk.base.UartBaseLink
 import sh.edm.s1kiosk.base.WallBase
 import sh.edm.s1kiosk.sendspin.PrefsSsStore
-import sh.edm.s1kiosk.sendspin.SsPairingRecord
+import dev.glassworks.sendspin.SsPairingRecord
 import java.io.File
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy

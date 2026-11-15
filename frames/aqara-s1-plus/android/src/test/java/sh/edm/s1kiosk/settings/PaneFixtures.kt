@@ -27,7 +27,7 @@ import sh.edm.s1kiosk.radio.SysProps
 import dev.glassworks.pane.PanelEvent
 import dev.glassworks.pane.PanelTimer
 import sh.edm.s1kiosk.sendspin.SendspinPane
-import sh.edm.s1kiosk.sendspin.SendspinSession
+import dev.glassworks.sendspin.SendspinSession
 import sh.edm.s1kiosk.esphome.UrlPlayer
 import sh.edm.s1kiosk.voice.AssistPane
 import sh.edm.s1kiosk.voice.SpeakerMedia

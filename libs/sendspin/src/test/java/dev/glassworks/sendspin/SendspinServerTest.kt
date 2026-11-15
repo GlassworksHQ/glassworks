@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
  * - guest: unpaired access enabled + operator approval → player role → audio.
  *
  *     python3 -m venv /tmp/sendspin-venv && /tmp/sendspin-venv/bin/pip install 'aiosendspin[server]==10.2.1'
- *     SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :pane-sendspin:testDebugUnitTest
+ *     SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :sendspin:testDebugUnitTest
  *
  * Skipped without SENDSPIN_PYTHON.
  */

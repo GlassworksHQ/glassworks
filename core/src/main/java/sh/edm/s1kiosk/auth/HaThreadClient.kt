@@ -135,7 +135,7 @@ class HaThreadClient(private val connect: (url: String) -> HaSocket) {
 }
 
 /** [HaSocket] over the kiosk's own RFC 6455 client (ws:// and wss://). */
-class WsHaSocket private constructor(private val ws: sh.edm.s1kiosk.sendspin.WsClient) : HaSocket {
+class WsHaSocket private constructor(private val ws: dev.glassworks.sendspin.WsClient) : HaSocket {
     override fun send(text: String) = ws.sendText(text)
 
     override fun receive(): String? {
@@ -150,6 +150,6 @@ class WsHaSocket private constructor(private val ws: sh.edm.s1kiosk.sendspin.WsC
     companion object {
         @Throws(IOException::class)
         fun connect(url: String): WsHaSocket =
-            WsHaSocket(sh.edm.s1kiosk.sendspin.WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 15_000))
+            WsHaSocket(dev.glassworks.sendspin.WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 15_000))
     }
 }

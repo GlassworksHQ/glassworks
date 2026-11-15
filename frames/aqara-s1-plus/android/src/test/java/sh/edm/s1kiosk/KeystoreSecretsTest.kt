@@ -27,7 +27,7 @@ import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowLog
 import sh.edm.s1kiosk.auth.StoredAuth
 import sh.edm.s1kiosk.sendspin.PrefsSsStore
-import sh.edm.s1kiosk.sendspin.SsPairingRecord
+import dev.glassworks.sendspin.SsPairingRecord
 
 /**
  * The app's own openers with their default store, [SecretStore.keystore], over a software stand-in for
