@@ -36,6 +36,8 @@ import sh.edm.s1kiosk.voice.VoiceUi
 class KioskService : Service() {
 
     private val main = Handler(Looper.getMainLooper())
+    /** The S1 app's runtime, for the panes' shared state the service hands around (the voice overlay, the device). */
+    private val runtime get() = (application as KioskApp).glassworks
     private var device: PanelDevice? = null
     private var discovery: HaDiscovery? = null
     private var wifiScanner: ScreenOffWifiScanner? = null
@@ -53,9 +55,9 @@ class KioskService : Service() {
         )
         promote()
         glassworks.screen.start(this)
-        wifiScanner = glassworks.s1?.screenOffWifiScanner(this) { main.post { if (wifiScanner != null) promote() } }?.also { it.start() }
+        wifiScanner = runtime.s1?.screenOffWifiScanner(this) { main.post { if (wifiScanner != null) promote() } }?.also { it.start() }
         glassworks.voiceState = if (PanePrefs(this).voice.enabled) "idle" else "off"
-        glassworks.voiceUi = VoiceUi(glassworks.voiceState)
+        runtime.voiceUi = VoiceUi(glassworks.voiceState)
         glassworks.voiceCancel = { device?.cancelVoice() }
         HaAuth.startServer(this)
         codeOverlay = CodeOverlay(this) { glassworks.panelCode.dismiss() }
@@ -76,9 +78,9 @@ class KioskService : Service() {
         discovery = d
         glassworks.discovery = d
         d.start()
-        device = PanelDevice(this, glassworks, { e -> main.post { onVoiceEvent(e) } }, d::onApiHello).also {
+        device = PanelDevice(this, runtime, { e -> main.post { onVoiceEvent(e) } }, d::onApiHello).also {
             it.start()
-            glassworks.device = it
+            runtime.device = it
         }
         ImprovController.init(this) // Improv Wi-Fi via BLE (provisioning mode; see improv/)
         // The web installer, over adb (docs/onboarding.md): Wi-Fi via Improv Serial, then HA + radio.
@@ -88,10 +90,10 @@ class KioskService : Service() {
     }
 
     private fun onVoiceEvent(e: VoiceEvent) {
-        glassworks.voiceUi = glassworks.voiceUi.on(e)
+        runtime.voiceUi = runtime.voiceUi.on(e)
         try { glassworks.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("S1Kiosk.Voice", "voice overlay failed", t) }
         if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return // texts only, no state change
-        glassworks.voiceState = glassworks.voiceUi.state
+        glassworks.voiceState = runtime.voiceUi.state
         Log.i("S1Kiosk.Voice", "voice: ${glassworks.voiceState}")
         // Talking to the panel counts as activity: wake the screen and keep it on.
         if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) glassworks.screen.wake("voice")
@@ -103,7 +105,7 @@ class KioskService : Service() {
         SetupChannelServer.stop()
         ImprovSerialServer.stop()
         ImprovController.shutdown()
-        glassworks.device = null
+        runtime.device = null
         device?.stop()
         device = null
         discovery?.stop()

@@ -12,6 +12,7 @@ import dev.glassworks.frame.Capability.SPEAKER
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.Hardware
 import dev.glassworks.frame.NamedBy
+import dev.glassworks.frame.RootUpdates
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PaneDefinition
 import sh.edm.s1kiosk.PanePrefs
@@ -55,7 +56,7 @@ class AqaraS1Plus : Frame {
         return listOf(WallBaseDefinition(prefs.paneFile("wall-base")), TimeZoneDefinition(prefs.paneFile("time-zone")))
     }
 
-    val rootUpdates = RootUpdateInstaller()
+    override val rootUpdates: RootUpdates = RootUpdateInstaller()
 
     /** Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3). One per service run. */
     fun screenOffWifiScanner(context: Context, onForegroundOnly: () -> Unit) =

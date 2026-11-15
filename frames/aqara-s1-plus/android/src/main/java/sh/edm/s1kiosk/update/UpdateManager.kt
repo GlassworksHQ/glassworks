@@ -12,7 +12,6 @@ import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.platform.Platform
 import dev.glassworks.platform.PlatformApi
-import sh.edm.s1kiosk.GlassworksRuntime
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -22,6 +21,7 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import sh.edm.s1kiosk.Glassworks
 
 /**
  * App updates from GitHub Releases, shown and installed through Home Assistant's update entity
@@ -41,12 +41,12 @@ import java.util.concurrent.TimeUnit
  */
 class UpdateManager(
     context: Context,
-    private val runtime: GlassworksRuntime,
+    private val runtime: Glassworks,
     private val onChange: () -> Unit,
 ) {
     private val ctx = context.applicationContext
     /** The S1 boot image's root update service; null on a frame without one, which installs with PackageInstaller. */
-    private val root = runtime.s1?.rootUpdates
+    private val root = runtime.frame.rootUpdates
     private val exec: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "s1-update").apply { isDaemon = true } }
     val model = UpdateModel(runtime.build.versionName)
@@ -282,6 +282,11 @@ class UpdateManager(
         val pending = File(dir, UpdateHelper.PENDING_NAME)
         if (!part.renameTo(pending)) return fail(a, "cannot move the APK into place")
         Log.i(TAG, "verified ${o.apk.name} (sha256 ${Releases.hex(digest)})")
+        installVerified(a, pending)
+    }
+
+    /** The verified APK at [pending]: through the frame's root update service when its boot image has one, else PackageInstaller. */
+    private fun installVerified(a: UpdateModel.Attempt, pending: File) {
         val helper = root?.takeIf { it.present() } ?: return installWithPackageInstaller(a, pending)
         helper.install(
             a.offer.version.toString(),

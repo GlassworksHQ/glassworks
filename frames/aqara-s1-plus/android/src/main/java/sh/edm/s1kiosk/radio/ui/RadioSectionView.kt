@@ -299,10 +299,10 @@ class RadioSectionView(private val context: Context) {
         rebind()
     }
 
-    /** Previews (RadioMockups): a tapped tile, an open disclosure, a refused switch. */
-    internal fun previewSelect(m: RadioMode?) { selected = m; rebind() }
-    internal fun previewOpen(more: Boolean = false, dataset: Boolean = false) { moreOpen = more; datasetOpen = dataset; rebind() }
-    internal fun previewRefused(m: RadioMode, status: String) { refused = m to status; rebind() }
+    /** Previews (RadioMockups): a tapped tile, an open disclosure, a refused switch. Public for the mock-ups. */
+    fun previewSelect(m: RadioMode?) { selected = m; rebind() }
+    fun previewOpen(more: Boolean = false, dataset: Boolean = false) { moreOpen = more; datasetOpen = dataset; rebind() }
+    fun previewRefused(m: RadioMode, status: String) { refused = m to status; rebind() }
 
     private fun rebind() {
         val f = facts ?: return

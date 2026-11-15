@@ -36,6 +36,10 @@ class AqaraS1PlusTest {
         assertEquals("aqara-s1-plus", frame.board)
     }
 
+    @Test fun updatesInstallThroughTheBootImagesRootService() {
+        assertTrue(frame.rootUpdates is RootUpdateInstaller)
+    }
+
     @Test fun theSettingsChainIsAndroidSettingsThenLumiSettings() {
         assertEquals(
             listOf("android.settings.SETTINGS" to null, "lumi.settings.SETTINGS" to "com.lumi.settings"),

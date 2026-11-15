@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.pane.Pane
+import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
@@ -21,7 +22,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONArray
 import org.json.JSONObject
-import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.discovery.HaUrls
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp
@@ -29,9 +29,14 @@ import sh.edm.s1kiosk.radio.ui.RadioSettingsView
 import sh.edm.s1kiosk.radio.ui.RadioSetupScreen
 import sh.edm.s1kiosk.radio.ui.RadioStep
 
+/** The controller of the running [RadioPane], null while none runs: the app's [RadioDefinition] reads it. */
+class RunningRadio {
+    @Volatile var controller: RadioController? = null
+}
+
 /**
  * What the radio's setup step and settings section read. The app's comes from the running
- * [RadioController] ([GlassworksRuntime.radio]); the mock-ups give fixed values.
+ * [RadioController] ([RunningRadio]); the mock-ups give fixed values.
  */
 interface RadioReadout {
     /** Null while the kiosk service (and so the controller) isn't running. */
@@ -62,7 +67,7 @@ interface RadioReadout {
 /**
  * The radio pane ([RadioPane]) for the whole process: the setup step (docs/onboarding.md, "Radio"),
  * the settings menu's Radio section, and the requests both send to the [RadioController]. Built once
- * by [GlassworksRuntime.paneDefinitions].
+ * by the app (GlassworksRuntime.paneDefinitions).
  */
 class RadioDefinition(
     /** The radio namespace's settings (`kiosk.xml`), the step's two flags included. */
@@ -70,6 +75,8 @@ class RadioDefinition(
     /** The panel shows any trace of an earlier setup (SetupState.setUpBefore): the core's facts. */
     private val setUpBefore: () -> Boolean,
     internal val readout: RadioReadout,
+    /** Where the running [RadioPane] puts its controller ([pane]); the app's [readout] reads it there ([app]). */
+    val running: RunningRadio,
 ) : PaneDefinition {
 
     override val id = "radio"
@@ -295,9 +302,9 @@ class RadioDefinition(
 
     /**
      * `Thread dataset` typed or pasted in the settings menu, the same path as HA's text entity: null when
-     * the radio took it, else why not. Never logged.
+     * the radio took it, else why not. Never logged. Public for tests.
      */
-    internal fun setDataset(hex: String): String? {
+    fun setDataset(hex: String): String? {
         val r = readout.controller() ?: return NOT_RUNNING
         return r.setThreadDataset(hex)
     }
@@ -391,18 +398,21 @@ class RadioDefinition(
         else r.afterPending { done(null) }
     }
 
-    /** The app's: the controller [RadioPane] puts on the runtime while it runs. */
+    /** The device shell's radio pane, which puts its controller where this definition's step and section read it. */
+    fun pane(ctx: PaneContext, panelIp: () -> String?): RadioPane = RadioPane(ctx, running, panelIp)
+
+    /** The app's: the controller [RadioPane] puts in [running] while it runs. */
     class AppReadout(
-        private val runtime: GlassworksRuntime,
+        private val running: RunningRadio,
         private val prefs: RadioPrefs,
         private val haBase: () -> String?,
     ) : RadioReadout {
-        override fun controller() = runtime.radio
-        override fun mode() = runtime.radio?.mode ?: RadioMode.parse(prefs.mode)
+        override fun controller() = running.controller
+        override fun mode() = running.controller?.mode ?: RadioMode.parse(prefs.mode)
 
         /** Cached values: no getprop here. */
         override fun facts(): RadioFollowUp.Facts? {
-            val r = runtime.radio ?: return null
+            val r = running.controller ?: return null
             return RadioFollowUp.Facts(
                 mode = r.mode, status = r.statusText(), helper = r.helperShown(), stack = r.zigbeeStack,
                 threadStored = r.threadStored(), thread = r.threadRouterState(),
@@ -415,12 +425,18 @@ class RadioDefinition(
     }
 
     companion object {
+        /** The app's definition: its step and section read the controller of the running [RadioPane]. */
+        fun app(prefs: RadioPrefs, setUpBefore: () -> Boolean, haBase: () -> String?): RadioDefinition {
+            val running = RunningRadio()
+            return RadioDefinition(prefs, setUpBefore, AppReadout(running, prefs, haBase), running)
+        }
+
         private const val TAG = "S1Kiosk.SetupChannel"
         private const val MAIN_TAG = "S1Kiosk"
         internal const val NATIVE_KEY = "radio"
         internal const val NOT_RUNNING = "The kiosk service isn't running yet; try again in a moment."
-        /** Why the radio can't run (the settings page; the nav says "Can't run"). */
-        internal const val NO_HELPER = "it needs the root helper, which the installer puts on the panel"
+        /** Why the radio can't run (the settings page; the nav says "Can't run"). Public for tests. */
+        const val NO_HELPER = "it needs the root helper, which the installer puts on the panel"
         private const val CHANNEL_NOT_RUNNING = "The radio controller isn't running yet; try again in a moment."
         /** Wait for RadioController to take the request, then for it to report how it went (client waits 30 s). */
         private const val RADIO_ACCEPT_MS = 15_000L

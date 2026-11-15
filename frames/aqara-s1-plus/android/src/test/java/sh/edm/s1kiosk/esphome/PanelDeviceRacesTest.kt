@@ -29,6 +29,7 @@ import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.dashboard.Dashboards
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import sh.edm.s1kiosk.radio.runningRadio
 import sh.edm.s1kiosk.sendspin.SendspinPrefs
 import sh.edm.s1kiosk.voice.VoicePrefs
 import java.net.InetAddress
@@ -117,7 +118,7 @@ class PanelDeviceRacesTest {
         val port = mdns.starts.single().port
         assertTrue("mDNS is registered", mdns.registered)
         assertTrue("the server listens", listens(port))
-        assertNotNull("the radio pane started", runtime.radio)
+        assertNotNull("the radio pane started", runtime.runningRadio(app).controller)
         assertNotNull("the update manager started", runtime.updates)
         assertTrue("the wake lock is held", ShadowPowerManager.getLatestWakeLock()?.isHeld == true)
         assertEquals("the Wi-Fi lock is held", 1, wifiLocks())
@@ -265,7 +266,7 @@ class PanelDeviceRacesTest {
 
         startup()
 
-        assertNull("the radio pane, which comes after the wall base, did not start", runtime.radio)
+        assertNull("the radio pane, which comes after the wall base, did not start", runtime.runningRadio(app).controller)
         assertNothingRunning(port = null)
         assertTrue("no server was started", mdns.starts.isEmpty())
     }
@@ -312,7 +313,7 @@ class PanelDeviceRacesTest {
 
     private fun assertNothingRunning(port: Int?) {
         assertFalse("mDNS has no record", mdns.registered)
-        assertNull("the radio pane is stopped", runtime.radio)
+        assertNull("the radio pane is stopped", runtime.runningRadio(app).controller)
         assertNull("the update manager is stopped", runtime.updates)
         assertFalse("the wake lock is not held", ShadowPowerManager.getLatestWakeLock()?.isHeld == true)
         assertEquals("the Wi-Fi lock is not held", 0, wifiLocks())
