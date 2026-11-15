@@ -191,6 +191,24 @@ describe('the test install', () => {
     }
   });
 
+  it('Connect stays off until the Mirror\'s check settles; a second click does nothing meanwhile', async () => {
+    const m = new FakeMirror();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const run = m.run.bind(m);
+    m.run = async (cmd: string) => { if (cmd === 'getprop ro.build.version.sdk') await gate; return run(cmd); };
+    const connect = vi.fn(async () => m);
+    const s = new MirrorSession({ connect }, true);
+    const first = s.connect();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(s.state.connecting).toBe(true);
+    await s.connect();
+    expect(connect).toHaveBeenCalledTimes(1);
+    release();
+    await first;
+    expect(s.state).toMatchObject({ connecting: false, screen: 'checks' });
+  });
+
   it('a refused install ends on the error screen with the reason', async () => {
     const s = await mirrorDemo('error', true);
     expect(s.state).toMatchObject({ screen: 'error' });
