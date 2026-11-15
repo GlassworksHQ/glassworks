@@ -27,8 +27,9 @@ On a phone the menu folds behind the ☰ button. Light or dark follows your phon
 
 Not on the page, because they need someone at the panel: the first Wi-Fi, Bluetooth's "Allow", and
 Aqara's own settings app. Some pane pages still have parts only the panel draws, and the page says
-"On the panel" for them: the radio's roles and Thread network, and the wall base's relays. The
-Bluetooth proxy page shows what the panel's shows: how it's listening, the advertisements and scanner
+"On the panel" for them: the radio's roles and Thread network. The wall base page has the relays'
+switches and each button's last press, or what a base adds when none is mounted. A relay's switch
+shows what the base reports, so reload to see it change. The Bluetooth proxy page shows what the panel's shows: how it's listening, the advertisements and scanner
 tiles, and its entities, with **Turn on Bluetooth** or **Turn on location** when one of them stops it.
 The time zone page has everything the panel's has: the zone, picked from a
 list grouped by region, whether the panel keeps it, and Home Assistant's zone, with **Use it** when
