@@ -92,6 +92,7 @@ public class VoiceEngine internal constructor(
         exec.shutdownNow()
         mic?.stop()
         mic = null
+        onMicLevel?.invoke(0f) // the microphone is closed: no frame will bring the level down
         clear()
     }
 
@@ -228,9 +229,11 @@ public class VoiceEngine internal constructor(
         m.start()
     }
 
+    /** Mutes: closes the microphone (its thread is joined), then reports the level down, as no frame will. */
     private fun stopMic() {
         mic?.stop()
         mic = null
+        onMicLevel?.invoke(0f)
     }
 
     /** Mic thread. */
