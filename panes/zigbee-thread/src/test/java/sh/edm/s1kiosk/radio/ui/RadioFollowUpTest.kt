@@ -306,4 +306,45 @@ class RadioFollowUpTest {
         assertTrue(RadioFollowUp.refusedText("Thread border router needs the root helper (init service s1kiosk_radio is not installed; …)").contains("only Off works"))
         assertEquals("something else", RadioFollowUp.refusedText("something else"))
     }
+
+    /**
+     * The radio's line on the Overview and in the nav (2026-11-15): the role once, then how it is doing in
+     * plain words, from RadioController.statusText()'s real formats. `Radio status` itself keeps them.
+     */
+    @Test
+    fun paneLine() {
+        fun line(mode: RadioMode, status: String) = RadioFollowUp.paneLine(facts(mode, status = status))
+        val tr = RadioMode.THREAD_ROUTER
+        assertEquals("Thread router (repeater) · not on a Thread network yet", line(tr, "ok Thread router (repeater): not on a Thread network yet"))
+        assertEquals("Thread router (repeater) · joined “Home” as a router", line(tr, "ok Thread router (repeater): joined “Home” as a router"))
+        assertEquals(
+            "Thread router (repeater) · not on a Thread network yet (Thread network left: done)",
+            line(tr, "ok Thread router (repeater): not on a Thread network yet (Thread network left: done)"),
+        )
+        assertEquals("Thread border router", line(RadioMode.THREAD, "ok Thread border router"))
+        assertEquals(
+            "Zigbee coordinator (TCP) · listening on :6638 for Home Assistant (192.0.2.20)",
+            line(RadioMode.ZIGBEE_TCP, "ok Zigbee coordinator (TCP): listening on :6638 for Home Assistant (192.0.2.20)"),
+        )
+        assertEquals("Thread router (repeater) · starting", line(tr, "applying Thread router (repeater)"))
+        assertEquals(
+            "Zigbee coordinator (TCP) · waiting for zigbeed 2025.6.2",
+            line(RadioMode.ZIGBEE_TCP, "applying Zigbee coordinator (TCP): waiting for zigbeed 2025.6.2"),
+        )
+        assertEquals("Thread border router · otbr-agent exited", line(RadioMode.THREAD, "error Thread border router: otbr-agent exited"))
+        assertEquals("Thread border router · failed", line(RadioMode.THREAD, "error Thread border router"))
+        // The helper still in another mode: what it runs now, without the role again.
+        assertEquals(
+            "Thread router (repeater) · still in Zigbee coordinator (TCP)",
+            line(tr, "ok Zigbee coordinator (TCP) (wanted Thread router (repeater))"),
+        )
+        // Without the helper's report: the app's own words.
+        assertEquals("Thread router (repeater) · applying…", line(tr, "Thread router (repeater): applying…"))
+        assertEquals("Thread router (repeater) · starting", line(tr, "starting"))
+        for (s in listOf("ok Thread router (repeater): x", "applying Thread router (repeater)", "error Thread router (repeater): x")) {
+            val l = line(tr, s)
+            assertEquals(l, 1, Regex(Regex.escape(tr.label)).findAll(l).count())
+            assertFalse(l, Regex("""(^| )(ok|applying|error) """).containsMatchIn(l))
+        }
+    }
 }

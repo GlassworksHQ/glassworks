@@ -166,6 +166,31 @@ object RadioFollowUp {
         return if (f.status.startsWith(prefix)) f.status.removePrefix(prefix) else f.status
     }
 
+    /**
+     * The radio's line under its name on the Overview and in the nav: its role, then how it is doing, once
+     * ("Thread router (repeater) · not on a Thread network yet"). RadioController's status repeats the role
+     * after the helper's state word ("ok Thread router (repeater): …"), which is for `Radio status`, not here.
+     */
+    fun paneLine(f: Facts): String {
+        val label = f.mode.label
+        val s = f.status.trim()
+        val state = s.substringBefore(' ').takeIf { it in HELPER_STATES }
+        var rest = if (state != null) s.substringAfter(' ') else s
+        if (rest.startsWith(label)) rest = rest.removePrefix(label).trimStart().removePrefix(":").trim()
+        // The helper still runs another role: "ok Zigbee coordinator (TCP) (wanted Thread router (repeater))".
+        val wanted = " (wanted $label)"
+        if (state != null && wanted in rest) rest = "still in " + rest.replace(wanted, "")
+        val words = when (state) {
+            "applying" -> rest.ifEmpty { "starting" }
+            "error" -> rest.ifEmpty { "failed" }
+            else -> rest
+        }
+        return listOf(label, words).filter { it.isNotEmpty() }.joinToString(" · ")
+    }
+
+    /** The root helper's state words, first in its status (RadioHelper.parseStatus). */
+    private val HELPER_STATES = setOf("ok", "applying", "error")
+
     fun card(f: Facts, place: Place): Card {
         if (place == Place.SETUP) return setupCard(f)
         val leave = if (showThreadLeave(f)) listOf(Action.THREAD_LEAVE) else emptyList()

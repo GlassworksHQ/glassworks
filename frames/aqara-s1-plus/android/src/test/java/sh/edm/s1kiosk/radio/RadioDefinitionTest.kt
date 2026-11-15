@@ -193,6 +193,16 @@ class RadioDefinitionTest {
     }
 
     @Test
+    fun theRadiosLineOnTheOverviewSaysItsRoleOnce() {
+        // 2026-11-15: the Overview read "Thread router (repeater) · ok Thread router (repeater): not on a Thread network yet".
+        val line = radioDefinition(app, FixedReadout(
+            RadioFollowUp.Facts(RadioMode.THREAD_ROUTER, "ok Thread router (repeater): not on a Thread network yet", HelperFacts(true, 4),
+                ZigbeeStack.AQARA, null, null, "http://homeassistant.local:8123", "192.0.2.10"),
+        )).settings().single().status()?.detail
+        assertEquals("Thread router (repeater) · not on a Thread network yet", line)
+    }
+
+    @Test
     fun theRadiosFirmwareAndHelperAreOnItsPageButNotWhoIsConnected() {
         // #212: "Connected now" waits for the root helper to report the live peer (#217).
         val pane = object : dev.glassworks.pane.Pane {
