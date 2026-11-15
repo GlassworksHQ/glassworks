@@ -267,7 +267,8 @@ line, both ways:
   before that is the previous network's. A dataset the helper doesn't take within a minute is `failed`
   ("the radio's root helper didn't take …"). `reason` says why for `needs_admin` and `failed`, in plain words. `role` is the radio's
   Thread role once it has a dataset (`detached`, `child`, `router`, `leader`, …). `idle` is also what a
-  restart shows, so a panel already on a network reads `idle` with a `role`. Never the dataset, network
+  restart shows, so a panel already on a network reads `idle` with a `role`. After *Leave Thread network*
+  (no dataset again) a finished join reads `idle` too. Never the dataset, network
   key or PSKc: `RadioThreadJoinTest` checks every reply and log.
 - While connected, `{"event":"state","state":…}` is pushed whenever the serialized state changes
   (checked every 1.5 s, once the client has asked for the state).

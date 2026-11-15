@@ -209,14 +209,15 @@ class RadioDefinition(
     /** The `radio` part of the setup channel's state (channel.ts `SetupState.radio`). */
     internal fun channelJson(): JSONObject {
         val r = readout.controller()
+        val mode = readout.mode()
         return channelJson(
-            mode = readout.mode().id,
+            mode = mode.id,
             status = r?.statusText() ?: "The radio controller isn't running yet",
             helper = helperInstalled(),
             allowed = r?.allowedNow(),
             answered = step.done(),
-            threadJoin = threadJoinJson(
-                readout.mode(), threadJoin().state, r?.threadHandOff() ?: RadioController.ThreadHandOff.ANSWERED,
+            threadJoin = if (mode != RadioMode.THREAD_ROUTER) null else threadJoinJson(
+                mode, threadJoin().state, r?.threadHandOff() ?: RadioController.ThreadHandOff.ANSWERED,
                 r?.threadRouterState(), r?.statusText(), readout::panelIp,
             ),
         )
@@ -526,6 +527,7 @@ class RadioDefinition(
          *    [router] and [status] count only once the helper answered the hand-off ([handOff]): until
          *    then they describe the network before it. A hand-off the helper never takes is `failed`.
          *  - `joined`: the radio is on the network; `role` is `child`, `router` or `leader`.
+         *    Once the radio has no dataset again (Leave Thread network), the join is over: `idle`.
          *  - `failed`: `reason` says why, in plain words.
          */
         fun threadJoinJson(mode: RadioMode, join: ThreadJoin.State, handOff: RadioController.ThreadHandOff,
@@ -544,6 +546,7 @@ class RadioDefinition(
                 is ThreadJoin.State.Joined -> when {
                     handOff == RadioController.ThreadHandOff.NOT_TAKEN -> phase("failed", HANDOFF_NOT_TAKEN)
                     router?.joined == true -> phase("joined")
+                    router?.dataset == false -> phase("idle")
                     answered && status != null && RadioStep.classify(mode, true, status) == RadioStep.Result.ERROR -> phase("failed", status)
                     else -> phase("joining")
                 }

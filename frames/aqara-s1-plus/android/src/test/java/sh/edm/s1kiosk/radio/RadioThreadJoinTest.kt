@@ -116,7 +116,7 @@ class RadioThreadJoinTest {
     @After fun noSecretsAnywhere() {
         System.setOut(realOut)
         val all = seen + radioLog + ShadowLog.getLogs().map { "${it.tag}: ${it.msg}" } + stdout.toString()
-        for (secret in listOf(TLV, NETWORK_KEY, PSKC, "PANEL-TOKEN")) {
+        for (secret in listOf(TLV, NETWORK_KEY, PSKC, NETWORK_KEY.take(16), PSKC.take(16), "PANEL-TOKEN")) {
             all.forEach { line -> assertFalse("leaked into: $line", line.contains(secret, ignoreCase = true)) }
         }
     }
@@ -362,6 +362,31 @@ class RadioThreadJoinTest {
         } finally {
             c.stop()
         }
+    }
+
+    @Test
+    fun leavingTheNetworkEndsTheJoin() {
+        startJoin()
+        runQueued()
+        helperTakes("ok thread_router: joined as router, network \"$NETWORK\"")
+        assertEquals("joined", joinState().getString("phase"))
+        helperTakes("ok thread_router: ready to join: waiting for a Thread dataset from Home Assistant")
+        assertEquals("after Leave Thread network", JSONObject("""{"phase":"idle"}""").toString(), joinState().toString())
+    }
+
+    @Test
+    fun aClientErrorCarryingTheTokenDoesNotLeakIt() {
+        ha = {
+            object : HaSocket {
+                private var greeted = false
+                override fun send(text: String) = throw IllegalStateException("couldn't send $text")
+                override fun receive(): String? = if (greeted) null else { greeted = true; """{"type":"auth_required"}""" }
+                override fun close() {}
+            }
+        }
+        startJoin()
+        runQueued()
+        assertEquals("failed", joinState().getString("phase"))
     }
 
     @Test
