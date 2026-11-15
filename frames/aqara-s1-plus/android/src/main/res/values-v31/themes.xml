@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ draws its own launch splash and ignores windowBackground for it: the stack on
+         flat night, which the connecting screen's first frame continues (Glass.BG, LoadingOverlay). -->
+    <style name="Theme.Kiosk" parent="Base.Theme.Kiosk">
+        <item name="android:windowSplashScreenBackground">#0A0B0F</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/glassworks_mark</item>
+    </style>
+</resources>
