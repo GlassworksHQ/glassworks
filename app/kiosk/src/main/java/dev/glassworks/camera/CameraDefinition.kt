@@ -5,6 +5,7 @@
 package dev.glassworks.camera
 
 import android.content.SharedPreferences
+import dev.glassworks.frame.Capability
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.PaneSwitch
@@ -15,11 +16,12 @@ import java.text.DateFormat
 import java.util.Date
 
 /**
- * The camera pane ([CameraPane]) for the whole process. [hasCamera]: the device has one
- * (`PackageManager.FEATURE_CAMERA_ANY`). Like every pane it has an on/off on every frame (#67); without
- * a camera its page says it can't run, it has no setup card, and the pane itself never runs. Its
- * settings have no MainActivity extras: any app can send those, and on a tablet another app could turn
- * privacy off or open the stream. The app sets them from adb through its own adb-only activity.
+ * The camera pane ([CameraPane]) for the whole process. It [requires] a camera: on a frame without one
+ * (the S1) the app wraps it in [dev.glassworks.pane.CantRun], one page that says why, with no on/off,
+ * setup card or entity, as every pane that lacks its hardware (#23). [hasCamera] is the frame's
+ * `provides` having one; the device shell builds the pane only then. Its settings have no MainActivity
+ * extras: any app can send those, and on a tablet another app could turn privacy off or open the
+ * stream. The app sets them from adb through its own adb-only activity.
  *
  * With a camera: a card on setup's Panes step, setup's Camera step ([CameraSetupStep]), and the page of
  * #117's approved design. [granted] reads Android's camera permission; [pickers] draws the two use
@@ -34,13 +36,12 @@ class CameraDefinition(
     private val time: (Long) -> String = { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) },
 ) : PaneDefinition {
     override val id = CameraPane.ID
+    override val requires = setOf(Capability.CAMERA)
     val prefs = CameraPrefs(file)
 
     override val switch = PaneSwitch(
         file, CameraPrefs.KEY_ENABLED, default = false, title = TITLE, detail = "Presence, and snapshots",
-        objectId = "camera_pane", entityName = "Camera pane", icon = "mdi:cctv", inSetup = hasCamera,
-        // Without a camera the pane has no entities, so the core's note about them would be wrong.
-        offNote = if (hasCamera) OFF_NOTE else NO_CAMERA_OFF_NOTE,
+        objectId = "camera_pane", entityName = "Camera pane", icon = "mdi:cctv", inSetup = hasCamera, offNote = OFF_NOTE,
     )
 
     private val step = CameraSetupStep(prefs, on = { switch.on }, turnOff = { switch.on = false }, granted = granted, pickers = pickers)
@@ -48,16 +49,13 @@ class CameraDefinition(
     override val setupSteps: List<SetupStep> get() = if (hasCamera) listOf(step) else emptyList()
 
     /**
-     * Without a camera, the page that says it can't run. With one, the camera's page: how it is doing,
-     * what it may do, the readings, privacy, and the stream with its addresses. The core adds the pane's
-     * entities as Home Assistant shows them ([SettingsSection.covers] is empty: the page shows none).
+     * The camera's page: how it is doing, what it may do, the readings, privacy, and the stream with its
+     * sign-in and addresses. The core adds the pane's entities as Home Assistant shows them
+     * ([SettingsSection.covers] is empty: the page shows none). Without a camera the app shows CantRun's.
      */
     override fun settings(): List<SettingsSection> = settings(null)
 
     override fun settings(running: Pane?): List<SettingsSection> {
-        if (!hasCamera) {
-            return listOf(SettingsSection(id, TITLE, listOf(SettingsItem.Note { NO_CAMERA_NOTE }), unavailable = { NO_CAMERA }))
-        }
         val pane = running as? CameraReadout
         // Once per page: the address asks the network, and the rows below read [read] every couple of seconds.
         val address = pane?.address()
@@ -119,9 +117,6 @@ class CameraDefinition(
     companion object {
         const val TITLE = "Camera"
         const val USE_KEY = "camera-use"
-        const val NO_CAMERA = "it has no camera"
         const val OFF_NOTE = "The camera pane is off. The camera stays closed, and its entities are unavailable in Home Assistant until you turn it on."
-        const val NO_CAMERA_OFF_NOTE = "This panel has no camera, so the camera pane can't run on it."
-        const val NO_CAMERA_NOTE = "On a panel with a camera, this pane wakes the screen when someone walks up, and can show the room in Home Assistant."
     }
 }

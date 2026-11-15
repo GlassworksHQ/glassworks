@@ -5,6 +5,7 @@ import dev.glassworks.pane.NOT_RUNNING
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.paneSections
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -27,16 +28,21 @@ class PaneSwitchesTest {
     @Test fun everyPaneSectionHasItsOnOffAtTheTop() {
         val sections = paneSections(definitions)
         assertEquals(listOf("assist", "sendspin", "radio", "bluetooth-proxy", "wall-base", "time-zone", "camera", "diagnostics"), sections.map { it.id })
-        assertEquals(listOf("Voice", "Music", "Zigbee / Thread radio", "Bluetooth proxy", "Wall base", "Time zone", "Camera", "Diagnostics"), sections.map { it.master?.title })
+        // The S1 has no camera: its page is CantRun's, without an on/off (#23).
+        assertEquals(listOf("Voice", "Music", "Zigbee / Thread radio", "Bluetooth proxy", "Wall base", "Time zone", null, "Diagnostics"), sections.map { it.master?.title })
         // No device runs here: a page that shows the running pane says so (#212); the radio and the Bluetooth proxy have their own.
         val waiting = sections.filter { s -> s.items.singleOrNull().let { it is SettingsItem.Note && it.text() == NOT_RUNNING } }
         assertEquals(listOf("assist", "sendspin", "wall-base", "time-zone", "diagnostics"), waiting.map { it.id })
     }
 
-    @Test fun theS1sCameraPageWhileOffSaysItHasNoCamera() {
-        // The S1 has no camera, so the pane has no entities: not the core's note about them.
-        val camera = paneSections(definitions).single { it.id == "camera" }
-        assertEquals(listOf(dev.glassworks.camera.CameraDefinition.NO_CAMERA_OFF_NOTE), camera.items.map { (it as SettingsItem.Note).text() })
+    @Test fun theS1sCameraCantRun() {
+        // No camera in the S1's hardware: CantRun, as every pane that lacks its own (#23): one page, no on/off, no entity.
+        val camera = definitions.single { it.id == "camera" }
+        assertTrue(camera is dev.glassworks.pane.CantRun)
+        assertEquals(null, camera.switch)
+        val page = paneSections(definitions).single { it.id == "camera" }
+        assertEquals("it has no camera", page.unavailable())
+        assertEquals(listOf("Needs a camera."), page.items.map { (it as SettingsItem.Note).text() })
     }
 
     @Test fun withACameraTheOffPageSaysTheCameraStaysClosed() {
@@ -60,12 +66,12 @@ class PaneSwitchesTest {
     /** Ids are permanent in Home Assistant. Only `sendspin` existed, and keeps its name. Each is off in HA until turned on there (#132, #208). */
     @Test fun eachSwitchIsAConfigEntityHomeAssistantKeeps() {
         val s = definitions.mapNotNull { it.switch }.map { it.entity() }
-        assertEquals(listOf("voice", "sendspin", "bluetooth_proxy", "wall_base", "keep_time_zone", "camera_pane", "diagnostics"), s.map { it.objectId })
+        assertEquals(listOf("voice", "sendspin", "bluetooth_proxy", "wall_base", "keep_time_zone", "diagnostics"), s.map { it.objectId })
         assertEquals("Music Assistant player (Sendspin)", s[1].name)
-        assertEquals(List(7) { true }, s.map { it.disabledByDefault })
+        assertEquals(List(6) { true }, s.map { it.disabledByDefault })
         assertEquals(setOf(sh.edm.esphome.EntityCategory.CONFIG), s.map { it.category }.toSet())
         // #210 verifier: turned on, a pane opens the microphone or a port; a keyless LAN client may not.
-        assertEquals("only an authenticated connection changes a pane's on/off", List(7) { true }, s.map { it.authOnly })
+        assertEquals("only an authenticated connection changes a pane's on/off", List(6) { true }, s.map { it.authOnly })
     }
 
     /** The device info's voice features follow the voice pane's switch, which says so: the shell names no pane. */
@@ -74,9 +80,9 @@ class PaneSwitchesTest {
     }
 
     /** The Bluetooth proxy is the one off until turned on: it starts the radio scanning (#67, #121). */
-    @Test fun everyPaneButTheBluetoothProxyAndTheCameraIsOnUntilTurnedOff() {
+    @Test fun everyPaneButTheBluetoothProxyIsOnUntilTurnedOff() {
         assertEquals(
-            listOf("assist" to true, "sendspin" to true, "bluetooth-proxy" to false, "wall-base" to true, "time-zone" to true, "camera" to false, "diagnostics" to true),
+            listOf("assist" to true, "sendspin" to true, "bluetooth-proxy" to false, "wall-base" to true, "time-zone" to true, "diagnostics" to true),
             definitions.mapNotNull { d -> d.switch?.let { d.id to it.on } },
         )
     }

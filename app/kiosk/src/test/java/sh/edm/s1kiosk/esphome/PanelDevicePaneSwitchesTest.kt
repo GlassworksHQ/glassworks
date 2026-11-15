@@ -255,11 +255,11 @@ class PanelDevicePaneSwitchesTest {
     }
 
     @Test fun onAFrameWithoutACameraTheCameraPaneNeverRunsNorLightsThePill() {
-        // Robolectric's device has no camera, as the S1.
-        set("camera", true)
+        // The S1 has no camera: the camera is CantRun (#23), with no on/off to turn on.
+        assertTrue(runtime.paneDefinitions(app).single { it.id == "camera" } is dev.glassworks.pane.CantRun)
         assertEquals(emptyList<Any>(), device.paneList().filter { it.id == "camera" })
+        assertEquals(false, device.entityList().any { it.objectId.startsWith("camera") })
         assertEquals(false, runtime.cameraLeaving)
         assertEquals(null, runtime.onCameraLeaving)
-        set("camera", false)
     }
 }

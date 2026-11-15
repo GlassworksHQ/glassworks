@@ -8,6 +8,12 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **On a device that isn't an Aqara S1, the app runs as that device.** On a tablet, for example, it
+  names itself after the device in Home Assistant ("Pixel Tablet", `pixel-tablet-a1b2c3`) with its
+  own maker and model. It runs the panes the device's hardware allows: Voice and Music with a
+  microphone and a speaker, the Bluetooth proxy with Bluetooth LE, and Diagnostics. The radio shows
+  "Can't run", and the S1's own Wall base and Time zone aren't there. On the S1, only the names in
+  Music Assistant and Improv change (below).
 - **Every pane's settings page shows what it is doing.** No page says "no settings of its own" any
   more. Diagnostics shows CPU, temperature, RAM, Wi-Fi, storage and uptime, with the last hour as a
   line. Wall base shows the base, its firmware, protection and power, and each relay with its switch
@@ -17,6 +23,10 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **Music Assistant and Improv use the panel's own name.** The Music Assistant player and the Wi-Fi
+  setup over Bluetooth now say what the device is, "Aqara S1 Plus" on the S1 (the name Home Assistant
+  shows), instead of "Glassworks Panel". So an S1 and a tablet no longer show up under the same name.
+  Two S1s still share it: rename one in Music Assistant's player settings.
 - **Panes you turned off fold at the bottom of the list.** In the settings menu they sit under
   "Off · N"; open it, or a pane in it, to see them. An off pane's page says what being off means.
   Every pane shows its state after its name, Running, On, Off or Can't run, as the Manage page does,
@@ -93,8 +103,8 @@ below as the release notes.
   and *Camera privacy* closes the camera. The camera has its own page in the panel's settings, with
   the panel's address and the stream's URLs, and a Camera step in setup that asks Android for the
   camera. A green "● Camera" pill sits at the top right whenever images leave the panel. On the S1,
-  which has no camera, Home Assistant gains only a *Camera pane* configuration switch, and the
-  panel's settings say the pane can't run.
+  which has no camera, the panel's settings say the pane can't run, and Home Assistant gets nothing
+  new.
 - **The panel can be a Bluetooth proxy for Home Assistant.** Turn on *Bluetooth proxy* in the
   panel's settings or on setup's Panes step, and Home Assistant finds it by itself and hears the
   Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a
@@ -142,6 +152,15 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
+  to call itself `s1-panel`, and adding a second device made Home Assistant offer to replace the
+  first. Now the S1 announces itself as "Aqara S1 Plus", with a node name such as
+  `aqara-s1-plus-a1b2c3` that ends in part of its MAC. A panel you already added stays in place with
+  all its entity ids. Home Assistant shows "Aqara S1 Plus" after the update, unless you renamed it.
+- **The screen stays on after Home Assistant wakes it.** After the panel had gone dark on its own,
+  a wake that wasn't a touch (Home Assistant's screen switch, a timer, voice, Wi-Fi setup) turned the
+  screen off again after about 20 seconds. Now it stays on until the panel's idle timeout, as after
+  a touch.
 - **A pane you turn off stays off after a restart.** Turning voice or music off, then restarting
   the app at once, could bring the pane back on: the setting was saved after the app had gone.
   Zoom, secure hosts and remote debugging, which restart the app, could lose their change the same
