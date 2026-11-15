@@ -218,7 +218,7 @@ a `when` statement (not an expression) may simply leave out the events it does n
 `SendspinPane` does. A new event does not touch the panes that do not use it. A pane does not have
 to add entities: [`TimersPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/timers/TimersPane.kt) has none and only
 reacts to `TimersChanged` and `TimerFinished`. The voice assistant
-([`AssistPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/voice/AssistPane.kt)) is the pane that raises those: it calls
+([`AssistPane.kt`](../../../../../../panes/assist/src/main/java/sh/edm/s1kiosk/voice/AssistPane.kt)) is the pane that raises those: it calls
 `ctx.emit(PanelEvent.TimerFinished(name))`, and `SpeakerClaimed` while it listens and talks.
 
 Every pane also has a **`pane.json` and an `icon.svg`** in its folder, next to its `PaneDefinition` (or its

@@ -14,7 +14,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/esphome.md#voice-assistant",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"11\" rx=\"3\"/><path d=\"M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21\"/></svg>",
-    "source": "frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/voice"
+    "source": "panes/assist/src/main/java/sh/edm/s1kiosk/voice"
   },
   {
     "id": "sendspin",
