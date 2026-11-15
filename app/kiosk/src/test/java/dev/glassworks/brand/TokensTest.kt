@@ -5,11 +5,11 @@
 package dev.glassworks.brand
 
 import dev.glassworks.manage.ManagePages
+import dev.glassworks.testing.RepoFiles
 import dev.glassworks.web.PageShell
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * #243: one set of tokens for the panel and its pages. [Tokens] holds glassworks.dev's values, pinned here to
@@ -17,10 +17,7 @@ import java.io.File
  * CSS is made from it.
  */
 class TokensTest {
-    private val brand: String by lazy {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        File(root, "kiln/packages/brand/src/tokens.css").readText()
-    }
+    private val brand: String by lazy { RepoFiles.file("kiln/packages/brand/src/tokens.css").readText() }
 
     /** The brand's [name] in daylight (the file's first `:root`) or at night (its dark block), normalised. */
     private fun brand(name: String, night: Boolean = false): String {
