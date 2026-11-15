@@ -9,7 +9,8 @@ publish the matching section below as the release notes.
 
 ### Added
 - **A stored key that can't be read now locks the server.** A `NoiseKeyStore` can say its key is
-  stored but unreadable (`unreadable()`, default false). The server then lets nobody in and isn't
+  stored but unreadable, in the same read that would give the key (`read()`: `StoredKey.Present`,
+  `Absent` or `Unreadable`; the default comes from `load()`). The server then lets nobody in and isn't
   provisionable, and reads the key again on each connection and every minute. A device with a key
   never falls back to plaintext because its storage is down.
 

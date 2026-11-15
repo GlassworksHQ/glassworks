@@ -118,7 +118,11 @@ class NoiseKeysTest {
     private class OutageStore(var key: ByteArray?, var down: Boolean) : NoiseKeyStore {
         override fun load(): ByteArray? = if (down) null else key?.copyOf()
         override fun save(key: ByteArray?): Boolean { if (down) return false; this.key = key?.copyOf(); return true }
-        override fun unreadable(): Boolean = down && key != null
+        override fun read(): StoredKey = when {
+            key == null -> StoredKey.Absent
+            down -> StoredKey.Unreadable
+            else -> StoredKey.Present(key!!.copyOf())
+        }
     }
 
     @Test
@@ -158,5 +162,22 @@ class NoiseKeysTest {
         assertTrue(keys.unlock())
         assertNull(keys.active)
         assertTrue("provision a new one", keys.provisionable)
+    }
+
+    /** The lock comes from one read: a store whose separate load() lags behind can't unlock it wrongly. */
+    @Test
+    fun theLockComesFromOneRead() {
+        var state: StoredKey = StoredKey.Unreadable
+        val store = object : NoiseKeyStore {
+            override fun load(): ByteArray? = null // stale: never consulted for the lock
+            override fun save(key: ByteArray?) = false
+            override fun read() = state
+        }
+        val keys = NoiseKeys(store)
+        assertTrue(keys.locked)
+        state = StoredKey.Present(k1)
+        assertTrue(keys.unlock())
+        assertArrayEquals(k1, keys.active)
+        assertFalse(keys.provisionable)
     }
 }

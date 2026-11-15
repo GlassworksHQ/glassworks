@@ -130,6 +130,16 @@ class SecretPrefsTest {
         assertEquals("made-up-token", prefs().getString("token", null))
     }
 
+    @Test fun anEditIsCheckedAgainstWhatIsStoredWhenItIsWritten() {
+        val p = prefs()
+        val staged = p.edit().remove("token") // nothing stored yet: nothing to keep, so far
+        p.edit().putString("token", "made-up-token").commit()
+        val sealed = stored("token")
+        key = null
+        assertFalse("the token stored since can't be read now: kept", staged.commit())
+        assertEquals(sealed, stored("token"))
+    }
+
     @Test fun getAllHandsOutSecretsOpened() {
         raw.edit().putString("host", "192.0.2.10").commit()
         prefs().edit().putString("token", "made-up-token").commit()

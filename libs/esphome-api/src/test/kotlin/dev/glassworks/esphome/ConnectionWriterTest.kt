@@ -206,7 +206,7 @@ class ConnectionWriterTest {
         val store = object : NoiseKeyStore {
             override fun load(): ByteArray? = if (down) null else ByteArray(32) { (it + 1).toByte() }
             override fun save(key: ByteArray?) = false
-            override fun unreadable() = down
+            override fun read(): StoredKey = if (down) StoredKey.Unreadable else StoredKey.Present(load()!!)
         }
         val activated = CountDownLatch(1)
         val s = server(keys = NoiseKeys(store)).apply { onKeyActivated = { activated.countDown() } }

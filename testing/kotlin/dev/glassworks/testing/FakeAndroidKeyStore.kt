@@ -35,6 +35,9 @@ object FakeAndroidKeyStore {
     @Volatile var down = false
     @Volatile var unrecoverable: Int? = null
 
+    /** The next [hidden] lookups answer "no key" although there is one, as Android 10 does when a check fails. */
+    val hidden = java.util.concurrent.atomic.AtomicInteger()
+
     /** Stands in for android.security.KeyStoreException, which the app reads by its getErrorCode(). */
     class Error(private val code: Int) : Exception("key store error $code") { fun getErrorCode(): Int = code }
 
@@ -52,19 +55,20 @@ object FakeAndroidKeyStore {
 
     fun uninstall() {
         Security.removeProvider(provider.name)
-        keys.clear(); down = false; unrecoverable = null
+        keys.clear(); down = false; unrecoverable = null; hidden.set(0)
     }
 
     class Store : KeyStoreSpi() {
         override fun engineLoad(stream: InputStream?, password: CharArray?) { if (down) throw java.io.IOException("key store down") }
         override fun engineGetKey(alias: String, password: CharArray?): Key? {
             if (down) throw KeyStoreException("key store down")
+            if (keys.containsKey(alias) && hidden.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) return null
             val code = unrecoverable
             if (code != null && keys.containsKey(alias)) throw UnrecoverableKeyException("Failed to obtain information about key").apply { initCause(Error(code)) }
             return keys[alias]
         }
         override fun engineDeleteEntry(alias: String) { keys.remove(alias) }
-        override fun engineContainsAlias(alias: String) = keys.containsKey(alias)
+        override fun engineContainsAlias(alias: String) = keys.containsKey(alias) && hidden.get() == 0
         override fun engineAliases(): Enumeration<String> = Collections.enumeration(keys.keys.toList())
         override fun engineSize() = keys.size
         override fun engineIsKeyEntry(alias: String) = keys.containsKey(alias)

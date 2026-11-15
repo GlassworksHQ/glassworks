@@ -30,16 +30,18 @@ class PrefsSsStore(context: Context, secrets: SecretStore = SecretStore.keystore
 
     @Synchronized override fun identity(): SsIdentity {
         cachedIdentity?.let { return it }
+        // Asked first: a true answer keeps the opened value for the read below, so an outage that ends
+        // between the two can't look like "no identity yet" and make a new one.
+        if (!sp.canRead("identity")) return standInIdentity ?: SsIdentity.generate().also { standInIdentity = it }
         val saved = sp.getString("identity", null)?.let { runCatching { SsIdentity(SsCrypto.unb64url(it)) }.getOrNull() }
-        if (saved == null && !sp.canRead("identity")) return standInIdentity ?: SsIdentity.generate().also { standInIdentity = it }
         val id = saved ?: SsIdentity.generate().also { sp.edit().putString("identity", SsCrypto.b64url(it.privateKey)).commit() }
         cachedIdentity = id
         return id
     }
 
     @Synchronized override fun pairingPsk(): ByteArray {
-        sp.getString("pairing_psk", null)?.let { s -> runCatching { SsCrypto.unb64url(s) }.getOrNull()?.takeIf { it.size == 32 }?.let { return it } }
         if (!sp.canRead("pairing_psk")) return standInPsk ?: SsCrypto.randomBytes(32).also { standInPsk = it }
+        sp.getString("pairing_psk", null)?.let { s -> runCatching { SsCrypto.unb64url(s) }.getOrNull()?.takeIf { it.size == 32 }?.let { return it } }
         val psk = SsCrypto.randomBytes(32)
         sp.edit().putString("pairing_psk", SsCrypto.b64url(psk)).commit()
         return psk

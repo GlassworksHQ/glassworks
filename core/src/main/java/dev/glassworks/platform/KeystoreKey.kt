@@ -23,40 +23,60 @@ import javax.crypto.SecretKey
  * copy that would call a fresh secret lost.
  *
  * Null when the key store can't be reached (a vendor bug, a test without one); [warn] hears that
- * once, without any value. A key that went missing, or whose entry can't be read any more
- * (`UnrecoverableKeyException`), is made again, so what was sealed with the old one no longer opens
+ * once, without any value. Only sealing makes a key ([orNew]); opening never does ([existing]), because
+ * Android 10's lookup also answers "no key" when the key store fails for a moment, and making a key
+ * under the alias deletes the one there. A key the key store itself says is gone for good
+ * ([lostForGood]) is made again, so what was sealed with it no longer opens
  * ([dev.glassworks.secrets.SecretStore.Opened.Lost]): the panel asks for it again.
  */
-class KeystoreKey(private val alias: String, private val warn: (String) -> Unit) : () -> SecretKey? {
+class KeystoreKey(private val alias: String, private val warn: (String) -> Unit) {
     private val warned = AtomicBoolean()
 
-    override fun invoke(): SecretKey? = synchronized(KeystoreKey::class.java) {
+    /** The key to open with, or null when there is none to use now. Never makes one. */
+    fun existing(): SecretKey? = use { store -> lookup(store) }
+
+    /**
+     * The key to seal with, made if there is none. A lookup that finds nothing is asked once more on a
+     * freshly loaded key store before a key is made, so a lookup that failed for a moment rarely costs
+     * the key there.
+     */
+    fun orNew(): SecretKey? = use { store ->
+        lookup(store) ?: run {
+            val again = KeyStore.getInstance(PROVIDER).apply { load(null) }
+            lookup(again) ?: if (again.containsAlias(alias)) null else make()
+        }
+    }
+
+    private fun <T> use(f: (KeyStore) -> T?): T? = synchronized(KeystoreKey::class.java) {
         try {
-            val store = KeyStore.getInstance(PROVIDER).apply { load(null) }
-            val k = try {
-                store.getKey(alias, null) as? SecretKey
-            } catch (e: UnrecoverableKeyException) {
-                // Android wraps every key store error in this one, a passing one too. Only an entry that is
-                // gone for good is replaced (signed out, paired again); anything else is an outage.
-                if (!lostForGood(e)) throw e
-                warn("The secrets key can't be read any more (${errorCode(e)}); made a new one, so secrets need setting again")
-                store.deleteEntry(alias)
-                null
-            } ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, PROVIDER).run {
-                init(
-                    KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                        .setKeySize(256)
-                        .build(),
-                )
-                generateKey()
-            }
-            k
+            f(KeyStore.getInstance(PROVIDER).apply { load(null) })
         } catch (e: Exception) {
             if (warned.compareAndSet(false, true)) warn("The key store isn't available (${e.javaClass.simpleName}); secrets stay as they are")
             null
         }
+    }
+
+    /** The entry under [alias]; one the key store says is gone for good is replaced by a new key. */
+    private fun lookup(store: KeyStore): SecretKey? = try {
+        store.getKey(alias, null) as? SecretKey
+    } catch (e: UnrecoverableKeyException) {
+        // Android wraps every key store error in this one, a passing one too. Only an entry that is
+        // gone for good is replaced (signed out, paired again); anything else is an outage.
+        if (!lostForGood(e)) throw e
+        warn("The secrets key can't be read any more (${errorCode(e)}); made a new one, so secrets need setting again")
+        store.deleteEntry(alias)
+        make()
+    }
+
+    private fun make(): SecretKey = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, PROVIDER).run {
+        init(
+            KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build(),
+        )
+        generateKey()
     }
 
     companion object {

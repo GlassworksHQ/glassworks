@@ -355,8 +355,8 @@ public final class dev/glassworks/esphome/MemoryKeyStore : dev/glassworks/esphom
 	public fun <init> ([B)V
 	public synthetic fun <init> ([BILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun load ()[B
+	public fun read ()Ldev/glassworks/esphome/StoredKey;
 	public fun save ([B)Z
-	public fun unreadable ()Z
 }
 
 public final class dev/glassworks/esphome/Msg {
@@ -443,12 +443,12 @@ public final class dev/glassworks/esphome/NoiseCipher {
 
 public abstract interface class dev/glassworks/esphome/NoiseKeyStore {
 	public abstract fun load ()[B
+	public abstract fun read ()Ldev/glassworks/esphome/StoredKey;
 	public abstract fun save ([B)Z
-	public abstract fun unreadable ()Z
 }
 
 public final class dev/glassworks/esphome/NoiseKeyStore$DefaultImpls {
-	public static fun unreadable (Ldev/glassworks/esphome/NoiseKeyStore;)Z
+	public static fun read (Ldev/glassworks/esphome/NoiseKeyStore;)Ldev/glassworks/esphome/StoredKey;
 }
 
 public final class dev/glassworks/esphome/NoiseKeys {
@@ -573,6 +573,28 @@ public final class dev/glassworks/esphome/SensorEntity : dev/glassworks/esphome/
 	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
 	public fun shownState ()Ljava/lang/String;
 	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public abstract interface class dev/glassworks/esphome/StoredKey {
+}
+
+public final class dev/glassworks/esphome/StoredKey$Absent : dev/glassworks/esphome/StoredKey {
+	public static final field INSTANCE Ldev/glassworks/esphome/StoredKey$Absent;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/esphome/StoredKey$Present : dev/glassworks/esphome/StoredKey {
+	public fun <init> ([B)V
+	public final fun getKey ()[B
+}
+
+public final class dev/glassworks/esphome/StoredKey$Unreadable : dev/glassworks/esphome/StoredKey {
+	public static final field INSTANCE Ldev/glassworks/esphome/StoredKey$Unreadable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class dev/glassworks/esphome/SwitchEntity : dev/glassworks/esphome/ApiEntity {

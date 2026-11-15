@@ -23,7 +23,15 @@ import javax.crypto.spec.GCMParameterSpec
  * scope (the file and key it is stored under) is authenticated with it, so a sealed value copied to
  * another key doesn't open. Never logs a value.
  */
-class SecretStore(private val key: () -> SecretKey?) {
+class SecretStore(
+    /** The key to seal with, made if there is none yet. */
+    private val key: () -> SecretKey?,
+    /** The key to open with: never a new one, since a value sealed before can't open with it. */
+    private val existing: () -> SecretKey?,
+) {
+    /** One key for both (a test's software key). */
+    constructor(key: () -> SecretKey?) : this(key, key)
+
 
     /** What [open] found. */
     sealed interface Opened {
@@ -53,7 +61,7 @@ class SecretStore(private val key: () -> SecretKey?) {
     fun open(sealed: String, scope: String): Opened {
         if (!isSealed(sealed)) return Opened.Lost
         val bytes = Base64.getDecoder().decode(sealed.substring(MARK.length))
-        val k = key() ?: return Opened.Unavailable
+        val k = existing() ?: return Opened.Unavailable
         return try {
             val c = Cipher.getInstance(TRANSFORMATION)
             c.init(Cipher.DECRYPT_MODE, k, GCMParameterSpec(TAG_BITS, bytes, 0, IV_BYTES))
@@ -86,6 +94,6 @@ class SecretStore(private val key: () -> SecretKey?) {
             runCatching { Base64.getDecoder().decode(stored.substring(MARK.length)).size >= IV_BYTES + TAG_BITS / 8 }.getOrDefault(false)
 
         /** The store for this app, with its key in the Android Keystore. */
-        fun keystore(): SecretStore = SecretStore(KeystoreKey(KEY_ALIAS) { Log.w(TAG, it) })
+        fun keystore(): SecretStore = KeystoreKey(KEY_ALIAS) { Log.w(TAG, it) }.let { SecretStore(it::orNew, it::existing) }
     }
 }

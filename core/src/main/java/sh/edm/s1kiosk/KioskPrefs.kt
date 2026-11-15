@@ -6,6 +6,8 @@ import android.net.Uri
 import android.util.Base64
 import dev.glassworks.screen.ScreenSettings
 import dev.glassworks.esphome.NoiseKeyStore
+import dev.glassworks.esphome.StoredKey
+import dev.glassworks.secrets.SecretPrefs
 import dev.glassworks.secrets.SecretStore
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.auth.StoredAuth
@@ -212,7 +214,11 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
             if (key == null) sp.edit().remove("api_key").putBoolean("api_encryption", false).commit()
             else sp.edit().putString("api_key", Base64.encodeToString(key, Base64.NO_WRAP))
                 .putBoolean("api_encryption", true).commit()
-        override fun unreadable(): Boolean = apiEncryption && !sp.canRead("api_key")
+        override fun read(): StoredKey = if (!apiEncryption) StoredKey.Absent else when (val r = sp.secret("api_key")) {
+            is SecretPrefs.Secret.Value -> decodeApiKey(r.text)?.let { StoredKey.Present(it) } ?: StoredKey.Absent
+            SecretPrefs.Secret.Absent -> StoredKey.Absent
+            SecretPrefs.Secret.Unavailable -> StoredKey.Unreadable
+        }
     }
 
     /** Stable MAC reported to Home Assistant (its config entry is keyed by it). */

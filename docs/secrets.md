@@ -53,7 +53,10 @@ corrupted), 17 (permanently invalidated) and Keymaster's -33 (invalid key blob),
 Android 10's `KeyStore.java` on 2026-11-15, or a ciphertext whose tag doesn't match. Any other key
 store error is treated as an outage (below), because Android 10 reports passing failures with the
 same exception types. A fresh sign-in or pairing still replaces a value that stays unreadable once the
-key store can seal again.
+key store can seal again. Opening a secret never makes a key: Android 10 answers "no key" when a lookup
+fails for a moment, and making a key under the same name deletes the one there. Only sealing makes
+one, and only after a second lookup on a freshly loaded key store also finds none. A key store that
+fails both lookups and then works at once can still cost the key (not seen; untested on a panel).
 
 If the Keystore can't be reached at all, sealed secrets read as not set for now, and nothing replaces
 or removes them. The app tries them again on each use, so they come back as soon as the Keystore does.

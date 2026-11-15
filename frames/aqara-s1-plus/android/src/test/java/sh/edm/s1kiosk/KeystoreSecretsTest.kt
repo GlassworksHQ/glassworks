@@ -104,6 +104,38 @@ class KeystoreSecretsTest {
         assertEquals("signing in again works", "made-up-new-token", KioskPrefs(app).auth?.refreshToken)
     }
 
+    /** Android 10's lookup answers "no key" when a check fails for a moment; making a key then would delete the real one. */
+    @Test fun aLookupThatFindsNoKeyForAMomentNeverReplacesIt() {
+        KioskPrefs(app); PrefsSsStore(app)
+        val sealed = onDisk()
+        val key = FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS)
+        FakeAndroidKeyStore.hidden.set(1)
+        assertNull("opening: reads as signed out for now", KioskPrefs(app).auth)
+        assertEquals("opening never makes a key", key, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
+        assertEquals(sealed, onDisk())
+        assertEquals(token, KioskPrefs(app).auth?.refreshToken)
+        FakeAndroidKeyStore.hidden.set(1)
+        PanePrefs(app).camera.signIn = "made-up-user" to "made-up-new-pass"
+        assertEquals("sealing asks again before it makes a key", key, FakeAndroidKeyStore.keys.getValue(SecretStore.KEY_ALIAS))
+        assertEquals(token, KioskPrefs(app).auth?.refreshToken)
+        assertEquals("made-up-user" to "made-up-new-pass", PanePrefs(app).camera.signIn)
+    }
+
+    /** The key store comes back between "can it be read?" and the read: the identity must not be made again. */
+    @Test fun anOutageEndingMidCallNeverReplacesTheIdentity() {
+        PrefsSsStore(app).identity()
+        var calls = 0
+        val flaky = SecretStore {
+            calls++
+            if (calls == 1) null else java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.getKey(SecretStore.KEY_ALIAS, null) as javax.crypto.SecretKey
+        }
+        val ss = PrefsSsStore(app, flaky)
+        ss.identity(); ss.pairingPsk()
+        assertArrayEquals("the stored identity is still the old one", identity, PrefsSsStore(app).identity().privateKey)
+        assertArrayEquals(psk, PrefsSsStore(app).pairingPsk())
+        assertArrayEquals("and the same store reads it now", identity, ss.identity().privateKey)
+    }
+
     @Test fun aKeyEntryThatFailsForAMomentIsKept() {
         KioskPrefs(app); PrefsSsStore(app)
         val sealed = onDisk()
@@ -196,7 +228,7 @@ class KeystoreSecretsTest {
         val sealed = onDisk().getValue("kiosk")
         FakeAndroidKeyStore.down = true
         val prefs = KioskPrefs(app)
-        assertTrue(prefs.noiseKeyStore.unreadable())
+        assertTrue(prefs.noiseKeyStore.read() is dev.glassworks.esphome.StoredKey.Unreadable)
         assertFalse("Home Assistant hears the key wasn't set", prefs.noiseKeyStore.save(ByteArray(32) { 9 }))
         assertFalse(prefs.noiseKeyStore.save(null))
         assertEquals("api_encryption and the key as they were", sealed, onDisk().getValue("kiosk"))

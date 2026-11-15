@@ -14,11 +14,24 @@ public interface NoiseKeyStore {
     public fun save(key: ByteArray?): Boolean
 
     /**
-     * A key is stored but can't be read now (the device's key store is down), so [load] gives null
-     * without the device being unprovisioned. The server then lets nobody in ([NoiseKeys.locked]).
-     * The default, false, suits a store that is always readable.
+     * One read of the stored key that also tells "no key" from "a key I can't read now" (the device's
+     * key store is down). [NoiseKeys] decides from it alone, so an outage that ends between two calls
+     * can't make a device with a key look unprovisioned. The default, from [load], suits a store that is
+     * always readable.
      */
-    public fun unreadable(): Boolean = false
+    public fun read(): StoredKey = load()?.let { StoredKey.Present(it) } ?: StoredKey.Absent
+}
+
+/** What a [NoiseKeyStore] holds, from one read ([NoiseKeyStore.read]). */
+public sealed interface StoredKey {
+    /** The stored key. */
+    public class Present(public val key: ByteArray) : StoredKey
+
+    /** No key: the device is unprovisioned. */
+    public data object Absent : StoredKey
+
+    /** A key is stored but can't be read now: the server lets nobody in until it can ([NoiseKeys.locked]). */
+    public data object Unreadable : StoredKey
 }
 
 /**
@@ -58,7 +71,9 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
     private val lock = Any()
 
     /** Key used for new connections; null = unprovisioned. */
-    @Volatile internal var active: ByteArray? = store.load()?.takeIf(::isUsableKey)?.copyOf()
+    private val first = store.read()
+
+    @Volatile internal var active: ByteArray? = (first as? StoredKey.Present)?.key?.takeIf(::isUsableKey)?.copyOf()
         private set
 
     /** Last persisted key (may still be waiting for activation). */
@@ -74,11 +89,11 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
     public val provisionable: Boolean get() = active == null && !locked
 
     /**
-     * A key is stored but can't be read now ([NoiseKeyStore.unreadable]): the server accepts nobody, not
+     * A key is stored but can't be read now ([StoredKey.Unreadable]): the server accepts nobody, not
      * plaintext and not the zero PSK, and isn't provisionable, until it reads the key. A device that has
      * a key never falls back to plaintext because its key store is down.
      */
-    @Volatile public var locked: Boolean = active == null && store.unreadable()
+    @Volatile public var locked: Boolean = first is StoredKey.Unreadable
         private set
 
     /** A copy of the latest key, including one saved but not yet active, or null for none. */
@@ -90,10 +105,13 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
      */
     internal fun unlock(): Boolean = synchronized(lock) {
         if (!locked) return false
-        val k = store.load()?.takeIf(::isUsableKey)
-        if (k != null) { active = k.copyOf(); saved = k.copyOf() }
-        locked = k == null && store.unreadable()
-        !locked
+        when (val r = store.read()) {
+            is StoredKey.Present -> r.key.takeIf(::isUsableKey)?.let { k -> active = k.copyOf(); saved = k.copyOf() }
+            StoredKey.Absent -> {}
+            StoredKey.Unreadable -> return false
+        }
+        locked = false
+        true
     }
 
     internal fun handleSetKey(field: ByteArray): SetKeyResult = synchronized(lock) {
@@ -129,7 +147,7 @@ public class NoiseKeys(private val store: NoiseKeyStore) {
      */
     internal fun replace(key: ByteArray?): Boolean = synchronized(lock) {
         // No key read because the store can't read it now: not a removed key. Keep what is active.
-        if (key == null && store.unreadable()) {
+        if (key == null && store.read() is StoredKey.Unreadable) {
             if (active == null) locked = true
             return false
         }
