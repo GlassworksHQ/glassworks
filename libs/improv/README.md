@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="../../../LICENSE">
+  <a href="../../LICENSE">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-license-mit-on-dark.svg">
       <img alt="License: MIT" src="https://www.glassworks.dev/brand/badge-license-mit-on-light.svg" height="30">
@@ -41,7 +41,7 @@ device over **Bluetooth LE**, over a **serial** stream, or over **adb on a USB c
 page. It also joins the network, which is the hard part on Android 10 and later. Few Android
 implementations of the device side exist.
 
-It was extracted from [S1 Kiosk](../../README.md), where it puts the Aqara S1 Plus panel on Wi-Fi.
+It was extracted from [S1 Kiosk](../../app/README.md), where it puts the Aqara S1 Plus panel on Wi-Fi.
 Package `sh.edm.improv`, MIT licensed.
 
 ## What's in it
@@ -52,7 +52,7 @@ Package `sh.edm.improv`, MIT licensed.
 | `ImprovSession` | The Improv BLE state machine (authorization, provisioning, errors, auth timeout). Pure Kotlin: Bluetooth and Wi-Fi sit behind `ImprovSession.Effects`, and time is passed in, so it is unit-testable. Behaviour follows the spec and ESPHome's `improv_ble`. |
 | `ImprovBleServer` | The Android GATT server and advertiser: service, characteristics, 0x4677 service data, queued notifications, MTU tracking, legacy or extended advertising (only legacy below Android 8). Turns Bluetooth on if needed. |
 | `ImprovSerial`, `SerialPacketReader`, `ImprovSerialSession` | [Improv Serial](https://www.improv-wifi.com/serial/): framing and its session. Transport-agnostic: feed it bytes from a UART, a socket or an adb stream. Pure Kotlin. |
-| `ImprovAdbServer`, `AdbSocketServer`, `AdbPeer` | Improv Serial over adb: an abstract Unix socket that only adb may open, with one serial session per connection. The browser client is the [`improv-serial`](../../../kiln/packages/improv-serial/README.md) TypeScript package. `AdbSocketServer` is also usable on its own, for any browser-to-app channel over USB. |
+| `ImprovAdbServer`, `AdbSocketServer`, `AdbPeer` | Improv Serial over adb: an abstract Unix socket that only adb may open, with one serial session per connection. The browser client is the [`improv-serial`](../../kiln/packages/improv-serial/README.md) TypeScript package. `AdbSocketServer` is also usable on its own, for any browser-to-app channel over USB. |
 | `WifiProvisioner` | Joins the network and verifies the connection, putting the previous network back on failure. Also scans. See [Joining Wi-Fi](#joining-wi-fi). |
 | `WifiSecurity`, `WifiSecurityRules` | Maps Android scan capabilities to Improv's auth labels, and picks the security type to configure (open, OWE, WEP, PSK, SAE, EAP), including for hidden networks. Pure Kotlin. |
 
@@ -156,7 +156,7 @@ server.start()
 ```
 
 A web page then opens `localabstract:myapp_improv` over WebUSB adb with the
-[`improv-serial`](../../../kiln/packages/improv-serial/README.md) package. From a computer you can
+[`improv-serial`](../../kiln/packages/improv-serial/README.md) package. From a computer you can
 also run `adb forward tcp:7000 localabstract:myapp_improv` and use any Improv Serial client on
 `localhost:7000`. Only adb (uid 2000, or 0 after `adb root`) may connect, so USB access with an
 authorized adb key is the physical authorization. That means it needs adb turned on, which suits
@@ -180,4 +180,4 @@ implementation(project(":improv"))
 
 The protocol, both sessions, the adb peer check and the Wi-Fi security rules have JVM unit tests.
 `ImprovBleServer` and `WifiProvisioner` have no automated tests. S1 Kiosk has only lightly tested them end to end on the panel (see
-[onboarding.md](../../../docs/onboarding.md)).
+[onboarding.md](../../docs/onboarding.md)).

@@ -36,7 +36,7 @@ class RepoFilesTest {
 
     @Test fun theRepoHasTheAppAndItsLibraries() {
         val r = RepoFiles
-        assertTrue(r.names(r.modules).toString(), r.names(r.modules).containsAll(listOf("app/kiosk", "app/libs/esphome-api", "app/libs/improv")))
+        assertTrue(r.names(r.modules).toString(), r.names(r.modules).containsAll(listOf("app/kiosk", "libs/esphome-api", "libs/improv")))
         assertEquals(r.names(r.modules) - r.names(r.libraries).toSet(), r.names(r.appModules))
         assertTrue(r.names(r.libraries).toString(), r.libraries.size >= 4 && r.libraries.all { "/libs/" in "/${r.rel(it)}" })
         assertTrue(r.rel(r.s1App), File(r.s1App, "src/main/AndroidManifest.xml").isFile)

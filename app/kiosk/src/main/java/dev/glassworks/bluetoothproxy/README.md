@@ -43,7 +43,7 @@
 
 While it is on, the panel answers Home Assistant as an ESPHome Bluetooth proxy (#121). HA adds it as
 a Bluetooth scanner by itself, and hears the thermometers, plant sensors and tags near the panel
-through it. The work is the [bluetooth-proxy library](../../../../../../../libs/bluetooth-proxy/README.md):
+through it. The work is the [bluetooth-proxy library](../../../../../../../../libs/bluetooth-proxy/README.md):
 one long-running scan, only while HA listens, within Android's limits. This pane is the glue.
 
 | | |
