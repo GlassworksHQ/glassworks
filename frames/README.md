@@ -18,16 +18,10 @@ and glassworks.dev read them from here.
 | [`lululemon-mirror`](lululemon-mirror) | Planned | not yet | `frame.json` only (no recovery drawing yet) |
 | [`generic-android`](generic-android) | Planned | not yet | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
 
-Every device glassworks.dev lists has a frame here, planned ones included. The site's slugs are
-these ids, except one:
-
-| glassworks.dev slug | Frame id here |
-|---|---|
-| `aqara-s1` | `aqara-s1-plus` |
-
-When the site switches to these files, it should redirect its old `/frames/aqara-s1` to
-`/frames/aqara-s1-plus`. The ids here don't change: Kiln's routes, the boot generator and the release
-tags (`aqara-s1-plus-v<version>`) use them.
+Every device glassworks.dev lists has a frame here, planned ones included. The site's URL for a frame is
+its id here, always (`/frames/<id>`): a frame id never changes, because Kiln's routes, the boot generator
+and the release tags (`aqara-s1-plus-v<version>`) use it. The site's one older slug, `/frames/aqara-s1`,
+redirects to `/frames/aqara-s1-plus`.
 
 ## `design/frame.json`
 
@@ -168,7 +162,7 @@ All read from [GlassworksHQ/glassworks.dev](https://github.com/GlassworksHQ/glas
 
 | Site file | Here | How |
 |---|---|---|
-| `src/lib/devices.ts`: the `aqara-s1` and `lululemon-mirror` entries | `aqara-s1-plus/design/frame.json`, `lululemon-mirror/design/frame.json` | Data copied; the S1's id is this repo's `aqara-s1-plus` (the site's slug is `aqara-s1`) and its project link is GlassworksHQ's |
+| `src/lib/devices.ts`: the `aqara-s1` and `lululemon-mirror` entries | `aqara-s1-plus/design/frame.json`, `lululemon-mirror/design/frame.json` | Data copied; the S1's id is this repo's `aqara-s1-plus` and its project link is GlassworksHQ's |
 | `src/lib/devices.ts`: the `generic-android` entry, read at `main` = `8abae2d` (2026-11-12) | `generic-android/design/frame.json` | Data copied field for field. The S1's `install.href` (s1.edm.sh) came from the same read, and was dropped later, because the S1 installs from Kiln. Nothing else differed, apart from the S1's project link |
 | `src/components/deviceGeometry.ts`: `MODELS.s1`, `MODELS.mirror`, `MODELS.tablet` | The `model` sections of those files (`tablet` is generic-android's) | Data copied; the Mirror's stand, computed in code there, written out as 13 tubes. The tablet is a generic shape, not a measured device |
 | `src/components/deviceGeometry.ts`: `geometry()` | `packages/frame-card/src/geometry.ts` | Ported; takes the model as an argument. Same output to 0.001 |
