@@ -4,63 +4,77 @@ import android.content.Context
 import java.io.File
 
 /**
- * Configuration of the on-device wake word / voice assistant ([VoiceEngine]).
+ * Configuration of the on-device wake word and voice assistant ([VoiceEngine]).
  *
  * @property threshold     Wake word score (0..1) that counts as a detection.
  * @property refractoryMs  After a detection, ignore further detections for this long.
- * @property modelsDir     Directory holding `melspectrogram.tflite`, `embedding_model.tflite`
- *                         and the wake models. `null` means [defaultModelsDir], i.e.
- *                         `/sdcard/Android/data/sh.edm.s1kiosk/files/models/`
- *                         (writable with `adb push`, no root needed).
+ * @property modelsDir     Directory holding the models: microWakeWord's in `micro/` (fetched on first use)
+ *                         and any legacy openWakeWord `*.tflite`. `null` means [defaultModelsDir], the app's
+ *                         external files directory (`.../files/models/`, writable with `adb push`, no root needed).
  * @property micGain       Linear gain applied to microphone samples (1.0 = unchanged), used both
  *                         for wake word detection and for the audio streamed to Home Assistant.
  * @property maxStreamMs   Safety cap on how long one command is streamed to Home Assistant.
  */
-data class VoiceConfig(
-    val threshold: Float = 0.5f,
-    val refractoryMs: Long = 3_000L,
-    val modelsDir: File? = null,
-    val micGain: Float = 1.0f,
-    val maxStreamMs: Long = 15_000L,
+public data class VoiceConfig(
+    public val threshold: Float = 0.5f,
+    public val refractoryMs: Long = 3_000L,
+    public val modelsDir: File? = null,
+    public val micGain: Float = 1.0f,
+    public val maxStreamMs: Long = 15_000L,
 ) {
     /** [modelsDir], or the default app-specific external directory. */
-    fun resolveModelsDir(context: Context): File = modelsDir ?: defaultModelsDir(context)
+    public fun resolveModelsDir(context: Context): File = modelsDir ?: defaultModelsDir(context)
 
-    companion object {
-        fun defaultModelsDir(context: Context): File =
+    /** Where the models are when [modelsDir] is null. */
+    public companion object {
+        /** `models/` in the app's external files directory, else in its internal files directory. */
+        public fun defaultModelsDir(context: Context): File =
             context.getExternalFilesDir("models") ?: File(context.filesDir, "models")
     }
 }
 
 /**
- * Status updates from [VoiceEngine], for UI. Delivered on a background thread:
- * post to the main thread before touching views.
+ * Status updates from the voice assistant ([VoiceAssistantController], [VoiceEngine]), for UI. Delivered
+ * on a background thread: post to the main thread before touching views.
  */
-sealed class VoiceEvent {
+public sealed class VoiceEvent {
     /** The local wake word fired. */
-    data object WakeDetected : VoiceEvent()
+    public data object WakeDetected : VoiceEvent()
 
     /** Streaming the user's speech to Home Assistant. */
-    data object Listening : VoiceEvent()
+    public data object Listening : VoiceEvent()
 
     /** Speech ended; Home Assistant is transcribing / running the agent / synthesizing. */
-    data object Thinking : VoiceEvent()
+    public data object Thinking : VoiceEvent()
 
     /** Playing the TTS response (or an announcement). */
-    data object Speaking : VoiceEvent()
+    public data object Speaking : VoiceEvent()
 
     /** Waiting for the wake word. */
-    data object Idle : VoiceEvent()
+    public data object Idle : VoiceEvent()
 
     /**
      * Something went wrong (missing models, mic failure, pipeline error, ...). [local] errors come
-     * from the panel itself (microphone, wake word models), not from a pipeline run.
+     * from the device itself (microphone, wake word models), not from a pipeline run.
      */
-    data class Error(val message: String, val local: Boolean = false) : VoiceEvent()
+    public data class Error(
+        /** What went wrong, in a short line. */
+        public val message: String,
+        /** From the device (microphone, models), not from Home Assistant's pipeline. */
+        public val local: Boolean = false,
+    ) : VoiceEvent()
 
     /** Home Assistant's final transcript of what the user said (STT_END). Not a state change. */
-    data class Heard(val text: String) : VoiceEvent()
+    public data class Heard(
+        /** The transcript. */
+        public val text: String,
+    ) : VoiceEvent()
 
     /** The text being spoken: a response (TTS_START) or an [announcement]. Not a state change. */
-    data class Reply(val text: String, val announcement: Boolean) : VoiceEvent()
+    public data class Reply(
+        /** What is spoken. */
+        public val text: String,
+        /** An announcement, not the answer to a request. */
+        public val announcement: Boolean,
+    ) : VoiceEvent()
 }

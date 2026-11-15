@@ -1,18 +1,6 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
-import dev.glassworks.voice.MicroModel
-import dev.glassworks.voice.MicroWakeWord
-import dev.glassworks.voice.Microphone
-import dev.glassworks.voice.ModelFetcher
-import dev.glassworks.voice.ModelsMissingException
-import dev.glassworks.voice.TfliteWakeWord
-import dev.glassworks.voice.VoiceConfig
-import dev.glassworks.voice.WakeDetector
-import dev.glassworks.voice.WakeWord
-import dev.glassworks.voice.WakeWords
 import android.content.Context
-import sh.edm.s1kiosk.esphome.VoiceAssistantController
-import sh.edm.s1kiosk.esphome.WakeWordCatalog
 import dev.glassworks.esphome.WakeWordInfo
 import java.io.File
 import java.util.concurrent.Executors
@@ -20,7 +8,8 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 /**
- * Microphone + on-device wake word, feeding the ESPHome voice assistant ([controller]).
+ * Microphone + on-device wake word, feeding the ESPHome voice assistant ([controller]). Needs the
+ * `RECORD_AUDIO` permission, which the app asks for.
  *
  * The microphone has one consumer: this engine. Every 80 ms frame goes through the wake word model
  * (so its buffers never hold stale audio), and while a pipeline run is starting/streaming the same
@@ -39,13 +28,20 @@ import java.util.concurrent.TimeUnit
  *
  * [loadDetector] loads a word's model; null loads the real ones (tests pass a fake).
  */
-class VoiceEngine(
+public class VoiceEngine internal constructor(
     context: Context,
     private val config: VoiceConfig,
     initialWord: String,
     private val onActiveWordChanged: (String) -> Unit,
-    loadDetector: ((WakeWord) -> WakeDetector)? = null,
+    loadDetector: ((WakeWord) -> WakeDetector)?,
 ) : VoiceInput {
+    /**
+     * An engine with the models in [config]'s directory, listening for [initialWord] (a wake word id from
+     * [available], or empty for none). [onActiveWordChanged] stores the word Home Assistant picks, so the
+     * app can pass it back as [initialWord] next time.
+     */
+    public constructor(context: Context, config: VoiceConfig, initialWord: String, onActiveWordChanged: (String) -> Unit) :
+        this(context, config, initialWord, onActiveWordChanged, null)
 
     /** A loaded model and the word it detects. */
     private class Loaded(val id: String, val phrase: String, val detector: WakeDetector)
@@ -81,6 +77,7 @@ class VoiceEngine(
 
     /** Errors for the UI (models missing, mic failure). Background thread. */
     @Volatile override var onError: ((String) -> Unit)? = null
+    @Volatile override var onMicLevel: ((Float) -> Unit)? = null
 
     override fun start(muted: Boolean) {
         running = true
@@ -243,8 +240,8 @@ class VoiceEngine(
         val streaming = state == VoiceAssistantController.State.STARTING || state == VoiceAssistantController.State.STREAMING
         if (streaming) {
             c?.onMicAudio(toBytes(frame))
-            // For the voice overlay's orb (after micGain, i.e. what Home Assistant receives).
-            VoiceLevels.mic = AudioLevel.fromRms(AudioLevel.rms(frame))
+            // For an orb or a meter (after micGain, i.e. what Home Assistant receives).
+            onMicLevel?.invoke(MicLevel.fromRms(MicLevel.rms(frame)))
             for (v in frame) {
                 val a = kotlin.math.abs(v.toInt())
                 if (a > runPeak) runPeak = a
@@ -252,7 +249,7 @@ class VoiceEngine(
             }
             runSamples += frame.size
         } else if (runSamples > 0) {
-            VoiceLevels.mic = 0f
+            onMicLevel?.invoke(0f)
             // Level of the audio HA received for the last run (helps tune mic gain).
             val rms = kotlin.math.sqrt(runSumSq / runSamples) / 32768.0
             VoiceLog.i("Run audio: %.1f s, peak %.3f, rms %.4f (gain %.1f)".format(

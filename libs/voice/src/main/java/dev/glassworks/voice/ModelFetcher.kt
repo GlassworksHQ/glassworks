@@ -17,7 +17,7 @@ import java.security.MessageDigest
  * - [FILES] (the default): the legacy openWakeWord models from the official v0.5.1 GitHub release.
  *   They are CC BY-NC-SA 4.0, so they can't ship in the APK or be hosted by the web installer.
  */
-class ModelFetcher(
+internal class ModelFetcher(
     private val base: String = BASE,
     private val files: Map<String, String> = FILES,
     private val open: (URL) -> InputStream = ::httpGet,

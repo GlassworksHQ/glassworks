@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.VoiceInput
 import dev.glassworks.voice.VoiceConfig
 import dev.glassworks.voice.VoiceEvent
 import dev.glassworks.voice.WakeWords
@@ -29,7 +30,7 @@ import dev.glassworks.esphome.TimerEventType
 import dev.glassworks.esphome.WakeWordInfo
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.esphome.UrlPlayer
-import sh.edm.s1kiosk.esphome.VoiceAssistantController
+import dev.glassworks.voice.VoiceAssistantController
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -39,6 +40,10 @@ class AssistPaneTest {
     private val events = ArrayList<PanelEvent>()
     private val heard = ArrayList<VoiceEvent>()
     private var chimes = 0
+    /** What the core's player was asked to play, its last onDone, and its stops: AssistPane adapts it to the library's UrlPlayer. */
+    private val played = ArrayList<List<String>>()
+    private var playDone: ((Boolean) -> Unit)? = null
+    private var playerStops = 0
     private val speaker = FakeSpeaker()
     private val input = FakeInput()
     private var created: Triple<VoiceConfig, String, (String) -> Unit>? = null
@@ -54,8 +59,8 @@ class AssistPaneTest {
             build = AppBuild("1.0.0", 10000, debug = false),
         ),
         player = object : UrlPlayer {
-            override fun play(urls: List<String>, onDone: (Boolean) -> Unit) {}
-            override fun stop() {}
+            override fun play(urls: List<String>, onDone: (Boolean) -> Unit) { played += urls; playDone = onDone }
+            override fun stop() { playerStops++ }
         },
         speaker = speaker,
         resolveUrl = { it },
@@ -484,6 +489,33 @@ class AssistPaneTest {
         return o.toByteArray()
     }
 
+    /** The library's controller plays through the core's player (#152: AssistPane's adapter), and hears its end and its stop. */
+    @Test
+    fun anAnnouncementPlaysOnTheCoresPlayerAndItsEndAndStopGetThrough() {
+        val p = started()
+        val server = dev.glassworks.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
+        p.bind(server)
+        server.voice!!.onAnnounce("http://homeassistant.local:8123/api/tts_proxy/a.mp3", "Dinner is ready", "", false)
+        assertEquals(listOf(listOf("http://homeassistant.local:8123/api/tts_proxy/a.mp3")), played)
+        assertEquals(VoiceEvent.Speaking, heard.last())
+        playDone!!(true)
+        assertEquals(VoiceEvent.Idle, heard.last())
+        server.voice!!.onAnnounce("http://homeassistant.local:8123/api/tts_proxy/b.mp3", "Again", "", false)
+        assertEquals(0, playerStops)
+        p.cancel()
+        assertEquals(1, playerStops)
+    }
+
+    /** The overlay's orb reads VoiceLevels.mic, which the engine now reports through onMicLevel (#152). */
+    @Test
+    fun theMicrophoneLevelReachesTheOverlay() {
+        started()
+        input.onMicLevel!!.invoke(0.4f)
+        assertEquals(0.4f, VoiceLevels.mic)
+        input.onMicLevel!!.invoke(0f)
+        assertEquals(0f, VoiceLevels.mic)
+    }
+
     @Test
     fun turnedOffAndOnAgainItTakesTheServerAndClearsTheTimers() {
         val p = started()
@@ -594,6 +626,7 @@ class AssistPaneTest {
         override var controller: VoiceAssistantController? = null
         override var threshold = 0.5f
         override var onError: ((String) -> Unit)? = null
+        override var onMicLevel: ((Float) -> Unit)? = null
         val starts = ArrayList<Boolean>()
         var stops = 0
         val muted = ArrayList<Boolean>()

@@ -1,15 +1,20 @@
-package sh.edm.s1kiosk.esphome
+package dev.glassworks.voice
 
 import dev.glassworks.esphome.*
-import dev.glassworks.voice.VoiceEvent
-import sh.edm.s1kiosk.voice.VoiceLog
-import sh.edm.s1kiosk.voice.nowMs
 
-/** The wake words the panel can detect locally (VoiceEngine: microWakeWord, legacy openWakeWord). */
-interface WakeWordCatalog {
-    fun available(): List<WakeWordInfo>
-    fun activeIds(): List<String>
-    fun setActive(ids: List<String>)
+/**
+ * The wake words the device can detect on its own, as Home Assistant's wake word select offers them
+ * ([VoiceEngine] is one: microWakeWord, and legacy openWakeWord models already on the device).
+ */
+public interface WakeWordCatalog {
+    /** Every word the device can listen for. */
+    public fun available(): List<WakeWordInfo>
+
+    /** The ids of the words it listens for now. */
+    public fun activeIds(): List<String>
+
+    /** Listens for [ids] from now on (Home Assistant's pick). */
+    public fun setActive(ids: List<String>)
 }
 
 /**
@@ -28,26 +33,50 @@ interface WakeWordCatalog {
  * HA -> VoiceAssistantAnnounceRequest{media_id, preannounce_media_id, start_conversation}
  *                    play -> VoiceAssistantAnnounceFinished
  * ```
- * Pure JVM; [send] writes to the subscribed API connection.
+ * Pure JVM and thread-safe. Give it to the esphome-api `ApiServer` (`server.voice = controller`) and to
+ * the [VoiceInput] (`input.controller = controller`), and call [tick] about once a second.
+ *
+ * @param send Writes one voice message to the subscribed API connection (`ApiServer.sendVoice`); false if none.
+ * @param player Plays the response and announcements.
+ * @param wakeWords The words Home Assistant may pick from ([VoiceEngine]).
+ * @param emit Every [VoiceEvent], for UI. On the caller's thread: post before touching views.
+ * @param resolveUrl Makes a relative media URL from Home Assistant absolute.
+ * @param onTimerFinished A voice timer rang, with its name.
+ * @param onTimersChanged Called (off the lock) with a snapshot whenever the set of timers changes.
+ * @param maxStreamMs Safety cap on how long one command is streamed.
+ * @param clock Milliseconds on a monotonic clock; a test moves it.
+ * @param onConfigurationRead Called after each answer to Home Assistant's `VoiceAssistantConfigurationRequest`.
  */
-class VoiceAssistantController(
+public class VoiceAssistantController(
     private val send: (type: Int, payload: ProtoWriter) -> Boolean,
     private val player: UrlPlayer,
     private val wakeWords: WakeWordCatalog,
     private val emit: (VoiceEvent) -> Unit,
     private val resolveUrl: (String) -> String = { it },
     private val onTimerFinished: (String) -> Unit = {},
-    /** Called (off the lock) with a snapshot whenever the set of timers changes. */
     private val onTimersChanged: (List<Timer>) -> Unit = {},
     private val maxStreamMs: Long = 15_000L,
     private val clock: () -> Long = ::nowMs,
-    /** Called after each answer to Home Assistant's `VoiceAssistantConfigurationRequest` (#212: a wake word picked on the panel). */
     private val onConfigurationRead: () -> Unit = {},
 ) : VoiceAssistantHandler {
 
-    enum class State { IDLE, STARTING, STREAMING, AWAITING, RESPONDING, ANNOUNCING }
+    /** Where a run stands, as esphome's `voice_assistant.cpp` names its states. */
+    public enum class State {
+        /** No run: waiting for a wake word. */
+        IDLE,
+        /** A run was requested; audio is buffered until Home Assistant answers. */
+        STARTING,
+        /** Streaming the microphone to Home Assistant. */
+        STREAMING,
+        /** Speech ended: Home Assistant transcribes and answers. */
+        AWAITING,
+        /** Playing the response. */
+        RESPONDING,
+        /** Playing an announcement. */
+        ANNOUNCING,
+    }
 
-    companion object {
+    private companion object {
         private const val START_TIMEOUT_MS = 10_000L
         private const val AWAIT_TIMEOUT_MS = 60_000L
         private const val PLAY_TIMEOUT_MS = 10 * 60_000L
@@ -56,7 +85,19 @@ class VoiceAssistantController(
         private val IGNORED_ERRORS = setOf("wake-word-timeout", "wake_word_detection_aborted", "no_wake_word")
     }
 
-    data class Timer(val id: String, val name: String, val totalSeconds: Int, val secondsLeft: Int, val active: Boolean)
+    /** A voice timer, as Home Assistant reports it. */
+    public data class Timer(
+        /** Home Assistant's id for it. */
+        public val id: String,
+        /** Its name, or empty. */
+        public val name: String,
+        /** Its length, in seconds. */
+        public val totalSeconds: Int,
+        /** What is left, in seconds, at the last report. */
+        public val secondsLeft: Int,
+        /** Running (true) or paused. */
+        public val active: Boolean,
+    )
 
     private val lock = Any()
     private var subscribed = false
@@ -80,9 +121,14 @@ class VoiceAssistantController(
     private val playbackStart = Any()
     private val timers = LinkedHashMap<String, Timer>()
 
-    val currentState: State get() = synchronized(lock) { state }
-    val isSubscribed: Boolean get() = synchronized(lock) { subscribed }
-    val activeTimers: List<Timer> get() = synchronized(lock) { timers.values.toList() }
+    /** Where the run stands now. Stream the microphone ([onMicAudio]) while [State.STARTING] or [State.STREAMING]. */
+    public val currentState: State get() = synchronized(lock) { state }
+
+    /** Home Assistant subscribed to the voice assistant on the API connection. */
+    public val isSubscribed: Boolean get() = synchronized(lock) { subscribed }
+
+    /** The voice timers now. */
+    public val activeTimers: List<Timer> get() = synchronized(lock) { timers.values.toList() }
 
     private fun setState(s: State) {
         if (s != state) VoiceLog.d("voice: $state -> $s")
@@ -99,8 +145,8 @@ class VoiceAssistantController(
 
     // ------------------------------------------------------------------ device side
 
-    /** A local wake word fired. Returns true if a pipeline run was requested. */
-    fun onWakeWord(phrase: String): Boolean {
+    /** A local wake word, [phrase], fired: starts a run unless one runs. Returns true if a run was requested. */
+    public fun onWakeWord(phrase: String): Boolean {
         var started = false
         locked {
             if (state != State.IDLE) return@locked
@@ -138,8 +184,8 @@ class VoiceAssistantController(
         return true
     }
 
-    /** Mic thread: one chunk of 16 kHz s16le mono audio. */
-    fun onMicAudio(pcm: ByteArray) {
+    /** One chunk of 16 kHz s16le mono audio from the microphone (80 ms chunks, as ESPHome sends). */
+    public fun onMicAudio(pcm: ByteArray) {
         locked {
             when (state) {
                 State.STARTING -> {
@@ -169,7 +215,7 @@ class VoiceAssistantController(
      * esphome `request_stop()`. Late events of the cancelled run are ignored. Returns true if
      * something was running.
      */
-    fun cancel(): Boolean = synchronized(playbackStart) {
+    public fun cancel(): Boolean = synchronized(playbackStart) {
         // After a playback start in progress: it either started, and is stopped here, or saw the cancel.
         var cancelled = false
         locked {
@@ -199,13 +245,13 @@ class VoiceAssistantController(
      * current one ends as [cancel] ends it, so its Idle resumes the music and lets go of the speaker.
      * Unlike [cancel], which the person uses between runs, this controller takes no run again.
      */
-    fun close(): Boolean {
+    public fun close(): Boolean {
         locked { closed = true }
         return cancel() // waits for a playback start in progress, as every cancel does
     }
 
-    /** Called about once a second: watchdogs. */
-    fun tick() {
+    /** Call about once a second: the watchdogs end a run that stalls, and timers count down. */
+    public fun tick() {
         locked {
             val age = clock() - stateSince
             when (state) {
@@ -230,6 +276,7 @@ class VoiceAssistantController(
 
     // ------------------------------------------------------------------ from Home Assistant
 
+    /** Home Assistant subscribed to (or left) the voice assistant on the API connection. */
     override fun onSubscribe(subscribed: Boolean) {
         locked {
             this@VoiceAssistantController.subscribed = subscribed
@@ -240,6 +287,7 @@ class VoiceAssistantController(
         }
     }
 
+    /** Home Assistant answered a run request: stream the buffered audio, or end the run on [error]. */
     override fun onStartResponse(port: Int, error: Boolean) {
         locked {
             if (state != State.STARTING) return@locked
@@ -255,6 +303,7 @@ class VoiceAssistantController(
         }
     }
 
+    /** One event of the Assist run (STT, intent, TTS, run end, errors), as esphome handles it. */
     override fun onEvent(type: Int, data: Map<String, String>) {
         locked {
             when (type) {
@@ -352,6 +401,7 @@ class VoiceAssistantController(
         }
     }
 
+    /** Home Assistant asks for an announcement: play it, then start a conversation if [startConversation]. */
     override fun onAnnounce(mediaId: String, text: String, preannounceMediaId: String, startConversation: Boolean) {
         locked {
             VoiceLog.i("voice: announce '$text' media=$mediaId preannounce=$preannounceMediaId")
@@ -372,6 +422,7 @@ class VoiceAssistantController(
         }
     }
 
+    /** A voice timer started, changed, was cancelled or rang. */
     override fun onTimer(type: Int, id: String, name: String, totalSeconds: Int, secondsLeft: Int, active: Boolean) {
         locked {
             val t = Timer(id, name, totalSeconds, secondsLeft, active)
@@ -389,9 +440,11 @@ class VoiceAssistantController(
         }
     }
 
+    /** The wake words on offer and the active ones, for Home Assistant's wake word select. */
     override fun configuration(): VoiceConfiguration =
         VoiceConfiguration(wakeWords.available(), wakeWords.activeIds(), maxActive = 1).also { onConfigurationRead() }
 
+    /** Home Assistant picked the wake words to listen for. */
     override fun setActiveWakeWords(ids: List<String>) {
         VoiceLog.i("voice: HA set active wake words $ids")
         wakeWords.setActive(ids.take(1))

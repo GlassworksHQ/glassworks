@@ -46,9 +46,8 @@ longest matching prefix wins; a class nothing matches is the core's. On the S1:
 | Media3 | `voice/`, and GeckoView ships the same version | shared |
 
 Classes a pane alone uses outside its own package are listed with it, so its total isn't short:
-`esphome/VoiceAssistantController.kt` (`VoiceAssistantController`, `UrlPlayer`, `WakeWordCatalog`,
-used only by `voice/`) is Assist's, and `frame/TimeZoneKeeper` (used only by `TimeZonePane`) is the
-time zone pane's. A class nothing matches is the core's, so a pane that moves code out of its package
+`VoiceOverlay` and the `voice` library (`dev.glassworks.voice`, used only by the Assist pane) are
+Assist's, and `frame/TimeZoneKeeper` (used only by `TimeZonePane`) is the time zone pane's. A class nothing matches is the core's, so a pane that moves code out of its package
 without saying so here looks smaller than it is.
 
 A new pane needs an entry in `parts.json` (a test checks every pane in the code has one), and a new

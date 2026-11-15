@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds fresh projects against the libraries in mavenLocal, as someone would use them from Maven
-# Central (dev.glassworks:esphome-api, esphome-api-android, improv and sendspin, at the versions in
+# Central (dev.glassworks:esphome-api, esphome-api-android, improv, sendspin and voice, at the versions in
 # libs/<name>/gradle.properties). Run it after `./gradlew publishToMavenLocal` (pr.yml, libs-publish).
 #   - two Android apps at minSdk 23 on the repo's AGP: one at compileSdk 37.2, one at compileSdk 23,
 #     the AARs' minCompileSdk (the root build.gradle.kts)
@@ -50,6 +50,7 @@ dependencies {
     implementation("dev.glassworks:esphome-api-android:$(version esphome-api-android)")
     implementation("dev.glassworks:improv:$(version improv)")
     implementation("dev.glassworks:sendspin:$(version sendspin)")
+    implementation("dev.glassworks:voice:$(version voice)")
 }
 EOF
   echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android" />' > "$m/src/main/AndroidManifest.xml"
@@ -70,6 +71,9 @@ import dev.glassworks.improv.SerialPacketReader
 import dev.glassworks.improv.WifiProvisioner
 import dev.glassworks.sendspin.MemoryStore
 import dev.glassworks.sendspin.SendspinPlayer
+import dev.glassworks.voice.VoiceConfig
+import dev.glassworks.voice.VoiceEngine
+import dev.glassworks.voice.WakeWords
 
 fun use(context: Context) {
     val identity = DeviceIdentity(
@@ -96,6 +100,7 @@ fun use(context: Context) {
         override val unpairedAccess = false
     }
     SendspinPlayer(context, MemoryStore(), SendspinPlayer.Identity("Consumer", "Consumer check", "Example", "Consumer 1.0"), settings).start()
+    VoiceEngine(context, VoiceConfig(), WakeWords.DEFAULT) {}.start(muted = true)
 }
 EOF
 }
@@ -132,5 +137,6 @@ EOF
 
 "$repo/gradlew" -p "$dir/android" --no-daemon --quiet :latest:assembleDebug :oldest:assembleDebug
 "$repo/gradlew" -p "$dir/jvm" --no-daemon --quiet compileKotlin
-echo "Built against esphome-api $(version esphome-api), esphome-api-android $(version esphome-api-android), improv $(version improv) and sendspin $(version sendspin):"
+echo "Built against esphome-api $(version esphome-api), esphome-api-android $(version esphome-api-android), improv $(version improv),"
+echo "sendspin $(version sendspin) and voice $(version voice):"
 echo "minSdk 23 apps at compileSdk 37.2 and 23, and a Kotlin $kotlin_min JVM app."

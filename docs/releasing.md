@@ -357,13 +357,19 @@ pairing key, options). See [install.md](../frames/aqara-s1-plus/docs/install.md#
 ## Libraries
 
 The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): `esphome-api` (a jar),
-`esphome-api-android`, `improv` and `sendspin` (AARs). `sendspin` (#152) is set up but has no release
-yet. Each has its own semver version, in `version=` in
+`esphome-api-android`, `improv`, `sendspin` and `voice` (AARs). `sendspin` and `voice` (#152) are set up
+but have no release yet. Each has its own semver version, in `version=` in
 `libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
 release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
-developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. The
-libraries bundle no third-party code; their dependencies come from Maven Central with their own
-licences. They're built for Kotlin 2.1 with kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can
+developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. Their
+dependencies come from Maven Central with their own licences.
+
+Ported code keeps its own licence. `voice`'s `MicroFrontend.kt` is a port of TensorFlow Lite Micro's
+audio frontend (Apache-2.0) and kissfft (BSD-3-Clause). A library lists such licences in its
+`gradle.properties` as `extraLicenses=<SPDX id>|<upstream copyright line>;…`, and explains the port in
+`libs/<name>/NOTICE`. The build then adds each licence to the POM, and ships it in the jar as
+`META-INF/LICENSE-<ID>` (from `LICENSES/<id>.txt`, under the copyright line), with `META-INF/NOTICE`.
+`check-lib-artifact.sh` checks both. They're built for Kotlin 2.1 with kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can
 use them.
 
 `bluetooth-proxy` isn't published yet. It's alpha, and GATT connections will change its API. To publish
@@ -427,7 +433,7 @@ check skips any other tag (`Releases.tagVersion`). So a library tag never makes 
    GitHub's web page instead, **untick "Set as the latest release"**: panels on 0.4.3 read
    `releases/latest`, which must stay the S1 app's release.
 
-Release `esphome-api` before `esphome-api-android` and `sendspin`: the workflow refuses a library whose
+Release `esphome-api` before `esphome-api-android`, `sendspin` and `voice`: the workflow refuses a library whose
 `dev.glassworks` dependency isn't on Maven Central yet. Once a few releases have gone out cleanly,
 set `MANUAL_PUBLISH: 'false'`. The workflow then publishes the deployment itself and makes the
 GitHub release public.
@@ -454,7 +460,7 @@ Every PR that touches `libs/`, the Gradle build or these scripts runs a dry run 
 
 ```sh
 ./gradlew publishToMavenLocal                        # no key: unsigned
-tools/release/check-lib-artifact.sh esphome-api      # and esphome-api-android, improv, sendspin
+tools/release/check-lib-artifact.sh esphome-api      # and esphome-api-android, improv, sendspin, voice
 tools/release/lib-consumer-check.sh                  # fresh apps build against them (below)
 ```
 

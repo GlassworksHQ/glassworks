@@ -310,9 +310,14 @@ Parts of the app are standalone modules other projects can use:
   Bluetooth proxy pane runs it (#121).
 - [`libs/sendspin`](../../../libs/sendspin/README.md): the Sendspin player for Music Assistant (protocol,
   Noise handshake, FLAC, playback in sync). The app's Sendspin pane runs it (#152).
+- [`libs/voice`](../../../libs/voice/README.md): the voice assistant: microphone, on-device wake word
+  (microWakeWord on TFLite) and the Assist client over `esphome-api`. The app's Assist pane runs it (#152).
 
 They build with the app (`./gradlew :esphome-api:test :esphome-api-android:assembleDebug
-:improv:testDebugUnitTest :bluetooth-proxy:testDebugUnitTest :sendspin:testDebugUnitTest`) and aren't published to a Maven repository or npm yet.
+:improv:testDebugUnitTest :bluetooth-proxy:testDebugUnitTest :sendspin:testDebugUnitTest :voice:testDebugUnitTest`).
+`esphome-api`, `esphome-api-android` and `improv` are on Maven Central as `dev.glassworks:<name>`;
+`sendspin` and `voice` are set up for it but not released yet, and `bluetooth-proxy` isn't
+([docs/releasing.md](../../../docs/releasing.md#libraries)).
 
 ## License
 

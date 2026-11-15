@@ -9,7 +9,7 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
 /** A loaded wake word model. Not thread-safe: the microphone thread feeds it. */
-interface WakeDetector : Closeable {
+internal interface WakeDetector : Closeable {
     /** Feeds one microphone frame of 16 kHz mono audio; returns the wake score, 0..1. */
     fun process(frame: ShortArray): Float
 }
@@ -18,7 +18,7 @@ interface WakeDetector : Closeable {
  * The input and output quantization of a microWakeWord streaming model: int8 input of [stride]
  * feature rows of 40, uint8 output of one probability.
  */
-data class MicroTensors(
+internal data class MicroTensors(
     val stride: Int,
     val inputScale: Float,
     val inputZeroPoint: Int,
@@ -35,7 +35,7 @@ data class MicroTensors(
  * Features are quantized like pymicro-wakeword, `round(value * 0.0390625 / scale + zero_point)`
  * (half to even), and clamped to int8 like ESPHome. The model is injected so a JVM test can drive it.
  */
-class MicroDetector(
+internal class MicroDetector(
     private val tensors: MicroTensors,
     window: Int,
     private val invoke: (ByteArray) -> Int,
@@ -84,7 +84,7 @@ class MicroDetector(
 }
 
 /** microWakeWord on TFLite: one streaming model, fed by [MicroDetector]. */
-class MicroWakeWord private constructor(
+internal class MicroWakeWord private constructor(
     private val interpreter: Interpreter,
     model: MicroModel,
 ) : WakeDetector {
