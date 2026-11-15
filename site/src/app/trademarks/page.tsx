@@ -1,12 +1,14 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { links } from "@/lib/site";
 import s from "./trademarks.module.css";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Trademarks",
-  description: "How you can use the Glassworks name, mark and badge.",
-};
+  description:
+    "How you can use the Glassworks name, mark and badge: what's fine, and what to ask about first.",
+  path: "/trademarks",
+});
 
 const ASK =
   "https://github.com/GlassworksHQ/.github/issues/new?title=Trademark%20request";

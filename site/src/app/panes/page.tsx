@@ -1,16 +1,18 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { PaneGrid } from "@/components/PaneGrid";
 import { SupportTag, paneIcon } from "@/components/DeviceBits";
 import { frameById } from "@/lib/frames";
 import type { Support } from "@/lib/frameText";
 import { framePanes } from "@/lib/site";
+import { pageMetadata } from "@/lib/seo";
 import s from "./panes.module.css";
 
-export const metadata: Metadata = {
-  title: "Panes",
-  description: "Plugins for Glassworks panels: what each does, what it needs, and where it runs.",
-};
+export const metadata = pageMetadata({
+  title: "Panes: plugins for Home Assistant panels",
+  description:
+    "Plugins for Glassworks panels: voice, music, a Zigbee/Thread radio, a Bluetooth proxy. What each does, what it needs and where it runs.",
+  path: "/panes",
+});
 
 export default function PanesPage() {
   return (

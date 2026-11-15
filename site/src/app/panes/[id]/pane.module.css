@@ -5,6 +5,13 @@
   min-height: 60vh;
 }
 
+/* The loading fallback fills the screen, so the footer stays below the fold until the page swaps in
+   and doesn't jump up the screen when it does (a layout shift, CLS). */
+.fallback {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
 .crumbs {
   display: flex;
   gap: 8px;

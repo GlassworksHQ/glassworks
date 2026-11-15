@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { FrameCard } from "@/components/FrameCard";
 import { ClarityCardLine } from "@/components/clarity/Clarity";
@@ -12,13 +11,15 @@ import { frames } from "@/lib/frames";
 import { difficultyHelp, ratingKeys, ships } from "@/lib/frameText";
 import { links, panes } from "@/lib/site";
 import { support } from "@/lib/paneSupport";
+import { pageMetadata } from "@/lib/seo";
 import s from "./frames.module.css";
 
-export const metadata: Metadata = {
-  title: "Devices",
+export const metadata = pageMetadata({
+  title: "Wall panels for Home Assistant",
   description:
-    "Panels Glassworks runs on, or will, and which panes work on each.",
-};
+    "Wall panels and tablets Glassworks runs on, or will: what installing changes, and which panes work on each.",
+  path: "/frames",
+});
 
 export default function DevicesPage() {
   return (

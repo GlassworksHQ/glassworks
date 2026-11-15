@@ -1,0 +1,45 @@
+/* The catalog pages' header (frames.module.css, panes.module.css) and the pane page's back links, as a 404. */
+.page {
+  display: grid;
+  gap: 32px;
+  align-content: start;
+  padding-block: 32px 64px;
+  min-height: 60vh;
+}
+
+.head {
+  display: grid;
+  gap: 14px;
+}
+
+.h1 {
+  font-size: clamp(34px, 5vw, 50px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.lede {
+  font-size: 17px;
+  color: var(--muted);
+  max-width: 56ch;
+}
+
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.links a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-sky);
+  text-decoration: none;
+}
+
+.links a::before {
+  content: "→ ";
+}

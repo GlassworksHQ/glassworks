@@ -1,4 +1,5 @@
 import { SITE } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/seo";
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { MarkDefs } from "@/components/Mark";
@@ -9,12 +10,14 @@ import "./globals.css";
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "greek"] });
 const mono = JetBrains_Mono({ variable: "--font-mono", subsets: ["latin"] });
 
+/* Defaults for every page. Pages set their own title, description and canonical with pageMetadata
+   (src/lib/seo.ts); a page without one (the 404) falls back to these, with no canonical. */
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: { default: "Glassworks", template: "%s · Glassworks" },
-  description:
-    "Open-source core for Home Assistant wall panels: dashboard, ESPHome device, setup and updates, with plugins for everything else.",
-  openGraph: { siteName: "Glassworks", type: "website" },
+  title: { default: SITE_NAME, template: `%s · ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  openGraph: { siteName: SITE_NAME, type: "website", locale: "en" },
 };
 
 export const viewport: Viewport = {

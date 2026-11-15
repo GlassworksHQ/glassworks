@@ -31,8 +31,9 @@
 #            Python image and fails if the committed files differ. A few minutes, so it runs only
 #            when branding/boot, branding/glass-tile, branding/bootlogos.json, the S1's frame.json
 #            or this file changes
-#   site     glassworks.dev (site/): lint, typecheck and the static build. The site has no tests of
-#            its own; its build checks the frames' data, banners and Clarity grades. Only when site/,
+#   site     glassworks.dev (site/): lint, typecheck, the static build, and the SEO check on the built
+#            site (every page in the sitemap with a title, description, canonical and preview image).
+#            The build also checks the frames' data, banners and Clarity grades. Only when site/,
 #            packages/, frames/, docs/, what the site reads from tools/perf, the root package files
 #            or this file changes
 name: PR checks
@@ -631,3 +632,6 @@ jobs:
       - name: Builds as Vercel builds it
         if: steps.changed.outputs.run == 'true'
         run: npm run build -w site
+      - name: SEO check (sitemap, titles, descriptions, canonicals, preview images)
+        if: steps.changed.outputs.run == 'true'
+        run: npm run check:seo -w site

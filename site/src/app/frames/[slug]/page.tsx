@@ -14,7 +14,9 @@ import {
 import { KilnGlyph } from "@/components/Glyphs";
 import { Mark } from "@/components/Mark";
 import { frameById, frames, installLink } from "@/lib/frames";
-import { ratingKeys, ships } from "@/lib/frameText";
+import { frameSeo, ratingKeys, ships } from "@/lib/frameText";
+import { JsonLd } from "@/components/JsonLd";
+import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { panes } from "@/lib/site";
 import { support } from "@/lib/paneSupport";
 import s from "./device.module.css";
@@ -30,7 +32,11 @@ export async function generateMetadata(
   const { slug } = await props.params;
   const d = frameById(slug);
   if (!d) return {};
-  return { title: d.name, description: d.summary };
+  return pageMetadata({
+    ...frameSeo(d),
+    path: `/frames/${d.id}`,
+    image: { path: `/frames/${d.id}/card.png`, alt: `${d.name}, a Glassworks frame` },
+  });
 }
 
 type Params = PageProps<"/frames/[slug]">["params"];
@@ -48,7 +54,7 @@ export default function DevicePage(props: PageProps<"/frames/[slug]">) {
 
 function DeviceFallback() {
   return (
-    <div className={`wrap ${s.page}`} aria-busy="true">
+    <div className={`wrap ${s.page} ${s.fallback}`} aria-busy="true">
       <nav className={s.crumbs} aria-label="Breadcrumb">
         <Link href="/frames">Devices</Link>
       </nav>
@@ -71,6 +77,14 @@ async function Device({ params }: { params: Params }) {
 
   return (
     <article className={`wrap ${s.page}`}>
+      <JsonLd
+        nodes={[
+          breadcrumbLd([
+            { name: "Devices", path: "/frames" },
+            { name: d.name, path: `/frames/${d.id}` },
+          ]),
+        ]}
+      />
       <nav className={s.crumbs} aria-label="Breadcrumb">
         <Link href="/frames">Devices</Link>
         <span aria-hidden="true">/</span>
