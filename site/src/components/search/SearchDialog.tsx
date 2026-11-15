@@ -147,6 +147,8 @@ export function SearchDialog() {
             autoFocus
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
+              // keys that confirm an input method's composition aren't ours
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                 e.preventDefault();
                 setAt((a) => (e.key === "ArrowDown" ? Math.min(flat.length - 1, a + 1) : Math.max(0, a - 1)));
