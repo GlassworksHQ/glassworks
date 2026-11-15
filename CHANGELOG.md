@@ -21,7 +21,8 @@ below as the release notes.
   engine and memory, and a list shows every pane with its state. The sidebar groups the pages under
   Panel, Panes and System, and Done stays at the bottom. "Dashboard" is now "Home Assistant &
   dashboard", on the panel and the Manage page, and it says which Home Assistant account the
-  dashboard is signed in as. On the Manage page, a browser signed in with the panel's code says so
+  dashboard is signed in as. Each page shows its settings in cards, one per group, with the value
+  on the right of its name, and "In Home Assistant" in a card of its own. On the Manage page, a browser signed in with the panel's code says so
   at the foot of the sidebar.
 - **On Android 12 and newer, app updates from Home Assistant install without a tap.** On a device
   that isn't an Aqara S1, such as a tablet, pressing Install in Home Assistant now updates the app

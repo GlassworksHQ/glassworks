@@ -110,13 +110,11 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     private val unavailable = g.text(15f, MU).apply { setLineSpacing(0f, 1.2f) }
     private val problem = g.text(15f, ROSE).apply { setLineSpacing(0f, 1.2f) }
     private val banner = Banner()
-    /** The section's rows, in a card: the same padding on every side, nothing above the first row. */
-    private val rows = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        background = g.surface(dev.glassworks.brand.Tokens.R_TILE.toFloat())
-        val p = px(OverviewPage.CARD_PAD)
-        setPadding(px(OverviewPage.CARD_PAD + 4f), p, px(OverviewPage.CARD_PAD + 4f), p)
-    }
+    /** The section's items: cards of rows ([card]), and what sits between them (a status line, tiles, a pane's own view). */
+    private val rows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+
+    /** The widest a row's value gets on the right, so its name keeps room. */
+    private val valueMax = px(resources.configuration.screenWidthDp * 0.3f)
     private val head = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -130,7 +128,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         addView(unavailable, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
         addView(problem, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
         addView(banner.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
-        addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+        addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
     }
     private val page = FrameLayout(context).apply {
         val tall = resources.configuration.screenHeightDp >= 600
@@ -339,7 +337,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         // A key no section has now (a pane from before a device restart, another base) is let go of.
         val keys = m.sections.flatMap { nativeKeys(it.items) }.toSet()
         natives.keys.retainAll(keys)
-        addItems(s.items, divided = s.items.none { it is SettingsItem.Native })
+        layOut(s.items)
         scroll.scrollTo(0, 0)
     }
 
@@ -410,6 +408,14 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
     }
 
+    /** The open page's item called [title] in the model as it is now. */
+    private fun now(key: String): SettingsItem? {
+        fun find(items: List<SettingsItem>, prefix: String): SettingsItem? = items.firstNotNullOfOrNull { i ->
+            if (i is SettingsItem.Group) find(i.items, prefix + i.title + "/") else i.takeIf { prefix + SettingsChange.titleOf(it) == key }
+        }
+        return model?.sections?.firstOrNull { it.id == current }?.let { find(it.items, "") }
+    }
+
     private fun flat(items: List<SettingsItem>): List<SettingsItem> =
         items.flatMap { if (it is SettingsItem.Group) flat(it.items) else listOf(it) }
 
@@ -425,52 +431,91 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         else -> null
     }
 
-    /** [items] as rows; [divided]: a hairline above each row, as drawn, but not right under a status line or tiles. */
-    private fun addItems(items: List<SettingsItem>, divided: Boolean) {
-        var after: SettingsItem? = null
-        for (i in items) {
-            val under = after
-            after = i
-            if (i is SettingsItem.Group) {
-                rows.addView(g.label(i.title), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(26f); bottomMargin = px(4f) })
-                addItems(i.items, divided = true)
-                continue
-            }
-            when (i) {
-                is SettingsItem.States -> { rows.addView(states(i), LinearLayout.LayoutParams(-1, -2)); continue }
-                is SettingsItem.Status -> { rows.addView(status(i), LinearLayout.LayoutParams(-1, -2)); continue }
-                is SettingsItem.Tiles -> { rows.addView(tiles(i), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f); bottomMargin = px(6f) }); continue }
-                is SettingsItem.Blueprints -> { rows.addView(blueprints(i), LinearLayout.LayoutParams(-1, -2)); continue }
-                else -> {}
-            }
-            if (divided && under != null && under !is SettingsItem.Status && under !is SettingsItem.Tiles) {
-                rows.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)))
-            }
-            rows.addView(item(i), LinearLayout.LayoutParams(-1, -2))
+    /**
+     * [items] as the approved layout draws them: the rows in cards, one per group with its name at the top,
+     * and the rows before any group in a card of their own; "In Home Assistant" as its own card. A status
+     * line, tiles and a pane's own view sit between the cards.
+     */
+    private fun layOut(items: List<SettingsItem>) {
+        var open: LinearLayout? = null
+        for (i in items) when (i) {
+            is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Native -> { addBlock(between(i)); open = null }
+            is SettingsItem.States -> { addBlock(states(i)); open = null }
+            is SettingsItem.Blueprints -> { addBlock(blueprints(i)); open = null }
+            is SettingsItem.Group -> { addBlock(card(i.title).also { c -> i.items.forEach { addRow(c, it, i.title + "/") } }); open = null }
+            else -> addRow(open ?: card(null).also { addBlock(it); open = it }, i, "")
         }
     }
 
-    private fun item(i: SettingsItem): View = when (i) {
-        is SettingsItem.Text -> follow(row(i.title, shownOf(i), chevron = i.enabled(), dim = !i.enabled()) { if (i.enabled()) sheet.text(i) { build() } }) { shownOf(i) }
-        is SettingsItem.Switch -> toggleRow(i)
-        is SettingsItem.Slider -> sliderRow(i)
-        is SettingsItem.Duration -> follow(row(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.duration(i) { build() } }) { i.shown(i.value()) }
-        is SettingsItem.TimeRange -> follow(row(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.range(i) { build() } }) { i.shown(i.value()) }
-        is SettingsItem.Link -> row(i.title, i.detail, chevron = true, dim = i.detail.isEmpty()) { i.open(context) }
-        is SettingsItem.Note -> g.text(14.5f, MU).apply { text = i.text(); setLineSpacing(0f, 1.25f); setPadding(0, px(14f), 0, px(14f)) }
-        is SettingsItem.Info -> infoRow(i)
-        is SettingsItem.Choice -> follow(row(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
-        is SettingsItem.SignIn -> follow(row(i.title, i.shown(i.isSet()), chevron = true, dim = false) { sheet.signIn(i) { build() } }) { i.shown(i.isSet()) }
-        is SettingsItem.Group, is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Blueprints -> error("laid out by addItems")
-        is SettingsItem.Native -> natives.getOrPut(i.key) { i.create(nativeHost) }.also { it.refresh() }.view
+    private fun addBlock(v: View) = rows.addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(OverviewPage.GAP) })
+
+    private fun between(i: SettingsItem): View = when (i) {
+        is SettingsItem.Status -> status(i)
+        is SettingsItem.Tiles -> tiles(i)
+        else -> item(i)
     }
 
     /**
-     * The row's value follows a change made elsewhere: Home Assistant (the wake word select) or the Manage
-     * page (#242). The value view is always there ([texts]); the null branch is a guard only.
+     * A card: the same padding on every side, its [title] at the top with a hairline under it, or its first
+     * row right at the top (the maintainer's fix to the mockup's spacing, 2026-11-15).
      */
+    private fun card(title: String?, aside: String? = null) = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        background = g.surface(dev.glassworks.brand.Tokens.R_TILE.toFloat())
+        val p = px(OverviewPage.CARD_PAD)
+        setPadding(px(OverviewPage.CARD_PAD + 4f), p, px(OverviewPage.CARD_PAD + 4f), p)
+        if (title != null) addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            tag = HEADER
+            setPadding(0, 0, 0, px(10f))
+            addView(g.text(16.5f, TX, Inter.MEDIUM).apply { text = title }, LinearLayout.LayoutParams(0, -2, 1f))
+            aside?.let { addView(g.text(14f, MU).apply { text = it }) }
+        }, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    /**
+     * [i] at the end of [c], with a hairline above it unless it is the card's first row. [prefix]: the groups
+     * it sits in, `/`-joined, so a row finds itself again by the pane API's key ([SettingsChange.changeable]).
+     */
+    private fun addRow(c: LinearLayout, i: SettingsItem, prefix: String) {
+        if (i is SettingsItem.Group) {
+            c.addView(g.label(i.title).apply { tag = LABEL }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(18f); bottomMargin = px(4f) })
+            i.items.forEach { addRow(c, it, prefix + i.title + "/") }
+            return
+        }
+        val last = c.getChildAt(c.childCount - 1)
+        if (last != null && last.tag != LABEL) c.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)))
+        c.addView(when (i) {
+            // In a group as at the top: each to its own builder.
+            is SettingsItem.States -> states(i)
+            is SettingsItem.Blueprints -> blueprints(i)
+            is SettingsItem.Status, is SettingsItem.Tiles -> between(i)
+            else -> item(i, prefix)
+        }, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    private fun item(i: SettingsItem, prefix: String = ""): View = when (i) {
+        is SettingsItem.Text -> follow(valueRow(i.title, shownOf(i), chevron = i.enabled(), dim = !i.enabled()) { if (i.enabled()) sheet.text(i) { build() } }) { shownOf(i) }
+        is SettingsItem.Switch -> toggleRow(i)
+        is SettingsItem.Slider -> sliderRow(i)
+        is SettingsItem.Duration -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.duration(i) { build() } }) { i.shown(i.value()) }
+        is SettingsItem.TimeRange -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.range(i) { build() } }) { i.shown(i.value()) }
+        // A link's line comes with the model, made again on each refresh: follow it (the Device page's radio mode).
+        is SettingsItem.Link -> follow(row(i.title, i.detail, chevron = true, dim = i.detail.isEmpty()) { i.open(context) }) {
+            (now(prefix + i.title) as? SettingsItem.Link)?.detail ?: i.detail
+        }
+        is SettingsItem.Note -> g.text(14.5f, MU).apply { text = i.text(); setLineSpacing(0f, 1.25f); setPadding(0, px(14f), 0, px(14f)) }
+        is SettingsItem.Info -> infoRow(i)
+        is SettingsItem.Choice -> follow(valueRow(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
+        is SettingsItem.SignIn -> follow(valueRow(i.title, i.shown(i.isSet()), chevron = true, dim = false) { sheet.signIn(i) { build() } }) { i.shown(i.isSet()) }
+        is SettingsItem.Group, is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Blueprints -> error("laid out by layOut")
+        is SettingsItem.Native -> natives.getOrPut(i.key) { i.create(nativeHost) }.also { it.refresh() }.view
+    }
+
+    /** The row's value follows a change made elsewhere: Home Assistant (the wake word select) or the Manage page (#242). */
     private fun follow(r: LinearLayout, now: () -> String): LinearLayout = r.also {
-        ((r.getChildAt(0) as? ViewGroup)?.getChildAt(1) as? TextView)?.let { value ->
+        (r.findViewWithTag<TextView>(VALUE))?.let { value ->
             live += { val n = now(); if (value.text != n) { value.text = n; value.visibility = if (n.isEmpty()) View.GONE else View.VISIBLE } }
         }
     }
@@ -491,8 +536,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = px(64f)
-            setPadding(0, px(12f), 0, px(12f))
+            minimumHeight = px(OverviewPage.ROW_MIN)
+            setPadding(0, px(10f), 0, px(10f))
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(name)
@@ -508,7 +553,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
      * each. Rows off by default in Home Assistant are dimmed, with a line that says why. Read again on [refresh].
      */
     private fun states(i: SettingsItem.States): View {
-        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val box = card(i.title)
         var names: List<String>? = null
         val values = ArrayList<TextView>()
         fun bind() {
@@ -519,21 +564,20 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             }
             names = list.map { it.name }
             values.clear()
-            box.removeAllViews()
-            box.addView(g.label(i.title), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(22f); bottomMargin = px(6f) })
+            while (box.childCount > 1) box.removeViewAt(1)
             list.forEach { r ->
                 box.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)))
                 box.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    minimumHeight = px(46f)
-                    addView(g.text(15.5f, if (r.offByDefault) MU else TX).apply { text = r.name; setSingleLine(); ellipsize = TextUtils.TruncateAt.END },
+                    minimumHeight = px(OverviewPage.ROW_MIN)
+                    addView(g.text(16f, if (r.offByDefault) MU else TX).apply { text = r.name; setSingleLine(); ellipsize = TextUtils.TruncateAt.END },
                         LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
-                    addView(g.text(15f, if (r.offByDefault) FA else MU).apply { text = r.value; setSingleLine() }.also { values += it })
+                    addView(g.text(15f, if (r.offByDefault) FA else MU).apply { text = r.value; setSingleLine(); ellipsize = TextUtils.TruncateAt.END; maxWidth = valueMax }.also { values += it })
                 }, LinearLayout.LayoutParams(-1, -2))
             }
             if (list.any { it.offByDefault }) box.addView(g.text(13.5f, FA).apply { text = OFF_BY_DEFAULT; setLineSpacing(0f, 1.2f) },
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         }
         bind()
         live += ::bind
@@ -541,13 +585,13 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * A pane's blueprints for Home Assistant: the label, a line that says why the buttons are off or lead to
+     * A pane's blueprints for Home Assistant, as a card of its own: its title, a line that says why the buttons are off or lead to
      * a phone, then each blueprint's name and summary with its button ([dev.glassworks.pane.blueprintCard]).
      * Add and Create automation open Home Assistant's own pages in the dashboard; Add from your phone shows
      * a QR code. Read again on [refresh]: the panel's sign-in check answers after the page opens.
      */
     private fun blueprints(i: SettingsItem.Blueprints): View {
-        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val box = card(BLUEPRINTS).apply { visibility = View.GONE }
         var drawn: List<Any?>? = null
         fun pill(label: String, on: Boolean, tap: () -> Unit) = g.ghost(label).apply {
             textSize = 15f
@@ -562,8 +606,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             val now = listOf(card.note) + card.rows.map { it.second }
             if (now == drawn) return
             drawn = now
-            box.removeAllViews()
-            box.addView(g.label(BLUEPRINTS), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(22f); bottomMargin = px(6f) })
+            box.visibility = View.VISIBLE
+            while (box.childCount > 1) box.removeViewAt(1) // the card's title stays
             card.note?.let { note ->
                 box.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -654,16 +698,34 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     private fun shownOf(i: SettingsItem.Text): String = SettingsChange.shown(i)
 
-    /** A name, its value under it and, when it opens something, a chevron. [dim]: a quieter row (Aqara's own settings). */
+    /** A name, a line under it and, when it opens something, a chevron. [dim]: a quieter row (Aqara's own settings). */
     private fun row(name: String, value: String, chevron: Boolean, dim: Boolean, onClick: (() -> Unit)?) = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        minimumHeight = px(64f)
-        setPadding(0, px(12f), 0, px(12f))
+        minimumHeight = px(OverviewPage.ROW_MIN)
+        setPadding(0, px(10f), 0, px(10f))
         addView(texts(name, value, if (dim) MU else TX), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
-        if (chevron) addView(g.text(26f, MU, Inter.LIGHT).apply { text = "›" })
+        if (chevron) addView(chevron())
         if (onClick != null) { isClickable = true; setOnClickListener { onClick() } }
     }
+
+    /** A name on the left, its value on the right and, when it opens something, a chevron (the approved layout's rows). */
+    private fun valueRow(name: String, value: String, chevron: Boolean, dim: Boolean, onClick: (() -> Unit)?) = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = px(OverviewPage.ROW_MIN)
+        setPadding(0, px(10f), 0, px(10f))
+        addView(g.text(16.5f, if (dim) MU else TX).apply { text = name }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
+        // Always there, gone while empty: a row that follows a change ([follow]) can fill it later.
+        addView(g.text(15f, MU).apply {
+            text = value; tag = VALUE; gravity = Gravity.END; maxLines = 2; ellipsize = TextUtils.TruncateAt.END; maxWidth = valueMax
+            visibility = if (value.isEmpty()) View.GONE else View.VISIBLE
+        })
+        if (chevron) addView(chevron())
+        if (onClick != null) { isClickable = true; setOnClickListener { onClick() } }
+    }
+
+    private fun chevron() = g.text(24f, FA, Inter.LIGHT).apply { text = "›"; setPadding(px(12f), 0, 0, 0) }
 
     private fun toggleRow(i: SettingsItem.Switch): View {
         lateinit var t: Glass.Toggle
@@ -689,8 +751,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = px(64f)
-            setPadding(0, px(12f), 0, px(12f))
+            minimumHeight = px(OverviewPage.ROW_MIN)
+            setPadding(0, px(10f), 0, px(10f))
             addView(texts(i.title, i.detail, TX), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
             addView(t)
             isClickable = true
@@ -734,8 +796,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         orientation = LinearLayout.VERTICAL
         addView(g.text(16.5f, color).apply { text = name })
         // Always there, gone while empty: a row that follows a change ([follow]) can fill it later.
-        addView(g.text(15f, MU).apply { text = value; setLineSpacing(0f, 1.15f); visibility = if (value.isEmpty()) View.GONE else View.VISIBLE },
-            LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
+        addView(g.text(15f, MU).apply { text = value; tag = VALUE; setLineSpacing(0f, 1.15f); visibility = if (value.isEmpty()) View.GONE else View.VISIBLE },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
     }
 
     /**
@@ -1053,6 +1115,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     companion object {
         const val RESTART_TEXT = SettingsChange.RESTART_TEXT
         const val OFF_BY_DEFAULT = SettingsChange.OFF_BY_DEFAULT
+        /** Tags: a card's title row, a group's name inside a card, and a row's value (what [follow] updates). */
+        private const val HEADER = "header"
+        private const val LABEL = "label"
+        private const val VALUE = "value"
 
     }
 }
