@@ -24,6 +24,7 @@ import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import sh.edm.s1kiosk.frame.TimeZoneDefinition
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
 import sh.edm.s1kiosk.settings.PaneFixtures
 import sh.edm.s1kiosk.settings.S1Settings
@@ -46,19 +47,20 @@ class PanelManageParityTest {
 
     /**
      * Views only the panel draws for now, by section: the Manage page says "On the panel" for them. A new
-     * native view fails the test until it is here, with its reason, or has typed items the page can draw.
+     * native view fails the test until it is here, with its reason, or has a typed twin the page draws (#269).
      */
     private val panelOnly = mapOf(
         "radio" to "the roles picker, the Thread dataset and the radio's actions (RadioSettingsView)",
-        "time-zone" to "the zone picker (TimeZoneView)",
         "wall-base" to "the relays' cards, or what a base adds (WallBaseViews)",
         "bluetooth-proxy" to "the devices and Allow, which needs someone at the panel (BluetoothProxyPage)",
     )
 
+    /** Every item and its key, a native view's twin too: its items' keys are their titles, as if they sat in the section (#269). */
     private fun walk(items: List<SettingsItem>, prefix: String = "", f: (SettingsItem, String) -> Unit) {
         for (i in items) {
             f(i, prefix + SettingsChange.titleOf(i))
             if (i is SettingsItem.Group) walk(i.items, prefix + i.title + "/", f)
+            if (i is SettingsItem.Native) walk(SettingsChange.twinOf(i), prefix, f)
         }
     }
 
@@ -76,7 +78,30 @@ class PanelManageParityTest {
         is SettingsItem.TimeRange -> listOf(i.title, i.shown(i.value()))
         is SettingsItem.Choice -> listOf(i.title, SettingsChange.shown(i))
         is SettingsItem.SignIn -> listOf(i.title, i.shown(i.isSet()))
+        // Its button may sit elsewhere on the panel (the time zone's "Use it" is in its picker): the row's words.
+        is SettingsItem.Action -> listOf(i.title, i.detail()).filter { it.isNotEmpty() }
         else -> listOf(SettingsChange.titleOf(i))
+    }
+
+    /** Every word a twin's items say, a group's items' too, with each tile's unit and line. */
+    private fun twinWords(items: List<SettingsItem>): Set<String> = items.flatMap { i ->
+        words(i) + when (i) {
+            is SettingsItem.Group -> twinWords(i.items)
+            is SettingsItem.Tiles -> i.tiles().flatMap { listOf(it.unit, it.detail) }
+            else -> emptyList()
+        }
+    }.filter { it.isNotEmpty() }.toSet()
+
+    /** The words a native view shows now: its visible texts, without glyphs such as the chevron. */
+    private fun shownTexts(v: android.view.View): List<String> {
+        val out = ArrayList<String>()
+        fun walk(x: android.view.View) {
+            if (!x.isShown) return
+            if (x is android.widget.TextView) x.text?.toString()?.trim()?.takeIf { t -> t.any { it.isLetterOrDigit() } }?.let(out::add)
+            if (x is android.view.ViewGroup) for (c in 0 until x.childCount) walk(x.getChildAt(c))
+        }
+        walk(v)
+        return out
     }
 
     /** The value [i] has now, as a form sends it: posting it back must save and change nothing. */
@@ -102,6 +127,7 @@ class PanelManageParityTest {
         f.statusFn = { model().let { m -> f.status.copy(panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }, sections = m.sections) } }
         val b = f.Browser().also { it.signInWithHa() }
         val natives = HashSet<String>()
+        val drawnOnlyThere = HashSet<String>()
         var changed = 0
 
         for (sec in model().sections) {
@@ -124,8 +150,17 @@ class PanelManageParityTest {
                     assertTrue("${sec.id}: the panel shows \"$w\"", onPanel(w))
                     assertTrue("${sec.id}: the Manage page shows \"$w\"", page.contains(esc(w)))
                 }
-                if (item is SettingsItem.Native) {
-                    natives += sec.id
+                if (item is SettingsItem.Native) natives += sec.id
+                if (item is SettingsItem.Native && SettingsChange.twinOf(item).isNotEmpty()) {
+                    assertTrue("${sec.id}: ${item.key} has a twin, so it isn't panel-only", sec.id !in panelOnly)
+                    assertTrue("${sec.id}: its twin's rows, not \"On the panel\"", !page.contains(ManagePages.ON_THE_PANEL))
+                    // And the other way (#269 verifier): every word the panel's view shows is in its twin, so a row
+                    // the twin drops fails here.
+                    val twin = twinWords(SettingsChange.twinOf(item))
+                    val view = o.previewNative(item.key)?.view ?: error("${sec.id}: the panel drew no ${item.key}")
+                    for (t in shownTexts(view)) assertTrue("${sec.id}: the panel's view shows \"$t\", so its twin must have it ($twin)", t in twin)
+                } else if (item is SettingsItem.Native) {
+                    drawnOnlyThere += sec.id
                     assertTrue("${sec.id}: a native view (${item.key}) the Manage page can't draw yet must be listed in panelOnly", sec.id in panelOnly)
                     assertTrue("${sec.id}: the Manage page says it's on the panel", page.contains(ManagePages.ON_THE_PANEL))
                     assertTrue("${sec.id}: ${item.key} names what it is", item.title.isNotEmpty() && page.contains(esc(item.title)))
@@ -138,9 +173,10 @@ class PanelManageParityTest {
             for ((key, item) in SettingsChange.changeable(sec)) {
                 if (key == SettingsChange.MASTER && sec.unavailable() != null) continue
                 // A sign-in's password is shown on request only, so it has no value here to send back: ManageSettingsTest posts one.
-                if (item is SettingsItem.SignIn) continue
+                // An action does something each time it runs: ManageTwinsTest and theTimeZonesUseItIsOnBoth run one.
+                if (item is SettingsItem.SignIn || item is SettingsItem.Action) continue
                 val before = current(item)
-                val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to sec.id, "key" to key, "confirmed" to "1") + before)
+                val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to sec.id, "key" to key) + before)
                 assertEquals("${sec.id}: \"$key\" saved from the browser (${r.text().substringAfter("class=\"err\"", "").take(120)})", 303, r.status)
                 assertEquals("${sec.id}: \"$key\" kept its value", before, current(item))
                 changed++
@@ -148,6 +184,39 @@ class PanelManageParityTest {
         }
         assertEquals("every change ran on the panel's main thread", changed, f.onMainCalls)
         assertTrue("the panes with native views ran: $natives", natives.containsAll(listOf("radio", "time-zone", "wall-base")))
+        assertEquals("panelOnly lists exactly the views with no twin yet: it shrinks as twins land (#269)", panelOnly.keys, drawnOnlyThere)
+    }
+
+    /**
+     * #269: Home Assistant's zone keeps another zone's clock, so the panel offers "Use it". The Manage page
+     * shows the same row, and its button keeps that zone, as the panel's picker does.
+     */
+    @Test fun theTimeZonesUseItIsOnBothAndKeepsHomeAssistantsZone() {
+        val tz = panes.timeZone(haRule = "GMT0BST,M3.5.0/1,M10.5.0")
+        val model = panes.model(listOf(tz))
+        val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+        o.reload = model
+        o.show(model())
+        o.previewSection("time-zone")
+        Mockup.idle()
+
+        val f = ManageFixture()
+        f.statusFn = { model().let { m -> f.status.copy(panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }, sections = m.sections) } }
+        val b = f.Browser().also { it.signInWithHa() }
+        val sec = model().sections.first { it.id == "time-zone" }
+        val use = SettingsChange.changeable(sec).map { it.second }.filterIsInstance<SettingsItem.Action>().single()
+        assertEquals(TimeZoneDefinition.HOME_ASSISTANT, use.title)
+        val line = use.detail()
+        assertTrue(line, line.contains("like Europe/") && line.endsWith("not the panel's"))
+        val zone = line.substringAfter("like ").substringBefore(",")
+        assertTrue("the panel shows the row", runCatching { Mockup.label(o, line) }.isSuccess)
+        val page = b.get("/time-zone").text()
+        assertTrue("the Manage page shows it with Use it", page.contains(esc(line)) && page.contains(">Use it</button>"))
+
+        val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to "time-zone", "key" to TimeZoneDefinition.HOME_ASSISTANT, "value" to "run"))
+        assertEquals(303, r.status)
+        assertEquals("the panel keeps Home Assistant's zone now", zone, tz.kept)
+        assertEquals(1, f.onMainCalls)
     }
 
     /**

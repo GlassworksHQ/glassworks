@@ -429,6 +429,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Link -> i.title
         is SettingsItem.Choice -> i.title
         is SettingsItem.SignIn -> i.title
+        // A changed action (Connect for Disconnect) draws the page again, with its own run (CodeRabbit on #331).
+        is SettingsItem.Action -> i.title
         else -> null
     }
 
@@ -510,6 +512,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Info -> infoRow(i)
         is SettingsItem.Choice -> follow(valueRow(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
         is SettingsItem.SignIn -> follow(valueRow(i.title, i.shown(i.isSet()), chevron = true, dim = false) { sheet.signIn(i) { build() } }) { i.shown(i.isSet()) }
+        is SettingsItem.Action -> actionRow(i, prefix)
         is SettingsItem.Group, is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Blueprints -> error("laid out by layOut")
         is SettingsItem.Native -> natives.getOrPut(i.key) { i.create(nativeHost) }.also { it.refresh() }.view
     }
@@ -765,6 +768,38 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             isClickable = true
             setOnClickListener { t.performClick() }
         }
+    }
+
+    /**
+     * A name, its line, and a button at the end (#269); one that asks first asks in the sheet. Its line, its
+     * button's word and its run are the model's action as it is now: a reload can bring the same title with another detail and
+     * run (Home Assistant's zone changed; CodeRabbit on #331). Done, the page is drawn again from the model:
+     * what the action changed shows at once.
+     */
+    private fun actionRow(i: SettingsItem.Action, prefix: String): View {
+        val button = g.ghost(i.label).apply { setPadding(px(18f), px(8f), px(18f), px(8f)) }
+        fun current() = now(prefix + i.title) as? SettingsItem.Action ?: i
+        fun run(a: SettingsItem.Action) {
+            button.isEnabled = false
+            save({ done -> a.run(done) }) { why ->
+                button.isEnabled = true
+                if (why != null) showProblem(why)
+                else {
+                    problem.visibility = View.GONE
+                    reload?.invoke()?.let { model = it }
+                    build()
+                }
+            }
+        }
+        button.setOnClickListener { val a = current(); a.confirm?.let { sheet.confirm(it) { run(a) } } ?: run(a) }
+        return follow(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = px(OverviewPage.ROW_MIN)
+            setPadding(0, px(10f), 0, px(10f))
+            addView(texts(i.title, i.detail(), TX), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
+            addView(button)
+        }) { val a = current(); if (button.text != a.label) button.text = a.label; a.detail() }
     }
 
     /** The name with the value on its right, the slider under them; saved when let go. */

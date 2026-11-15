@@ -54,8 +54,37 @@ class ManageServer(
     private val event: (String) -> Unit = {},
     /** How long a settings change may take before the page answers "still applying" (the radio's off waits on the radio). */
     private val saveWaitMs: Long = 20_000,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val random = SecureRandom()
+
+    /** A question's answer (#269 verifier): the change it asked about, for one session, until it runs out. */
+    private data class Asked(val session: String, val section: String, val key: String, val value: String, val untilMs: Long)
+
+    /** The questions the page has shown, by their one-shot token. */
+    private val asked = java.util.concurrent.ConcurrentHashMap<String, Asked>()
+
+    /** A token for the question about [value] at [key]: the dialog's form sends it back with the answer. */
+    private fun ask(session: String, section: String, key: String, value: String): String {
+        val now = clock()
+        asked.entries.removeIf { it.value.untilMs < now }
+        // A browser can't pile questions up: the oldest go first.
+        while (asked.size >= MAX_ASKED) asked.entries.minByOrNull { it.value.untilMs }?.let { asked.remove(it.key) } ?: break
+        val b = ByteArray(18).also(random::nextBytes)
+        val token = Base64.getUrlEncoder().withoutPadding().encodeToString(b)
+        asked[token] = Asked(session, section, key, value, now + ASK_MS)
+        return token
+    }
+
+    /**
+     * Whether [token] answers the question about exactly this change for this session. Used up either way: a
+     * replayed or a stale answer asks again. A form with `confirmed=1` and no token is no answer.
+     */
+    private fun answered(token: String?, session: String, section: String, key: String, value: String): Boolean {
+        if (token.isNullOrEmpty()) return false
+        val a = asked.remove(token) ?: return false
+        return a.untilMs >= clock() && a == a.copy(session = session, section = section, key = key, value = value)
+    }
 
     fun handle(req: HttpRequest): HttpResponse {
         if (req.path in qrPaths) return qrPage(req)
@@ -238,7 +267,7 @@ class ManageServer(
         // An edit link for an item the page doesn't have now, or one changed in its row (a switch, a slider), is the page itself.
         val shown = dialog?.takeIf { d ->
             val item = section?.let { SettingsChange.find(it, d.key) }
-            d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider)
+            d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider && item !is SettingsItem.Action)
         }
         return html(code, pages.section(status, viewer, "/$id", pane?.title ?: section!!.title, pane?.state, section, pane?.links.orEmpty(),
             dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done)))
@@ -253,8 +282,9 @@ class ManageServer(
     /**
      * `/settings`, POST: change one item, as the panel's menu does (#242). The form names the section, the
      * item's key ([SettingsChange.changeable]) and the value; [SettingsChange.change] checks it and calls the
-     * item's own save, on the panel's main thread ([ManageHost.onMain]). A switch that asks first on the panel
-     * asks here too, then comes back with `confirmed`, for either sign-in, as on the panel.
+     * item's own save, on the panel's main thread ([ManageHost.onMain]). A switch or an action that asks first
+     * on the panel asks here too, for either sign-in, and runs only when the dialog's one-shot `answer` comes
+     * back for the same session and change.
      */
     private fun changeSetting(req: HttpRequest, s: Session, viewer: ManagePages.Viewer): HttpResponse {
         val status = host.status()
@@ -265,22 +295,30 @@ class ManageServer(
         val item = SettingsChange.find(section, key) ?: return HttpResponse.seeOther("$page?done=gone")
         val what = "${section.title} › " + if (key == SettingsChange.MASTER) "on/off" else key.replace("/", " › ")
         if (item is SettingsItem.SignIn) return changeSignIn(req, s, viewer, page, key, what, item)
-        // The time window's dialog sends On, From and To; the rest send their value as text.
-        val raw = if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
-            else req.form["value"].orEmpty()
-        if (item is SettingsItem.Switch && req.form["confirmed"] != "1" && (raw == "on" || raw == "off")) {
-            val ask = runCatching { item.confirm(raw == "on") }.getOrNull()
-            if (ask != null) return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, ask))!!
+        // The time window's dialog sends On, From and To; the rest send their value as text. Trimmed here, as
+        // SettingsChange.change trims it, so a padded value (" run ") can't skip the question (CodeRabbit on #331).
+        val raw = (if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
+            else req.form["value"].orEmpty()).trim()
+        // A change that asks first on the panel asks here too, and runs only with the answer to that question:
+        // a one-shot token the dialog carries, for this session and this exact change (#269 verifier).
+        val question: SettingsItem.Confirm? = when {
+            item is SettingsItem.Switch && (raw == "on" || raw == "off") -> runCatching { item.confirm(raw == "on") }.getOrNull()
+            item is SettingsItem.Action && raw == SettingsItem.Action.RUN -> item.confirm
+            else -> null
+        }
+        if (question != null && !answered(req.form["answer"], s.id, id, key, raw)) {
+            return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, question, ask(s.id, id, key, raw)))!!
         }
         val problem = apply(item, raw)
+        val did = if (item is SettingsItem.Action) "ran" else "changed"
         if (problem == PENDING) {
-            event("${who(s)} changed $what (still applying)")
+            event("${who(s)} $did $what (still applying)")
             return HttpResponse.seeOther("$page?done=pending")
         }
-        event(if (problem == null) "${who(s)} changed $what" else "${who(s)} couldn't change $what: $problem")
+        event(if (problem == null) "${who(s)} $did $what" else "${who(s)} couldn't ${if (item is SettingsItem.Action) "run" else "change"} $what: $problem")
         if (problem == null) return HttpResponse.seeOther(if (SettingsChange.restarts(item)) "$page?done=restart" else page)
         // As the panel: a typed value, a duration, a choice or a window keeps its sheet open with why; the rest say it on the page.
-        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider) null
+        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action) null
             else ManagePages.Dialog.Edit(key, problem, typed = raw.takeIf { item is SettingsItem.Text })
         return settingsPage(host.status(), viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422)!!
     }
@@ -472,6 +510,9 @@ class ManageServer(
         const val PURPOSE_SIGN_IN = "signin"
         const val PURPOSE_REBOOT = "reboot"
 
+        /** How long a question's answer stays good, and how many may wait at once. */
+        private const val ASK_MS = 5 * 60_000L
+        private const val MAX_ASKED = 64
         private const val NO_CODE = "The panel can't show a code right now."
 
         /**

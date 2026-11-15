@@ -71,6 +71,30 @@ class PanelManageMockups {
     }
 
     /**
+     * #269: the time zone page's twin on the Manage page, next to the panel's own page: Home Assistant's zone
+     * the same as the panel's, the zone's grouped list, and Home Assistant on another zone's clock ("Use it").
+     */
+    @Test
+    fun timeZone() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val out = File(Mockup.dir!!, "269").apply { mkdirs() }
+        for ((name, rule) in listOf("time-zone" to "CET-1CEST,M3.5.0,M10.5.0/3", "time-zone-use-it" to "GMT0BST,M3.5.0/1,M10.5.0")) {
+            val model = panes.model(listOf(panes.timeZone(haRule = rule)))
+            val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+            o.reload = model
+            o.show(model())
+            o.previewSection("time-zone")
+            Mockup.idle()
+            Mockup.save("269/$name-panel", o)
+            val f = ManageFixture()
+            f.statusFn = { model().let { m -> f.status.copy(panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }, sections = m.sections) } }
+            val b = f.Browser().also { it.signInWithHa() }
+            File(out, "$name-manage.html").writeBytes(b.get("/time-zone").body)
+            if (name == "time-zone") File(out, "time-zone-edit-manage.html").writeBytes(b.get("/time-zone?edit=Time+zone").body)
+        }
+    }
+
+    /**
      * #261: a pane page's "In Home Assistant" on a panel Home Assistant never added, added but not connected
      * now, and connected: Music's list and Voice's own, scrolled to the list.
      */

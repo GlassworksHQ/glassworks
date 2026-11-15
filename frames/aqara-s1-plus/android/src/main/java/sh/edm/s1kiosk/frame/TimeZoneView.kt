@@ -3,8 +3,6 @@ package sh.edm.s1kiosk.frame
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.os.SystemClock
-import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -27,12 +25,16 @@ internal class TimeZoneView(
     private val host: SettingsItem.NativeHost,
     private val pane: TimeZonePane,
     private val choices: TimeZoneChoices,
-    /**
-     * Runs the match of Home Assistant's zone, which reads a year of offsets: never on the main thread (the
-     * pane's own thread). False when it couldn't take the work.
-     */
-    private val background: (Runnable) -> Boolean,
+    /** Home Assistant's zone matched to the panel's, shared with the page's twin on the Manage page (#269). */
+    private val match: HomeAssistantZoneMatch,
 ) : SettingsItem.NativeView {
+    /**
+     * [background] runs the match of Home Assistant's zone, which reads a year of offsets: never on the main
+     * thread (the pane's own thread). False when it couldn't take the work.
+     */
+    constructor(host: SettingsItem.NativeHost, pane: TimeZonePane, choices: TimeZoneChoices, background: (Runnable) -> Boolean) :
+        this(host, pane, choices, HomeAssistantZoneMatch(choices, background))
+
     private val context: Context = host.context
     private val g = Glass(context)
     private fun px(v: Float) = g.px(v)
@@ -45,51 +47,26 @@ internal class TimeZoneView(
 
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        addView(row(g.text(16.5f, Glass.TX).apply { text = "Time zone" }, zoneValue, chevron = true).apply {
+        addView(row(g.text(16.5f, Glass.TX).apply { text = TimeZoneDefinition.ZONE }, zoneValue, chevron = true).apply {
             isClickable = true
             setOnClickListener { open() }
         })
         addView(row(keptTitle, keptValue, chevron = false))
-        haRow = row(g.text(16.5f, Glass.TX).apply { text = "Home Assistant's time zone" }, haValue, chevron = false)
+        haRow = row(g.text(16.5f, Glass.TX).apply { text = TimeZoneDefinition.HOME_ASSISTANT }, haValue, chevron = false)
         addView(haRow)
     }
 
     /** The zone the panel shows now, by its current name: the one it keeps, else the system's. */
     private fun current() = choices.name(pane.kept.ifEmpty { TimeZone.getDefault().id })
 
-    private var haCache: Pair<Pair<String, String>, TimeZoneChoices.HomeAssistantZone?>? = null
-    /** The rule and zone being matched now, on [background]. */
-    private var matching: Pair<String, String>? = null
-
     /**
-     * Home Assistant's zone matched to the panel's zones, once per rule and zone. Null until the match,
-     * which runs on [background] and posts its answer back: the row shows then.
+     * Home Assistant's zone matched to the panel's zones. Null until the match, which runs off the main
+     * thread and posts its answer back: the row shows then, and an open picker gets its card too, keeping
+     * what the person picked (CodeRabbit on #235).
      */
     private fun homeAssistant(): TimeZoneChoices.HomeAssistantZone? {
         val rule = pane.homeAssistantRule ?: return null
-        val zone = current()
-        val key = rule to zone
-        haCache?.let { (k, v) -> if (k == key) return v }
-        if (matching != key) {
-            matching = key
-            val queued = background {
-                val started = SystemClock.elapsedRealtimeNanos()
-                val found = runCatching { choices.homeAssistant(rule, zone, Instant.now()) }.getOrNull()
-                // The panel run records this (#235).
-                Log.i(TimeZoneKeeper.TAG, "matched Home Assistant's zone in ${(SystemClock.elapsedRealtimeNanos() - started) / 1_000_000} ms: $found")
-                view.post {
-                    if (matching != key) return@post
-                    matching = null
-                    haCache = key to found
-                    refresh()
-                    // An open picker gets its card now too, keeping what the person picked (CodeRabbit on #235).
-                    fillHomeAssistant?.invoke()
-                }
-            }
-            // Refused (the pane's thread had stopped): the next refresh tries again (#235 verifier).
-            if (!queued) matching = null
-        }
-        return null
+        return match.get(rule, current()) { view.post { refresh(); fillHomeAssistant?.invoke() } }
     }
 
     override fun refresh() {

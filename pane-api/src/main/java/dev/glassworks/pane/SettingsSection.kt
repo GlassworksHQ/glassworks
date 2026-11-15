@@ -13,7 +13,7 @@ import dev.glassworks.esphome.EventEntity
 /**
  * One section of the panel's settings. The panel's settings menu draws it, and the Manage page (#33)
  * will draw the same sections in a browser, so a section is data: typed items with their values and how
- * to save them. Only [SettingsItem.Native] is panel-only.
+ * to save them. Only [SettingsItem.Native]'s view is panel-only; its typed twin goes everywhere.
  */
 class SettingsSection(
     /** Stable, for links and tests (`dashboard`, `screen`, a pane's id). */
@@ -346,8 +346,34 @@ sealed interface SettingsItem {
         val title: String,
         val value: () -> String,
         val options: () -> List<Pair<String, String>>,
+        /**
+         * A long list's group for each option id (the time zone's regions), or null for a short one. A surface
+         * lists a grouped choice by group (the Manage page's `<select>` with its `<optgroup>`s), not as chips.
+         */
+        val group: ((String) -> String)? = null,
+        /** The row's line for the picked id, when it says more than its option's name (`Europe/Madrid · UTC+01:00 · 14:32 now`). */
+        val line: ((String) -> String)? = null,
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
+
+    /**
+     * A button on a row (#269): its [title], a [detail] line read again while the page is open, and the
+     * button's [label] ("Use it"). [confirm]: asked first, as a [Switch] does, for anything that costs
+     * something (a reset, the radio's roles). `run` does it and calls `done` with null, or what went wrong.
+     * A surface sends the word [RUN] for it.
+     */
+    class Action(
+        val title: String,
+        val detail: () -> String,
+        val label: String,
+        val confirm: Confirm? = null,
+        val run: (done: (String?) -> Unit) -> Unit,
+    ) : SettingsItem {
+        companion object {
+            /** What a surface sends to run an action ([SettingsChange.change]). */
+            const val RUN = "run"
+        }
+    }
 
     /**
      * Read-only states under [title], one line each: a name on the left, its value on the right
@@ -390,14 +416,22 @@ sealed interface SettingsItem {
     )
 
     /**
-     * A view only the panel draws, for what has no typed item yet. [key] names it: the menu makes it
-     * once with [create] and keeps it while the activity lives. A section with a native item is drawn
-     * without its own card: native views bring their surfaces, and its other items go in [Group]s.
+     * A view only the panel draws, where its own layout is nicer than rows (the time zone's picker). [key]
+     * names it: the menu makes it once with [create] and keeps it while the activity lives. A section with
+     * a native item is drawn without its own card: native views bring their surfaces, and its other items
+     * go in [Group]s.
+     *
+     * [twin] (#269): the same rows and actions as typed items, read again with the page, which every other
+     * surface draws instead of the view (the Manage page). The view and its twin show the same words and
+     * change the same things; `PanelManageParityTest` checks the words. Their keys are their own titles,
+     * as if the twin's items sat in the section itself. Never put a secret in a twin: it is a page in a
+     * browser and a line in the diagnostics.
      */
     class Native(
         val key: String,
-        /** What the view is, in words, for a surface that can't draw it (the Manage page's "On the panel" row). */
+        /** What the view is, in words, for a surface that can't draw it and has no [twin] (the Manage page's "On the panel" row). */
         val title: String = "",
+        val twin: () -> List<SettingsItem> = { emptyList() },
         val create: (NativeHost) -> NativeView,
     ) : SettingsItem
 

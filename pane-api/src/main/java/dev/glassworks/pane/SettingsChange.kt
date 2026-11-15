@@ -26,6 +26,8 @@ object SettingsChange {
         fun walk(items: List<SettingsItem>, prefix: String): List<Pair<String, SettingsItem>> = items.flatMap { i ->
             when {
                 i is SettingsItem.Group -> walk(i.items, prefix + i.title + "/")
+                // A native view's typed twin: its items as if they sat here (#269).
+                i is SettingsItem.Native -> walk(twinOf(i), prefix)
                 canChange(i) -> listOf(prefix + titleOf(i) to i)
                 else -> emptyList()
             }
@@ -36,11 +38,14 @@ object SettingsChange {
     /** The item at [key] in [section], or null when the page has no such item now. */
     fun find(section: SettingsSection, key: String): SettingsItem? = changeable(section).firstOrNull { it.first == key }?.second
 
+    /** [n]'s typed twin as it is now, or none when reading it fails. */
+    fun twinOf(n: SettingsItem.Native): List<SettingsItem> = runCatching { n.twin() }.getOrDefault(emptyList())
+
     /** A kind of item a person changes (a Text only while [SettingsItem.Text.enabled]). */
     fun canChange(i: SettingsItem): Boolean = when (i) {
         is SettingsItem.Text -> runCatching { i.enabled() }.getOrDefault(false)
         is SettingsItem.Switch, is SettingsItem.Slider, is SettingsItem.Duration, is SettingsItem.TimeRange, is SettingsItem.Choice,
-        is SettingsItem.SignIn -> true
+        is SettingsItem.SignIn, is SettingsItem.Action -> true
         else -> false
     }
 
@@ -52,6 +57,7 @@ object SettingsChange {
         is SettingsItem.TimeRange -> i.title
         is SettingsItem.Choice -> i.title
         is SettingsItem.SignIn -> i.title
+        is SettingsItem.Action -> i.title
         is SettingsItem.Link -> i.title
         is SettingsItem.Group -> i.title
         is SettingsItem.States -> i.title
@@ -64,7 +70,7 @@ object SettingsChange {
     /**
      * Applies [raw], the value as text, to [item]: checked, then the item's `save`. [done] gets null when
      * it saved, else what went wrong, in words for the person. A switch takes `on` or `off`; a time range
-     * `HH:MM-HH:MM` or empty for none. A save that throws is an answer too (#63 F8).
+     * `HH:MM-HH:MM` or empty for none; an action `run` ([SettingsItem.Action.RUN]). A save that throws is an answer too (#63 F8).
      */
     fun change(item: SettingsItem, raw: String, done: (String?) -> Unit) {
         val v = raw.trim()
@@ -107,6 +113,10 @@ object SettingsChange {
                     if (item.options().none { it.first == v }) return done(PICK)
                     item.save(v, done)
                 }
+                is SettingsItem.Action -> {
+                    if (v != SettingsItem.Action.RUN) return done(CANT_HERE)
+                    item.run(done)
+                }
                 else -> done(CANT_HERE)
             }
         } catch (e: Throwable) {
@@ -146,8 +156,12 @@ object SettingsChange {
         return if (v.isBlank()) i.shown(v).ifBlank { i.hint } else i.shown(v)
     }
 
-    /** The picked option's name, or its id when it has none. */
-    fun shown(i: SettingsItem.Choice): String { val v = i.value(); return i.options().firstOrNull { it.first == v }?.second ?: v }
+    /** The row's line for the picked option: its [SettingsItem.Choice.line], else its name, or its id when it has none. */
+    fun shown(i: SettingsItem.Choice): String {
+        val v = i.value()
+        i.line?.let { return it(v) }
+        return i.options().firstOrNull { it.first == v }?.second ?: v
+    }
 
     /** The slider's value on its steps, as the panel's slider snaps it. */
     fun snap(v: Float, min: Float, max: Float, step: Float): Float {

@@ -53,6 +53,7 @@ class SettingsMenuTest {
             is SettingsItem.Native -> listOf("native ${i.key}")
             is SettingsItem.Choice -> listOf(i.title)
             is SettingsItem.SignIn -> listOf(i.title)
+            is SettingsItem.Action -> listOf("action ${i.title}")
             is SettingsItem.States -> listOf("states ${i.title}")
             is SettingsItem.Status -> listOf("status")
             is SettingsItem.Tiles -> listOf("tiles")
