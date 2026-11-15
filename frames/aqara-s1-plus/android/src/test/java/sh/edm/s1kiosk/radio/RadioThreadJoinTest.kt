@@ -186,7 +186,7 @@ class RadioThreadJoinTest {
 
     @Test
     fun theQrCodeRunsOut() {
-        val s = RadioDefinition.threadJoinJson(RadioMode.THREAD_ROUTER, ThreadJoin.State.NeedsAdmin(until = 10, why = "x"), null, { IP }, now = 10)!!
+        val s = RadioDefinition.threadJoinJson(RadioMode.THREAD_ROUTER, ThreadJoin.State.NeedsAdmin(until = 10, why = "x"), null, null, { IP }, now = 10)!!
         assertEquals("failed", s.getString("phase"))
         assertEquals("nobody signed in as an administrator in time; start again", s.getString("reason"))
         assertFalse(s.has("adminUrl"))
@@ -207,6 +207,17 @@ class RadioThreadJoinTest {
         startJoin()
         runQueued()
         assertEquals("can't reach Home Assistant (connection refused)", joinState().getString("reason"))
+    }
+
+    @Test
+    fun theRadioFailingAfterTheHandOffEndsTheJoin() {
+        startJoin()
+        runQueued()
+        init.props[RadioHelper.PROP_STATUS] = "error thread_router: otbr-agent didn't start"
+        radio.refresh()
+        val s = joinState()
+        assertEquals("failed", s.getString("phase"))
+        assertTrue(s.getString("reason"), s.getString("reason").contains("otbr-agent didn't start"))
     }
 
     @Test

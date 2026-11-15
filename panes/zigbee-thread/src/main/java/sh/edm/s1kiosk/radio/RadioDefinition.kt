@@ -215,7 +215,7 @@ class RadioDefinition(
             helper = helperInstalled(),
             allowed = r?.allowedNow(),
             answered = step.done(),
-            threadJoin = threadJoinJson(readout.mode(), threadJoin().state, r?.threadRouterState(), readout::panelIp),
+            threadJoin = threadJoinJson(readout.mode(), threadJoin().state, r?.threadRouterState(), r?.statusText(), readout::panelIp),
         )
     }
 
@@ -518,10 +518,11 @@ class RadioDefinition(
          *    `adminUrl` (left out while the panel has no address), where an administrator signs in once.
          *    `reason` says why.
          *  - `joining`: the dataset is fetched and handed to the radio; the radio hasn't attached yet.
+         *    The radio's error after the hand-off ([status], RadioController.statusText) is `failed`.
          *  - `joined`: the radio is on the network; `role` is `child`, `router` or `leader`.
          *  - `failed`: `reason` says why, in plain words.
          */
-        fun threadJoinJson(mode: RadioMode, join: ThreadJoin.State, router: ThreadRouterState?, panelIp: () -> String?, now: Long = System.currentTimeMillis()): JSONObject? {
+        fun threadJoinJson(mode: RadioMode, join: ThreadJoin.State, router: ThreadRouterState?, status: String?, panelIp: () -> String?, now: Long = System.currentTimeMillis()): JSONObject? {
             if (mode != RadioMode.THREAD_ROUTER) return null
             val o = JSONObject()
             fun phase(p: String, reason: String? = null) { o.put("phase", p); reason?.let { o.put("reason", it) } }
@@ -531,7 +532,11 @@ class RadioDefinition(
                 is ThreadJoin.State.NeedsAdmin ->
                     if (now < join.until) { phase("needs_admin", join.why); panelIp()?.let { o.put("adminUrl", ThreadJoin.url(it)) } }
                     else phase("failed", "nobody signed in as an administrator in time; start again")
-                is ThreadJoin.State.Joined -> phase(if (router?.joined == true) "joined" else "joining")
+                is ThreadJoin.State.Joined -> when {
+                    router?.joined == true -> phase("joined")
+                    status != null && RadioStep.classify(mode, true, status) == RadioStep.Result.ERROR -> phase("failed", status)
+                    else -> phase("joining")
+                }
                 is ThreadJoin.State.Failed -> phase("failed", join.reason)
             }
             router?.role?.takeIf { router.dataset }?.let { o.put("role", it) }
