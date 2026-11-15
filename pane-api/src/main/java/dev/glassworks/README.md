@@ -42,7 +42,7 @@
 ---
 
 Glassworks is the device-neutral core being pulled out of
-[S1 Unleashed](../../../../../../../../README.md) one step at a time. A **frame** describes a device.
+[S1 Unleashed](../../../../../../README.md) one step at a time. A **frame** describes a device.
 A **pane** is a feature: the Music Assistant player, voice, timers, the radio. This package
 (`dev.glassworks.pane`) is the contract between the two.
 
@@ -65,16 +65,16 @@ change until Glassworks v1.
 | `SettingsSection` | A section of the settings: typed items (`SettingsItem`) that the panel's menu and the Manage page both draw and change (#242). `settingsOrder` places them; `SettingsChange` checks and applies a change for both. |
 | `ScreenPolicy` | (`dev.glassworks.screen`) Wake on approach, idle off, the night window and its timeout, the brightness curve and the screen mode. It reads the frame's `PresenceSource` and `LightSource` and the app's `ScreenSettings`. One per process, on `GlassworksRuntime.screen`. |
 | `Platform` | (`dev.glassworks.platform`) What the running Android can do, as named queries (`hasNotificationChannels`, `hasWindowInsetsController`, …) and small shims. The only place that reads `Build.VERSION.SDK_INT`. |
-| `NotificationsPane` | (`dev.glassworks.notifications`) Notifications from Home Assistant: the `notify` action, Do not disturb, the rules for each priority, and a tapped button as the bus event `esphome.notification_action`. A core pane, off by default. The panel's overlay draws what its `NotificationsHub` holds. How to use it: [docs/notifications.md](../../../../../../../../docs/notifications.md). |
-| `DiagnosticsPane` | (`dev.glassworks.diagnostics`) The panel's health as diagnostic entities: CPU, temperature, RAM, storage, Wi-Fi, uptime, the last restart reason. A core pane, so every frame has it. The entities are in [docs/esphome.md](../../../../../../../../docs/esphome.md#diagnostics). |
-| `BluetoothProxyPane` | (`dev.glassworks.bluetoothproxy`) The panel as an ESPHome Bluetooth proxy (#121). The work is in the [bluetooth-proxy library](../../../../../../../../libs/bluetooth-proxy/README.md); the pane gives it the device's server and adds two diagnostic entities. Its page is the frame's to draw ([`BluetoothProxyModel`](bluetoothproxy/ProxyPhase.kt)); the S1's is `BluetoothProxyPage`. See [its README](bluetoothproxy/README.md). |
+| `NotificationsPane` | (`dev.glassworks.notifications`) Notifications from Home Assistant: the `notify` action, Do not disturb, the rules for each priority, and a tapped button as the bus event `esphome.notification_action`. A core pane, off by default. The panel's overlay draws what its `NotificationsHub` holds. How to use it: [docs/notifications.md](../../../../../../docs/notifications.md). |
+| `DiagnosticsPane` | (`dev.glassworks.diagnostics`) The panel's health as diagnostic entities: CPU, temperature, RAM, storage, Wi-Fi, uptime, the last restart reason. A core pane, so every frame has it. The entities are in [docs/esphome.md](../../../../../../docs/esphome.md#diagnostics). |
+| `BluetoothProxyPane` | (`dev.glassworks.bluetoothproxy`) The panel as an ESPHome Bluetooth proxy (#121). The work is in the [bluetooth-proxy library](../../../../../../libs/bluetooth-proxy/README.md); the pane gives it the device's server and adds two diagnostic entities. Its page is the frame's to draw ([`BluetoothProxyModel`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/bluetoothproxy/ProxyPhase.kt)); the S1's is `BluetoothProxyPage`. See [its README](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/bluetoothproxy/README.md). |
 | `Engine` | (`dev.glassworks.engine`) The web engine that shows the dashboard: open a page, load, reload, go back, restart after a crash, and talk to the page's scripts. `GeckoEngine` (`dev.glassworks.engine.gecko`) is the only code that uses GeckoView. One per process, on `GlassworksRuntime.engine`. |
 
 ## What makes a pane
 
 Glassworks is native to Home Assistant: a panel joins HA as an ESPHome device and needs nothing
 else. Panes keep it that way. The reasons are in
-[Glassworks Principles](../../../../../../../../docs/principles.md). Before you write a pane, check
+[Glassworks Principles](../../../../../../docs/principles.md). Before you write a pane, check
 it against these four rules.
 
 ### 1. It adds something only the panel can do
@@ -125,7 +125,7 @@ camera's stream. It never uses it to control HA, or to watch entities in place o
 
 When a read needs an administrator and the panel's user isn't one, ask an admin to sign in once,
 use the token for that read and revoke it straight away, as
-[`ThreadJoin.kt`](../../sh/edm/s1kiosk/auth/ThreadJoin.kt) does. The panel keeps no admin
+[`ThreadJoin.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/auth/ThreadJoin.kt) does. The panel keeps no admin
 credentials.
 
 A *person* signed in on the Manage page is different: they act with their own HA rights, like the
@@ -169,7 +169,7 @@ How to apply it in code:
 
 HA uses `disabledByDefault` only when it first registers the entity. Changing it later doesn't
 change a panel HA already has; changing the category does
-([esphome.md](../../../../../../../../docs/esphome.md#a-panel-that-ha-already-has)). Decide it when you
+([esphome.md](../../../../../../docs/esphome.md#a-panel-that-ha-already-has)). Decide it when you
 add the entity.
 
 **A pane's own on/off switch (#67)** is a `SwitchEntity` with `EntityCategory.CONFIG` and
@@ -178,7 +178,7 @@ in the list while the pane is off, so turning the pane back on doesn't need HA t
 entities again.
 
 Every S1 entity, with its category, default and reason:
-[esphome.md](../../../../../../../../docs/esphome.md#categories-and-defaults).
+[esphome.md](../../../../../../docs/esphome.md#categories-and-defaults).
 
 ### Example: the camera pane
 
@@ -192,7 +192,7 @@ Every S1 entity, with its category, default and reason:
 
 A pane takes its `PaneContext` in the constructor and overrides only what it needs. This is the
 shape of the Sendspin pane, the first one moved out of the S1 app
-([`SendspinPane.kt`](../../sh/edm/s1kiosk/sendspin/SendspinPane.kt)):
+([`SendspinPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPane.kt)):
 
 ```kotlin
 class MusicPane(ctx: PaneContext) : Pane {
@@ -216,9 +216,9 @@ class MusicPane(ctx: PaneContext) : Pane {
 `PanelEvent` is an open interface. A pane handles the events it cares about and ignores the rest:
 a `when` statement (not an expression) may simply leave out the events it does not use, as
 `SendspinPane` does. A new event does not touch the panes that do not use it. A pane does not have
-to add entities: [`TimersPane.kt`](../../sh/edm/s1kiosk/timers/TimersPane.kt) has none and only
+to add entities: [`TimersPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/timers/TimersPane.kt) has none and only
 reacts to `TimersChanged` and `TimerFinished`. The voice assistant
-([`AssistPane.kt`](../../sh/edm/s1kiosk/voice/AssistPane.kt)) is the pane that raises those: it calls
+([`AssistPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/voice/AssistPane.kt)) is the pane that raises those: it calls
 `ctx.emit(PanelEvent.TimerFinished(name))`, and `SpeakerClaimed` while it listens and talks.
 
 Every pane also has a **`pane.json` and an `icon.svg`** in its folder, next to its `PaneDefinition` (or its
@@ -226,14 +226,14 @@ Every pane also has a **`pane.json` and an `icon.svg`** in its folder, next to i
 `id`, `name`, `does` (one line), `requires` (hardware words), `status`, `frame` for a frame pane, and
 optionally `docs`. The icon is 24 × 24, stroked with `currentColor` at 1.6 with round caps and joins, and
 has no fills or colours; a new icon is UI, so the maintainer approves it.
-[`PaneCatalogTest`](../../../../test/java/dev/glassworks/pane/PaneCatalogTest.kt) fails if a pane
+[`PaneCatalogTest`](../../../../../../frames/aqara-s1-plus/android/src/test/java/dev/glassworks/pane/PaneCatalogTest.kt) fails if a pane
 has no files or a file has no pane. Then run `npm run panes -w @glassworks/frame-card`
-([frames/README.md](../../../../../../../README.md#the-panes-a-frame-runs)).
+([frames/README.md](../../../../../../frames/README.md#the-panes-a-frame-runs)).
 
 The core raises `HomeAssistantSubscribed(address, authenticated)` each time Home Assistant subscribes
 to the states. `authenticated` is true when the connection uses the key Home Assistant provisioned.
 Only then is the address proven to be Home Assistant's, so a pane that trusts the address checks it.
-The radio ([`RadioPane.kt`](../../sh/edm/s1kiosk/radio/RadioPane.kt)) does: it lets only that
+The radio ([`RadioPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/radio/RadioPane.kt)) does: it lets only that
 address reach its TCP services.
 
 On an authenticated connection the core also asks Home Assistant for the time, and raises
@@ -243,7 +243,7 @@ not an IANA id). The time zone pane offers it on its page.
 ### Entities that change, and events
 
 A pane's entity list may change while the panel runs. The wall base
-([`WallBasePane.kt`](../../sh/edm/s1kiosk/base/WallBasePane.kt)) adds relays, buttons and power
+([`WallBasePane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt)) adds relays, buttons and power
 sensors when a switch base is mounted. The pane then calls `ctx.entitiesChanged()`. The core builds
 the device's list again from its own entities and every pane's `entities()`, and gives it to Home
 Assistant, which reconnects and lists the entities again. `entities()` must return the new list from
@@ -255,7 +255,7 @@ fires it on HA's bus instead ([the exception above](#2-it-works-through-esphome-
 so build the list once per state, not on every `entities()` call. A pane does not hold the API
 server for this. The core owns it, including its restarts.
 
-Entities come from [esphome-api](../../../../../../../../libs/esphome-api/README.md). Home Assistant
+Entities come from [esphome-api](../../../../../../libs/esphome-api/README.md). Home Assistant
 keys them by object id, so an object id is permanent: renaming one makes a new entity in every
 home that already has the panel.
 
@@ -263,7 +263,7 @@ home that already has the panel.
 
 A pane gets its settings file with `ctx.prefs(id)`, where the namespace is the pane's own id. It
 wraps the file in its own typed class and reads and writes only its own keys there, as the Sendspin
-pane does with [`SendspinPrefs`](../../sh/edm/s1kiosk/sendspin/SendspinPrefs.kt):
+pane does with [`SendspinPrefs`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPrefs.kt):
 
 ```kotlin
 private val prefs = SendspinPrefs(ctx.prefs(id))
@@ -271,7 +271,7 @@ private val prefs = SendspinPrefs(ctx.prefs(id))
 
 The frame decides which file holds a namespace. A namespace is the owner of a set of keys, not a
 file or a key prefix. On the S1 every pane's settings stay in `kiosk.xml`, under the key names they
-had before panes ([`KioskPrefs.PANE_FILES`](../../sh/edm/s1kiosk/KioskPrefs.kt)), because panels
+had before panes ([`KioskPrefs.PANE_FILES`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/KioskPrefs.kt)), because panels
 update in place and no stored value may move. `PrefsPinTest` pins every file, key, type and default.
 `ctx.prefs` refuses a namespace the frame does not know.
 
@@ -302,7 +302,7 @@ is its part of the setup channel's state, under the step's id; `ops` are the req
 it, on the wire as `<step id>.<op>`. That way the installer can finish every step without the
 screen, and the setup screen is one more client. `SetupChannelStepsTest` fails if a step has no
 requests that finish it. The radio's step is
-[`RadioDefinition`](../../sh/edm/s1kiosk/radio/RadioDefinition.kt). Its `radio.set_mode` accepts
+[`RadioDefinition`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/radio/RadioDefinition.kt). Its `radio.set_mode` accepts
 only the ids the step offers (`RadioStep.OPTIONS`, the state's `radio.options`). Any other mode is
 refused, so a mode only appears to the installer once the step offers it. Asking for the mode in
 effect, running or on its way, answers the step and leaves the radio alone, and the state's
@@ -427,7 +427,7 @@ its own. Timers have none either: they come only from voice.
 
 ## The Manage page
 
-The panel serves `http://<panel>:8099/` ([docs/manage.md](../../../../../../../../docs/manage.md), #33),
+The panel serves `http://<panel>:8099/` ([docs/manage.md](../../../../../../docs/manage.md), #33),
 on the same port as the QR-code sign-in pages. The core has the whole page; a frame gives it one
 `ManageHost`.
 
@@ -485,7 +485,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 The app makes one frame at start, and `GlassworksRuntime` holds it. The device shell
 (`PanelDevice`) reads only these members; `PanelDeviceFrameTest` fails if it reaches past them.
 
-The S1's frame is [`AqaraS1Plus`](../../sh/edm/s1kiosk/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
+The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
 presence source is the VI5300 time-of-flight sensor, with Lumi's `proximity_threshold` range table,
 and its light source is the MK6212 sensor. Its panes are the wall base (with Aqara's cloud daemon,
 which holds the wall base UART) and the time zone. It also holds the root update service. The rest of
@@ -535,7 +535,7 @@ sets the flag again at the end of its own shutdown.
 ## Licence
 
 The files in `dev.glassworks` are licensed under the
-[Mozilla Public License 2.0](../../../../../../../../LICENSES/MPL-2.0.txt). The rest of S1 Unleashed
+[Mozilla Public License 2.0](../../../../../../LICENSES/MPL-2.0.txt). The rest of S1 Unleashed
 stays MIT.
 
 The MPL works file by file. You can ship Glassworks inside a closed product, and your own frames

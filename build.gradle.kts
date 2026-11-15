@@ -8,3 +8,55 @@ plugins {
     // The pure-JVM libraries under libs/ (esphome-api).
     id("org.jetbrains.kotlin.jvm") version "2.4.20" apply false
 }
+
+// The test settings of every Glassworks module (not the libraries in libs/, which test on their own):
+// -Ps1MockupDir writes the *Mockups PNGs (a module without mockups then runs none, not fails), and
+// -Ps1RegenGolden=true rewrites the pin tests' goldens. The repo files the tests read are inputs (#21).
+val libraries = setOf(":esphome-api", ":esphome-api-android", ":improv", ":bluetooth-proxy")
+subprojects {
+    if (path in libraries) return@subprojects
+    tasks.withType<Test>().configureEach {
+        (project.findProperty("s1MockupDir") as String?)?.let {
+            systemProperty("s1.mockupDir", it)
+            filter.isFailOnNoMatchingTests = false
+        }
+        (project.findProperty("s1RegenGolden") as String?)?.let { systemProperty("s1.regenGolden", it) }
+        // ApkAbiListsTest reads the workflows, every frame's frame.json and frame-abis.sh; WakeWordsTest the
+        // host fetch script. Declared as inputs, so a change re-runs the tests instead of taking them UP-TO-DATE
+        // or FROM-CACHE. Build files and the web extension are under readsRepoFiles' roots.
+        inputs.dir(rootProject.file(".github/workflows")).withPropertyName("workflows")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+        inputs.files(fileTree(rootProject.file("frames")) { include("*/design/frame.json") }, rootProject.file("tools/release/frame-abis.sh"))
+            .withPropertyName("frameAbis").withPathSensitivity(PathSensitivity.RELATIVE)
+        inputs.file(rootProject.file("tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
+            .withPathSensitivity(PathSensitivity.NONE)
+        // The pane catalog (#231), the confinement scans, goldens, the font and the repo files the tests read.
+        readsRepoFiles(rootProject.projectDir)
+    }
+}
+
+/**
+ * What tests read from the repo beyond their own module (RepoFiles, testing/kotlin): every module's src/main
+ * and build file under RepoFiles' search roots, and the repo files that tests open. Declared as inputs, so a
+ * change to any of them re-runs the tests instead of taking them UP-TO-DATE or FROM-CACHE: a pane.json or
+ * icon.svg, which no compile task takes in (#231), and, after #21's split, another module's sources that a
+ * confinement scan in this module reads. Relative paths keep the build cache relocatable. Every module's
+ * test task calls it once there are several (#21).
+ */
+fun Test.readsRepoFiles(repo: File) {
+    val roots = listOf("app", "libs", "core", "pane-api", "engines", "panes", "frames") // RepoFiles.SEARCH, by top folder
+    inputs.files(roots.map { dir ->
+        fileTree(File(repo, dir)) {
+            include("**/src/main/**", "**/build.gradle.kts")
+            exclude("**/build/**", "**/node_modules/**", "**/.gradle/**")
+        }
+    }).withPropertyName("repoModules").withPathSensitivity(PathSensitivity.RELATIVE)
+    val files = listOf(
+        "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
+        "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",
+        "tools/bracket/base_emulator.py",
+    )
+    inputs.files(files.map { File(repo, it) }, fileTree(File(repo, "LICENSES")), fileTree(File(repo, "docs")) { include("**/*.md") },
+        fileTree(File(repo, "frames")) { include("*/README.md") })
+        .withPropertyName("repoFiles").withPathSensitivity(PathSensitivity.RELATIVE)
+}

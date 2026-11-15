@@ -124,6 +124,7 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
     // Libraries extracted from this app (app/libs/). esphome-api brings BouncyCastle (Noise), which
     // Sendspin's encryption also uses.
+    implementation(project(":glassworks-pane-api"))
     implementation(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy")) // the Bluetooth proxy pane's engine (#121)
@@ -140,54 +141,6 @@ dependencies {
     testImplementation("org.json:json:20250517")
     // Mock-up screenshots of the real settings/setup views (RadioMockups, only with -Ps1MockupDir=<dir>).
     testImplementation("org.robolectric:robolectric:4.17")
-}
-
-// RadioMockups writes PNGs of the radio views when asked: ./gradlew :kiosk:testDebugUnitTest
-// --tests '*RadioMockups*' -Ps1MockupDir=<dir>. Without the property it is skipped.
-tasks.withType<Test>().configureEach {
-    (project.findProperty("s1MockupDir") as String?)?.let { systemProperty("s1.mockupDir", it) }
-    // PanelEntitiesPinTest rewrites its golden file with -Ps1RegenGolden=true.
-    (project.findProperty("s1RegenGolden") as String?)?.let { systemProperty("s1.regenGolden", it) }
-    // ApkAbiListsTest reads the workflows, this file, every frame's frame.json and frame-abis.sh. Declared
-    // as inputs, so a change to any of them re-runs the tests instead of taking them UP-TO-DATE or FROM-CACHE.
-    inputs.dir(rootProject.file(".github/workflows")).withPropertyName("workflows")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
-    inputs.file("build.gradle.kts").withPropertyName("kioskBuildScript").withPathSensitivity(PathSensitivity.NONE)
-    inputs.files(fileTree(rootProject.file("frames")) { include("*/design/frame.json") }, rootProject.file("tools/release/frame-abis.sh"))
-        .withPropertyName("frameAbis").withPathSensitivity(PathSensitivity.RELATIVE)
-    // WakeWordsTest checks that the host fetch script pins the same models as the app.
-    inputs.file(rootProject.file("tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
-        .withPathSensitivity(PathSensitivity.NONE)
-    // ContentScriptReadyTest runs the web extension's content.js under node: a change to it re-runs the tests.
-    inputs.dir("src/main/assets/extension").withPropertyName("webExtension").withPathSensitivity(PathSensitivity.RELATIVE)
-    // The pane catalog (#231), the confinement scans, goldens, the font and the repo files the tests read.
-    readsRepoFiles(rootProject.projectDir)
-}
-
-/**
- * What tests read from the repo beyond their own module (RepoFiles, testing/kotlin): every module's src/main
- * and build file under RepoFiles' search roots, and the repo files that tests open. Declared as inputs, so a
- * change to any of them re-runs the tests instead of taking them UP-TO-DATE or FROM-CACHE: a pane.json or
- * icon.svg, which no compile task takes in (#231), and, after #21's split, another module's sources that a
- * confinement scan in this module reads. Relative paths keep the build cache relocatable. Every module's
- * test task calls it once there are several (#21).
- */
-fun Test.readsRepoFiles(repo: File) {
-    val roots = listOf("app", "libs", "core", "pane-api", "engines", "panes", "frames") // RepoFiles.SEARCH, by top folder
-    inputs.files(roots.map { dir ->
-        fileTree(File(repo, dir)) {
-            include("**/src/main/**", "**/build.gradle.kts")
-            exclude("**/build/**", "**/node_modules/**", "**/.gradle/**")
-        }
-    }).withPropertyName("repoModules").withPathSensitivity(PathSensitivity.RELATIVE)
-    val files = listOf(
-        "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
-        "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",
-        "tools/bracket/base_emulator.py",
-    )
-    inputs.files(files.map { File(repo, it) }, fileTree(File(repo, "LICENSES")), fileTree(File(repo, "docs")) { include("**/*.md") },
-        fileTree(File(repo, "frames")) { include("*/README.md") })
-        .withPropertyName("repoFiles").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Open source licences screen (hidden settings → "Open source licences"): the repo's

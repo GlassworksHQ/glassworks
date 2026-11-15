@@ -13,7 +13,7 @@ Bring-up notes that others can build on belong in the same PR as the work: in `f
 
 Glassworks is opinionated on purpose. Read [Glassworks Principles](docs/principles.md) first: what
 we build, what we don't, and the questions a new feature has to pass. New panes follow
-[What makes a pane](frames/aqara-s1-plus/android/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
+[What makes a pane](pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
 
 ## Issues
 
