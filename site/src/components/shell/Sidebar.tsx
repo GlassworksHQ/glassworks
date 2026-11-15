@@ -6,10 +6,13 @@ import { NavLink } from "./NavLink";
 import { ThemeToggle } from "./ThemeToggle";
 import { frames, KILN } from "@/lib/frames";
 import { links, panes } from "@/lib/site";
+import { POSTS } from "@/lib/blog/posts";
+import { getPosts } from "@/lib/docs";
 import s from "./Shell.module.css";
 
 /** The site's one navigation: Manage's sidebar on desktop, the menu's drawer on phones. */
-export function Sidebar() {
+export async function Sidebar() {
+  const fresh = (await getPosts()).some((p) => p.fresh);
   return (
     <>
       <Link href="/" className={s.brand}>
@@ -46,6 +49,12 @@ export function Sidebar() {
         </a>
 
         <span className={s.group}>Project</span>
+        {POSTS.length > 0 && (
+          <NavLink href="/blog">
+            Blog
+            {fresh && <small className={s.new}>New</small>}
+          </NavLink>
+        )}
         <NavLink href="/brand">Brand</NavLink>
         <NavLink href="/trademarks">Trademarks</NavLink>
       </nav>

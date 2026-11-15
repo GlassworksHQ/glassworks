@@ -10,8 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Agent guide: glassworks.dev (`site/`)
 
-The Glassworks project site: the landing page, `/frames`, `/panes`, `/docs`, `/changelog`, `/brand`
-and `/trademarks`. The
+The Glassworks project site: the landing page, `/frames`, `/panes`, `/docs`, `/changelog`, `/blog`,
+`/brand` and `/trademarks`. The
 repo-wide rules in the root [AGENTS.md](../AGENTS.md) apply here too; these are the site's own.
 
 ## Commands
@@ -75,3 +75,7 @@ files change.
    `#anchor` its target doesn't have. Links follow GitHub's rules (its heading slugs), so a link that
    works on GitHub works here, and `tools/check-doc-links.py` checks the same Markdown. Search is
    Pagefind, built over the static HTML by `npm run build`; it only works on a built site.
+9. **A blog post is `blog/<YYYY-MM-DD>-<slug>/index.md`**, rendered like a doc. `draft: true` keeps it
+   out of production and the feed: drafts show only in `next dev`, on preview deploys, or with
+   `SITE_DRAFTS=1`. A post says only what's true on its date; facts that wait on a release stay in
+   [brackets] until then.

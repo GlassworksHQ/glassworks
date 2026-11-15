@@ -8,6 +8,9 @@ import { release } from "@/lib/release";
 import { panes, stageCounts } from "@/lib/site";
 import { JsonLd } from "@/components/JsonLd";
 import { SITE_DESCRIPTION, organizationLd, pageMetadata, softwareLd, websiteLd } from "@/lib/seo";
+import { DraftFlag, PostCover, longDate } from "@/components/blog/PostBits";
+import { getPosts } from "@/lib/docs";
+import b from "@/components/blog/Blog.module.css";
 import styles from "./page.module.css";
 
 export const metadata = pageMetadata({
@@ -17,12 +20,16 @@ export const metadata = pageMetadata({
   path: "/",
 });
 
-export default function Home() {
+export default async function Home() {
+  const [post] = await getPosts();
   const app = frames.find((f) => f.project)?.project?.name ?? "Glassworks";
   return (
     <>
       <JsonLd nodes={[organizationLd(), websiteLd(), softwareLd(SITE_DESCRIPTION)]} />
-      <StackStory release={{ name: app, version: release.version, href: release.href }} />
+      <StackStory
+        release={{ name: app, version: release.version, href: release.href }}
+        post={post?.fresh ? { title: post.title, href: post.url } : undefined}
+      />
 
       <Tiles>
         <Tile href="/frames" label="Frames" value={frames.length} sub={stageCounts(frames)} />
@@ -30,6 +37,22 @@ export default function Home() {
         <Tile href={release.href} label="Latest release" value={release.version} sub={`${app} · ${release.date}`} />
         <Tile href="/docs/principles" label="Docs" value="Principles" sub="What it is and isn't" />
       </Tiles>
+
+      {post && (
+        <Link href={post.url} className={`${m.card} ${b.homeCard}`}>
+          <PostCover post={post} />
+          <div>
+            <div className={b.meta}>
+              {post.draft && <DraftFlag />}
+              <span>Blog</span>
+              <time dateTime={post.date}>{longDate(post.date)}</time>
+            </div>
+            <h2>{post.title}</h2>
+            <p>{post.summary}</p>
+            <span className={b.read}>Read the post</span>
+          </div>
+        </Link>
+      )}
 
       <ListCard id="panes" title="Panes" aside={<Link href="/panes">All panes ›</Link>}>
         <PaneRows panes={panes} />

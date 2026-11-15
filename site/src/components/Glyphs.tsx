@@ -231,3 +231,10 @@ export const BookGlyph = (props: GlyphProps) => (
     <path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19" />
   </svg>
 );
+
+export const FeedGlyph = (props: GlyphProps) => (
+  <svg {...base} strokeWidth={1.8} {...props}>
+    <path d="M5 5a14 14 0 0 1 14 14M5 11a8 8 0 0 1 8 8" />
+    <circle cx="6" cy="18" r="1.2" fill="currentColor" />
+  </svg>
+);

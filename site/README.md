@@ -1,6 +1,6 @@
 # glassworks.dev
 
-The Glassworks project site: the landing page, frames, panes, the docs and `/brand`. Kiln
+The Glassworks project site: the landing page, frames, panes, the docs, the blog and `/brand`. Kiln
 (the installer) is a separate app at `kiln.glassworks.dev`. See `planning/site.md` for what goes
 where.
 
@@ -55,6 +55,7 @@ src/lib/release.ts     the latest app release, from ../CHANGELOG.md
 src/lib/docs/          the docs: sources.ts (repo file → URL and nav group), render.ts (Markdown → HTML, GitHub's rules), index.ts (renders all, checks every link)
 src/app/docs/          /docs, each doc page, the panes and libraries indexes; the docs' own sidebar
 src/components/search/ the ⌘K search over the Pagefind index that `npm run build` writes
+blog/<YYYY-MM-DD>-<slug>/index.md  a post (front matter: title, date, author, summary, draft); src/lib/blog/posts.ts reads them
 src/components/clarity/  the Clarity seal, the frame page's panel, the catalog line
 scripts/brand/banner.mjs  the part banner every banner shares, the mark, each part's light
 scripts/brand/frame.mjs   a frame's README banner, banner-frame-<id>, drawn from its frame.json
@@ -124,6 +125,6 @@ npx vercel build --prod
 npx vercel deploy --prebuilt --prod
 ```
 
-A preview: `npx vercel pull --yes --environment=preview`, then
+A preview, which also shows draft blog posts: `npx vercel pull --yes --environment=preview`, then
 `npx vercel build` and `npx vercel deploy --prebuilt`, without `--prod`. Run every command from the
 clone's root, where `vercel link` put `.vercel/`.

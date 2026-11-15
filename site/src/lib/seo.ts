@@ -69,7 +69,7 @@ export function pageMetadata(p: PageSeo): Metadata {
   return {
     title: p.absoluteTitle ? { absolute: p.title } : p.title,
     description: p.description,
-    alternates: { canonical: absoluteUrl(p.path) },
+    alternates: { canonical: absoluteUrl(p.path), types: { "application/atom+xml": [{ url: "/blog/feed.xml", title: "Glassworks blog" }] } },
     openGraph:
       p.type === "article"
         ? {

@@ -113,7 +113,10 @@ function KilnCells() {
 /** The hero's status line: the latest release of the reference frame's app. */
 export type StoryRelease = { name: string; version: string; href: string };
 
-export function StackStory({ release }: { release: StoryRelease }) {
+/** A post from the last 30 days, for the hero's "New" pill. */
+export type StoryPost = { title: string; href: string };
+
+export function StackStory({ release, post }: { release: StoryRelease; post?: StoryPost }) {
   const ref = useRef<HTMLElement>(null);
   const [p, setP] = useState(0);
 
@@ -226,6 +229,13 @@ export function StackStory({ release }: { release: StoryRelease }) {
       <div className={s.sticky}>
         <div className={s.text}>
           <div className={s.hero} style={{ opacity: heroO, transform: `translateY(${-24 * (1 - heroO)}px)` }} inert={heroO < 0.5}>
+            {post && (
+              <a className={s.newPill} href={post.href}>
+                <span className={s.newTag}>New</span>
+                <b>{post.title}</b>
+                <span>Read the post →</span>
+              </a>
+            )}
             <span className={s.status}>
               <span className={s.statusChip}>
                 <b>Open source</b> MPL-2.0

@@ -6,6 +6,7 @@ import { imageSize } from "image-size";
 import { anchorsOf, cutSection, render, type Image, type Link, type Rendered, type Toc } from "./render";
 import { REPO, SECTIONS, SOURCES, siteUrl, type Section, type Source } from "./sources";
 import { links } from "../links";
+import { POSTS, type PostSource } from "../blog/posts";
 
 export { SECTIONS, type Section, type Source, type Toc };
 
@@ -17,6 +18,20 @@ export type Doc = Source &
     /** the last commit's date, when the build has the repo's history */
     updated?: string;
   };
+
+/** A post, rendered: everything but its Markdown, plus the HTML. */
+export type Post = Omit<PostSource, "body"> & {
+  html: string;
+  /** an H1 in the Markdown is dropped for the front matter's title, which keeps its id so #links to it land */
+  titleId: string;
+  toc: Toc[];
+  minutes: number;
+  edit: string;
+  /** published in the 30 days before this build: the home page and sidebar call it new */
+  fresh: boolean;
+};
+
+const DAY = 86_400_000;
 
 const GH = links.s1;
 
@@ -58,22 +73,30 @@ const short = (t: string, n = 150) => (t.length <= n ? t : `${t.slice(0, t.lastI
 const plain = (html: string) =>
   html.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
 
-async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
+async function build(): Promise<{ docs: Doc[]; posts: Post[]; assets: string[] }> {
   const assets = new Set<string>();
   const read = (s: Source) => {
     const src = fs.readFileSync(path.join(/* turbopackIgnore: true */ REPO, s.file), "utf8");
     return s.cut ? cutSection(src, s.cut) : src;
   };
 
+  // docs and posts render the same way, with the same link rules
+  const inputs = [
+    ...SOURCES.map((s) => ({ url: s.url, file: s.file, src: read(s), doc: s })),
+    ...POSTS.map((p) => ({ url: p.url, file: p.file, src: p.body, post: p })),
+  ];
+
   // first pass: the ids on every page, so the second can check #anchors
   const idle = { link: (href: string): Link => ({ href, kind: "site" }), image: (src: string): Image => ({ src }) };
   const ids = new Map<string, Set<string>>();
-  for (const s of SOURCES) ids.set(s.url, (await render(read(s), idle)).ids);
+  for (const i of inputs) ids.set(i.url, (await render(i.src, idle)).ids);
+  const publishedAt = (file: string) => siteUrl(file) ?? POSTS.find((p) => p.file === file)?.url;
 
   const errors: string[] = [];
   const anchors: Record<string, Set<string>> = {};
   const docs: Doc[] = [];
-  for (const s of SOURCES) {
+  const posts: Post[] = [];
+  for (const s of inputs) {
     const dir = path.posix.dirname(s.file);
     const full = SOURCES.find((o) => o.file === s.file && !o.cut);
     const link = (href: string): Link => {
@@ -96,7 +119,7 @@ async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
       }
       const [p, hash] = href.split("#");
       const target = path.posix.normalize(p.startsWith("/") ? p.slice(1) : path.posix.join(dir, decodeURIComponent(p))).replace(/\/$/, "");
-      const url = siteUrl(target);
+      const url = publishedAt(target);
       const anchor = hash ? `#${hash}` : "";
       if (url && (!hash || ids.get(url)?.has(decodeURIComponent(hash)))) return { href: url + anchor, kind: "site" };
       if (url && ids.has(url)) {
@@ -132,22 +155,38 @@ async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
         return { src: ASSET_PREFIX + target };
       }
     };
-    const r = await render(read(s), { link, image });
+    const r = await render(s.src, { link, image });
+    if ("post" in s) {
+      const { body, ...meta } = s.post;
+      if (meta.cover) assets.add(meta.cover);
+      const age = Date.now() - Date.parse(meta.date);
+      posts.push({
+        ...meta,
+        html: r.html,
+        titleId: r.titleId,
+        toc: r.toc,
+        minutes: Math.max(1, Math.round(body.split(/\s+/).length / 220)),
+        edit: `${GH}/edit/main/${s.file}`,
+        fresh: age >= 0 ? age < 30 * DAY : meta.draft,
+      });
+      continue;
+    }
+    const d = s.doc;
     docs.push({
-      ...s,
+      ...d,
       titleId: r.titleId,
       tagline: r.tagline,
       badges: r.badges,
       html: r.html,
       toc: r.toc,
-      title: r.title || s.label || path.posix.basename(s.file, ".md"),
+      title: r.title || d.label || path.posix.basename(s.file, ".md"),
       summary: short(plain(r.tagline) || r.lead),
       edit: `${GH}/edit/main/${s.file}`,
       updated: lastChanged(s.file),
     });
   }
   if (errors.length && BUILDING) throw new Error(`Docs: ${errors.length} link(s) the site can't resolve (fix the Markdown):\n${errors.join("\n")}`);
-  return { docs, assets: [...assets] };
+  return { docs, posts, assets: [...assets] };
 }
 
 let memo: ReturnType<typeof build> | undefined;
@@ -173,5 +212,8 @@ export async function getDoc(url: string) {
   return (await getDocs()).find((d) => d.url === url);
 }
 
-/** Every image the docs use, by repo path. */
+/** The posts this build shows, newest first. */
+export const getPosts = async () => (await rendered()).posts;
+
+/** Every image the docs and posts use, by repo path. */
 export const docAssets = async () => (await rendered()).assets;

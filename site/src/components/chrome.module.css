@@ -22,6 +22,11 @@
   color: var(--muted);
 }
 
+.footLinks {
+  display: inline-flex;
+  gap: 16px;
+}
+
 .skip {
   position: absolute;
   left: 12px;

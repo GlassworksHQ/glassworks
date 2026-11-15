@@ -73,9 +73,17 @@ try {
     return u.slice(SITE.length) || "/";
   });
   const manifest = JSON.parse(readFileSync(join(site, ".next/prerender-manifest.json"), "utf8"));
+  // a route prerendered as the 404 (a blog draft this build hides) isn't a page
+  const status = (r) => {
+    try {
+      return JSON.parse(readFileSync(join(site, ".next/server/app", `${r === "/" ? "index" : r}.meta`), "utf8")).status ?? 200;
+    } catch {
+      return 200;
+    }
+  };
   const pages = Object.keys(manifest.routes).filter(
     // HTML pages only: not image, feed or file routes, not Next's own error pages
-    (r) => !/\.[a-z]+$|\/(opengraph|twitter)-image$|^\/_/.test(r) && !r.endsWith("/manifest.webmanifest"),
+    (r) => !/\.[a-z]+$|\/(opengraph|twitter)-image$|^\/_/.test(r) && !r.endsWith("/manifest.webmanifest") && status(r) !== 404,
   );
   for (const p of pages) if (!paths.includes(p)) fail(p, "built but not in the sitemap (src/lib/routes.ts)");
   for (const p of paths) if (!pages.includes(p)) fail(p, "in the sitemap but not a built page");
