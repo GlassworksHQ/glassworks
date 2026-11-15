@@ -224,9 +224,11 @@ class CameraMockups {
         shot("camera-03-onvif-streaming", menu(streaming))
         shot("camera-03b-onvif-addresses", menu(streaming), scrollTo = "Sign-in", bottom = false)
         shot("camera-03c-sign-in-shown", menu(streaming), scrollTo = "Sign-in", bottom = false) { o ->
-            // The row tapped: the password shows until the next tap or until the page is drawn again.
-            val row = Mockup.label(o, "glassworks · password hidden, tap to show")
+            // The sign-in's sheet after Show (#242): hidden again after a minute, when the screen goes off or the sheet closes.
+            val row = Mockup.label(o, "glassworks · password hidden")
             generateSequence(row as View) { it.parent as? View }.first { it.isClickable }.performClick()
+            Mockup.idle()
+            Mockup.label(o, "Show").performClick()
         }
         shot("camera-04-stream-off-sign-in-not-made", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS }.someoneWalksUp()), scrollTo = "Sign-in", bottom = false)
         shot("camera-05-privacy-on", menu(Rig { it.privacy = true }))

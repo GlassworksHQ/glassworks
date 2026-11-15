@@ -5,6 +5,7 @@ import android.content.Context
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.manage.ManageHost
+import dev.glassworks.pane.SettingsItem
 import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -26,6 +27,7 @@ import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.improv.ImprovIdentity
 import sh.edm.s1kiosk.manage.S1Manage
 import sh.edm.s1kiosk.sendspin.SendspinPane
+import sh.edm.s1kiosk.settings.S1Settings
 import sh.edm.s1kiosk.update.UpdateManager
 import sh.edm.s1kiosk.voice.VoicePrefs
 import java.net.HttpURLConnection
@@ -93,9 +95,19 @@ class AppBuildTest {
             override fun get(url: String, maxBytes: Int) = 0 to ""
         })
         val manage = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app))
-        assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", manage.status().about.toMap()["Glassworks Panel"])
+        val status = manage.status()
+        assertEquals("9.8.7 · test build f00ba47", status.version)
+        val about = status.sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
+        assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", about.title())
         val host = S1Manage::class.java.getDeclaredField("host").apply { isAccessible = true }.get(manage) as ManageHost
         assertEquals("Version: S1 Kiosk 9.8.7 · test build f00ba47 (90807)", host.diagnostics().lineSequence().first())
+    }
+
+    @Test fun theSettingsMenuShowsTheGivenBuild() {
+        val model = S1Settings.model(runtime, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {})
+        assertEquals("9.8.7 · test build f00ba47", model.version)
+        val about = model.sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
+        assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", about.title())
     }
 
     /** What the runtime's engine starts Gecko with. */

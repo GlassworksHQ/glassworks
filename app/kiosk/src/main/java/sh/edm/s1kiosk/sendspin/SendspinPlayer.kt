@@ -200,14 +200,14 @@ class SendspinPlayer(
     private val outputLock = Any()
     @Volatile private var ducked = false
     private val wake = Object()
-    // Set internally by tests and the settings mock-ups too.
-    @Volatile var status: SendspinSession.Status = SendspinSession.Status(SendspinSession.Phase.CLOSED); internal set
+    // Set by tests and the settings mock-ups too.
+    @Volatile var status: SendspinSession.Status = SendspinSession.Status(SendspinSession.Phase.CLOSED)
     /** True once the client has started since boot (ESPHome reports the client id only then). */
     @Volatile var started = false; private set
     @Volatile private var lastUrl: String? = null
-    /** The server of the session that runs now, or null: what the settings page names (#212). Set internally by the mock-ups too. */
-    @Volatile internal var activeUrl: String? = null
-    @Volatile internal var nowPlaying: String? = null
+    /** The server of the session that runs now, or null: what the settings page names (#212). Set by the mock-ups too. */
+    @Volatile var activeUrl: String? = null
+    @Volatile var nowPlaying: String? = null
     /** Why FLAC is no longer offered this run (decoder failures), or null. */
     @Volatile private var flacFailure: String? = null
     /** The platform's FLAC decoder, or null if there is none (then only PCM is offered). */
@@ -218,8 +218,8 @@ class SendspinPlayer(
         if (prefs.flac && flacFailure == null && flacDecoder != null) listOf(SsFormat.FLAC_48K_STEREO_16, SsFormat.PCM_48K_STEREO_16)
         else listOf(SsFormat.PCM_48K_STEREO_16)
 
-    /** Built per connection: the formats can change between connections. */
-    internal fun hello() = SsHelloInfo(
+    /** Built per connection: the formats can change between connections. Public for tests. */
+    fun hello() = SsHelloInfo(
         name = device.friendlyName,
         productName = device.model,
         manufacturer = device.manufacturer,
