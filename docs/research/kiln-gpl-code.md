@@ -223,23 +223,26 @@ top, #355). Until the rewrite lands, the notices state the facts.
 All read-only. Clone the two upstreams at the commits above. For Magisk, a sparse clone of
 `native/src/boot` and `scripts` is enough. Then run:
 
-`tools/licence-audit/overlap.py` (read-only; its header explains the three counts):
+`tools/licence-audit/overlap.py` is read-only, and its header explains the three counts.
 
-Every row of step 3, from the repo root at `73fe7d1a`, with sunxi-tools in `~/src/sunxi-tools` and
-the sparse Magisk clone in `magisk/`:
+Every row of step 3. The files are as they were at `73fe7d1a` (later commits moved some of this code,
+#359), but the tool only exists from this PR on. So check out `73fe7d1a` separately and run the tool
+from this branch. Here sunxi-tools is in `~/src/sunxi-tools` and the sparse Magisk clone is in `magisk/`:
 
 ```sh
+git worktree add /tmp/at-73fe7d1a 73fe7d1a
+O=/tmp/at-73fe7d1a
 for f in kiln/packages/fel/src/{a133,felDevice,index,protocol,transport,uboot}.ts kiln/packages/fel/test/fakes.ts; do
-  python3 -I tools/licence-audit/overlap.py "$f" ~/src/sunxi-tools
+  python3 -I tools/licence-audit/overlap.py "$O/$f" ~/src/sunxi-tools
 done
-python3 -I tools/licence-audit/overlap.py kiln/packages/bootpatch/src/wasm/src/lib.rs magisk/native/src/boot
+python3 -I tools/licence-audit/overlap.py "$O/kiln/packages/bootpatch/src/wasm/src/lib.rs" magisk/native/src/boot
 for f in kiln/packages/bootpatch/src/{cpio,bootimg,magisk,index,compress,overlay,vbmeta}.ts; do
-  python3 -I tools/licence-audit/overlap.py "$f" magisk/native/src/boot magisk/scripts
+  python3 -I tools/licence-audit/overlap.py "$O/$f" magisk/native/src/boot magisk/scripts
 done
+git worktree remove /tmp/at-73fe7d1a
 ```
 
-The output is the table in step 3. Later commits moved some of this code (#359), so run it on
-`73fe7d1a` to get the same numbers.
+The output is the table in step 3. Re-run this way on 2026-11-15, every row matched.
 
 For the word arrays, in order. This one stays here rather than in `tools/`, because it names
 sunxi-tools functions and `tools/` is open to the clean-room implementer (#355):

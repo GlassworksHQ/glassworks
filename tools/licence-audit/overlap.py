@@ -37,7 +37,7 @@ def main() -> None:
     sources = [p for p in paths if p.suffix in SUFFIXES]
     if not sources:
         sys.exit(f'overlap.py: no {" ".join(sorted(SUFFIXES))} files under {" ".join(sys.argv[2:])}')
-    up = ''.join(p.read_text(encoding='utf-8', errors='replace') for p in sources)
+    up = '\n'.join(p.read_text(encoding='utf-8', errors='replace') for p in sources)
 
     norm = lambda s: re.sub(r'\s+', ' ', s).strip()
     up_lines = {norm(line) for line in up.splitlines()}
