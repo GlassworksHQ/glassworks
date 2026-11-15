@@ -14,8 +14,13 @@ import javax.crypto.SecretKey
 
 /**
  * An AES-256-GCM key in the Android Keystore under [alias], made the first time it is asked for. The
- * key never leaves the key store (no app can export it) and needs no user sign-in, so the panel can
- * use it at boot with nobody at the screen. API 23 and later have all of it; the app's minimum is 26.
+ * key never leaves the key store (no app can export it) and needs no user authentication, so the app can
+ * use it whenever it runs, with nobody at the screen (it starts once the device has unlocked after boot;
+ * the S1 has no lock screen). API 23 and later have all of it; the app's minimum is 26.
+ *
+ * It reads the entry from the key store on every use and keeps no copy, so every object in the process
+ * uses the key the store holds now: one made again by another object (below) is never met with an old
+ * copy that would call a fresh secret lost.
  *
  * Null when the key store can't be reached (a vendor bug, a test without one); [warn] hears that
  * once, without any value. A key that went missing, or whose entry can't be read any more
@@ -23,12 +28,10 @@ import javax.crypto.SecretKey
  * ([dev.glassworks.secrets.SecretStore.Opened.Lost]): the panel asks for it again.
  */
 class KeystoreKey(private val alias: String, private val warn: (String) -> Unit) : () -> SecretKey? {
-    @Volatile private var key: SecretKey? = null
     private val warned = AtomicBoolean()
 
-    @Synchronized override fun invoke(): SecretKey? {
-        key?.let { return it }
-        return try {
+    override fun invoke(): SecretKey? = synchronized(KeystoreKey::class.java) {
+        try {
             val store = KeyStore.getInstance(PROVIDER).apply { load(null) }
             val k = try {
                 store.getKey(alias, null) as? SecretKey
@@ -48,7 +51,7 @@ class KeystoreKey(private val alias: String, private val warn: (String) -> Unit)
                 )
                 generateKey()
             }
-            k.also { key = it }
+            k
         } catch (e: Exception) {
             if (warned.compareAndSet(false, true)) warn("The key store isn't available (${e.javaClass.simpleName}); secrets stay as they are")
             null

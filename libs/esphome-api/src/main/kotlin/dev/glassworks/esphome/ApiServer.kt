@@ -241,6 +241,9 @@ public class ApiServer(
         internal const val UNRESPONSIVE_MS = 150_000L // ESPHome: KEEPALIVE_TIMEOUT_MS * 5 / 2
         /** ESPHome activates a newly saved PSK 100 ms after answering (api_server.cpp update_noise_psk_). */
         internal const val KEY_ACTIVATION_DELAY_MS = 100L
+
+        /** How often the keepalive tries to read a key that is stored but unreadable ([NoiseKeys.locked]). */
+        internal const val UNLOCK_RETRY_MS = 60_000L
         /** Action calls waiting for the action thread; more are refused, so a client can't fill the memory. */
         internal const val MAX_PENDING_ACTIONS = 32
         /** A camera stream runs this long after the last stream request (ESPHome api_connection.cpp `CAMERA_STOP_STREAM`). */
@@ -421,6 +424,7 @@ public class ApiServer(
 
     private fun modeName() = when {
         keys == null -> "plaintext only"
+        keys.locked -> "a key is stored but can't be read now: no connections until it can"
         keys.hasKey -> "Noise, key fingerprint ${NoiseKeys.fingerprint(keys.active!!)}"
         else -> "no key yet: plaintext + zero-PSK Noise, key provisionable"
     }
@@ -456,6 +460,20 @@ public class ApiServer(
     }
 
     /** Sessions opened before a key change must not survive it (esphome `flags_.next_close`). */
+    /** When a locked key ([NoiseKeys.locked]) was last tried; the keepalive tries again every [UNLOCK_RETRY_MS]. */
+    @Volatile private var unlockTriedAt = 0L
+
+    /** Tries to read a locked key; when it ends the lock, the device advertises its new state. */
+    private fun tryUnlock() {
+        val k = keys ?: return
+        if (!k.locked) return
+        unlockTriedAt = clock()
+        if (k.unlock()) {
+            EspHomeLog.i("Encryption key readable again; now ${modeName()}")
+            try { onKeyActivated?.invoke() } catch (t: Throwable) { EspHomeLog.w("onKeyActivated failed", t) }
+        }
+    }
+
     private fun retireAll() {
         for (c in connections) c.retire()
     }
@@ -463,6 +481,7 @@ public class ApiServer(
     /** Pings quiet clients and drops the ones that stay silent (see [KEEPALIVE_MS]). Tests call it too. */
     internal fun keepaliveTick() {
         val now = clock()
+        if (keys?.locked == true && now - unlockTriedAt >= UNLOCK_RETRY_MS) tryUnlock()
         for (c in connections) {
             try {
                 if (!c.ready || !c.isOpen) continue
@@ -619,6 +638,11 @@ public class ApiServer(
                 val output = BufferedOutputStream(socket.getOutputStream(), 16 * 1024)
                 val ident = identity()
                 val k = keys
+                if (k != null && k.locked) tryUnlock()
+                if (k != null && k.locked) {
+                    EspHomeLog.w("[$id] $remote: the encryption key can't be read right now; refusing the connection")
+                    return
+                }
                 val active = k?.active
                 transport = when {
                     k == null -> PlaintextTransport(input, output)

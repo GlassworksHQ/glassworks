@@ -114,6 +114,22 @@ class SecretPrefsTest {
         assertEquals("made-up-psk", back.getString("psk", null))
     }
 
+    @Test fun anEditThatWouldDropAnUnreadableSecretWritesNothing() {
+        prefs().edit().putString("token", "made-up-token").putString("host", "192.0.2.10").commit()
+        val before = raw.all
+        key = null
+        val p = prefs()
+        assertFalse("clear", p.edit().clear().commit())
+        assertFalse("remove", p.edit().remove("token").putString("host", "192.0.2.99").commit())
+        assertFalse("a null put is a remove", p.edit().putString("token", null).commit())
+        assertFalse("replace", p.edit().putString("token", "made-up-new").putBoolean("flag", true).commit())
+        p.edit().remove("token").putString("host", "192.0.2.99").apply()
+        assertEquals("all or nothing: the other changes in those edits aren't written either", before, raw.all)
+        assertTrue("an edit that leaves the secret alone is written", p.edit().putString("host", "192.0.2.99").commit())
+        key = first
+        assertEquals("made-up-token", prefs().getString("token", null))
+    }
+
     @Test fun getAllHandsOutSecretsOpened() {
         raw.edit().putString("host", "192.0.2.10").commit()
         prefs().edit().putString("token", "made-up-token").commit()

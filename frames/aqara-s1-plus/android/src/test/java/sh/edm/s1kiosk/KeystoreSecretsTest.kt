@@ -25,6 +25,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowLog
+import sh.edm.s1kiosk.auth.StoredAuth
 import sh.edm.s1kiosk.sendspin.PrefsSsStore
 import sh.edm.s1kiosk.sendspin.SsPairingRecord
 
@@ -104,13 +105,14 @@ class KeystoreSecretsTest {
     }
 
     @Test fun aKeyStoreOutageWritesNothingBack() {
-        KioskPrefs(app); PanePrefs(app); PrefsSsStore(app)
+        KioskPrefs(app); PanePrefs(app)
+        val ss = PrefsSsStore(app)
         val sealed = onDisk()
         FakeAndroidKeyStore.down = true
         val prefs = KioskPrefs(app)
         assertNull("reads as signed out for now", prefs.auth)
         assertNull(PanePrefs(app).camera.signIn)
-        val ss = PrefsSsStore(app)
+        assertFalse("no pairing token for a stand-in", ss.secretsReadable())
         val standIn = ss.identity()
         assertFalse("a stand-in identity", standIn.privateKey.contentEquals(identity))
         assertTrue("the same one while it lasts", ss.identity() === standIn)
@@ -120,21 +122,58 @@ class KeystoreSecretsTest {
         ss.touchRecord("made-up-server", 3L)
         ss.removeRecord("made-up-server")
         PanePrefs(app).camera.signIn = "made-up-user" to "made-up-typed-in-outage"
-        assertEquals("nothing replaced, nothing regenerated", sealed, onDisk())
+        PanePrefs(app).camera.signIn = null
+        assertEquals("nothing replaced, nothing removed, nothing regenerated", sealed, onDisk())
 
         FakeAndroidKeyStore.down = false
         assertEquals(token, KioskPrefs(app).auth?.refreshToken)
-        val back = PrefsSsStore(app)
-        assertArrayEquals("the same identity", identity, back.identity().privateKey)
-        assertArrayEquals(psk, back.pairingPsk())
-        assertEquals("still paired", "made-up-server", back.records().single().serverId)
+        assertTrue(ss.secretsReadable())
+        assertArrayEquals("the same store object reads the real identity again", identity, ss.identity().privateKey)
+        assertArrayEquals(psk, ss.pairingPsk())
+        assertEquals("still paired", "made-up-server", ss.records().single().serverId)
         assertEquals("made-up-user" to "made-up-camera-pass-7", PanePrefs(app).camera.signIn)
+    }
+
+    @Test fun aSignInOrSignOutDuringAnOutageFailsAndKeepsTheStoredOne() {
+        KioskPrefs(app)
+        val sealed = onDisk().getValue("auth")
+        FakeAndroidKeyStore.down = true
+        val prefs = KioskPrefs(app)
+        val signIn = runCatching { prefs.auth = StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token") }.exceptionOrNull()
+        assertTrue("a new sign-in fails where the person sees it: $signIn", signIn is SignInNotStored)
+        assertTrue(runCatching { prefs.auth = null }.exceptionOrNull() is SignInNotStored)
+        assertEquals("the sealed token stays", sealed, onDisk().getValue("auth"))
+        assertFalse(onDisk().getValue("auth").contains("made-up-new-token"))
+        FakeAndroidKeyStore.down = false
+        assertEquals(token, KioskPrefs(app).auth?.refreshToken)
+    }
+
+    @Test fun aNoiseKeyDuringAnOutageIsRefusedAndNeverFallsBackToPlaintext() {
+        KioskPrefs(app)
+        val sealed = onDisk().getValue("kiosk")
+        FakeAndroidKeyStore.down = true
+        val prefs = KioskPrefs(app)
+        assertTrue(prefs.noiseKeyStore.unreadable())
+        assertFalse("Home Assistant hears the key wasn't set", prefs.noiseKeyStore.save(ByteArray(32) { 9 }))
+        assertFalse(prefs.noiseKeyStore.save(null))
+        assertEquals("api_encryption and the key as they were", sealed, onDisk().getValue("kiosk"))
+        assertTrue(prefs.apiEncryption)
+        val keys = dev.glassworks.esphome.NoiseKeys(prefs.noiseKeyStore)
+        assertTrue("nobody gets in, not plaintext", keys.locked)
+        assertFalse(keys.provisionable)
+        assertFalse(keys.handleSetKey(java.util.Base64.getEncoder().encode(ByteArray(32) { 9 })).success)
+        FakeAndroidKeyStore.down = false
+        val after = dev.glassworks.esphome.NoiseKeys(KioskPrefs(app).noiseKeyStore)
+        assertTrue("the same key once the key store is back", after.hasKey && !after.locked)
+        assertArrayEquals(ByteArray(32) { (0x20 + it).toByte() }, KioskPrefs(app).noiseKeyStore.load())
     }
 
     /** Every opener of a file with secrets goes through SecretFiles: opened any other way, it reads sealed text. */
     @Test fun onlySecretFilesOpensAFileWithSecrets() {
         val sources = RepoFiles.code(atLeast = 100, inModules = RepoFiles.appModules)
         val opens = sources.filter { "getSharedPreferences(" in it.readText() }.map { RepoFiles.rel(it).substringAfterLast('/') }.toSet()
+        val secretOpeners = sources.filter { "SecretFiles.open(" in it.readText() }.map { it.name }.toSet()
+        assertEquals("the openers of kiosk, auth and sendspin", setOf("KioskPrefs.kt", "PanePrefs.kt", "SendspinPlayer.kt"), secretOpeners)
         assertTrue("the scan sees SecretFiles", "SecretFiles.kt" in opens)
         // The others open only files without secrets: PanePrefs opens SecretFiles' files through it, the
         // wall base its energy counter (s1base), the timers their anchor (timers).

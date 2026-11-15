@@ -104,7 +104,10 @@ server.start()
 `ReadmeExampleTest` keeps this example compiling and working.
 
 - **Persist the key.** Implement `NoiseKeyStore` over your own storage (S1 Kiosk uses
-  SharedPreferences). `save` must be synchronous, and the key must never be logged.
+  SharedPreferences). `save` must be synchronous and return false when the key wasn't stored, and the
+  key must never be logged. If your storage can hold a key it can't read for a while (a key store
+  that is down), return true from `unreadable()` then: the server locks instead of falling back to
+  plaintext.
 - **Threads.** Entity getters and setters run on connection threads, so make them thread-safe.
 - **Changing entities at runtime.** `server.setEntities(...)`.
 - **Categories and defaults.** The entity types take `category` (`CONFIG`, `DIAGNOSTIC`) and

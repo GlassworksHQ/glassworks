@@ -113,4 +113,50 @@ class NoiseKeysTest {
         assertArrayEquals(k1, NoiseKeys.decodeKeyField(field(k1)))
         assertArrayEquals(k1, NoiseKeys.decodeKeyField((Base64.getEncoder().encodeToString(k1) + "\n").toByteArray()))
     }
+
+    /** The device's key store is down: a key is stored but `load()` can't give it. */
+    private class OutageStore(var key: ByteArray?, var down: Boolean) : NoiseKeyStore {
+        override fun load(): ByteArray? = if (down) null else key?.copyOf()
+        override fun save(key: ByteArray?): Boolean { if (down) return false; this.key = key?.copyOf(); return true }
+        override fun unreadable(): Boolean = down && key != null
+    }
+
+    @Test
+    fun aKeyThatCantBeReadLocksInsteadOfFallingBackToPlaintext() {
+        val store = OutageStore(k1, down = true)
+        val keys = NoiseKeys(store)
+        assertTrue(keys.locked)
+        assertFalse("never advertised as provisionable", keys.provisionable)
+        assertFalse(keys.hasKey)
+        assertFalse("no new key while locked", keys.handleSetKey(field(k2)).success)
+        assertFalse("still locked", keys.unlock())
+        assertFalse("a local clear during the outage changes nothing", keys.replace(null))
+        assertTrue(keys.locked)
+
+        store.down = false
+        assertTrue("the key reads again", keys.unlock())
+        assertFalse(keys.locked)
+        assertArrayEquals(k1, keys.active)
+        assertArrayEquals(k1, keys.latest)
+    }
+
+    @Test
+    fun aKeyReadEarlierSurvivesAnOutage() {
+        val store = OutageStore(k1, down = false)
+        val keys = NoiseKeys(store)
+        store.down = true
+        assertFalse("an unreadable store is not a removed key", keys.replace(null))
+        assertArrayEquals(k1, keys.active)
+        assertFalse(keys.locked)
+    }
+
+    @Test
+    fun aKeyLostForGoodUnlocksAsUnprovisioned() {
+        val store = OutageStore(k1, down = true)
+        val keys = NoiseKeys(store)
+        store.key = null; store.down = false // the key store came back without it
+        assertTrue(keys.unlock())
+        assertNull(keys.active)
+        assertTrue("provision a new one", keys.provisionable)
+    }
 }

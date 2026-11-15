@@ -51,6 +51,9 @@ ESPHome device built with `api: encryption:` and no key in YAML:
   The panel stores it, activates it 100 ms later and drops every older session. HA reconnects with
   the key. You never see the key.
 - **With a key**: only Noise with that key (as before). Logs show only a 4-hex fingerprint.
+- **A key it can't read right now** (the Keystore is down, [secrets.md](secrets.md#when-the-key-is-gone)):
+  nobody gets in, not plaintext and not a new key, until it reads the key again (on each connection
+  and every minute). A panel with a key never falls back to plaintext.
 - Removing the device in HA sends an empty key, which puts the panel back to "no key".
 - Manual key, as before: `$A --es api_key $(openssl rand -base64 32) --ez api_encryption true`
   (applied live; all sessions are dropped). Then enter the same key in HA.

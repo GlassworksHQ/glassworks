@@ -48,10 +48,20 @@ removes the unreadable value, logs it once under `S1Kiosk.Secrets` without the v
 again through its usual setup. It never crashes over it.
 
 If the Keystore can't be reached at all, sealed secrets read as not set for now, and nothing replaces
-them: the panel doesn't store a new Sendspin identity, pairing key or pairing list, and a change to a
-sealed secret isn't saved. Sendspin uses a stand-in identity it never stores until the Keystore is
-back. A secret that had no sealed value yet is written unsealed so the panel keeps working, and is
-sealed the next time the app starts with a working Keystore.
+or removes them. The app tries them again on each use, so they come back as soon as the Keystore does.
+Until then:
+
+| What | During the outage |
+|---|---|
+| Home Assistant sign-in | The dashboard can't sign in. A new sign-in fails on the phone with "The panel can't store the sign-in right now", and signing out keeps the stored token |
+| ESPHome API | A key is stored but can't be read: the API lets nobody in (no plaintext, no zero-PSK provisioning) and isn't advertised as provisionable. It reads the key again on each connection and every minute. A new key from Home Assistant is refused |
+| Sendspin | It plays under a stand-in identity it never stores, hands out no pairing token, and keeps the stored pairings. The same running app reads the real identity once the Keystore is back |
+| Camera password | A change isn't saved |
+
+A change that would replace or drop an unreadable secret is refused whole, with the other settings in
+the same change, so nothing is half written. A secret that had no sealed value yet is written unsealed
+so the panel keeps working, and is sealed the next time the app starts with a working Keystore. Each
+kind of problem is logged once under `S1Kiosk.Secrets`, without the value.
 
 Nothing on the panel goes into a backup or a device-to-device transfer (`allowBackup="false"` and
 the data extraction rules), because a sealed secret is useless without this panel's key.

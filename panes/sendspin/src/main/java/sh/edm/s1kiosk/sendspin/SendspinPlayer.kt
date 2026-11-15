@@ -44,11 +44,15 @@ class PrefsSsStore(context: Context, secrets: SecretStore = SecretStore.keystore
         return psk
     }
 
+    override fun secretsReadable(): Boolean = sp.canRead("identity") && sp.canRead("pairing_psk")
+
     @Synchronized override fun records() = SsStore.decodeRecords(sp.getString("records", null))
 
-    /** Rewrites the pairings from [records], unless the stored ones can't be read now: that would drop them all. */
+    /**
+     * Rewrites the pairings from [records]. While the stored ones can't be read (an outage), [records] is
+     * empty and the store refuses the edit (SecretPrefs never replaces a sealed value it can't read).
+     */
     private fun writeRecords(commit: Boolean, change: (List<SsPairingRecord>) -> List<SsPairingRecord>) {
-        if (!sp.canRead("records")) return
         val e = sp.edit().putString("records", SsStore.encodeRecords(change(records())))
         if (commit) e.commit() else e.apply()
     }
@@ -245,6 +249,9 @@ class SendspinPlayer(
 
     /** The version-0 pairing token (a credential: never log it). */
     fun pairingToken(): String = SsCrypto.pairingToken(store.identity().publicKey, store.pairingPsk())
+
+    /** A pairing token made now would be for a stand-in identity ([SsStore.secretsReadable]). */
+    val pairingReady: Boolean get() = store.secretsReadable()
 
     /**
      * One [start] to its [stop], with what its threads own. Once it is no longer [current], its

@@ -90,10 +90,16 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
             val cid = authSp.getString("client_id", null) ?: return null
             return StoredAuth(base, cid, rt)
         }
+        /**
+         * Writes the three keys (never `clear()`, which would drop a sealed token the key store can't read
+         * now). Throws [SignInNotStored] when it wasn't stored: a sign-in during a key store outage fails
+         * where the person sees it (the sign-in page says the panel couldn't store it), not silently.
+         */
         set(v) {
-            val e = authSp.edit().clear()
-            if (v != null) e.putString("refresh_token", v.refreshToken).putString("ha_base", v.haBase).putString("client_id", v.clientId)
-            e.commit()
+            val e = authSp.edit()
+            if (v == null) e.remove("refresh_token").remove("ha_base").remove("client_id")
+            else e.putString("refresh_token", v.refreshToken).putString("ha_base", v.haBase).putString("client_id", v.clientId)
+            if (!e.commit()) throw SignInNotStored(if (v == null) "The sign-in can't be removed right now" else "The panel can't store the sign-in right now")
         }
 
     val hasAuth: Boolean get() = authSp.contains("refresh_token")
@@ -200,10 +206,13 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
     /** Persists the key HA provisions over the API (synchronously, like ESPHome's pref sync). */
     val noiseKeyStore: NoiseKeyStore = object : NoiseKeyStore {
         override fun load(): ByteArray? = effectiveApiKey()
+        // Both writes in one edit: when the key isn't stored (the key store is down), neither is
+        // api_encryption, and save() says false, so Home Assistant hears the key wasn't set.
         override fun save(key: ByteArray?): Boolean =
             if (key == null) sp.edit().remove("api_key").putBoolean("api_encryption", false).commit()
             else sp.edit().putString("api_key", Base64.encodeToString(key, Base64.NO_WRAP))
                 .putBoolean("api_encryption", true).commit()
+        override fun unreadable(): Boolean = apiEncryption && !sp.canRead("api_key")
     }
 
     /** Stable MAC reported to Home Assistant (its config entry is keyed by it). */
@@ -257,3 +266,6 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
         private const val KEY_REMOTE_DEBUG = "remote_debug"
     }
 }
+
+/** The HA sign-in couldn't be written: the key store can't seal it, or can't let the old one go, now. */
+class SignInNotStored(message: String) : IllegalStateException(message)

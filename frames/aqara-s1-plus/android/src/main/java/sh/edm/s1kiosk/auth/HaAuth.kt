@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.auth
 
+import sh.edm.s1kiosk.SignInNotStored
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -166,7 +167,8 @@ object HaAuth {
 
     private fun clearLocal() {
         val had = prefs.hasAuth
-        prefs.auth = null
+        // During a key store outage the sealed token stays (it reads as signed out until the store is back).
+        try { prefs.auth = null } catch (e: SignInNotStored) { AuthLog.w("${e.message}; it stays until the key store is back") }
         cache.clear()
         if (had) notifyChanged()
     }

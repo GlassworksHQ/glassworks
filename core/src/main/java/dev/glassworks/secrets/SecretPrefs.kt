@@ -128,15 +128,27 @@ class SecretPrefs(
         synchronized(listeners) { listeners.remove(l) }?.let(raw::unregisterOnSharedPreferenceChangeListener)
     }
 
+    /**
+     * All or nothing. An edit that would replace or drop a secret that can't be read now ([canRead] false:
+     * a put while the key store can't seal it, a remove, a clear) is refused whole: [commit] writes nothing
+     * and returns false, and [apply] drops it. The secret stays for when the key store is back.
+     */
     private inner class Editor(private val e: SharedPreferences.Editor) : SharedPreferences.Editor {
+        private var refused: String? = null
+
+        private fun refuse(key: String) { if (refused == null) refused = key }
+
+        /** [key] holds a secret that must not be replaced or dropped now. */
+        private fun held(key: String) = key in secrets && !canRead(key)
+
         override fun putString(key: String, value: String?): SharedPreferences.Editor {
-            if (key !in secrets || value == null) { e.putString(key, value); return this }
+            if (key !in secrets) { e.putString(key, value); return this }
+            if (value == null) return remove(key)
             val sealed = store.seal(value, scope(key))
             when {
                 sealed != null -> e.putString(key, sealed)
                 // A sealed value that may open again is never replaced with plaintext.
-                stored(key)?.let(SecretStore::isSealed) == true ->
-                    warnOnce(Warning.KEPT_SEALED, "The key store isn't available; $file/$key keeps its sealed value and the change isn't saved")
+                stored(key)?.let(SecretStore::isSealed) == true -> refuse(key)
                 else -> {
                     warnOnce(Warning.CANT_SEAL, "The key store isn't available; $file/$key is stored unsealed until it is")
                     e.putString(key, value)
@@ -149,9 +161,20 @@ class SecretPrefs(
         override fun putLong(key: String, value: Long): SharedPreferences.Editor { e.putLong(key, value); return this }
         override fun putFloat(key: String, value: Float): SharedPreferences.Editor { e.putFloat(key, value); return this }
         override fun putBoolean(key: String, value: Boolean): SharedPreferences.Editor { e.putBoolean(key, value); return this }
-        override fun remove(key: String): SharedPreferences.Editor { e.remove(key); return this }
-        override fun clear(): SharedPreferences.Editor { e.clear(); return this }
-        override fun commit(): Boolean = e.commit()
-        override fun apply() = e.apply()
+        override fun remove(key: String): SharedPreferences.Editor { if (held(key)) refuse(key) else e.remove(key); return this }
+        override fun clear(): SharedPreferences.Editor {
+            val k = secrets.firstOrNull(::held)
+            if (k != null) refuse(k) else e.clear()
+            return this
+        }
+
+        private fun allowed(): Boolean {
+            val key = refused ?: return true
+            warnOnce(Warning.KEPT_SEALED, "The key store isn't available; $file/$key keeps its sealed value and the change isn't saved")
+            return false
+        }
+
+        override fun commit(): Boolean = allowed() && e.commit()
+        override fun apply() { if (allowed()) e.apply() }
     }
 }

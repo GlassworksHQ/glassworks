@@ -34,7 +34,7 @@ class SendspinPane(ctx: PaneContext, haBase: () -> String?) : Pane {
         server.sendspin = object : SendspinTokenSource {
             override fun clientIdIfStarted() = player.takeIf { it.started }?.clientId ?: ""
             override fun pairingToken(): Pair<Int, String?> {
-                val status = pairingStatus(prefs.enabled, player.started)
+                val status = pairingStatus(prefs.enabled, player.started, player.pairingReady)
                 return status to if (status == SendspinApi.STATUS_OK) player.pairingToken() else null
             }
         }
@@ -60,8 +60,9 @@ class SendspinPane(ctx: PaneContext, haBase: () -> String?) : Pane {
 }
 
 // `started` means "started since boot" and is never cleared, so the setting has to be checked first.
-internal fun pairingStatus(enabled: Boolean, started: Boolean): Int = when {
+internal fun pairingStatus(enabled: Boolean, started: Boolean, secretsReadable: Boolean = true): Int = when {
     !enabled -> SendspinApi.STATUS_DISABLED
-    !started -> SendspinApi.STATUS_NOT_READY
+    // The key store is down: a token now would pair Music Assistant with a stand-in identity.
+    !started || !secretsReadable -> SendspinApi.STATUS_NOT_READY
     else -> SendspinApi.STATUS_OK
 }
