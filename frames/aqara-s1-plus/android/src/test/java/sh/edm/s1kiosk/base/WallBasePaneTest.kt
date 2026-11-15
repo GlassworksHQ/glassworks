@@ -62,13 +62,15 @@ class WallBasePaneTest {
         assertEquals(listOf("block_aqara_cloud", "aqara_cloud", "base"), shellList().map { it.objectId })
     }
 
-    @Test fun theSettingsPageOfAMountedBaseStillListsTheCloudEntities() {
-        // CodeRabbit on #235: mounting a base dropped Block Aqara cloud and the daemon from the page.
+    @Test fun theCloudIsOnTheDevicePageNotTheWallBases() {
+        // Maintainer 2026-11-15: Block Aqara cloud and the daemon moved to the S1's Device page; Home Assistant keeps both entities.
+        val def = WallBaseDefinition(PanePrefs(app).paneFile("wall-base"))
+        fun inHa() = dev.glassworks.pane.paneSections(listOf(def)) { pane }.single().items.filterIsInstance<dev.glassworks.pane.SettingsItem.States>().flatMap { it.rows() }.map { it.name }
+        assertTrue("no base: nothing else to list", "Block Aqara cloud" !in inHa() && "Aqara cloud daemon" !in inHa())
         pane.tracker.apply(mapOf(BaseRes.DOCK_CLASS to 0x0100F110, BaseRes.CHANNEL_COUNT to 2, BaseRes.RELAY_MASK to 3), 0)
         pane.baseListener.onLayout(pane.tracker.current()!!)
-        val items = dev.glassworks.pane.paneSections(listOf(WallBaseDefinition(PanePrefs(app).paneFile("wall-base")))) { pane }.single().items
-        val ha = items.filterIsInstance<dev.glassworks.pane.SettingsItem.States>().single()
-        assertEquals("the base's own are its tiles and cards", listOf("Block Aqara cloud", "Aqara cloud daemon"), ha.rows().map { it.name })
+        assertEquals("a mounted base's own are its tiles and cards", emptyList<String>(), inHa())
+        assertTrue("still in Home Assistant", pane.entities().map { it.objectId }.containsAll(WallBaseDefinition.CLOUD_ENTITIES))
     }
 
     @Test fun aNewLayoutAsksTheShellToRebuildWithItsEntities() {

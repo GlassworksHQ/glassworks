@@ -229,7 +229,10 @@ ${foot(viewer)}"""
             is SettingsItem.Info -> row(safe { item.title() }, safe { item.detail() }, fix = runCatching { item.fixable() }.getOrDefault(false))
             is SettingsItem.Note -> """<div class="row static note"><span>${esc(safe { item.text() })}</span></div>"""
             // Opens something on the panel itself (another app, the licences): say so, rather than drop the row.
-            is SettingsItem.Link -> row(item.title, item.detail, right = ON_THE_PANEL, dim = item.detail.isEmpty())
+            // Another section's page opens here as on the panel.
+            is SettingsItem.Link -> item.section?.let { id ->
+                """<a class="row" href="/${esc(id)}"><div><b>${esc(item.title)}</b>${if (item.detail.isNotEmpty()) "<span>${esc(item.detail)}</span>" else ""}</div><i class="chev" aria-hidden="true">›</i></a>"""
+            } ?: row(item.title, item.detail, right = ON_THE_PANEL, dim = item.detail.isEmpty())
             is SettingsItem.Group -> """<div class="grp"><div class="gl">${esc(item.title)}</div>${items(v, path, section, item.items, "$prefix${item.title}/")}</div>"""
             // A view only the panel can draw: say so, rather than drop the row.
             is SettingsItem.Native -> row(item.title.ifEmpty { nativeTitle(section) }, "Shown on the panel's own settings", right = ON_THE_PANEL)

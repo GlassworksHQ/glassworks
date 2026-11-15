@@ -45,8 +45,9 @@ class WallBaseDefinition(file: SharedPreferences) : PaneDefinition {
             } else null,
         )
         // A mounted base's tiles and cards cover its entities, energy too: it stays hidden until #216 settles
-        // its unit. The core lists the rest (Aqara's cloud), so the page has all Home Assistant has.
-        val covers = if (layout == null || !layout.attached) emptySet() else BaseEntities.objectIds(layout).toSet()
+        // its unit. Aqara's cloud (Block Aqara cloud and the daemon's state) is on the frame's Device page.
+        val base = if (layout == null || !layout.attached) emptySet() else BaseEntities.objectIds(layout).toSet()
+        val covers = base + CLOUD_ENTITIES
         return listOf(SettingsSection(id, "Wall base", items, covers = covers))
     }
 
@@ -56,4 +57,9 @@ class WallBaseDefinition(file: SharedPreferences) : PaneDefinition {
         // "" (/dev/ttyS3) or tcp:host:port (frames/aqara-s1-plus/tools/bracket/base_emulator.py)
         IntentExtra.string("base_transport") { prefs.transport = it },
     )
+
+    companion object {
+        /** The pane's Aqara cloud entities, shown on the S1's Device page instead of here (same ids in Home Assistant). */
+        val CLOUD_ENTITIES = setOf("block_aqara_cloud", "aqara_cloud")
+    }
 }

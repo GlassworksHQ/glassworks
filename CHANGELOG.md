@@ -24,6 +24,12 @@ below as the release notes.
   dashboard is signed in as. Each page shows its settings in cards, one per group, with the value
   on the right of its name, and "In Home Assistant" in a card of its own. On the Manage page, a browser signed in with the panel's code says so
   at the foot of the sidebar.
+- **A page for the device itself in the settings.** Under Panel, the S1 has an "S1 Plus" page with
+  Block Aqara cloud (moved there from the wall base's page; its Home Assistant entity is unchanged),
+  whether Aqara's cloud daemon runs, which of Aqara's apps are turned off, and the radio's mode,
+  which opens the Radio page. On another device the page is named after it and says whether app
+  updates install without a tap, whether the app is the device owner, the model and the Android
+  version. It's on the panel and the Manage page.
 - **On Android 12 and newer, app updates from Home Assistant install without a tap.** On a device
   that isn't an Aqara S1, such as a tablet, pressing Install in Home Assistant now updates the app
   with nobody at the screen, once "Install unknown apps" is allowed for it. If Android still asks,

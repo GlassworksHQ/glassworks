@@ -73,7 +73,8 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   uptime, Reload dashboard, Restart app, Check for updates, Home Assistant, Wi-Fi, engine and memory
   tiles, every pane with its state). The sidebar has Panel (Home Assistant & dashboard: address, the
   dashboard's sign-in, full screen, zoom, secure hosts; Screen: presence, idle and night times,
-  brightness, Aqara's own settings), each pane under Panes with its status dot, and System (Log, About).
+  brightness, Aqara's own settings; S1 Plus: Block Aqara cloud, the cloud daemon, Aqara's apps, the
+  radio's mode), each pane under Panes with its status dot, and System (Log, About).
   Changes apply as you make them; the few that need a restart offer one.
 - **Kiosk mode for HA**: a built-in Gecko web extension (`engines/engine-gecko/src/main/assets/extension/`) hides the HA dashboard
   header and the sidebar. Add `?kiosk=0` to the URL to show them for one page; while you're editing a

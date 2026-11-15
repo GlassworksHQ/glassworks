@@ -134,10 +134,11 @@ const val UNKNOWN = "Unknown"
 const val UNAVAILABLE = "Unavailable"
 
 /** Where a settings section sits. The core's own come first and last; panes go in between. */
-enum class SettingsPlace { DASHBOARD, SCREEN, NETWORK, PANES, LOG, SECURITY, ABOUT }
+enum class SettingsPlace { DASHBOARD, SCREEN, DEVICE, NETWORK, PANES, LOG, SECURITY, ABOUT }
 
 /**
- * The sections in the order every settings surface uses: the core's Dashboard, Screen and Network,
+ * The sections in the order every settings surface uses: the core's Dashboard and Screen, the frame's
+ * Device page ([dev.glassworks.frame.Frame.deviceSection]) and Network,
  * then [panes] in definition order, then Log, Security and About. Sections without items are left out.
  */
 fun settingsOrder(core: Map<SettingsPlace, SettingsSection>, panes: List<SettingsSection>): List<SettingsSection> =
@@ -233,8 +234,13 @@ sealed interface SettingsItem {
         val save: (Pair<String, String?>?, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
-    /** Opens something else: another app's settings, the licences. */
-    class Link(val title: String, val detail: String, val open: (Context) -> Unit) : SettingsItem
+    /** Opens something else: another app's settings, the licences, or another section ([Link.section]). */
+    class Link(
+        val title: String, val detail: String,
+        /** The id of another section this row opens instead (the Device page's radio line opens the Radio pane). */
+        val section: String? = null,
+        val open: (Context) -> Unit = {},
+    ) : SettingsItem
 
     /** A line of status text. */
     class Note(val text: () -> String) : SettingsItem

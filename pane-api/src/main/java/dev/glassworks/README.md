@@ -344,6 +344,8 @@ steps but no card, with an error in the log: the person could never turn it on o
 `Status` (the line under a page's heading), `Tiles` (readings with their last hour, #212) and `States`
 (entities as Home Assistant shows them). A slider, a duration (picked from its choices, with units), a
 choice and a daily window are never typed (#63 round 2), so a browser can draw the same controls.
+A `Link` with a `section` opens that section's page instead of something outside the menu (the S1's
+Device page opens the Radio pane this way), on the panel and the Manage page alike.
 `Info`, `Status`, `Tiles`, `States` and a `Slider` not being dragged are read again every couple of
 seconds while the page is open. If the page itself changes (a base mounted, the pane turned off from
 Home Assistant, the device started), the menu draws it again from the definitions. A `Switch` can ask first (`confirm` gives a `Confirm`: the question, what it costs,
@@ -500,6 +502,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
+| `deviceSection(context, running)` | The frame's Device page: settings and facts about the device that belong to no pane. Every settings surface lists it under Panel, after Screen, named after the frame ("S1 Plus"; a generic device's model). `running` gives a running pane by id. Null (the default) means no page. |
 
 The app makes one frame at start, and `GlassworksRuntime` holds it. The device shell
 (`PanelDevice`) reads only these members; `PanelDeviceFrameTest` fails if it reaches past them.

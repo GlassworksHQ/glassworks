@@ -14,6 +14,7 @@ import dev.glassworks.frame.Hardware
 import dev.glassworks.frame.NamedBy
 import dev.glassworks.frame.RootUpdates
 import dev.glassworks.pane.PaneContext
+import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.WallBaseDefinition
@@ -55,6 +56,8 @@ class AqaraS1Plus : Frame {
         val prefs = PanePrefs(context)
         return listOf(WallBaseDefinition(prefs.paneFile("wall-base")), TimeZoneDefinition(prefs.paneFile("time-zone")))
     }
+
+    override fun deviceSection(context: Context, running: (String) -> Pane?) = S1Device(aqaraCloud).section(context, running)
 
     override val rootUpdates: RootUpdates = RootUpdateInstaller()
 

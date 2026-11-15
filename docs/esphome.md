@@ -794,6 +794,9 @@ ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gra
 
 ### Aqara cloud
 
+Both show on the S1 Plus page of the panel's settings and the Manage page (the frame's Device page),
+not on the wall base's page. Their entity ids are the wall base pane's, as before.
+
 - switch `Block Aqara cloud` (`block_aqara_cloud`, default on): stops Aqara's cloud daemon `ha_master`.
   With the UART wall-base backend (default) it is always stopped; with the LocalService backend it is
   kept only while a switch base is attached (or before the base check has read the dock). With no base,

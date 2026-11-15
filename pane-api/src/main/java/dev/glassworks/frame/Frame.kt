@@ -10,6 +10,7 @@ import android.provider.Settings
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PaneDefinition
+import dev.glassworks.pane.SettingsSection
 import dev.glassworks.platform.Platform
 import dev.glassworks.screen.LightSource
 import dev.glassworks.screen.PresenceSource
@@ -80,6 +81,13 @@ interface Frame {
      * device run, among its own, and the device runs them like any other. [device] is the device's thread.
      */
     fun panes(ctx: PaneContext, device: ScheduledExecutorService): List<Pane>
+
+    /**
+     * The frame's Device page: settings and facts about the device that belong to no pane. Every settings
+     * surface lists it under Panel, named after the frame (its title). [running] gives a running pane by
+     * id, to read what it knows. Null for no page. Read again whenever the settings are.
+     */
+    fun deviceSection(context: Context, running: (String) -> Pane? = { null }): SettingsSection? = null
 }
 
 /** The first of [Frame.systemSettingsIntents] that resolves on this device, ready to start from any context. Null when none does. */

@@ -170,7 +170,8 @@ class PanelManageParityTest {
             override fun get(url: String, maxBytes: Int) = 0 to ""
         })
         val manage = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, prefs)
-        val menu = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), S1Settings.hasDeviceSettings(runtime, app), fullScreen = {})
+        // As MainActivity makes it: with the activity's context, which the frame's Device page reads.
+        val menu = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), S1Settings.hasDeviceSettings(runtime, app), fullScreen = {}, context = app)
         fun shape(s: List<SettingsSection>) = s.map { sec ->
             val items = ArrayList<String>()
             walk(sec.items) { i, key -> items += "${i::class.simpleName} $key" }
