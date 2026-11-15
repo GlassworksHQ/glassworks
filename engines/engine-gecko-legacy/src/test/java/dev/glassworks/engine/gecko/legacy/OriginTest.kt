@@ -29,6 +29,7 @@ class OriginTest {
             "http://xn--lt-uia.example.org:8123/api/websocket" to "http://xn--lt-uia.example.org:8123",
             "https://ÄLT.example.org/" to "https://xn--lt-uia.example.org",
             "http://xn--fa-hia.example.org:8123/" to "http://xn--fa-hia.example.org:8123",
+            "http://us%40er:p%40ss@192.0.2.10:8123/" to "http://192.0.2.10:8123",
         )
         for ((url, origin) in cases) assertEquals(url, origin, Origin.of(url))
         for (none in listOf(null, "", "about:blank", "data:text/html,x", "moz-extension://abc/x", "javascript:x", "file:///x",
@@ -39,7 +40,9 @@ class OriginTest {
             "http://exa\nmple.com@192.0.2.10:8123/", "http://exa mple.com@192.0.2.10:8123/", "http://exa\u0001mple.com@192.0.2.10:8123/",
             "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/",
             // IDNA deviation characters: Android's IDN says fass, Gecko xn--fa-hia (#346 review). Refused.
-            "http://faß.example.org:8123/", "http://ς.example.org/", "http://a\u200db.example.org/", "http://a\u200cb.example.org/")) {
+            "http://faß.example.org:8123/", "http://ς.example.org/", "http://a\u200db.example.org/", "http://a\u200cb.example.org/",
+            // A percent escape in the host: Gecko decodes it first (fa%C3%9F is faß). Refused (#346 review).
+            "http://fa%C3%9F.example.org:8123/", "http://%78n--fa-hia.example.org/", "http://[fe80::1%25eth0]:8123/")) {
             assertEquals(none, null, Origin.of(none))
         }
     }
