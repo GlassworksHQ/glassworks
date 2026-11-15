@@ -204,7 +204,7 @@ abstract class ReadmeSnippets : DefaultTask() {
         fun lines(text: String) = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
         val source = lines(examples.files.sorted().joinToString("\n") { it.readText() }
             .replace(Regex("""\S+ /\* README: (.+?) \*/"""), "$1"))
-        val blocks = Regex("```kotlin\n(.*?)```", RegexOption.DOT_MATCHES_ALL).findAll(readme.get().asFile.readText())
+        val blocks = Regex("```kotlin\r?\n(.*?)```", RegexOption.DOT_MATCHES_ALL).findAll(readme.get().asFile.readText())
             .map { it.groupValues[1] }.filter { "implementation(\"dev.glassworks:" !in it }.toList()
         if (blocks.isEmpty()) throw GradleException("${readme.get().asFile}: no Kotlin examples")
         val missing = blocks.filter { block -> lines(block).let { want -> source.windowed(want.size).none { it == want } } }

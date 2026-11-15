@@ -211,8 +211,10 @@ public class ApiServer(
     private val bindAddress: InetAddress? = null,
 ) {
     /**
-     * A server with a fixed 32-byte [psk] that Home Assistant can't change, or a plaintext-only one when
-     * [psk] is null.
+     * A server that starts with the 32-byte key [psk], kept in memory only: Home Assistant can still
+     * replace it (`NoiseEncryptionSetKeyRequest`), and a new server starts from [psk] again. Pass a
+     * [NoiseKeys] with your own [NoiseKeyStore] to keep a replaced key. With [psk] null, the server is
+     * plaintext-only.
      */
     public constructor(port: Int, identity: () -> DeviceIdentity, entities: List<ApiEntity>, psk: ByteArray?) :
         this(port, identity, entities, psk?.let { NoiseKeys(MemoryKeyStore(it)) })
