@@ -75,8 +75,8 @@ class RadioDefinition(
     /** The panel shows any trace of an earlier setup (SetupState.setUpBefore): the core's facts. */
     private val setUpBefore: () -> Boolean,
     internal val readout: RadioReadout,
-    /** Where the app's running [RadioPane] puts its controller ([app]); null in the mock-ups, which build no pane. */
-    val running: RunningRadio? = null,
+    /** Where the running [RadioPane] puts its controller ([pane]); the app's [readout] reads it there ([app]). */
+    val running: RunningRadio,
 ) : PaneDefinition {
 
     override val id = "radio"
@@ -399,7 +399,7 @@ class RadioDefinition(
     }
 
     /** The device shell's radio pane, which puts its controller where this definition's step and section read it. */
-    fun pane(ctx: PaneContext, panelIp: () -> String?): RadioPane? = running?.let { RadioPane(ctx, it, panelIp) }
+    fun pane(ctx: PaneContext, panelIp: () -> String?): RadioPane = RadioPane(ctx, running, panelIp)
 
     /** The app's: the controller [RadioPane] puts in [running] while it runs. */
     class AppReadout(
