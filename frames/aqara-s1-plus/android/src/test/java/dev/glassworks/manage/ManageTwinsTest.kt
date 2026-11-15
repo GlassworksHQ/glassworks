@@ -22,6 +22,7 @@ class ManageTwinsTest {
     private var used = 0
     private var resets = 0
     private var failing = false
+    private var role = "thread_router"
     private val f = ManageFixture()
 
     private val zones = listOf("Europe/Madrid" to "Madrid", "Europe/London" to "London", "America/New_York" to "New York", "UTC" to "UTC")
@@ -34,6 +35,8 @@ class ManageTwinsTest {
                 SettingsItem.Action("Home Assistant's time zone", { "UTC+00:00 · like Europe/London" }, "Use it") { d ->
                     if (failing) d("The root helper didn't answer.") else { used++; zone = "Europe/London"; d(null) }
                 },
+                SettingsItem.Choice("Role", { role }, { listOf("zigbee_tcp" to "Zigbee coordinator", "thread_router" to "Thread repeater") },
+                    confirm = { v -> if (v == role) null else SettingsItem.Confirm("Switch to Zigbee coordinator?", "The panel stops repeating for your Thread network.", "Switch") }) { v, d -> role = v; d(null) },
                 SettingsItem.Action("Thread network", { "Joined" }, "Reset",
                     confirm = SettingsItem.Confirm("Reset the Thread network?", "Thread devices drop off.", "Reset")) { d -> resets++; d(null) },
             )
@@ -107,6 +110,22 @@ class ManageTwinsTest {
         assertTrue(r.text().contains("class=\"err\" role=\"alert\">The root helper didn't answer.</p>"))
         assertFalse("no dialog for an action", r.text().contains("class=\"dlg\""))
         assertTrue(f.events.any { it.startsWith("Alex couldn't run Time zone › Home Assistant's time zone") })
+    }
+
+    /** A choice that asks first on the panel (the radio's role) asks here too; the one it has asks nothing. */
+    @Test fun aChoiceThatAsksOnThePanelAsksHereFirst() {
+        val b = signedIn()
+        val ask = b.post("/settings", form(b, "Role", "value" to "zigbee_tcp"))
+        assertEquals(200, ask.status)
+        val dlg = ask.text().substringAfter("class=\"dlg\"")
+        assertTrue(dlg.contains("Switch to Zigbee coordinator?") && dlg.contains("name=\"value\" value=\"zigbee_tcp\"") && ask.answer() != null)
+        assertEquals("asked, not done", "thread_router", role)
+        assertEquals(0, f.onMainCalls)
+        assertEquals("confirmed=1 alone is no answer", 200, b.post("/settings", form(b, "Role", "value" to "zigbee_tcp", "confirmed" to "1")).status)
+        assertEquals("thread_router", role)
+        assertEquals(303, b.post("/settings", form(b, "Role", "value" to "zigbee_tcp", "answer" to ask.answer()!!)).status)
+        assertEquals("zigbee_tcp", role)
+        assertEquals("the role it has: no question, saved at once", 303, b.post("/settings", form(b, "Role", "value" to "zigbee_tcp")).status)
     }
 
     /** Either sign-in (#288); one that costs something asks first, as on the panel. */

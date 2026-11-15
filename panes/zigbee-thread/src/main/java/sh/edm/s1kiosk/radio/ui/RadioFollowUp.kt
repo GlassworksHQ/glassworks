@@ -386,6 +386,19 @@ object RadioFollowUp {
     }
 
     /**
+     * Whether a role button's request ([action]) has run its course: the status moved on from [before], or it
+     * waited long enough ([waitedMs]). Join and Leave have no answer of their own. The panel's card ([Flow])
+     * and the Manage page's guard (RadioTwin.Guard) both ask this.
+     */
+    fun actDone(action: Action, status: String, before: String, waitedMs: Long): Boolean = when (action) {
+        Action.ROUTER_JOIN -> (status != before && !status.contains(": joining")) || waitedMs > 120_000
+        Action.ROUTER_LEAVE -> status != before || waitedMs > 30_000
+        Action.THREAD_LEAVE -> status.contains("Thread network left") || status.contains("Thread leave") || waitedMs > 40_000
+        // Runs on its own screen (setup/ThreadJoinOverlay): the button is free again at once.
+        Action.THREAD_JOIN_HA -> true
+    }
+
+    /**
      * Inline confirmation and "request running" for one card. [press] returns the request to run now
      * (no confirmation needed) or null (it asks first, or something is already running). The host
      * calls [started] when it hands the request to RadioController, then [finish] with the outcome, or
@@ -432,15 +445,7 @@ object RadioFollowUp {
         /** Requests without an answer of their own end when the status says so (or after a while). */
         fun tick(status: String): Boolean {
             val r = running as? Request.Act ?: return false
-            val waited = clock() - since
-            val done = when (r.action) {
-                Action.ROUTER_JOIN -> (status != before && !status.contains(": joining")) || waited > 120_000
-                Action.ROUTER_LEAVE -> status != before || waited > 30_000
-                Action.THREAD_LEAVE -> status.contains("Thread network left") || status.contains("Thread leave") || waited > 40_000
-                // Runs on its own screen (setup/ThreadJoinOverlay): the button is free again at once.
-                Action.THREAD_JOIN_HA -> true
-            }
-            if (!done) return false
+            if (!actDone(r.action, status, before, clock() - since)) return false
             running = null
             result = when {
                 r.action == Action.THREAD_LEAVE && status.contains("Thread network left") -> "Thread network left."

@@ -373,7 +373,8 @@ reports a problem in words. An item that only takes effect when the app starts a
 name in the list. An `Action` is a button on a row ("Use it", a reset): `run(done)`, asked first with
 its `confirm` when it costs something, as a `Switch` asks. A long `Choice` gives each option a `group`
 (the time zone's regions), and a browser lists it as one grouped list, not chips; its `line` is the row's
-words for the picked one when they say more than its name. `Native` is a view only the panel draws,
+words for the picked one when they say more than its name, and its `confirm` asks before a pick that
+costs something (the radio's role), on every surface. `Native` is a view only the panel draws,
 where its own layout is nicer than rows (the time zone's picker). Give it a `twin` (#269): the same
 rows and actions as typed items, which every other surface draws instead, so the Manage page has the
 same features. Never put a secret in a twin: it goes to a browser and the diagnostics. A native view
