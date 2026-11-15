@@ -137,8 +137,27 @@ images, are not supported. The rewrite doesn't need to detect them by their byte
 covers them. The "every byte the repack would drop is zero" check refuses such images generically,
 because their extra data sits after the last block. On all of the S1's boot images in the golden set
 (stock 4.5.80, the older stock image, the bundled Magisk image, and every patched output), those
-ranges are all zeros (checked 2026-11-15). The code being replaced doesn't have this check, so no
-recorded vector covers it: add a test with a synthetic image that has non-zero bytes there.
+ranges are all zeros (verified 2026-11-15 with the read-only `tools/kiln/boot-padding.py`, which reads
+the ranges from the header and the AVB footer as described above):
+
+```
+$ python3 -I tools/kiln/boot-padding.py ~/src/aqara-panel-backups/web-golden/{in,out}/*.img
+boot-4.5.80.img: gap 0 bytes, all zero True; tail 12090752 bytes, all zero True
+boot-old.img: gap 2048 bytes, all zero True; tail 12090752 bytes, all zero True
+s1-boot-magisk-v31.1-bundled.img: gap 0 bytes, all zero True; tail 10931584 bytes, all zero True
+noanim-4.5.80.img: gap 0 bytes, all zero True; tail 10308992 bytes, all zero True
+nokey-4.5.80.img: gap 0 bytes, all zero True; tail 6352256 bytes, all zero True
+preinit-data-4.5.80.img: gap 0 bytes, all zero True; tail 6352256 bytes, all zero True
+repatch-4.5.80.img: gap 0 bytes, all zero True; tail 6352256 bytes, all zero True
+repatch-bundled.img: gap 2048 bytes, all zero True; tail 6352256 bytes, all zero True
+repatch-noanim-from-anim.img: gap 0 bytes, all zero True; tail 6352256 bytes, all zero True
+stock-4.5.80.img: gap 0 bytes, all zero True; tail 6352256 bytes, all zero True
+stock-old.img: gap 2048 bytes, all zero True; tail 6352256 bytes, all zero True
+```
+
+("gap" runs from the last block to the vbmeta block, and "tail" from the vbmeta block to the footer.)
+The code being replaced doesn't have this check, so no recorded vector covers it: add a test with a
+synthetic image that has non-zero bytes there.
 
 An AVB footer whose offset doesn't point at `"AVB0"` is ignored, and the image is treated as having
 no AVB data.
