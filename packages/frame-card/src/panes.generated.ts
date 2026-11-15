@@ -14,7 +14,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/esphome.md#voice-assistant",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"11\" rx=\"3\"/><path d=\"M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21\"/></svg>",
-    "source": "app/kiosk/src/main/java/sh/edm/s1kiosk/voice"
+    "source": "panes/assist/src/main/java/sh/edm/s1kiosk/voice"
   },
   {
     "id": "sendspin",
@@ -26,7 +26,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/sendspin.md",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 18V6l10-2v12\"/><circle cx=\"6.5\" cy=\"18\" r=\"2.5\"/><circle cx=\"16.5\" cy=\"16\" r=\"2.5\"/></svg>",
-    "source": "app/kiosk/src/main/java/sh/edm/s1kiosk/sendspin"
+    "source": "panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin"
   },
   {
     "id": "timers",
@@ -39,7 +39,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/esphome.md#timers-on-screen",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"13.5\" r=\"7.5\"/><path d=\"M12 13.5V9.5M9.5 2.5h5\"/></svg>",
-    "source": "app/kiosk/src/main/java/sh/edm/s1kiosk/timers"
+    "source": "panes/timers/src/main/java/sh/edm/s1kiosk/timers"
   },
   {
     "id": "radio",
@@ -51,7 +51,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/radio.md",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14\"/></svg>",
-    "source": "app/kiosk/src/main/java/sh/edm/s1kiosk/radio"
+    "source": "frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/radio"
   },
   {
     "id": "bluetooth-proxy",
@@ -63,7 +63,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "alpha",
     "docs": "docs/esphome.md#bluetooth-proxy",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7.5 16.5 16 12 20V4l4.5 4L7 16.5\"/><circle cx=\"4\" cy=\"12\" r=\"1\"/><circle cx=\"20\" cy=\"12\" r=\"1\"/></svg>",
-    "source": "app/kiosk/src/main/java/dev/glassworks/bluetoothproxy"
+    "source": "panes/bluetooth-proxy/src/main/java/dev/glassworks/bluetoothproxy"
   },
   {
     "id": "camera",
@@ -75,7 +75,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "alpha",
     "docs": "docs/esphome.md#camera-entities",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2.5\" y=\"6.5\" width=\"13.5\" height=\"11\" rx=\"3\"/><circle cx=\"9.25\" cy=\"12\" r=\"2.6\"/><path d=\"M16 10.2 21.5 7.5v9L16 13.8\"/></svg>",
-    "source": "app/kiosk/src/main/java/dev/glassworks/camera"
+    "source": "panes/camera/src/main/java/dev/glassworks/camera"
   },
   {
     "id": "diagnostics",
@@ -85,7 +85,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "alpha",
     "docs": "docs/esphome.md#diagnostics",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"6\" width=\"20\" height=\"12\" rx=\"3.5\"/><path d=\"M5.5 12h3l1.5-3 3 6 1.5-3h4\"/></svg>",
-    "source": "app/kiosk/src/main/java/dev/glassworks/diagnostics"
+    "source": "panes/diagnostics/src/main/java/dev/glassworks/diagnostics"
   },
   {
     "id": "notifications",
@@ -95,7 +95,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "alpha",
     "docs": "docs/notifications.md",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z\"/><path d=\"M10 20.5a2 2 0 0 0 4 0\"/></svg>",
-    "source": "app/kiosk/src/main/java/dev/glassworks/notifications"
+    "source": "panes/notifications/src/main/java/dev/glassworks/notifications"
   },
   {
     "id": "time-zone",
@@ -105,7 +105,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "frame": "aqara-s1-plus",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 3.5a4.5 8.5 0 0 0 0 17\"/><path d=\"M12 7.5V12h3.8\"/></svg>",
-    "source": "app/kiosk/src/main/java/sh/edm/s1kiosk/frame"
+    "source": "frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/frame"
   },
   {
     "id": "wall-base",
@@ -118,6 +118,6 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "frame": "aqara-s1-plus",
     "docs": "docs/esphome.md#wall-base-entities",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"6\" width=\"16\" height=\"12\" rx=\"3\"/><path d=\"M8 18v2M16 18v2M9 12h6\"/></svg>",
-    "source": "app/kiosk/src/main/java/sh/edm/s1kiosk/base"
+    "source": "frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base"
   }
 ];

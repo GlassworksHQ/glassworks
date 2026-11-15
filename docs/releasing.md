@@ -278,7 +278,6 @@ The same environment variables as CI. Without them, `assembleRelease` produces a
 (`kiosk-release-unsigned.apk`); it never falls back to the debug key.
 
 ```sh
-cd app
 export S1_KEYSTORE_FILE=~/secure/s1kiosk-release.jks S1_KEY_ALIAS=s1kiosk S1_VERSION=1.0.0
 read -rs S1_KEYSTORE_PASSWORD && export S1_KEYSTORE_PASSWORD S1_KEY_PASSWORD="$S1_KEYSTORE_PASSWORD"
 ./gradlew :kiosk:assembleRelease

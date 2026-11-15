@@ -140,4 +140,4 @@ may come later.
 ## For developers
 
 The server is `dev.glassworks.manage.ManageServer`; a frame supplies a `ManageHost` (status, actions,
-diagnostics). See the [core's README](../app/kiosk/src/main/java/dev/glassworks/README.md#the-manage-page).
+diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/README.md#the-manage-page).

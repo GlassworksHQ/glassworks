@@ -13,8 +13,8 @@ The kiosk app makes the panel look like **one ESPHome device** to Home Assistant
 One integration, discovered automatically, no Wyoming or MQTT. It replaces the earlier Wyoming
 satellite (remove that Wyoming entry from HA when you switch).
 
-Code: the protocol core is the reusable pure-JVM library [`app/libs/esphome-api`](../app/libs/esphome-api/README.md)
-(package `sh.edm.esphome`), with mDNS from [`app/libs/esphome-api-android`](../app/libs/esphome-api-android/README.md);
+Code: the protocol core is the reusable pure-JVM library [`app/libs/esphome-api`](../libs/esphome-api/README.md)
+(package `sh.edm.esphome`), with mDNS from [`app/libs/esphome-api-android`](../libs/esphome-api-android/README.md);
 the panel's entities and glue are `PanelDevice` and `VoiceAssistantController` in
 `app/kiosk/src/main/java/sh/edm/s1kiosk/esphome/`, with the wall base and the Aqara cloud switch in
 `base/WallBasePane.kt` and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
@@ -121,7 +121,7 @@ Where a new entity's id comes from depends on Home Assistant's version:
 ### Categories and defaults
 
 Each entity has a category and a default, following the rule in
-[the pane rules](../app/kiosk/src/main/java/dev/glassworks/README.md#entities). An entity is enabled
+[the pane rules](../pane-api/src/main/java/dev/glassworks/README.md#entities). An entity is enabled
 when HA first adds it only if people reach for it day to day. When HA adds a panel, 15 entities
 are on (22 with a two-channel switch base). The rest are created turned off. To turn one on, open
 **Settings → Devices & services → ESPHome → Aqara S1 Plus**, select *+N entities not shown*,
@@ -332,7 +332,7 @@ services › Bluetooth*, and hears the BLE sensors near the panel through it. No
   you add the panel. Without a key, the proxy answers nobody, so no one else on the LAN can listen.
 
 How it works, and Android's limits on scanning, are in the
-[bluetooth-proxy library](../app/libs/bluetooth-proxy/README.md).
+[bluetooth-proxy library](../libs/bluetooth-proxy/README.md).
 
 ### Diagnostics
 
@@ -688,9 +688,8 @@ with the Python TFLite runtime that the patched model gives bit-identical output
 ## Tests (host)
 
 ```sh
-cd app
 python3 -m venv /tmp/esphome-venv && /tmp/esphome-venv/bin/pip install aioesphomeapi==46.25.0
-MODELS_CACHE=/tmp/oww-models ../tools/voice/fetch-models.sh --no-push
+MODELS_CACHE=/tmp/oww-models tools/voice/fetch-models.sh --no-push
 ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gradlew :kiosk:testDebugUnitTest
 ```
 

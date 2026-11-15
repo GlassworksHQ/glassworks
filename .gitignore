@@ -19,3 +19,13 @@ dumps/
 
 # npm workspace root (package.json)
 node_modules/
+
+# Gradle and Android Studio (the Gradle root, #21)
+.gradle/
+.kotlin/
+local.properties
+*.apk
+*.aab
+.idea/
+*.iml
+captures/
