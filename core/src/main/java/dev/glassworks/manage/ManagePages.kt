@@ -250,7 +250,8 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
         val rows = card.rows.joinToString("") { (bp, a) ->
             val act = when (a) {
                 is BlueprintAction.Add -> link("Add in Home Assistant ↗", a.url)
-                is BlueprintAction.Phone -> link("Add in Home Assistant ↗", a.url)
+                // blueprintCard gives a QR code on the panel only; the Manage page always links.
+                is BlueprintAction.Phone -> error("no Phone action on the Manage page")
                 is BlueprintAction.CreateAutomation -> """<span class="chip"><i class="dot ok"></i>In Home Assistant</span>""" + link("Create automation ↗", a.url)
                 BlueprintAction.Off -> """<button class="pill sm" type="button" disabled>Add in Home Assistant</button>"""
             }

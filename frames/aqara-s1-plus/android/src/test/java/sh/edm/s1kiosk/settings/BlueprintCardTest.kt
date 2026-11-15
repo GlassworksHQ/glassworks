@@ -167,4 +167,24 @@ class BlueprintCardTest {
         settle()
         assertTrue(p.access() is BlueprintAccess.Admin)
     }
+
+    @Test fun aChangeDuringACheckStartsAnotherWhenItEnds() {
+        var context: Any? = "A"
+        val checks = AtomicInteger()
+        val gate = java.util.concurrent.Semaphore(0)
+        val p = PanelBlueprints(
+            catalog = { listOf(doorbell) }, ref = "v0.5.0", haBase = { ha },
+            check = { checks.incrementAndGet(); gate.acquire(); BlueprintAccess.NotAdmin("Kitchen Panel") }, context = { context },
+        )
+        p.access()
+        repeat(200) { if (checks.get() == 1) return@repeat; Thread.sleep(5) }
+        // Signed in to another Home Assistant while A's check runs.
+        context = "B"
+        gate.release(2)
+        // Nobody asks again: the finished check sees the change and starts B's itself.
+        repeat(400) { if (checks.get() == 2) return@repeat; Thread.sleep(5) }
+        assertEquals(2, checks.get())
+        repeat(200) { if (p.access() !is BlueprintAccess.Checking) return@repeat; Thread.sleep(5) }
+        assertEquals(BlueprintAccess.NotAdmin("Kitchen Panel"), p.access())
+    }
 }

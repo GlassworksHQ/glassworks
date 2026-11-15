@@ -44,14 +44,17 @@ object BlueprintLinks {
 
     /**
      * The git ref the app's blueprints come from: a test build's commit, a release's tag `v<versionName>`,
-     * else `main`. A development build has no release version (versionCode 1, the build's default), so it
-     * follows main, as its code does.
+     * else `main`. A release's versionCode is always major*10000 + minor*100 + patch of its versionName
+     * (build.gradle.kts); a development build's defaults (0.1.0 with code 1) don't match, so it follows main.
      */
     fun ref(build: AppBuild): String = when {
         build.testBuild.isNotEmpty() -> build.testBuild
-        build.versionCode > 1 -> "v${build.versionName}"
+        build.versionCode == releaseCode(build.versionName) -> "v${build.versionName}"
         else -> "main"
     }
+
+    private fun releaseCode(name: String): Int? =
+        name.split('.').map { it.toIntOrNull() ?: return null }.takeIf { it.size == 3 }?.let { (a, b, c) -> a * 10000 + b * 100 + c }
 
     fun raw(ref: String, path: String) = "https://raw.githubusercontent.com/$REPO/$ref/$path"
 

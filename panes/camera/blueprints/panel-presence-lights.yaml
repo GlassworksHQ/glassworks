@@ -21,6 +21,7 @@ blueprint:
               device_class: occupancy
     lights:
       name: Lights
+      description: The lights to turn on, and off again later.
       selector:
         target:
           entity:
@@ -38,6 +39,7 @@ blueprint:
               device_class: illuminance
     dark_below:
       name: Dark below
+      description: "With a light sensor: the lights turn on only below this level."
       default: 30
       selector:
         number:
@@ -46,6 +48,7 @@ blueprint:
           unit_of_measurement: lx
     off_after:
       name: Off once nobody has been there for
+      description: The lights turn off once the panel has seen nobody for this long.
       default: 120
       selector:
         number:

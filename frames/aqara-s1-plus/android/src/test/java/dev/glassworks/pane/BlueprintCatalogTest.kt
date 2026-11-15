@@ -97,6 +97,7 @@ class BlueprintCatalogTest {
             assertTrue("$where: no inputs", inputs.isNotEmpty())
             for ((k, v) in inputs) {
                 assertTrue("$where: input $k has a name", (v["name"] as? String)?.isNotBlank() == true)
+                assertTrue("$where: input $k has a description", (v["description"] as? String)?.isNotBlank() == true)
                 assertTrue("$where: input $k has a selector", v["selector"] is Map<*, *>)
             }
             // Every input is used, and nothing uses an input that isn't declared.

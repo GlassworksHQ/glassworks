@@ -26,21 +26,25 @@ blueprint:
           multiple: true
     title:
       name: Title
+      description: The panels show it above the question.
       default: A question
       selector:
         text:
     message:
       name: The question
+      description: "What the panels ask, like \"Water the plants?\""
       selector:
         text:
           multiline: true
     button_1_title:
       name: First button
+      description: The words on the first button.
       default: "Yes"
       selector:
         text:
     button_1_script:
       name: First button runs
+      description: The script the first button runs.
       selector:
         entity:
           filter:
@@ -53,6 +57,7 @@ blueprint:
         text:
     button_2_script:
       name: Second button runs
+      description: The script the second button runs.
       default: ""
       selector:
         entity:
@@ -66,6 +71,7 @@ blueprint:
         text:
     button_3_script:
       name: Third button runs
+      description: The script the third button runs.
       default: ""
       selector:
         entity:
@@ -84,6 +90,7 @@ blueprint:
               value: high
     timeout:
       name: Close without an answer after
+      description: With no answer, the question closes by itself after this long.
       default: 300
       selector:
         number:

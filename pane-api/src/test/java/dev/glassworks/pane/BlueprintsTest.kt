@@ -35,6 +35,9 @@ class BlueprintsTest {
         assertEquals("28c157d", BlueprintLinks.ref(AppBuild("0.4.3", 403, debug = false, testBuild = "28c157d")))
         // a development build: the build's default version, no release set
         assertEquals("main", BlueprintLinks.ref(AppBuild("0.1.0", 1, debug = true)))
+        assertEquals("main", BlueprintLinks.ref(AppBuild("0.1.0", 1, debug = false)))
+        // a release's code always matches its name, also the smallest one
+        assertEquals("v0.0.1", BlueprintLinks.ref(AppBuild("0.0.1", 1, debug = false)))
     }
 
     @Test fun theRawUrlIsPinnedToTheRef() {

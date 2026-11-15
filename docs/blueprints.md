@@ -41,6 +41,9 @@ To know whether you're an administrator and which blueprints Home Assistant has,
 Assistant with its sign-in (`auth/current_user`, then `blueprint/list`). Both only read. It asks again
 every 15 seconds while the page is open, so the card follows an import you just made.
 
+The import link opens Home Assistant at the root of its address. A Home Assistant served under a
+subpath of a reverse proxy (`https://example.org/ha/`) isn't supported.
+
 ## Adding one from the Manage page
 
 The pane's page on the [Manage page](manage.md) has the same card. Each button is a link that opens your

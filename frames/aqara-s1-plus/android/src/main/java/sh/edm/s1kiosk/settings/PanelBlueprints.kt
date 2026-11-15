@@ -62,6 +62,8 @@ class PanelBlueprints(
                 val access = runCatching(check).getOrElse { BlueprintAccess.Off(HaBlueprintClient.UNREACHABLE) }
                 answer = Answer(about, access, clock())
                 checking.set(false)
+                // Home Assistant or the sign-in changed while it ran: check again for the new one.
+                if (context() != about) access()
             }
         }
         return a?.access ?: BlueprintAccess.Checking

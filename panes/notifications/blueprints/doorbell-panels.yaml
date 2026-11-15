@@ -28,6 +28,7 @@ blueprint:
           multiple: true
     camera:
       name: Door camera
+      description: The panels show its picture when the doorbell rings.
       selector:
         entity:
           filter:
@@ -40,6 +41,7 @@ blueprint:
         text:
     timeout:
       name: Back to the normal dashboard after
+      description: The panels go back to their own dashboard after this long.
       default: 90
       selector:
         number:
