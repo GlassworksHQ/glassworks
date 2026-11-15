@@ -104,6 +104,9 @@ wait_cool() {
 
 "$ADB" get-state >/dev/null || { echo "no device" >&2; exit 1; }
 sh_dev pm path "$PACKAGE" | grep -q package: || { echo "$PACKAGE is not installed" >&2; exit 1; }
+# GW_PERF_TIME_SCALE (clock.py) is for the off-device tests: refused on a real device here, before
+# anything else on it is touched. Without it, this asks the device nothing.
+python3 "$HERE/clock.py" --check || exit 2
 
 if [ -n "$IDLE_ONLY" ]; then
   n=0
