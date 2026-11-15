@@ -52,7 +52,7 @@ licensed upstream, and whether it reaches browsers.
    ```
    `SCTLR_CODE` (3 words) was checked by hand. Upstream builds its first word from the coprocessor
    fields: `aw_read_arm_cp_reg(15, 0, 1, 0, 0)` gives `0xee110f10`, and the other two words are
-   literal and the same. Step 3's `overlap.py` only compares sets of distinct hex words over whole
+   literal and the same. Step 3's `overlap.py` (`tools/licence-audit/`) only compares sets of distinct hex words over whole
    files (91 of 91 in `protocol.ts`), not order.
 
 3. **Line and string overlap, all of `kiln/packages/fel` and `bootpatch`** (2026-11-15, verified).
@@ -102,14 +102,33 @@ licensed upstream, and whether it reaches browsers.
    thunks/fel-to-spl-thunk.h)"; "exactly as magiskboot v31.1 handles it (native/src/boot/cpio.rs)").
    None carries an upstream copyright line or licence. Both `package.json` files say MIT.
 
-6. **What the browsers get** (2026-11-15, verified against the live sites)
+6. **What the browsers get** (2026-11-15, verified against the live sites). The wizard's code is a
+   chunk loaded on demand, so its name is found inside the chunks the page lists. Chunk names change
+   with each deploy.
    ```
-   $ curl -sL https://kiln.glassworks.dev/aqara-s1-plus/set-up    # then its chunks
-   chunks/10aa-hfyrwjo2.js: 'eGON.FEL', '0xe28f40e8' (thunk word), 'Record new entry: [${e}] -> [.backup/.rmlist]', 'Patch with flag'
-   media/bootpatch.09teyhlyf1tf7.wasm: sha256 d6fa9e4892b3a44e… = kiln/packages/bootpatch/src/wasm/bootpatch.wasm
-   $ curl -sL https://s1.edm.sh/    # the older Vite page
-   index-CUoj7J41.js: 'eGON.FEL', 'Record new entry'
+   $ curl -sL https://kiln.glassworks.dev/aqara-s1-plus/set-up -o setup.html
+   $ for c in $(grep -oE '/_next/static/[^"]+\.js' setup.html | sort -u); do curl -s "https://kiln.glassworks.dev$c" -O; done
+   $ grep -ohE '[A-Za-z0-9_-]{10,16}\.js' *.js | sort -u        # chunk names referenced by those chunks
+   10aa-hfyrwjo2.js  (and the ones already fetched)
+   $ curl -s https://kiln.glassworks.dev/_next/static/immutable/chunks/10aa-hfyrwjo2.js -O
+   $ grep -o 'eGON.FEL\|Record new entry\|Patch with flag\|0xe28f40e8' 10aa-hfyrwjo2.js | sort | uniq -c
+         1 0xe28f40e8          (a thunk word)
+         1 Patch with flag
+         1 Record new entry
+         1 eGON.FEL
+   $ grep -oE '[^"]{0,60}\.wasm' 10aa-hfyrwjo2.js
+   /_next/static/immutable/media/bootpatch.09teyhlyf1tf7.wasm
+   $ curl -s https://kiln.glassworks.dev/_next/static/immutable/media/bootpatch.09teyhlyf1tf7.wasm | shasum -a 256
+   d6fa9e4892b3a44e…   (same as: shasum -a 256 kiln/packages/bootpatch/src/wasm/bootpatch.wasm)
+   $ curl -sL https://s1.edm.sh/ | grep -oE 'src="[^"]+\.js"'     # the older Vite page: one bundle
+   src="/assets/index-DJY43h0z.js"
+   $ curl -s https://s1.edm.sh/assets/index-DJY43h0z.js -O
+   $ grep -o 'eGON.FEL\|Record new entry' index-DJY43h0z.js | sort | uniq -c
+         1 Record new entry
+         1 eGON.FEL
    ```
+   (The first check that day found the same strings in `index-CUoj7J41.js`. The page was redeployed
+   in between.)
    The FEL code, the bootpatch code and the wizard share one JavaScript chunk. Both packages are in
    the page people load.
 
@@ -203,29 +222,16 @@ top, #355). Until the rewrite lands, the notices state the facts.
 All read-only. Clone the two upstreams at the commits above. For Magisk, a sparse clone of
 `native/src/boot` and `scripts` is enough. Then run:
 
-```python
-# overlap.py <our file> <upstream dir or file>... : identical code lines, 32-bit hex words, string literals
-import re, sys, pathlib
-ours = pathlib.Path(sys.argv[1]).read_text()
-up = ''.join(p.read_text(errors='ignore') for a in sys.argv[2:] for p in
-             ([pathlib.Path(a)] if pathlib.Path(a).is_file() else pathlib.Path(a).rglob('*'))
-             if p.is_file() and p.suffix in {'.c', '.h', '.S', '.rs', '.cpp', '.hpp', '.sh'})
-norm = lambda s: re.sub(r'\s+', ' ', s).strip()
-up_lines = {norm(l) for l in up.splitlines()}
-lines = [norm(l) for l in ours.splitlines() if len(norm(l)) >= 24 and not norm(l).startswith(('//', '*', '/*'))]
-hexw = set(re.findall(r'0x[0-9a-f]{8}', ours.lower())); uphex = set(re.findall(r'0x[0-9a-f]{8}', up.lower()))
-strs = set(re.findall(r"""['"`]([^'"`\n${}]{12,})['"`]""", ours))
-print(sys.argv[1], 'lines', sum(l in up_lines for l in lines), '/', len(lines),
-      'hex', len(hexw & uphex), '/', len(hexw), 'strings', [s for s in strs if s in up])
-```
+`tools/licence-audit/overlap.py` (read-only; its header explains the three counts):
 
 ```sh
-python3 -I overlap.py kiln/packages/fel/src/protocol.ts ~/src/sunxi-tools
-python3 -I overlap.py kiln/packages/bootpatch/src/wasm/src/lib.rs magisk/native/src/boot
-python3 -I overlap.py kiln/packages/bootpatch/src/cpio.ts magisk/native/src/boot magisk/scripts
+python3 -I tools/licence-audit/overlap.py kiln/packages/fel/src/protocol.ts ~/src/sunxi-tools
+python3 -I tools/licence-audit/overlap.py kiln/packages/bootpatch/src/wasm/src/lib.rs magisk/native/src/boot
+python3 -I tools/licence-audit/overlap.py kiln/packages/bootpatch/src/cpio.ts magisk/native/src/boot magisk/scripts
 ```
 
-For the word arrays, in order:
+For the word arrays, in order. This one stays here rather than in `tools/`, because it names
+sunxi-tools functions and `tools/` is open to the clean-room implementer (#355):
 
 ```python
 # arrays.py <protocol.ts> <sunxi-tools dir>: each ARM word array, in order, against its upstream array
