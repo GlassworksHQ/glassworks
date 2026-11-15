@@ -18,6 +18,8 @@
 #            Android code or this file changes
 #   web     the npm workspaces from the repo root (job id kept, as branch protection names it):
 #            Kiln, its packages, the frame recipes and packages/*: typecheck, tests, both builds
+#   refract  Refract, Kiln's download Worker (kiln/workers/refract, its own lockfile, not a root
+#            workspace): typecheck and its tests in workerd. Only when kiln/workers or this file changes
 #   scripts  frames/aqara-s1-plus/tools/install.sh's off-device tests, the perf test's rubric, report and grade
 #            (tools/perf), the docs' relative links, the libraries' parity tables, and that every glassworks.dev brand image the
 #            Markdown uses is live (a 404 fails; an unreachable site only warns)
@@ -372,6 +374,51 @@ jobs:
         run: npm run build -w kiln
       - name: Kiln (Next.js) builds
         run: npm run build -w @glassworks/kiln-app
+
+  refract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        # Fails closed like the site job's: without a base commit to compare with, or when git diff
+        # fails, Refract is checked.
+        run: |
+          paths="kiln/workers .github/workflows/pr.yml"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No base commit to compare with ($BASE); checking Refract."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
+            echo "git diff failed; checking Refract."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$changed" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing in kiln/workers changed; skipping Refract."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: kiln/workers/refract/package-lock.json
+      - if: steps.changed.outputs.run == 'true'
+        run: npm ci --prefix kiln/workers/refract
+      - name: Typecheck
+        if: steps.changed.outputs.run == 'true'
+        run: npm run typecheck --prefix kiln/workers/refract
+      - name: Tests (workerd, through Miniflare)
+        if: steps.changed.outputs.run == 'true'
+        run: npm test --prefix kiln/workers/refract
 
   scripts:
     runs-on: ubuntu-24.04

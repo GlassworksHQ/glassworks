@@ -31,6 +31,13 @@ describe('one workspace at the repo root', () => {
     }
   });
 
+  it("leaves Refract out: its wrangler and workerd stay in its own lockfile, not everyone's npm ci", () => {
+    expect(workspaces).not.toContain('kiln/workers/refract');
+    expect(existsSync(join(REPO, 'kiln/workers/refract/package-lock.json'))).toBe(true);
+    const lock = readFileSync(join(REPO, 'package-lock.json'), 'utf8');
+    for (const p of ['wrangler', 'miniflare', 'workerd']) expect(lock).not.toContain(`"node_modules/${p}"`);
+  });
+
   it.each(deps)('%s finds %s, the same copy as the repo root', (w, dep) => {
     const found = lookup(join(REPO, w), dep);
     expect(found, `${dep} from ${w}`).toBeDefined();
