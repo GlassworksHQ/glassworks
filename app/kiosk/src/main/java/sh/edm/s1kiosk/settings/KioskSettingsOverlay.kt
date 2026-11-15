@@ -195,7 +195,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     /** The rail fits without scrolling (tests). */
-    internal val railFits: Boolean get() = nav.height <= navScroll.height
+    val railFits: Boolean get() = nav.height <= navScroll.height
 
     fun hide() {
         if (!isShowing) return
@@ -263,8 +263,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     /** Previews (the mock-ups): a section's page, an open editor or picker, a native view, the restart banner. */
-    internal fun previewSection(id: String) { current = id; build() }
-    internal fun previewEdit(title: String, typed: String? = null) {
+    fun previewSection(id: String) { current = id; build() }
+    fun previewEdit(title: String, typed: String? = null) {
         when (val i = model?.sections?.flatMap { flat(it.items) }?.firstOrNull { titleOf(it) == title } ?: return) {
             is SettingsItem.Text -> { sheet.text(i) {}; typed?.let { sheet.field.setText(it) } }
             is SettingsItem.Duration -> sheet.duration(i) {}
@@ -273,17 +273,17 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             else -> {}
         }
     }
-    internal fun previewConfirm(id: String) {
+    fun previewConfirm(id: String) {
         val s = model?.sections?.firstOrNull { it.id == id } ?: return
         val m = s.master ?: return
         m.confirm(!m.value())?.let { sheet.confirm(it) {} }
     }
-    internal fun previewRestart() { restartPending = true; banner.bind() }
-    internal fun previewNative(key: String): SettingsItem.NativeView? = natives[key]
+    fun previewRestart() { restartPending = true; banner.bind() }
+    fun previewNative(key: String): SettingsItem.NativeView? = natives[key]
 
     /** The native views kept now, by key (tests). */
-    internal val keptNatives: Set<String> get() = natives.keys.toSet()
-    internal fun previewScrollTo(v: View, alignBottom: Boolean = false) {
+    val keptNatives: Set<String> get() = natives.keys.toSet()
+    fun previewScrollTo(v: View, alignBottom: Boolean = false) {
         val r = Rect()
         v.getDrawingRect(r)
         scroll.offsetDescendantRectToMyCoords(v, r)

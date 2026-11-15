@@ -194,7 +194,7 @@ class GroupedRail(context: Context) : LinearLayout(context) {
         }
     }
 
-    internal companion object {
+    companion object {
         /**
          * The widest a chip's word gets (#249): "Can't run", the longest today, is about 53 dp at 12 sp. At
          * 110 dp a long word left a pane's name no room in the 216 dp rail (the mock-up showed it).
