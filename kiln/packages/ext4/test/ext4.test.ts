@@ -229,6 +229,12 @@ describe('ext4 without e2fsprogs', () => {
     await expect(fs.replaceFile('/keep', new Uint8Array((free.b + 10) * 4096))).rejects.toThrow(/no room for \/keep/);
     expect({ b: fs.freeBlocks, i: fs.freeInodes }).toEqual(free);
     expect((await fs.readFile('/keep'))[0]).toBe(1);
+    // a hard-linked file keeps its blocks when one name goes: they don't count as freed
+    const n = await fs.inode(await fs.resolve('/keep'));
+    n.links = 2;
+    await fs.putInode(n);
+    await expect(fs.replaceFile('/keep', new Uint8Array((fs.freeBlocks - 2) * 4096))).rejects.toThrow(/no room for \/keep/);
+    expect((await fs.readFile('/keep'))[0]).toBe(1);
   });
 
   it('refuses to remove a tree holding a block-mapped file, before unlinking anything', async () => {

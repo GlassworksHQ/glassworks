@@ -763,8 +763,9 @@ export class Ext4 {
   async replaceFile(path: string, data: Uint8Array, time?: number): Promise<void> {
     const old = await this.inode(await this.resolve(path));
     const { runs, tree } = await this.extents(old); // also refuses a block-mapped file before anything changes
-    const freed = runs.reduce((a, r) => a + r.count, 0) + tree.length + (old.fileAcl ? 1 : 0);
-    this.needs(this.blocksFor(data.length) - freed, 0, path); // the old file stays unless the new one fits
+    const unlinkOnly = old.links > 1; // remove keeps a hard-linked file's blocks and inode
+    const freed = unlinkOnly ? 0 : runs.reduce((a, r) => a + r.count, 0) + tree.length + (old.fileAcl ? 1 : 0);
+    this.needs(this.blocksFor(data.length) - freed, unlinkOnly ? 1 : 0, path); // the old file stays unless the new one fits
     const xattrs = await this.xattrs(old);
     const label = xattrs.find(isLabel);
     const attrs: Attrs = { mode: old.mode & 0o7777, uid: old.uid, gid: old.gid, label: label ? dec.decode(label.value).replace(/\0+$/, '') : undefined, time, xattrs: xattrs.filter((x) => !isLabel(x)) };
