@@ -6,7 +6,7 @@
 #
 # - microWakeWord (the engine): the four official models (Apache-2.0) from
 #   esphome/micro-wake-word-models at a pinned commit, each checked against its SHA-256 (the same
-#   hashes as panes/assist/.../voice/WakeWords.kt). Pushed to .../files/models/micro/.
+#   hashes as libs/voice/.../voice/WakeWords.kt). Pushed to .../files/models/micro/.
 # - openWakeWord (legacy, with --openwakeword): the v0.5.1 release models, CC BY-NC-SA 4.0 (the
 #   code is Apache-2.0), checked to be TFLite flatbuffers. Pushed to .../files/models/.
 #

@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
 import java.io.File
 import java.io.IOException

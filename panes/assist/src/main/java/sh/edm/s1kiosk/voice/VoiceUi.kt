@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.VoiceEvent
 import kotlin.math.exp
 import kotlin.math.log10
 import kotlin.math.sin

@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.VoiceEvent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

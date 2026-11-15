@@ -1,5 +1,8 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.VoiceConfig
+import dev.glassworks.voice.VoiceEvent
+import dev.glassworks.voice.WakeWords
 import android.app.Application
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent

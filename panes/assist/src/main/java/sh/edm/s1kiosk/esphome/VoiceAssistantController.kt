@@ -1,7 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.esphome.*
-import sh.edm.s1kiosk.voice.VoiceEvent
+import dev.glassworks.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceLog
 import sh.edm.s1kiosk.voice.nowMs
 

@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
 /**
  * An official microWakeWord v2 model from esphome/micro-wake-word-models (Apache-2.0), with the

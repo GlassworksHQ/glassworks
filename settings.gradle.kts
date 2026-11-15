@@ -32,6 +32,8 @@ include(":bluetooth-proxy")
 project(":bluetooth-proxy").projectDir = file("libs/bluetooth-proxy")
 include(":sendspin")
 project(":sendspin").projectDir = file("libs/sendspin")
+include(":voice")
+project(":voice").projectDir = file("libs/voice")
 
 // Glassworks modules (#21): the pane API, the core, engines and panes. The S1 app above depends on them.
 include(":glassworks-pane-api")

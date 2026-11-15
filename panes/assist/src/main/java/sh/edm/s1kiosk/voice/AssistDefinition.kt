@@ -1,5 +1,8 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.Microphone
+import dev.glassworks.voice.WakeWord
+import dev.glassworks.voice.WakeWords
 import dev.glassworks.frame.Capability
 import android.content.SharedPreferences
 import dev.glassworks.pane.IntentExtra

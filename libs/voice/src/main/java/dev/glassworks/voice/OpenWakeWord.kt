@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
 import kotlin.random.Random
 

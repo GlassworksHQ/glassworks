@@ -1,4 +1,4 @@
-"""Regenerate the microWakeWord test fixtures in panes/assist/src/test/resources/.
+"""Regenerate the microWakeWord test fixtures in libs/voice/src/test/resources/.
 
 Host only, touches no device. Writes two files:
 
@@ -23,7 +23,7 @@ Setup (a venv outside the repo; pass paths as arguments):
     #   ~/.cache/s1kiosk/microwakeword-<commit>/{okay_nabu,hey_jarvis,alexa,hey_mycroft}.{tflite,json}
     /tmp/mww-venv/bin/python -I tools/voice/mww_reference.py \\
         --voice /path/en_US-kristin-medium.onnx --models ~/.cache/s1kiosk/microwakeword-<commit> \\
-        --out panes/assist/src/test/resources
+        --out libs/voice/src/test/resources
 """
 import argparse, json, wave
 from pathlib import Path

@@ -20,7 +20,7 @@
   "zxing": {"dex": ["com.google.zxing."], "used_by": ["core"], "_why": "the sign-in QR code (ui/)"}
  },
  "panes": {
-  "assist": {"dex": ["sh.edm.s1kiosk.voice.", "sh.edm.s1kiosk.VoiceOverlay", "sh.edm.s1kiosk.esphome.VoiceAssistantController",
+  "assist": {"dex": ["sh.edm.s1kiosk.voice.", "dev.glassworks.voice.", "sh.edm.s1kiosk.VoiceOverlay", "sh.edm.s1kiosk.esphome.VoiceAssistantController",
                      "sh.edm.s1kiosk.esphome.UrlPlayer", "sh.edm.s1kiosk.esphome.WakeWordCatalog"],
              "_why": "VoiceAssistantController.kt (esphome/) declares these three, used only by voice/"},
   "sendspin": {"dex": ["sh.edm.s1kiosk.sendspin.", "dev.glassworks.sendspin."], "_why": "the pane and its engine library (libs/sendspin, #152). The library's WsClient also serves the core's HaThreadClient, and is counted here"},

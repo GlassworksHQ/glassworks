@@ -136,10 +136,10 @@ Host only; nothing touches a device.
 2. The models: `tools/voice/fetch-models.sh --no-push` (SHA-256 checked, into
    `~/.cache/s1kiosk/microwakeword-40ff33f…`). The JSON manifests are next to them in the models repo.
 3. The fixtures: see the header of `tools/voice/mww_reference.py`.
-4. The tests: `MWW_PYTHON=/tmp/mww-venv/bin/python ./gradlew :pane-assist:testDebugUnitTest
+4. The tests: `MWW_PYTHON=/tmp/mww-venv/bin/python ./gradlew :voice:testDebugUnitTest
    --tests '*Micro*'`. Without `MWW_PYTHON` the clip test is skipped; the frontend and detector tests
    always run. CI runs the clip test in the `wake-word` job of `pr.yml` (#184), with the LiteRT pinned
-   in `panes/assist/mww-test-requirements.txt`.
+   in `libs/voice/mww-test-requirements.txt`.
 5. The C cross-check: the header of `tools/voice/microfrontend_check.cc`.
 
 ## Panel run

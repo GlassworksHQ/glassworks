@@ -327,7 +327,7 @@ jobs:
         id: models
         if: steps.changed.outputs.run == 'true'
         run: |
-          wake_words=$(tools/release/android-layout.sh file . src/main/java/sh/edm/s1kiosk/voice/WakeWords.kt)
+          wake_words=$(tools/release/android-layout.sh file . src/main/java/dev/glassworks/voice/WakeWords.kt)
           commit=$(sed -n 's/.*const val MODELS_COMMIT = "\([0-9a-f]\{40\}\)".*/\1/p' "$wake_words")
           [ -n "$commit" ] || { echo "::error::no MODELS_COMMIT in WakeWords.kt"; exit 1; }
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
@@ -346,10 +346,10 @@ jobs:
           # --rerun: Gradle doesn't see MWW_PYTHON, so a cached result must not stand in for a run.
           failed=""
           MWW_PYTHON="$RUNNER_TEMP/mww-venv/bin/python" ./gradlew --no-daemon \
-            :pane-assist:testDebugUnitTest --tests sh.edm.s1kiosk.voice.MicroWakeWordClipTest --rerun \
+            :voice:testDebugUnitTest --tests dev.glassworks.voice.MicroWakeWordClipTest --rerun \
             || failed=1
           report=$("$GITHUB_WORKSPACE/tools/release/android-layout.sh" file . \
-            build/test-results/testDebugUnitTest/TEST-sh.edm.s1kiosk.voice.MicroWakeWordClipTest.xml)
+            build/test-results/testDebugUnitTest/TEST-dev.glassworks.voice.MicroWakeWordClipTest.xml)
           [ -z "$failed" ] || { cat "$report"; exit 1; }
           grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: the test skipped"; exit 1; }
 

@@ -9,7 +9,7 @@
  * unsigned and 16-bit wrapping arithmetic spelled out. The texts are in THIRD-PARTY-NOTICES.md and
  * LICENSES/. */
 
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
 /**
  * microWakeWord's audio features, bit for bit what the TFLite Micro frontend gives with ESPHome's
