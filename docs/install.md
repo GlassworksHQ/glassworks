@@ -249,11 +249,14 @@ fix. **More help** has tips, the error message, the technical log, and the way t
 </tr>
 <tr>
 <td><em><b>Nothing was written</b>: the panel is as it was. Fix the cause and click <b>Try again</b>.</em></td>
-<td><em><b>Part of the new software was written</b>: don't unplug it. Use <b>Undo with your backup</b>, or try again.</em></td>
+<td><em><b>Part of the new software was written</b>: use <b>Undo with your backup</b>, or try again. Unplug it only to put it in recovery mode again.</em></td>
 </tr>
 </table>
 
-FEL is in the chip's ROM, so you can always get back to recovery mode, whatever was written. If a
+"Don't unplug it yet" means: not while Kiln is still writing, and not to leave it like this,
+because the panel may not start. Once Kiln has stopped, unplug it, then hold the button and plug it
+back in to enter recovery mode, as on the Connect screen. Undo connects to it there. FEL is in the
+chip's ROM, so you can always get back to recovery mode, whatever was written. If a
 failure came after the new software was in place (during Set up), nothing more can break:
 unplug the panel, plug it back in, and use **Finish setting up**. The titles Kiln uses are in
 [Troubleshooting](#troubleshooting).
@@ -325,9 +328,15 @@ Keep the whole backup: the `.zip` Kiln offers, or the CLI's folder. Undo needs `
 them, before it writes anything. Kiln then says *This backup can't undo the install* and links to
 the steps below. If you only have `boot.img` and `vbmeta.img`, you can still put those
 two back by hand. The splash then stays ours. The same goes for a backup refused because its splash
-is ours. First check those two, in the backup's folder. It needs
-both entries in `SHA256SUMS` and both files to match. Go on only if it ends with
-`boot and vbmeta OK: go on`:
+is ours.
+
+Do this only with a backup whose `boot` is Aqara's: one made at your first install, or one refused
+only because its splash is ours. The check below shows that the two files are intact, not that they
+are Aqara's. A backup made on an already-installed panel holds our patched `boot`, and putting it
+back by hand reinstalls our software instead of Aqara's.
+
+First check those two, in the backup's folder. It needs both entries in `SHA256SUMS` and both files
+to match. Go on only if it ends with `boot and vbmeta OK: go on`:
 
 <!-- install-tests.sh runs this block: keep the marker right above it -->
 ```sh
@@ -336,14 +345,18 @@ grep -q '  boot\.img$' SHA256SUMS && grep -q '  vbmeta\.img$' SHA256SUMS &&
   echo "boot and vbmeta OK: go on"
 ```
 
-Then put the panel in FEL mode and run:
+Then put the panel in FEL mode and run this from the repository's folder, with `B` set to the
+backup's folder. Each command runs only if the one before it worked, so a failed flash stops
+before the restart. If a flash fails, the panel stays in our U-Boot's fastboot: run that
+`fastboot flash` line again, then the rest.
 
 ```sh
-NO_BL31=1 tools/fel/fel-boot.sh            # our U-Boot in RAM; it starts fastboot
-unset ANDROID_SERIAL                       # our U-Boot's fastboot serial isn't the panel's adb one
-fastboot flash boot boot.img
-fastboot flash vbmeta vbmeta.img
-fastboot reboot
+B=~/s1-backup                                 # the backup's folder
+unset ANDROID_SERIAL                          # our U-Boot's fastboot serial isn't the panel's adb one
+NO_BL31=1 tools/fel/fel-boot.sh &&            # our U-Boot in RAM; it starts fastboot
+  fastboot flash boot "$B/boot.img" &&
+  fastboot flash vbmeta "$B/vbmeta.img" &&
+  fastboot reboot
 ```
 
 ## Updating
@@ -463,7 +476,7 @@ within seconds after boot, and whenever it changes later.
 | *This isn't a panel Kiln knows* | Kiln stopped before writing anything. That panel isn't a layout it knows; please [open an issue](https://github.com/GlassworksHQ/glassworks/issues). |
 | *This panel only runs signed software* | Its chip has secure boot on, so Kiln can't start on it. Nothing was written. |
 | *A download failed* | Check the computer's internet connection, then try again. Kiln checks every file it downloads by its SHA-256. |
-| *Something went wrong while writing*, or a read-back didn't match | Kiln stops and doesn't restart the panel. Don't unplug it: put it in recovery mode again and use *Undo with your backup*, or try again. FEL is always available. |
+| *Something went wrong while writing*, or a read-back didn't match | Kiln stops and doesn't restart the panel, which may not start now. Don't unplug it while Kiln is writing. Once it has stopped, unplug it, put it in recovery mode again (hold the button, plug in) and use *Undo with your backup*, or try again. FEL is always available. |
 | *The panel didn't finish starting* | Unplug it and plug it back in, then use **Finish setting up**. |
 | *This backup can't undo the install* | See [Which backup](#which-backup). Nothing on the panel was changed. |
 | The screen turns off at night | That's the kiosk's night mode, which you can tune in Home Assistant. With `install.sh --keep-dnd`, Aqara's own Do Not Disturb (22:00–07:00) also forces it off; see [frames/aqara-s1-plus/research/screen-policy.md](../frames/aqara-s1-plus/research/screen-policy.md). |
