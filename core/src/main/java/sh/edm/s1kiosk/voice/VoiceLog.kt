@@ -1,6 +1,9 @@
 package sh.edm.s1kiosk.voice
 
-/** Tiny log facade: android.util.Log on the device, stdout in JVM unit tests. */
+/**
+ * Tiny log facade: android.util.Log on the device, stdout in JVM unit tests. The voice library keeps its own
+ * copy with the same tag (libs/voice/.../dev/glassworks/voice/VoiceLog.kt), because it can't depend on the core.
+ */
 object VoiceLog {
     private const val TAG = "S1Voice"
     private val onAndroid = System.getProperty("java.vendor")?.contains("Android") == true
