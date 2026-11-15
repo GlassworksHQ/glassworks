@@ -125,14 +125,13 @@ dependencies {
     // Libraries extracted from this app (app/libs/). esphome-api brings BouncyCastle (Noise), which
     // Sendspin's encryption also uses.
     implementation(project(":glassworks-pane-api"))
+    implementation(project(":glassworks-core"))
     implementation(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy")) // the Bluetooth proxy pane's engine (#121)
     // Audio playback (TTS, announcements, media player): streams over HTTP in-process, avoiding the
     // vendor CedarX HTTP stack. Same version GeckoView already ships.
     implementation("androidx.media3:media3-exoplayer:1.11.1")
-    // QR code on the sign-in screen (encoder only, pure Java, Apache-2.0).
-    implementation("com.google.zxing:core:3.5.3")
     // XZ decoder (pure Java, 0BSD) for Silicon Labs' zigbeed .deb (radio/SisdkZigbeed.kt).
     implementation("org.tukaani:xz:1.10")
 

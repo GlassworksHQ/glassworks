@@ -34,3 +34,5 @@ project(":bluetooth-proxy").projectDir = file("libs/bluetooth-proxy")
 // Glassworks modules (#21): the pane API, the core, engines and panes. The S1 app above depends on them.
 include(":glassworks-pane-api")
 project(":glassworks-pane-api").projectDir = file("pane-api")
+include(":glassworks-core")
+project(":glassworks-core").projectDir = file("core")
