@@ -10,7 +10,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.camera,dev.glassworks.panes.assist,dev.glassworks.panes.bluetoothproxy,dev.glassworks.panes.timers,dev.glassworks.panes.notifications,dev.glassworks.panes.sendspin,dev.glassworks.frames.s1.wallbase,dev.glassworks.panes.diagnostics,dev.glassworks.panes.radio,dev.glassworks.sendspin" />
+    <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.camera,dev.glassworks.panes.assist,dev.glassworks.panes.bluetoothproxy,dev.glassworks.panes.timers,dev.glassworks.panes.notifications,dev.glassworks.panes.sendspin,dev.glassworks.frames.s1.wallbase,dev.glassworks.panes.diagnostics,dev.glassworks.panes.radio,dev.glassworks.sendspin,dev.glassworks.voice" />
 
     <application
         android:label="S1 Kiosk legacy"
