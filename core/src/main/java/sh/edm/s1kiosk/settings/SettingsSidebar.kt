@@ -64,6 +64,8 @@ class SettingsSidebar(context: Context) : LinearLayout(context) {
 
     /** Draws [nav] with [selected] picked. [overview]: the menu has an Overview. [frame]: the frame's name, under "Settings". */
     fun bind(nav: SettingsNav, selected: String?, overview: Boolean, frame: String) {
+        val moved = selected != shown
+        shown = selected
         frameName.text = frame
         frameName.visibility = if (frame.isEmpty()) View.GONE else View.VISIBLE
         list.removeAllViews()
@@ -75,7 +77,15 @@ class SettingsSidebar(context: Context) : LinearLayout(context) {
         }
         group("Panes", nav.panes.map { row(it.id, it.title, selected, it.state) } + off)
         group("System", nav.system.map { row(it.id, it.title, selected) })
+        // A page picked from elsewhere (the Overview's list) brings its row into view; the refresh ticks don't move the list.
+        if (moved) scroll.post {
+            val row = (0 until list.childCount).map(list::getChildAt).firstOrNull { it.isSelected } ?: return@post
+            if (row.top < scroll.scrollY || row.bottom > scroll.scrollY + scroll.height) scroll.scrollTo(0, row.top - (scroll.height - row.height) / 2)
+        }
     }
+
+    /** The page the list was last drawn for. */
+    private var shown: String? = null
 
     private fun group(title: String, rows: List<View>) {
         if (rows.isEmpty()) return
@@ -107,6 +117,7 @@ class SettingsSidebar(context: Context) : LinearLayout(context) {
             addView(g.dot(dotColor(state)).apply { contentDescription = "status $word" }, LayoutParams(g.px(8f), g.px(8f)).apply { marginStart = g.px(10f) })
         }
         background = if (on) g.surface(Tokens.R_PANE.toFloat()) else null
+        isSelected = on
         contentDescription = title
         isClickable = true
         setOnClickListener { onTap?.invoke(id) }

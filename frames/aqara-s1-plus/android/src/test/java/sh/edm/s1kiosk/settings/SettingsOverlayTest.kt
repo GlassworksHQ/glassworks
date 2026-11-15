@@ -362,6 +362,11 @@ class SettingsOverlayTest {
         list.scrollTo(0, list.getChildAt(0).height) // as far as it goes
         val shown = inMenu(about)
         assertTrue("About scrolls into view: $shown in ${port()}, Done $done", port().contains(shown) && port().bottom <= done.top)
+        // A page picked from elsewhere (the Overview's list) brings its row into view.
+        list.scrollTo(0, 0)
+        o.previewSection("p8")
+        Mockup.idle(); Mockup.layout(o)
+        assertTrue("the picked row in view", port().contains(inMenu(Mockup.label(o, "Pane 8"))))
     }
 
     @Test
