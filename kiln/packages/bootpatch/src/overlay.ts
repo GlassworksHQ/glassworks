@@ -3,7 +3,7 @@
 // browser's adb key).
 
 import type { OverlayFile } from './index';
-import { zipEntries } from './magisk';
+import { zipEntries } from './apk';
 
 export interface S1OverlayInputs {
   radioRc: Uint8Array;        // frames/aqara-s1-plus/tools/radio/s1kiosk_radio.rc

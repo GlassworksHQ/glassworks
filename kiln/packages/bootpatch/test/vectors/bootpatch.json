@@ -1,0 +1,1811 @@
+{
+ "note": "Recorded 2026-11-15 from the implementation then in kiln/packages/bootpatch. See docs/research/kiln-cleanroom/bootpatch-spec.md.",
+ "inputs": {
+  "xzRamdiskBase64": "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",
+  "magisk": {
+   "magiskinit": "105e7f36bd7ef0476cfa3f99d8568a9490be1a72f38c0e4938b588241f6a7642",
+   "magisk": "ae2255133c4bbd13447905284fb71de5f2515720aa4ee654805349f45eca1cc7",
+   "initLd": "798709ab3e61aa772b1540ad3322518d47375c1147fa3494d0d2dcec16c7c8f6"
+  }
+ },
+ "cases": [
+  {
+   "name": "stock: v2, page 2048, gzip ramdisk, AVB footer, SHA-1 id",
+   "imageSha256": "a4b299c683c8f4cd61bc8ac590fe2f66d644b6269d47d1efd4b1e64cbe1ed4c5",
+   "size": 524288,
+   "wasMagisk": false,
+   "magiskConfig": "KEEPVERITY=true\nKEEPFORCEENCRYPT=true\nRECOVERYMODE=false\nVENDORBOOT=false\nPREINITDEVICE=cache\nSHA1=784b6fd8f68b771918484e2ed2e4dd13db0af940\n",
+   "inputSha256": "3cc6f8a93919745e3296fb9c3aad7d3be7d2b14dc3c82d0bc3eb2ee657bdf214",
+   "ramdisk": [
+    {
+     "name": ".backup",
+     "mode": "40000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300000
+    },
+    {
+     "name": ".backup/.magisk",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 140,
+     "sha256": "ed5aa67ec58a819a8bde13560d2d733964c3fb7a7d00127f648f675e77fc9e7c",
+     "ino": 300001
+    },
+    {
+     "name": ".backup/.rmlist",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 76,
+     "sha256": "1b08879a98e01fcb1bcc97ada3658ed29df0353932415b54fbcbb45287a66d8c",
+     "ino": 300002
+    },
+    {
+     "name": ".backup/init.xz",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 9108,
+     "sha256": "3f5e8a570a7b053b4ca41953ad518867a1bcbcca4dfa61482598004467f51565",
+     "ino": 300003
+    },
+    {
+     "name": "A",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 1,
+     "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+     "ino": 300004
+    },
+    {
+     "name": "a",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300005
+    },
+    {
+     "name": "a-b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "d44362d67d921091c7b9674d752e9e23c1f9ec8a4f0b82741bf01364eb97c830",
+     "ino": 300006
+    },
+    {
+     "name": "a.b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "2e7336dc8eba87ef472df568c35482abf2575dc3e5eac0c5c62b8ffaeac2c934",
+     "ino": 300007
+    },
+    {
+     "name": "a/b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "c14cddc033f64b9dea80ea675cf280a015e672516090a5626781153dc68fea11",
+     "ino": 300008
+    },
+    {
+     "name": "data",
+     "mode": "40771",
+     "uid": 1000,
+     "gid": 1000,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300009
+    },
+    {
+     "name": "dev",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300010
+    },
+    {
+     "name": "dev/console",
+     "mode": "20600",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "5:1",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300011
+    },
+    {
+     "name": "fstab.sun50iw10p1",
+     "mode": "100640",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 85,
+     "sha256": "bcbe76e18d2b4efcf40051d80676f5c35185fb2e65955ed3a3b19a60404e9c85",
+     "ino": 300012
+    },
+    {
+     "name": "init",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 6052,
+     "sha256": "105e7f36bd7ef0476cfa3f99d8568a9490be1a72f38c0e4938b588241f6a7642",
+     "ino": 300013
+    },
+    {
+     "name": "init.rc",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 26,
+     "sha256": "c05776a1e88ad9bd963cb08c37bebbd443c126f9d8eb8248a2265cb6d28027fe",
+     "ino": 300014
+    },
+    {
+     "name": "overlay.d",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300015
+    },
+    {
+     "name": "overlay.d/s1kiosk_demo.rc",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 43,
+     "sha256": "3b8df9035800293eb42849a84fdca46ee3a8ea8ea5e5fc318fa18490f6471b40",
+     "ino": 300016
+    },
+    {
+     "name": "overlay.d/sbin",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300017
+    },
+    {
+     "name": "overlay.d/sbin/init-ld.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 5848,
+     "sha256": "2d5c941a21d0aae22bed0b1a29a3c2eae3116dbe3bf4b22e84204ce50ad97b5f",
+     "ino": 300018
+    },
+    {
+     "name": "overlay.d/sbin/magisk.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 20108,
+     "sha256": "d3d5a6a945f4134f7e82bc7eb9bec59c300b05ef75969ebd287f68266fae008c",
+     "ino": 300019
+    },
+    {
+     "name": "overlay.d/sbin/s1kiosk_demo.sh",
+     "mode": "100700",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 27,
+     "sha256": "50a724f542becf26fda355c9f4be0053daa8b629fb201a24d63b85cab628d933",
+     "ino": 300020
+    },
+    {
+     "name": "sh",
+     "mode": "120777",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 14,
+     "sha256": "479bafb2b5ec9694f7c31c6fb21d9a3c8be21627807af2b0cc712443784cc0db",
+     "ino": 300021
+    },
+    {
+     "name": "system",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300022
+    },
+    {
+     "name": "verity_key",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 524,
+     "sha256": "46438f1a77260d55c9253c02c22b96f7575574ff1cf23e4afd972a0ac8dedf38",
+     "ino": 300023
+    },
+    {
+     "name": "überdir",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300024
+    }
+   ],
+   "repatch": {
+    "imageSha256": "a4b299c683c8f4cd61bc8ac590fe2f66d644b6269d47d1efd4b1e64cbe1ed4c5",
+    "wasMagisk": true
+   }
+  },
+  {
+   "name": "stock, PREINITDEVICE=metadata",
+   "imageSha256": "d7aa910d8d762d0e0c00374d6778b9a17199c0f0519a39e7ef9ff7cc8129bf29",
+   "size": 524288,
+   "wasMagisk": false,
+   "magiskConfig": "KEEPVERITY=true\nKEEPFORCEENCRYPT=true\nRECOVERYMODE=false\nVENDORBOOT=false\nPREINITDEVICE=metadata\nSHA1=784b6fd8f68b771918484e2ed2e4dd13db0af940\n",
+   "inputSha256": "3cc6f8a93919745e3296fb9c3aad7d3be7d2b14dc3c82d0bc3eb2ee657bdf214",
+   "ramdisk": [
+    {
+     "name": ".backup",
+     "mode": "40000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300000
+    },
+    {
+     "name": ".backup/.magisk",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 143,
+     "sha256": "bf50da70acae7e159e859a89b8f42b305e74ccd6c916e9ae23fd29748c6aa341",
+     "ino": 300001
+    },
+    {
+     "name": ".backup/.rmlist",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 76,
+     "sha256": "1b08879a98e01fcb1bcc97ada3658ed29df0353932415b54fbcbb45287a66d8c",
+     "ino": 300002
+    },
+    {
+     "name": ".backup/init.xz",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 9108,
+     "sha256": "3f5e8a570a7b053b4ca41953ad518867a1bcbcca4dfa61482598004467f51565",
+     "ino": 300003
+    },
+    {
+     "name": "A",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 1,
+     "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+     "ino": 300004
+    },
+    {
+     "name": "a",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300005
+    },
+    {
+     "name": "a-b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "d44362d67d921091c7b9674d752e9e23c1f9ec8a4f0b82741bf01364eb97c830",
+     "ino": 300006
+    },
+    {
+     "name": "a.b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "2e7336dc8eba87ef472df568c35482abf2575dc3e5eac0c5c62b8ffaeac2c934",
+     "ino": 300007
+    },
+    {
+     "name": "a/b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "c14cddc033f64b9dea80ea675cf280a015e672516090a5626781153dc68fea11",
+     "ino": 300008
+    },
+    {
+     "name": "data",
+     "mode": "40771",
+     "uid": 1000,
+     "gid": 1000,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300009
+    },
+    {
+     "name": "dev",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300010
+    },
+    {
+     "name": "dev/console",
+     "mode": "20600",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "5:1",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300011
+    },
+    {
+     "name": "fstab.sun50iw10p1",
+     "mode": "100640",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 85,
+     "sha256": "bcbe76e18d2b4efcf40051d80676f5c35185fb2e65955ed3a3b19a60404e9c85",
+     "ino": 300012
+    },
+    {
+     "name": "init",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 6052,
+     "sha256": "105e7f36bd7ef0476cfa3f99d8568a9490be1a72f38c0e4938b588241f6a7642",
+     "ino": 300013
+    },
+    {
+     "name": "init.rc",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 26,
+     "sha256": "c05776a1e88ad9bd963cb08c37bebbd443c126f9d8eb8248a2265cb6d28027fe",
+     "ino": 300014
+    },
+    {
+     "name": "overlay.d",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300015
+    },
+    {
+     "name": "overlay.d/s1kiosk_demo.rc",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 43,
+     "sha256": "3b8df9035800293eb42849a84fdca46ee3a8ea8ea5e5fc318fa18490f6471b40",
+     "ino": 300016
+    },
+    {
+     "name": "overlay.d/sbin",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300017
+    },
+    {
+     "name": "overlay.d/sbin/init-ld.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 5848,
+     "sha256": "2d5c941a21d0aae22bed0b1a29a3c2eae3116dbe3bf4b22e84204ce50ad97b5f",
+     "ino": 300018
+    },
+    {
+     "name": "overlay.d/sbin/magisk.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 20108,
+     "sha256": "d3d5a6a945f4134f7e82bc7eb9bec59c300b05ef75969ebd287f68266fae008c",
+     "ino": 300019
+    },
+    {
+     "name": "overlay.d/sbin/s1kiosk_demo.sh",
+     "mode": "100700",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 27,
+     "sha256": "50a724f542becf26fda355c9f4be0053daa8b629fb201a24d63b85cab628d933",
+     "ino": 300020
+    },
+    {
+     "name": "sh",
+     "mode": "120777",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 14,
+     "sha256": "479bafb2b5ec9694f7c31c6fb21d9a3c8be21627807af2b0cc712443784cc0db",
+     "ino": 300021
+    },
+    {
+     "name": "system",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300022
+    },
+    {
+     "name": "verity_key",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 524,
+     "sha256": "46438f1a77260d55c9253c02c22b96f7575574ff1cf23e4afd972a0ac8dedf38",
+     "ino": 300023
+    },
+    {
+     "name": "überdir",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300024
+    }
+   ],
+   "repatch": {
+    "imageSha256": "d7aa910d8d762d0e0c00374d6778b9a17199c0f0519a39e7ef9ff7cc8129bf29",
+    "wasMagisk": true
+   }
+  },
+  {
+   "name": "stock, no overlay files",
+   "imageSha256": "8aa4f0bd8ee277fa301f660e035fad71fc3c5ef592e3ac9ea54ff8c8b0aae25d",
+   "size": 524288,
+   "wasMagisk": false,
+   "magiskConfig": "KEEPVERITY=true\nKEEPFORCEENCRYPT=true\nRECOVERYMODE=false\nVENDORBOOT=false\nPREINITDEVICE=cache\nSHA1=784b6fd8f68b771918484e2ed2e4dd13db0af940\n",
+   "inputSha256": "3cc6f8a93919745e3296fb9c3aad7d3be7d2b14dc3c82d0bc3eb2ee657bdf214",
+   "ramdisk": [
+    {
+     "name": ".backup",
+     "mode": "40000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300000
+    },
+    {
+     "name": ".backup/.magisk",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 140,
+     "sha256": "ed5aa67ec58a819a8bde13560d2d733964c3fb7a7d00127f648f675e77fc9e7c",
+     "ino": 300001
+    },
+    {
+     "name": ".backup/.rmlist",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 76,
+     "sha256": "1b08879a98e01fcb1bcc97ada3658ed29df0353932415b54fbcbb45287a66d8c",
+     "ino": 300002
+    },
+    {
+     "name": ".backup/init.xz",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 9108,
+     "sha256": "3f5e8a570a7b053b4ca41953ad518867a1bcbcca4dfa61482598004467f51565",
+     "ino": 300003
+    },
+    {
+     "name": "A",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 1,
+     "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+     "ino": 300004
+    },
+    {
+     "name": "a",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300005
+    },
+    {
+     "name": "a-b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "d44362d67d921091c7b9674d752e9e23c1f9ec8a4f0b82741bf01364eb97c830",
+     "ino": 300006
+    },
+    {
+     "name": "a.b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "2e7336dc8eba87ef472df568c35482abf2575dc3e5eac0c5c62b8ffaeac2c934",
+     "ino": 300007
+    },
+    {
+     "name": "a/b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "c14cddc033f64b9dea80ea675cf280a015e672516090a5626781153dc68fea11",
+     "ino": 300008
+    },
+    {
+     "name": "data",
+     "mode": "40771",
+     "uid": 1000,
+     "gid": 1000,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300009
+    },
+    {
+     "name": "dev",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300010
+    },
+    {
+     "name": "dev/console",
+     "mode": "20600",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "5:1",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300011
+    },
+    {
+     "name": "fstab.sun50iw10p1",
+     "mode": "100640",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 85,
+     "sha256": "bcbe76e18d2b4efcf40051d80676f5c35185fb2e65955ed3a3b19a60404e9c85",
+     "ino": 300012
+    },
+    {
+     "name": "init",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 6052,
+     "sha256": "105e7f36bd7ef0476cfa3f99d8568a9490be1a72f38c0e4938b588241f6a7642",
+     "ino": 300013
+    },
+    {
+     "name": "init.rc",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 26,
+     "sha256": "c05776a1e88ad9bd963cb08c37bebbd443c126f9d8eb8248a2265cb6d28027fe",
+     "ino": 300014
+    },
+    {
+     "name": "overlay.d",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300015
+    },
+    {
+     "name": "overlay.d/sbin",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300016
+    },
+    {
+     "name": "overlay.d/sbin/init-ld.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 5848,
+     "sha256": "2d5c941a21d0aae22bed0b1a29a3c2eae3116dbe3bf4b22e84204ce50ad97b5f",
+     "ino": 300017
+    },
+    {
+     "name": "overlay.d/sbin/magisk.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 20108,
+     "sha256": "d3d5a6a945f4134f7e82bc7eb9bec59c300b05ef75969ebd287f68266fae008c",
+     "ino": 300018
+    },
+    {
+     "name": "sh",
+     "mode": "120777",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 14,
+     "sha256": "479bafb2b5ec9694f7c31c6fb21d9a3c8be21627807af2b0cc712443784cc0db",
+     "ino": 300019
+    },
+    {
+     "name": "system",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300020
+    },
+    {
+     "name": "verity_key",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 524,
+     "sha256": "46438f1a77260d55c9253c02c22b96f7575574ff1cf23e4afd972a0ac8dedf38",
+     "ino": 300021
+    },
+    {
+     "name": "überdir",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300022
+    }
+   ],
+   "repatch": {
+    "imageSha256": "8aa4f0bd8ee277fa301f660e035fad71fc3c5ef592e3ac9ea54ff8c8b0aae25d",
+    "wasMagisk": true
+   }
+  },
+  {
+   "name": "stock: page 4096, uncompressed ramdisk, second and recovery DTBO, SHA-256 id, no AVB",
+   "imageSha256": "2bf65835df9278b9928c7a479b6c0db7a6275ff322cdec3ea1b2e6f72694839d",
+   "size": 524288,
+   "wasMagisk": false,
+   "magiskConfig": "KEEPVERITY=true\nKEEPFORCEENCRYPT=true\nRECOVERYMODE=false\nVENDORBOOT=false\nPREINITDEVICE=cache\nSHA1=7c55401d2be19bc5f29a61b0c16dd99a964dbe8a\n",
+   "inputSha256": "9c8a893f3257cb935f325dc8659d43016b56b3c801a1a7372c7459acc977294b",
+   "ramdisk": [
+    {
+     "name": ".backup",
+     "mode": "40000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300000
+    },
+    {
+     "name": ".backup/.magisk",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 140,
+     "sha256": "35e3553ef7ffca12215255cdbbb5c6222501b39ec74df7b7acdc2bedf7621142",
+     "ino": 300001
+    },
+    {
+     "name": ".backup/.rmlist",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 76,
+     "sha256": "1b08879a98e01fcb1bcc97ada3658ed29df0353932415b54fbcbb45287a66d8c",
+     "ino": 300002
+    },
+    {
+     "name": ".backup/init.xz",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 9108,
+     "sha256": "3f5e8a570a7b053b4ca41953ad518867a1bcbcca4dfa61482598004467f51565",
+     "ino": 300003
+    },
+    {
+     "name": "A",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 1,
+     "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+     "ino": 300004
+    },
+    {
+     "name": "a",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300005
+    },
+    {
+     "name": "a-b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "d44362d67d921091c7b9674d752e9e23c1f9ec8a4f0b82741bf01364eb97c830",
+     "ino": 300006
+    },
+    {
+     "name": "a.b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "2e7336dc8eba87ef472df568c35482abf2575dc3e5eac0c5c62b8ffaeac2c934",
+     "ino": 300007
+    },
+    {
+     "name": "a/b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "c14cddc033f64b9dea80ea675cf280a015e672516090a5626781153dc68fea11",
+     "ino": 300008
+    },
+    {
+     "name": "data",
+     "mode": "40771",
+     "uid": 1000,
+     "gid": 1000,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300009
+    },
+    {
+     "name": "dev",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300010
+    },
+    {
+     "name": "dev/console",
+     "mode": "20600",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "5:1",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300011
+    },
+    {
+     "name": "fstab.sun50iw10p1",
+     "mode": "100640",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 85,
+     "sha256": "bcbe76e18d2b4efcf40051d80676f5c35185fb2e65955ed3a3b19a60404e9c85",
+     "ino": 300012
+    },
+    {
+     "name": "init",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 6052,
+     "sha256": "105e7f36bd7ef0476cfa3f99d8568a9490be1a72f38c0e4938b588241f6a7642",
+     "ino": 300013
+    },
+    {
+     "name": "init.rc",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 26,
+     "sha256": "c05776a1e88ad9bd963cb08c37bebbd443c126f9d8eb8248a2265cb6d28027fe",
+     "ino": 300014
+    },
+    {
+     "name": "overlay.d",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300015
+    },
+    {
+     "name": "overlay.d/s1kiosk_demo.rc",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 43,
+     "sha256": "3b8df9035800293eb42849a84fdca46ee3a8ea8ea5e5fc318fa18490f6471b40",
+     "ino": 300016
+    },
+    {
+     "name": "overlay.d/sbin",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300017
+    },
+    {
+     "name": "overlay.d/sbin/init-ld.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 5848,
+     "sha256": "2d5c941a21d0aae22bed0b1a29a3c2eae3116dbe3bf4b22e84204ce50ad97b5f",
+     "ino": 300018
+    },
+    {
+     "name": "overlay.d/sbin/magisk.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 20108,
+     "sha256": "d3d5a6a945f4134f7e82bc7eb9bec59c300b05ef75969ebd287f68266fae008c",
+     "ino": 300019
+    },
+    {
+     "name": "overlay.d/sbin/s1kiosk_demo.sh",
+     "mode": "100700",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 27,
+     "sha256": "50a724f542becf26fda355c9f4be0053daa8b629fb201a24d63b85cab628d933",
+     "ino": 300020
+    },
+    {
+     "name": "sh",
+     "mode": "120777",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 14,
+     "sha256": "479bafb2b5ec9694f7c31c6fb21d9a3c8be21627807af2b0cc712443784cc0db",
+     "ino": 300021
+    },
+    {
+     "name": "system",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300022
+    },
+    {
+     "name": "verity_key",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 524,
+     "sha256": "46438f1a77260d55c9253c02c22b96f7575574ff1cf23e4afd972a0ac8dedf38",
+     "ino": 300023
+    },
+    {
+     "name": "überdir",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300024
+    }
+   ],
+   "repatch": {
+    "imageSha256": "2bf65835df9278b9928c7a479b6c0db7a6275ff322cdec3ea1b2e6f72694839d",
+    "wasMagisk": true
+   }
+  },
+  {
+   "name": "stock: xz ramdisk",
+   "imageSha256": "6776af0d8d9efb736cd7cb0125e2906e4533378f659f026c292ee125df8d6917",
+   "size": 524288,
+   "wasMagisk": false,
+   "magiskConfig": "KEEPVERITY=true\nKEEPFORCEENCRYPT=true\nRECOVERYMODE=false\nVENDORBOOT=false\nPREINITDEVICE=cache\nSHA1=5e5ab47bce43a39a36cc1b29884ffd15d54157af\n",
+   "inputSha256": "18f23bfe7996391296ae1a85ab46de2d25cd4b5907f70f4d269f8720eda7769f",
+   "ramdisk": [
+    {
+     "name": ".backup",
+     "mode": "40000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300000
+    },
+    {
+     "name": ".backup/.magisk",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 140,
+     "sha256": "02bdbcb14239dd4021c19a999627d0e60d785bdce28478e137a6608ea7c04104",
+     "ino": 300001
+    },
+    {
+     "name": ".backup/.rmlist",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 76,
+     "sha256": "1b08879a98e01fcb1bcc97ada3658ed29df0353932415b54fbcbb45287a66d8c",
+     "ino": 300002
+    },
+    {
+     "name": ".backup/init.xz",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 9108,
+     "sha256": "3f5e8a570a7b053b4ca41953ad518867a1bcbcca4dfa61482598004467f51565",
+     "ino": 300003
+    },
+    {
+     "name": "A",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 1,
+     "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+     "ino": 300004
+    },
+    {
+     "name": "a",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300005
+    },
+    {
+     "name": "a-b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "d44362d67d921091c7b9674d752e9e23c1f9ec8a4f0b82741bf01364eb97c830",
+     "ino": 300006
+    },
+    {
+     "name": "a.b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "2e7336dc8eba87ef472df568c35482abf2575dc3e5eac0c5c62b8ffaeac2c934",
+     "ino": 300007
+    },
+    {
+     "name": "a/b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "c14cddc033f64b9dea80ea675cf280a015e672516090a5626781153dc68fea11",
+     "ino": 300008
+    },
+    {
+     "name": "data",
+     "mode": "40771",
+     "uid": 1000,
+     "gid": 1000,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300009
+    },
+    {
+     "name": "dev",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300010
+    },
+    {
+     "name": "dev/console",
+     "mode": "20600",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "5:1",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300011
+    },
+    {
+     "name": "fstab.sun50iw10p1",
+     "mode": "100640",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 85,
+     "sha256": "bcbe76e18d2b4efcf40051d80676f5c35185fb2e65955ed3a3b19a60404e9c85",
+     "ino": 300012
+    },
+    {
+     "name": "init",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 6052,
+     "sha256": "105e7f36bd7ef0476cfa3f99d8568a9490be1a72f38c0e4938b588241f6a7642",
+     "ino": 300013
+    },
+    {
+     "name": "init.rc",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 26,
+     "sha256": "c05776a1e88ad9bd963cb08c37bebbd443c126f9d8eb8248a2265cb6d28027fe",
+     "ino": 300014
+    },
+    {
+     "name": "overlay.d",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300015
+    },
+    {
+     "name": "overlay.d/s1kiosk_demo.rc",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 43,
+     "sha256": "3b8df9035800293eb42849a84fdca46ee3a8ea8ea5e5fc318fa18490f6471b40",
+     "ino": 300016
+    },
+    {
+     "name": "overlay.d/sbin",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300017
+    },
+    {
+     "name": "overlay.d/sbin/init-ld.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 5848,
+     "sha256": "2d5c941a21d0aae22bed0b1a29a3c2eae3116dbe3bf4b22e84204ce50ad97b5f",
+     "ino": 300018
+    },
+    {
+     "name": "overlay.d/sbin/magisk.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 20108,
+     "sha256": "d3d5a6a945f4134f7e82bc7eb9bec59c300b05ef75969ebd287f68266fae008c",
+     "ino": 300019
+    },
+    {
+     "name": "overlay.d/sbin/s1kiosk_demo.sh",
+     "mode": "100700",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 27,
+     "sha256": "50a724f542becf26fda355c9f4be0053daa8b629fb201a24d63b85cab628d933",
+     "ino": 300020
+    },
+    {
+     "name": "sh",
+     "mode": "120777",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 14,
+     "sha256": "479bafb2b5ec9694f7c31c6fb21d9a3c8be21627807af2b0cc712443784cc0db",
+     "ino": 300021
+    },
+    {
+     "name": "system",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300022
+    },
+    {
+     "name": "verity_key",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 524,
+     "sha256": "46438f1a77260d55c9253c02c22b96f7575574ff1cf23e4afd972a0ac8dedf38",
+     "ino": 300023
+    },
+    {
+     "name": "überdir",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300024
+    }
+   ],
+   "repatch": {
+    "imageSha256": "6776af0d8d9efb736cd7cb0125e2906e4533378f659f026c292ee125df8d6917",
+    "wasMagisk": true
+   }
+  },
+  {
+   "name": "stock: ramdisk of two concatenated cpio archives",
+   "imageSha256": "36ff52cf0136b98a2e8b39003e8ea9da05a3e3a52b5ccbe8d628bf11faa896ef",
+   "size": 524288,
+   "wasMagisk": false,
+   "magiskConfig": "KEEPVERITY=true\nKEEPFORCEENCRYPT=true\nRECOVERYMODE=false\nVENDORBOOT=false\nPREINITDEVICE=cache\nSHA1=d65242447415f43a99b07ac66e03054b51e822e2\n",
+   "inputSha256": "554dc024811608697ae68cc997bf7cb801bc734ed03d8854dffcbbe0885f6112",
+   "ramdisk": [
+    {
+     "name": ".backup",
+     "mode": "40000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300000
+    },
+    {
+     "name": ".backup/.magisk",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 140,
+     "sha256": "d4cadd8c302ff9017de5269df05a70d61f2f5d6ed7e707ed97783136c3808927",
+     "ino": 300001
+    },
+    {
+     "name": ".backup/.rmlist",
+     "mode": "100000",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 76,
+     "sha256": "1b08879a98e01fcb1bcc97ada3658ed29df0353932415b54fbcbb45287a66d8c",
+     "ino": 300002
+    },
+    {
+     "name": ".backup/init.xz",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 9108,
+     "sha256": "3f5e8a570a7b053b4ca41953ad518867a1bcbcca4dfa61482598004467f51565",
+     "ino": 300003
+    },
+    {
+     "name": "A",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 1,
+     "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+     "ino": 300004
+    },
+    {
+     "name": "a",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300005
+    },
+    {
+     "name": "a-b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "d44362d67d921091c7b9674d752e9e23c1f9ec8a4f0b82741bf01364eb97c830",
+     "ino": 300006
+    },
+    {
+     "name": "a.b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "2e7336dc8eba87ef472df568c35482abf2575dc3e5eac0c5c62b8ffaeac2c934",
+     "ino": 300007
+    },
+    {
+     "name": "a/b",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 3,
+     "sha256": "c14cddc033f64b9dea80ea675cf280a015e672516090a5626781153dc68fea11",
+     "ino": 300008
+    },
+    {
+     "name": "data",
+     "mode": "40771",
+     "uid": 1000,
+     "gid": 1000,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300009
+    },
+    {
+     "name": "dev",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300010
+    },
+    {
+     "name": "dev/console",
+     "mode": "20600",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "5:1",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300011
+    },
+    {
+     "name": "fstab.sun50iw10p1",
+     "mode": "100640",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 85,
+     "sha256": "bcbe76e18d2b4efcf40051d80676f5c35185fb2e65955ed3a3b19a60404e9c85",
+     "ino": 300012
+    },
+    {
+     "name": "init",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 6052,
+     "sha256": "105e7f36bd7ef0476cfa3f99d8568a9490be1a72f38c0e4938b588241f6a7642",
+     "ino": 300013
+    },
+    {
+     "name": "init.rc",
+     "mode": "100750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 26,
+     "sha256": "c05776a1e88ad9bd963cb08c37bebbd443c126f9d8eb8248a2265cb6d28027fe",
+     "ino": 300014
+    },
+    {
+     "name": "overlay.d",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300015
+    },
+    {
+     "name": "overlay.d/s1kiosk_demo.rc",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 43,
+     "sha256": "3b8df9035800293eb42849a84fdca46ee3a8ea8ea5e5fc318fa18490f6471b40",
+     "ino": 300016
+    },
+    {
+     "name": "overlay.d/sbin",
+     "mode": "40750",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300017
+    },
+    {
+     "name": "overlay.d/sbin/init-ld.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 5848,
+     "sha256": "2d5c941a21d0aae22bed0b1a29a3c2eae3116dbe3bf4b22e84204ce50ad97b5f",
+     "ino": 300018
+    },
+    {
+     "name": "overlay.d/sbin/magisk.xz",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 20108,
+     "sha256": "d3d5a6a945f4134f7e82bc7eb9bec59c300b05ef75969ebd287f68266fae008c",
+     "ino": 300019
+    },
+    {
+     "name": "overlay.d/sbin/s1kiosk_demo.sh",
+     "mode": "100700",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 27,
+     "sha256": "50a724f542becf26fda355c9f4be0053daa8b629fb201a24d63b85cab628d933",
+     "ino": 300020
+    },
+    {
+     "name": "sh",
+     "mode": "120777",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 14,
+     "sha256": "479bafb2b5ec9694f7c31c6fb21d9a3c8be21627807af2b0cc712443784cc0db",
+     "ino": 300021
+    },
+    {
+     "name": "system",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300022
+    },
+    {
+     "name": "verity_key",
+     "mode": "100644",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 524,
+     "sha256": "46438f1a77260d55c9253c02c22b96f7575574ff1cf23e4afd972a0ac8dedf38",
+     "ino": 300023
+    },
+    {
+     "name": "überdir",
+     "mode": "40755",
+     "uid": 0,
+     "gid": 0,
+     "rdev": "0:0",
+     "size": 0,
+     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "ino": 300024
+    }
+   ],
+   "repatch": {
+    "imageSha256": "36ff52cf0136b98a2e8b39003e8ea9da05a3e3a52b5ccbe8d628bf11faa896ef",
+    "wasMagisk": true
+   }
+  }
+ ],
+ "refusals": [
+  {
+   "name": "header version 0",
+   "errorContains": "header version",
+   "inputSha256": "a943d9cbc58463cd48e00aaa1ae1d06e92c2454b0f0ed4108147b53508b2b882"
+  },
+  {
+   "name": "header version 1",
+   "errorContains": "header version",
+   "inputSha256": "02289c67c0d9546bfb9dfdcfec46a2c908bcbcd0e9b3b88ab7c9aa47075208a4"
+  },
+  {
+   "name": "header version 3",
+   "errorContains": "header version",
+   "inputSha256": "51bf3140a313f18403662ceb19d535ad71b9db1d77841a96994c1efa6db2cd84"
+  },
+  {
+   "name": "header version 4",
+   "errorContains": "header version",
+   "inputSha256": "91f7334c2c02032cf5c25d15ba31368620d51b66e9234662845d9369b9cea7e6"
+  },
+  {
+   "name": "page size 1024",
+   "errorContains": "page size",
+   "inputSha256": "1ce76b6780ae263b463f7d4c1ff75dffe600202ed36bd443aa72d7c733a2b83b"
+  },
+  {
+   "name": "size not a multiple of 4096",
+   "errorContains": "multiple of 4096",
+   "inputSha256": "572a0fa0a4491243ed8993f0ccb654fc4dc1fe38b4f19f3ec5998b69b7ab2c66"
+  },
+  {
+   "name": "no ANDROID! magic",
+   "errorContains": "not an Android boot image",
+   "inputSha256": "d04078a2f3e77c42558d02ab50a9a41595af646c54147f9bcfc82f55a47fd493"
+  },
+  {
+   "name": "compressed kernel",
+   "errorContains": "kernel format",
+   "inputSha256": "13571405e10d457d2f1f57ecc748ac48defb66323911220488efaf90080a2c39"
+  },
+  {
+   "name": "kernel with an appended DTB",
+   "errorContains": "DTB",
+   "inputSha256": "527fd3a9f75b8b4d22dfddb660dc95fe887d002cae6c45393d5caecb44c9a716"
+  },
+  {
+   "name": "no ramdisk",
+   "errorContains": "no ramdisk",
+   "inputSha256": "1a48f9dd5e0ea025032303b6bc23ac93686c0fe5029722926e57bf4eb47cabed"
+  },
+  {
+   "name": "lz4 ramdisk",
+   "errorContains": "ramdisk format",
+   "inputSha256": "65ee24161a37b47e2c7f886f14c644cc01ee8b5f64f55492b0cfbaa330c6c954"
+  },
+  {
+   "name": "block past the end of the image",
+   "errorContains": "Corrupted",
+   "inputSha256": "0ae43484e0bb15f7ac2f48a721f53501ead1439bfc9992f3d22cab8c754073c9"
+  },
+  {
+   "name": "Samsung trailer",
+   "errorContains": "SEANDROID",
+   "inputSha256": "6a26e2d8764a7f6475eebc2219e1aeb7204669b83beaee26c03fc2894a6c2298"
+  },
+  {
+   "name": "LG trailer",
+   "errorContains": "LG",
+   "inputSha256": "d8a51829aa29b483510f826b916a33fe76f69d34c626e51cf1d1e44ed78b2905"
+  },
+  {
+   "name": "AVB1 signature trailer",
+   "errorContains": "AVB1",
+   "inputSha256": "027fcac1401fc354ec61ab604af9aad5999116df1fda321c702ea45a92f3df3a"
+  },
+  {
+   "name": "vbmeta block past the end",
+   "errorContains": "truncated",
+   "inputSha256": "b0007bba1d69b4d7e7e1ddb5ba92b14bf925b9b05960e8ddf33cd9bd086879c7"
+  },
+  {
+   "name": "ramdisk already rooted by another tool (sbin/su)",
+   "errorContains": "stock boot image",
+   "inputSha256": "55a725e312691bd7ec8d46009a27a539cec6fc8862745e58779ba89ecdb7392f"
+  },
+  {
+   "name": "old Magisk ramdisk (init.magisk.rc, no .backup/.magisk)",
+   "errorContains": ".backup/.magisk",
+   "inputSha256": "59eb9069ab30e87bc23ea93add1db11b7376c77415253ce601bdf2ecb5bb33b2"
+  },
+  {
+   "name": "dtb with skip_initramfs",
+   "errorContains": "skip_initramfs",
+   "inputSha256": "56170c41979afa01a423373c41156eba5c734bbf55df983d961607b0c73221f0"
+  },
+  {
+   "name": "dtb patched for /system_root",
+   "errorContains": "patched by old",
+   "inputSha256": "b7e6a3633a216d3ec64c7576c88393e77f351e00f7ea9817ac55756102d5f141"
+  },
+  {
+   "name": "kernel with Samsung pattern 1",
+   "errorContains": "kernel matches",
+   "inputSha256": "f9b2b920f09ecf0accf8e477f630dd7882d8f942f4e65772a7d9f2cbc7e18a5b"
+  },
+  {
+   "name": "kernel with Samsung pattern 2",
+   "errorContains": "kernel matches",
+   "inputSha256": "2740db982a2fd32a707dd211c0344d306b909e19c8dd714ec1fc78c59a517852"
+  },
+  {
+   "name": "kernel with Samsung pattern 3",
+   "errorContains": "kernel matches",
+   "inputSha256": "4fc57faf99cd60b52bb74b051af9ab60f515179b617224cd24d3dc9afdc5bffa"
+  },
+  {
+   "name": "patched image does not fit the partition",
+   "errorContains": "does not fit",
+   "inputSha256": "5d2b8fbc853ab9d9c911c18fde89ed6905a417e69fa82258d4db2744516cc351"
+  }
+ ],
+ "compress": [
+  {
+   "name": "ELF ARM (Thumb filter)",
+   "inputSha256": "56456752f56b2d0c83a1ee1014e665c417251f7e7d71076364630f45b3a0e15d",
+   "bcjFilter": 3,
+   "gzipSha256": "69014f845fe8e8063b2d840984bae2174565024c944c355648c2d820a1f15b59",
+   "xz4096Sha256": "aa6898225fe8c00f744bc0f3c7e0fce3e51edfc0497f53de0a0ebe171fddec63",
+   "xzFullSha256": "aa6898225fe8c00f744bc0f3c7e0fce3e51edfc0497f53de0a0ebe171fddec63"
+  },
+  {
+   "name": "ELF AArch64",
+   "inputSha256": "13c65d6ceadd2c1a6f5a42a09e7c37741ae382568bc73d45fcacc09dc33b032a",
+   "bcjFilter": 4,
+   "gzipSha256": "c1c4b6c5495f491e788c0148cdc4b4959391bc3c12d2e9e06d952b9397acf536",
+   "xz4096Sha256": "99a241622df4d028d03f3a42f9cf4feeb046d98f4e80e9abd5cf7f40445930dd",
+   "xzFullSha256": "99a241622df4d028d03f3a42f9cf4feeb046d98f4e80e9abd5cf7f40445930dd"
+  },
+  {
+   "name": "ELF x86-64",
+   "inputSha256": "15315124a42c6e318b8699d708464fecd9ca681c31e1ab28afae90d4e87c7bca",
+   "bcjFilter": 1,
+   "gzipSha256": "57859bf670239051cadc31180e7535008cd212e6debe7f5036e86c59372e7011",
+   "xz4096Sha256": "55f38922d90a306b1d4d505d1f87401147585cc798277f144ef9bd6894623878",
+   "xzFullSha256": "55f38922d90a306b1d4d505d1f87401147585cc798277f144ef9bd6894623878"
+  },
+  {
+   "name": "ELF RISC-V",
+   "inputSha256": "1951a052e5ef9776bda506f579ee8fce71b7a5251ff03fe6af9eb74ae7a59975",
+   "bcjFilter": 5,
+   "gzipSha256": "18f6ab823d13c42cbc913fdb15ada32f55e2abf8919637fd0071fb9be5195c03",
+   "xz4096Sha256": "f7751ea345777187c250e56345d9c905fbf2b48be6e476774876ee4e6105de7e",
+   "xzFullSha256": "f7751ea345777187c250e56345d9c905fbf2b48be6e476774876ee4e6105de7e"
+  },
+  {
+   "name": "ELF big-endian ARM",
+   "inputSha256": "5cbc04a0df6c30b79188517640166f1aac231bc743353d9a3a169bac202cada3",
+   "bcjFilter": 3,
+   "gzipSha256": "a68e4c5265fc9ec462f9b89a77acec2c08b88c8267f3761117b11afecba7e8e2",
+   "xz4096Sha256": "e468fc393924ee5ea3ae4eb36dfa482ff3b7e7219caf5a71d1936638305a1902",
+   "xzFullSha256": "e468fc393924ee5ea3ae4eb36dfa482ff3b7e7219caf5a71d1936638305a1902"
+  },
+  {
+   "name": "ARM64 Linux Image",
+   "inputSha256": "8e5b80c29ffdd1de962a9687e416d8ee37ea671fee096fdec4a302c20e9395d8",
+   "bcjFilter": 4,
+   "gzipSha256": "99afc98171cb01ae923886d1106f77d193696d01e6a285b507ba7dcf1cfe7240",
+   "xz4096Sha256": "b16278be2a1643e196e980c1db9a4f41ab25b0e3a840ce733046877fe9ba14e1",
+   "xzFullSha256": "b16278be2a1643e196e980c1db9a4f41ab25b0e3a840ce733046877fe9ba14e1"
+  },
+  {
+   "name": "RISC-V Linux Image",
+   "inputSha256": "c13f86bec11e456a4827ab5993e2b4a000bd03e80594d17a865b71647ad0916e",
+   "bcjFilter": 5,
+   "gzipSha256": "919b05ae9749a005088045bd4ad1359b51dccd940b185da3b073c527e5966c55",
+   "xz4096Sha256": "da85582ddb87f75ef1ac51c7865f9bd69da7cb77f4f25bb9bd21b7e33fc476a2",
+   "xzFullSha256": "da85582ddb87f75ef1ac51c7865f9bd69da7cb77f4f25bb9bd21b7e33fc476a2"
+  },
+  {
+   "name": "raw A32 code",
+   "inputSha256": "6f819383d08169ca03df3d6a8cff7227b20e47fca6584987f814a12133d37058",
+   "bcjFilter": 2,
+   "gzipSha256": "81bdf0e941e7bec0e5615d334af5d2f4a7e81a53ea2d2b0bd7955137e141be33",
+   "xz4096Sha256": "686a8669e8345b598b83d48422973eb4657c4bb27b6d5cfe1399c584b9f580dc",
+   "xzFullSha256": "686a8669e8345b598b83d48422973eb4657c4bb27b6d5cfe1399c584b9f580dc"
+  },
+  {
+   "name": "raw A32 code, 63 bytes",
+   "inputSha256": "1bf2ec9be7630717b849b727f4e851764803552b85ef7d7bdf56a8f8ca51c6eb",
+   "bcjFilter": 0,
+   "gzipSha256": "57b911d306d35e40031af941d91b09813c30f5012099cb9c5064a582ed4c0799",
+   "xz4096Sha256": "8eccec0fbd31bdd4c9dbbe2e345c47ed0683a48426b3f0ba23974888abf1f803",
+   "xzFullSha256": "8eccec0fbd31bdd4c9dbbe2e345c47ed0683a48426b3f0ba23974888abf1f803"
+  },
+  {
+   "name": "70% A32 words",
+   "inputSha256": "a177d4e9248c77510037d96b5d10d0c11ed9b4880467b8dfed27284d57538b06",
+   "bcjFilter": 0,
+   "gzipSha256": "e38c99a8eca034d10b5ac0cd99a8e9e95285cb33faf7bc498f4d3abeb08e1190",
+   "xz4096Sha256": "50aaf7a6d76a659f8909451643d9663788911876d320dc673aa78aa5ed88a95b",
+   "xzFullSha256": "50aaf7a6d76a659f8909451643d9663788911876d320dc673aa78aa5ed88a95b"
+  },
+  {
+   "name": "text",
+   "inputSha256": "ef683c36fb374a28b513311dea9b6ac5cd6135db1007003e64ccf1a2e7e75d96",
+   "bcjFilter": 0,
+   "gzipSha256": "0b499252d10c2f18f01335d3ae2c115508962dfa9ab1ed8c8c6a9136b4adcff1",
+   "xz4096Sha256": "2fb5270a5f9146b8d7df9e655b82edfa2e25328ba5a0d91734130716b57608a2",
+   "xzFullSha256": "2fb5270a5f9146b8d7df9e655b82edfa2e25328ba5a0d91734130716b57608a2"
+  },
+  {
+   "name": "random",
+   "inputSha256": "219afa2ebe105586f37ec62b72f824b0b09aa731571efa098b6c66fd39cd5648",
+   "bcjFilter": 0,
+   "gzipSha256": "bef8a6e205ad4b4fc7c168073e7ee7e17fc1ebbfc4b960589cf5b6df9b196485",
+   "xz4096Sha256": "9b5e4037c8e64334f1a7a83bb186320ea3019b4cbd8fe83066b176f1e2194e19",
+   "xzFullSha256": "9b5e4037c8e64334f1a7a83bb186320ea3019b4cbd8fe83066b176f1e2194e19"
+  },
+  {
+   "name": "empty",
+   "inputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "bcjFilter": 0,
+   "gzipSha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+   "xz4096Sha256": "14c80c40f5b247deead9e9d1d31b8b4f5f0b4f4425e6eb12291fd3e505fc8414",
+   "xzFullSha256": "14c80c40f5b247deead9e9d1d31b8b4f5f0b4f4425e6eb12291fd3e505fc8414"
+  }
+ ],
+ "isMagiskPatched": {
+  "stock": false,
+  "patched": true,
+  "oldMagiskMarker": true,
+  "otherRootTool": false
+ }
+}
