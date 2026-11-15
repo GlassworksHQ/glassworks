@@ -46,7 +46,8 @@ below as the release notes.
   Manage page no longer have a Show button for it, and the panel no longer makes a password for you.
   You type your own when you turn the stream on, so you know it for Home Assistant's ONVIF
   integration, Frigate or Protect. To change it, type a new one; **Clear** removes it and closes the
-  stream until you set another.
+  stream until you set another. A panel that already had a stream keeps streaming, but its password
+  can no longer be shown; set a new one if you need to type it into Home Assistant.
 - **Generic Android: the launch screen shows the Glassworks mark instead of a plain app icon.** On
   Android 12 and newer, such as a tablet, the screen Android shows while the app starts is the
   Glassworks stack on the app's dark background, and it fades into the connecting screen. Where the

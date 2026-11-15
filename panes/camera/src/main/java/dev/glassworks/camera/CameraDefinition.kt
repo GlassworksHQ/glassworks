@@ -9,6 +9,7 @@ import dev.glassworks.frame.Capability
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.PaneSwitch
+import dev.glassworks.pane.SettingsChange
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.pane.SetupStep
@@ -95,7 +96,15 @@ class CameraDefinition(
                         SettingsItem.SignIn(
                             "Sign-in", isSet = { prefs.signIn != null }, user = { prefs.signIn?.first ?: CameraPrefs.DEFAULT_USER },
                             shown = { CameraPage.signIn(prefs.signIn) },
-                        ) { v, done -> prefs.signIn = v?.let { (u, p) -> u to (p ?: prefs.signIn?.second.orEmpty()) }; done(null) },
+                        ) { v, done ->
+                            // An empty field keeps the stored password; if it was cleared since the sheet opened, there is none to keep.
+                            val kept = prefs.signIn?.second
+                            when {
+                                v == null -> { prefs.signIn = null; done(null) }
+                                v.second == null && kept == null -> done(SettingsChange.TYPE_PASSWORD)
+                                else -> { prefs.signIn = v.first to (v.second ?: kept!!); done(null) }
+                            }
+                        },
                         SettingsItem.Info({ "Address" }, { CameraPage.address(read().address) }),
                         SettingsItem.Info({ "Stream" }, { CameraPage.stream(read()) }),
                         SettingsItem.Info({ "ONVIF device" }, { CameraPage.device(read()) }),

@@ -221,6 +221,12 @@ class CameraSetupTest {
         assertEquals("viewer" to "made-up-new-5678", r.def.prefs.signIn)
         dev.glassworks.pane.SettingsChange.signIn(signIn, "viewer2", "") { answer = it }
         assertEquals("an empty password keeps the stored one", "viewer2" to "made-up-new-5678", r.def.prefs.signIn)
+        // Cleared elsewhere (Home Assistant, the other surface) between opening the sheet and Save: nothing to keep.
+        r.def.prefs.signIn = null
+        signIn.save("viewer2" to null) { answer = it }
+        assertEquals(dev.glassworks.pane.SettingsChange.TYPE_PASSWORD, answer)
+        assertEquals("never a sign-in with an empty password", null, r.def.prefs.signIn)
+        r.def.prefs.signIn = "viewer2" to "made-up-new-5678"
         dev.glassworks.pane.SettingsChange.clear(signIn) { answer = it }
         assertEquals(null, r.def.prefs.signIn)
         r.def.prefs.signIn = "glassworks" to "made-up-pass-1234"
