@@ -2,7 +2,10 @@
 
 The summary (tools/perf/summary.py) holds measurements only; the letter is derived from it and
 rubric.json. These tests build fixture reports, export their summaries, and check that grade.py and
-grade.ts give each one the report's own grade."""
+grade.ts give each one the report's own grade. They also check that each frame's published
+clarity.json is exactly what summary.py writes from the report.json beside it (#115)."""
+import difflib
+import glob
 import json
 import os
 import re
@@ -13,6 +16,7 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import grade as G  # noqa: E402
@@ -363,6 +367,52 @@ class Parity(unittest.TestCase):
         ts, py = ts_grades([s])[0], G.grade_summary(s)
         self.assertEqual((py["status"], py["why"]), ("not-comparable", "the reference dashboards weren't measured"))
         self.assertEqual((ts["status"], ts["why"]), (py["status"], py["why"]))
+
+
+class Published(unittest.TestCase):
+    """#115: a frame's published summary (frames/<id>/clarity/clarity.json) is generated, never
+    edited by hand: it is exactly what summary.py writes from the report.json beside it."""
+
+    def assertGenerated(self, folder):
+        with open(os.path.join(folder, "clarity.json")) as f:
+            text = f.read()
+        committed = json.loads(text)
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "clarity.json")
+            cmd = [sys.executable, os.path.join(os.path.dirname(HERE), "summary.py"), os.path.join(folder, "report.json"), out,
+                   "--report-url", committed.get("report", "report.json")]
+            if committed.get("complete") is False:
+                cmd.append("--allow-provisional")
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            with open(out) as f:
+                want = f.read()
+        if text != want:
+            name = f"{os.path.relpath(folder, REPO)}/clarity.json"
+            diff = difflib.unified_diff(text.splitlines(True), want.splitlines(True), name, "summary.py's output", n=1)
+            self.fail(f"{name} isn't summary.py's output for the report.json beside it: regenerate it "
+                      f"(docs/perf.md, Published results)\n{''.join(diff)}")
+
+    def test_each_published_summary_is_generated_from_its_report(self):
+        folders = sorted(glob.glob(os.path.join(REPO, "frames", "*", "clarity")))
+        self.assertTrue(folders, "no frames/*/clarity to check")
+        for folder in folders:
+            with self.subTest(frame=os.path.basename(os.path.dirname(folder))):
+                self.assertGenerated(folder)
+
+    def test_a_hand_edited_summary_fails(self):
+        src = os.path.join(REPO, "frames", "aqara-s1-plus", "clarity")
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("report.json", "clarity.json"):
+                shutil.copy(os.path.join(src, name), d)
+            with open(os.path.join(d, "clarity.json")) as f:
+                s = json.load(f)
+            s["restart_ms"] = (s["restart_ms"] or 0) - 1
+            with open(os.path.join(d, "clarity.json"), "w") as f:
+                json.dump(s, f, indent=1)
+                f.write("\n")
+            with self.assertRaisesRegex(AssertionError, "isn't summary.py's output"):
+                self.assertGenerated(d)
 
 
 if __name__ == "__main__":
