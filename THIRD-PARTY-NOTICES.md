@@ -354,11 +354,12 @@ The page's JavaScript and WebAssembly ([`kiln/`](kiln)):
   [docs/research/kiln-gpl-code.md](docs/research/kiln-gpl-code.md).
 - **sunxi-tools** (https://github.com/linux-sunxi/sunxi-tools, compared at commit
   `34dfa20f8284273085666436e4cac09af19646c8`): [`kiln/packages/fel`](kiln/packages/fel) holds code
-  from it, in `src/protocol.ts`:
-  - The fel-to-spl thunk, 69 words from `thunks/fel-to-spl-thunk.S`: MIT, "Copyright © 2015 Siarhei
-    Siamashka".
+  from it:
+  - The fel-to-spl thunk, 69 words from `thunks/fel-to-spl-thunk.S`, in `src/thunk.ts` with its
+    licence: MIT, "Copyright © 2015 Siarhei Siamashka".
   - The readl, RMR, stack-info and SCTLR routines, ARM words copied from `fel_lib.c` and `fel.c`, and the
-    SPL loader (`splWritePlan`, `checkEgon`), translated from `fel.c`: GPL-2.0-or-later, Copyright
+    SPL loader (`splWritePlan`, `checkEgon`), translated from `fel.c`, all in `src/protocol.ts`:
+    GPL-2.0-or-later, Copyright
     Henrik Nordstrom, Siarhei Siamashka, Bernhard Nortmann and the sunxi-tools contributors.
 
   The package is labelled MIT. It is being rewritten so it holds no

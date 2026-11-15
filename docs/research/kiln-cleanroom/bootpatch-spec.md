@@ -129,10 +129,16 @@ panel uses. All refusals happen before any output.
 | no `"SEANDROIDENFORCE"` right after the last block (Samsung) | `SEANDROID` |
 | no AVB 1.0 signature right after the last block (byte `0x30`, then a byte with bit 7 set) | `AVB1` |
 | if there is an AVB footer and `"AVB0"` at its vbmeta offset, the vbmeta block ends within the image | `truncated` |
+| every byte the repack would drop is zero: from the end of the last block to the vbmeta block (or, without AVB data, to the end of the image), and from the end of the vbmeta block to the footer | `unsupported` |
 
 **Out of scope.** Kiln patches only the S1's Allwinner boot image, which the golden tests cover. Images
 that need vendor-specific handling, such as Samsung kernels that Magisk binary-patches or LG "bump"
-images, are not supported. The rewrite doesn't need to detect them, and no vector covers them.
+images, are not supported. The rewrite doesn't need to detect them by their bytes, and no vector
+covers them. The "every byte the repack would drop is zero" check refuses such images generically,
+because their extra data sits after the last block. On all of the S1's boot images in the golden set
+(stock 4.5.80, the older stock image, the bundled Magisk image, and every patched output), those
+ranges are all zeros (checked 2026-11-15). The code being replaced doesn't have this check, so no
+recorded vector covers it: add a test with a synthetic image that has non-zero bytes there.
 
 An AVB footer whose offset doesn't point at `"AVB0"` is ignored, and the image is treated as having
 no AVB data.

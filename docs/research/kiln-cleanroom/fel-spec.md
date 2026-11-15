@@ -44,6 +44,9 @@ Other code imports these by name, so keep them as they are (`src/index.ts` expor
 `A133`, `FEL_CHUNK` (`a133.ts`), `bootUboot`, `checkChip` (`uboot.ts`), `BulkTransport` and
 `WebUsbBulk` (`transport.ts`) stay as they are.
 
+Today's `FelDevice` also has public `sctlr()` and `stackInfo()` methods. Nothing in the repo calls
+them, so the rewrite drops them. Read SCTLR inside `runSpl`, and the stack pointers aren't needed.
+
 **Transport rule.** Send each USB transfer below with one `BulkTransport.out(bytes)` call, and read
 each with one `BulkTransport.in(length)` call. The vectors compare transfers one by one.
 
