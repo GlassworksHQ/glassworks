@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:esphome-api-android` on Maven Ce
 cut from `libs/esphome-api-android/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.1.0] - 2026-11-15
 
 ### Added
 - **First release on Maven Central.** `EspHomeMdns` advertises an esphome-api device over mDNS
