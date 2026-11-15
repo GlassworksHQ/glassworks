@@ -311,6 +311,60 @@ class RadioThreadJoinTest {
     }
 
     @Test
+    fun theWaitForTheAnswerStartsAtTheTake() {
+        threadRouter("joined as router, network \"older-net\"")
+        radio.refresh()
+        startJoin()
+        runQueued()
+        now += RadioController.HANDOFF_MS - 1
+        File(tmp.root, RadioHelper.DATASET_FILE).delete()
+        radio.refresh()
+        now += 2
+        radio.refresh()
+        assertEquals("taken just before the hand-off's minute: the old status is still not the answer", "joining", joinState().getString("phase"))
+        now += RadioController.HANDOFF_MS
+        radio.refresh()
+        assertEquals("unchanged a minute after the take: the same network again", "joined", joinState().getString("phase"))
+    }
+
+    @Test
+    fun aStatusReadBeforeTheHandOffIsNotItsBaseline() {
+        threadRouter("detached: looking for network \"older-net\"")
+        val armed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val statusRead = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val props = object : SysProps by init {
+            override fun get(name: String): String {
+                val v = init.get(name)
+                if (name == RadioHelper.PROP_STATUS && armed.compareAndSet(true, false)) { statusRead.countDown(); release.await(5, TimeUnit.SECONDS) }
+                return v
+            }
+        }
+        val c = RadioController(props, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
+        fun settle() { val done = CountDownLatch(1); c.afterPending { done.countDown() }; assertTrue(done.await(5, TimeUnit.SECONDS)) }
+        try {
+            c.start()
+            settle()
+            armed.set(true)
+            c.refreshSoon()
+            assertTrue(statusRead.await(5, TimeUnit.SECONDS))
+            val atGate = CountDownLatch(1)
+            val gate = CountDownLatch(1)
+            c.afterPending { atGate.countDown(); gate.await(5, TimeUnit.SECONDS) }
+            assertNull(c.setThreadDataset(TLV))
+            release.countDown()
+            assertTrue(atGate.await(5, TimeUnit.SECONDS))
+            init.props[RadioHelper.PROP_STATUS] = "ok thread_router: joined as router, network \"older-net\""
+            File(tmp.root, RadioHelper.DATASET_FILE).delete()
+            gate.countDown()
+            settle()
+            assertEquals("the old network changed, then the helper took the file", RadioController.ThreadHandOff.PENDING, c.threadHandOff())
+        } finally {
+            c.stop()
+        }
+    }
+
+    @Test
     fun refusedOutsideThreadRouter() {
         panePrefs.radio.mode = RadioMode.OFF.id
         init.props[RadioHelper.PROP_MODE] = RadioMode.OFF.id

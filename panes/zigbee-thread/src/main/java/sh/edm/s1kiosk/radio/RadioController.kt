@@ -226,6 +226,9 @@ class RadioController(
         syncRouterHost(helper)
         if (helper) zigbeedHandOff()
         firmware.cleanup()
+        // Before the status: a hand-off made after this read waits for the next refresh, so its
+        // baseline is never a status read before it existed.
+        val pending = handOff.get()
         // Status first, then the allow-list: the helper writes them in the opposite order, so the list
         // is never older than the status. Read once, so the status text and allowedNow() agree.
         val raw = if (helper) props.get(RadioHelper.PROP_STATUS) else ""
@@ -244,17 +247,19 @@ class RadioController(
             ?.let { ThreadRouterState.parse(it.detail) }
         var s = if (helper) helperStatusText(raw, allowed) else status
         if (s.length > 250) s = s.take(249) + "…" // ESPHome text sensors are capped at 255 bytes
-        handOff.get()?.let { h ->
-            val taken = filesDir == null || !File(filesDir, RadioHelper.DATASET_FILE).exists()
-            val late = clock() - h.at > HANDOFF_MS
+        pending?.let { h ->
+            // After the status read: a file still there means that status is from before the take.
+            val gone = filesDir == null || !File(filesDir, RadioHelper.DATASET_FILE).exists()
+            val late = clock() - h.since > HANDOFF_MS
             // Only the record looked at: a dataset handed over meanwhile (any thread) stays pending.
             handOff.compareAndSet(h, when {
                 // Until the helper takes the file, any status is still the old network's: it's the new baseline.
-                !taken -> h.copy(status = s, lost = late)
-                // Taken after all: wait for its answer as for any take.
-                h.lost -> h.copy(at = clock(), lost = false)
-                // No status seen before the take (this thread was busy): only the deadline tells.
-                (h.status != null && s != h.status) || late -> null
+                !gone -> h.copy(status = s, lost = late)
+                h.status != null && s != h.status -> null
+                // First seen taken: the wait for the helper's answer starts now, not at the hand-off.
+                !h.taken -> h.copy(taken = true, since = clock(), lost = false)
+                // Unchanged a minute after the take: that is the answer (a re-join can end where it was).
+                late -> null
                 else -> h
             })
         }
@@ -292,8 +297,8 @@ class RadioController(
         ANSWERED,
         /**
          * The helper hasn't taken the file, or no status since then differs from the last one [refresh]
-         * saw before it took it (for at most [HANDOFF_MS], also when [refresh] saw none). The helper takes
-         * the file before it writes a new status.
+         * saw before it took it (for at most [HANDOFF_MS] after the take, also when [refresh] saw none).
+         * The helper takes the file before it writes a new status.
          */
         PENDING,
         /** The file is still there after [HANDOFF_MS]: the helper isn't taking it (stopped, or another mode). */
@@ -308,8 +313,11 @@ class RadioController(
         }
     }
 
-    /** [status]: the last status [refresh] read while the file was still there; null before the first. */
-    private data class HandOff(val status: String?, val at: Long, val lost: Boolean = false)
+    /**
+     * [status]: the last status [refresh] read while the file was still there, null before the first.
+     * [since]: the hand-off, then the first [refresh] that found the file taken ([taken]).
+     */
+    private data class HandOff(val status: String?, val since: Long, val taken: Boolean = false, val lost: Boolean = false)
     private val handOff = java.util.concurrent.atomic.AtomicReference<HandOff?>()
 
     /** Helper installed and its contract version, as of the last [refresh] (for the UI thread: no getprop). */
