@@ -1,0 +1,18 @@
+/* a credit line: quiet, with its links at the line's size */
+.credit {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 0;
+}
+
+.credit svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  align-self: center;
+}
+
+.credit :global(.link) {
+  font-size: inherit;
+}

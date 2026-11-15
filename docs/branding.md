@@ -83,6 +83,16 @@ and `-on-light.svg`. The site draws it at build time from the frame's published 
 `clarity/clarity.json` (beside its report, [docs/perf.md](perf.md#published-results); until a frame has one, it
 reads "not measured"), and `tools/check-brand-images.py` doesn't check it: that tool covers `/brand/` images only.
 
+## Credit for the work a frame stands on
+
+Our brand never goes on someone else's work. When a frame relies on another project (the Mirror runs
+[Glass Panes](https://github.com/git-nimrod/glass-panes)' Android image), that project keeps its own
+name and its author's, and we say so where people meet it: "This image is built by git-nimrod as part
+of Glass Panes." Don't put the Glassworks mark, a banner or a badge on their image, their releases or
+their screens, and don't rename what they made. The data is the frame's `credits`
+([frames/README.md](../frames/README.md#credits)); the site, Kiln and the frame's README show it, and
+Kiln's tests fail if a recipe uses outside work without a credit.
+
 ## Colour, in short
 
 The full palette is on [/brand#colour](https://www.glassworks.dev/brand#colour). These four rules

@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ABIS, PANE_IDS, RATING_KEYS, framePanes, geometry, isCapability, isPaneAlias, type FrameDesign } from '@glassworks/frame-card';
+import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, framePanes, geometry, isCapability, isPaneAlias, type FrameDesign } from '@glassworks/frame-card';
 import { FRAMES, RENDERS } from '../src/frames/catalog';
 
 const frames = fileURLToPath(new URL('../../../../frames', import.meta.url));
@@ -50,6 +50,7 @@ describe('frame designs', () => {
       expect(f.tagline.length, 'tagline: at most 50 characters (glassworks.dev\'s pnpm brand checks the drawn width)').toBeLessThanOrEqual(50);
     }
     expect(Object.keys(f.ratings).sort()).toEqual([...RATING_KEYS].sort());
+    expect(creditProblems(f), 'credits (frames/README.md#credits)').toEqual([]);
     // it rates only panes that exist (by id or an old alias); every other pane is worked out, with a reason (#231)
     expect(Object.keys(f.panes).filter((k) => !PANE_IDS.includes(k) && !isPaneAlias(k)), 'panes rated that the app has no pane for').toEqual([]);
     expect((f.provides ?? []).filter((c) => !isCapability(c)), 'provides: unknown capability words').toEqual([]);

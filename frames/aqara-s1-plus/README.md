@@ -64,6 +64,22 @@ A Glassworks **frame**: the device definition for the Aqara S1 Plus. Its data is
   <a href="../../docs/research/README.md">How we got here</a>
 </p>
 
+## Credits
+
+Kiln's install stands on two open-source projects. Thank you.
+
+- **FEL tooling: [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools), by
+  [linux-sunxi](https://github.com/linux-sunxi)** (GPL-2.0). The FEL protocol reference that the
+  recovery-mode step follows to start U-Boot from RAM ([fel.md](research/fel.md),
+  [web-installer.md](research/web-installer.md)).
+- **Root: [Magisk](https://github.com/topjohnwu/Magisk), by [topjohnwu](https://github.com/topjohnwu)**
+  (GPL-3.0). The root that the boot patch adds. Kiln downloads it from Magisk's own release and
+  checks its hash; Glassworks never ships it.
+
+U-Boot, Trusted Firmware-A and the other code we ship are in
+[THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md). The list above is in
+[`design/frame.json`](design/frame.json) (`credits`; [how](../README.md#credits)).
+
 ## Why
 
 The S1 Plus is good wall hardware: a 1440×720 touchscreen, a microphone and a speaker, a

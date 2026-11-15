@@ -327,5 +327,91 @@
       "value": "planned"
     }
   },
-  "ratingsNote": "Check before flashing: fastboot must report MSM8916 and the expected partition sizes. If anything differs, stop."
+  "ratingsNote": "Check before flashing: fastboot must report MSM8916 and the expected partition sizes. If anything differs, stop.",
+  "credits": [
+    {
+      "id": "glass-panes-image",
+      "who": {
+        "name": "git-nimrod",
+        "href": "https://github.com/git-nimrod"
+      },
+      "what": "Android image",
+      "project": {
+        "name": "Glass Panes",
+        "href": "https://github.com/git-nimrod/glass-panes"
+      },
+      "licence": "MIT for the project's code; the image's parts keep their own licences",
+      "uses": "The Android 6.0.1 image the Mirror runs (release mirror-android-1). You download it from their release; Glassworks never hosts or sends it.",
+      "quote": {
+        "text": "Ready-made system.img and userdata.sparse for the Lululemon Studio mirror (board MIR63A0-00-P1, revision RevP21), so you can put Android on your mirror by flashing two files.",
+        "href": "https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-1"
+      },
+      "card": true
+    },
+    {
+      "id": "mirror-repurpose",
+      "who": {
+        "name": "repairman29",
+        "href": "https://github.com/repairman29"
+      },
+      "what": "Research",
+      "project": {
+        "name": "lululemon-mirror-repurpose",
+        "href": "https://github.com/repairman29/lululemon-mirror-repurpose"
+      },
+      "licence": "Apache-2.0",
+      "uses": "Which boards run Android 6.0.1, why later NXP revisions are different, and the limits of the boot chain. Our notes revisions.md and mirror-android.md cite it.",
+      "quote": {
+        "text": "An owner-controlled, software-only revival of the discontinued Lululemon MIRROR fitness mirror",
+        "href": "https://github.com/repairman29/lululemon-mirror-repurpose"
+      }
+    },
+    {
+      "id": "lulu-mirror-software-only",
+      "who": {
+        "name": "Onemoremichael",
+        "href": "https://github.com/Onemoremichael"
+      },
+      "what": "Research",
+      "project": {
+        "name": "lulu-mirror-software-only",
+        "href": "https://github.com/Onemoremichael/lulu-mirror-software-only"
+      },
+      "uses": "The stock kernel's config, the hardware research on the NXP revisions, and why size and year don't identify a board. Our notes mirror-android.md and revisions.md cite it.",
+      "quote": {
+        "text": "Recover a discontinued lululemon Studio MIRROR as a usable Android computer on its original mainboard.",
+        "href": "https://github.com/Onemoremichael/lulu-mirror-software-only"
+      }
+    },
+    {
+      "id": "olm3ca-mirror",
+      "who": {
+        "name": "olm3ca",
+        "href": "https://github.com/olm3ca"
+      },
+      "what": "Research",
+      "project": {
+        "name": "mirror",
+        "href": "https://github.com/olm3ca/mirror"
+      },
+      "uses": "The move from 40-inch to 43-inch panels on later units. Our note revisions.md cites it.",
+      "quote": {
+        "text": "Enhancements for the Lululemon Mirror",
+        "href": "https://github.com/olm3ca/mirror"
+      }
+    },
+    {
+      "id": "mdme-teardown",
+      "who": {
+        "name": "MDME",
+        "href": "https://mdthats.me/"
+      },
+      "what": "Teardown",
+      "project": {
+        "name": "Smart Mirror Teardown",
+        "href": "https://mdthats.me/projects/lululemon-smart-mirror-p1/"
+      },
+      "uses": "The chips inside: the SoC, Wi-Fi and Bluetooth, audio and camera. Our note mirror-android.md cites it, and the frame's Bluetooth rating comes from it."
+    }
+  ]
 }

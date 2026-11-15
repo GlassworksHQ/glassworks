@@ -42,6 +42,37 @@
 
 A Glassworks **frame**: the device definition for the lululemon Studio Mirror. Its data is in [`design/frame.json`](design/frame.json) (format: [frames/README.md](../README.md)), and [glassworks.dev/frames/lululemon-mirror](https://www.glassworks.dev/frames/lululemon-mirror) shows it.
 
+## Credits
+
+This frame stands on other people's work. Glassworks adds its app to the Mirror; making the Mirror
+run Android in the first place was theirs. Thank you.
+
+- **The Android image: [Glass Panes](https://github.com/git-nimrod/glass-panes), by
+  [git-nimrod](https://github.com/git-nimrod).** The Mirror runs their Android 6.0.1 image, release
+  [`mirror-android-1`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-1). In
+  their words: "Ready-made system.img and userdata.sparse for the Lululemon Studio mirror (board
+  MIR63A0-00-P1, revision RevP21), so you can put Android on your mirror by flashing two files."
+  You download it from their release; Glassworks never hosts or sends it. The project's code is MIT;
+  the image's Android and kernel source keep their own licences, and its vendor files belong to
+  Qualcomm and Quectel. Glass Panes credits, in turn: "This build stands on the work of the
+  Lululemon-mirror community. Thank you to Onemoremichael, lrinQVQ, TimStewartJ, repairman29,
+  porcuswine, vgab7 and everyone in the mirror-repurposing community."
+- **Research: [lululemon-mirror-repurpose](https://github.com/repairman29/lululemon-mirror-repurpose),
+  by [repairman29](https://github.com/repairman29)** (Apache-2.0). Which boards run Android 6.0.1,
+  why the later NXP revisions differ, and the limits of the boot chain
+  ([revisions.md](research/revisions.md), [mirror-android.md](research/mirror-android.md)).
+- **Research: [lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only),
+  by [Onemoremichael](https://github.com/Onemoremichael).** The stock kernel's config, the research
+  on the NXP revisions, and why size and year don't identify a board (same notes).
+- **Research: [mirror](https://github.com/olm3ca/mirror), by [olm3ca](https://github.com/olm3ca).**
+  The move from 40-inch to 43-inch panels ([revisions.md](research/revisions.md)).
+- **Teardown: [Smart Mirror Teardown](https://mdthats.me/projects/lululemon-smart-mirror-p1/), by
+  [MDME](https://mdthats.me/).** The chips inside: the SoC, Wi-Fi and Bluetooth, audio and camera
+  ([mirror-android.md](research/mirror-android.md)).
+
+The same list is in [`design/frame.json`](design/frame.json) (`credits`), which glassworks.dev and
+Kiln show ([how](../README.md#credits)).
+
 ## Status
 
 **Status: planned.** Nothing installs on it yet. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).

@@ -98,6 +98,7 @@ know, and the screens say Kiln can't tell instead.
 | `src/wizard/routes.ts`, `useRouteSync.ts`, `registry.ts` | The routes, and the frame's session that outlives them |
 | `src/frames/catalog.ts`, `src/components/FrameCard.tsx` | The picker's frames, from `frames/<id>/design/frame.json` ([frames/README.md](../../../frames/README.md)), drawn by the card glassworks.dev shares ([`packages/frame-card`](../../../packages/frame-card/README.md)) as radio items |
 | `src/wizard/screens.tsx` | One component per screen of the design, on Radix primitives |
+| `src/components/Credit.tsx` | The outside work an install stands on, from the frame's `credits` ([frames/README.md](../../../frames/README.md#credits)): `Credit` next to the step that uses it (`built="image"`: "This image is built by git-nimrod as part of Glass Panes."), `BuiltOn` on the start page and the done screen, `stepCredits()` to pick them from a recipe's `credits` |
 | `src/frames/aqara-s1-plus.ts` | What the screens say for the S1: the USB names to pick, help links, the radio's next steps |
 | `src/recovery/player.ts` | The recovery-mode player, drawing a frame's data. The S1's is `frames/aqara-s1-plus/design/recovery.json` (canonical); `docs/design/kiln/recovery/` keeps the prototype's copy, and a test keeps them equal |
 

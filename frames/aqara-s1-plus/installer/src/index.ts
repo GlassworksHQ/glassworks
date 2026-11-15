@@ -1,3 +1,4 @@
+export { credits } from './credits';
 export { s1Plus, type AssetName, type SetUpOptions } from './recipe';
 export { DEBLOAT, KeyMismatchError, PKG, type AppApk, type AppPhase, deviceInfo, kioskVersion, parseWifiScan, provision, q, scanWifi, unprovision, type ProvisionOptions, type Provisioned, type StepFn, type SwitchResult, type WifiNetwork } from './provision';
 export { describeSwitch, isKeyMismatch, panelWifi, parseWifiList, parseWifiOwner, planSwitch, switchSigningKey, wifiAtRisk, xmlUnescape, type PanelWifi, type SwitchPlan } from './switch';

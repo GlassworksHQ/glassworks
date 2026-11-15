@@ -1,5 +1,6 @@
 // What Kiln's screens say and show for the Aqara S1 Plus. The hardware steps are the recipe's
 // (@glassworks/aqara-s1-plus-installer); this is the words, the drawing data and the links.
+import { credits } from '@glassworks/aqara-s1-plus-installer';
 import type { AskKind } from '@glassworks/kiln-core';
 import recovery from '../../../../../frames/aqara-s1-plus/design/recovery.json';
 import photo from '../../../../../docs/img/fel-button.jpg';
@@ -37,6 +38,8 @@ export const s1PlusUi = {
     learn: `${DOCS}/install.md`,
   },
   app: 'S1 Kiosk',
+  /** The outside work each install phase uses (the recipe's, ids from frame.json `credits`). */
+  credits,
   /** Undo's two depths (frames/aqara-s1-plus/docs/install.md#undo). */
   undo: {
     factory: { title: 'As it came from Aqara', detail: 'The original software, then a factory reset on the panel. Everything is removed.' },
