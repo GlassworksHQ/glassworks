@@ -96,7 +96,7 @@ export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ship
         <span id={idPrefix ? `${idPrefix}-tags` : undefined} className={s.tags}>
           {expected && <span className={s.expected}>Expected, not tested yet: </span>}
           {cardTags(f.ratings).map((t) => (
-            <span key={t.text} className={t.severity ? s[t.severity] : undefined}>
+            <span key={t.text} className={[t.severity && s[t.severity], t.text.length > 24 && s.long].filter(Boolean).join(' ') || undefined}>
               <TagIcon k={t.key} value={t.value} />
               {t.text}
             </span>
