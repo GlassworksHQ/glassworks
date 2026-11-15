@@ -41,7 +41,7 @@ UART through Web Serial, a socket, a test double). An optional adapter connects 
 **Android app over WebUSB adb**, so a web page can put an Android device on Wi-Fi over one USB
 cable, with no Bluetooth and no app on a phone.
 
-The Android side is `ImprovAdbServer` in the [improv](../../../app/libs/improv/README.md) Kotlin
+The Android side is `ImprovAdbServer` in the [improv](../../../libs/improv/README.md) Kotlin
 library. Both were extracted from S1 Unleashed, whose web installer uses this package to set up
 the panel's Wi-Fi. MIT licensed.
 

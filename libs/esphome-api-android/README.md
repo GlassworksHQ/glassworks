@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="../../../LICENSE">
+  <a href="../../LICENSE">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-license-mit-on-dark.svg">
       <img alt="License: MIT" src="https://www.glassworks.dev/brand/badge-license-mit-on-light.svg" height="30">

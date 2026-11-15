@@ -146,7 +146,7 @@ header from the example in the table, then change the name, the tagline and the 
 | The README is for | Header | Copy it from |
 |---|---|---|
 | The repository's front page (the root `README.md`) | `banner-glassworks`, centred title and tagline, then the status and roadmap badges | [README.md](README.md) |
-| A library: something another project could use on its own (`app/libs/*`, `packages/*`, or such a package in `kiln/packages/`) | `banner-library-<name>`, centred title and tagline, then the MIT, status and roadmap badges | [improv](app/libs/improv/README.md) |
+| A library: something another project could use on its own (`app/libs/*`, `packages/*`, or such a package in `kiln/packages/`) | `banner-library-<name>`, centred title and tagline, then the MIT, status and roadmap badges | [improv](libs/improv/README.md) |
 | The Glassworks core or a pane | `banner-core` or `banner-pane`, title and tagline, then the part badge, licence, status and roadmap badges | [core](app/kiosk/src/main/java/dev/glassworks/README.md) |
 | Kiln | `banner-kiln`, title and tagline, then the Kiln, MIT, status and roadmap badges | [Kiln](kiln/apps/kiln/README.md) |
 | An app or product built on the core | Title and tagline, then Built on Glassworks, MIT, status and roadmap badges. No banner | [S1 Kiosk](app/README.md) |

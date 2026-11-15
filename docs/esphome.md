@@ -13,8 +13,8 @@ The kiosk app makes the panel look like **one ESPHome device** to Home Assistant
 One integration, discovered automatically, no Wyoming or MQTT. It replaces the earlier Wyoming
 satellite (remove that Wyoming entry from HA when you switch).
 
-Code: the protocol core is the reusable pure-JVM library [`app/libs/esphome-api`](../app/libs/esphome-api/README.md)
-(package `sh.edm.esphome`), with mDNS from [`app/libs/esphome-api-android`](../app/libs/esphome-api-android/README.md);
+Code: the protocol core is the reusable pure-JVM library [`app/libs/esphome-api`](../libs/esphome-api/README.md)
+(package `sh.edm.esphome`), with mDNS from [`app/libs/esphome-api-android`](../libs/esphome-api-android/README.md);
 the panel's entities and glue are `PanelDevice` and `VoiceAssistantController` in
 `app/kiosk/src/main/java/sh/edm/s1kiosk/esphome/`, with the wall base and the Aqara cloud switch in
 `base/WallBasePane.kt` and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
@@ -332,7 +332,7 @@ services › Bluetooth*, and hears the BLE sensors near the panel through it. No
   you add the panel. Without a key, the proxy answers nobody, so no one else on the LAN can listen.
 
 How it works, and Android's limits on scanning, are in the
-[bluetooth-proxy library](../app/libs/bluetooth-proxy/README.md).
+[bluetooth-proxy library](../libs/bluetooth-proxy/README.md).
 
 ### Diagnostics
 

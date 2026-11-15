@@ -293,14 +293,14 @@ Sendspin output is muted locally and stays in sync. Verified on the panel agains
 
 Parts of the app are standalone modules other projects can use:
 
-- [`libs/esphome-api`](libs/esphome-api/README.md): the ESPHome native API, device side, in plain
+- [`libs/esphome-api`](../libs/esphome-api/README.md): the ESPHome native API, device side, in plain
   Kotlin/JVM (Noise encryption with HA key provisioning, entities, voice assistant messages).
-- [`libs/esphome-api-android`](libs/esphome-api-android/README.md): mDNS discovery for it on Android.
-- [`libs/improv`](libs/improv/README.md): Improv Wi-Fi for Android: a BLE GATT server, Improv Serial
+- [`libs/esphome-api-android`](../libs/esphome-api-android/README.md): mDNS discovery for it on Android.
+- [`libs/improv`](../libs/improv/README.md): Improv Wi-Fi for Android: a BLE GATT server, Improv Serial
   (including over adb, from a web page over USB), Wi-Fi joining that works on Android 10+, and the
   pure-Kotlin protocol and state machines. Its browser client is
   [`kiln/packages/improv-serial`](../kiln/packages/improv-serial/README.md).
-- [`libs/bluetooth-proxy`](libs/bluetooth-proxy/README.md): an ESPHome Bluetooth proxy on Android:
+- [`libs/bluetooth-proxy`](../libs/bluetooth-proxy/README.md): an ESPHome Bluetooth proxy on Android:
   BLE scanning on Android's terms, batched into `esphome-api`. Listening only so far; the app's
   Bluetooth proxy pane runs it (#121).
 
