@@ -27,7 +27,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 ## Commands
 
 ```sh
-cd app && ./gradlew test :kiosk:assembleDebug        # app + libs: unit tests and a debug APK
+./gradlew test :kiosk:assembleDebug                 # app + libs: unit tests and a debug APK
 npm install && npm run stage -w kiln && npm test     # npm workspaces, from the repo root (also: npm run typecheck, npm run build)
 tools/install/test/install-tests.sh                  # install scripts, off-device
 python3 tools/check-doc-links.py                     # relative links and #anchors in docs

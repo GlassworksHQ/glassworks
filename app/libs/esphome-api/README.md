@@ -175,7 +175,7 @@ checks the library's classes, and the BouncyCastle classes they reach, against A
 ## Tests
 
 ```sh
-cd app && ./gradlew :esphome-api:test
+./gradlew :esphome-api:test
 ```
 
 `EspHomeKeepaliveTest`, `EspHomeActionsCameraTest` and `EspHomeHaEventTest` run the real `aioesphomeapi` client when

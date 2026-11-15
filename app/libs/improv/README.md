@@ -175,7 +175,7 @@ implementation(project(":improv"))
 ## Tests
 
 ```sh
-cd app && ./gradlew :improv:testDebugUnitTest
+./gradlew :improv:testDebugUnitTest
 ```
 
 The protocol, both sessions, the adb peer check and the Wi-Fi security rules have JVM unit tests.

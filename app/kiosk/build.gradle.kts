@@ -23,7 +23,7 @@ val s1TestBuild: String = ((findProperty("s1TestBuild") as String?) ?: System.ge
 // each per-ABI GeckoView AAR carries its own classes.jar and omni.ja, so two cannot share a classpath
 // (docs/releasing.md "ABIs"). Every ABI's APK has the same versionCode. Each frame declares the ABIs its
 // device runs (`abis` in frames/<id>/design/frame.json), and the release builds them all (#98).
-val frameAbis: Map<String, List<String>> = layout.projectDirectory.dir("../../frames").asFile.listFiles().orEmpty()
+val frameAbis: Map<String, List<String>> = rootProject.layout.projectDirectory.dir("frames").asFile.listFiles().orEmpty()
     .map { File(it, "design/frame.json") }.filter { it.isFile }.sortedBy { it.parentFile.parentFile.name }
     .associate { f ->
         val abis = ((groovy.json.JsonSlurper().parse(f) as? Map<*, *>)?.get("abis") as? List<*>)
@@ -109,7 +109,7 @@ android {
     }
 
     // RepoFiles, the tests' way to find files across every module from the repo root (#21).
-    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("../testing/kotlin"))
+    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/kotlin"))
 }
 
 dependencies {
@@ -150,18 +150,18 @@ tasks.withType<Test>().configureEach {
     (project.findProperty("s1RegenGolden") as String?)?.let { systemProperty("s1.regenGolden", it) }
     // ApkAbiListsTest reads the workflows, this file, every frame's frame.json and frame-abis.sh. Declared
     // as inputs, so a change to any of them re-runs the tests instead of taking them UP-TO-DATE or FROM-CACHE.
-    inputs.dir(rootProject.file("../.github/workflows")).withPropertyName("workflows")
+    inputs.dir(rootProject.file(".github/workflows")).withPropertyName("workflows")
         .withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file("build.gradle.kts").withPropertyName("kioskBuildScript").withPathSensitivity(PathSensitivity.NONE)
-    inputs.files(fileTree(rootProject.file("../frames")) { include("*/design/frame.json") }, rootProject.file("../tools/release/frame-abis.sh"))
+    inputs.files(fileTree(rootProject.file("frames")) { include("*/design/frame.json") }, rootProject.file("tools/release/frame-abis.sh"))
         .withPropertyName("frameAbis").withPathSensitivity(PathSensitivity.RELATIVE)
     // WakeWordsTest checks that the host fetch script pins the same models as the app.
-    inputs.file(rootProject.file("../tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
+    inputs.file(rootProject.file("tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
         .withPathSensitivity(PathSensitivity.NONE)
     // ContentScriptReadyTest runs the web extension's content.js under node: a change to it re-runs the tests.
     inputs.dir("src/main/assets/extension").withPropertyName("webExtension").withPathSensitivity(PathSensitivity.RELATIVE)
     // The pane catalog (#231), the confinement scans, goldens, the font and the repo files the tests read.
-    readsRepoFiles(rootProject.file(".."))
+    readsRepoFiles(rootProject.projectDir)
 }
 
 /**
@@ -209,7 +209,7 @@ abstract class LicenceAssets : DefaultTask() {
         }
     }
 }
-val repoRoot = layout.projectDirectory.dir("../..")
+val repoRoot = rootProject.layout.projectDirectory
 val thirdPartyNotices = repoRoot.file("THIRD-PARTY-NOTICES.md")
 val licenceAssets = tasks.register<LicenceAssets>("licenceAssets") {
     notices.set(thirdPartyNotices)
