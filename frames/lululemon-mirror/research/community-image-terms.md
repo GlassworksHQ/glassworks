@@ -91,4 +91,6 @@ person" as the fallback.
 ## Open questions
 
 - Does the release's `SHA256SUMS` stay put? Kiln would pin `d13dd330…83ed5` for `system.img`.
-  Refract pins the size and SHA-256 in its `allowlist.json`, so a changed release fails there first.
+  Refract checks only the size pinned in its `allowlist.json` (it streams, so it never hashes the
+  file): a changed release of another size fails there with a 502. One of the same size streams
+  through, and Kiln rejects it by its SHA-256.
