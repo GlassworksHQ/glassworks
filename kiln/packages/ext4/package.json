@@ -5,7 +5,10 @@
   "description": "ext4 and Android sparse images in the browser: stream a sparse image into a block device (OPFS), edit its ext4 (add and remove files with owners and SELinux labels), build a fresh ext4, and stream it back out as a sparse image.",
   "license": "MIT",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./test/tools.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

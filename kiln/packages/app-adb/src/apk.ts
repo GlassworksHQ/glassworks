@@ -10,16 +10,33 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(s).arrayBuffer());
 }
 
+/** The names of the files in a zip, from its central directory. */
+export function zipNames(zip: Uint8Array): string[] {
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const { count, at: first } = centralDirectory(zip, dv);
+  const out: string[] = [];
+  for (let i = 0, at = first; i < count; i++) {
+    if (dv.getUint32(at, true) !== 0x02014b50) throw new Error('this APK\'s zip directory is broken');
+    const nlen = dv.getUint16(at + 28, true);
+    out.push(td8.decode(zip.subarray(at + 46, at + 46 + nlen)));
+    at += 46 + nlen + dv.getUint16(at + 30, true) + dv.getUint16(at + 32, true);
+  }
+  return out;
+}
+
+function centralDirectory(zip: Uint8Array, dv: DataView): { count: number; at: number } {
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 0xffff); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) return { count: dv.getUint16(i + 10, true), at: dv.getUint32(i + 16, true) };
+  }
+  throw new Error('this file isn\'t an APK (no zip directory)');
+}
+
 /** One file out of a zip, by name (stored or deflated). Undefined if it isn't there. */
 export async function zipEntry(zip: Uint8Array, name: string): Promise<Uint8Array | undefined> {
   const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
-  let eocd = -1;
-  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 0xffff); i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) throw new Error('this file isn\'t an APK (no zip directory)');
-  const count = dv.getUint16(eocd + 10, true);
-  let at = dv.getUint32(eocd + 16, true);
+  const cd = centralDirectory(zip, dv);
+  const count = cd.count;
+  let at = cd.at;
   for (let i = 0; i < count; i++) {
     if (dv.getUint32(at, true) !== 0x02014b50) throw new Error('this APK\'s zip directory is broken');
     const method = dv.getUint16(at + 10, true), csize = dv.getUint32(at + 20, true);

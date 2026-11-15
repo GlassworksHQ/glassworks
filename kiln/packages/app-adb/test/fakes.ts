@@ -38,23 +38,36 @@ function axml(pkg: string, utf8: boolean): Uint8Array {
   return x;
 }
 
-/** A zip holding one stored file. */
-function zip(name: string, body: Uint8Array): Uint8Array {
-  const n = new TextEncoder().encode(name);
-  const local = new Uint8Array(30 + n.length), central = new Uint8Array(46 + n.length), end = new Uint8Array(22);
-  const lv = new DataView(local.buffer), cv = new DataView(central.buffer), ev = new DataView(end.buffer);
-  lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint32(18, body.length, true); lv.setUint32(22, body.length, true); lv.setUint16(26, n.length, true);
-  local.set(n, 30);
-  cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint32(20, body.length, true); cv.setUint32(24, body.length, true);
-  cv.setUint16(28, n.length, true); cv.setUint32(42, 0, true);
-  central.set(n, 46);
-  ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, 1, true); ev.setUint16(10, 1, true);
-  ev.setUint32(12, central.length, true); ev.setUint32(16, local.length + body.length, true);
-  const out = new Uint8Array(local.length + body.length + central.length + end.length);
-  out.set(local); out.set(body, local.length); out.set(central, local.length + body.length); out.set(end, local.length + body.length + central.length);
+/** A zip of stored (uncompressed) files. */
+function zip(files: [string, Uint8Array][]): Uint8Array {
+  const te = new TextEncoder();
+  const locals: Uint8Array[] = [], centrals: Uint8Array[] = [];
+  let off = 0;
+  for (const [name, body] of files) {
+    const n = te.encode(name);
+    const local = new Uint8Array(30 + n.length + body.length), central = new Uint8Array(46 + n.length);
+    const lv = new DataView(local.buffer), cv = new DataView(central.buffer);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint32(18, body.length, true); lv.setUint32(22, body.length, true); lv.setUint16(26, n.length, true);
+    local.set(n, 30); local.set(body, 30 + n.length);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint32(20, body.length, true); cv.setUint32(24, body.length, true);
+    cv.setUint16(28, n.length, true); cv.setUint32(42, off, true);
+    central.set(n, 46);
+    locals.push(local); centrals.push(central);
+    off += local.length;
+  }
+  const cdSize = centrals.reduce((x, c) => x + c.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, off, true);
+  const out = new Uint8Array(off + cdSize + 22);
+  let p = 0;
+  for (const x of [...locals, ...centrals, end]) { out.set(x, p); p += x.length; }
   return out;
 }
 
-export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean } = {}): Uint8Array {
-  return zip('AndroidManifest.xml', axml(pkg, !!o.utf8));
+/** `libs`: native libraries by ABI, e.g. { 'arm64-v8a': { 'libxul.so': bytes } }. */
+export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Record<string, Record<string, Uint8Array>> } = {}): Uint8Array {
+  const libs = Object.entries(o.libs ?? {}).flatMap(([abi, fs]) => Object.entries(fs).map(([n, b]): [string, Uint8Array] => [`lib/${abi}/${n}`, b]));
+  return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs]);
 }
