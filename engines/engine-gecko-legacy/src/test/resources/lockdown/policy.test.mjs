@@ -14,6 +14,14 @@ const P = context.P;
 const decide = (details, ha) => JSON.parse(JSON.stringify(P.decide(details, ha)));
 const HA = "http://192.0.2.10:8123";
 
+test("every case reads as Origin.kt reads it (origin-cases.json, run through Kotlin by LockdownPolicyJsTest)", () => {
+  if (!process.env.KOTLIN_ORIGINS) return; // run by hand, without the Kotlin side
+  const kotlin = JSON.parse(process.env.KOTLIN_ORIGINS);
+  const cases = JSON.parse(readFileSync(new URL("./origin-cases.json", import.meta.url), "utf8"));
+  assert.ok(cases.length >= 40);
+  for (const url of cases) assert.equal(P.origin(url), kotlin[url], JSON.stringify(url));
+});
+
 test("origins match Origin.kt (OriginTest's cases)", () => {
   const cases = {
     "http://192.0.2.10:8123/lovelace/0": "http://192.0.2.10:8123",
@@ -32,6 +40,7 @@ test("origins match Origin.kt (OriginTest's cases)", () => {
     "http://ält.example.org:8123/lovelace": "http://xn--lt-uia.example.org:8123",
     "http://xn--lt-uia.example.org:8123/api/websocket": "http://xn--lt-uia.example.org:8123",
     "https://ÄLT.example.org/": "https://xn--lt-uia.example.org",
+    "http://xn--fa-hia.example.org:8123/": "http://xn--fa-hia.example.org:8123",
   };
   for (const [url, origin] of Object.entries(cases)) assert.equal(P.origin(url), origin, url);
   for (const none of [null, undefined, "", "about:blank", "data:text/html,x", "moz-extension://abc/x", "javascript:x",
@@ -39,7 +48,8 @@ test("origins match Origin.kt (OriginTest's cases)", () => {
     "http://192.0.2.10:12a/", "http://[2001:db8::1/", "blob:about:blank",
     "http://example.com\\@192.0.2.10:8123/", "http://192.0.2.10:8123\\@example.com/", "http://exa\tmple.com@192.0.2.10:8123/",
     "http://exa\nmple.com@192.0.2.10:8123/", "http://exa mple.com@192.0.2.10:8123/", "http://exa\u0001mple.com@192.0.2.10:8123/",
-    "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/"]) {
+    "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/",
+    "http://faß.example.org:8123/", "http://ς.example.org/", "http://a\u200db.example.org/", "http://a\u200cb.example.org/"]) {
     assert.equal(P.origin(none), null, String(none));
   }
 });

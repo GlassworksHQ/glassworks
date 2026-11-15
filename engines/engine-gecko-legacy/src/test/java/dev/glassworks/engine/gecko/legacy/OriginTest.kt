@@ -28,6 +28,7 @@ class OriginTest {
             "http://ält.example.org:8123/lovelace" to "http://xn--lt-uia.example.org:8123",
             "http://xn--lt-uia.example.org:8123/api/websocket" to "http://xn--lt-uia.example.org:8123",
             "https://ÄLT.example.org/" to "https://xn--lt-uia.example.org",
+            "http://xn--fa-hia.example.org:8123/" to "http://xn--fa-hia.example.org:8123",
         )
         for ((url, origin) in cases) assertEquals(url, origin, Origin.of(url))
         for (none in listOf(null, "", "about:blank", "data:text/html,x", "moz-extension://abc/x", "javascript:x", "file:///x",
@@ -36,7 +37,9 @@ class OriginTest {
             // A browser reads these as another host than the text after the last @ says, or the port isn't digits.
             "http://example.com\\@192.0.2.10:8123/", "http://192.0.2.10:8123\\@example.com/", "http://exa\tmple.com@192.0.2.10:8123/",
             "http://exa\nmple.com@192.0.2.10:8123/", "http://exa mple.com@192.0.2.10:8123/", "http://exa\u0001mple.com@192.0.2.10:8123/",
-            "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/")) {
+            "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/",
+            // IDNA deviation characters: Android's IDN says fass, Gecko xn--fa-hia (#346 review). Refused.
+            "http://faß.example.org:8123/", "http://ς.example.org/", "http://a\u200db.example.org/", "http://a\u200cb.example.org/")) {
             assertEquals(none, null, Origin.of(none))
         }
     }
