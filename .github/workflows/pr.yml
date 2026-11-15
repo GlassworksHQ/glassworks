@@ -122,7 +122,7 @@ jobs:
           layout="$GITHUB_WORKSPACE/tools/release/android-layout.sh"
           esphome_api=$("$layout" file . esphome-api/test-requirements.txt)
           esphome_api=$(dirname "$esphome_api")
-          bluetooth_proxy=$("$layout" file . bluetooth-proxy/build.gradle.kts)
+          bluetooth_proxy=$("$layout" file . libs/bluetooth-proxy/build.gradle.kts)
           bluetooth_proxy=$(dirname "$bluetooth_proxy")
           python -m venv "$RUNNER_TEMP/esphome-venv"
           "$RUNNER_TEMP/esphome-venv/bin/pip" install --quiet --require-hashes --only-binary :all: \

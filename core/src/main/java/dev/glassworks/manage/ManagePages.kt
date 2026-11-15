@@ -242,7 +242,7 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
         return """<div class="ptl" style="--cols:${item.columns.coerceIn(1, 6)}">""" + list.joinToString("") { t ->
             val unit = if (t.unit.isEmpty()) "" else """<u>${esc(t.unit)}</u>"""
             val under = when {
-                t.meter != null -> """<i class="mt"><i style="width:${(t.meter.coerceIn(0f, 1f) * 100).toInt()}%"></i></i>"""
+                t.meter != null -> """<i class="mt"><i style="width:${(t.meter!!.coerceIn(0f, 1f) * 100).toInt()}%"></i></i>"""
                 (t.history?.size ?: 0) >= 2 -> spark(t.history!!)
                 else -> ""
             }

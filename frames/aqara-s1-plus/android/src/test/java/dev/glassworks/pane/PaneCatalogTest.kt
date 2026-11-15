@@ -19,7 +19,6 @@ import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.io.File
 import java.lang.reflect.Modifier
-import java.net.URI
 import java.util.jar.JarFile
 
 /**
@@ -58,14 +57,13 @@ class PaneCatalogTest {
      */
     private val paneClassIds by lazy {
         val loader = Pane::class.java.classLoader!!
-        val url = loader.getResource("dev/glassworks/pane/Pane.class")!!
-        // the app's classes are a jar or a directory on the test classpath, depending on the build
-        val paths: Sequence<String> = when (url.protocol) {
-            "jar" -> JarFile(File(URI(url.path.substringBefore("!/")))).use { jar -> jar.entries().asSequence().map { it.name }.toList() }.asSequence()
-            "file" -> File(url.toURI()).parentFile.parentFile.parentFile.parentFile.let { root ->
-                root.walkTopDown().filter { it.isFile }.map { it.relativeTo(root).path.replace(File.separatorChar, '/') }
-            }
-            else -> error("the app's classes come from $url, neither a jar nor a directory")
+        // every module's classes (#21): the jars and directories on the test classpath that the repo builds
+        val roots = System.getProperty("java.class.path").split(File.pathSeparator).map(::File)
+            .filter { it.exists() && it.absolutePath.startsWith(repo.absolutePath + File.separator) }
+        assertTrue("no class roots of this repo on the test classpath", roots.isNotEmpty())
+        val paths: Sequence<String> = roots.asSequence().flatMap { root ->
+            if (root.isDirectory) root.walkTopDown().filter { it.isFile }.map { it.relativeTo(root).path.replace(File.separatorChar, '/') }
+            else JarFile(root).use { jar -> jar.entries().asSequence().map { it.name }.toList() }.asSequence()
         }
         paths.filter { it.endsWith(".class") && !Regex("""\$\d""").containsMatchIn(it) }
             .map { it.removeSuffix(".class").replace('/', '.') }

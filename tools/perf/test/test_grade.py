@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import grade as G  # noqa: E402
 import perflib as P  # noqa: E402
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
-from pane_ids import pane_ids_in  # noqa: E402
+from pane_ids import main_sources, pane_ids_in  # noqa: E402
 
 GOOD, NI, POOR = G.GOOD, G.NI, G.POOR
 
@@ -281,7 +281,7 @@ class MemoryBudget(unittest.TestCase):
         for k in switchable:
             self.assertIsInstance(s1["panes"][k]["ram_pss_max_kb"], int)
         # Every pane in the app's code is in the frame's file, so a new one can't be left out of RAM or size.
-        ids = pane_ids_in(os.path.join(root, "app", "kiosk", "src", "main", "java"))
+        ids = pane_ids_in(main_sources(root))
         self.assertIn("camera", ids, "a pane declared by a constant is found")
         self.assertEqual(set(), ids - set(s1["panes"]), "panes in the code without a budget in budgets.json")
         self.assertEqual(set(s1["panes"]), ids)
