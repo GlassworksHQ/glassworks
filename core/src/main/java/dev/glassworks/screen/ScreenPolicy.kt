@@ -96,6 +96,8 @@ class ScreenPolicy(
 
     /** A [testHold] is on. Main thread. */
     var testHeld = false; private set
+    /** When it ends, on [SystemClock.elapsedRealtime], which counts deep sleep too. */
+    private var testHoldUntil = 0L
 
     /** Activity hooks: keep-screen-on flag and window brightness (0..1, or -1 = system). */
     var onKeepScreenOn: ((Boolean) -> Unit)? = null
@@ -142,6 +144,8 @@ class ScreenPolicy(
         })
         applyPresenceRange()
         handler.post(tick)
+        // A test hold from before start() (the intent that launched the activity) hasn't woken it yet.
+        if (testHeld) wake(TEST_HOLD)
     }
 
     /** Undoes [start]: the sensors, the screen broadcasts, the brightness observer and the tick. [start] may run again. */
@@ -230,7 +234,6 @@ class ScreenPolicy(
      * itself, so a test that crashed can't leave the screen on.
      */
     fun testHold(seconds: Int) {
-        handler.removeCallbacks(testHoldExpiry)
         if (seconds <= 0) {
             if (testHeld) endTestHold("ended")
             return
@@ -238,8 +241,8 @@ class ScreenPolicy(
         val s = minOf(seconds, TEST_HOLD_MAX_S)
         Log.i(logTag, "test hold ${if (testHeld) "renewed" else "on"} for $s s")
         testHeld = true
+        testHoldUntil = SystemClock.elapsedRealtime() + s * 1000L
         if (started) wake(TEST_HOLD)
-        handler.postDelayed(testHoldExpiry, s * 1000L)
     }
 
     /**
@@ -252,11 +255,8 @@ class ScreenPolicy(
         intent.removeExtra(TEST_HOLD_EXTRA)
     }
 
-    private val testHoldExpiry = Runnable { endTestHold("expired") }
-
     /** The idle timeout counts from now, so the screen doesn't go dark at once. */
     private fun endTestHold(why: String) {
-        handler.removeCallbacks(testHoldExpiry)
         testHeld = false
         Log.i(logTag, "test hold off ($why)")
         lastActivity = SystemClock.elapsedRealtime()
@@ -294,6 +294,7 @@ class ScreenPolicy(
     private val tick = object : Runnable {
         override fun run() {
             handler.postDelayed(this, TICK_MS)
+            if (testHeld && SystemClock.elapsedRealtime() >= testHoldUntil) endTestHold("expired")
             if (!screenOn) return
             // Still wanted on: take the wake lock again before its own timeout runs out. Not while the
             // device isn't interactive: the power key may have just turned it off, its broadcast not yet

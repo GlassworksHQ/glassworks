@@ -227,7 +227,7 @@ class ScreenPolicyTest {
         assertTrue(screen.testHeld)
         assertFalse("not a hold that lifts night dimming", screen.held)
 
-        advance(1_000)
+        advance(2_000) // the next tick
         assertFalse("expired by itself", screen.testHeld)
         advance(19_000)
         assertEquals(emptyList<Boolean>(), keepOn.filter { !it })
@@ -322,6 +322,33 @@ class ScreenPolicyTest {
             listOf("test hold on for 90 s", "test hold renewed for 1800 s", "test hold off (ended)"),
             ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
         )
+        screen.stop()
+    }
+
+    /** A cold launch: MainActivity applies the intent before it starts the policy (CodeRabbit on #332). */
+    @Test fun aTestHoldFromBeforeStartWakesTheScreenAtStart() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.applyTestHoldExtra(Intent().putExtra("test_hold", true))
+        screen.start(context)
+        assertTrue(ShadowLog.getLogsForTag("Test.Screen").any { it.msg == "wake (test hold)" })
+        assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+        screen.stop()
+    }
+
+    /**
+     * The end is on elapsedRealtime and the tick checks it before anything else, so it also ends while
+     * the screen is off (CodeRabbit on #332: a Handler delay counts uptime, which deep sleep stops).
+     */
+    @Test fun aTestHoldEndsWhileTheScreenIsOff() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(60)
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        advance(10)
+        assertFalse(screen.screenOn)
+        advance(61_000)
+        assertFalse(screen.testHeld)
         screen.stop()
     }
 }
