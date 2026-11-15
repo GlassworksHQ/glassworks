@@ -201,12 +201,9 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   if (pkg !== PKG) throw new Error(`this APK is ${pkg}, not S1 Kiosk (${PKG}). Nothing was changed.`);
   r.detail(`APK: ${pkg}`);
 
-  let previousHome = await recordedHome(r);
-  if (!previousHome && report.home && report.home !== ACT && COMPONENT.test(report.home)) {
-    previousHome = report.home;
-    await r.run(`echo ${q(previousHome)} > ${PREVIOUS_HOME}`);
-    r.detail(`kept the home app for undo: ${previousHome}`);
-  }
+  // the home app to give back on undo: kept on the Mirror once the install worked, never before
+  const recorded = await recordedHome(r);
+  const candidate = !recorded && report.home && report.home !== ACT && COMPONENT.test(report.home) ? report.home : undefined;
 
   r.step(report.app ? `Update S1 Kiosk (${report.app.name ?? report.app.code})` : 'Install S1 Kiosk');
   phase({ step: 'apk', stage: 'copy' });
@@ -215,6 +212,11 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   const app = await kioskVersion(p);
   if (!app) throw new Error(`Android says it installed the APK, but S1 Kiosk (${PKG}) isn't there.`);
   r.detail(`S1 Kiosk ${app.name ?? ''} (${app.code}) installed`);
+  const previousHome = recorded ?? candidate;
+  if (candidate) {
+    await r.run(`echo ${q(candidate)} > ${PREVIOUS_HOME}`);
+    r.detail(`kept the home app for undo: ${candidate}`);
+  }
 
   phase({ step: 'grant' });
   await grantPermissions(r);

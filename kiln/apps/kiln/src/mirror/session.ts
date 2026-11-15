@@ -32,7 +32,10 @@ export interface MirrorState {
 }
 
 export interface MirrorDeps {
-  /** Opens the browser's device list (inside the click) and authenticates. */
+  /**
+   * Opens the browser's device list and authenticates. Called inside the click, before any await:
+   * WebUSB only shows its list during the click's user activation.
+   */
   connect(): Promise<PanelShell>;
   sleep?: (ms: number) => Promise<void>;
   homeTimeoutMs?: number;
@@ -76,7 +79,11 @@ export class MirrorSession {
     const pick = ++this.picks;
     this.apk = undefined;
     this.set({ apk: undefined });
-    const bytes = await data;
+    let bytes: Uint8Array;
+    try { bytes = await data; } catch (e) {
+      if (pick === this.picks) this.set({ apk: { name, size: 0, sha256: '', error: `the file couldn't be read (${(e as Error).message})` } });
+      return;
+    }
     const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
     let pkg: string | undefined, error: string | undefined;
     try { pkg = await apkPackage(bytes); } catch (e) { error = (e as Error).message; }
@@ -146,6 +153,10 @@ export class MirrorSession {
 
   /** From Done or an error: read the Mirror again, or connect again if it went away. */
   async again(): Promise<void> {
-    try { await this.check(); } catch { this.panel = undefined; this.set({ screen: 'pick', report: undefined }); }
+    try { await this.check(); } catch (e) {
+      this.panel = undefined;
+      this.set({ screen: 'pick', report: undefined, flow: undefined, result: undefined, error: undefined, phases: [],
+        connectError: `The Mirror went away: ${(e as Error).message}. Connect again.` });
+    }
   }
 }

@@ -2,7 +2,7 @@
 // /lululemon-mirror: the Mirror's test install. Off unless the address has ?apk=local (or a demo):
 // the Mirror is a planned frame, and the only APK for it is a test build picked from this computer.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
-import { Panel, loadOrCreateAdbKey } from '@glassworks/adb';
+import { Panel, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
 import { fmtSize } from '@glassworks/kiln-core';
 import type { MirrorPhase } from '@glassworks/lululemon-mirror-installer';
 import * as Collapsible from '@radix-ui/react-collapsible';
@@ -16,8 +16,19 @@ import { MirrorSession, mirrorMode, type MirrorState } from './session';
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the S1's do. */
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
 
+/**
+ * The adb key loads as the page opens, so Connect can ask for the device inside its click with no
+ * await in front (WebUSB shows its list only during the click), as the S1's session does.
+ */
+export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbKey) => Promise<PanelShell>): () => Promise<PanelShell> {
+  let key: AdbKey | undefined;
+  const ready = loadKey().then((k) => { key = k; });
+  return () => (key ? connect(key) : ready.then(() => { throw new Error('Kiln was still making its key for this browser. Click Connect again.'); }));
+}
+
 function realSession(on: boolean): MirrorSession {
-  return new MirrorSession({ connect: async () => Panel.connect(await loadOrCreateAdbKey()) }, on);
+  const connect = on ? keyedConnect(loadOrCreateAdbKey, (k) => Panel.connect(k)) : () => Promise.reject(new Error('off'));
+  return new MirrorSession({ connect }, on);
 }
 
 /** Install or undo, then Done. The rail's steps and where the person is on them. */
@@ -83,7 +94,7 @@ function Inputs({ s, session }: { s: MirrorState; session: MirrorSession }) {
         <div className="well">
           <div className="grow">
             <b>{s.apk.name}</b>
-            <span className="small">{s.apk.package ?? 'no package'} · {fmtSize(s.apk.size)} · SHA-256 <code>{s.apk.sha256}</code></span>
+            {s.apk.sha256 && <span className="small">{s.apk.package ?? 'no package'} · {fmtSize(s.apk.size)} · SHA-256 <code>{s.apk.sha256}</code></span>}
             {s.apk.error && <span className="status err" role="alert">{s.apk.error}.</span>}
           </div>
         </div>

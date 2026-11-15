@@ -59,7 +59,7 @@ describe('install', () => {
     expect(res).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, home: 'set', previousHome: MIRROR_KIOSK });
     expect(phases).toEqual([{ step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'start' }, { step: 'home', pick: 'S1 Kiosk' }]);
     const at = (c: string) => { const i = p.cmds.findIndex((x) => x.startsWith(c)); expect(i, c).toBeGreaterThanOrEqual(0); return i; };
-    const order = [`echo '${MIRROR_KIOSK}' > ${PREVIOUS_HOME}`, 'push /data/local/tmp/s1kiosk.apk', 'pm install -r -g /data/local/tmp/s1kiosk.apk',
+    const order = ['push /data/local/tmp/s1kiosk.apk', 'pm install -r -g /data/local/tmp/s1kiosk.apk', `echo '${MIRROR_KIOSK}' > ${PREVIOUS_HOME}`,
       'pm grant sh.edm.s1kiosk android.permission.RECORD_AUDIO', 'dpm set-active-admin', `am start -n ${OURS} --es url 'http://homeassistant.local:8123'`,
       'am start -a android.intent.action.MAIN -c android.intent.category.HOME'].map(at);
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -85,6 +85,8 @@ describe('install', () => {
     const p = new FakeMirror({ installFails: 'Failure [INSTALL_FAILED_OLDER_SDK]' });
     await expect(installMirror(p, { apk, sleep: noSleep })).rejects.toThrow(/legacy build/);
     expect(p.cmds.some((c) => c.startsWith('pm grant') || c.startsWith('am start'))).toBe(false);
+    expect(p.files.has(PREVIOUS_HOME)).toBe(false); // "nothing was changed" holds: no undo record either
+    expect((await checkMirror(p)).pendingHome).toBeUndefined();
     expect(p.cmds).toContain('rm -f /data/local/tmp/s1kiosk.apk');
   });
 

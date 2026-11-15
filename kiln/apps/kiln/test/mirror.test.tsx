@@ -10,7 +10,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from '../src/mirror/demo';
-import { MirrorWizard, Screens } from '../src/mirror/MirrorWizard';
+import { MirrorWizard, Screens, keyedConnect } from '../src/mirror/MirrorWizard';
 import { MirrorSession, mirrorMode } from '../src/mirror/session';
 
 beforeAll(() => {
@@ -106,6 +106,37 @@ describe('the test install', () => {
     expect(s.state).toMatchObject({ screen: 'checks', report: { pendingHome: MIRROR_KIOSK } });
     render(<Screens session={s} />);
     expect(screen.getByText('Undo: give the home screen back')).toBeTruthy();
+  });
+
+  it('Connect asks for the device inside the click, before anything is awaited', () => {
+    const connect = vi.fn(() => new Promise<never>(() => {}));
+    const s = new MirrorSession({ connect }, true);
+    void s.connect();
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('the key loads with the page, so the click goes straight to the device list', async () => {
+    const connect = vi.fn(() => new Promise<never>(() => {}));
+    const go = keyedConnect(async () => ({}) as never, connect);
+    await expect(go()).rejects.toThrow(/still making its key/); // clicked before the key was ready: says so
+    void go();
+    expect(connect).toHaveBeenCalledTimes(1); // no await in front of the device request
+  });
+
+  it('an APK that can\'t be read says so', async () => {
+    const s = new MirrorSession({ connect: async () => new FakeMirror() }, true);
+    await s.pickApk('gone.apk', Promise.reject(new Error('NotFoundError')));
+    expect(s.state.apk).toMatchObject({ name: 'gone.apk', error: /couldn't be read \(NotFoundError\)/ });
+  });
+
+  it('reading the Mirror again when it went away goes back to Connect and says why', async () => {
+    const m = new FakeMirror({ picks: (c) => c[0], installed: 600 });
+    const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+    await s.connect();
+    await s.undo();
+    m.run = async () => { throw new Error('USB transfer failed'); };
+    await s.again();
+    expect(s.state).toMatchObject({ screen: 'pick', flow: undefined, result: undefined, connectError: /went away: USB transfer failed/ });
   });
 
   it('a refused install ends on the error screen with the reason', async () => {
