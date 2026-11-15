@@ -75,4 +75,18 @@ class PanePageLayoutTest {
         assertEquals(card.paddingTop, card.paddingBottom)
         assertEquals(card.paddingLeft, card.paddingRight)
     }
+
+    @Test
+    fun aLinksLineFollowsTheModel() {
+        // #301 verifier: the page is drawn again only when its shape changes, so a link's line froze.
+        var mode = "Zigbee coordinator (TCP)"
+        fun model() = KioskSettingsOverlay.Model(listOf(SettingsSection("device", "S1 Plus", listOf(SettingsItem.Link("Radio mode", mode) {}))), "0.4.3")
+        val o = Mockup.show(KioskSettingsOverlay(Mockup.activity())).apply { reload = ::model }
+        o.show(model())
+        Mockup.idle()
+        mode = "Thread border router"
+        o.refresh()
+        assertEquals("Thread border router", Mockup.label(o, "Thread border router").text.toString())
+        assertTrue(Mockup.label(o, "Thread border router").isShown)
+    }
 }

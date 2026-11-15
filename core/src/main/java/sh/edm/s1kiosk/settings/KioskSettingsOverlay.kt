@@ -408,6 +408,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
     }
 
+    /** The open page's item called [title] in the model as it is now. */
+    private fun now(title: String): SettingsItem? =
+        model?.sections?.firstOrNull { it.id == current }?.let { flat(it.items) }?.firstOrNull { titleOf(it) == title }
+
     private fun flat(items: List<SettingsItem>): List<SettingsItem> =
         items.flatMap { if (it is SettingsItem.Group) flat(it.items) else listOf(it) }
 
@@ -487,7 +491,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Slider -> sliderRow(i)
         is SettingsItem.Duration -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.duration(i) { build() } }) { i.shown(i.value()) }
         is SettingsItem.TimeRange -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.range(i) { build() } }) { i.shown(i.value()) }
-        is SettingsItem.Link -> row(i.title, i.detail, chevron = true, dim = i.detail.isEmpty()) { i.open(context) }
+        // A link's line comes with the model, made again on each refresh: follow it (the Device page's radio mode).
+        is SettingsItem.Link -> follow(row(i.title, i.detail, chevron = true, dim = i.detail.isEmpty()) { i.open(context) }) {
+            (now(i.title) as? SettingsItem.Link)?.detail ?: i.detail
+        }
         is SettingsItem.Note -> g.text(14.5f, MU).apply { text = i.text(); setLineSpacing(0f, 1.25f); setPadding(0, px(14f), 0, px(14f)) }
         is SettingsItem.Info -> infoRow(i)
         is SettingsItem.Choice -> follow(valueRow(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
