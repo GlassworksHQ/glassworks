@@ -196,8 +196,8 @@ class RadioDefinitionTest {
         val pane = object : dev.glassworks.pane.Pane {
             override val id = "radio"
             override fun entities() = listOf(
-                sh.edm.esphome.TextSensorEntity("radio_firmware", "Radio firmware", get = { "EmberZNet 7.4.4 · EZSP v13" }),
-                sh.edm.esphome.TextSensorEntity("radio_helper", "Radio helper", get = { "v4 · root side ready" }),
+                dev.glassworks.esphome.TextSensorEntity("radio_firmware", "Radio firmware", get = { "EmberZNet 7.4.4 · EZSP v13" }),
+                dev.glassworks.esphome.TextSensorEntity("radio_helper", "Radio helper", get = { "v4 · root side ready" }),
             )
         }
         val d = radioDefinition(app, FixedReadout(null, running = false))

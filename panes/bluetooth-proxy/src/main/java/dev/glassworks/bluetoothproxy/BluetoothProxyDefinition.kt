@@ -11,8 +11,8 @@ import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.PaneSwitch
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
-import sh.edm.bluetoothproxy.ProxyStatus
-import sh.edm.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
+import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 import java.util.concurrent.ScheduledExecutorService
 
 /**

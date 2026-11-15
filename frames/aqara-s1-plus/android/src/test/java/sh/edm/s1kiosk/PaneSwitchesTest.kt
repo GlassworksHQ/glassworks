@@ -71,7 +71,7 @@ class PaneSwitchesTest {
         assertEquals(listOf("voice", "sendspin", "notifications", "bluetooth_proxy", "wall_base", "keep_time_zone", "diagnostics"), s.map { it.objectId })
         assertEquals("Music Assistant player (Sendspin)", s[1].name)
         assertEquals(List(7) { true }, s.map { it.disabledByDefault })
-        assertEquals(setOf(sh.edm.esphome.EntityCategory.CONFIG), s.map { it.category }.toSet())
+        assertEquals(setOf(dev.glassworks.esphome.EntityCategory.CONFIG), s.map { it.category }.toSet())
         // #210 verifier: turned on, a pane opens the microphone or a port; a keyless LAN client may not.
         assertEquals("only an authenticated connection changes a pane's on/off", List(7) { true }, s.map { it.authOnly })
     }

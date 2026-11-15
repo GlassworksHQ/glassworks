@@ -12,10 +12,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
-import sh.edm.esphome.EspHomeLog
-import sh.edm.esphome.Msg
-import sh.edm.esphome.ProtoMessage
-import sh.edm.esphome.ProtoWriter
+import dev.glassworks.esphome.EspHomeLog
+import dev.glassworks.esphome.Msg
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.base.BaseBackend

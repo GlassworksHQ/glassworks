@@ -18,13 +18,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.ApiAction
-import sh.edm.esphome.ActionCall
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.HomeAssistantEvent
-import sh.edm.esphome.ProtoMessage
-import sh.edm.esphome.ProtoWriter
-import sh.edm.esphome.SwitchEntity
+import dev.glassworks.esphome.ApiAction
+import dev.glassworks.esphome.ActionCall
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.HomeAssistantEvent
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
+import dev.glassworks.esphome.SwitchEntity
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 

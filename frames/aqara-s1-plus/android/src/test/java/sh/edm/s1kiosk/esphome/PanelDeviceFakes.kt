@@ -1,6 +1,6 @@
 package sh.edm.s1kiosk.esphome
 
-import sh.edm.esphome.DeviceIdentity
+import dev.glassworks.esphome.DeviceIdentity
 import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.Callable
 import java.util.concurrent.Delayed

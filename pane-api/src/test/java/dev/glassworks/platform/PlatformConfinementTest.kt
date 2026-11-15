@@ -42,6 +42,6 @@ class PlatformConfinementTest {
     @Test
     fun `the scan sees the places that are allowed to read it`() {
         assertTrue(RepoFiles.source("dev/glassworks/platform/Platform.kt").readText().contains("SDK_INT"))
-        assertTrue(RepoFiles.source("sh/edm/improv/Compat.kt").readText().contains("SDK_INT"))
+        assertTrue(RepoFiles.source("dev/glassworks/improv/Compat.kt").readText().contains("SDK_INT"))
     }
 }

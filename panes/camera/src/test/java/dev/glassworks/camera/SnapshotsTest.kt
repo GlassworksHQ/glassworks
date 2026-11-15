@@ -10,9 +10,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.ProtoMessage
-import sh.edm.esphome.ProtoWriter
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
 
 class SnapshotsTest {
 

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "sh.edm.bluetoothproxy"
+    namespace = "dev.glassworks.esphome.bluetoothproxy"
     compileSdk {
         version = release(37) { minorApiLevel = 2 }
     }

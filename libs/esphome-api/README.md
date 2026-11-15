@@ -41,7 +41,7 @@ an ESPHome device, with entities, encryption and the voice assistant. Most libra
 *client* side (talking to ESPHome devices). This one implements the device.
 
 It was extracted from [S1 Kiosk](../../frames/aqara-s1-plus/android/README.md), where it runs the Aqara S1 Plus panel's
-ESPHome device. Package `sh.edm.esphome`, MIT licensed.
+ESPHome device. Package `dev.glassworks.esphome`, MIT licensed.
 
 ## What it does
 

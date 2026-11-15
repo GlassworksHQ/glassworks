@@ -48,7 +48,7 @@ class RepoFilesTest {
         val r = tree(
             "app/kiosk/build.gradle.kts", "app/kiosk/src/main/java/dev/glassworks/platform/Platform.kt",
             "app/kiosk/src/main/java/sh/edm/s1kiosk/MainActivity.kt", "app/kiosk/src/main/res/font/inter.ttf",
-            "app/kiosk/src/test/resources/prefs.golden.txt", "app/libs/improv/src/main/java/sh/edm/improv/Compat.kt",
+            "app/kiosk/src/test/resources/prefs.golden.txt", "app/libs/improv/src/main/java/dev/glassworks/improv/Compat.kt",
             "app/kiosk/build/intermediates/src/main/java/Stale.kt",
         )
         touch("app/kiosk/build.gradle.kts", "android { defaultConfig { applicationId = \"sh.edm.s1kiosk\" } }")
@@ -71,7 +71,7 @@ class RepoFilesTest {
             "frames/aqara-s1-plus/android/src/test/resources/prefs.golden.txt",
             "frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt",
             "frames/aqara-s1-plus/installer/src/index.ts", "frames/aqara-s1-plus/design/frame.json",
-            "libs/improv/src/main/java/sh/edm/improv/Compat.kt", "libs/esphome-api/src/main/kotlin/sh/edm/esphome/Api.kt",
+            "libs/improv/src/main/java/dev/glassworks/improv/Compat.kt", "libs/esphome-api/src/main/kotlin/dev/glassworks/esphome/Api.kt",
             "core/build/tmp/src/main/java/Stale.kt", "kiln/node_modules/x/src/main/java/Y.kt",
         )
         touch("frames/aqara-s1-plus/android/build.gradle.kts", "applicationId = \"sh.edm.s1kiosk\"")
@@ -85,7 +85,7 @@ class RepoFilesTest {
         // every app module's code, none of the libraries' and none of the build output
         assertEquals(6, r.code(atLeast = 6, inModules = r.appModules).size)
         assertEquals("pane-api/src/main/java/dev/glassworks/platform/Platform.kt", r.rel(r.source("dev/glassworks/platform/Platform.kt")))
-        assertEquals("libs/esphome-api/src/main/kotlin/sh/edm/esphome/Api.kt", r.rel(r.source("sh/edm/esphome/Api.kt")))
+        assertEquals("libs/esphome-api/src/main/kotlin/dev/glassworks/esphome/Api.kt", r.rel(r.source("dev/glassworks/esphome/Api.kt")))
         assertEquals(listOf("core", "pane-api"), r.packageDirs("dev/glassworks/pane").map { r.rel(it).substringBefore("/src/") })
         assertEquals(1, r.sources(atLeast = 1) { it.name == "pane.json" }.size)
         assertEquals("core/src/main/res/font/inter.ttf", r.rel(r.inModule("src/main/res/font/inter.ttf")))

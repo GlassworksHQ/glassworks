@@ -535,8 +535,9 @@ sets the flag again at the end of its own shutdown.
 ## Licence
 
 The files in `dev.glassworks` are licensed under the
-[Mozilla Public License 2.0](../../../../../../LICENSES/MPL-2.0.txt). The rest of S1 Unleashed
-stays MIT.
+[Mozilla Public License 2.0](../../../../../../LICENSES/MPL-2.0.txt), except the libraries in
+[`libs/`](../../../../../../libs): `dev.glassworks.esphome` with its subpackages, and
+`dev.glassworks.improv`. Those are MIT, like the rest of S1 Unleashed.
 
 The MPL works file by file. You can ship Glassworks inside a closed product, and your own frames
 and panes, in their own files, can use any licence. Changes to Glassworks' own files must be

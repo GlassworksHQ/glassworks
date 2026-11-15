@@ -10,7 +10,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.DeviceIdentity
+import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.sendspin.SendspinSession.Phase
 import sh.edm.s1kiosk.sendspin.SendspinSession.Status

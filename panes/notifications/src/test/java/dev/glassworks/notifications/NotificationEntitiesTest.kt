@@ -7,10 +7,10 @@ package dev.glassworks.notifications
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
-import sh.edm.esphome.ActionArg
-import sh.edm.esphome.ActionArgType
-import sh.edm.esphome.ActionResponse
-import sh.edm.esphome.EntityCategory
+import dev.glassworks.esphome.ActionArg
+import dev.glassworks.esphome.ActionArgType
+import dev.glassworks.esphome.ActionResponse
+import dev.glassworks.esphome.EntityCategory
 
 class NotificationEntitiesTest {
     @Test

@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
-import sh.edm.esphome.EspHomeLog
+import dev.glassworks.esphome.EspHomeLog
 
 class ForEachPaneTest {
 

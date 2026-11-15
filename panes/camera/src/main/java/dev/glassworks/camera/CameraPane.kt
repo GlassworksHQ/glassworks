@@ -8,11 +8,11 @@ import android.util.Log
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.BinarySensorEntity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.SelectEntity
-import sh.edm.esphome.SwitchEntity
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.BinarySensorEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.SelectEntity
+import dev.glassworks.esphome.SwitchEntity
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit

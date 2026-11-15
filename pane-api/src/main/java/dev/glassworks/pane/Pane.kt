@@ -7,12 +7,12 @@ package dev.glassworks.pane
 import android.content.Context
 import android.content.SharedPreferences
 import dev.glassworks.platform.AppBuild
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.ApiServer
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.EspHomeLog
-import sh.edm.esphome.EventEntity
-import sh.edm.esphome.HomeAssistantEvent
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.ApiServer
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.EspHomeLog
+import dev.glassworks.esphome.EventEntity
+import dev.glassworks.esphome.HomeAssistantEvent
 import java.net.InetAddress
 
 /**

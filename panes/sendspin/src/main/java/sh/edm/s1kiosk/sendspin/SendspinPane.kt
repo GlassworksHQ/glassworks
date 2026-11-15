@@ -3,12 +3,12 @@ package sh.edm.s1kiosk.sendspin
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.ApiServer
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.SendspinApi
-import sh.edm.esphome.SendspinTokenSource
-import sh.edm.esphome.TextSensorEntity
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.ApiServer
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.SendspinApi
+import dev.glassworks.esphome.SendspinTokenSource
+import dev.glassworks.esphome.TextSensorEntity
 
 /**
  * The Music Assistant player (Sendspin, docs/sendspin.md) as a pane: its two entities, its lifecycle and its settings.

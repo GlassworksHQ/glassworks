@@ -4,10 +4,10 @@ import android.util.Log
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.TextEntity
-import sh.edm.esphome.TextSensorEntity
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.TextEntity
+import dev.glassworks.esphome.TextSensorEntity
 
 /**
  * The S1's `Time zone` and `Time zone status` entities (docs/install.md "Time zone"), backed by [TimeZoneKeeper].

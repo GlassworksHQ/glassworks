@@ -4,8 +4,8 @@
 
 package dev.glassworks.bluetoothproxy
 
-import sh.edm.bluetoothproxy.ProxyStatus
-import sh.edm.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
+import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 
 /**
  * What the Bluetooth proxy is doing, in one place: the settings page's status line and card, and the
@@ -47,7 +47,7 @@ enum class ProxyPhase(val entityText: String?) {
 interface BluetoothProxyModel {
     fun phase(): ProxyPhase
     /** The engine's status, or null while none runs. */
-    fun status(): sh.edm.bluetoothproxy.ProxyStatus?
+    fun status(): dev.glassworks.esphome.bluetoothproxy.ProxyStatus?
     /** Turns Bluetooth on. False where Android doesn't let apps. */
     fun turnBluetoothOn(): Boolean
     /** Turns location on. False where the app may not. */

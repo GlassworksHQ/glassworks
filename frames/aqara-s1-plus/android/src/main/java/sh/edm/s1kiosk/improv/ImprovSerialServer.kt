@@ -2,7 +2,7 @@ package sh.edm.s1kiosk.improv
 
 import dev.glassworks.frame.Frame
 import dev.glassworks.platform.AppBuild
-import sh.edm.improv.*
+import dev.glassworks.improv.*
 import android.util.Log
 import sh.edm.s1kiosk.InstallerGlue
 import sh.edm.s1kiosk.auth.OAuth

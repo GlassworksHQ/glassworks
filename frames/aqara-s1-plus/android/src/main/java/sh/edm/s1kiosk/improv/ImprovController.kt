@@ -3,7 +3,7 @@ package sh.edm.s1kiosk.improv
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.AdminReceiver
 import android.content.ComponentName
-import sh.edm.improv.*
+import dev.glassworks.improv.*
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application

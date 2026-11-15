@@ -18,12 +18,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.ApiServer
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.ProtoMessage
-import sh.edm.esphome.ProtoWriter
-import sh.edm.esphome.TimerEventType
-import sh.edm.esphome.WakeWordInfo
+import dev.glassworks.esphome.ApiServer
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
+import dev.glassworks.esphome.TimerEventType
+import dev.glassworks.esphome.WakeWordInfo
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.esphome.UrlPlayer
 import sh.edm.s1kiosk.esphome.VoiceAssistantController
@@ -91,7 +91,7 @@ class AssistPaneTest {
      * that reads no_wake_word, and a pick that isn't active becomes no_wake_word.
      */
     private class HaWakeWordSelect(var option: String?) {
-        fun configUpdated(cfg: sh.edm.esphome.VoiceConfiguration) {
+        fun configUpdated(cfg: dev.glassworks.esphome.VoiceConfiguration) {
             val words = cfg.available.associate { it.wakeWord to it.id }
             var o = option
             if (cfg.active.size == 1 && (o == null || o == NONE)) o = words.entries.firstOrNull { it.value == cfg.active[0] }?.key
@@ -108,7 +108,7 @@ class AssistPaneTest {
         prefs.wakeWord = "hey_jarvis"
         val p = started()
         p.rereadDelayMs = 0
-        val server = sh.edm.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
+        val server = dev.glassworks.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
         p.bind(server)
         p.onEvent(PanelEvent.SettingChanged(VoicePrefs.KEY_WAKE_WORD)) // the shell's event for the stored word
         val ha = HaWakeWordSelect(null)
@@ -142,7 +142,7 @@ class AssistPaneTest {
         p.rereadDelayMs = 0
         var now = 1_000L
         p.clock = { now }
-        val server = sh.edm.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
+        val server = dev.glassworks.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
         p.bind(server)
         val before = reconnects
         p.useWakeWord("okay_nabu")
@@ -171,7 +171,7 @@ class AssistPaneTest {
             }
             now
         }
-        val server = sh.edm.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
+        val server = dev.glassworks.esphome.ApiServer(0, { identity }, emptyList(), psk = null)
         p.bind(server)
         p.useWakeWord("okay_nabu")
         now += AssistPane.REREAD_WINDOW_MS + 1
@@ -440,15 +440,15 @@ class AssistPaneTest {
     @Test
     fun turnedOffMidRunItResumesTheMusicAndLetsGoOfTheSpeaker() {
         val p = started()
-        val server = ApiServer(0, { identity }, emptyList(), null as sh.edm.esphome.NoiseKeys?, java.net.InetAddress.getLoopbackAddress())
+        val server = ApiServer(0, { identity }, emptyList(), null as dev.glassworks.esphome.NoiseKeys?, java.net.InetAddress.getLoopbackAddress())
         p.bind(server)
         server.start()
         try {
             java.net.Socket(java.net.InetAddress.getLoopbackAddress(), server.localPort).use { s ->
                 // As Home Assistant: hello, then subscribe to the voice assistant.
                 val out = s.getOutputStream()
-                out.write(frame(sh.edm.esphome.Msg.HELLO_REQUEST, ProtoWriter().string(1, "Home Assistant 2026.11.0").uint32(2, 1).uint32(3, 10).toByteArray()))
-                out.write(frame(sh.edm.esphome.Msg.SUBSCRIBE_VOICE_ASSISTANT_REQUEST, ProtoWriter().bool(1, true).toByteArray()))
+                out.write(frame(dev.glassworks.esphome.Msg.HELLO_REQUEST, ProtoWriter().string(1, "Home Assistant 2026.11.0").uint32(2, 1).uint32(3, 10).toByteArray()))
+                out.write(frame(dev.glassworks.esphome.Msg.SUBSCRIBE_VOICE_ASSISTANT_REQUEST, ProtoWriter().bool(1, true).toByteArray()))
                 out.flush()
                 val c = input.controller!!
                 val end = System.currentTimeMillis() + 5_000

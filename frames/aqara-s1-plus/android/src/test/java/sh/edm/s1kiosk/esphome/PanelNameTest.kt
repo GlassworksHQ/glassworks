@@ -42,7 +42,7 @@ class PanelNameTest {
     @After fun tearDown() = devices.forEach { runCatching { it.stop() } }
 
     /** Starts a device as KioskService does, stops it, and returns what it announced. */
-    private fun announced(): sh.edm.esphome.DeviceIdentity {
+    private fun announced(): dev.glassworks.esphome.DeviceIdentity {
         val exec = ManualExecutor()
         val mdns = RecordingMdns()
         val device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,

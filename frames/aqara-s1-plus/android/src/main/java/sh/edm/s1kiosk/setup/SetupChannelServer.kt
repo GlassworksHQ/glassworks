@@ -3,7 +3,7 @@ package sh.edm.s1kiosk.setup
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import sh.edm.improv.AdbSocketServer
+import dev.glassworks.improv.AdbSocketServer
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.InstallerGlue
 import sh.edm.s1kiosk.KioskPrefs

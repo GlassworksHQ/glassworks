@@ -5,8 +5,8 @@
 package dev.glassworks.pane
 
 import android.content.SharedPreferences
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.SwitchEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.SwitchEntity
 
 /**
  * A pane's on/off (#67), kept by the core: a flag under [key] in the pane's own settings [file]. The

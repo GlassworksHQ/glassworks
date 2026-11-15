@@ -1,7 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.android.EspHomeMdns
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.android.EspHomeMdns
 
 /**
  * What [PanelDevice] asks of mDNS: advertise the API server, and stop. [EspHomeMdns] on the panel;

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "sh.edm.esphome.android"
+    namespace = "dev.glassworks.esphome.android"
     compileSdk {
         version = release(37) { minorApiLevel = 2 }
     }

@@ -6,9 +6,9 @@ package dev.glassworks.pane
 
 import android.content.Context
 import android.view.View
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.ButtonEntity
-import sh.edm.esphome.EventEntity
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.ButtonEntity
+import dev.glassworks.esphome.EventEntity
 
 /**
  * One section of the panel's settings. The panel's settings menu draws it, and the Manage page (#33)

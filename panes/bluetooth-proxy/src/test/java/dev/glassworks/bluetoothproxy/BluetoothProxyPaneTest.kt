@@ -13,12 +13,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.bluetoothproxy.BleScanner
-import sh.edm.bluetoothproxy.BluetoothProxyEngine
-import sh.edm.bluetoothproxy.ScanFailure
-import sh.edm.bluetoothproxy.ScanPower
-import sh.edm.esphome.ApiServer
-import sh.edm.esphome.DeviceIdentity
+import dev.glassworks.esphome.bluetoothproxy.BleScanner
+import dev.glassworks.esphome.bluetoothproxy.BluetoothProxyEngine
+import dev.glassworks.esphome.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.ScanPower
+import dev.glassworks.esphome.ApiServer
+import dev.glassworks.esphome.DeviceIdentity
 import java.util.concurrent.Executors
 
 /** The pane around the engine: it offers the proxy to Home Assistant only while it is on, on the server it was given. */
