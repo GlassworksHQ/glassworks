@@ -229,6 +229,12 @@ the order they start and list their entities, the frame's own panes included (th
 the ones the frame can't run (`CantRun`), then starts, stops and lists the rest. A pane that needs
 something from the device takes it in its constructor; it never reaches for the device itself.
 
+A pane's **layer over the dashboard** (the voice orb, the timers, the notifications, the camera's privacy dot)
+is built the same way. The activity hands the app an `OverlayHost` (itself, opening a view in the page or
+going back to the dashboard, closing the settings menu, the main thread), and the app returns its
+`PaneOverlay`s bottom first (`AppParts.overlays`). The activity adds them over the page, puts the ones that
+must never be covered above its menus, and tells each about screen changes, Back and its own end.
+
 Every pane also has a **`pane.json` and an `icon.svg`** in its folder, next to its `PaneDefinition` (or its
 `Pane`, for a pane without a definition of its own, like timers). They describe it to Kiln and glassworks.dev:
 `id`, `name`, `does` (one line), `requires` (hardware words), `status`, `frame` for a frame pane, and
