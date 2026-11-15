@@ -102,7 +102,7 @@ Not available yet. As planned, it installs by flashing system and userdata over 
 
 Check before flashing: fastboot must report MSM8916 and the expected partition sizes. If anything differs, stop.
 
-**Test only, today:** on a Mirror that already runs the community image, Kiln can install S1 Kiosk's legacy build over adb, from an APK file on your computer: `/lululemon-mirror?apk=local` ([its recipe](installer)). It changes nothing else on the Mirror, and its undo removes the app and gives the home screen back. Making S1 Kiosk the home screen needs one tap on the Mirror, in Android's chooser ([home-app.md](research/home-app.md)), and the Mirror has no touchscreen, so use scrcpy or a USB mouse.
+**Test only, today:** on a Mirror that already runs the community image, Kiln can install S1 Kiosk's legacy build over adb, from an APK file on your computer: `/lululemon-mirror?apk=local` ([its recipe](installer)). It changes nothing else on the Mirror. Making S1 Kiosk the home screen needs a choice on the Mirror, in Android's list of home screens: S1 Kiosk, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
 
 ## Panes
 

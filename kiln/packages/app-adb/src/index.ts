@@ -112,3 +112,5 @@ export async function dropAdmin(p: PanelShell, sleep: (ms: number) => Promise<vo
   }
   return false;
 }
+
+export { apkPackage, axmlAttribute, zipEntry } from './apk';

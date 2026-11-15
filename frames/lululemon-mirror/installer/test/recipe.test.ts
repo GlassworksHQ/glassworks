@@ -1,10 +1,11 @@
+import { fakeApk } from '@glassworks/app-adb/fakes';
 import { describe, expect, it } from 'vitest';
 import { PREVIOUS_HOME, checkMirror, installMirror, parseDfFreeMb, parsePreferredHome, undoMirror, type MirrorPhase } from '../src';
 import { FakeMirror, LAUNCHER3, MIRROR_KIOSK } from './fakes';
 
 const OURS = 'sh.edm.s1kiosk/.MainActivity';
 const noSleep = async () => {};
-const apk = new Uint8Array([1, 2, 3]);
+const apk = fakeApk('sh.edm.s1kiosk');
 /** Commands that change the Mirror. Everything else the recipe runs only reads. */
 const WRITES = /^(push |pm (install|uninstall|grant|disable|enable|hide)|appops set|dpm |echo |rm |am (start|force-stop))/;
 
@@ -87,6 +88,26 @@ describe('install', () => {
     expect(p.cmds).toContain('rm -f /data/local/tmp/s1kiosk.apk');
   });
 
+  it('refuses an APK that isn\'t S1 Kiosk before anything reaches the Mirror', async () => {
+    const p = new FakeMirror();
+    await expect(installMirror(p, { apk: fakeApk('com.nimrod.mirrorkiosk'), sleep: noSleep })).rejects.toThrow(/is com\.nimrod\.mirrorkiosk, not S1 Kiosk.*Nothing was changed/);
+    await expect(installMirror(p, { apk: new TextEncoder().encode('not an apk'), sleep: noSleep })).rejects.toThrow(/isn't an APK/);
+    expect(p.cmds.filter((c) => WRITES.test(c))).toEqual([]);
+  });
+
+  it('an update with another app kept as home: opens its settings to clear its defaults, then the chooser', async () => {
+    const p = new FakeMirror({ installed: 500, clearsDefaults: true, picks: () => OURS, pickAfter: 1 });
+    p.pick(MIRROR_KIOSK); // Android keeps this pick: the home apps don't change on an update
+    const phases: MirrorPhase[] = [];
+    const res = await installMirror(p, { apk, sleep: noSleep, onPhase: (ph) => phases.push(ph) });
+    expect(res.home).toBe('set');
+    expect(phases.filter((ph) => ph.step === 'home')).toEqual([
+      { step: 'home', pick: 'S1 Kiosk' }, { step: 'home', pick: 'S1 Kiosk', clear: 'com.nimrod.mirrorkiosk' }, { step: 'home', pick: 'S1 Kiosk' },
+    ]);
+    expect(p.cmds).toContain('am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:com.nimrod.mirrorkiosk');
+    expect(p.preferred?.comp).toBe(OURS);
+  });
+
   it('an update keeps S1 Kiosk as home, and keeps the home app recorded the first time', async () => {
     const p = new FakeMirror({ installed: 500 });
     p.files.set(PREVIOUS_HOME, `${MIRROR_KIOSK}\n`);
@@ -133,6 +154,7 @@ describe('undo', () => {
     p.files.set(PREVIOUS_HOME, `${MIRROR_KIOSK}\n`);
     expect(await undoMirror(p, { sleep: noSleep, homeTimeoutMs: 0 })).toMatchObject({ removed: true, home: 'unconfirmed' });
     expect(p.files.has(PREVIOUS_HOME)).toBe(true);
+    expect(await checkMirror(p)).toMatchObject({ pendingHome: MIRROR_KIOSK }); // the checks screen offers undo again
     p.o.picks = () => MIRROR_KIOSK;
     expect(await undoMirror(p, { sleep: noSleep })).toEqual({ removed: false, home: 'set', previousHome: MIRROR_KIOSK });
     expect(p.files.has(PREVIOUS_HOME)).toBe(false);

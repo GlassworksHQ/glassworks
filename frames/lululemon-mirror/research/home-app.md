@@ -71,6 +71,7 @@ All read-only, by serial, on 2026-11-15 (verified). Serials left out.
 | Set the home app from adb | Not possible: no `cmd`, no `pm set-home-activity` | Verified |
 | Hide the other home apps | `pm disable-user` needs a permission shell lacks; `pm hide` may work (`MANAGE_USERS`) but would leave launcher3 as the only fallback | Read; untested |
 | Make S1 Kiosk home | Install it, then `am start -a MAIN -c HOME`. The set of home apps changed, so Android drops the old Always pick and shows its chooser. The person taps S1 Kiosk, then Always | Read from AOSP 6 `PackageManagerService.findPreferredActivity` ("Result set changed, dropping preferred activity"); untested on the unit |
+| Update, with another app kept as home | The home apps don't change, so Android keeps the other app's Always pick and shows no chooser (found in review, #339). adb's shell can't clear another app's defaults, so Kiln opens that app's Settings page (`am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:<pkg>`): the person taps Clear defaults, and Kiln asks for HOME again | Read from AOSP 6 (`sameSet`); untested on the unit |
 | Know it worked | Read `dumpsys package preferred-activities` until the HOME entry with `mAlways=true` is S1 Kiosk | Format verified above |
 | Undo | Ask the app to drop its admin (`--ez remove_admin true`), `pm uninstall`, then the chooser again for the old home app. The old one is kept in `/data/local/tmp/glassworks-previous-home` at install | Read; untested |
 

@@ -7,7 +7,7 @@
 // another app. The person picks S1 Kiosk and "Always" in Android's chooser on the Mirror, and Kiln
 // waits until Android records that choice (frames/lululemon-mirror/research/home-app.md).
 import type { PanelShell } from '@glassworks/adb';
-import { ACT, PKG, Steps, dropAdmin, grantPermissions, kioskVersion, q, startApp, type StepFn } from '@glassworks/app-adb';
+import { ACT, PKG, Steps, apkPackage, dropAdmin, grantPermissions, kioskVersion, q, startApp, type StepFn } from '@glassworks/app-adb';
 
 const HOME_INTENT = 'am start -a android.intent.action.MAIN -c android.intent.category.HOME';
 /** The home app the Mirror had before S1 Kiosk, kept on the Mirror for undo. adb's shell owns /data/local/tmp. */
@@ -29,6 +29,8 @@ export interface MirrorReport {
   app?: AppVersion;
   /** the app Android opens as the home screen ("Always"), when there is one */
   home?: string;
+  /** an undo removed S1 Kiosk but the old home app wasn't picked again yet: undo again to finish */
+  pendingHome?: string;
 }
 
 /** The parts of install and undo the screen follows, in order. `home`: waiting for the person's tap. */
@@ -36,7 +38,8 @@ export type MirrorPhase =
   | { step: 'apk'; stage: 'copy' | 'install' }
   | { step: 'grant' }
   | { step: 'start' }
-  | { step: 'home'; pick: string }
+  /** `clear`: Android keeps another app's "Always" pick, so its defaults are cleared in Settings first */
+  | { step: 'home'; pick: string; clear?: string }
   | { step: 'admin' }
   | { step: 'remove' };
 
@@ -124,7 +127,9 @@ export async function checkMirror(p: PanelShell): Promise<MirrorReport> {
   ];
   const app = await kioskVersion(p);
   const home = await preferredHome(p);
-  return { checks, ok: checks.every((c) => c.ok), ...(app ? { app } : {}), ...(home ? { home } : {}) };
+  const recorded = app ? undefined : await recordedHome(new Steps(p));
+  const pendingHome = recorded && recorded !== home ? recorded : undefined;
+  return { checks, ok: checks.every((c) => c.ok), ...(app ? { app } : {}), ...(home ? { home } : {}), ...(pendingHome ? { pendingHome } : {}) };
 }
 
 /** pm's refusals that someone testing with the wrong file would hit, said plainly. */
@@ -141,16 +146,33 @@ function installError(out: string): Error {
 /**
  * Asks Android for the home screen, which shows its chooser when the home apps changed, and waits
  * until the person's pick is recorded: `want(home)` true. `pick` is what the screen asks them to tap.
+ *
+ * When the home apps didn't change (an update, with another app picked "Always" before), Android
+ * keeps that pick and shows no chooser, and adb's shell can't clear another app's defaults. Then
+ * that app's page in Settings is opened, the person taps Clear defaults, and the chooser follows.
  */
 async function waitForHome(p: PanelShell, r: Steps, pick: string, want: (home: string | undefined) => boolean, o: HomeWait): Promise<'set' | 'unconfirmed'> {
   const sleep = o.sleep ?? defaultSleep;
-  if (want(await preferredHome(p))) { r.detail('home screen already set'); return 'set'; }
-  o.onPhase?.({ step: 'home', pick });
+  const phase = o.onPhase ?? (() => {});
+  const before = await preferredHome(p);
+  if (want(before)) { r.detail('home screen already set'); return 'set'; }
+  phase({ step: 'home', pick });
   await r.run(HOME_INTENT);
   const until = Date.now() + (o.homeTimeoutMs ?? 180_000);
+  let stuck: string | undefined;
   for (;;) {
     const home = await preferredHome(p);
     if (want(home)) { r.detail(`home screen: ${home}`); return 'set'; }
+    if (home && home === before && !stuck) {
+      stuck = home.split('/')[0]!;
+      r.detail(`Android keeps ${home} as the home screen: opening its settings to clear its defaults`);
+      phase({ step: 'home', pick, clear: stuck });
+      await r.try(`am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:${stuck}`);
+    } else if (stuck && !home) {
+      stuck = undefined;
+      phase({ step: 'home', pick });
+      await r.run(HOME_INTENT);
+    }
     if (Date.now() >= until) { r.detail(`home screen not confirmed (Android has ${home ?? 'none'})`); return 'unconfirmed'; }
     await sleep(2000);
   }
@@ -175,6 +197,10 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   const bad = report.checks.filter((c) => !c.ok);
   if (bad.length) throw new Error(`this doesn't look like a Mirror Kiln can install on (${bad.map((c) => `${c.what}: ${c.found}, needs ${c.need}`).join('; ')}). Nothing was changed.`);
 
+  const pkg = await apkPackage(o.apk);
+  if (pkg !== PKG) throw new Error(`this APK is ${pkg}, not S1 Kiosk (${PKG}). Nothing was changed.`);
+  r.detail(`APK: ${pkg}`);
+
   let previousHome = await recordedHome(r);
   if (!previousHome && report.home && report.home !== ACT && COMPONENT.test(report.home)) {
     previousHome = report.home;
@@ -187,7 +213,7 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   const out = await r.tryInstall('s1kiosk', o.apk, true, () => phase({ step: 'apk', stage: 'install' }));
   if (!/Success/.test(out)) throw installError(out);
   const app = await kioskVersion(p);
-  if (!app) throw new Error(`Android installed the file, but it isn't S1 Kiosk (${PKG}). Remove that app from the Mirror's settings.`);
+  if (!app) throw new Error(`Android says it installed the APK, but S1 Kiosk (${PKG}) isn't there.`);
   r.detail(`S1 Kiosk ${app.name ?? ''} (${app.code}) installed`);
 
   phase({ step: 'grant' });

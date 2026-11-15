@@ -50,3 +50,31 @@ describe('S1 Kiosk over adb', () => {
     expect(await kioskVersion(new Shell())).toBeUndefined(); // Android 6 prints nothing for a missing package
   });
 });
+
+describe('the APK\'s package, read before anything is installed', () => {
+  it('reads it from binary XML with UTF-16 or UTF-8 strings', async () => {
+    const { fakeApk } = await import('./fakes');
+    const { apkPackage } = await import('../src');
+    expect(await apkPackage(fakeApk('sh.edm.s1kiosk'))).toBe('sh.edm.s1kiosk');
+    expect(await apkPackage(fakeApk('com.example.other', { utf8: true }))).toBe('com.example.other');
+  });
+
+  it('a deflated manifest, as aapt2 writes it', async () => {
+    const { deflateRawSync } = await import('node:zlib');
+    const { fakeApk } = await import('./fakes');
+    const { apkPackage, zipEntry } = await import('../src');
+    const stored = fakeApk('sh.edm.s1kiosk');
+    const xml = (await zipEntry(stored, 'AndroidManifest.xml'))!;
+    const z = new Uint8Array(deflateRawSync(xml));
+    // rebuild the zip with method 8
+    const local = Buffer.alloc(30 + 19); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(8, 8); local.writeUInt32LE(z.length, 18); local.writeUInt32LE(xml.length, 22); local.writeUInt16LE(19, 26); local.write('AndroidManifest.xml', 30);
+    const central = Buffer.alloc(46 + 19); central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(8, 10); central.writeUInt32LE(z.length, 20); central.writeUInt32LE(xml.length, 24); central.writeUInt16LE(19, 28); central.write('AndroidManifest.xml', 46);
+    const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10); end.writeUInt32LE(central.length, 12); end.writeUInt32LE(local.length + z.length, 16);
+    expect(await apkPackage(new Uint8Array(Buffer.concat([local, z, central, end])))).toBe('sh.edm.s1kiosk');
+  });
+
+  it('refuses a file that isn\'t an APK', async () => {
+    const { apkPackage } = await import('../src');
+    await expect(apkPackage(new TextEncoder().encode('not a real APK'))).rejects.toThrow(/isn't an APK/);
+  });
+});

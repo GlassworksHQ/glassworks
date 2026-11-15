@@ -66,16 +66,14 @@ function Off() {
   );
 }
 
-function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
+/** The APK and the Home Assistant address: on the first screen, and again on Checks to correct them. */
+function Inputs({ s, session }: { s: MirrorState; session: MirrorSession }) {
   return (
-    <section className="card" aria-labelledby="h">
-      <div className="row"><TestOnly /></div>
-      <h2 id="h">Install a test build on the Mirror.</h2>
-      <p className="lede">Kiln installs an APK file from this computer: S1 Kiosk&apos;s legacy build for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
+    <>
       <div className="fields">
         <label className="field"><span>APK file</span>
           <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void f.arrayBuffer().then((b) => session.pickApk(f.name, new Uint8Array(b))); }} />
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
         </label>
         <label className="field"><span>Home Assistant (optional)</span>
           <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => session.setHaUrl(e.target.value.trim())} />
@@ -83,9 +81,24 @@ function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
       </div>
       {s.apk && (
         <div className="well">
-          <div className="grow"><b>{s.apk.name}</b><span className="small">{fmtSize(s.apk.size)} · SHA-256 <code>{s.apk.sha256}</code></span></div>
+          <div className="grow">
+            <b>{s.apk.name}</b>
+            <span className="small">{s.apk.package ?? 'no package'} · {fmtSize(s.apk.size)} · SHA-256 <code>{s.apk.sha256}</code></span>
+            {s.apk.error && <span className="status err" role="alert">{s.apk.error}.</span>}
+          </div>
         </div>
       )}
+    </>
+  );
+}
+
+function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
+  return (
+    <section className="card" aria-labelledby="h">
+      <div className="row"><TestOnly /></div>
+      <h2 id="h">Install a test build on the Mirror.</h2>
+      <p className="lede">Kiln installs an APK file from this computer: S1 Kiosk&apos;s legacy build for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
+      <Inputs s={s} session={session} />
       <p className="small">On the Mirror, USB debugging is on. Plug it into this computer, click Connect and pick it in the browser&apos;s list. Then the Mirror asks to allow USB debugging for this browser: choose <b>Allow</b>. It has no touchscreen, so use a USB mouse.</p>
       {s.connecting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list, then choose Allow on the Mirror&apos;s screen…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
@@ -114,11 +127,14 @@ function Checks({ s, session }: { s: MirrorState; session: MirrorSession }) {
       <p className="small">
         {r.app ? `S1 Kiosk ${r.app.name ?? r.app.code} is installed. ` : 'S1 Kiosk isn\'t installed. '}
         Home screen: {r.home ? <code>{r.home}</code> : 'Android asks'}.
+        {r.pendingHome && <> An undo removed S1 Kiosk, but <code>{r.pendingHome.split('/')[0]}</code> isn&apos;t the home screen again yet: undo once more to finish.</>}
       </p>
+      {r.ok && <Inputs s={s} session={session} />}
       {r.ok && blocked && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
         <span className="links">
           {r.app && <button type="button" className="link" onClick={() => void session.undo()}>Undo: remove S1 Kiosk</button>}
+          {!r.app && r.pendingHome && <button type="button" className="link" onClick={() => void session.undo()}>Undo: give the home screen back</button>}
         </span>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.install()}>{r.app ? 'Update' : 'Install'}</button>
       </div>
@@ -146,6 +162,7 @@ function Working({ s }: { s: MirrorState }) {
   const now = s.phases.at(-1);
   const at = now ? rows.findIndex((r) => r.id === rowOf(now)) : 0;
   const pick = now?.step === 'home' ? now.pick : undefined;
+  const clear = now?.step === 'home' ? now.clear : undefined;
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? 'Removing S1 Kiosk.' : 'Installing S1 Kiosk.'}</h2>
@@ -157,8 +174,13 @@ function Working({ s }: { s: MirrorState }) {
         <div className="well" role="status">
           <div className="grow">
             <span className="turn-label"><span className="pulse" />Your turn, on the Mirror</span>
-            <b>Choose {pick.includes('/') ? <code>{pick.split('/')[0]}</code> : pick}, then Always.</b>
-            <span className="small">Android shows its list of home screens. Kiln carries on once it sees your choice.</span>
+            {clear ? <>
+              <b>Choose Clear defaults.</b>
+              <span className="small">Android keeps <code>{clear}</code> as the home screen, so Kiln opened its settings. After Clear defaults, Android shows its list of home screens: choose {pick.includes('/') ? <code>{pick.split('/')[0]}</code> : pick}, then Always.</span>
+            </> : <>
+              <b>Choose {pick.includes('/') ? <code>{pick.split('/')[0]}</code> : pick}, then Always.</b>
+              <span className="small">Android shows its list of home screens. Kiln carries on once it sees your choice.</span>
+            </>}
           </div>
         </div>
       ) : <div className="bar wait"><i /></div>}

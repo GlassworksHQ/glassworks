@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // /lululemon-mirror: off for everyone without ?apk=local, a test install with it, and every demo
 // screen on the real recipe behind a simulated Mirror.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { fakeApk } from '@glassworks/app-adb/fakes';
 import { FakeMirror, MIRROR_KIOSK } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -61,8 +62,10 @@ describe('the test install', () => {
     await s.connect();
     expect(s.state.screen).toBe('checks');
     expect(s.installBlocked()).toMatch(/APK/);
-    await s.pickApk('kiosk-legacy-debug.apk', new Uint8Array([1, 2, 3]));
-    expect(s.state.apk).toEqual({ name: 'kiosk-legacy-debug.apk', size: 3, sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81' });
+    const apk = fakeApk('sh.edm.s1kiosk');
+    await s.pickApk('kiosk-legacy-debug.apk', apk);
+    expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', size: apk.length, package: 'sh.edm.s1kiosk' });
+    expect(s.state.apk?.sha256).toMatch(/^[0-9a-f]{64}$/);
     s.setHaUrl('homeassistant.local:8123');
     expect(s.installBlocked()).toMatch(/http/);
     s.setHaUrl('http://homeassistant.local:8123');
@@ -75,6 +78,34 @@ describe('the test install', () => {
     expect(s.state).toMatchObject({ screen: 'done', result: { flow: 'undo', removed: { removed: true, home: 'set' } } });
     expect(m.installed).toBeUndefined();
     expect(m.preferred?.comp).toBe(MIRROR_KIOSK);
+  });
+
+  it('the latest APK picked wins, however long the earlier one takes to read', async () => {
+    const s = new MirrorSession({ connect: async () => new FakeMirror() }, true);
+    let release!: (b: Uint8Array) => void;
+    const slow = s.pickApk('big-old.apk', new Promise<Uint8Array>((r) => { release = r; }));
+    await s.pickApk('kiosk-legacy-debug.apk', fakeApk('sh.edm.s1kiosk'));
+    release(fakeApk('com.example.other'));
+    await slow;
+    expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', package: 'sh.edm.s1kiosk' });
+  });
+
+  it('a file that isn\'t S1 Kiosk is named and blocks Install; the inputs stay editable on Checks', async () => {
+    const s = await mirrorDemo('pick-wrong', true);
+    expect(s.state.apk).toMatchObject({ package: 'com.nimrod.mirrorkiosk', error: /not S1 Kiosk/ });
+    await s.connect();
+    expect(s.installBlocked()).toMatch(/Pick another file/);
+    render(<Screens session={s} />);
+    expect(document.querySelector('input[type=file]')).not.toBeNull(); // on Checks
+    await act(() => s.pickApk('kiosk-legacy-debug.apk', fakeApk('sh.edm.s1kiosk')));
+    expect(s.installBlocked()).toBeUndefined();
+  });
+
+  it('after an undo that couldn\'t confirm the home app, Checks offers undo again', async () => {
+    const s = await mirrorDemo('undo-pending', true);
+    expect(s.state).toMatchObject({ screen: 'checks', report: { pendingHome: MIRROR_KIOSK } });
+    render(<Screens session={s} />);
+    expect(screen.getByText('Undo: give the home screen back')).toBeTruthy();
   });
 
   it('a refused install ends on the error screen with the reason', async () => {
@@ -97,6 +128,11 @@ describe('every demo screen', () => {
     render(<Screens session={s} />);
     await until(() => !!document.querySelector('.card'));
     expect(embers().length).toBeLessThanOrEqual(1);
+  });
+
+  it('an update with another app kept as home asks for Clear defaults first', async () => {
+    render(<Screens session={await mirrorDemo('home-clear', true)} />);
+    await screen.findByText('Choose Clear defaults.');
   });
 
   it('home waits for the person\'s tap on the Mirror', async () => {

@@ -25,6 +25,8 @@ export interface FakeMirrorOptions {
   pickAfter?: number;
   /** the app keeps its device admin when asked to drop it */
   keepsAdmin?: boolean;
+  /** with an app's settings open, the person taps Clear defaults */
+  clearsDefaults?: boolean;
   /** each command takes this long (the demo) */
   delayMs?: number;
 }
@@ -35,6 +37,8 @@ export class FakeMirror implements PanelShell {
   /** the "Always" home and the home apps it was picked from */
   preferred?: { comp: string; from: string[] };
   chooser?: string[];
+  /** the package whose Settings page is open */
+  settings?: string;
   installed?: number;
   admins = new Set<string>(['com.nimrod.mirrorkiosk/.AdminReceiver']);
   private reads = 0;
@@ -97,6 +101,7 @@ export class FakeMirror implements PanelShell {
       if (!this.preferred || this.preferred.from.join() !== homes.join()) { this.preferred = undefined; this.chooser = homes; this.reads = 0; }
       return ok('Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }\n');
     }
+    if ((m = /^am start -a android\.settings\.APPLICATION_DETAILS_SETTINGS -d package:(\S+)$/.exec(cmd))) { this.settings = m[1]; return ok(); }
     if ((m = /^cat (\S+) 2>\/dev\/null$/.exec(cmd))) {
       const f = this.files.get(m[1]!);
       return f === undefined ? { out: '', code: 1 } : ok(f);
@@ -107,6 +112,7 @@ export class FakeMirror implements PanelShell {
   }
 
   private maybePick() {
+    if (this.o.clearsDefaults && this.settings && this.preferred?.comp.startsWith(`${this.settings}/`)) { this.preferred = undefined; this.settings = undefined; return; }
     if (!this.chooser || !this.o.picks || this.reads < (this.o.pickAfter ?? 1)) return;
     const comp = this.o.picks(this.chooser);
     if (comp) this.pick(comp);

@@ -3,6 +3,7 @@
 // it exists behind ?apk=local because there is no release of S1 Kiosk's legacy build, and there
 // must not be one yet (issue 198). The release-asset route stays for releases only.
 import type { PanelShell } from '@glassworks/adb';
+import { PKG, apkPackage } from '@glassworks/app-adb';
 import {
   checkMirror, installMirror, undoMirror, type Installed, type MirrorPhase, type MirrorReport, type Removed,
 } from '@glassworks/lululemon-mirror-installer';
@@ -10,7 +11,7 @@ import {
 export type MirrorScreen = 'off' | 'pick' | 'checks' | 'working' | 'done' | 'error';
 
 /** The APK the tester picked: what the screen shows of it. The bytes stay in the session. */
-export interface PickedApk { name: string; size: number; sha256: string }
+export interface PickedApk { name: string; size: number; sha256: string; package?: string; error?: string }
 
 export type Result = { flow: 'install'; installed: Installed } | { flow: 'undo'; removed: Removed };
 
@@ -52,6 +53,8 @@ export class MirrorSession {
   private listeners = new Set<() => void>();
   private apk?: Uint8Array;
   private panel?: PanelShell;
+  /** Picks so far: a slower read of an earlier file never replaces a later one. */
+  private picks = 0;
 
   constructor(private readonly d: MirrorDeps, on: boolean) {
     this.state = { screen: on ? 'pick' : 'off', haUrl: '', phases: [], log: [] };
@@ -65,11 +68,22 @@ export class MirrorSession {
   }
   private log = (step: string, detail?: string) => this.set({ log: [...this.state.log, step || `  ${detail}`].slice(-400) });
 
-  /** The APK file, hashed so the tester can match it to the build they meant. */
-  async pickApk(name: string, data: Uint8Array): Promise<void> {
-    const sha256 = hex(await crypto.subtle.digest('SHA-256', data as Uint8Array<ArrayBuffer>));
-    this.apk = data;
-    this.set({ apk: { name, size: data.length, sha256 } });
+  /**
+   * The APK file: hashed so the tester can match it to the build they meant, and its package read so
+   * a file that isn't S1 Kiosk is refused here. Only the latest pick counts.
+   */
+  async pickApk(name: string, data: Uint8Array | Promise<Uint8Array>): Promise<void> {
+    const pick = ++this.picks;
+    this.apk = undefined;
+    this.set({ apk: undefined });
+    const bytes = await data;
+    const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
+    let pkg: string | undefined, error: string | undefined;
+    try { pkg = await apkPackage(bytes); } catch (e) { error = (e as Error).message; }
+    if (pick !== this.picks) return;
+    if (!error && pkg !== PKG) error = `this APK is ${pkg}, not S1 Kiosk (${PKG})`;
+    this.apk = error ? undefined : bytes;
+    this.set({ apk: { name, size: bytes.length, sha256, package: pkg, ...(error ? { error } : {}) } });
   }
 
   setHaUrl(haUrl: string) { this.set({ haUrl }); }
@@ -95,6 +109,7 @@ export class MirrorSession {
   installBlocked(): string | undefined {
     const s = this.state;
     if (!s.report?.ok) return 'This device doesn\'t pass the checks.';
+    if (s.apk?.error) return `Pick another file: ${s.apk.error}.`;
     if (!this.apk) return 'Pick the APK file first.';
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     return undefined;
