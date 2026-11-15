@@ -52,7 +52,8 @@ run Android in the first place was theirs. Thank you.
   [`mirror-android-1`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-1). In
   their words: "Ready-made system.img and userdata.sparse for the Lululemon Studio mirror (board
   MIR63A0-00-P1, revision RevP21), so you can put Android on your mirror by flashing two files."
-  You download it from their release; Glassworks never hosts or sends it. The project's code is MIT;
+  Kiln fetches it from their GitHub release through Refract, our download proxy, which passes it
+  through without storing it. The project's code is MIT;
   the image's Android and kernel source keep their own licences, and its vendor files belong to
   Qualcomm and Quectel. Glass Panes credits, in turn: "This build stands on the work of the
   Lululemon-mirror community. Thank you to Onemoremichael, lrinQVQ, TimStewartJ, repairman29,

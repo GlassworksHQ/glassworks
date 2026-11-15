@@ -341,7 +341,7 @@
         "href": "https://github.com/git-nimrod/glass-panes"
       },
       "licence": "MIT for the project's code; the image's parts keep their own licences",
-      "uses": "The Android 6.0.1 image the Mirror runs (release mirror-android-1). You download it from their release; Glassworks never hosts or sends it.",
+      "uses": "The Android 6.0.1 image the Mirror runs (release mirror-android-1). Kiln fetches it from their GitHub release through Refract, our download proxy, which passes it through without storing it.",
       "quote": {
         "text": "Ready-made system.img and userdata.sparse for the Lululemon Studio mirror (board MIR63A0-00-P1, revision RevP21), so you can put Android on your mirror by flashing two files.",
         "href": "https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-1"

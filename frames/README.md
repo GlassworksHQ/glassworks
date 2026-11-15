@@ -113,8 +113,9 @@ GitLab or Codeberg (a release to download, say) without a credit that a recipe u
 
 Credits are not licence notices. Code we ship is listed in
 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md); a credit is for the work a frame stands on,
-shipped by us or not. The Mirror's image is a credit and not a notice: the person downloads it from
-its own release, and we never send it out.
+shipped by us or not. The Mirror's image is credited even though it isn't our code: Kiln fetches it
+from Glass Panes' GitHub release through Refract, our download proxy, which passes it through without
+storing it.
 
 | Frame | Credits |
 |---|---|
