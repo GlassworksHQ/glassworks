@@ -25,7 +25,8 @@ const SPL_LEN = 0x9000;
 const spl = () => makeSpl(SPL_LEN, 0x40000); // u-boot-sunxi-with-spl.bin: the eGON SPL, then padding
 const uboot = () => new Uint8Array(300_000).map((_, i) => (i * 13) & 0xff);
 
-interface Refusal { name: string; error: string; setup: (b: FakeBrom) => void; spl: () => Uint8Array }
+/** `late`: refused after the SPL was uploaded, so writes did happen. `ran`: the SPL itself ran (and failed). */
+interface Refusal { name: string; error: string | RegExp; setup: (b: FakeBrom) => void; spl: () => Uint8Array; late?: boolean; ran?: boolean }
 const refusals: Refusal[] = [
   { name: 'not an A133', error: 'not an Aqara S1 Plus', setup: (b) => { b.socId = 0x1823; }, spl },
   { name: 'secure boot on', error: 'secure boot is enabled', setup: (b) => { b.regs.set(A133.sidSecureBootReg, 1); }, spl },
@@ -35,7 +36,9 @@ const refusals: Refusal[] = [
   { name: 'length not a multiple of 4', error: 'length', setup: () => {}, spl: () => { const s = spl(); new DataView(s.buffer).setUint32(16, SPL_LEN + 2, true); return s; } },
   { name: 'length past the end of the file', error: 'length', setup: () => {}, spl: () => makeSpl(SPL_LEN).subarray(0, SPL_LEN - 4) },
   { name: 'SPL too large', error: 'too large', setup: () => {}, spl: () => makeSpl(0x20004) },
-  { name: 'SPL reports failure', error: 'eGON.BAD', setup: (b) => { b.splFailure = 'eGON.BAD'; }, spl },
+  { name: 'length shorter than the eGON header', error: /length|checksum/, setup: () => {}, spl: () => { const s = spl(); new DataView(s.buffer).setUint32(16, 0, true); new DataView(s.buffer).setUint32(12, 0, true); return s; } },
+  { name: 'SPL reports failure', error: 'eGON.BAD', setup: (b) => { b.splFailure = 'eGON.BAD'; }, spl, late: true, ran: true },
+  { name: 'instruction cache on (the thunk refuses)', error: 'eGON.???', setup: (b) => { b.sctlr |= 1 << 12; }, spl, late: true },
 ];
 
 async function record() {
@@ -56,7 +59,7 @@ describe('FEL vectors', () => {
         splRanSha256: sha(brom.splRan!),
         resetEntry: `0x${brom.resetEntry!.toString(16)}`,
       },
-      refusals: refusals.map((r) => ({ name: r.name, errorContains: r.error })),
+      refusals: refusals.map((r) => ({ name: r.name, errorContains: String(r.error) })),
     };
     writeFileSync(FILE, `${JSON.stringify(out, null, 1)}\n`);
   });
@@ -102,9 +105,9 @@ describe('FEL vectors', () => {
       const brom = new FakeBrom();
       r.setup(brom);
       await expect(bootUboot(new FelDevice(brom), r.spl(), uboot())).rejects.toThrow(r.error);
-      expect(want.refusals.find((x: { name: string }) => x.name === r.name)?.errorContains).toBe(r.error);
-      if (r.name !== 'SPL reports failure') {
-        expect(brom.splRan).toBeNull();
+      expect(want.refusals.find((x: { name: string }) => x.name === r.name)?.errorContains).toBe(String(r.error));
+      expect(brom.splRan !== null).toBe(!!r.ran);
+      if (!r.late) {
         expect(brom.ops.some((o) => !o.routine && o.req === 'write')).toBe(false);
       }
       expect(brom.resetEntry).toBeNull();

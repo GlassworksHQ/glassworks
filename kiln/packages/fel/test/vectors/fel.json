@@ -653,8 +653,16 @@
    "errorContains": "too large"
   },
   {
+   "name": "length shorter than the eGON header",
+   "errorContains": "/length|checksum/"
+  },
+  {
    "name": "SPL reports failure",
    "errorContains": "eGON.BAD"
+  },
+  {
+   "name": "instruction cache on (the thunk refuses)",
+   "errorContains": "eGON.???"
   }
  ]
 }

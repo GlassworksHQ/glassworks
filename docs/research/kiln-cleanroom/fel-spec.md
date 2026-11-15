@@ -142,7 +142,7 @@ U-Boot. Only the SPL part is used (linux-sunxi wiki, [EGON](https://linux-sunxi.
 | 0 | 4 | A branch instruction to the code |
 | 4 | 8 | Magic `"eGON.BT0"` |
 | 12 | 4 | Checksum |
-| 16 | 4 | SPL length in bytes (a multiple of 4) |
+| 16 | 4 | SPL length in bytes: a multiple of 4, at least 32 (the header), at most the file's length |
 
 **Checksum rule.** Take the first `length` bytes as little-endian 32-bit words, with the checksum
 field replaced by the stamp `0x5F0A6C39`. Their sum, mod 2^32, must equal the checksum field.
@@ -160,9 +160,11 @@ licence. You call it. You don't change it.
 **Its interface.** In memory at the thunk address, write the 69 thunk words, then the SPL address
 (one word), then one triple of words (buf1, buf2, size) per parked buffer, then a triple of zeros.
 On the A133 that is 69 + 1 + 3 + 3 = 76 words, 304 bytes. Then execute the thunk address. The thunk
-checks the eGON checksum in SRAM itself. When the SPL returns, the thunk overwrites the 8 bytes at
-SPL address + 4: `"eGON.FEL"` means success. Any other value is a failure code from the thunk or the
-SPL.
+checks the eGON checksum in SRAM itself, and it refuses to run the SPL when the data or instruction
+cache is on (SCTLR bit 2 or bit 12), leaving `"eGON.???"`. When the SPL returns, the thunk overwrites
+the 8 bytes at SPL address + 4: `"eGON.FEL"` means success. Any other value is a failure code from the
+thunk or the SPL. The A133's ROM leaves the caches off, so Kiln doesn't need to check them itself:
+the thunk's code reaches the user through the error in step 6.
 
 ## Behaviour
 
@@ -185,8 +187,8 @@ peripheral range (`0x01000000`..`0x3fffffff`) from its register table.
 
 In this order:
 
-1. Check the eGON header. Refuse a missing magic, a length that is not a multiple of 4 or is longer
-   than the input, and a bad checksum. Refuse an SPL longer than the size limit. No SPL byte may be
+1. Check the eGON header. Refuse a missing magic, a length that is not a multiple of 4, is shorter
+   than the 32-byte header or is longer than the input, and a bad checksum. Refuse an SPL longer than the size limit. No SPL byte may be
    written before these checks pass (routines may run before them).
 2. Read SCTLR. Refuse if bit 0 (M, MMU on) is set. The A133's ROM leaves the MMU off, and Kiln has no
    path for an MMU-on ROM. Checking other bits is optional.
@@ -221,9 +223,10 @@ around it is yours. Keep it short and plain.
 | SCTLR has the MMU on | `MMU` | "The boot ROM left the MMU on, which Kiln does not expect on an A133." |
 | No eGON magic | `eGON` | "This file has no eGON header, so it is not an Allwinner SPL." |
 | Length not a multiple of 4, or longer than the file | `length` | "The SPL's length field is wrong." |
+| Length shorter than the 32-byte header | `length` or `checksum` | "The SPL's length field is wrong." |
 | Bad checksum | `checksum` | "The SPL's checksum does not match: the file is damaged." |
 | Too long | `too large` | "The SPL is too large for SRAM (need N bytes, have M)." |
-| Not `"eGON.FEL"` after the run | the 8 bytes it read, e.g. `eGON.BAD` | "The SPL did not finish (it left 'eGON.BAD')." |
+| Not `"eGON.FEL"` after the run | the 8 bytes it read, e.g. `eGON.BAD`, or `eGON.???` when the thunk found a cache on | "The SPL did not finish (it left 'eGON.BAD')." |
 | Bad USB status | `AWUS` | "FEL: unexpected USB status (no AWUS)." |
 
 ## Test vectors
@@ -246,8 +249,9 @@ around it is yours. Keep it short and plain.
   - the only register write is RVBAR = `0x4a000000`;
   - there is exactly one warm reset, into AArch64 at `0x4a000000`, and it is the last thing that
     happens.
-- **Refusals.** Nine cases, each with its required substring, and (except the SPL failure) no
-  non-routine write and no SPL run before the refusal.
+- **Refusals.** Eleven cases, each with its required substring. For the nine refused before the
+  upload, no non-routine write may happen first. For all but the SPL that runs and fails, the SPL
+  must not run.
 
 `test/fel.test.ts` checks the public API on the same fake: version, readl, chunked writes,
 bootUboot, and the refusals.

@@ -45,7 +45,10 @@ The work is split between two people:
     the upstream sources line by line;
   - `docs/research/kiln-gpl-code.md` (#348): the audit, which names upstream functions and quotes
     their structure;
-  - the thread and PR bodies of #348 and the diffs of the PRs that first added these packages.
+  - `docs/research/kiln-cleanroom/spec-owner-notes.md`: the spec owner's mutation commands, which
+    quote the old code;
+  - #348 and #359 on GitHub, their bodies and diffs (read the spec files in the repo instead), and the
+    diffs of the PRs that first added these packages.
 
 ### Fine to open
 
@@ -74,6 +77,9 @@ was always under that licence, so it's no part of the rewrite.
 - Moved the tests of the internals into `test/legacy-internals.test.ts` in each package, so the
   implementer can delete them whole.
 - Recorded the vectors from the old code: `kiln/packages/fel/test/vectors/fel.json` and
-  `kiln/packages/bootpatch/test/vectors/bootpatch.json`. Mutation checks show they catch real changes:
-  a skipped secure-boot check, an AArch32 instead of AArch64 reset, and a cpio ino off by one each
-  fail them. A routine rewritten with different but equivalent instructions still passes.
+  `kiln/packages/bootpatch/test/vectors/bootpatch.json`.
+- Checked that they catch real changes, by editing the old code and running the vectors (2026-11-15,
+  verified). A skipped secure-boot refusal, a reset into AArch32, and cpio inodes off by one each make
+  them fail. A routine rewritten with different but equivalent instructions still passes. The exact
+  edits quote the old code, so they are in [spec-owner-notes.md](spec-owner-notes.md), which the
+  implementer must not open.

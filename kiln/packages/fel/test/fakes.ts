@@ -232,7 +232,7 @@ export class FakeBrom implements BulkTransport {
     runArm(bus, addr, { sp: this.sp, mode: 0x13 });
   }
 
-  /** The thunk swaps each buf1/buf2 pair, runs the SPL if its eGON header checks out, swaps back. */
+  /** The thunk checks the caches are off, swaps each buf1/buf2 pair, runs the SPL if its eGON header checks out, swaps back. */
   private runThunk() {
     const words = FEL_TO_SPL_THUNK.length;
     const code = this.load(A133.thunkAddr, words * 4);
@@ -254,6 +254,8 @@ export class FakeBrom implements BulkTransport {
         this.store(s.buf1, b); this.store(s.buf2, a);
       }
     };
+    // The thunk itself refuses to run the SPL with the data or instruction cache on (SCTLR C, I).
+    if (this.sctlr & ((1 << 2) | (1 << 12))) { this.store(splAddr + 4, ascii('eGON.???')); return; }
     swap();
     const head = this.load(splAddr, 32);
     const len = u32(head, 16);
