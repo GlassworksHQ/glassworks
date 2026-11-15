@@ -314,7 +314,7 @@ class PanelDevice internal constructor(
                 now = android.os.SystemClock::elapsedRealtime,
             ),
         ) + frame.panes(paneContext, exec) +
-            runtime.paneDefinitions(ctx).filterIsInstance<RadioDefinition>().mapNotNull { it.pane(paneContext, panelIp = ::ipAddress) } +
+            runtime.paneDefinitions(ctx).filterIsInstance<RadioDefinition>().map { it.pane(paneContext, panelIp = ::ipAddress) } +
             runtime.paneDefinitions(ctx).filterIsInstance<BluetoothProxyDefinition>().map { it.pane(paneContext, exec) } +
             listOfNotNull(cameraPane(paneContext, identity)) +
             DiagnosticsPane(paneContext, frame.cpuThermalZone, runtime.engine::isContentProcess, exec)

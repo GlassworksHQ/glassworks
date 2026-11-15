@@ -282,6 +282,11 @@ class UpdateManager(
         val pending = File(dir, UpdateHelper.PENDING_NAME)
         if (!part.renameTo(pending)) return fail(a, "cannot move the APK into place")
         Log.i(TAG, "verified ${o.apk.name} (sha256 ${Releases.hex(digest)})")
+        installVerified(a, pending)
+    }
+
+    /** The verified APK at [pending]: through the frame's root update service when its boot image has one, else PackageInstaller. */
+    private fun installVerified(a: UpdateModel.Attempt, pending: File) {
         val helper = root?.takeIf { it.present() } ?: return installWithPackageInstaller(a, pending)
         helper.install(
             a.offer.version.toString(),

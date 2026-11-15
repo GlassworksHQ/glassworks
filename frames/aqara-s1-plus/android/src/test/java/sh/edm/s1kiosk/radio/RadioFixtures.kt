@@ -30,9 +30,9 @@ class FixedReadout(
 fun radioDefinition(context: Context, readout: RadioReadout): RadioDefinition {
     val prefs = KioskPrefs(context)
     val panePrefs = PanePrefs(context)
-    return RadioDefinition(panePrefs.radio, { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) }, readout)
+    return RadioDefinition(panePrefs.radio, { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) }, readout, RunningRadio())
 }
 
 /** Where the app's radio definition reads the running radio pane's controller (RadioDefinition.running). */
 internal fun Glassworks.runningRadio(context: Context): RunningRadio =
-    paneDefinitions(context).filterIsInstance<RadioDefinition>().single().running!!
+    paneDefinitions(context).filterIsInstance<RadioDefinition>().single().running
