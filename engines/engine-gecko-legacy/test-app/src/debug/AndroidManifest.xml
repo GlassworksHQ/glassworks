@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The legacy test APK (#198), over the S1 app's manifest. The Glassworks modules declare minSdk 26; this APK
+     runs them on API 23-25 to find out what breaks there, so it overrides their floor.
+
+     The S1 app's own entry points are off: its MainActivity calls API 24+ (registerDefaultNetworkCallback first,
+     2026-11-15 on an API 23 emulator), so on a Mirror it would crash at every boot (BootReceiver) and as a HOME
+     choice. Making the app itself run on API 23-25 is a later part of #198. Until then the APK's only entry is the
+     engine check (EngineCheckActivity), and the disabled components can be turned on to try them:
+     adb shell pm enable sh.edm.s1kiosk.legacy/sh.edm.s1kiosk.MainActivity -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.camera,dev.glassworks.panes.assist,dev.glassworks.panes.bluetoothproxy,dev.glassworks.panes.timers,dev.glassworks.panes.notifications,dev.glassworks.panes.sendspin,dev.glassworks.frames.s1.wallbase,dev.glassworks.panes.diagnostics,dev.glassworks.panes.radio,dev.glassworks.sendspin,dev.glassworks.voice" />
+
+    <application
+        android:label="S1 Kiosk legacy"
+        tools:replace="android:label">
+
+        <activity android:name="sh.edm.s1kiosk.MainActivity" android:enabled="false" tools:replace="android:enabled" />
+        <receiver android:name="sh.edm.s1kiosk.BootReceiver" android:enabled="false" tools:replace="android:enabled" />
+        <service android:name="sh.edm.s1kiosk.KioskService" android:enabled="false" tools:replace="android:enabled" />
+
+        <!-- The engine and its lockdown alone, without the S1 app's MainActivity (EngineCheckActivity.kt). -->
+        <activity
+            android:name="sh.edm.s1kiosk.legacycheck.EngineCheckActivity"
+            android:label="Legacy engine check"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+            android:exported="true"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

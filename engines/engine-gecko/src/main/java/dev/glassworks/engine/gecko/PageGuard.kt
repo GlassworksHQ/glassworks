@@ -1,0 +1,46 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.engine.gecko
+
+import org.mozilla.geckoview.GeckoRuntime
+
+/**
+ * What a page may load, for an engine that can't be trusted with the open web: the frozen GeckoView of the
+ * legacy engine (engines/engine-gecko-legacy, #198) loads only the panel's Home Assistant. [GeckoVariant] picks
+ * it. The current engine has none, and its pages load as they always did.
+ */
+internal interface PageGuard {
+    /** Gecko prefs the guard adds to the generated config. */
+    val prefs: Map<String, Any>
+
+    /** Called once, when the runtime exists. */
+    fun attach(runtime: GeckoRuntime)
+
+    /** The app loads [url] itself ([dev.glassworks.engine.Page.load]): its origin is the one pages may use. */
+    fun appLoads(url: String)
+
+    /**
+     * Runs [load] once the guard is in force: at once if it is, else when it is (never, if it can't be). If it
+     * can't be, or is slow to, [stuck] says why in words for the screen.
+     */
+    fun whenReady(load: () -> Unit, stuck: (String) -> Unit)
+
+    /** Whether [url] may load as [kind]. The guard notes a refusal on the page and in the log. */
+    fun allows(kind: Load, url: String): Boolean
+
+    enum class Load {
+        /** A top-level load in the page's own window. */
+        PAGE,
+
+        /** A document in an iframe. */
+        FRAME,
+
+        /** `window.open` or `target=_blank`. */
+        WINDOW,
+
+        /** A response Gecko can't show: a download. */
+        DOWNLOAD,
+    }
+}

@@ -129,6 +129,36 @@ jobs:
             cp "$apk" "$RUNNER_TEMP/apk/$abi.apk"
           done
 
+      # The legacy engine's test APK (#198): the S1 app on GeckoView 144 for Android 6-7, the Mirror's ABI. Only on
+      # branches with "legacy" in the name. Debug-signed with this runner's throwaway key, so a later one doesn't
+      # install over it (uninstall first); applicationId sh.edm.s1kiosk.legacy, so it never touches the S1 app.
+      - name: Legacy engine test APK (debug)
+        if: contains(github.ref_name, 'legacy')
+        working-directory: ${{ env.GRADLE_ROOT }}
+        env:
+          S1_TEST_BUILD: ${{ env.SHORT_SHA }}
+        run: |
+          ./gradlew --no-daemon :kiosk-legacy:assembleDebug
+          mkdir -p "$GITHUB_WORKSPACE/dist-legacy"
+          cp engines/engine-gecko-legacy/test-app/build/outputs/apk/debug/kiosk-legacy-debug.apk \
+            "$GITHUB_WORKSPACE/dist-legacy/s1-kiosk-legacy-test-$SHORT_SHA.apk"
+          cd "$GITHUB_WORKSPACE/dist-legacy" && sha256sum ./*.apk | tee "s1-kiosk-legacy-test-$SHORT_SHA.apk.sha256"
+          {
+            echo
+            echo "Legacy engine test APK (#198, debug-signed, never install over a release):"
+            echo '```'
+            echo "gh run download $GITHUB_RUN_ID -R $GITHUB_REPOSITORY -n s1-kiosk-legacy-test-$SHORT_SHA"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: contains(github.ref_name, 'legacy')
+        with:
+          name: s1-kiosk-legacy-test-${{ env.SHORT_SHA }}
+          path: dist-legacy/
+          retention-days: 3
+          if-no-files-found: error
+
       - name: Remove the keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/s1kiosk-release.jks"
