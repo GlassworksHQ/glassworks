@@ -343,4 +343,13 @@ class CameraPaneTest {
         file.edit().putString(CameraPrefs.KEY_USE, "Presence + snapshots").commit()
         assertEquals("a panel's stored choice still reads", CameraUse.PRESENCE_AND_SNAPSHOTS, r.prefs.use)
     }
+
+    @Test fun applyNeverStartsTheStreamWithoutASignIn() {
+        // The plan already asks for one (CameraPlan), and reconcile makes one; this pins apply's own guard.
+        val r = Rig()
+        r.pane.start()
+        r.pane.apply(CameraPlan(detect = true, feedScreen = true, stream = true), signIn = null)
+        assertNull(r.stream.running)
+        assertEquals(0, r.stream.starts)
+    }
 }

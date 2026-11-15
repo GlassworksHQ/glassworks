@@ -53,9 +53,8 @@ import java.util.concurrent.Executors
 /**
  * Mock-ups of the camera pane's screens (#117) on a panel with a camera, at the panel's 1440x720 px:
  * its page in each state, the privacy dot on a dashboard (below Android 12 only), and setup's Panes and
- * Camera steps. The
- * page reads a real [CameraPane] driven with a fake camera and stream. Illustrative values only: RFC
- * 5737 addresses, no images of anyone. Skipped unless asked:
+ * Camera steps. The page reads a real [CameraPane] driven with a fake camera and stream. Illustrative
+ * values only: RFC 5737 addresses, no images of anyone. Skipped unless asked:
  *   ./gradlew :kiosk:testDebugUnitTest --tests '*CameraMockups*' -Ps1MockupDir=<dir>
  */
 @RunWith(RobolectricTestRunner::class)

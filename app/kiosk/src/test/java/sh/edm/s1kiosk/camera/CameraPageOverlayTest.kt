@@ -103,4 +103,29 @@ class CameraPageOverlayTest {
         o.previewSection("about"); o.previewSection(CameraPane.ID); Mockup.idle()
         assertEquals("hidden again when the page is drawn again", false, onScreen(o, "made-up-pass-1234"))
     }
+
+    @Test fun aRevealedPasswordHidesWhenTheScreenGoesOffOrAfterAMinute() {
+        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
+        def.prefs.signIn = "glassworks" to "made-up-pass-1234"
+        val o = menu(def, pane())
+        fun tap() {
+            val row = all(o).filterIsInstance<android.widget.TextView>().first { it.text.toString().startsWith("glassworks ·") }
+            generateSequence(row as android.view.View) { it.parent as? android.view.View }.first { it.isClickable }.performClick()
+        }
+        tap()
+        assertEquals(true, onScreen(o, "made-up-pass-1234"))
+        o.screenChanged(on = true)
+        assertEquals("the screen staying on changes nothing", true, onScreen(o, "made-up-pass-1234"))
+        o.screenChanged(on = false)
+        assertEquals("hidden when the screen goes off", false, onScreen(o, "made-up-pass-1234"))
+
+        tap()
+        assertEquals(true, onScreen(o, "made-up-pass-1234"))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(KioskSettingsOverlay.REVEAL_MS - 1_000, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals("still shown just before the minute", true, onScreen(o, "made-up-pass-1234"))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(2_000, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals("hidden after it", false, onScreen(o, "made-up-pass-1234"))
+        tap()
+        assertEquals("a tap shows it again", true, onScreen(o, "made-up-pass-1234"))
+    }
 }

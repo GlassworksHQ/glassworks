@@ -251,6 +251,17 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     /** The page's read-only rows ([SettingsItem.States]) that read their values again on [refresh]. */
     private val live = ArrayList<() -> Unit>()
 
+    /** The rows that show a revealed secret now ([SettingsItem.Info.reveal]): each hides it when called. */
+    private val concealers = ArrayList<() -> Unit>()
+
+    /** Hides every revealed secret (the camera stream's password). */
+    fun conceal() = concealers.toList().forEach { it() }
+
+    /** The screen went off or on (MainActivity): off, nothing revealed stays for the next person. */
+    fun screenChanged(on: Boolean) {
+        if (!on) conceal()
+    }
+
     /** Previews (the mock-ups): a section's page, an open editor or picker, a native view, the restart banner. */
     internal fun previewSection(id: String) { current = id; build() }
     internal fun previewEdit(title: String, typed: String? = null) {
@@ -302,6 +313,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         banner.bind()
         rows.removeAllViews()
         live.clear()
+        concealers.clear() // the rows are drawn again, hidden
         natives.values.forEach { n -> (n.view.parent as? android.view.ViewGroup)?.removeView(n.view); n.reset() }
         // A key no section has now (a pane from before a device restart, another base) is let go of.
         val keys = m.sections.flatMap { nativeKeys(it.items) }.toSet()
@@ -442,6 +454,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         val value = g.text(15f, MU).apply { setLineSpacing(0f, 1.15f) }
         // Shown only while tapped, and never kept: the row starts hidden whenever the page is drawn.
         var revealed = false
+        lateinit var hide: () -> Unit
         fun bind() {
             name.text = i.title()
             val v = if (revealed) i.reveal?.invoke() ?: i.detail() else i.detail()
@@ -462,8 +475,24 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 addView(value, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
             }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
             if (i.reveal != null) {
+                // Hidden again on the next tap, when the screen goes off, or after [REVEAL_MS] (a hallway panel).
+                val timeout = Runnable { hide() }
+                hide = {
+                    revealed = false
+                    removeCallbacks(timeout)
+                    concealers.remove(hide)
+                    bind()
+                }
                 isClickable = true
-                setOnClickListener { revealed = !revealed; bind() }
+                setOnClickListener {
+                    if (revealed) hide()
+                    else {
+                        revealed = true
+                        concealers += hide
+                        postDelayed(timeout, REVEAL_MS)
+                        bind()
+                    }
+                }
             }
         }
     }
@@ -881,6 +910,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     companion object {
+        /** How long a revealed secret stays shown without another tap. */
+        const val REVEAL_MS = 60_000L
         const val RESTART_TEXT = "This takes effect after the app restarts. It takes about 5 seconds."
         const val OFF_BY_DEFAULT = "Dimmed: off by default in Home Assistant. Turn them on there to keep their history."
         private const val PANES = "panes"

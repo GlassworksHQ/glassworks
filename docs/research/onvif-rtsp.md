@@ -128,7 +128,7 @@ setup and two Protect notes (read 2026-11-14):
 - The RTSP server binds its port before it counts as running, so a port clash throws and a later
   start can still bind.
 - Nothing listens until the pane starts the servers, and the pane starts them only while
-  `onvif_stream` is on, the camera is in Presence + snapshots, and privacy is off
+  `onvif_stream` is on, the camera is in Presence + camera, and privacy is off
   (`CameraPolicy.streamMayRun`).
 
 **Limits we accept, and what bounds them** (2026-11-14):
@@ -136,7 +136,7 @@ setup and two Protect notes (read 2026-11-14):
 | Limit | Why it stays | What bounds it |
 |---|---|---|
 | Plain HTTP and RTSP, no TLS. Basic auth and WS-Security `PasswordText` send the password in a form anyone on the LAN can read | HA's ONVIF integration and UniFi Protect speak ONVIF over HTTP; they choose Digest or `PasswordDigest` when offered | The stream is off by default and needs its own sign-in, not the panel's or HA's. Use a password for nothing else |
-| HTTP Digest (ONVIF snapshot, RTSP): a nonce stays valid until it is evicted (ONVIF) or for 12 h (RTSP), and `nc` isn't tracked, so a captured `Authorization` header can be replayed | ffmpeg and other RTSP clients reuse the first nonce for a whole session; refusing a reused `nc` breaks them | Replaying needs a captured header from the LAN; it gives what that client already saw. A future round can bind nonces to a connection |
+| HTTP Digest (ONVIF, RTSP): a nonce stays valid for 12 h (both; an older one gets a fresh challenge), the realm and the requested resource must be the panel's, and `nc` isn't tracked, so a captured `Authorization` header can be replayed within those 12 h | ffmpeg and other RTSP clients reuse the first nonce for a whole session; refusing a reused `nc` breaks them | Replaying needs a captured header from the LAN; it gives what that client already saw. A future round can bind nonces to a connection |
 | WS-Security `UsernameToken`: `Created` isn't range-checked and nonces aren't remembered, so a captured token can be replayed | Panel and client clocks differ, and HA corrects for that skew itself | As above: a LAN capture, for the operations that client already made |
 | RTSP over UDP: a session ends when its control connection closes (upstream's choice), although RTSP 1.0 lets it outlive the connection | HA and Protect stream over TCP; ending with the connection stops video to an address whose client is gone | Clients that keep their control connection open, as ffmpeg does, are unaffected |
 
@@ -199,13 +199,15 @@ old sign-in, polled `GetProfiles` about 59 times until it was adopted again. Bot
 
 | Call | Answer | What HA 2026.11.1 does with it |
 |---|---|---|
-| Device and media (`GetDeviceInformation`, `GetProfiles`, …) | HTTP 400, SOAP 1.2 fault `env:Sender` / `ter:NotAuthorized` | `is_auth_error()` is true: "auth failed" in the config flow, a reauth flow at setup |
+| Device and media (`GetDeviceInformation`, `GetProfiles`, …) | HTTP 400, SOAP 1.2 fault `s:Sender` / `ter:NotAuthorized` | `is_auth_error()` is true: "auth failed" in the config flow, a reauth flow at setup |
 | Events (`PullMessages`, `Renew`, `CreatePullPointSubscription`, …) | HTTP 401 with the Digest and Basic challenge, no body | a `TransportError` 401: the pull loop waits 60 s instead of 0.75 s; reauth at setup |
 | RTSP (`DESCRIBE`, `SETUP`) | `RTSP/1.0 401` with the challenge | |
 | Digest with the right password on a nonce the panel forgot | HTTP 401, challenge with `stale=true` | the client signs in again once |
 
-A wrong sign-in in the events now costs one request a minute, not one every 0.75 s (the second lab
-case again: no Renew or Create after the change, only refused pulls). HA has no reauth path in its pull
+A wrong sign-in in the events now costs about two requests a minute, not one every 0.75 s: a pull
+each minute, and its one retry when the client answers the 401's Digest challenge (aiohttp's
+`DigestAuthMiddleware` retries once; the lab's second case again: no Renew or Create after the
+change, only refused pulls). HA has no reauth path in its pull
 loop; a loaded entry with a stale sign-in asks to reauth the next time it is set up (an HA restart or
 a reload). The panel logs a refused sign-in once a minute per client, never with the sign-in:
 `ONVIF PullMessages from <address> refused: the sign-in doesn't match the stream's`.

@@ -18,7 +18,8 @@ import java.io.File
 
 /**
  * The second use is "Presence + camera" (maintainer, 2026-11-14: "snapshots" read as leaving the
- * Protect stream out). Nothing a person reads says "Presence + snapshots"; only the stored value does.
+ * Protect stream out). Nothing a person reads (the app, docs/, the README, the changelog) says
+ * "Presence + snapshots"; only the stored value does.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -41,7 +42,8 @@ class CameraWordingTest {
     @Test fun noUserFacingTextSaysPresencePlusSnapshots() {
         val old = "Presence + snapshots"
         val files = File(repo, "app/kiosk/src/main").walkTopDown().filter { it.isFile && it.extension in setOf("kt", "xml", "json") }.toList() +
-            listOf(File(repo, "docs/esphome.md"), File(repo, "CHANGELOG.md"), File(repo, "README.md"))
+            File(repo, "docs").walkTopDown().filter { it.isFile && it.extension == "md" }.toList() +
+            listOf(File(repo, "CHANGELOG.md"), File(repo, "README.md"))
         val found = files.flatMap { f ->
             f.readLines().withIndex().filter { (_, l) -> old in l && "STORED_CAMERA =" !in l }.map { (i, l) -> "${f.relativeTo(repo)}:${i + 1}: ${l.trim()}" }
         }

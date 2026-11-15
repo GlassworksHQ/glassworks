@@ -103,4 +103,16 @@ class CameraSetupLeakTest {
             assertEquals("$step shows no camera line", false, cameraLineShown(s))
         }
     }
+
+    @Test fun anotherStepsOwnStatusSurvivesARedrawOfThatStep() {
+        // The fix must not over-clear: the Home Assistant step's own line stays through a redraw of the same step.
+        val (s, m) = setUp()
+        tap(s, "Home Assistant")
+        val step = all(s).filterIsInstance<TextView>().first { it.text.toString().contains("Home Assistant ·") && visible(it) }.text.toString()
+        s.manualResult(false, "No Home Assistant answered at that address.")
+        fun shown() = all(s).filterIsInstance<TextView>().any { it.text.toString() == "No Home Assistant answered at that address." && visible(it) }
+        assertTrue(shown())
+        s.render(m) // the screen draws the same state again (every discovery or Wi-Fi refresh)
+        assertTrue("still there after a redraw of the same step ($step)", shown())
+    }
 }
