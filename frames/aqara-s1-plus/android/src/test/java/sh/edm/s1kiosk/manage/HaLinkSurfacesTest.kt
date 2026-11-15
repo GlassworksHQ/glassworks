@@ -27,7 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
@@ -129,7 +129,7 @@ class HaLinkSurfacesTest {
     /** The app's own model, for the panel and the Manage page: the link from whether Home Assistant ever added the panel. */
     @Test
     fun theAppsModelReadsWhetherHomeAssistantAddedThePanel() {
-        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         runtime.panes = fixtures.all()
         val prefs = KioskPrefs(app)
         val tokens = HaTokenClient(object : HttpPoster {

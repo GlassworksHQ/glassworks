@@ -16,7 +16,7 @@ import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.esphome.Msg
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
@@ -35,7 +35,7 @@ import java.net.Socket
 class PanelDevicePaneSwitchesTest {
     private val app = RuntimeEnvironment.getApplication()
     private val exec = ManualExecutor()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+    private val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val mdns = RecordingMdns()
     private lateinit var device: PanelDevice
     private val port get() = mdns.starts.single().port

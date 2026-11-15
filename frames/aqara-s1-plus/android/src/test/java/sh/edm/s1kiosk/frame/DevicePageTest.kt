@@ -24,7 +24,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
@@ -169,7 +169,7 @@ class DevicePageTest {
     })
 
     @Test fun bothSurfacesShowTheSamePageUnderPanelAfterScreen() {
-        for (runtime in listOf(GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), GlassworksRuntime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false)))) {
+        for (runtime in listOf(KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), KioskApp.runtime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false)))) {
             val prefs = KioskPrefs(app)
             val panel = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
             val ids = panel.sections.map { it.id }

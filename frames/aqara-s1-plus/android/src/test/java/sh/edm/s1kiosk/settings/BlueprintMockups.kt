@@ -23,7 +23,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.radio.FixedReadout
@@ -59,7 +59,7 @@ class BlueprintMockups {
     private fun model(frame: Frame, access: BlueprintAccess): KioskSettingsOverlay.Model {
         KioskPrefs(app).apply { urlSetting = "$ha/lovelace/panel" }
         val radio = radioDefinition(app, FixedReadout(null, running = false))
-        val definitions = GlassworksRuntime(frame, build = AppBuild("0.5.0", 500, debug = false)).paneDefinitions(app).map { if (it.id == "radio") radio else it }
+        val definitions = KioskApp.runtime(frame, build = AppBuild("0.5.0", 500, debug = false)).paneDefinitions(app).map { if (it.id == "radio") radio else it }
         definitions.forEach { it.switch?.on = true }
         return MenuFixture.model(app, radio, status = "screen on", panes = definitions, blueprints = cards(access))
     }

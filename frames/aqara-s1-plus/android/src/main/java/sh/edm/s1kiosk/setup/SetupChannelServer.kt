@@ -12,7 +12,7 @@ import sh.edm.s1kiosk.auth.HaAuth
 /**
  * The setup channel on `@s1kiosk_setup` (adb `localabstract:`), started by KioskService. Thin glue:
  * the protocol is [SetupChannel]; this reads the app's state and applies changes the same way the
- * panel itself does. The panes' setup steps (GlassworksRuntime.paneDefinitions) bring their own state
+ * panel itself does. The panes' setup steps (Glassworks.paneDefinitions) bring their own state
  * and requests.
  */
 object SetupChannelServer {

@@ -14,7 +14,7 @@ import sh.edm.s1kiosk.voice.VoicePrefs
 
 /**
  * Where this app keeps each pane's settings ([PANE_FILES]), and each pane's typed settings, for the code
- * that builds the panes and their definitions (GlassworksRuntime.paneDefinitions). The core's own
+ * that builds the panes and their definitions (S1Panes). The core's own
  * settings are in [KioskPrefs].
  */
 class PanePrefs(private val context: Context) {

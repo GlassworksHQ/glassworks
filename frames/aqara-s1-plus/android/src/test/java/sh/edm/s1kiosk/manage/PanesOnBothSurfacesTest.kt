@@ -23,6 +23,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.auth.HaTokenClient
@@ -52,9 +53,9 @@ class PanesOnBothSurfacesTest {
     private class Frame(val name: String, val runtime: GlassworksRuntime, val rail: List<String>, val hidden: List<String>)
 
     private fun frames() = listOf(
-        Frame("S1", GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)),
+        Frame("S1", KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)),
             listOf("assist", "sendspin", "notifications", "radio", "bluetooth-proxy", "wall-base", "time-zone", "diagnostics"), listOf("camera")),
-        Frame("Pixel Tablet", GlassworksRuntime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false)),
+        Frame("Pixel Tablet", KioskApp.runtime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false)),
             listOf("assist", "sendspin", "notifications", "bluetooth-proxy", "camera", "diagnostics"), listOf("radio")),
     )
 

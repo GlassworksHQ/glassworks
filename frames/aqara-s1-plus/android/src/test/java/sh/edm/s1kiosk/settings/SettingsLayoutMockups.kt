@@ -20,7 +20,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.radio.FixedReadout
@@ -57,7 +57,7 @@ class SettingsLayoutMockups {
     /** The menu on [frame] with [running] panes, [off] turned off, on its Overview. */
     private fun menu(frame: Frame, frameName: String, running: List<Pane>, off: Set<String>, memory: String): KioskSettingsOverlay {
         val radio = radioDefinition(app, FixedReadout(null, running = true))
-        val defs = GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { if (it.id == "radio" && frame is AqaraS1Plus) radio else it }
+        val defs = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { if (it.id == "radio" && frame is AqaraS1Plus) radio else it }
         defs.forEach { d -> d.switch?.on = d.id !in off }
         val byId = running.associateBy { it.id }
         fun model() = MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = defs, running = { byId[it] }).let { m ->

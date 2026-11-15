@@ -2,6 +2,10 @@ package sh.edm.s1kiosk
 
 import android.app.Application
 import android.util.Log
+import dev.glassworks.engine.Engine
+import dev.glassworks.engine.EngineSettings
+import dev.glassworks.engine.gecko.GeckoEngine
+import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.platform.Platform
@@ -17,6 +21,26 @@ class KioskApp : Application(), GlassworksApp {
         val frame = AqaraS1Plus.orElse(Platform.hardware) { GenericAndroid(this) }
         // Once per process, so a device that got the wrong frame shows it in logcat.
         Log.i("S1Kiosk", "Frame: ${frame.board} (${Platform.hardware})")
-        GlassworksRuntime(frame, build)
+        runtime(frame, build)
+    }
+
+    companion object {
+        /**
+         * The S1 app's runtime on [frame]: GeckoView with the kiosk's extension, and the S1 app's panes. Tests
+         * pass a fake [paneFrame]. Internal: the app makes one per process (one GeckoView runtime, one hub).
+         */
+        internal fun runtime(frame: Frame, build: AppBuild, paneFrame: Frame = frame): GlassworksRuntime =
+            GlassworksRuntime(frame, build, engine(build), S1Panes(), paneFrame)
+
+        /**
+         * GeckoView, with the kiosk's helper extension (assets/extension). Its settings are read once, when
+         * MainActivity first opens a page.
+         */
+        private fun engine(build: AppBuild): Engine = GeckoEngine(
+            settings = { context -> KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug)) } },
+            extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
+            logTag = "S1Kiosk",
+            generatedBy = "S1 Kiosk",
+        )
     }
 }

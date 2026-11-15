@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
@@ -14,7 +15,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
-import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.base.WallBasePane
 import sh.edm.s1kiosk.base.BaseKind
@@ -58,7 +58,7 @@ class BaseLayoutEntitiesPinTest {
         val app = RuntimeEnvironment.getApplication()
         PanePrefs(app).wallBase.layout = layout.encode()
         PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
-        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val device = PanelDevice(app, runtime, runtime::devicePanes)
         try {
             val identity = DeviceIdentity(

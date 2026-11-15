@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import dev.glassworks.platform.Platform
+import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.settings.SettingsMenu
 import android.os.IBinder
 import android.os.Handler
@@ -54,9 +55,9 @@ class KioskService : Service() {
         )
         promote()
         glassworks.screen.start(this)
-        wifiScanner = runtime.s1?.screenOffWifiScanner(this) { main.post { if (wifiScanner != null) promote() } }?.also { it.start() }
+        wifiScanner = (runtime.frame as? AqaraS1Plus)?.screenOffWifiScanner(this) { main.post { if (wifiScanner != null) promote() } }?.also { it.start() }
         glassworks.voiceState = if (PanePrefs(this).voice.enabled) "idle" else "off"
-        runtime.voiceUi = VoiceUi(glassworks.voiceState)
+        runtime.s1Panes.voiceUi = VoiceUi(glassworks.voiceState)
         glassworks.voiceCancel = { device?.cancelVoice() }
         HaAuth.startServer(this)
         codeOverlay = CodeOverlay(this) { glassworks.panelCode.dismiss() }

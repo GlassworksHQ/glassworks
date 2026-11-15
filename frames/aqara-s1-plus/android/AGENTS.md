@@ -50,8 +50,9 @@ A new library in `libs/` or a new pane needs a branded README header: see
 - Components get what they need from the runtime: the core's `Glassworks` interface
   (reached with `glassworks` from Android entry points), which the S1 app's
   `GlassworksRuntime` implements (owned by `KioskApp`). Core code names `Glassworks`, never
-  `GlassworksRuntime`. Don't add new static singletons; this is groundwork for the device-neutral
-  core (#16, #30).
+  `GlassworksRuntime`. The app gives the runtime its engine and its parts (`AppParts`: its panes, where
+  their settings live, its activity and its Manage page); the S1's are `S1Panes`, so the runtime names
+  no pane. Don't add new static singletons; this is groundwork for the device-neutral core (#16, #30).
 - **Never read `Build.VERSION.SDK_INT` outside `dev.glassworks.platform`.** Add a named query to
   `Platform` instead (libraries keep theirs in their own `Compat.kt`). `PlatformConfinementTest`
   fails the build otherwise.

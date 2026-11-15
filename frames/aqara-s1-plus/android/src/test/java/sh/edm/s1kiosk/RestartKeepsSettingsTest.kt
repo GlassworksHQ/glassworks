@@ -38,14 +38,14 @@ class RestartKeepsSettingsTest {
     private fun process() = Disk.Process(RuntimeEnvironment.getApplication(), disk)
 
     private fun switches(ctx: Context): Map<String, Boolean> =
-        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(ctx).mapNotNull { d -> d.switch?.let { d.id to it.on } }.toMap()
+        KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(ctx).mapNotNull { d -> d.switch?.let { d.id to it.on } }.toMap()
 
     private val allOff = mapOf(
         "assist" to false, "sendspin" to false, "notifications" to false, "bluetooth-proxy" to false, "wall-base" to false,
         "time-zone" to false, "diagnostics" to false,
     )
 
-    private fun definitions(ctx: Context): List<PaneDefinition> = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(ctx)
+    private fun definitions(ctx: Context): List<PaneDefinition> = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(ctx)
 
     @Test fun aPaneTurnedOffInTheSettingsStaysOffAfterARestart() {
         val ctx = process()

@@ -43,7 +43,7 @@ import java.net.InetAddress
 class AppBuildTest {
     private val app = RuntimeEnvironment.getApplication()
     private val build = AppBuild("9.8.7", 90807, debug = false, testBuild = "f00ba47")
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build)
+    private val runtime = KioskApp.runtime(AqaraS1Plus(), build)
     private val stops = ArrayList<() -> Unit>()
 
     @After fun tearDown() = stops.forEach { runCatching { it() } }
@@ -55,8 +55,8 @@ class AppBuildTest {
     }
 
     @Test fun remoteDebuggingDefaultsToTheGivenBuildType() {
-        assertEquals(true, engineSettings(GlassworksRuntime(AqaraS1Plus(), build.copy(debug = true))).remoteDebugging)
-        assertEquals(false, engineSettings(GlassworksRuntime(AqaraS1Plus(), build.copy(debug = false))).remoteDebugging)
+        assertEquals(true, engineSettings(KioskApp.runtime(AqaraS1Plus(), build.copy(debug = true))).remoteDebugging)
+        assertEquals(false, engineSettings(KioskApp.runtime(AqaraS1Plus(), build.copy(debug = false))).remoteDebugging)
     }
 
     @Test fun updatesCompareAndAskWithTheGivenVersion() {

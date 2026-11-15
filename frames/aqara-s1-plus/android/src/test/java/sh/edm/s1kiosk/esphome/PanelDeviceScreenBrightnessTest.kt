@@ -14,7 +14,7 @@ import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 
 /** What the Screen light reports to Home Assistant, driven through its entities as HA does (#129). */
@@ -24,7 +24,7 @@ class PanelDeviceScreenBrightnessTest {
 
     @Test fun autoBrightnessBackOnBeforeALightReadingDoesNotReportTheSavedManualValue() {
         val app = RuntimeEnvironment.getApplication()
-        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val device = PanelDevice(app, runtime, runtime::devicePanes)
         try {
             device.initEntities(

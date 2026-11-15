@@ -1,10 +1,13 @@
 package sh.edm.s1kiosk
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
+import dev.glassworks.bluetoothproxy.AndroidProxyRadio
 import dev.glassworks.bluetoothproxy.BluetoothProxyDefinition
 import dev.glassworks.camera.CameraDefinition
 import dev.glassworks.camera.CameraHub
@@ -13,31 +16,105 @@ import dev.glassworks.camera.CameraPane
 import dev.glassworks.camera.CameraStream
 import dev.glassworks.camera.FrameEgress
 import dev.glassworks.camera.stillGate
+import dev.glassworks.diagnostics.DiagnosticsDefinition
 import dev.glassworks.diagnostics.DiagnosticsPane
 import dev.glassworks.esphome.EspHomeLog
+import dev.glassworks.manage.ManagePage
 import dev.glassworks.notifications.NotificationScreen
 import dev.glassworks.notifications.NotificationSounds
+import dev.glassworks.notifications.NotificationsDefinition
+import dev.glassworks.notifications.NotificationsHub
 import dev.glassworks.notifications.NotificationsPane
 import dev.glassworks.pane.Pane
+import dev.glassworks.pane.PaneDefinition
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import sh.edm.s1kiosk.auth.HaTokenClient
+import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.esphome.DeviceHost
+import sh.edm.s1kiosk.manage.S1Manage
 import sh.edm.s1kiosk.radio.RadioDefinition
+import sh.edm.s1kiosk.sendspin.SendspinDefinition
 import sh.edm.s1kiosk.sendspin.SendspinPane
+import sh.edm.s1kiosk.settings.BluetoothProxyPage
+import sh.edm.s1kiosk.setup.SetupState
 import sh.edm.s1kiosk.timers.TimersPane
+import sh.edm.s1kiosk.voice.AssistDefinition
 import sh.edm.s1kiosk.voice.AssistPane
 import sh.edm.s1kiosk.voice.SpeakerMedia
 import sh.edm.s1kiosk.voice.VoiceEngine
+import sh.edm.s1kiosk.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceLevels
+import sh.edm.s1kiosk.voice.VoiceUi
 import sh.edm.s1kiosk.voice.chime
 import sh.edm.s1kiosk.voice.wakeChime
 
 /**
- * The S1 app's panes for the panel's device (GlassworksRuntime.devicePanes): what each pane is built
- * with, in the order the device starts them and lists their entities.
+ * The S1 app's parts ([AppParts]): its panes' definitions and what each pane is built with for the panel's
+ * device, in order, plus the panes' state its shell reads ([notifications], [voiceUi]).
  */
-internal object S1Panes {
+class S1Panes : AppParts {
 
-    fun forDevice(runtime: GlassworksRuntime, host: DeviceHost): List<Pane> {
+    /** The notifications pane's state, for the overlay and the settings page (#118). */
+    val notifications = NotificationsHub()
+
+    /** What the voice overlay shows (state, heard text, reply). Main thread. */
+    var voiceUi = VoiceUi()
+
+    /**
+     * One thread for the settings pages' work that must not run on the main thread and must keep its order
+     * (Music's volume, sent to Music Assistant). Made on first use; idle, it is one parked daemon thread.
+     */
+    private val settingsWorker by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "s1-settings").apply { isDaemon = true } } }
+
+    /**
+     * The core's panes in the order the settings list them (voice, music, notifications, radio, Bluetooth
+     * proxy), then the frame's, then the camera, then diagnostics.
+     */
+    override fun paneDefinitions(context: Context, runtime: GlassworksRuntime, frameDefinitions: List<PaneDefinition>): List<PaneDefinition> {
+        val prefs = KioskPrefs(context)
+        val panePrefs = PanePrefs(context)
+        val radio = RadioDefinition.app(
+            panePrefs.radio,
+            setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
+        ) { prefs.haBase }
+        val notify = NotificationsDefinition(
+            panePrefs.paneFile("notifications"), notifications,
+            nodeName = { runtime.device?.nodeName },
+            now = SystemClock::elapsedRealtime,
+        )
+        // It requires a camera: without one in the frame's hardware it is CantRun, as every pane that lacks its own.
+        val camera = CameraDefinition(
+            panePrefs.paneFile("camera"),
+            granted = { context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
+            pickers = { c -> sh.edm.s1kiosk.camera.CameraUseCards(c) },
+        )
+        val bluetoothProxy = BluetoothProxyDefinition(panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(context), ::BluetoothProxyPage)
+        return listOf(AssistDefinition(panePrefs.paneFile("assist")), SendspinDefinition(panePrefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
+            frameDefinitions + camera + DiagnosticsDefinition(panePrefs.paneFile("diagnostics"))
+    }
+
+    override val mainActivity = MainActivity::class.java
+
+    override fun paneFile(context: Context, namespace: String) = PanePrefs.file(context, namespace)
+
+    override fun managePage(context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
+        S1Manage(context, runtime, signIn, tokens, prefs)
+
+    /** A voice event from the assistant (main thread): the voice overlay, the voice state and the screen follow it. */
+    fun onVoiceEvent(runtime: GlassworksRuntime, e: VoiceEvent) {
+        voiceUi = voiceUi.on(e)
+        try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("S1Kiosk.Voice", "voice overlay failed", t) }
+        if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return // texts only, no state change
+        runtime.voiceState = voiceUi.state
+        Log.i("S1Kiosk.Voice", "voice: ${runtime.voiceState}")
+        // Talking to the panel counts as activity: wake the screen and keep it on.
+        if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) runtime.screen.wake("voice")
+        runtime.screen.onStateChanged?.invoke()
+    }
+
+    /** What each pane is built with for the panel's device, in the order the device starts them and lists their entities. */
+    override fun devicePanes(runtime: GlassworksRuntime, host: DeviceHost): List<Pane> {
         val paneContext = host.paneContext
         val ctx = paneContext.context
         val prefs = KioskPrefs(ctx)
@@ -59,7 +136,7 @@ internal object S1Panes {
             },
             resolveUrl = host::resolveUrl,
             wakeChime = { host.chimes().wakeChime() },
-            onVoiceEvent = { e -> main.post { runtime.onVoiceEvent(e) } },
+            onVoiceEvent = { e -> main.post { onVoiceEvent(runtime, e) } },
             createInput = { cfg, model, onModelChanged -> VoiceEngine(ctx, cfg, model, onModelChanged) },
         )
         var panes = listOf(
@@ -74,7 +151,7 @@ internal object S1Panes {
                 silence = host::silenceChimes,
             ),
             NotificationsPane(
-                paneContext, panePrefs.notifications, runtime.notifications,
+                paneContext, panePrefs.notifications, notifications,
                 screen = object : NotificationScreen {
                     override fun wake() = ui { screen.wake("notification") }
                     override fun hold() = ui { screen.hold("notification") }
@@ -133,3 +210,7 @@ internal object S1Panes {
         ).also { pane = it }
     }
 }
+
+// TODO(S-shell): remove once the activity and the service no longer read the S1 app's panes' state.
+/** The S1 app's parts of a runtime it made ([KioskApp.runtime]). */
+val GlassworksRuntime.s1Panes: S1Panes get() = app as S1Panes

@@ -59,7 +59,7 @@ import sh.edm.s1kiosk.voice.TtsPlayer
 class PanelDevice(
     context: Context,
     private val runtime: Glassworks,
-    /** The app's panes for this device, in order, built from what the device gives them (GlassworksRuntime.devicePanes). */
+    /** The app's panes for this device, in order, built from what the device gives them (AppParts.devicePanes). */
     private val buildPanes: (DeviceHost) -> List<Pane>,
     /** HelloRequest from an API client (Home Assistant discovery, HaDiscovery.onApiHello). */
     private val onApiHello: (String, java.net.InetAddress?) -> Unit,

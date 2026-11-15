@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
+import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
@@ -14,7 +15,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
-import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.base.WallBasePane
 import java.io.File
@@ -58,7 +58,7 @@ class PanelEntitiesPinTest {
     @Test fun everyPaneOffKeepsTheSameEntities() {
         if (System.getProperty("s1.regenGolden") == "true") return
         val app = RuntimeEnvironment.getApplication()
-        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).forEach { it.switch?.on = false }
+        KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).forEach { it.switch?.on = false }
         assertEquals(javaClass.getResourceAsStream("/$GOLDEN")?.bufferedReader()?.readText(), describe(realEntityList()))
     }
 
@@ -71,7 +71,7 @@ class PanelEntitiesPinTest {
     private fun realEntityList(backend: BaseBackend = BaseBackend.LOCALSERVICE): List<ApiEntity> {
         val app = RuntimeEnvironment.getApplication()
         PanePrefs(app).wallBase.backend = backend.pref
-        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+        val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val device = PanelDevice(app, runtime, runtime::devicePanes)
         try {
             val identity = DeviceIdentity(

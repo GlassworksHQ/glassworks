@@ -301,8 +301,9 @@ through its definition (below), which uses the same typed class.
 
 A running `Pane` exists only while the device runs, but the setup screen decides on its first frame
 and the settings menu opens at any time. So a pane also has a `PaneDefinition`, made once per
-process. The app makes the core's (`GlassworksRuntime.paneDefinitions`), and the frame adds its own
-(`Frame.paneDefinitions`). The definition's `id` is the pane's.
+process. The app makes its own (`AppParts.paneDefinitions`, the S1's in `S1Panes`) and places the
+frame's (`Frame.paneDefinitions`) among them; the runtime marks the ones the frame can't run `CantRun`.
+The definition's `id` is the pane's.
 
 | Member | What it is |
 |---|---|
@@ -544,7 +545,8 @@ first `open`, so a change needs a process restart. `engine.started` says what it
 
 `GeckoEngine` takes the S1's values: the built-in extension (`assets/extension`, id
 `helper@s1kiosk.edm.sh`, native app `s1kiosk`), the log tag and the settings from `KioskPrefs`.
-GeckoView allows one runtime per process, so `GlassworksRuntime` holds the one engine.
+GeckoView allows one runtime per process, so the app makes the one engine (the S1's: `KioskApp`) and
+hands it to the `GlassworksRuntime` it runs, which holds it.
 `EngineConfinementTest` fails `./gradlew test` if code outside `dev.glassworks.engine.gecko` names
 `org.mozilla.gecko`.
 
