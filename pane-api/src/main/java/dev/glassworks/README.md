@@ -230,6 +230,13 @@ has no fills or colours; a new icon is UI, so the maintainer approves it.
 has no files or a file has no pane. Then run `npm run panes -w @glassworks/frame-card`
 ([frames/README.md](../../../../../../frames/README.md#the-panes-a-frame-runs)).
 
+A pane may also list **Home Assistant blueprints** in its `pane.json`: `"blueprints": [{"file":
+"blueprints/<name>.yaml", "summary": "…"}]`, each file in the pane's module and its name unique in the repo.
+The core puts a *Blueprints for Home Assistant* card on the pane's page (`SettingsItem.Blueprints`, from
+`paneSections`' `blueprints`), above its *In Home Assistant* list, while the pane is on. Its
+buttons open Home Assistant's own import dialog; the panel never writes to Home Assistant
+([docs/blueprints.md](../../../../../../docs/blueprints.md)).
+
 The core raises `HomeAssistantSubscribed(address, authenticated)` each time Home Assistant subscribes
 to the states. `authenticated` is true when the connection uses the key Home Assistant provisioned.
 Only then is the address proven to be Home Assistant's, so a pane that trusts the address checks it.

@@ -118,7 +118,8 @@ def owner_of_file(path, parts, lint):
                 return ("pane", m.group(1)), "assets"
             lint.append(f"{path}: under assets/panes/ but `{m.group(1)}` isn't a pane")
             return ("core", None), "assets"
-        if any(path.startswith(p) for p in parts["core_assets"]):
+        # A folder (ending in /) owns what is under it; a file only itself.
+        if any(path.startswith(p) if p.endswith("/") else path == p for p in parts["core_assets"]):
             return ("core", None), "assets"
         for k, v in parts["panes"].items():
             if any(path.startswith(p) for p in v.get("assets", [])):

@@ -148,7 +148,8 @@ draws without NaN.
 Each pane in the app has a `pane.json` and an `icon.svg` next to its code (issue #231): its id, name,
 what it does, what hardware it `requires`, its status, and `frame` for a frame pane such as the wall
 base. `packages/frame-card` collects them (`PANES`, `PANE_IDS`; [its README](../packages/frame-card/README.md#the-pane-catalog)),
-and `PaneCatalogTest` in the app fails if a pane has no file or a file has no pane.
+and `PaneCatalogTest` in the app fails if a pane has no file or a file has no pane. A pane's `blueprints`
+lists its Home Assistant blueprints ([docs/blueprints.md](../docs/blueprints.md)).
 
 A frame's rating of a pane is the one in its `panes`, if it gives one. Otherwise `paneSupport()` works
 it out, and says why:

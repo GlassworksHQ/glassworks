@@ -4,6 +4,9 @@
 
 package dev.glassworks.manage
 
+import dev.glassworks.pane.BLUEPRINTS
+import dev.glassworks.pane.BlueprintAction
+import dev.glassworks.pane.BlueprintSurface
 import dev.glassworks.pane.NOT_RUNNING
 import dev.glassworks.pane.ChipTone
 import dev.glassworks.pane.PaneState
@@ -231,7 +234,31 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
                     (if (list.any { it.offByDefault }) """<p class="foot">${esc(SettingsChange.OFF_BY_DEFAULT)}</p>""" else "") + "</div>"
             }
             is SettingsItem.Tiles -> tiles(item)
+            is SettingsItem.Blueprints -> blueprints(v, item)
         }
+    }
+
+    /**
+     * A pane's blueprints, as the panel's card: each button is a link to Home Assistant's own page in a new
+     * tab, for both sign-ins, so the Manage page keeps no Home Assistant token and Home Assistant checks who
+     * opens it. With the panel's code, a line says so. "In Home Assistant" comes from the panel's own check.
+     */
+    private fun blueprints(v: Viewer, item: SettingsItem.Blueprints): String {
+        val card = runCatching { item.card(BlueprintSurface.MANAGE) }.getOrNull() ?: return ""
+        val note = card.note ?: if (!v.homeAssistant) BLUEPRINTS_CODE else null
+        fun link(label: String, url: String) = """<a class="pill sm" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>"""
+        val rows = card.rows.joinToString("") { (bp, a) ->
+            val act = when (a) {
+                is BlueprintAction.Add -> link("Add in Home Assistant ↗", a.url)
+                // blueprintCard gives a QR code on the panel only; the Manage page always links.
+                is BlueprintAction.Phone -> error("no Phone action on the Manage page")
+                is BlueprintAction.CreateAutomation -> """<span class="chip"><i class="dot ok"></i>In Home Assistant</span>""" + link("Create automation ↗", a.url)
+                BlueprintAction.Off -> """<button class="pill sm" type="button" disabled>Add in Home Assistant</button>"""
+            }
+            """<div class="row bp"><div><b>${esc(bp.name)}</b><span>${esc(bp.summary)}</span></div><div class="act">$act</div></div>"""
+        }
+        return """<div class="grp"><div class="gl">${esc(BLUEPRINTS)}</div>""" +
+            note?.let { """<div class="st"><i class="dot off"></i><span>${esc(it)}</span></div>""" }.orEmpty() + rows + "</div>"
     }
 
     /** Readings as tiles, [SettingsItem.Tiles.columns] to a row, each with its last hour or how full it is. */
@@ -403,6 +430,8 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
 
         /** A row that opens something only the panel has. */
         const val ON_THE_PANEL = "On the panel"
+        /** The Blueprints card's line with the panel's code: Manage doesn't know who you are in Home Assistant. */
+        const val BLUEPRINTS_CODE = "You signed in with the panel's code. Home Assistant asks who you are, and only an administrator can add blueprints."
 
         /** `up 3 days, 4 h`, `up 5 h, 12 min`, `up 3 min`. */
         fun duration(ms: Long): String {
@@ -459,6 +488,7 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 .tg:disabled{opacity:.45;cursor:not-allowed}.tg:focus-visible,.pc:focus-visible,.pill:focus-visible{outline:2px solid var(--sky);outline-offset:3px}
 .row.note span{color:var(--muted);font-size:15px;line-height:1.35}.row.quiet b{color:var(--muted)}
 .row.sl{flex-direction:column;align-items:stretch;gap:8px}.slh{display:flex;align-items:baseline;gap:16px}.slh b{flex:1;min-width:0}.row.sl .slh em{flex:none;max-width:60%;text-align:right;font-style:normal;color:var(--muted);font-size:15px}
+.row.bp .act{display:flex;align-items:center;gap:10px;flex:none}.row.bp .act .chip{display:inline-flex;font-size:${Tokens.Chip.TEXT}px}.pill:disabled{opacity:.45;cursor:not-allowed}
 .slr{display:flex;align-items:center;gap:14px}.slr input{flex:1;min-width:0;accent-color:var(--sky)}.pill.sm{padding:7px 16px;font-size:14px}
 .gl{margin:24px 0 4px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-weight:600}
 .st{display:flex;align-items:center;gap:10px;padding:16px 0 8px;color:var(--muted);font-size:15px}.st.bad span{color:var(--rose)}.row span.fix{color:var(--work-ink)}
@@ -496,6 +526,7 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 .tile{flex-direction:row;align-items:center;justify-content:space-between;border:0;border-bottom:1px solid var(--edge);border-radius:0;background:none;padding:14px 0}
 .tile:last-child{border-bottom:0}.tile small{color:var(--fg);font-size:16px}.tile b{font-size:14px;color:var(--muted);gap:8px}.tile span{display:none}
 .crumb{font-size:20px}.pchip{display:inline-flex}.ptl{grid-template-columns:repeat(2,minmax(0,1fr))}.banner{flex-wrap:wrap}
+.row.bp{flex-wrap:wrap;row-gap:10px}.row.bp>div:first-child{flex-basis:100%}
 .list{padding:4px 20px}.row{min-height:56px}.row.static{flex-wrap:wrap;row-gap:4px}.row em{flex-basis:100%;max-width:none;text-align:left}.row b{font-size:16px}.row span{font-size:14px}.chev{display:none}
 .ph{font-size:32px}.sub{font-size:15px;margin-bottom:18px}.lt{flex-direction:column;gap:0}.dl{text-align:left;margin:0 0 14px}.search{flex-basis:100%}
 .logs{padding:12px 14px;font-size:12.5px}.lr{grid-template-columns:auto 1fr;gap:4px 12px}.lr span{grid-column:1/-1;padding-bottom:6px}}"""

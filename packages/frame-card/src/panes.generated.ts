@@ -74,6 +74,16 @@ export const PANE_FILES: readonly PaneInfo[] = [
     ],
     "status": "alpha",
     "docs": "docs/esphome.md#camera-entities",
+    "blueprints": [
+      {
+        "file": "blueprints/panel-presence-lights.yaml",
+        "summary": "Someone moves in front of the panel: lights on, and off again after a while."
+      },
+      {
+        "file": "blueprints/panel-motion-snapshot.yaml",
+        "summary": "Movement at the panel while nobody is home sends its picture to your phone."
+      }
+    ],
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2.5\" y=\"6.5\" width=\"13.5\" height=\"11\" rx=\"3\"/><circle cx=\"9.25\" cy=\"12\" r=\"2.6\"/><path d=\"M16 10.2 21.5 7.5v9L16 13.8\"/></svg>",
     "source": "panes/camera/src/main/java/dev/glassworks/camera"
   },
@@ -94,6 +104,16 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "requires": [],
     "status": "alpha",
     "docs": "docs/notifications.md",
+    "blueprints": [
+      {
+        "file": "blueprints/doorbell-panels.yaml",
+        "summary": "When the doorbell rings, the panels ring and show the door's view and camera."
+      },
+      {
+        "file": "blueprints/ask-panels.yaml",
+        "summary": "A question with buttons on the panels. Each button runs a script you pick."
+      }
+    ],
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z\"/><path d=\"M10 20.5a2 2 0 0 0 4 0\"/></svg>",
     "source": "panes/notifications/src/main/java/dev/glassworks/notifications"
   },

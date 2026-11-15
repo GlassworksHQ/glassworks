@@ -95,6 +95,9 @@ A pane is a feature the panel can run or leave out. These are the panes today:
 - **Camera**: on a panel with a camera, presence from motion, snapshots and an opt-in ONVIF/RTSP
   stream for Home Assistant ([entities](docs/esphome.md#camera-entities)). New, not yet run on a device.
 
+Notifications and Camera also offer Home Assistant [blueprints](docs/blueprints.md) on their settings
+page, added through Home Assistant's own import dialog.
+
 Each frame's README rates the panes its `frame.json` lists. The [pane API](pane-api/src/main/java/dev/glassworks/README.md)
 says how to write one, and [What makes a pane](pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane)
 says which features qualify.

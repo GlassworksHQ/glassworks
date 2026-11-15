@@ -41,6 +41,7 @@ object MenuFixture {
         panes: List<PaneDefinition> = listOf(cardOnly("voice", "Voice", "Assist and timers"), cardOnly("sendspin", "Music", "A Sendspin speaker"), radio),
         live: CoreSettings.Live = CoreSettings.Live(),
         running: (String) -> Pane? = { null },
+        blueprints: (String) -> SettingsItem.Blueprints? = { null },
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
@@ -48,7 +49,7 @@ object MenuFixture {
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             live = live,
         )
-        val sections = paneSections(panes, running)
+        val sections = paneSections(panes, blueprints, running)
         return KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), version, sections.map { it.id }.toSet())
     }
 }

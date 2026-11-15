@@ -1,0 +1,71 @@
+# Glassworks: the panel's picture on your phone when it sees movement and nobody is home (#117). The
+# Camera pane's blueprint: listed in its pane.json, offered on its settings page. It needs the pane in
+# Presence + camera, so the panel's camera gives Home Assistant stills (docs/esphome.md).
+# Not yet run on a panel (2026-11-15).
+blueprint:
+  name: Snapshot when away
+  description: >-
+    When someone moves in front of the panel while nobody is home, your phone gets the panel's
+    picture. Nobody is home when Home Assistant's Home zone counts no people. The panel's Camera use
+    must be Presence + camera, or the picture is empty.
+  domain: automation
+  input:
+    presence:
+      name: The panel's Camera presence
+      description: binary_sensor.<panel>_camera_presence
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+              device_class: occupancy
+    camera:
+      name: The panel's camera
+      description: camera.<panel>_camera
+      selector:
+        entity:
+          filter:
+            - domain: camera
+    phone:
+      name: Your phone's notify action
+      description: >-
+        The Home Assistant app's action for your phone, like notify.mobile_app_alex_phone.
+        Developer tools → Actions lists them (search for "mobile_app").
+      selector:
+        text:
+    quiet_for:
+      name: Not again for
+      description: After a picture, more movement sends nothing for this long.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 120
+          unit_of_measurement: min
+
+# One picture, then quiet for a while: more movement in that time sends nothing.
+mode: single
+max_exceeded: silent
+
+variables:
+  camera: !input camera
+  phone: !input phone
+
+triggers:
+  - trigger: state
+    entity_id: !input presence
+    to: "on"
+
+conditions:
+  - condition: numeric_state
+    entity_id: zone.home
+    below: 1
+
+actions:
+  - action: "{{ phone }}"
+    data:
+      title: Movement at the panel
+      message: "Someone moved in front of the panel at {{ now().strftime('%H:%M') }}, and nobody is home."
+      data:
+        image: "/api/camera_proxy/{{ camera }}"
+  - delay:
+      minutes: !input quiet_for

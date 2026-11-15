@@ -1,0 +1,93 @@
+# Glassworks: lights on when someone is at the panel (#117). The Camera pane's blueprint: listed in
+# its pane.json, offered on its settings page. Any panel's presence works: the Camera pane's Camera
+# presence, or the panel's own Presence on a panel with a presence sensor (docs/esphome.md).
+# Not yet run on a panel (2026-11-15).
+blueprint:
+  name: Lights on at the panel
+  description: >-
+    When someone moves in front of the panel, the lights you pick turn on: always, or only while it's
+    dark if you pick a light sensor. They turn off again once nobody has been there for a while.
+  domain: automation
+  input:
+    presence:
+      name: Presence at the panel
+      description: >-
+        The panel's Camera presence (binary_sensor.<panel>_camera_presence), or its Presence on a panel
+        with a presence sensor.
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+              device_class: occupancy
+    lights:
+      name: Lights
+      description: The lights to turn on, and off again later.
+      selector:
+        target:
+          entity:
+            - domain: light
+    light_sensor:
+      name: Light sensor (optional)
+      description: >-
+        Turn the lights on only while this reads below the level under it. The panel's own Illuminance
+        works. Leave it empty to turn them on at any light.
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: illuminance
+    dark_below:
+      name: Dark below
+      description: "With a light sensor: the lights turn on only below this level."
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 1000
+          unit_of_measurement: lx
+    off_after:
+      name: Off once nobody has been there for
+      description: The lights turn off once the panel has seen nobody for this long.
+      default: 120
+      selector:
+        number:
+          min: 15
+          max: 3600
+          unit_of_measurement: s
+
+mode: queued
+max_exceeded: silent
+
+variables:
+  light_sensor: !input light_sensor
+  dark_below: !input dark_below
+
+triggers:
+  - trigger: state
+    entity_id: !input presence
+    to: "on"
+    id: near
+  - trigger: state
+    entity_id: !input presence
+    to: "off"
+    for:
+      seconds: !input off_after
+    id: gone
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: near
+          - condition: template
+            value_template: "{{ not light_sensor or states(light_sensor) | float(0) < dark_below | float(0) }}"
+        sequence:
+          - action: light.turn_on
+            target: !input lights
+      - conditions:
+          - condition: trigger
+            id: gone
+        sequence:
+          - action: light.turn_off
+            target: !input lights

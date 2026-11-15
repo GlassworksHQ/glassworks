@@ -13,9 +13,13 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.glassworks.pane.BLUEPRINTS
+import dev.glassworks.pane.BlueprintAction
+import dev.glassworks.pane.BlueprintSurface
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.pane.chipWord
@@ -38,6 +42,7 @@ import sh.edm.s1kiosk.ui.Glass.Companion.TX
 import sh.edm.s1kiosk.ui.GlassSlider
 import sh.edm.s1kiosk.ui.GroupedRail
 import sh.edm.s1kiosk.ui.Inter
+import sh.edm.s1kiosk.ui.QrCode
 import sh.edm.s1kiosk.ui.StackView
 import sh.edm.s1kiosk.ui.TileView
 import sh.edm.s1kiosk.ui.Wrap
@@ -285,6 +290,12 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         m.confirm(!m.value())?.let { sheet.confirm(it) {} }
     }
     fun previewRestart() { restartPending = true; banner.bind() }
+    /** The QR sheet of the open page's first blueprint that leads to a phone. */
+    fun previewBlueprintQr() {
+        val s = model?.sections?.firstOrNull { it.id == current } ?: return
+        val card = flat(s.items).filterIsInstance<SettingsItem.Blueprints>().firstOrNull()?.card(BlueprintSurface.PANEL) ?: return
+        card.rows.firstNotNullOfOrNull { (bp, a) -> (a as? BlueprintAction.Phone)?.let { bp to it } }?.let { (bp, a) -> sheet.qr(bp.name, a.url) }
+    }
     fun previewNative(key: String): SettingsItem.NativeView? = natives[key]
 
     /** The native views kept now, by key (tests). */
@@ -425,6 +436,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 is SettingsItem.States -> { rows.addView(states(i), LinearLayout.LayoutParams(-1, -2)); continue }
                 is SettingsItem.Status -> { rows.addView(status(i), LinearLayout.LayoutParams(-1, -2)); continue }
                 is SettingsItem.Tiles -> { rows.addView(tiles(i), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f); bottomMargin = px(6f) }); continue }
+                is SettingsItem.Blueprints -> { rows.addView(blueprints(i), LinearLayout.LayoutParams(-1, -2)); continue }
                 else -> {}
             }
             if (divided && under !is SettingsItem.Status && under !is SettingsItem.Tiles) {
@@ -445,7 +457,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Info -> infoRow(i)
         is SettingsItem.Choice -> follow(row(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
         is SettingsItem.SignIn -> follow(row(i.title, i.shown(i.isSet()), chevron = true, dim = false) { sheet.signIn(i) { build() } }) { i.shown(i.isSet()) }
-        is SettingsItem.Group, is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles -> error("laid out by addItems")
+        is SettingsItem.Group, is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Blueprints -> error("laid out by addItems")
         is SettingsItem.Native -> natives.getOrPut(i.key) { i.create(nativeHost) }.also { it.refresh() }.view
     }
 
@@ -518,6 +530,71 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             }
             if (list.any { it.offByDefault }) box.addView(g.text(13.5f, FA).apply { text = OFF_BY_DEFAULT; setLineSpacing(0f, 1.2f) },
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+        }
+        bind()
+        live += ::bind
+        return box
+    }
+
+    /**
+     * A pane's blueprints for Home Assistant: the label, a line that says why the buttons are off or lead to
+     * a phone, then each blueprint's name and summary with its button ([dev.glassworks.pane.blueprintCard]).
+     * Add and Create automation open Home Assistant's own pages in the dashboard; Add from your phone shows
+     * a QR code. Read again on [refresh]: the panel's sign-in check answers after the page opens.
+     */
+    private fun blueprints(i: SettingsItem.Blueprints): View {
+        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        var drawn: List<Any?>? = null
+        fun pill(label: String, on: Boolean, tap: () -> Unit) = g.ghost(label).apply {
+            textSize = 15f
+            setPadding(px(18f), px(10f), px(18f), px(10f))
+            setSingleLine()
+            isEnabled = on
+            alpha = if (on) 1f else 0.4f
+            if (on) setOnClickListener { tap() }
+        }
+        fun bind() {
+            val card = runCatching { i.card(BlueprintSurface.PANEL) }.getOrNull() ?: return
+            val now = listOf(card.note) + card.rows.map { it.second }
+            if (now == drawn) return
+            drawn = now
+            box.removeAllViews()
+            box.addView(g.label(BLUEPRINTS), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(22f); bottomMargin = px(6f) })
+            card.note?.let { note ->
+                box.addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, px(4f), 0, px(10f))
+                    addView(g.dot(FA), LinearLayout.LayoutParams(px(8f), px(8f)).apply { marginEnd = px(10f) })
+                    addView(g.text(14.5f, MU).apply { text = note; setLineSpacing(0f, 1.2f) }, LinearLayout.LayoutParams(0, -2, 1f))
+                }, LinearLayout.LayoutParams(-1, -2))
+            }
+            for ((bp, action) in card.rows) {
+                box.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)))
+                val right = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                when (action) {
+                    is BlueprintAction.Add -> right.addView(pill("Add to Home Assistant", true) { hide(); i.open(action.url) })
+                    is BlueprintAction.CreateAutomation -> {
+                        right.addView(LinearLayout(context).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            addView(g.dot(Glass.GREEN), LinearLayout.LayoutParams(px(8f), px(8f)).apply { marginEnd = px(8f) })
+                            addView(g.text(14.5f, MU).apply { text = "In Home Assistant"; setSingleLine() })
+                        }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(14f) })
+                        right.addView(pill("Create automation", true) { hide(); i.open(action.url) })
+                    }
+                    is BlueprintAction.Phone -> right.addView(pill("Add from your phone", true) { sheet.qr(bp.name, action.url) })
+                    BlueprintAction.Off -> right.addView(pill("Add to Home Assistant", false) {})
+                }
+                box.addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    minimumHeight = px(64f)
+                    setPadding(0, px(12f), 0, px(12f))
+                    addView(texts(bp.name, bp.summary, TX), LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
+                    addView(right)
+                }, LinearLayout.LayoutParams(-1, -2))
+            }
         }
         bind()
         live += ::bind
@@ -799,6 +876,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             content?.let { body.addView(it, LayoutParams(-1, -2)) }
             body.visibility = if (content != null) View.VISIBLE else View.GONE
             why.visibility = View.GONE
+            cancel.visibility = View.VISIBLE
             saveButton.visibility = if (action != null) View.VISIBLE else View.GONE
             saveButton.text = action.orEmpty()
             busy(false)
@@ -951,6 +1029,32 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 })
             }
             open(i.title, "", chips, null)
+        }
+
+        /**
+         * A blueprint's import as a QR code, for a phone signed in to Home Assistant as an administrator: the
+         * panel's own sign-in isn't one. [url] is My Home Assistant's link, which the phone app opens signed in.
+         */
+        fun qr(blueprint: String, url: String) {
+            val words = g.text(15f, MU).apply {
+                text = "The panel's Home Assistant user isn't an administrator, so it can't add blueprints.\n\n" +
+                    "Scan with a phone signed in to Home Assistant as an administrator. It opens Home Assistant's import dialog with $blueprint filled in."
+                setLineSpacing(0f, 1.25f)
+            }
+            val code = FrameLayout(context).apply {
+                background = g.surface(14f, Color.WHITE, Color.TRANSPARENT)
+                setPadding(px(12f), px(12f), px(12f), px(12f))
+                addView(ImageView(context).apply { setImageBitmap(QrCode.bitmap(url, px(176f))); contentDescription = "QR code: add $blueprint" }, LayoutParams(px(176f), px(176f)))
+            }
+            val content = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(words, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(24f) })
+                addView(code, LinearLayout.LayoutParams(-2, -2))
+            }
+            onSave = { close() }
+            open("Add it from your phone", "", content, "Done")
+            cancel.visibility = View.GONE
         }
 
         /** A question before a change: its words, Cancel and the action. */

@@ -8,6 +8,13 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Add a pane's Home Assistant blueprints from its settings page.** Notifications and Camera have a
+  *Blueprints for Home Assistant* card: the doorbell, a question with buttons on the panels, lights on
+  when someone is at the panel, and a snapshot to your phone when nobody is home. **Add to Home
+  Assistant** opens Home Assistant's own import dialog in the dashboard, filled in; the panel itself
+  never writes to Home Assistant. If the panel's Home Assistant user isn't an administrator, a QR code
+  lets you add it from your phone. The Manage page has the same card, with links that open Home
+  Assistant in a new tab. The doorbell blueprint moved to `panes/notifications/blueprints/`.
 - **On Android 12 and newer, app updates from Home Assistant install without a tap.** On a device
   that isn't an Aqara S1, such as a tablet, pressing Install in Home Assistant now updates the app
   with nobody at the screen, once "Install unknown apps" is allowed for it. If Android still asks,

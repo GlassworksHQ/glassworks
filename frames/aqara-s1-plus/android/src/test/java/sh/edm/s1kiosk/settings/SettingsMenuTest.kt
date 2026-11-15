@@ -55,6 +55,7 @@ class SettingsMenuTest {
             is SettingsItem.States -> listOf("states ${i.title}")
             is SettingsItem.Status -> listOf("status")
             is SettingsItem.Tiles -> listOf("tiles")
+            is SettingsItem.Blueprints -> listOf("blueprints")
         }
     }
 

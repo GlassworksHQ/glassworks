@@ -34,6 +34,7 @@ import sh.edm.s1kiosk.dashboard.Dashboards
 import sh.edm.s1kiosk.discovery.HaUrls
 import sh.edm.s1kiosk.notifications.NotificationOverlay
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
+import sh.edm.s1kiosk.settings.PanelBlueprints
 import sh.edm.s1kiosk.settings.S1Settings
 import sh.edm.s1kiosk.settings.SettingsMenu
 import sh.edm.s1kiosk.setup.Backdrop
@@ -831,7 +832,22 @@ class MainActivity : Activity() {
     private var deviceSettings = false
 
     /** The menu's sections as they are now, the Manage page's too (#242): each pane's page reads its running pane (#212). */
-    private fun settingsModel(): KioskSettingsOverlay.Model = S1Settings.model(glassworks, prefs, panes, deviceSettings, fullScreen = ::pushConfig)
+    private fun settingsModel(): KioskSettingsOverlay.Model =
+        S1Settings.model(glassworks, prefs, panes, deviceSettings, fullScreen = ::pushConfig, blueprints = { id -> blueprints.item(id, ::openBlueprintLink) })
+
+    /** The panes' Blueprints cards: the list, and what the panel's sign-in may do with them (checked off the main thread). */
+    private val blueprints by lazy { PanelBlueprints.forPanel(this, glassworks.build, prefs) }
+
+    /**
+     * A Blueprints card's button: Home Assistant's own page (its import dialog, filled in, or its blueprint
+     * list) in the dashboard, in place, so Back comes back to the dashboard. The panel writes nothing to
+     * Home Assistant; the person does, in Home Assistant's dialog.
+     */
+    private fun openBlueprintLink(url: String) {
+        Log.i(TAG, "Blueprints: opening Home Assistant's page in the dashboard")
+        if (FrontendUrls.sameOrigin(currentUrl, url)) page?.post(JSONObject().put("type", "navigate").put("url", url).put("replace", false))
+        else page?.load(externalize(url))
+    }
 
     private var restartWaitingSince = 0L
 

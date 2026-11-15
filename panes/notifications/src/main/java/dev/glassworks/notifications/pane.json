@@ -4,5 +4,15 @@
   "does": "Home Assistant's notifications over the dashboard, with a picture, buttons and a sound.",
   "requires": [],
   "status": "alpha",
-  "docs": "docs/notifications.md"
+  "docs": "docs/notifications.md",
+  "blueprints": [
+    {
+      "file": "blueprints/doorbell-panels.yaml",
+      "summary": "When the doorbell rings, the panels ring and show the door's view and camera."
+    },
+    {
+      "file": "blueprints/ask-panels.yaml",
+      "summary": "A question with buttons on the panels. Each button runs a script you pick."
+    }
+  ]
 }
