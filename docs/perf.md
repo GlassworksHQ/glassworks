@@ -1662,6 +1662,11 @@ files for anything device-unique (serial, MACs, addresses other than RFC 5737, H
 the report and summary are built to carry none, but a run directory's other files do. The S1's is
 [frames/aqara-s1-plus/clarity/](../frames/aqara-s1-plus/clarity/report.md).
 
+`test_summary.py` checks every `frames/*/clarity/clarity.json` against the command above: it runs
+`summary.py` on the `report.json` beside it, with the committed `report` URL, and fails if the output
+differs by a byte. A hand edit, or a `report.json` changed without regenerating the summary, fails
+CI (#115).
+
 ### Showing the grade
 
 The site computes the letter **at render time** from the frame's summary and `rubric.json`, with
