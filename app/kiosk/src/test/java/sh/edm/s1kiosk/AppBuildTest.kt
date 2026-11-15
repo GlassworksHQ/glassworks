@@ -42,7 +42,7 @@ import java.net.InetAddress
 @Config(sdk = [34], application = Application::class)
 class AppBuildTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val build = AppBuild("9.8.7", 90807, "f00ba47")
+    private val build = AppBuild("9.8.7", 90807, debug = false, testBuild = "f00ba47")
     private val runtime = GlassworksRuntime(AqaraS1Plus(), build)
     private val stops = ArrayList<() -> Unit>()
 
@@ -50,7 +50,7 @@ class AppBuildTest {
 
     @Test fun theApkHandsInItsBuildConfig() {
         val kiosk = KioskApp()
-        assertEquals(AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.TEST_BUILD, BuildConfig.DEBUG), kiosk.build)
+        assertEquals(AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD), kiosk.build)
         assertSame(kiosk.build, kiosk.glassworks.build)
     }
 

@@ -44,7 +44,7 @@ class RadioPaneTest {
     @get:Rule val tmp = TemporaryFolder()
 
     private val app = RuntimeEnvironment.getApplication()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val props = HelperProps()
     private val allow = MemoryAllowStore()
     private var stored: String? = "thread_router"
@@ -58,7 +58,7 @@ class RadioPaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = { published++ }, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
-            build = AppBuild("1.0.0", 10000),
+            build = AppBuild("1.0.0", 10000, debug = false),
         )
         val controller = RadioController(
             props, load = { stored }, store = { stored = it }, inline = true, log = {},

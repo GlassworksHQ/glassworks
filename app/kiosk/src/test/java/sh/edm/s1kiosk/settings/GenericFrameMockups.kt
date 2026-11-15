@@ -57,7 +57,7 @@ class GenericFrameMockups {
             deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.AQARA_DETAIL) {},
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
         )
-        val sections = paneSections(GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000)).paneDefinitions(app))
+        val sections = paneSections(GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app))
         o.show(KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), "0.4.3", sections.map { it.id }.toSet()))
         o.previewSection(section)
         Mockup.idle()
@@ -73,7 +73,7 @@ class GenericFrameMockups {
 
     private fun setup(frame: Frame, step: String): SetupOverlay {
         val a = Mockup.activity()
-        val s = SetupOverlay(a, GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000)).setupPanes(app), frame.friendlyName())
+        val s = SetupOverlay(a, GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false)).setupPanes(app), frame.friendlyName())
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(
             step = step, done = setOf(SetupFlow.WIFI), wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),

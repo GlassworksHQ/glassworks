@@ -108,7 +108,7 @@ class CameraMockups {
                 PaneContext(
                     app, prefs = { file }, DeviceIdentity("panel", "Hallway panel", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
                     publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
-                    build = AppBuild("1.0.0", 10000),
+                    build = AppBuild("1.0.0", 10000, debug = false),
                 ),
                 def.prefs, camera, { byteArrayOf(1) }, stream, egress,
                 permitted = { allowed }, ownSensor = { false }, toScreen = { _, _ -> }, exec = exec,

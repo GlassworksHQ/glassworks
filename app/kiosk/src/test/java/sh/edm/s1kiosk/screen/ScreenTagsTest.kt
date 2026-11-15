@@ -24,7 +24,7 @@ class ScreenTagsTest {
         val context = RuntimeEnvironment.getApplication()
         ShadowLog.clear()
         ShadowPowerManager.reset()
-        val screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).screen
+        val screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen
         screen.start(context)
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(false)
         screen.wake("test")

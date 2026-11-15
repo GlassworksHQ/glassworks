@@ -47,10 +47,10 @@ import java.util.concurrent.ScheduledExecutorService
 class FramePanesTest {
 
     private val app get() = RuntimeEnvironment.getApplication()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
 
     /** The S1's runtime with [frame]'s panes in place of the S1's own. */
-    private fun runtimeWith(frame: Frame) = GlassworksRuntime(AqaraS1Plus(), paneFrame = frame, build = AppBuild("1.0.0", 10000))
+    private fun runtimeWith(frame: Frame) = GlassworksRuntime(AqaraS1Plus(), paneFrame = frame, build = AppBuild("1.0.0", 10000, debug = false))
 
     /**
      * A frame with one pane, "camera": one settings section, and a setup step for each of [steps]

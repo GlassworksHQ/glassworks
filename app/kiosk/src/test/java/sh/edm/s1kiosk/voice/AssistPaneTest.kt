@@ -48,7 +48,7 @@ class AssistPaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = {}, emit = { events += it }, entitiesChanged = { reconnects++ }, sendEvent = { _, _ -> },
-            build = AppBuild("1.0.0", 10000),
+            build = AppBuild("1.0.0", 10000, debug = false),
         ),
         player = object : UrlPlayer {
             override fun play(urls: List<String>, onDone: (Boolean) -> Unit) {}

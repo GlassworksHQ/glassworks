@@ -31,7 +31,7 @@ import sh.edm.s1kiosk.frame.AqaraS1Plus
 @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
 class ManagePaneSwitchesTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val prefs = KioskPrefs(app)
     private val tokens = HaTokenClient(object : HttpPoster {
         override fun postForm(url: String, body: String) = 0 to ""

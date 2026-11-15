@@ -57,7 +57,7 @@ class BaseLayoutEntitiesPinTest {
         val app = RuntimeEnvironment.getApplication()
         KioskPrefs(app).wallBase.layout = layout.encode()
         KioskPrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
-        val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), onVoiceEvent = {})
+        val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), onVoiceEvent = {})
         try {
             val identity = DeviceIdentity(
                 name = "aqara-s1-plus-000001", friendlyName = "Aqara S1 Plus", macAddress = "02:00:00:00:00:01",

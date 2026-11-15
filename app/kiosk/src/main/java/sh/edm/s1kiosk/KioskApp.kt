@@ -10,7 +10,7 @@ import sh.edm.s1kiosk.frame.AqaraS1Plus
 class KioskApp : Application() {
 
     /** This APK's build, from its BuildConfig. Code that can leave this module gets it from here, never from BuildConfig (BuildConfigConfinementTest). */
-    val build = AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.TEST_BUILD, BuildConfig.DEBUG)
+    val build = AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD)
 
     /** Made on first use, when the device is known: the frame is the S1's on its hardware, else the generic one. */
     val glassworks by lazy {

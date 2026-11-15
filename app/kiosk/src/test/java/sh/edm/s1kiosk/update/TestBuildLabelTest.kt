@@ -11,9 +11,9 @@ import java.io.File
 class TestBuildLabelTest {
     private val repo = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, ".github/workflows").isDirectory }
 
-    @Test fun aTestBuildSaysSo() = assertEquals("0.4.3 · test build 28c157d", AppBuild("0.4.3", 403, "28c157d").shown)
+    @Test fun aTestBuildSaysSo() = assertEquals("0.4.3 · test build 28c157d", AppBuild("0.4.3", 403, debug = false, testBuild = "28c157d").shown)
 
-    @Test fun aReleaseIsItsVersion() = assertEquals("0.4.3", AppBuild("0.4.3", 403).shown)
+    @Test fun aReleaseIsItsVersion() = assertEquals("0.4.3", AppBuild("0.4.3", 403, debug = false).shown)
 
     /**
      * Every place that shows the app's version shows [AppBuild.shown], so a test build says so there too

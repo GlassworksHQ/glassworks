@@ -168,7 +168,7 @@ class SendspinRunsTest {
     /** Lazy, so a test can choose its sinks ([realSinks]) before the player makes one. */
     private val player by lazy {
         SendspinPlayer(
-            app, prefs, { null }, DEVICE, AppBuild("1.0.0", 10000),
+            app, prefs, { null }, DEVICE, AppBuild("1.0.0", 10000, debug = false),
             connect = { _, _, hooks ->
                 val first = conns.isEmpty() && firstConnectThread == null
                 if (first && holdFirstConnect) {

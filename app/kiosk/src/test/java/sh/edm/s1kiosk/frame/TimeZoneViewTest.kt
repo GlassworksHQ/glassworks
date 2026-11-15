@@ -44,7 +44,7 @@ class TimeZoneViewTest {
         val ctx = PaneContext(
             app, KioskPrefs(app)::paneFile, DeviceIdentity("t", "T", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
-            build = AppBuild("1.0.0", 10000),
+            build = AppBuild("1.0.0", 10000, debug = false),
         )
         val pane = TimeZonePane(ctx, TimeZonePrefs(KioskPrefs(app).paneFile("time-zone")), TimeZoneKeeper(props, inline = true))
         pane.start()

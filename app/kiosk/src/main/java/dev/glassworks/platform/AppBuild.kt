@@ -17,10 +17,10 @@ data class AppBuild(
     val versionName: String,
     /** Android's versionCode, derived from [versionName] (docs/releasing.md). */
     val versionCode: Int,
+    /** A debug build (the build type's): Gecko remote debugging defaults to on in one. No default, so a new APK can't leave it off by accident. */
+    val debug: Boolean,
     /** A test build's commit, "" for a release. A test build reuses its release's [versionName], so it installs over it. */
     val testBuild: String = "",
-    /** A debug build (the build type's): Gecko remote debugging defaults to on in one. */
-    val debug: Boolean = false,
 ) {
     /** The version people see (#263): "0.4.3", or "0.4.3 · test build 28c157d". */
     val shown: String get() = if (testBuild.isEmpty()) versionName else "$versionName · test build $testBuild"

@@ -48,7 +48,7 @@ class PaneCatalogTest {
     }
 
     private val definitionIds by lazy {
-        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).paneDefinitions(RuntimeEnvironment.getApplication()).map { it.id }
+        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(RuntimeEnvironment.getApplication()).map { it.id }
     }
 
     /**

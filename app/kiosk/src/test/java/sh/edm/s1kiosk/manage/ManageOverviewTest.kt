@@ -42,7 +42,7 @@ class ManageOverviewTest {
         override fun get(url: String, maxBytes: Int) = 0 to ""
     })
     private fun manage(context: Context = app, version: String = "0.4.3") =
-        S1Manage(context, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app), version)
+        S1Manage(context, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app), version)
     private val manage = manage()
 
     private fun wifi() = manage.status().tiles.single { it.label == "Wi-Fi" }

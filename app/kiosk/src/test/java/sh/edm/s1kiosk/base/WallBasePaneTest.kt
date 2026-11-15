@@ -39,7 +39,7 @@ class WallBasePaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = {}, emit = {}, entitiesChanged = { changes++ }, sendEvent = { e, t -> sent += e to t },
-            build = AppBuild("1.0.0", 10000),
+            build = AppBuild("1.0.0", 10000, debug = false),
         ),
         WallBase.Config(BaseBackend.LOCALSERVICE),
         device,
@@ -132,7 +132,7 @@ class WallBasePaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
-            build = AppBuild("1.0.0", 10000),
+            build = AppBuild("1.0.0", 10000, debug = false),
         ),
         config, device, init.cloud,
     )

@@ -34,7 +34,7 @@ class BluetoothProxyPaneTest {
     private val ctx = PaneContext(
         RuntimeEnvironment.getApplication(), prefs = { throw IllegalArgumentException(it) }, identity,
         publishStates = {}, emit = {}, entitiesChanged = { rebuilds++ }, sendEvent = { _, _ -> },
-        build = AppBuild("1.0.0", 10000),
+        build = AppBuild("1.0.0", 10000, debug = false),
     )
 
     /** Records what each scanner it hands out is asked, in order. */

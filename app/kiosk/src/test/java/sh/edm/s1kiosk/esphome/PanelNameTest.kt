@@ -30,7 +30,7 @@ import java.net.InetAddress
 class PanelNameTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val devices = ArrayList<PanelDevice>()
 
     @Before fun setUp() {

@@ -57,7 +57,7 @@ class DiagnosticsPaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = { published++ }, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
-            build = AppBuild("1.0.0", 10000),
+            build = AppBuild("1.0.0", 10000, debug = false),
         ),
         hasTemperature, exec, probe,
     )

@@ -117,7 +117,7 @@ class PanePrefsTest {
             compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
         ),
         publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
-        build = AppBuild("1.0.0", 10000),
+        build = AppBuild("1.0.0", 10000, debug = false),
     )
 
     /** Builds each pane and drives it through what reads and writes settings; yields it before the next. */
@@ -125,8 +125,8 @@ class PanePrefsTest {
         yield(drive(SendspinPane(ctx, haBase = { null }), SendspinPrefs.KEY_FLAC))
         yield(drive(assist(), VoicePrefs.KEY_MIC_GAIN, start = false))
         yield(drive(WallBasePane(ctx, WallBase.Config(BaseBackend.LOCALSERVICE), device, AqaraCloud()), start = false))
-        yield(drive(RadioPane(ctx, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), panelIp = { null }), start = false))
-        yield(drive(TimersPane(ctx, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).screen, schedule = { _, _ -> device.submit {} }, play = {}, silence = {})))
+        yield(drive(RadioPane(ctx, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), panelIp = { null }), start = false))
+        yield(drive(TimersPane(ctx, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen, schedule = { _, _ -> device.submit {} }, play = {}, silence = {})))
         yield(drive(BluetoothProxyPane(ctx, NoRadio, device)))
     }
 

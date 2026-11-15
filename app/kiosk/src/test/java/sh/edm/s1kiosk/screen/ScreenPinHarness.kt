@@ -54,7 +54,7 @@ class ScreenPinHarness {
         if (::screen.isInitialized) detach()
         ShadowPowerManager.reset()
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(screenOn)
-        screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).screen
+        screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen
         screen.start(context)
         screen.onKeepScreenOn = { keepOnCalls += it }
         screen.onBrightness = { brightnessCalls += it }

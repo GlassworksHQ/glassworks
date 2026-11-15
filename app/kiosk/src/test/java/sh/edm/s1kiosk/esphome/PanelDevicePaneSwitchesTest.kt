@@ -35,7 +35,7 @@ import java.net.Socket
 class PanelDevicePaneSwitchesTest {
     private val app = RuntimeEnvironment.getApplication()
     private val exec = ManualExecutor()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val mdns = RecordingMdns()
     private lateinit var device: PanelDevice
     private val port get() = mdns.starts.single().port

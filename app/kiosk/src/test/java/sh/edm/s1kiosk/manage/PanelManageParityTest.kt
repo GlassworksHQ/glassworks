@@ -156,14 +156,14 @@ class PanelManageParityTest {
      */
     @Test fun everyPaneHasOneSection() {
         val model = panes.model(panes.all())()
-        val ids = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)).paneDefinitions(app).map { it.id }.toSet()
+        val ids = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { it.id }.toSet()
         val sections = model.sections.filter { it.id in model.panes }.map { it.id }
         assertTrue("each pane section has its pane's id: $sections", sections.all { it in ids })
         assertEquals("one section per pane", sections.distinct(), sections)
     }
 
     @Test fun theManagePageReadsThePanelMenusOwnModel() {
-        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
+        val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val prefs = KioskPrefs(app)
         val tokens = HaTokenClient(object : HttpPoster {
             override fun postForm(url: String, body: String) = 0 to ""

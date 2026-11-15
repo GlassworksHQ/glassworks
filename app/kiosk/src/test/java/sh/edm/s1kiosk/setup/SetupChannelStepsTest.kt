@@ -65,7 +65,7 @@ class SetupChannelStepsTest {
     }
 
     @Before fun s1() {
-        runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000))
+        runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val prefs = KioskPrefs(app)
         runtime.radio = RadioController(
             TestInit(), load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,

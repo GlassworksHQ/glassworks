@@ -40,7 +40,7 @@ class PanelDeviceApiBindTest {
         val port = ApiServer.DEFAULT_PORT
         assumeTrue("port $port is in use on this machine", portFree(port))
 
-        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)), onVoiceEvent = {})
+        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), onVoiceEvent = {})
         try {
             device.startInternal()
             Socket().use { s ->
@@ -58,7 +58,7 @@ class PanelDeviceApiBindTest {
         val lan = lanAddress()
         assumeTrue("this machine has no non-loopback IPv4 address", lan != null)
         val mdns = RecordingMdns()
-        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000)),
+        val device = PanelDevice(RuntimeEnvironment.getApplication(), GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)),
             onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = ManualExecutor(), mdns = mdns, apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress())
         try {
