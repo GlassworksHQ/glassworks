@@ -200,7 +200,16 @@ class OnvifServerTest {
         now += 12 * 3600_000L + 1
         val aged = get(nonce)
         assertEquals(401, aged.status)
-        assertTrue("stale=true, so the client signs in again once", aged.headers.first { it.second.startsWith("Digest") }.second.contains("stale=true"))
+        val again = aged.headers.first { it.second.startsWith("Digest") }.second
+        assertTrue("stale=true, so the client signs in again once", again.contains("stale=true"))
+        val fresh = Regex("nonce=\"([^\"]+)\"").find(again)!!.groupValues[1]
+        assertEquals("signed in again with the fresh nonce", 200, get(fresh).status)
+        // A wrong Digest response on a nonce the panel never issued: refused, and not stale.
+        val bogus = "Digest username=\"$user\", realm=\"Glassworks\", nonce=\"0123456789abcdef0123456789abcdef\", uri=\"$path\", " +
+            "qop=auth, nc=00000001, cnonce=\"abc\", response=\"00000000000000000000000000000000\""
+        val refused = s.handle("GET", path, mapOf("authorization" to bogus), ByteArray(0))
+        assertEquals(401, refused.status)
+        assertTrue("a wrong response isn't stale, even on an unknown nonce", refused.headers.none { it.second.contains("stale=true") })
         val wrong = s.handle("GET", path, mapOf("authorization" to "Basic " + OnvifBase64.encode("$user:wrong".toByteArray())), ByteArray(0))
         assertEquals(401, wrong.status)
         assertTrue("a wrong password isn't stale", wrong.headers.none { it.second.contains("stale=true") })
