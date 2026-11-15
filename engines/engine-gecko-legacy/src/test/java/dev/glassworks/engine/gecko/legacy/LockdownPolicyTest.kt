@@ -31,6 +31,21 @@ class LockdownPolicyTest {
         assertTrue(fresh.allows(Load.PAGE, "about:blank"))
     }
 
+    /**
+     * Gecko writes faß and fa%C3%9F as xn--fa-hia, which Android's IDN can't reproduce: such a dashboard URL sets no
+     * origin, so the app's own load of it, and every page from Gecko's spelling of that host, is refused (#346 review).
+     */
+    @Test fun `a dashboard host Gecko would write differently allows nothing`() {
+        for (configured in listOf("http://faß.example.org:8123/", "http://fa%C3%9F.example.org:8123/")) {
+            val fresh = LockdownPolicy()
+            assertFalse(configured, fresh.appLoads(configured))
+            assertNull(configured, fresh.origin)
+            assertFalse(configured, fresh.allows(Load.PAGE, configured))
+            assertFalse(configured, fresh.allows(Load.PAGE, "http://xn--fa-hia.example.org:8123/"))
+            assertFalse(configured, fresh.allows(Load.FRAME, "http://xn--fa-hia.example.org:8123/frame"))
+        }
+    }
+
     @Test fun `an app load that isn't a network URL leaves the origin alone`() {
         assertFalse(policy.appLoads("about:blank"))
         assertFalse(policy.appLoads("data:text/html,hi"))

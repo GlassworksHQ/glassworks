@@ -89,11 +89,15 @@ test("the app's Unicode dashboard URL matches Gecko's punycode requests", () => 
 });
 
 test("a dashboard URL whose host Gecko would write differently allows nothing (fails closed)", () => {
-  // Gecko writes each of these hosts as xn--fa-hia.example.org; neither parser stores an origin for them.
+  // Gecko writes each of these hosts as xn--fa-hia.example.org; neither parser stores an origin for them. The app's
+  // navigation delegate then refuses the page itself (LockdownPolicyTest), so no document of that host exists to
+  // stand in, and a request in Gecko's spelling, or IDNA 2003's, is refused.
   for (const configured of ["http://faß.example.org:8123/", "http://fa%C3%9F.example.org:8123/"]) {
     const ha = P.origin(configured);
     assert.equal(ha, null, configured);
-    assert.equal(P.decide(req("http://fass.example.org:8123/x.js", "script", { documentUrl: undefined }), ha).allow, false, configured);
+    for (const url of ["http://xn--fa-hia.example.org:8123/x.js", "http://fass.example.org:8123/x.js"]) {
+      assert.equal(P.decide({ url, type: "script" }, ha).allow, false, `${configured} → ${url}`);
+    }
   }
 });
 
