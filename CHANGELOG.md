@@ -93,6 +93,14 @@ below as the release notes.
   Diagnostic section.
 
 ### Added
+- **A camera pane for panels with a camera.** On a tablet with a camera (not the S1), the panel can
+  wake its screen when someone walks up, using motion that ignores lights switching on, dusk and TV
+  light; no image leaves the panel for that. You can also let Home Assistant take snapshots, and
+  turn on an ONVIF and RTSP stream (ports 8554 and 8000) for Home Assistant's ONVIF integration,
+  Frigate or UniFi Protect. The first time you turn the stream on, the panel makes its own sign-in:
+  the username `glassworks` and a random password, never shared between panels. Everything is off
+  until you turn it on, and *Camera privacy* closes the camera. On the S1, which has no camera, the
+  panel's settings say the pane can't run, and Home Assistant gets nothing new.
 - **The panel can be a Bluetooth proxy for Home Assistant.** Turn on *Bluetooth proxy* in the
   panel's settings or on setup's Panes step, and Home Assistant finds it by itself and hears the
   Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a
@@ -156,6 +164,12 @@ below as the release notes.
   a wake that wasn't a touch (Home Assistant's screen switch, a timer, voice, Wi-Fi setup) turned the
   screen off again after about 20 seconds. Now it stays on until the panel's idle timeout, as after
   a touch.
+- **An update or app restart no longer leaves the panel crash-looping for minutes.** Android 10 on
+  the S1 has a bug that shows after about two dozen restarts of the app: from then on, no app can
+  start, and the screen stays black or white until Android restarts itself, after anything from a
+  second to about 11 minutes. The panel now notices within 30 seconds and restarts Android's
+  framework at once, which takes about a minute. An update that was interrupted this way now checks
+  whether it went in, instead of reporting an error. It reaches a panel when you run the installer again.
 - **A pane you turn off stays off after a restart.** Turning voice or music off, then restarting
   the app at once, could bring the pane back on: the setting was saved after the app had gone.
   Zoom, secure hosts and remote debugging, which restart the app, could lose their change the same

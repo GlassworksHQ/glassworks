@@ -4,7 +4,8 @@
  * 7b5e6f28; a fork of DigitallyRefined/android-ip-camera. Copyright (c) 2025 DigitallyRefined and
  * contributors. The licence text is in THIRD-PARTY-NOTICES.md and LICENSES/MIT.txt.
  * Changes: package; with no credentials, or a username without a password, every request that needs a
- * user is refused (upstream let everyone in). */
+ * user is refused (upstream let everyone in); the panel's name in place of "AndroidIPCamera"; at most 64
+ * headers and 32 KiB in a request head. */
 
 package dev.glassworks.camera.onvif
 
@@ -56,16 +57,24 @@ class OnvifServer(
     private val credentials: () -> Pair<String, String>?,
     private val snapshot: (() -> ByteArray?)? = null,
     private val onLog: (String) -> Unit = {},
+    /** The time for Digest nonces' age ([NONCE_MS]); a test passes its own. */
+    private val clock: () -> Long = System::currentTimeMillis,
     private val discoveryPort: Int = 3702,
-    private val enableDiscovery: Boolean = true
+    private val enableDiscovery: Boolean = true,
+    /** Glassworks: the panel's name, for the auth realm, the Server header and the host name fallback. */
+    private val name: String = "Glassworks",
 ) {
     companion object {
-        private const val REALM = "AndroidIPCamera"
         private const val MAX_BODY = 1 shl 20
+        private const val MAX_HEADERS = 64
+        private const val MAX_HEADER_BYTES = 32 * 1024
         private const val MAX_SUBSCRIPTIONS = 16
         private const val MAX_QUEUED = 200
         private const val DEFAULT_SUB_MS = 10 * 60_000L
         private const val MAX_PULL_WAIT_MS = 60_000L
+        private const val REFUSAL_LOG_MS = 60_000L
+        /** A Digest nonce's life, as RTSP's (RtspAuth): 12 h. */
+        private const val NONCE_MS = 12 * 3600_000L
         private const val TOPIC_DIALECT = "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet"
         private const val TOPIC_CELL = "tns1:RuleEngine/CellMotionDetector/Motion"
         private const val TOPIC_ALARM = "tns1:VideoSource/MotionAlarm"
@@ -101,6 +110,8 @@ class OnvifServer(
     private val issuedNonces = object : LinkedHashMap<String, Long>(64, 0.75f, false) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?) = size > 256
     }
+    /** Glassworks: was the constant "AndroidIPCamera". */
+    private val realm = name.replace("\"", "")
     @Volatile private var motion = false
     private val openSockets = ConcurrentHashMap.newKeySet<Socket>()
 
@@ -220,9 +231,13 @@ class OnvifServer(
         val parts = line.split(' ')
         if (parts.size < 2) return null
         val headers = HashMap<String, String>()
+        var headerBytes = 0
         while (true) {
             val h = readLine(input) ?: break
             if (h.isEmpty()) break
+            // Glassworks: a bound on the head, before sign-in can run.
+            headerBytes += h.length
+            if (headers.size >= MAX_HEADERS || headerBytes > MAX_HEADER_BYTES) throw IllegalStateException("request head too large")
             val i = h.indexOf(':')
             if (i > 0) headers[h.substring(0, i).trim().lowercase()] = h.substring(i + 1).trim()
         }
@@ -243,7 +258,7 @@ class OnvifServer(
         val sb = StringBuilder("HTTP/1.1 ${r.status} $reason\r\n")
         sb.append("Content-Type: ${r.contentType}\r\n")
         sb.append("Content-Length: ${r.body.size}\r\n")
-        sb.append("Server: AndroidIPCamera-ONVIF\r\n")
+        sb.append("Server: ${name.replace(Regex("[\r\n]"), " ")} ONVIF\r\n")
         sb.append("Connection: ${if (keepAlive) "keep-alive" else "close"}\r\n")
         r.headers.forEach { (k, v) -> sb.append("$k: $v\r\n") }
         sb.append("\r\n")
@@ -278,13 +293,30 @@ class OnvifServer(
         if (action != "PullMessages") onLog("ONVIF $action from $who")
 
         if (action !in UNAUTHENTICATED) {
-            when (checkAuth(header, method, rawPath, headers)) {
+            val auth = checkAuth(header, method, rawPath, headers)
+            if (auth == AuthResult.BAD || auth == AuthResult.MISSING) refused(who, action, auth)
+            // Events (PullMessages, Renew, CreatePullPointSubscription…): any refusal is a bare HTTP 401 with the
+            // challenge and no SOAP body. Home Assistant's pull loop (2026.11.1, onvif-zeep-async 4.3.0) answers
+            // a SOAP fault there by renewing and re-creating at once, every 0.75 s; a 401 without a body is a
+            // TransportError to it, after which it waits 60 s. Its setup and config flow call the device and
+            // media services first, which keep the SOAP fault: "auth failed" in the config flow, a reauth at setup.
+            if (auth != AuthResult.OK && (ns == OnvifNs.TEV || ns == OnvifNs.WSNT)) {
+                return unauthorized("text/plain; charset=utf-8", ByteArray(0), stale = auth == AuthResult.STALE)
+            }
+            when (auth) {
                 AuthResult.OK -> {}
                 AuthResult.MISSING -> return unauthorized(
                     "application/soap+xml; charset=utf-8",
                     OnvifXml.fault("ter:NotAuthorized", "Sender not authorized").toByteArray()
                 )
+                // A wrong sign-in gets a final SOAP fault (env:Sender, ter:NotAuthorized) and no new challenge, so
+                // nothing invites a retry. Only a Digest nonce we no longer know gets one, marked stale.
                 AuthResult.BAD -> return soapFault("ter:NotAuthorized", "Sender not authorized", 400)
+                AuthResult.STALE -> return unauthorized(
+                    "application/soap+xml; charset=utf-8",
+                    OnvifXml.fault("ter:NotAuthorized", "Sender not authorized").toByteArray(),
+                    stale = true,
+                )
             }
         }
 
@@ -308,21 +340,40 @@ class OnvifServer(
 
     private fun fault(code: String, msg: String) = "FAULT:$code|$msg"
 
+    /** When each client's refusal was last logged. */
+    private val refusalsLogged = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * Glassworks: says when a client's sign-in is refused, at most once a minute per client, never with the
+     * username or password. Home Assistant's ONVIF integration answers a refused PullMessages by renewing
+     * and re-creating its subscription every 0.75 s (the tablet run on 2026-11-14, with an entry that kept
+     * an older app's sign-in); without this line the log showed only those Renew and Create calls.
+     */
+    private fun refused(who: String, action: String, why: AuthResult) {
+        val now = System.currentTimeMillis()
+        val last = refusalsLogged[who]
+        if (last != null && now - last < REFUSAL_LOG_MS) return
+        refusalsLogged[who] = now
+        if (refusalsLogged.size > 64) refusalsLogged.entries.removeIf { now - it.value >= REFUSAL_LOG_MS }
+        val reason = if (why == AuthResult.MISSING) "no sign-in sent, or none is set on the panel" else "the sign-in doesn't match the stream's"
+        onLog("ONVIF $action from $who refused: $reason (said once a minute per client)")
+    }
+
     private fun soapFault(code: String, msg: String, status: Int) =
         HttpResponse(status, OnvifXml.fault(code, msg, sender = status < 500).toByteArray(Charsets.UTF_8))
 
-    private fun unauthorized(ct: String, body: ByteArray): HttpResponse {
+    private fun unauthorized(ct: String, body: ByteArray, stale: Boolean = false): HttpResponse {
         val nonce = OnvifXml.randomHex()
-        synchronized(issuedNonces) { issuedNonces[nonce] = System.currentTimeMillis() }
+        synchronized(issuedNonces) { issuedNonces[nonce] = clock() }
         return HttpResponse(401, body, ct, listOf(
-            "WWW-Authenticate" to "Digest realm=\"$REALM\", qop=\"auth\", nonce=\"$nonce\", algorithm=MD5",
-            "WWW-Authenticate" to "Basic realm=\"$REALM\""
+            "WWW-Authenticate" to "Digest realm=\"$realm\", qop=\"auth\", nonce=\"$nonce\", algorithm=MD5" + if (stale) ", stale=true" else "",
+            "WWW-Authenticate" to "Basic realm=\"$realm\""
         ))
     }
 
     // ===================================================================== auth
 
-    internal enum class AuthResult { OK, MISSING, BAD }
+    internal enum class AuthResult { OK, MISSING, BAD, STALE }
 
     private fun creds(): Pair<String, String>? = credentials()?.takeIf { it.first.isNotBlank() && it.second.isNotEmpty() }
 
@@ -331,7 +382,7 @@ class OnvifServer(
         val c = creds() ?: return AuthResult.MISSING
         val token = OnvifXml.find(header, "UsernameToken")
         if (token != null) return if (verifyUsernameToken(token, c)) AuthResult.OK else AuthResult.BAD
-        if (headers["authorization"] != null) return if (httpAuthOk(method, uri, headers)) AuthResult.OK else AuthResult.BAD
+        if (headers["authorization"] != null) return httpAuth(method, uri, headers)
         return AuthResult.MISSING
     }
 
@@ -351,31 +402,57 @@ class OnvifServer(
         }
     }
 
-    internal fun httpAuthOk(method: String, uri: String, headers: Map<String, String>): Boolean {
-        val c = creds() ?: return false
-        val auth = headers["authorization"] ?: return false
+    internal fun httpAuthOk(method: String, uri: String, headers: Map<String, String>): Boolean = httpAuth(method, uri, headers) == AuthResult.OK
+
+    /**
+     * HTTP Basic or Digest. Digest is checked against the nonce the client sent: the right password with a
+     * nonce we didn't issue or have forgotten (the stream turned off and on, or it aged out) is STALE, so
+     * the client gets a fresh challenge and signs in again once (RFC 7616 `stale=true`); a wrong one is BAD.
+     */
+    private fun httpAuth(method: String, uri: String, headers: Map<String, String>): AuthResult {
+        val c = creds() ?: return AuthResult.MISSING
+        val auth = headers["authorization"] ?: return AuthResult.MISSING
         return when {
             auth.startsWith("Basic ", true) -> {
-                val dec = OnvifBase64.decode(auth.substring(6).trim())?.toString(Charsets.UTF_8) ?: return false
+                val dec = OnvifBase64.decode(auth.substring(6).trim())?.toString(Charsets.UTF_8) ?: return AuthResult.BAD
                 val i = dec.indexOf(':')
-                i > 0 && OnvifXml.constantTimeEquals(dec.substring(0, i), c.first) &&
+                val ok = i > 0 && OnvifXml.constantTimeEquals(dec.substring(0, i), c.first) &&
                     OnvifXml.constantTimeEquals(dec.substring(i + 1), c.second)
+                if (ok) AuthResult.OK else AuthResult.BAD
             }
             auth.startsWith("Digest ", true) -> {
                 val p = parseAuthParams(auth.substring(7))
-                if (p["username"] != c.first) return false
-                val nonce = p["nonce"] ?: return false
-                if (synchronized(issuedNonces) { !issuedNonces.containsKey(nonce) }) return false
-                val realm = p["realm"] ?: REALM
+                if (p["username"] != c.first) return AuthResult.BAD
+                // Our realm only, and the request's own path, as RTSP checks (#239 verifier f41eab5d).
+                if (p["realm"] != realm) return AuthResult.BAD
+                val digestUri = p["uri"] ?: return AuthResult.BAD
+                if (!sameResource(digestUri, uri)) return AuthResult.BAD
+                val nonce = p["nonce"] ?: return AuthResult.BAD
                 val ha1 = OnvifXml.md5Hex("${c.first}:$realm:${c.second}")
-                val ha2 = OnvifXml.md5Hex("$method:${p["uri"] ?: uri}")
+                val ha2 = OnvifXml.md5Hex("$method:$digestUri")
                 val expected = if (p["qop"] != null)
                     OnvifXml.md5Hex("$ha1:$nonce:${p["nc"]}:${p["cnonce"]}:${p["qop"]}:$ha2")
                 else OnvifXml.md5Hex("$ha1:$nonce:$ha2")
-                OnvifXml.constantTimeEquals(expected, p["response"].orEmpty())
+                val issued = synchronized(issuedNonces) { issuedNonces[nonce] }
+                when {
+                    !OnvifXml.constantTimeEquals(expected, p["response"].orEmpty()) -> AuthResult.BAD
+                    // Not ours, forgotten, or older than RTSP's 12 h: the right password signs in again once.
+                    issued == null || clock() - issued > NONCE_MS -> AuthResult.STALE
+                    else -> AuthResult.OK
+                }
             }
-            else -> false
+            else -> AuthResult.BAD
         }
+    }
+
+    /**
+     * The Digest `uri` names the resource requested ([request]: its path and query): as sent, or in
+     * absolute form (`http://host:port/path`, RFC 7616 allows it) with the same path.
+     */
+    private fun sameResource(digestUri: String, request: String): Boolean {
+        val abs = Regex("^https?://[^/]*(/.*)?$", RegexOption.IGNORE_CASE).find(digestUri)
+        val path = if (abs != null) abs.groupValues[1].ifEmpty { "/" } else digestUri
+        return path == request
     }
 
     private fun parseAuthParams(s: String): Map<String, String> {
@@ -457,7 +534,7 @@ class OnvifServer(
                 "<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>${e(it)}</tt:ScopeItem></tds:Scopes>"
             } + "</tds:GetScopesResponse>"
             "GetHostname" -> "<tds:GetHostnameResponse><tds:HostnameInformation><tt:FromDHCP>false</tt:FromDHCP>" +
-                "<tt:Name>${e(i.name.replace(Regex("[^A-Za-z0-9-]"), "-").trim('-').ifEmpty { "android-ip-camera" })}</tt:Name></tds:HostnameInformation></tds:GetHostnameResponse>"
+                "<tt:Name>${e(i.name.replace(Regex("[^A-Za-z0-9-]"), "-").trim('-').ifEmpty { "glassworks-camera" })}</tt:Name></tds:HostnameInformation></tds:GetHostnameResponse>"
             "GetNetworkInterfaces" -> "<tds:GetNetworkInterfacesResponse><tds:NetworkInterfaces token=\"eth0\">" +
                 "<tt:Enabled>true</tt:Enabled><tt:Info><tt:Name>wlan0</tt:Name><tt:HwAddress>${e(macColon())}</tt:HwAddress><tt:MTU>1500</tt:MTU></tt:Info>" +
                 "<tt:IPv4><tt:Enabled>true</tt:Enabled><tt:Config><tt:Manual><tt:Address>${e(host())}</tt:Address><tt:PrefixLength>24</tt:PrefixLength></tt:Manual><tt:DHCP>true</tt:DHCP></tt:Config></tt:IPv4>" +

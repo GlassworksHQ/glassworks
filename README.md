@@ -92,6 +92,8 @@ A pane is a feature the panel can run or leave out. These are the panes today:
 - **Bluetooth proxy**: the panel listens for Bluetooth devices and passes them to Home Assistant.
 - **Notifications**: Home Assistant's notifications over the dashboard, with a picture, buttons and a
   sound, or a dashboard view full screen for a doorbell.
+- **Camera**: on a panel with a camera, presence from motion, snapshots and an opt-in ONVIF/RTSP
+  stream for Home Assistant ([entities](docs/esphome.md#camera-entities)). New, not yet run on a device.
 
 Each frame's README rates the panes its `frame.json` lists. The [pane API](app/kiosk/src/main/java/dev/glassworks/README.md)
 says how to write one, and [What makes a pane](app/kiosk/src/main/java/dev/glassworks/README.md#what-makes-a-pane)

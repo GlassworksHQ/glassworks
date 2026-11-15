@@ -2,6 +2,13 @@
 """Build report.json and report.md from a tools/perf run directory (MIT). Offline; no adb.
 
     python3 tools/perf/report.py <run-dir> [--apk app.apk ...] [--budgets frames/<id>/budgets.json]
+                                 [--out DIR] [--app-version LABEL]
+
+--out writes report.json and report.md there instead of into the run directory (a published copy,
+e.g. frames/<id>/clarity/; the run's own files stay as they are). --app-version shows LABEL as the
+app's version, in place of the version the device reported (e.g. "pre-v1" for a build before the
+app's first release): report.md, report.json and the APK sizes show it as given, and nothing in the
+grade reads it.
 
 The report schema (glassworks.perf/4) is documented in docs/perf.md.
 """
@@ -294,6 +301,21 @@ def change_to_screen(step, page, period=None):
             "max_ms": xs[-1], "skipped": skipped}, None
 
 
+def _good_max_gap_ms():
+    """The longest gap the camera's "good" level allows (rubric.json camera_levels), by name."""
+    good = next((lv for lv in G.CAMERA_LEVELS if lv.get("level") == "good"), None)
+    if not good or "max_gap_max_ms" not in good:
+        raise RuntimeError("rubric.json camera_levels needs a 'good' level with max_gap_max_ms (report.CAMERA_UNCOVERED_MAX_MS)")
+    return good["max_gap_max_ms"]
+
+
+# The most of a camera's window its receiver counts may leave out: the longest gap "good" allows
+# (500 ms). A longer stretch could hold a stall the counts never saw.
+CAMERA_UNCOVERED_MAX_MS = _good_max_gap_ms()
+# Fluid's bar on the stalls added up (1000 ms), for the report's words.
+FLUID_STALL_TOTAL_MS = next(lv["stall_total_max_ms"] for lv in G.CAMERA_LEVELS if "stall_total_max_ms" in lv)
+
+
 def camera_run(line, tier):
     """One run's live cameras (#174), from the harness's camera line: the worst stream's first frame
     (from the navigation, so it includes building the view), share of frames shown, longest gap and stalls (gaps over 500 ms) added
@@ -308,6 +330,15 @@ def camera_run(line, tier):
     # reported no freeze counts (stall_total_ms null), or there was no span to measure gaps over (one
     # sample, nothing decoded: max_gap_ms null). Both are n/a, never 0.
     unreported = [s for s in played if s.get("stall_total_ms") is None or s.get("max_gap_ms") is None]
+    # Streams whose receiver counts cover less of the window than a stall can hide in (#255): a busy
+    # page answers getStats late, and the counts end at the last answer back by statsWaitMs. What
+    # came after it is unknown, not stall-free, so these stalls and gaps are n/a too.
+    window = line.get("window_ms")
+    short = [s for s in played if s.get("span_ms") is not None and window and window - s["span_ms"] > CAMERA_UNCOVERED_MAX_MS]
+    unreported += [s for s in short if s not in unreported]
+    # Shorter ones are graded, but their stalls can be under-read by up to what they left out: the
+    # graders hold the fluid total bar against stalls + that (grade.camera_level).
+    left_out = [max(0.0, window - s["span_ms"]) for s in played if s.get("span_ms") is not None and window]
     whole = len(played) == len(streams) and len(streams) >= (line.get("expected") or 0)
     return {
         # The path the frontend played the graded streams on: web_rtc since protocol 6, hls before
@@ -320,6 +351,8 @@ def camera_run(line, tier):
         "max_gap_ms": max(s["max_gap_ms"] for s in played) if whole and played and not unreported else None,
         "stall_total_ms": max(s["stall_total_ms"] for s in played) if whole and played and not unreported else None,
         **({"stalls_reported": False} if whole and played and unreported else {}),
+        # The most of the window a stream's receiver counts left out (0 when they cover it; none over HLS).
+        **({"uncovered_ms": round(max(left_out), 1)} if whole and left_out else {}),
         "streams": len(streams), "expected": line.get("expected"), "window_ms": line.get("window_ms"),
         "detail": [{k: s.get(k) for k in ("w", "h", "first_frame_ms", "shown_pct", "max_gap_ms", "stall_total_ms", "stall_presented",
                                             "frames", "decoded", "dropped", "waiting", "source", "webrtc", "others",
@@ -883,8 +916,18 @@ def task_phrase(task, s_):
             return "a camera never showed a frame"
         shown = statistics.median(r["shown_pct"] for r in runs if r.get("shown_pct") is not None)
         failed = len(runs) - len(ff)
+        na = sum(1 for r in runs if r.get("stalls_reported") is False)
         return (f"a camera takes {statistics.median(ff) / 1000:.1f} s to show its first frame and shows {shown:.0f}% of its frames"
-                + (f" ({failed} of {len(runs)} run(s) had a stream that showed no frame)" if failed else ""))
+                + (f" ({failed} of {len(runs)} run(s) had a stream that showed no frame)" if failed else "")
+                + (f"; its stalls weren't measured in {na} of {len(runs)} run(s)" if na else ""))
+    if task == "blocking":
+        # Rubric 2: the wait after the draw, its own task; never the open's words (s1rtc10's headline
+        # read "the view takes 1.2 s to open" for a page held back by 2.9 s of blocking).
+        if med("blocking_ms") is None:
+            return "the blocking after the view is drawn wasn't measured"
+        return f"the main thread is blocked for {med('blocking_ms') / 1000:.1f} s after the view is drawn"
+    if task != "load":
+        raise ValueError(f"no words for task {task!r}")
     if med("load_ms") is not None:
         return f"the view takes {med('load_ms') / 1000:.1f} s to open"
     return "opening the view wasn't measured"
@@ -911,7 +954,9 @@ def headline(name, g, ref):
     for t, phrases in hb:
         if phrases:
             # "typical dashboards", "typical dashboards with a camera" (rubric v10, #205).
-            label = "typical dashboards with a camera" if t == "typical" else f"{LABEL.get(t, t)} dashboards"
+            # And "without a camera" for typical-nocam: its numbers aren't typical-with-a-camera's (#255's review).
+            label = {"typical": "typical dashboards with a camera",
+                     "typical-nocam": "typical dashboards without a camera"}.get(t, f"{LABEL.get(t, t)} dashboards")
             out += f" {lead} {label}: " + "; ".join(phrases) + "."
     if g["capped_by_start"]:
         out += f" A slow restart ({g['start']['value'] / 1000:.1f} s) caps it at {G.START_CAP}."
@@ -1180,7 +1225,7 @@ def reference_ram(ref_idles, refstarts, package, budgets, mem_total_kb):
             "samples": len(bm),
             "app_pss_kb": max(m["app_pss_kb"] for m in bm),
             "by_role_pss_kb": {r: max(m["by_role"].get(r, {}).get("pss_kb", 0) for m in bm) for r in roles},
-            # Each process's peak RSS since it started (VmHWM), summed: catches a peak between two samples.
+            # Each process's peak RSS since it started (VmHWM), summed: includes a peak between two samples, as RSS (an upper bound on PSS).
             "app_rss_hwm_kb": max(sum(r["rss_peak_kb"] for r in m["by_role"].values()) for m in bm),
             "mem_available_min_kb": min((m["mem_available_kb"] for m in bm if m["mem_available_kb"] is not None), default=None),
         } if bm else None,
@@ -1324,7 +1369,25 @@ def coverage_reasons(ref, attempted):
         short = [f"{task} {n} of {attempted}" for task, n in got.items() if 0 < n < attempted]
         if short:
             out.append(f"{t}: measured in fewer runs than attempted ({', '.join(short)})")
-        na = sum(1 for c in (s_ or {}).get("camera_runs") or [] if c.get("stalls_reported") is False)
+        # Camera runs whose level is left open, and which bar couldn't be settled (grade.camera_level_why):
+        # stalls n/a; good's gap, which with what the counts left out could pass 500 ms; or fluid's
+        # total, which could reach 1 s. A first frame or frames shown that already fail every level
+        # decide it, and those aren't open.
+        whys = [G.camera_level_why(c)[1] for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out")]
+        open_ = [c for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out") and G.camera_level_why(c)[1] == G.OPEN_STALLS_NA]
+        short = [c for c in open_ if (c.get("uncovered_ms") or 0) > CAMERA_UNCOVERED_MAX_MS]
+        na = len(open_) - len(short)
+        gap, total = whys.count(G.OPEN_GOOD_GAP), whys.count(G.OPEN_FLUID_TOTAL)
+        if gap:
+            out.append(f"{t}: {gap} camera run(s) whose longest gap, with the part of the window their receiver counts "
+                       f"left out, could pass good's {CAMERA_UNCOVERED_MAX_MS} ms: good couldn't be confirmed, not measured")
+        if total:
+            out.append(f"{t}: {total} camera run(s) whose stalls, with the part of the window their receiver counts left "
+                       f"out, could reach fluid's {FLUID_STALL_TOTAL_MS} ms in all: fluid couldn't be confirmed, not measured")
+        if short:
+            worst = max(c["uncovered_ms"] for c in short)
+            out.append(f"{t}: {len(short)} camera run(s) whose receiver counts left up to {worst / 1000:.1f} s of the "
+                       "window out (getStats answered late): stalls n/a, not measured")
         if na:
             out.append(f"{t}: {na} camera run(s) whose stalls couldn't be measured (no freeze counts from the receiver, "
                        "or no frames to measure gaps over): n/a, not measured")
@@ -1600,9 +1663,20 @@ def webrtc_detail(c):
     busy = (f"; the page's frame callbacks (detail, how busy the page was): {sum(x.get('callbacks') or 0 for x in cbs)} "
             f"for {total('frames_decoded')} frames, stalls by them up to {max((x.get('stall_total_ms') or 0) for x in cbs) / 1000:.1f} s"
             if cbs else "")
+    # Receiver counts that leave more of the window out than a stall can hide in (#265): their freezes
+    # are n/a there too, as the stalls are, and the counts say the time they cover (#255's review).
+    # From the spans themselves, of the streams that played (as camera_run's uncovered_ms), so a run in
+    # which a stream never played, with no uncovered_ms, still gets it (#255's review).
+    spans = [s["span_ms"] for s in c.get("detail") or [] if (s.get("webrtc") or {}).get("inbound")
+             and s.get("span_ms") is not None and s.get("first_frame_ms") is not None and s.get("shown_pct") is not None]
+    window = c.get("window_ms")
+    short = bool(spans and window and window - min(spans) > CAMERA_UNCOVERED_MAX_MS)
+    freezes = ("freezes n/a" if short else f"{total('freezes')} freezes ({total('freeze_s', '{:.1f}')} s)")
+    covered = (f" (the receiver's counts cover {min(spans) / 1000:.1f} s of the window's {window / 1000:.1f} s)"
+               if short else "")
     return (f"decoder {', '.join(decs)}" + (f" ({', '.join(hw)})" if hw else "")
             + f", {total('frames_decoded')} frames decoded, {total('frames_dropped')} dropped, "
-            f"{total('freezes')} freezes ({total('freeze_s', '{:.1f}')} s), candidate {', '.join(cand) or 'n/a'}{restarts}{busy}")
+            f"{freezes}{covered}, candidate {', '.join(cand) or 'n/a'}{restarts}{busy}")
 
 
 def by_cpu(khz):
@@ -1641,8 +1715,14 @@ def camera_cell(s_, b):
         return f"{late_note or 'a stream showed no frame'}, {b.get('camera') or 'n/a'}"
     # The numbers are the runs whose streams all played; say how many didn't (they make the level).
     failed = sum(1 for r in runs if r.get("first_frame_ms") is None and not r.get("timed_out"))
+    # The stalls median is over the runs that measured them: say how many didn't, and how many runs'
+    # levels are left open (#265: s1rtc9's typical read "stalls 0 ms, n=2" with run 3 n/a).
+    na = sum(1 for r in runs if r.get("stalls_reported") is False)
+    open_ = sum(1 for r in runs if not r.get("timed_out") and G.camera_level(r) is None)
     note = (f", {failed} of {len(runs)} run(s) had a stream that showed no frame" if failed else "") \
-        + (f", {late_note}" if late else "")
+        + (f", {late_note}" if late else "") \
+        + (f", stalls n/a in {na} of {len(runs)} run(s)" if 0 < na < len(runs) else "") \
+        + (f", the level not measured in {open_} of {len(runs)} run(s)" if 0 < open_ < len(runs) else "")
     return (f"first frame {fmt(ff, ' ms')}, {fmt(med('shown_pct'), ' %')} shown, stalls {fmt(med('stall_total_ms'), ' ms')}, "
             f"{b.get('camera') or 'n/a'}{note}")
 
@@ -1831,11 +1911,16 @@ def ram_markdown(ram):
         return []
     out = ["", "## RAM on the reference dashboards (not graded)", "",
            "PSS per process, from `dumpsys meminfo`: at idle on the typical reference dashboard after each "
-           "graded run, and between the graded pages (the largest of those is the peak during the graded tasks).", ""]
+           "graded run, and between the graded pages. The peak is the largest of the between-page samples only (the "
+           "idle samples aren't in it, so the idle median can be above it). They are taken between tasks, not inside "
+           "them (a dumpsys would disturb what a task measures), so a short peak inside a task can be missed. The VmHWM "
+           "line below is each process's peak RSS since it started, so it includes such a peak, but RSS counts "
+           "shared pages in full: it bounds the PSS peak from above and doesn't measure it. It covers only the processes "
+           "still running, with a readable VmHWM, when it is read: one that exited earlier isn't in it.", ""]
     idle, peak = ram.get("reference_idle"), ram.get("graded_peak")
     roles = sorted(set((idle or {}).get("by_role_pss_kb", {})) | set((peak or {}).get("by_role_pss_kb", {})))
     if idle or peak:
-        out += ["| Process | Idle (median of runs) | Peak during the graded tasks |", "|---|---|---|"]
+        out += ["| Process | Idle (median of runs) | Peak, sampled between the graded pages |", "|---|---|---|"]
         for r in roles:
             pk = (peak or {}).get("by_role_pss_kb", {}).get(r)
             pk = "n/a" if pk is None else f"{pk / 1024:.0f} MB"
@@ -1850,7 +1935,9 @@ def ram_markdown(ram):
         out += ["", "Budgets (frames/<id>/budgets.json):"]
         for k, c in b["checks"].items():
             val = "n/a" if c["value_kb"] is None else f"{c['value_kb'] / 1024:.0f} MB"
-            out.append(f"- {k}: {val} against {c['budget_kb'] / 1024:.0f} MB: {budget_word(c['ok'])}")
+            # A peak here is the sampled one above (between pages), not a maximum inside the tasks.
+            what = " (sampled between pages)" if "peak" in k else ""
+            out.append(f"- {k}{what}: {val} against {c['budget_kb'] / 1024:.0f} MB: {budget_word(c['ok'])}")
     if ram.get("panes"):
         out += ["", "Each pane on by itself against every pane off, on the typical reference dashboard (median of runs; "
                     "the tolerance is twice the noisier set's estimated standard deviation; `:boot` left out). Only samples "
@@ -1894,17 +1981,35 @@ def main():
     ap.add_argument("--apk", action="append", default=[])
     ap.add_argument("--budgets", default=None, help="a frame's budgets file; default frames/<id>/budgets.json, else tools/perf/budgets.json")
     ap.add_argument("--keep-apk", action="store_true", help="keep the apk sizes of the existing report.json (run.sh --idle-only)")
+    ap.add_argument("--out", default=None, help="write report.json and report.md here (default: the run directory)")
+    ap.add_argument("--app-version", default=None, help="show this label as the app's version (never graded)")
     a = ap.parse_args()
     rep = build(a.run_dir, a.apk, a.budgets)
     old = os.path.join(a.run_dir, "report.json")
     if a.keep_apk and not a.apk and os.path.exists(old):
         rep["apk"] = read_json(old).get("apk", [])
-    with open(os.path.join(a.run_dir, "report.json"), "w") as f:
+    if a.app_version:
+        label_app_version(rep, a.app_version)
+    out = a.out or a.run_dir
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "report.json"), "w") as f:
         json.dump(rep, f, indent=1)
+        f.write("\n")
     md = markdown(rep)
-    with open(os.path.join(a.run_dir, "report.md"), "w") as f:
+    with open(os.path.join(out, "report.md"), "w") as f:
         f.write(md)
     print(md)
+
+
+def label_app_version(rep, label):
+    """The app's version as given (--app-version), in place of the device's: the frame's app, and the
+    APK sizes' file names (a test build's carry its commit). Only labels: the grade reads none of it,
+    and the summary's app_version is this label."""
+    app = rep["frame"]["app"]
+    app.update(version_name=label, version_code=None, version_label="given")
+    for x in rep.get("apk") or []:
+        x["file"] = f"{app.get('package', 'app')}-{label}.apk"
+    return rep
 
 
 if __name__ == "__main__":

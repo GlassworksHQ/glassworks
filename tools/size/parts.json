@@ -33,6 +33,8 @@
   "diagnostics": {"dex": ["dev.glassworks.diagnostics."]},
   "bluetooth-proxy": {"dex": ["dev.glassworks.bluetoothproxy.", "sh.edm.bluetoothproxy.", "sh.edm.s1kiosk.settings.BluetoothProxyPage"]},
   "notifications": {"dex": ["dev.glassworks.notifications.", "sh.edm.s1kiosk.notifications."],
-                    "_why": "the pane (dev.glassworks.notifications) and its overlay (sh.edm.s1kiosk.notifications)"}
+                    "_why": "the pane (dev.glassworks.notifications) and its overlay (sh.edm.s1kiosk.notifications)"},
+  "camera": {"dex": ["dev.glassworks.camera.", "sh.edm.s1kiosk.CameraAdbActivity"],
+             "_why": "the camera pane (#117); CameraAdbActivity sets its settings from adb and is used by nothing else"}
  }
 }

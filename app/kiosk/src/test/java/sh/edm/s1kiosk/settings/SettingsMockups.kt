@@ -98,6 +98,13 @@ class SettingsMockups {
         shot("settings-18-wall-base", menu(radioRunning = true), "wall-base")
         shot("settings-19-time-zone", menu(radioRunning = true), "time-zone")
         shot("settings-20-diagnostics", menu(radioRunning = true), "diagnostics")
+        // #117: the camera pane on the S1, which has no camera: CantRun, as the app builds it (#23), greyed in
+        // the rail with its page saying why, and no on/off.
+        val noCamera = dev.glassworks.pane.CantRun.unless(
+            dev.glassworks.camera.CameraDefinition(KioskPrefs(RuntimeEnvironment.getApplication()).paneFile("camera")),
+            sh.edm.s1kiosk.frame.AqaraS1Plus().provides,
+        )
+        shot("settings-21-camera-cant-run", menu(radioRunning = true, extra = listOf(noCamera)), "camera")
         shot("settings-16-screen-scrolled", menu(radioRunning = true), "screen") { o ->
             Mockup.layout(o)
             o.previewScrollTo(Mockup.label(o, "Brightness"), alignBottom = true)

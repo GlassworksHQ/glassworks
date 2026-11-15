@@ -447,7 +447,18 @@ hls.js on MSE, and each stream gets the hardware H.264 decoder (below).
   `statsWaitMs`, 10 s, at the window's end), so a late answer counts nothing past the time its
   counts were taken, and frames shown are over that same span (`clock`: `stats`, or `asked` when a
   sample has no timestamp). A receiver that reports no `freezeCount` has stalls and gaps `n/a`
-  (`stalls_reported` false), never 0: that run's camera level isn't measured, and the report says so.
+  (`stalls_reported` false), never 0. So does a stream whose counts leave more than 500 ms of the
+  window out (`uncovered_ms`; the longest gap "good" allows): a busy page answers `getStats` late,
+  and the counts end at the last answer back, so a stall after it would go unseen (#255; on
+  s1rtc9's heavy the counts covered 5.8 to 24.7 s of 30). Such a run's camera level isn't measured,
+  and the report says so, unless its first frame or frames shown already fail every level: then
+  it is `slow`, as no stall could lift it. When the counts leave out 500 ms or less their stalls
+  count, but they can be under-read by up to that much, so "fluid" holds its 1 s bar against the stalls
+  plus what was left out: 600 ms of stalls with 400 ms left out is not measured, with 399 ms it is
+  fluid. "Good" likewise holds its 500 ms gap bar against the longest gap plus what was left out, as a
+  gap open at the counts' end could run on into it: a 450 ms gap with 100 ms left out is not
+  measured, 400 with 100 is good. That uses the longest gap anywhere, not only one open at the end
+  (the counts don't say which), so it can leave a level open that was good, never grade one wrongly. report.md's camera cell says in how many runs the stalls were n/a or the level open.
 - **Gaps and stalls over HLS (the fallback, not graded)**: gaps over 500 ms between frames
   presented by `requestVideoFrameCallback`, the longest and their sum, and the `waiting` events.
 
@@ -987,7 +998,7 @@ and lags the compositor's first scrolled frame.
 | Android's TTID | The `Displayed …: +Nms` line of each restart |
 | CPU clock per view | Every core's `scaling_cur_freq` every 5 s (`GW_PERF_CPU_CLOCK_S`) from a view's open to its done, and each core's `cpuinfo_max_freq` once, when the sampler starts (read-only `cat`s of `/sys/devices/system/cpu/cpu*/cpufreq/` over adb). The sampler runs while the SurfaceFlinger poller is paused too: it is the one adb call inside timed windows, on purpose, and costs a fraction of a percent of a core. report.md gives each view's median and range in MHz beside the CPU's top clock, or each core's median when they differ (a big.LITTLE CPU's clusters), so a capped or boosted CPU shows (#244: the S1's power HAL holds 1.2 of its 1.608 GHz). The run's file has `cpu_khz` (`[view, time, {cpu number: kHz}]`, the numbers from the sysfs paths, so cpu10 is never taken for cpu2; a reading that crossed into another view, a recovery or the run's end is dropped), `cpu_max_khz` (`{cpu number: kHz}`) and `cpu_clock_s`; report.json has each tier's `cpu_mhz` (cores pooled) and `cpu_mhz_by_core` (by cpu number), and `graded.reference.cpu_max_mhz` and `cpu_clock_s` |
 | Your dashboard | A restart back to your own dashboard: process start to its `PageStart`, its load to settled, and the whole wait from the force-stop. A run that doesn't finish within 120 s is recorded as an error |
-| RAM on the reference dashboards | PSS per process at idle on the typical reference dashboard and the peak during the graded tasks, and each switchable pane's share. See [RAM](#ram) |
+| RAM on the reference dashboards | PSS per process at idle on the typical reference dashboard and the peak of the samples taken between the graded pages, and each switchable pane's share. See [RAM](#ram) |
 | Memory on your dashboard | PSS of every app process (the app, Gecko's GPU, content and crash helper processes), the main process's App Summary, each process's peak RSS (`VmHWM`), the radio's processes, and `MemTotal`/`MemAvailable`, at idle on your dashboard and at the run's peak |
 | CPU at idle | Jiffies of every app and radio process over 15 s, and the whole device's busy share |
 | Idle frames | Frames your dashboard presents while nobody touches it |
@@ -1331,10 +1342,13 @@ Assistant:
 - **At idle**: after each graded run, the runner opens the typical reference dashboard (with no
   nonce, so nothing on it is timed and the live updates stay off), waits 30 s, samples CPU and
   frames for 15 s, then RAM (label `ref-idle`). The report gives the median of the runs per process.
-- **Peak during the graded tasks**: after each graded page, while the screen is still and nothing is
+- **Peak, sampled between the graded pages**: after each graded page, while the screen is still and nothing is
   timed, the runner samples RAM. The largest of those samples is the peak. It is taken between tasks,
   not inside them (a `dumpsys` during a task would disturb what it measures), so a short peak inside
-  a task can be missed; `VmHWM` catches it, and the report gives it beside the PSS peak.
+  a task can be missed. `VmHWM` (each process's peak RSS since it started) includes such a peak, and the
+  report gives it beside the PSS peak; RSS counts shared pages in full, so it bounds the PSS peak from above
+  and doesn't measure it. It covers only the processes still running, with a readable `VmHWM`, when it
+  is read.
 - **Per pane**, with `--pane-ram assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on`
   (the settings now, put back
   afterwards). The kiosk is pointed at the typical reference dashboard. In each run the runner turns every switchable
@@ -1425,12 +1439,13 @@ Assistant:
   run with the warm-up has three warm ones. Whether it brings the S1 near ±10 MB is for the next
   run on the panel (after #181).
 - **Not switched**: since [#67](https://github.com/GlassworksHQ/glassworks/issues/67) every
-  pane has an on/off, but three aren't measured on their own (`not_switched` in `budgets.json`). The
+  pane has an on/off, but four aren't measured on their own (`not_switched` in `budgets.json`). The
   radio's on/off is its mode, which Clarity leaves as it is, so the panel's Zigbee or Thread network
   stays up; its processes are measured where they run. Timers come only with voice, so they are inside
   `assist`'s share. The Bluetooth proxy scans only while Home Assistant listens, which the reference
-  run doesn't, so on by itself it would measure an idle pane (#121). The report lists all three, with
-  why. The wall base, time zone and diagnostics shares
+  run doesn't, so on by itself it would measure an idle pane (#121). The S1 has no camera, so the
+  camera pane can't run there; its code still ships, so it keeps a size budget (#117). The report
+  lists all four, with why. The wall base, time zone and diagnostics shares
   have not been measured on a panel yet.
 
 **Why not an emulator in CI** (assessed 2026-11-13, from the build and the panes' needs; not tried).
@@ -1529,13 +1544,13 @@ from real use, and nothing device-unique.
 | `app_version` | The kiosk's version name |
 | `viewport` | `css` (CSS px), `dpr` (device pixel ratio), `default_dpr` (density / 160) |
 | `runs` | `attempted`, `graded` |
-| `pages` | Per page (`light`, `typical-nocam`, `typical`, `heavy`): `inp_ms` (median), `open_ms` (median; rubric 2: to the first screen drawn), `blocking_ms` (median, rubric 2), `usable_ms` (median, detail; rounded), the graded medians (`inp_ms`, `open_ms`, `blocking_ms`) unrounded since `/3`, `scroll` (`fps`, `p95_ms`, `scrolled_px`: medians; `sf_valid` per run; `runs`: each run's `p95_ms`, `jank_pct`, `frozen_pct`, `fps`, `n`), `updates` (`latency_p95_ms`, `latency_median_ms`: medians of change to screen; `pacing_p95_ms`, detail; `runs`: each run's `latency_n`, `latency_median_ms`, `latency_p95_ms` and `frames`, the stats of the frames that had a change to draw), `scroll.during_updates` (per run, how many swipes ran during the updates), `camera` (`runs`: each run's worst stream's `first_frame_ms`, `shown_pct`, `max_gap_ms`, `stall_total_ms`; empty on a page without streams; `path`: what the graded streams played over, `web_rtc` since protocol 6, `null` without streams; `fallback`: the page's cameras over HLS, detail, `path` and `runs` as above, `null` before protocol 6 and without streams; a run's record is `{"timed_out": true}` with the numbers `null` when the page didn't finish before its streams were measured), `timed_out_runs` (protocol 7: in how many runs the page didn't finish within the runner's deadline; their unmeasured tasks are in the runs as failing: `inp_ms` at the deadline, `blocking_ms` at it when the main thread was never free, `open_ms` at it only when the view was never drawn (drawn but never free keeps its real open), `{"timed_out": true}` records for `scroll`, `updates` and `camera`), `runs` (how many runs measured `tap`, `scroll`, `updates`, `open`, `blocking`, `camera`) |
+| `pages` | Per page (`light`, `typical-nocam`, `typical`, `heavy`): `inp_ms` (median), `open_ms` (median; rubric 2: to the first screen drawn), `blocking_ms` (median, rubric 2), `usable_ms` (median, detail; rounded), the graded medians (`inp_ms`, `open_ms`, `blocking_ms`) unrounded since `/3`, `scroll` (`fps`, `p95_ms`, `scrolled_px`: medians; `sf_valid` per run; `runs`: each run's `p95_ms`, `jank_pct`, `frozen_pct`, `fps`, `n`), `updates` (`latency_p95_ms`, `latency_median_ms`: medians of change to screen; `pacing_p95_ms`, detail; `runs`: each run's `latency_n`, `latency_median_ms`, `latency_p95_ms` and `frames`, the stats of the frames that had a change to draw), `scroll.during_updates` (per run, how many swipes ran during the updates), `camera` (`runs`: each run's worst stream's `first_frame_ms`, `shown_pct`, `max_gap_ms`, `stall_total_ms`, and over WebRTC `uncovered_ms` (the most of the window its receiver counts left out), with `stalls_reported` false when the stalls are n/a; empty on a page without streams; `path`: what the graded streams played over, `web_rtc` since protocol 6, `null` without streams; `fallback`: the page's cameras over HLS, detail, `path` and `runs` as above, `null` before protocol 6 and without streams; a run's record is `{"timed_out": true}` with the numbers `null` when the page didn't finish before its streams were measured), `timed_out_runs` (protocol 7: in how many runs the page didn't finish within the runner's deadline; their unmeasured tasks are in the runs as failing: `inp_ms` at the deadline, `blocking_ms` at it when the main thread was never free, `open_ms` at it only when the view was never drawn (drawn but never free keeps its real open), `{"timed_out": true}` records for `scroll`, `updates` and `camera`), `runs` (how many runs measured `tap`, `scroll`, `updates`, `open`, `blocking`, `camera`) |
 | `restart_ms` | Process start to a usable reference dashboard (median, unrounded since `/3`; to engine ready before protocol 4) |
 | `gaps` | Measurement facts that leave it short: "1 of 3 graded runs failed or are missing", "heavy: scrolling rests on rAF only in 1 run(s)…". Empty when complete |
 | `not_comparable` | Why the numbers can't be compared with other frames' (e.g. not at the default zoom), or `null` |
 | `report` | A relative path or URL of the full report (`--report-url`) |
 | `complete` | `false` when it was exported with `--allow-provisional` and has gaps, missing measurements or isn't comparable |
-| `ram` | Not graded; `null` if not measured. In kB: `idle_app_pss_kb` and `idle_by_process_pss_kb` (medians at idle on the typical reference dashboard), `peak_app_pss_kb` and `peak_by_process_pss_kb` (the peak during the graded tasks), `panes` (each: `id`, `pss_kb`, `tolerance_kb` (`null` under two samples a side), `measurable`, `runs`, `budget_kb` and `budget_ok` (the frame's pane budget and whether the share is within it; `null` without a budget, or when the tolerance is too wide to tell), `budget_measurable` (`false` under three samples a side or with a tolerance over a quarter of the budget; `null` without one; read a null `budget_ok` as unknown, not as over), and `off_by` when the report has it. Only panes whose every sample was checked against the kiosk's log (`verified`) are listed: one with no number, or from a run before that check (such as s1v7), isn't), `panes_waiting` (pane ids; empty since #67), `panes_not_switched` (pane ids), `budget_ok` (`true`, `false` or `null`) |
+| `ram` | Not graded; `null` if not measured. In kB: `idle_app_pss_kb` and `idle_by_process_pss_kb` (medians at idle on the typical reference dashboard), `peak_app_pss_kb` and `peak_by_process_pss_kb` (the largest of the samples taken between the graded pages), `panes` (each: `id`, `pss_kb`, `tolerance_kb` (`null` under two samples a side), `measurable`, `runs`, `budget_kb` and `budget_ok` (the frame's pane budget and whether the share is within it; `null` without a budget, or when the tolerance is too wide to tell), `budget_measurable` (`false` under three samples a side or with a tolerance over a quarter of the budget; `null` without one; read a null `budget_ok` as unknown, not as over), and `off_by` when the report has it. Only panes whose every sample was checked against the kiosk's log (`verified`) are listed: one with no number, or from a run before that check (such as s1v7), isn't), `panes_waiting` (pane ids; empty since #67), `panes_not_switched` (pane ids), `budget_ok` (`true`, `false` or `null`) |
 | `apk` | Not graded; `null` if no APK was given. Per APK: `file`, `abis`, `bytes` |
 | `notes` | The report's `notes` (`good`, `limits`, `causes`, `text`, `rubric`). Show them only when `rubric` is the site's rubric version: they judge tasks by that rubric |
 | `webrtc_transport` | Protocol 7: the camera video's path, `transport` (`lan-udp`, `lan-turn` or `adb`), `chosen_by` (`auto` or `flag`), `reason`, and `possibly_limited` (over adb, heavy's camera result may be the test's link's). Letters over different transports aren't comparable; `gradeSummary` returns `transport` and `transport_caveat` with the letter. `null` before protocol 7 |
@@ -1622,6 +1637,30 @@ aren't comparable with v1's.
   `tools/perf/summary.py <run-dir>/report.json <out>`.
 - A later version will raise `clarity` with a change that makes earlier results incomparable, and
   `protocol_version` and the rubric's `version` with each change to the measurement or the rules.
+
+### Published results
+
+A frame's published result lives in its folder, `frames/<id>/clarity/`, generated from the run's
+files and never edited by hand:
+
+| File | What |
+|---|---|
+| `report.md` | The report, as report.md is for any run (the site links to it on GitHub) |
+| `report.json` | The full report (`glassworks.perf/4`) |
+| `clarity.json` | The summary (`glassworks.perf-summary/3`), which the site grades with `grade.ts`; its `report` is report.md's GitHub URL |
+
+```sh
+python3 tools/perf/report.py <run-dir> --keep-apk --out frames/<id>/clarity --app-version <label>
+python3 tools/perf/summary.py frames/<id>/clarity/report.json frames/<id>/clarity/clarity.json \
+    --report-url https://github.com/GlassworksHQ/glassworks/blob/main/frames/<id>/clarity/report.md
+```
+
+`--out` leaves the run directory as it was. `--app-version` shows a label in place of the version
+the device reported (report.md, report.json, the summary's `app_version` and the APK sizes' names),
+for an app before its first release; nothing in the grade reads it. Before committing, check the
+files for anything device-unique (serial, MACs, addresses other than RFC 5737, HA URLs, tokens):
+the report and summary are built to carry none, but a run directory's other files do. The S1's is
+[frames/aqara-s1-plus/clarity/](../frames/aqara-s1-plus/clarity/report.md).
 
 ### Showing the grade
 
@@ -1719,6 +1758,18 @@ Frame statistics are defined once, in `tools/perf/page/stats.js` and `tools/perf
 `tools/perf/test/stats-cases.json` pins both to the same answers.
 
 ## Example: Aqara S1 Plus
+
+**Clarity v2: D** (s1rtc10, 2de8ac20, 3 of 3 runs, protocol 2, rubric 2, the S1 Kiosk build before
+its first release (`pre-v1`), camera video over the LAN (`lan-udp`), measured 2026-11-15 UTC; not
+provisional): "a good wall panel for light dashboards. Held back by typical dashboards: the main
+thread is blocked for 2.9 s after the view is drawn." Typical without its camera (`typical-nocam`) opens in 1.2 s
+(drawn, good) and is usable at 5.1 s; the 2.9 s of blocking between them (poor, over 600 ms) is what stops it at fluid.
+Light blocks for 233 ms (needs improvement, which fluid accepts). A restart takes 14.3 s, which
+would cap it at C. The published report is
+[frames/aqara-s1-plus/clarity/report.md](../frames/aqara-s1-plus/clarity/report.md), and its
+summary [clarity.json](../frames/aqara-s1-plus/clarity/clarity.json). The S1's Clarity v1 run
+(s1rtc9, also a D) was held when rubric 2 was decided, and never published. The results below
+are earlier versions' (see [Versions](#versions)) and not comparable with it.
 
 **Protocol 5: D** (s1cam3, cbc2be6, 3 of 3 runs, rubric v6, S1 Kiosk 0.4.3, `thread_router`,
 2026-11-13; not provisional): protocol 4's views with live camera streams. Typical's 720p stream
