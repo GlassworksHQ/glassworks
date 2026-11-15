@@ -26,7 +26,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/sendspin.md",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 18V6l10-2v12\"/><circle cx=\"6.5\" cy=\"18\" r=\"2.5\"/><circle cx=\"16.5\" cy=\"16\" r=\"2.5\"/></svg>",
-    "source": "frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/sendspin"
+    "source": "panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin"
   },
   {
     "id": "timers",
