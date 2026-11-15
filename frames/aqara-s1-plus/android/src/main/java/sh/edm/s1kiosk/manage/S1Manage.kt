@@ -116,7 +116,7 @@ class S1Manage(
             // The panel menu's own model (#242): the same sections, items and saves.
             val model = S1Settings.model(runtime, prefs, defs, S1Settings.hasDeviceSettings(runtime, app), fullScreen = ::fullScreen, version = version,
                 // Links in a new tab here: nothing opens on the panel.
-                blueprints = { id -> blueprints.item(id) {} })
+                blueprints = { id -> blueprints.item(id) {} }, context = app)
             val panes = model.sections.filter { it.id in model.panes }
             return PanelStatus(
                 name = name,

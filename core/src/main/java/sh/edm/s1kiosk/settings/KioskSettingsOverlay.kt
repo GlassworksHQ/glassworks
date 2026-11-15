@@ -502,7 +502,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Duration -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.duration(i) { build() } }) { i.shown(i.value()) }
         is SettingsItem.TimeRange -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.range(i) { build() } }) { i.shown(i.value()) }
         // A link's line comes with the model, made again on each refresh: follow it (the Device page's radio mode).
-        is SettingsItem.Link -> follow(row(i.title, i.detail, chevron = true, dim = i.detail.isEmpty()) { i.open(context) }) {
+        is SettingsItem.Link -> follow(row(i.title, i.detail, chevron = true, dim = i.detail.isEmpty() && i.section == null) { i.section?.let(::select) ?: i.open(context) }) {
             (now(prefix + i.title) as? SettingsItem.Link)?.detail ?: i.detail
         }
         is SettingsItem.Note -> g.text(14.5f, MU).apply { text = i.text(); setLineSpacing(0f, 1.25f); setPadding(0, px(14f), 0, px(14f)) }

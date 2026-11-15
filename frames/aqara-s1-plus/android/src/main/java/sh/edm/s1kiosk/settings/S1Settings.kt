@@ -9,6 +9,7 @@ import dev.glassworks.frame.openSystemSettings
 import dev.glassworks.frame.systemSettings
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SettingsItem
+import dev.glassworks.pane.SettingsPlace
 import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.settingsOrder
 import sh.edm.s1kiosk.Glassworks
@@ -35,6 +36,8 @@ object S1Settings {
         version: String = runtime.build.shown,
         /** A pane's Blueprints card by its id ([PanelBlueprints.item]), or null for none. */
         blueprints: (String) -> SettingsItem.Blueprints? = { null },
+        /** Where the frame's Device page reads the device from; null leaves the page out. */
+        context: Context? = null,
     ): KioskSettingsOverlay.Model {
         val frame = runtime.frame
         val core = CoreSettings(
@@ -55,7 +58,10 @@ object S1Settings {
         val sections = panes.flatMap { d ->
             runCatching { paneSections(listOf(d), blueprints, runtime::runningPane) }.onFailure { Log.w(TAG, "${d.id}'s settings failed", it) }.getOrDefault(emptyList())
         }
-        return KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), version, sections.map { it.id }.toSet(), frameName(runtime))
+        // The frame's own page; a frame whose page fails keeps the rest.
+        val device = context?.let { c -> runCatching { frame.deviceSection(c, runtime::runningPane) }.onFailure { Log.w(TAG, "the device page failed", it) }.getOrNull() }
+        val own = core.sections() + listOfNotNull(device?.let { SettingsPlace.DEVICE to it })
+        return KioskSettingsOverlay.Model(settingsOrder(own, sections), version, sections.map { it.id }.toSet(), frameName(runtime))
     }
 
     /** The frame's name in words: "S1 Plus", or the device's ("Google Pixel Tablet"). */

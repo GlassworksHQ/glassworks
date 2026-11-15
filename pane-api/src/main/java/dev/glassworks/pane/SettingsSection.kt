@@ -80,7 +80,7 @@ fun paneSections(
         own.isNotEmpty() -> {
             // The pane's entities no page covers, once, at the end of the first page that takes part.
             val covered = own.mapNotNull { it.covers }.flatten().toSet()
-            val rest = inHomeAssistant(pane) { it.objectId !in covered }
+            val rest = inHomeAssistant(pane) { it.objectId !in covered && it.objectId !in d.shownElsewhere }
             val first = own.indexOfFirst { it.covers != null }
             val card = blueprints(d.id)
             own.mapIndexed { i, s ->
@@ -93,7 +93,7 @@ fun paneSections(
         }
         choice != null -> listOf(SettingsSection(
             d.id, choice.title,
-            listOfNotNull(off?.let { s -> SettingsItem.Note { s.offNote } }, if (off == null) blueprints(d.id) else null, inHomeAssistant(pane, on = off == null))
+            listOfNotNull(off?.let { s -> SettingsItem.Note { s.offNote } }, if (off == null) blueprints(d.id) else null, inHomeAssistant(pane, on = off == null) { it.objectId !in d.shownElsewhere })
                 .ifEmpty { listOf(SettingsItem.Note { NOT_RUNNING }) },
             master = master, source = pane,
         ))
@@ -134,15 +134,40 @@ const val UNKNOWN = "Unknown"
 const val UNAVAILABLE = "Unavailable"
 
 /** Where a settings section sits. The core's own come first and last; panes go in between. */
-enum class SettingsPlace { DASHBOARD, SCREEN, NETWORK, PANES, LOG, SECURITY, ABOUT }
+enum class SettingsPlace { DASHBOARD, SCREEN, DEVICE, NETWORK, PANES, LOG, SECURITY, ABOUT }
 
 /**
- * The sections in the order every settings surface uses: the core's Dashboard, Screen and Network,
+ * The sections in the order every settings surface uses: the core's Dashboard and Screen, the frame's
+ * Device page ([dev.glassworks.frame.Frame.deviceSection]) and Network,
  * then [panes] in definition order, then Log, Security and About. Sections without items are left out.
  */
-fun settingsOrder(core: Map<SettingsPlace, SettingsSection>, panes: List<SettingsSection>): List<SettingsSection> =
-    SettingsPlace.entries.flatMap { p -> if (p == SettingsPlace.PANES) panes else listOfNotNull(core[p]) }
-        .filter { it.items.isNotEmpty() }
+fun settingsOrder(core: Map<SettingsPlace, SettingsSection>, panes: List<SettingsSection>): List<SettingsSection> {
+    val sections = SettingsPlace.entries.flatMap { p -> if (p == SettingsPlace.PANES) panes else listOfNotNull(core[p]) }
+    // A link to a section that isn't shown (its pane can't run on this frame, or it has no items) would
+    // open nothing: left out. Leaving one out can empty its section, and links to that go too, until
+    // nothing changes; each round only drops sections, so it ends.
+    var ids = sections.filter { it.items.isNotEmpty() }.map { it.id }.toSet()
+    while (true) {
+        val kept = sections.filter { it.id in ids }.map { pruned(it, ids) }.filter { it.items.isNotEmpty() }
+        val next = kept.map { it.id }.toSet()
+        if (next == ids) return kept
+        ids = next
+    }
+}
+
+/** [s] without links to sections outside [ids], nor the groups that leaves empty; [s] itself when it has none. */
+private fun pruned(s: SettingsSection, ids: Set<String>): SettingsSection {
+    fun dead(i: SettingsItem) = i is SettingsItem.Link && i.section != null && i.section !in ids
+    fun any(items: List<SettingsItem>): Boolean = items.any { dead(it) || (it is SettingsItem.Group && any(it.items)) }
+    fun live(items: List<SettingsItem>): List<SettingsItem> = items.mapNotNull { i ->
+        when {
+            dead(i) -> null
+            i is SettingsItem.Group -> live(i.items).takeIf { it.isNotEmpty() }?.let { SettingsItem.Group(i.title, it) }
+            else -> i
+        }
+    }
+    return if (!any(s.items)) s else SettingsSection(s.id, s.title, live(s.items), s.heading, s.master, s.status, s.unavailable, s.source, s.covers)
+}
 
 /**
  * A row in a [SettingsSection]. Values are read when the menu opens. Each change applies on its own,
@@ -233,8 +258,13 @@ sealed interface SettingsItem {
         val save: (Pair<String, String?>?, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
-    /** Opens something else: another app's settings, the licences. */
-    class Link(val title: String, val detail: String, val open: (Context) -> Unit) : SettingsItem
+    /** Opens something else: another app's settings, the licences, or another section ([Link.section]). */
+    class Link(
+        val title: String, val detail: String,
+        /** The id of another section this row opens instead (the Device page's radio line opens the Radio pane). */
+        val section: String? = null,
+        val open: (Context) -> Unit = {},
+    ) : SettingsItem
 
     /** A line of status text. */
     class Note(val text: () -> String) : SettingsItem

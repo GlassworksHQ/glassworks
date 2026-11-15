@@ -37,6 +37,7 @@ import sh.edm.s1kiosk.ui.Mockup
 @Config(sdk = [34], application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SettingsLayoutMockups {
+    private val S1DeviceApps = sh.edm.s1kiosk.frame.S1Device.AQARA_APPS.keys
     private val app = RuntimeEnvironment.getApplication()
     private val panes = PaneFixtures(app)
 
@@ -47,13 +48,25 @@ class SettingsLayoutMockups {
 
     @After fun shutdown() = panes.shutdown()
 
+    /** The radio's mode as the root helper has it, for the S1's Device page. */
+    private val props = object : sh.edm.s1kiosk.radio.SysProps {
+        override fun get(name: String) = if (name == "persist.s1kiosk.radio_mode") "thread_router" else ""
+        override fun set(name: String, value: String) {}
+    }
+
     /** The menu on [frame] with [running] panes, [off] turned off, on its Overview. */
     private fun menu(frame: Frame, frameName: String, running: List<Pane>, off: Set<String>, memory: String): KioskSettingsOverlay {
         val radio = radioDefinition(app, FixedReadout(null, running = true))
         val defs = GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { if (it.id == "radio" && frame is AqaraS1Plus) radio else it }
         defs.forEach { d -> d.switch?.on = d.id !in off }
         val byId = running.associateBy { it.id }
-        fun model() = MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = defs, running = { byId[it] }).copy(frame = frameName)
+        fun model() = MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = defs, running = { byId[it] }).let { m ->
+            // The frame's Device page, after Screen, as S1Settings puts it.
+            val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app) { byId[it] }
+                else frame.deviceSection(app) { byId[it] }
+            val at = m.sections.indexOfFirst { it.id == "screen" } + 1
+            m.copy(frame = frameName, sections = m.sections.toMutableList().apply { if (device != null) add(at, device) })
+        }
         val f = ManageFixture()
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         o.reload = ::model
@@ -85,12 +98,18 @@ class SettingsLayoutMockups {
         shot("05-off-pane", "diagnostics")
         shot("06-about", "about")
         shot("07-edit-a-value", "dashboard") { it.previewEdit("Home Assistant") }
+        shot("08-device", "device")
     }
 
     @Test
     @Config(qualifiers = "w960dp-h480dp-land-hdpi")
     fun s1() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        // Aqara's apps as debloat.sh leaves them: all but the launcher turned off.
+        for (pkg in S1DeviceApps) {
+            shadowOf(app.packageManager).installPackage(android.content.pm.PackageInfo().apply { packageName = pkg; applicationInfo = android.content.pm.ApplicationInfo().apply { packageName = pkg } })
+            if (pkg != "com.aqara.inhome.launcher") app.packageManager.setApplicationEnabledSetting(pkg, PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER, 0)
+        }
         shots("layout-s1", Mockup.W, Mockup.H) {
             menu(AqaraS1Plus(), "S1 Plus", listOf(panes.voice(), panes.music(), panes.radio(), panes.wallBase(), panes.timeZone()), setOf("diagnostics"), "1.1 of 2 GB")
         }

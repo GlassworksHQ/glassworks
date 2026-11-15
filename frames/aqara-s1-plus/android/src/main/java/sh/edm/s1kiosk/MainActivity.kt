@@ -833,7 +833,7 @@ class MainActivity : Activity() {
 
     /** The menu's sections as they are now, the Manage page's too (#242): each pane's page reads its running pane (#212). */
     private fun settingsModel(): KioskSettingsOverlay.Model =
-        S1Settings.model(glassworks, prefs, panes, deviceSettings, fullScreen = ::pushConfig, blueprints = { id -> blueprints.item(id, ::openBlueprintLink) })
+        S1Settings.model(glassworks, prefs, panes, deviceSettings, fullScreen = ::pushConfig, blueprints = { id -> blueprints.item(id, ::openBlueprintLink) }, context = this)
 
     /** The panes' Blueprints cards: the list, and what the panel's sign-in may do with them (checked off the main thread). */
     private val blueprints by lazy { PanelBlueprints.forPanel(this, glassworks.build, prefs) }
