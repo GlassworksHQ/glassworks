@@ -1109,7 +1109,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                         // One that asks first (the radio's role, #269): the question replaces the list, then it applies.
                         val ask = i.confirm(id)
                         if (ask == null) { onSave = {}; commit(false, after) { done -> i.save(id, done) } }
-                        else confirm(ask) { save({ done -> i.save(id, done) }) { why -> if (why != null) showProblem(why); after() } }
+                        else confirm(ask) { save({ done -> i.save(id, done) }) { why -> after(); if (why != null) showProblem(why) } } // rebuild first: it hides the problem line
                     }
                 })
             }
