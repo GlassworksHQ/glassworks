@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit

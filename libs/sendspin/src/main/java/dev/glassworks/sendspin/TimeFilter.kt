@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
 import kotlin.math.abs
 import kotlin.math.floor

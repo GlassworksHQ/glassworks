@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
 /**
  * FLAC framing for the Sendspin player (RFC 9639), pure JVM:

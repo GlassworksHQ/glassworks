@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.sendspin
+package dev.glassworks.sendspin
 
 import dev.glassworks.esphome.NoiseMacException
 import org.junit.Assert.assertArrayEquals
