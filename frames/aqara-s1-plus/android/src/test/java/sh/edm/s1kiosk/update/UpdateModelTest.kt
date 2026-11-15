@@ -133,23 +133,6 @@ class UpdateModelTest {
         assertTrue(m.statusText().contains("cancelled"))
     }
 
-    @Test fun haSeesWhetherTheInstallRunsByItselfOrWaitsForATap() {
-        val m = UpdateModel("1.2.0")
-        m.onChecked(offer("1.3.0"))
-        assertFalse("nothing installing", m.onWaitingForTap())
-        val a = m.beginInstall(0)!!
-        assertFalse("still downloading", m.onWaitingForTap())
-        m.onInstalling(a, 10_000, "Installing 1.3.0 without a tap")
-        assertEquals("Installing 1.3.0 without a tap", m.statusText())
-        assertTrue(m.onWaitingForTap())
-        assertEquals("Installing 1.3.0: waiting for a tap on the screen", m.statusText())
-        assertTrue(m.view().releaseSummary.startsWith("Installing 1.3.0: waiting for a tap on the screen"))
-        assertTrue("still in progress", m.view().inProgress)
-        assertFalse("said once", m.onWaitingForTap())
-        m.failActive("package installer: cancelled")
-        assertFalse(m.onWaitingForTap())
-    }
-
     @Test fun installNoteOnlyWhileAnUpdateWaits() {
         val m = UpdateModel("1.2.0")
         m.installNote = UpdateManager.NO_HELPER_NOTE

@@ -850,7 +850,8 @@ class MainActivity : Activity() {
         val pi = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            Platform.backgroundStartOptions(),
         )
         (getSystemService(ALARM_SERVICE) as AlarmManager)
             .set(AlarmManager.RTC, System.currentTimeMillis() + 600, pi)

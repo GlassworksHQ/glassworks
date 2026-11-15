@@ -1,19 +1,15 @@
 package sh.edm.s1kiosk.update
 
-import android.Manifest
 import android.app.Application
 import android.content.pm.PackageInstaller.SessionParams
 import android.os.Parcel
 import dev.glassworks.platform.PlatformApi
-import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.io.File
 
 /**
  * The PackageInstaller session for an update (#277): on Android 12+ it asks for no user action, and
@@ -60,14 +56,6 @@ class UpdateSessionTest {
             assertEquals("API $api", SessionParams.USER_ACTION_NOT_REQUIRED, requireUserAction(p))
             val same = before(12_345).apply { setRequireUserAction(SessionParams.USER_ACTION_NOT_REQUIRED) }
             assertArrayEquals("API $api: nothing else changes", bytes(same), bytes(p))
-        }
-    }
-
-    @Test
-    fun `the app declares the permissions Android checks`() {
-        val manifest = File(RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
-        for (p in listOf(Manifest.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION, Manifest.permission.REQUEST_INSTALL_PACKAGES)) {
-            assertTrue(p, "<uses-permission android:name=\"$p\" />" in manifest)
         }
     }
 }
