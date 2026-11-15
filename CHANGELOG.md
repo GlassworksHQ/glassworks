@@ -207,6 +207,10 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A pane's "In Home Assistant" list says when Home Assistant doesn't have the panel.** On a panel
+  Home Assistant never added, it says so once, with where to add it (Settings → Devices & services),
+  instead of "Unknown" on each row. When Home Assistant was added but isn't connected now, it says so
+  and dims the last known states. On the panel and the Manage page.
 - **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
   to call itself `s1-panel`, and adding a second device made Home Assistant offer to replace the
   first. Now the S1 announces itself as "Aqara S1 Plus", with a node name such as

@@ -72,6 +72,9 @@ interface Glassworks {
 
     fun runningPane(id: String): Pane? = panes.firstOrNull { it.id == id }
 
+    /** Home Assistant is connected and listening to the panel's states now; false while the device isn't running. */
+    fun homeAssistantConnected(): Boolean
+
     /** Set while KioskService runs; the sign-in screen uses it for manual HA URL entry. */
     var discovery: HaDiscovery?
 

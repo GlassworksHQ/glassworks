@@ -15,6 +15,8 @@ import dev.glassworks.pane.chipTone
 import dev.glassworks.pane.chipWord
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
+import dev.glassworks.pane.StatesShown
+import dev.glassworks.pane.shown
 import dev.glassworks.brand.Tokens
 import dev.glassworks.web.PageShell
 import dev.glassworks.web.PageShell.Look
@@ -245,11 +247,15 @@ ${foot(viewer)}"""
                 }
                 """<div class="st${if (tone == "bad") " bad" else ""}"><i class="dot $tone"></i><span>${esc(safe { item.text() })}</span></div>"""
             }
+            // As the panel: without Home Assistant, a line says so; not connected, every row is dimmed (#261).
             is SettingsItem.States -> {
-                val list = runCatching { item.rows() }.getOrDefault(emptyList())
-                """<div class="grp"><div class="gl">${esc(item.title)}</div>${list.joinToString("") { r ->
-                    """<div class="sr${if (r.offByDefault) " quiet" else ""}"><span>${esc(r.name)}</span><em>${esc(r.value)}</em></div>""" }}""" +
-                    (if (list.any { it.offByDefault }) """<p class="foot">${esc(SettingsChange.OFF_BY_DEFAULT)}</p>""" else "") + "</div>"
+                val now = runCatching { item.shown() }.getOrDefault(StatesShown(null, emptyList(), dimmed = false))
+                val list = now.rows
+                """<div class="grp"><div class="gl">${esc(item.title)}</div>""" +
+                    (now.note?.let { """<div class="row static note"><span>${esc(it)}</span></div>""" } ?: "") +
+                    list.joinToString("") { r ->
+                        """<div class="sr${if (r.offByDefault || now.dimmed) " quiet" else ""}"><span>${esc(r.name)}</span><em>${esc(r.value)}</em></div>""" } +
+                    (if (!now.dimmed && list.any { it.offByDefault }) """<p class="foot">${esc(SettingsChange.OFF_BY_DEFAULT)}</p>""" else "") + "</div>"
             }
             is SettingsItem.Tiles -> tiles(item)
             is SettingsItem.Blueprints -> blueprints(v, item)

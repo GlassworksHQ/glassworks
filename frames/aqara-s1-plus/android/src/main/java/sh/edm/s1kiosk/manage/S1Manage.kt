@@ -26,6 +26,7 @@ import dev.glassworks.manage.SessionStore
 import dev.glassworks.manage.Tile
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
+import dev.glassworks.pane.shown
 import dev.glassworks.platform.WifiLink
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
@@ -191,7 +192,8 @@ class S1Manage(
             // Its password is shown on request only (Show), never here: whether one is set.
             is SettingsItem.SignIn -> listOf("${i.title}: ${v { i.shown(i.isSet()) }}")
             is SettingsItem.Status -> listOf(v(i.text))
-            is SettingsItem.States -> listOf("${i.title}:") + runCatching { i.rows() }.getOrDefault(emptyList()).map { "  ${it.name}: ${it.value}" }
+            is SettingsItem.States -> listOf("${i.title}:") + runCatching { i.shown() }.getOrNull()
+                ?.let { s -> listOfNotNull(s.note?.let { "  $it" }) + s.rows.map { "  ${it.name}: ${it.value}" } }.orEmpty()
             is SettingsItem.Tiles -> runCatching { i.tiles() }.getOrDefault(emptyList()).map { "${it.name}: ${it.value} ${it.unit}".trim() }
             // What each button does now, without its links (they carry the Home Assistant address).
             is SettingsItem.Blueprints -> listOf("${dev.glassworks.pane.BLUEPRINTS}:") + runCatching { i.card(dev.glassworks.pane.BlueprintSurface.PANEL) }.getOrNull()
@@ -203,7 +205,7 @@ class S1Manage(
     private fun haTile(): Tile {
         val base = prefs.haBase
         val host = base?.substringAfter("://")?.substringBefore('/')?.substringBefore(':') ?: "No address yet"
-        val connected = runtime.device?.homeAssistantConnected() == true
+        val connected = runtime.homeAssistantConnected()
         val value = when {
             connected -> "Connected"
             prefs.haSeen -> "Not connected"

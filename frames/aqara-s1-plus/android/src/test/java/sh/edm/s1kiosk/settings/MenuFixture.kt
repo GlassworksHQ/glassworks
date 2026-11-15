@@ -5,7 +5,9 @@ import dev.glassworks.pane.PaneChoice
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SettingsItem
+import dev.glassworks.pane.HaLink
 import dev.glassworks.pane.paneSections
+import dev.glassworks.pane.withHaLink
 import dev.glassworks.pane.settingsOrder
 import dev.glassworks.diagnostics.DiagnosticsDefinition
 import sh.edm.s1kiosk.KioskPrefs
@@ -43,6 +45,8 @@ object MenuFixture {
         running: (String) -> Pane? = { null },
         blueprints: (String) -> SettingsItem.Blueprints? = { null },
         account: String = "Signed in as Wall panel",
+        /** Whether Home Assistant has the panel, as the app reads it ([S1Settings.model]). */
+        link: () -> HaLink = { HaLink.CONNECTED },
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
@@ -52,6 +56,6 @@ object MenuFixture {
             account = { account },
         )
         val sections = paneSections(panes, blueprints, running)
-        return KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), version, sections.map { it.id }.toSet())
+        return KioskSettingsOverlay.Model(withHaLink(settingsOrder(core.sections(), sections), link), version, sections.map { it.id }.toSet())
     }
 }

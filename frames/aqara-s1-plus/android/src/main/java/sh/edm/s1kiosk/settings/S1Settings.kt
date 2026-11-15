@@ -7,11 +7,13 @@ import android.widget.Toast
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
 import dev.glassworks.frame.systemSettings
+import dev.glassworks.pane.HaLink
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsPlace
 import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.settingsOrder
+import dev.glassworks.pane.withHaLink
 import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.Licences
@@ -61,7 +63,8 @@ object S1Settings {
         // The frame's own page; a frame whose page fails keeps the rest.
         val device = context?.let { c -> runCatching { frame.deviceSection(c, runtime::runningPane) }.onFailure { Log.w(TAG, "the device page failed", it) }.getOrNull() }
         val own = core.sections() + listOfNotNull(device?.let { SettingsPlace.DEVICE to it })
-        return KioskSettingsOverlay.Model(settingsOrder(own, sections), version, sections.map { it.id }.toSet(), frameName(runtime))
+        val ha = withHaLink(settingsOrder(own, sections)) { HaLink.of(connected = runtime.homeAssistantConnected(), added = prefs.haSeen) }
+        return KioskSettingsOverlay.Model(ha, version, sections.map { it.id }.toSet(), frameName(runtime))
     }
 
     /** The frame's name in words: "S1 Plus", or the device's ("Google Pixel Tablet"). */
