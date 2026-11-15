@@ -85,7 +85,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "alpha",
     "docs": "docs/esphome.md#diagnostics",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"6\" width=\"20\" height=\"12\" rx=\"3.5\"/><path d=\"M5.5 12h3l1.5-3 3 6 1.5-3h4\"/></svg>",
-    "source": "frames/aqara-s1-plus/android/src/main/java/dev/glassworks/diagnostics"
+    "source": "panes/diagnostics/src/main/java/dev/glassworks/diagnostics"
   },
   {
     "id": "notifications",
