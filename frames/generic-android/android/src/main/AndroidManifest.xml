@@ -48,15 +48,27 @@
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true">
 
-        <!-- Landscape, either way up: the core's screens are laid out for a landscape panel. -->
+        <!-- Landscape, either way up: the core's screens are laid out for a landscape panel.
+             Its intent extras change settings (the dashboard's address, the API key, remote debugging), and
+             on a device with other apps any of them could send some. So starting it directly takes
+             WRITE_SECURE_SETTINGS, which adb's shell holds and normal apps can't get; the app's own starts
+             need none. Launchers and the home screen start it through the alias below, whose extras the
+             app drops (GenericParts.trustsExtras). -->
         <activity
             android:name="sh.edm.s1kiosk.MainActivity"
             android:exported="true"
+            android:permission="android.permission.WRITE_SECURE_SETTINGS"
             android:launchMode="singleTask"
             android:screenOrientation="sensorLandscape"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation"
             android:windowSoftInputMode="adjustResize"
-            android:stateNotNeeded="true">
+            android:stateNotNeeded="true" />
+
+        <!-- The launcher's and home screen's way in: no permission, no settings from extras. -->
+        <activity-alias
+            android:name="dev.glassworks.generic.Launcher"
+            android:targetActivity="sh.edm.s1kiosk.MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -67,7 +79,7 @@
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <service
             android:name="sh.edm.s1kiosk.KioskService"

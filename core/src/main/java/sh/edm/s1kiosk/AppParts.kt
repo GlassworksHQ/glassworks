@@ -2,6 +2,7 @@ package sh.edm.s1kiosk
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.pane.Pane
@@ -35,6 +36,13 @@ interface AppParts {
 
     /** The app's activity: the one that shows the dashboard, and that Home Assistant's commands go to. */
     val mainActivity: Class<out Activity>
+
+    /**
+     * Whether the extras of [intent], which started or reached the app's activity, may change settings. S1 Kiosk
+     * trusts all: it is the panel's one app, and adb, Kiln and Clarity drive it with them. An app on a device
+     * with other apps trusts only an entry point they can't use (#23); the activity drops the rest's extras.
+     */
+    fun trustsExtras(intent: Intent): Boolean = true
 
     /** The file that holds the settings of the pane with id [namespace]. */
     fun paneFile(context: Context, namespace: String): SharedPreferences

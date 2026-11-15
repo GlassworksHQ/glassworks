@@ -165,6 +165,7 @@ class MainActivity : Activity() {
         prefs = KioskPrefs(this)
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
+        intent?.let { screenExtras(it, runtime.app::trustsExtras) }
         applyIntent(intent, fromNewIntent = false)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -634,6 +635,7 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        screenExtras(intent, runtime.app::trustsExtras)
         applyIntent(intent, fromNewIntent = true)
     }
 
@@ -1084,6 +1086,17 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        /**
+         * Drops [intent]'s extras unless [trusted] (AppParts.trustsExtras), so an entry point other apps can use
+         * changes no setting (#23). Returns whether it dropped any. Public for tests.
+         */
+        fun screenExtras(intent: Intent, trusted: (Intent) -> Boolean): Boolean {
+            if (intent.extras == null || trusted(intent)) return false
+            Log.w("S1Kiosk", "ignored the extras of a start through ${intent.component?.shortClassName}: settings change only through adb")
+            intent.replaceExtras(null as Bundle?)
+            return true
+        }
+
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()
         private const val TAG = "S1Kiosk"

@@ -5,6 +5,7 @@
 package dev.glassworks.generic
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
@@ -83,6 +84,12 @@ class GenericParts : AppParts {
 
     override val mainActivity = MainActivity::class.java
 
+    /**
+     * Only a start of MainActivity itself, which takes WRITE_SECURE_SETTINGS (adb) unless it is the app's own,
+     * may change settings with its extras. The launcher alias ([LAUNCHER]), which any app can start, may not.
+     */
+    override fun trustsExtras(intent: Intent): Boolean = intent.component?.className == MainActivity::class.java.name
+
     override fun serviceStarted(context: Context, runtime: GlassworksRuntime) {
         runtime.voiceState = if (VoicePrefs(paneFile(context, "assist")).enabled) "idle" else "off"
         voiceUi = VoiceUi(runtime.voiceState)
@@ -146,6 +153,9 @@ class GenericParts : AppParts {
     }
 
     companion object {
+        /** The launcher's and home screen's way in (AndroidManifest.xml): an alias of MainActivity with no permission. */
+        const val LAUNCHER = "dev.glassworks.generic.Launcher"
+
         /** The panes this app has settings for. */
         val PANES = setOf("assist", "sendspin", "timers")
     }
