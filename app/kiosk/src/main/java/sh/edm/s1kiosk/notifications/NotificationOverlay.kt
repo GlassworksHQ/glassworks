@@ -86,8 +86,8 @@ class NotificationOverlay(
     private val pill = pill()
     private val pageBar = FrameLayout(context)
     private val stage = FrameLayout(context)
-    /** The critical alert's animated orb: one, kept while the stage's text is rebuilt, so its motion runs on. */
-    internal val criticalOrb = CriticalOrb(context, orbs)
+    /** The critical alert's animated orb: one, kept while the stage's text is rebuilt, so its motion runs on. Public for tests. */
+    val criticalOrb = CriticalOrb(context, orbs)
     /** The stage's text and buttons, rebuilt on each change. */
     private val stageContent = FrameLayout(context)
     private val sheetLayer = FrameLayout(context)
