@@ -64,7 +64,7 @@ with its data (2026-11-13, verified).
 ## How to reproduce
 
 Read-only: the files and lines above, at the tags named. To print the wire bytes,
-`python -I app/libs/esphome-api/src/test/resources/esphome_golden.py` with aioesphomeapi 46.25.0.
+`python -I libs/esphome-api/src/test/resources/esphome_golden.py` with aioesphomeapi 46.25.0.
 
 ## Open questions
 

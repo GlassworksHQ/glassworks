@@ -86,7 +86,7 @@ The default name in the code is "三键开关底座 Pro" ("3-switch base Pro").
 
 ## Implementation (S1 Kiosk)
 
-Code: `app/kiosk/src/main/java/sh/edm/s1kiosk/base/`. Logs: `adb logcat -s S1Base`.
+Code: `frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base/`. Logs: `adb logcat -s S1Base`.
 
 ### How it talks to the base
 

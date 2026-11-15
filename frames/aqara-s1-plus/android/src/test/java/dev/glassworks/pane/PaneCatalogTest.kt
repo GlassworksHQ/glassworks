@@ -58,8 +58,10 @@ class PaneCatalogTest {
     private val paneClassIds by lazy {
         val loader = Pane::class.java.classLoader!!
         // every module's classes (#21): the jars and directories on the test classpath that the repo builds
+        // canonical paths, so a checkout reached through a symlink (macOS /tmp is /private/tmp) still matches
+        val repoDir = repo.canonicalFile
         val roots = System.getProperty("java.class.path").split(File.pathSeparator).map(::File)
-            .filter { it.exists() && it.absolutePath.startsWith(repo.absolutePath + File.separator) }
+            .filter { it.exists() && it.canonicalFile.startsWith(repoDir) }
         assertTrue("no class roots of this repo on the test classpath", roots.isNotEmpty())
         val paths: Sequence<String> = roots.asSequence().flatMap { root ->
             if (root.isDirectory) root.walkTopDown().filter { it.isFile }.map { it.relativeTo(root).path.replace(File.separatorChar, '/') }

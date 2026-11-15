@@ -41,7 +41,7 @@ by itself as each step completes ✅ (see [Setup screen](#setup-screen-)).
   Phones can use improv-wifi.com (Web Bluetooth) too.
 - Fallback: the setup screen offers Android's Wi-Fi panel (`Settings.Panel.ACTION_WIFI`).
 
-#### What's implemented (`app/kiosk/.../improv/`; the protocol, session, BLE server, `WifiProvisioner` and `WifiSecurity` are the reusable [Improv library](../libs/improv/README.md))
+#### What's implemented (`frames/aqara-s1-plus/android/…/improv/`; the protocol, session, BLE server, `WifiProvisioner` and `WifiSecurity` are the reusable [Improv library](../libs/improv/README.md))
 
 | File | Role |
 |---|---|
@@ -204,7 +204,7 @@ the [`improv-serial`](../kiln/packages/improv-serial/README.md) package (`kiln/p
 and `kiln/packages/setup-channel/src/channel.ts`.
 
 **Wi-Fi: Improv Serial on `@s1kiosk_improv`** (`ImprovSerial.kt` in the [Improv library](../libs/improv/README.md), pure, `ImprovSerialTest`;
-glue `app/kiosk/…/improv/ImprovSerialServer.kt`). [Improv Serial](https://www.improv-wifi.com/serial/) framing
+glue `frames/aqara-s1-plus/android/…/improv/ImprovSerialServer.kt`). [Improv Serial](https://www.improv-wifi.com/serial/) framing
 (`IMPROV`, version 1, type, length, data, checksum) over the stream instead of a UART.
 - State: Ready (authorized) from the start, or Provisioned when the panel is already on Wi-Fi (the
   installer then says so; new Wi-Fi settings are still accepted).
@@ -263,7 +263,7 @@ The intent hand-off this replaces (`--es wifi_ssid/wifi_psk`, results on logcat)
 ### 2. Adoption + encryption: ESPHome dynamic keys ✅
 
 - ✅ The panel advertises `_esphomelib._tcp` and implements the ESPHome native API with Noise.
-- ✅ **Dynamic key** (`NoiseKeys.kt`, `ApiServer` in [`app/libs/esphome-api`](../libs/esphome-api/README.md)). A panel without a key behaves like an
+- ✅ **Dynamic key** (`NoiseKeys.kt`, `ApiServer` in [`libs/esphome-api`](../libs/esphome-api/README.md)). A panel without a key behaves like an
   ESPHome build with `api: encryption:` and no YAML key; a panel with a key works as before.
 
   Verified against the sources:

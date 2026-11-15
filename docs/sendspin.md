@@ -5,7 +5,7 @@ own players, called by the panel's name in Home Assistant (**Aqara S1 Plus** on 
 group it with them. You no longer need MA's "Home Assistant MediaPlayers" bridge for the panel.
 That bridge goes MA → HA → `media_player.<device>_speaker` and has no sync.
 
-Code: `app/kiosk/src/main/java/sh/edm/s1kiosk/sendspin/`. The protocol core is pure
+Code: `panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin/`. The protocol core is pure
 JVM (`SendspinSession`, `SsCrypto`, `TimeFilter`, `PlaybackScheduler`, `WsClient`, `Flac`,
 `AudioPipeline`) and `SendspinPlayer` and `MediaCodecFlacDecoder` are the Android glue. It is owned by `PanelDevice` and runs in the foreground
 `KioskService`. Logs: `adb logcat -s S1Sendspin`.
@@ -380,7 +380,7 @@ the player (it arrives as `set_output_delay`).
 
 ```sh
 python3 -m venv /tmp/sendspin-venv && /tmp/sendspin-venv/bin/pip install 'aiosendspin[server]==10.2.1'
-SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :kiosk:testDebugUnitTest
+SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :pane-sendspin:testDebugUnitTest
 ```
 
 `aiosendspin[server]` brings PyAV with FFmpeg's FLAC encoder, which the FLAC stream test needs.
@@ -422,7 +422,8 @@ SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :kiosk:testDebugUnitTest
     the received stream decodes with PyAV to the server's 440 Hz tone (sample count, peak,
     frequency). The pair test uses the PCM-only hello (the fallback);
   - fails if the server logs any non-compliance.
-- `EspHomeApiTest` (needs `ESPHOME_PYTHON`): the real aioesphomeapi 46.25.0 client reads
+- `EspHomeApiTest` (needs `ESPHOME_PYTHON`; it lives in the S1 app module, so run it with
+  `./gradlew :kiosk:testDebugUnitTest --tests '*EspHomeApiTest*'`): the real aioesphomeapi 46.25.0 client reads
   `DeviceCapabilities.sendspin` and gets the token over Noise (`OK`) but not over plaintext
   (`ENCRYPTION_REQUIRED`).
 

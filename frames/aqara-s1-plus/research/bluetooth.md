@@ -96,7 +96,7 @@ that ships we need to know:
 | A scan for days | Restart it every 25 min, at most 4 starts per 30 s (read) |
 | Passive vs active scan type | Android doesn't let an app choose, so no `FEATURE_STATE_AND_MODE` (read) |
 
-The `bluetooth-proxy` library (`app/libs/bluetooth-proxy`) follows all of these.
+The `bluetooth-proxy` library (`libs/bluetooth-proxy`) follows all of these.
 
 ## How to reproduce
 

@@ -8,7 +8,7 @@ import android.widget.TextView
 
 /**
  * "Open source licences" in the hidden settings: THIRD-PARTY-NOTICES.md, the project's LICENSE and the
- * licence texts of LICENSES/, which app/kiosk/build.gradle.kts copies into assets/licenses/ at build time.
+ * licence texts of LICENSES/, which frames/aqara-s1-plus/android/build.gradle.kts copies into assets/licenses/ at build time.
  * Shown as plain text, like the rest of the settings dialog.
  */
 object Licences {

@@ -25,11 +25,11 @@ image follows GitHub's theme.
 | Part | Badge or banner | Where it goes |
 |---|---|---|
 | The repository's front page | **Glassworks banner** (`banner-glassworks-on-*.svg`), then the status and roadmap badges | Top of [README.md](../README.md). /brand gives this banner to the org profile and the main README. It has no licence badge, because the repository is mixed: MIT, with the core under MPL-2.0 |
-| S1 Kiosk, the app on the core | **Built on Glassworks** (`badge-on-*.svg`) | Top of [app/README.md](../frames/aqara-s1-plus/android/README.md). The badge rules also ask for it on the app's About screen |
-| A library in `app/libs/` | **Library banner** (`banner-library-<name>-on-*.svg`), then the MIT licence, status and roadmap badges | Top of that library's README. Copy the header of [improv's README](../libs/improv/README.md) |
+| S1 Kiosk, the app on the core | **Built on Glassworks** (`badge-on-*.svg`) | Top of [frames/aqara-s1-plus/android/README.md](../frames/aqara-s1-plus/android/README.md). The badge rules also ask for it on the app's About screen |
+| A library in `libs/` | **Library banner** (`banner-library-<name>-on-*.svg`), then the MIT licence, status and roadmap badges | Top of that library's README. Copy the header of [improv's README](../libs/improv/README.md) |
 | Libraries in a list or table, where a banner doesn't fit | **Library badge** (`badge-library-on-*.svg`) | E.g. the Libraries section of [principles.md](principles.md) |
 | [Glassworks Principles](principles.md) | **Principles banner** (`banner-principles-on-*.svg`), then a part badge under each part's heading | `docs/principles.md` |
-| The Glassworks core (`dev.glassworks.*`), including the pane API | **Core banner** (`banner-core-on-*.svg`) as the header, and the **core badge** (`badge-core-on-*.svg`) | `app/kiosk/src/main/java/dev/glassworks/README.md` |
+| The Glassworks core (`dev.glassworks.*`), including the pane API | **Core banner** (`banner-core-on-*.svg`) as the header, and the **core badge** (`badge-core-on-*.svg`) | `pane-api/src/main/java/dev/glassworks/README.md` |
 | A pane | **Pane badge** (`badge-pane-on-*.svg`) | The pane's README |
 | [Clarity](perf.md), the perf test and grade every frame follows | **Core badge** (`badge-core-on-*.svg`) alone, under the title. No banner | `docs/perf.md`. Its tools in `tools/perf` stay plain, like every dev tool |
 | The installer (`kiln/`, `tools/install.sh`) | **Kiln badge** (`badge-kiln-on-*.svg`) | Kiln's README. The S1 installer is still S1-branded until it moves into Kiln |
@@ -43,7 +43,7 @@ Use the Glassworks info badges, not shields.io: a licence badge, `badge-roadmap`
 badge for the stage the project is at: `badge-status-planned`, `badge-status-under-development`,
 `badge-status-alpha`, `badge-status-beta` or `badge-status-stable`. Each comes as `-on-dark.svg` and `-on-light.svg`. They're on [/brand#info](https://www.glassworks.dev/brand#info), with a README snippet.
 The licence badge is `badge-license` (MPL-2.0) for the Glassworks core and `badge-license-mit` (MIT)
-for the libraries in `app/libs/`, which are MIT like the rest of this repo.
+for the libraries in `libs/`, which are MIT like the rest of this repo.
 They sit on the same field as the part badges, so a header reads as one set. If you need one that
 isn't there, add it to the generator. Only a live value, such as the latest release version, still
 needs shields.io or a release link.

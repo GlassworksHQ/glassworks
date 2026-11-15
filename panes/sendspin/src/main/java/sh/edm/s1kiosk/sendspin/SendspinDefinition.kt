@@ -11,7 +11,7 @@ import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import java.net.URI
 
-/** The Sendspin player ([SendspinPane]) for the whole process: its on/off and adb extras (app/README.md). [file] is its settings file. */
+/** The Sendspin player ([SendspinPane]) for the whole process: its on/off and adb extras (frames/aqara-s1-plus/android/README.md). [file] is its settings file. */
 class SendspinDefinition(
     file: SharedPreferences,
     /**

@@ -85,7 +85,7 @@ where the sketch has `color.body`, and the screen is placed with `top` where the
 ### `abis`
 
 What the device runs, not what its release ships. The release builds the union of every frame's
-`abis`, in frame-id order (`tools/release/frame-abis.sh`, and `app/kiosk/build.gradle.kts` the same
+`abis`, in frame-id order (`tools/release/frame-abis.sh`, and the root `build.gradle.kts` the same
 way), so today: `armeabi-v7a` and `arm64-v8a`. `ApkAbiListsTest` checks that the app's update check
 (`ApkAbi`) knows exactly that list.
 

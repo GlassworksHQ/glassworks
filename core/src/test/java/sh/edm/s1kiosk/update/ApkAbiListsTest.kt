@@ -65,8 +65,9 @@ class ApkAbiListsTest {
 
     @Test fun `no workflow or build script lists ABIs of its own`() {
         val abiName = Regex(""""(${ApkAbi.entries.joinToString("|") { Regex.escape(it.id) }})"""")
-        val build = File(RepoFiles.s1App, "build.gradle.kts")
-        assertEquals(RepoFiles.rel(build), null, abiName.find(build.readText())?.value)
+        // the root build file reads every frame.json and picks s1Abi for all modules
+        val builds = listOf(File(repo, "build.gradle.kts"), File(RepoFiles.s1App, "build.gradle.kts"))
+        for (build in builds) assertEquals(RepoFiles.rel(build), null, abiName.find(build.readText())?.value)
         for (wf in workflows) {
             val lines = File(repo, wf).readLines().map { it.trim() }
             assertEquals("$wf: ABIS comes from frame-abis.sh", 1, lines.count { it == """abis="${'$'}(tools/release/frame-abis.sh)"""" })

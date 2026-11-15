@@ -15,7 +15,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 
-/** The panes' adb extras (app/README.md): each pane's on/off (#67), then its own, from their definitions. */
+/** The panes' adb extras (frames/aqara-s1-plus/android/README.md): each pane's on/off (#67), then its own, from their definitions. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class PaneExtrasTest {

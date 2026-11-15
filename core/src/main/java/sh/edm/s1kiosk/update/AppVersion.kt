@@ -5,7 +5,7 @@ package sh.edm.s1kiosk.update
  * leading `v` as in git tags. Ordering follows SemVer precedence: numeric core, then a pre-release
  * sorts before the release, identifiers compared numerically or lexically; build metadata is ignored.
  *
- * The same rule derives the Android versionCode (app/kiosk/build.gradle.kts):
+ * The same rule derives the Android versionCode (frames/aqara-s1-plus/android/build.gradle.kts):
  * `major * 10000 + minor * 100 + patch`, so minor and patch must stay below 100.
  */
 data class AppVersion(

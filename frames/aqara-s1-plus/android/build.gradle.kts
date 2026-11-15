@@ -100,7 +100,7 @@ android {
 }
 
 dependencies {
-    // Libraries extracted from this app (app/libs/). esphome-api brings BouncyCastle (Noise), which
+    // Libraries extracted from this app (libs/). esphome-api brings BouncyCastle (Noise), which
     // Sendspin's encryption also uses.
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))

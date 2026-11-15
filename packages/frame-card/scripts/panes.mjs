@@ -3,8 +3,9 @@
  * Writes packages/frame-card/src/panes.generated.ts from every pane's pane.json and icon.svg (#231).
  *
  * Reads:  <module>/src/main/{java,kotlin}/**\/pane.json and the icon.svg beside each (read-only), in every Gradle
- *         module under MODULE_ROOTS (app/kiosk and app/libs/* today; core, pane-api, engines/*, panes/*
- *         and frames/<id>/android after the split, #21). Finding no pane is an error, not an empty list.
+ *         module under MODULE_ROOTS (core, pane-api, engines/*, panes/*, libs/*, frames/<id>/android and
+ *         frames/<id>/panes/*; app/ too, the layout before #21's split). Finding no pane is an error, not an
+ *         empty list.
  * Writes: packages/frame-card/src/panes.generated.ts, nothing else.
  *
  *   node packages/frame-card/scripts/panes.mjs          (or: npm run panes -w @glassworks/frame-card)

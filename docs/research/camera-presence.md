@@ -91,7 +91,7 @@ ISP and the YUV buffers), which may cost more than the model. Only a device with
 **Superseded on 2026-11-14.** The pick above was the person model. The maintainer decided instead
 that presence works like their own tested implementation: `MotionDetectorCore` from
 [aguilaair/android-ip-camera](https://github.com/aguilaair/android-ip-camera) (`onvif-rtsp-motion`,
-`7b5e6f28`, MIT), ported unchanged to `app/kiosk/src/main/java/dev/glassworks/camera/`. The same
+`7b5e6f28`, MIT), ported unchanged to `panes/camera/src/main/java/dev/glassworks/camera/`. The same
 motion feeds the panel's presence and the ONVIF motion events
 ([onvif-rtsp.md](onvif-rtsp.md#result)). The table above stays as the record of what was weighed.
 
@@ -116,7 +116,7 @@ step with a bright window, a TV cutting between scenes, and a person-sized chang
 per frame, so about 0.1 million operations a second at 5 frames a second. Negligible next to the
 camera pipeline. Nothing is downloaded, and the APK grows by the ported classes only.
 
-The engine (#117) in `app/kiosk/src/main/java/dev/glassworks/camera/`:
+The engine (#117) in `panes/camera/src/main/java/dev/glassworks/camera/`:
 
 - `CameraPresence` is a `PresenceSource`. It takes frames from a `FrameSource` at about 5 a second and
   drops the rest, and gives them to `MotionDetectorCore`. Frames go nowhere else.

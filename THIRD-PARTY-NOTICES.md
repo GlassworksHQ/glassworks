@@ -10,8 +10,9 @@ standard texts. The copyright holders are named under each component below. The 
 and those texts under **Open source licences** in its hidden settings: tap the top-left corner five
 times.
 
-Checked against the code on 2026-11-10. `app/kiosk/build.gradle.kts` fails a release build if a
-library in the APK is missing from section 1.
+Checked against the code on 2026-11-10. `checkThirdPartyNotices` in
+`frames/aqara-s1-plus/android/build.gradle.kts` fails a release build if a library in the APK is
+missing from section 1.
 
 ## Contents
 
@@ -27,9 +28,9 @@ library in the APK is missing from section 1.
 
 ## 1. S1 Kiosk APK
 
-`sh.edm.s1kiosk`, built from [`app/`](app) by `.github/workflows/release.yml`. These are the libraries
-in the APK: the release runtime classpath of `app/kiosk`, including transitive dependencies. The
-versions are the ones Gradle resolves.
+`sh.edm.s1kiosk`, built from [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android) by
+`.github/workflows/release.yml`. These are the libraries in the APK: the release runtime classpath
+of `:kiosk`, including transitive dependencies. The versions are the ones Gradle resolves.
 
 ### GeckoView (browser engine)
 
@@ -71,7 +72,7 @@ versions are the ones Gradle resolves.
 - **TensorFlow Lite Micro audio microfrontend** (`tensorflow/lite/experimental/microfrontend/lib`:
   window, fft, filterbank, noise reduction, PCAN gain control, log scale). Apache-2.0, Copyright 2018
   The TensorFlow Authors. Ported to Kotlin in
-  `app/kiosk/src/main/java/sh/edm/s1kiosk/voice/MicroFrontend.kt`, which stays under Apache-2.0 and
+  `panes/assist/src/main/java/sh/edm/s1kiosk/voice/MicroFrontend.kt`, which stays under Apache-2.0 and
   says what changed. Ported from the copy in https://github.com/rhasspy/pymicro-features (tag
   `v2.0.2`, commit `96bd69cfad79aa67697e176570d3dd87052c3def`), the same code as
   https://github.com/tensorflow/tflite-micro.
@@ -84,8 +85,8 @@ versions are the ones Gradle resolves.
   commit `7b5e6f28b7cbcb0f06716365d995e3a5d5cf1050`; `H264Bitstream.kt` as upstream had it at
   `90f9f80f0237832b1251f511592296e5ac5a630a`), itself a fork of
   https://github.com/DigitallyRefined/android-ip-camera. In
-  `app/kiosk/src/main/java/dev/glassworks/camera/MotionDetectorCore.kt` and
-  `app/kiosk/src/main/java/dev/glassworks/camera/onvif/`. Those files stay under MIT, and each says
+  `panes/camera/src/main/java/dev/glassworks/camera/MotionDetectorCore.kt` and
+  `panes/camera/src/main/java/dev/glassworks/camera/onvif/`. Those files stay under MIT, and each says
   what changed.
 
 ### Kotlin and AndroidX
@@ -151,7 +152,7 @@ All Apache-2.0.
 
 GeckoView depends on Google's proprietary Play services client libraries (`play-services-fido`,
 `-base`, `-basement`, `-tasks`) for WebAuthn/passkeys. The app's build excludes them
-(`app/kiosk/build.gradle.kts`), as Firefox's F-Droid builds do: the panel has no Google Play services,
+(`engines/engine-gecko/build.gradle.kts`), as Firefox's F-Droid builds do: the panel has no Google Play services,
 so they could never run. Passkey sign-in is therefore not available in the kiosk's browser.
 
 ### Assets in the APK
@@ -174,7 +175,7 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
 ### Not in the APK
 
 - JUnit 4.13.2 (EPL-1.0) and org.json 20250517 (Public Domain) are used only by the unit tests.
-- `app/kiosk/src/test/resources/mww_clip.wav` (a unit test fixture, not in the APK): speech
+- `panes/assist/src/test/resources/mww_clip.wav` (a unit test fixture, not in the APK): speech
   synthesised with Piper's `en_US-kristin-medium` voice (https://huggingface.co/rhasspy/piper-voices,
   MIT; trained from scratch on public-domain LibriVox recordings) by `tools/voice/mww_reference.py`.
   No recording of a person.

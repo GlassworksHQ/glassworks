@@ -13,11 +13,12 @@ The kiosk app makes the panel look like **one ESPHome device** to Home Assistant
 One integration, discovered automatically, no Wyoming or MQTT. It replaces the earlier Wyoming
 satellite (remove that Wyoming entry from HA when you switch).
 
-Code: the protocol core is the reusable pure-JVM library [`app/libs/esphome-api`](../libs/esphome-api/README.md)
-(package `sh.edm.esphome`), with mDNS from [`app/libs/esphome-api-android`](../libs/esphome-api-android/README.md);
-the panel's entities and glue are `PanelDevice` and `VoiceAssistantController` in
-`app/kiosk/src/main/java/sh/edm/s1kiosk/esphome/`, with the wall base and the Aqara cloud switch in
-`base/WallBasePane.kt` and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
+Code: the protocol core is the reusable pure-JVM library [`libs/esphome-api`](../libs/esphome-api/README.md)
+(package `sh.edm.esphome`), with mDNS from [`libs/esphome-api-android`](../libs/esphome-api-android/README.md);
+the panel's entities and glue are `PanelDevice` in
+`frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/esphome/` and `VoiceAssistantController` in
+`panes/assist`, with the wall base and the Aqara cloud switch in `frames/aqara-s1-plus/panes/wall-base`
+(`WallBasePane.kt`) and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
 keeps working while the screen is off. Logs: `adb logcat -s S1ESPHome S1Voice`.
 
 ## Add it to Home Assistant
@@ -698,7 +699,7 @@ with the Python TFLite runtime that the patched model gives bit-identical output
 ```sh
 python3 -m venv /tmp/esphome-venv && /tmp/esphome-venv/bin/pip install aioesphomeapi==46.25.0
 MODELS_CACHE=/tmp/oww-models tools/voice/fetch-models.sh --no-push
-ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gradlew :kiosk:testDebugUnitTest
+ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gradlew test
 ```
 
 - `EspHomeApiTest`: runs the API server (plaintext and Noise) on the JVM against the real
@@ -743,7 +744,7 @@ ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gra
 - `MicroDetectorTest`: strides, quantization and the sliding window. `MicroWakeWordClipTest` runs
   the four real models (LiteRT) behind the Kotlin pipeline over the clip: each fires in its own word
   only. Skipped without `MWW_PYTHON`; CI's `wake-word` job runs it with LiteRT from
-  `app/kiosk/mww-test-requirements.txt` and fails if it skipped.
+  `panes/assist/mww-test-requirements.txt` and fails if it skipped.
 - `WakeWordCatalogTest`, `AssistPaneTest`: the words HA is offered, the 0.4 migration, the threshold.
 - `OwwFeaturesTest`: compares the Kotlin feature buffering with openWakeWord's own
   `AudioFeatures` code, run with deterministic fake models (fixture made by
