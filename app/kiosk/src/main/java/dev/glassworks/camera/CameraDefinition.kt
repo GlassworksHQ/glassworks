@@ -14,12 +14,12 @@ import dev.glassworks.pane.SettingsSection
 /**
  * The camera pane ([CameraPane]) for the whole process. It [requires] a camera: on a frame without one
  * (the S1) the app wraps it in [dev.glassworks.pane.CantRun], one page that says why, with no on/off,
- * setup card or entity, as every pane that lacks its hardware (#23). [hasCamera] is the frame's
- * `provides` having one; the device shell builds the pane only then. Its settings have no MainActivity
+ * setup card or entity, as every pane that lacks its hardware (#23); the device shell builds the pane
+ * only where it isn't. Its settings have no MainActivity
  * extras: any app can send those, and on a tablet another app could turn privacy off or open the
  * stream. The app sets them from adb through its own adb-only activity.
  */
-class CameraDefinition(file: SharedPreferences, val hasCamera: Boolean) : PaneDefinition {
+class CameraDefinition(file: SharedPreferences) : PaneDefinition {
     override val id = CameraPane.ID
     override val requires = setOf(Capability.CAMERA)
     val prefs = CameraPrefs(file)
