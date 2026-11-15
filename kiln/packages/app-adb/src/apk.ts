@@ -56,6 +56,8 @@ export async function zipEntry(zip: Uint8Array, name: string): Promise<Uint8Arra
 
 /** Android's resource ids for the manifest attributes read here (android.R.attr). */
 const ATTR_IDS: Record<string, number> = { minSdkVersion: 0x0101020c };
+/** Attributes that only count without a namespace. */
+const NO_NAMESPACE = new Set(['package']);
 
 /**
  * The value of attribute `attr` on the first element `element` in binary XML: a string, or a number
@@ -95,8 +97,10 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
         const aStart = dv.getUint16(ext + 8, true), aSize = dv.getUint16(ext + 10, true), aCount = dv.getUint16(ext + 12, true);
         for (let i = 0; i < aCount; i++) {
           const a = ext + aStart + i * aSize;
-          const nameIdx = dv.getUint32(a + 4, true);
+          const ns = dv.getUint32(a, true), nameIdx = dv.getUint32(a + 4, true);
           if (strings[nameIdx] !== attr && (ATTR_IDS[attr] === undefined || resIds[nameIdx] !== ATTR_IDS[attr])) continue;
+          // <manifest package> has no namespace: an android:package (or any namespaced one) isn't it
+          if (NO_NAMESPACE.has(attr) && ns !== 0xffffffff) continue;
           const raw = dv.getUint32(a + 8, true), kind = xml[a + 15], data = dv.getUint32(a + 16, true);
           if (raw !== 0xffffffff) return strings[raw];
           if (kind === 0x03) return strings[data];                 // TYPE_STRING

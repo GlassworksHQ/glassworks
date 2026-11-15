@@ -81,6 +81,17 @@ describe('the APK\'s package, read before anything is installed', () => {
     expect((await apkInfo(fakeApk('sh.edm.s1kiosk'))).minSdk).toBeUndefined();
   });
 
+  it('reads only the un-namespaced package attribute', async () => {
+    const { fakeApk } = await import('./fakes');
+    const { zipEntry, axmlAttribute } = await import('../src');
+    const xml = (await zipEntry(fakeApk('sh.edm.s1kiosk'), 'AndroidManifest.xml'))!.slice();
+    // the fake's first attribute is <manifest package>: give it a namespace, as a crafted APK could
+    const dv = new DataView(xml.buffer);
+    let at = 8; at += dv.getUint32(at + 4, true); at += dv.getUint32(at + 4, true); // string pool, resource map
+    dv.setUint32(at + 16 + 20, 1, true);
+    expect(axmlAttribute(xml, 'manifest', 'package')).toBeUndefined();
+  });
+
   it('refuses a file that isn\'t an APK', async () => {
     const { apkPackage } = await import('../src');
     await expect(apkPackage(new TextEncoder().encode('not a real APK'))).rejects.toThrow(/isn't an APK/);
