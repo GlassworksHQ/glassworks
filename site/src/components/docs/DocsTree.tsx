@@ -9,12 +9,20 @@ import s from "../shell/Shell.module.css";
 export function DocsTree({ groups }: { groups: NavGroup[] }) {
   const path = usePathname();
   const within = (href: string) => path === href || path.startsWith(`${href}/`);
-  const link = (it: NavItem, sub = false) => (
-    <Link key={it.href} href={it.href} className={`${s.ni} ${sub ? s.sub : ""} ${path === it.href ? s.on : ""}`} aria-current={path === it.href ? "page" : undefined}>
-      {it.label}
-      {it.aside && <small>{it.aside}</small>}
-    </Link>
-  );
+  const link = (it: NavItem, sub = false) => {
+    const A = it.plain ? "a" : Link;
+    return (
+      <A
+        key={it.href}
+        href={it.href}
+        className={`${s.ni} ${sub ? s.sub : ""} ${it.deep ? s.deep : ""} ${path === it.href ? s.on : ""}`}
+        aria-current={path === it.href ? "page" : undefined}
+      >
+        {it.label}
+        {it.aside && <small>{it.aside}</small>}
+      </A>
+    );
+  };
   return (
     <nav className={s.nav} aria-label="Docs">
       {groups.map((g) => (

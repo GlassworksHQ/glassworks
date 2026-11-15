@@ -19,6 +19,26 @@ npm run brand -w site             # regenerate the mark files, badges and banner
 npm run brand:raster -w site      # re-render the PNGs (app icon, GitHub avatar, social images) with headless Chrome
 ```
 
+### The libraries' API reference
+
+`npm run build` and `npm run dev` first run `scripts/api-docs.mjs`. For each library in `libs/` that is
+published to Maven Central, it reads the latest release from `maven-metadata.xml`, downloads its
+`-javadoc.jar` (Dokka HTML), checks it against Central's `.sha256` or `.sha1`, and unpacks it to
+`public/docs/libraries/<name>/api/`. The site serves those pages as they are, with
+`public/api-reference.css` and a breadcrumb back to the docs added to each. The library's docs page
+and the sidebar link it with its version. It sits under the library's own page (`/docs/libraries/<name>`)
+rather than at `/api/`, which reads like a server endpoint.
+
+| Central says | The library's page shows |
+|---|---|
+| a release | "API reference: <name> <version>", served here, and in the sitemap |
+| 404 (not released yet) | "API reference: after the first release" |
+| nothing (no network) | the cached jar if there is one, else a link to javadoc.io |
+| a jar whose checksum doesn't match | nothing, because the build fails |
+
+Jars are cached in `.api-docs/cache/`. `MAVEN_REPO=<url>` reads another Maven repository, e.g. a
+release in a local repository before Central has it.
+
 Opening `npm run dev` from another machine (a tailnet name, a LAN IP)? Next.js blocks its dev scripts
 for unknown hosts, so the page renders but nothing interactive works. List the host in a git-ignored
 `.env.local` and restart the dev server:
@@ -64,6 +84,7 @@ src/app/frames/[slug]/render.webp/route.ts  each frame's render (frame.json `ren
 scripts/brand/clarity.mjs the Clarity README badge, served per frame at /frames/<id>/clarity-on-*.svg
 tests/clarity/         made-up Clarity summaries for working on the site (CLARITY_FIXTURES)
 src/lib/libraries.json the standalone libraries, one banner each
+src/lib/apiDocs.ts     each library's API reference, as scripts/api-docs.mjs found it on Maven Central
 scripts/brand/         `npm run brand` and `npm run brand:raster`: every brand file, from src/lib/markGeometry.ts
 public/brand/          downloadable SVGs
 ```

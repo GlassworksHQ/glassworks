@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
       "../{panes,pane-api}/**/README.md",
       "../branding/glass-tile/preview.webp",
       "./blog/**",
+      // which libraries have an API reference (scripts/api-docs.mjs, src/lib/apiDocs.ts)
+      "./.api-docs/libraries.json",
     ],
   },
   outputFileTracingExcludes: {
@@ -49,6 +51,9 @@ const nextConfig: NextConfig = {
       // isn't a pane (presence and light are core entities), so its page goes to the list.
       { source: "/panes/base", destination: "/panes/wall-base", permanent: true },
       { source: "/panes/sensors", destination: "/panes", permanent: true },
+      // A library's API reference is static Dokka HTML (scripts/api-docs.mjs), whose links are relative to
+      // its index.html, so the folder's own address goes there.
+      { source: "/docs/libraries/:name/api", destination: "/docs/libraries/:name/api/index.html", permanent: false },
     ];
   },
 };

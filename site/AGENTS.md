@@ -27,6 +27,7 @@ npm run build -w site        # every route is static; this is what Vercel runs
 npm run check:seo -w site    # after a build: every page has a title, description, canonical and preview
 npm run check:trace -w site  # after a build: each docs route's bundle has every published file
 npm run brand -w site        # regenerate public/brand/ after a frame.json or libraries.json change
+npm run api-docs -w site     # the libraries' API reference from Maven Central (build and dev run it first)
 ```
 
 CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frames/`,
@@ -48,7 +49,9 @@ files change.
    maps each file to its URL and nav group, and the site never keeps a copy. A doc's text changes in
    the Markdown, on GitHub; a new doc gets a line in `sources.ts`. A data change
    and the page that shows it go in one PR. The site's own words for that data are in
-   `src/lib/frameText.ts`.
+   `src/lib/frameText.ts`. The libraries' API reference is each release's Dokka HTML, from its
+   `-javadoc.jar` on Maven Central (`scripts/api-docs.mjs`), so the build also needs
+   repo1.maven.org; without it the pages link javadoc.io, and a checksum that doesn't match fails it.
 3. **Brand files are generated.** `public/brand/` comes from `scripts/brand/` (`npm run brand`).
    Don't draw or edit an SVG by hand. The build fails when a frame's banner isn't what its
    `frame.json` draws.

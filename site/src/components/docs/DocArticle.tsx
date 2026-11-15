@@ -5,11 +5,47 @@ import { EditGlyph } from "../Glyphs";
 import { Toc } from "./Toc";
 import { SECTIONS, type Doc } from "@/lib/docs";
 import { frameById } from "@/lib/frames";
+import type { ApiReference } from "@/lib/apiDocs";
 import d from "./Docs.module.css";
 import "./prose.css";
 
+/** A library's API reference, as a strip under the breadcrumb. */
+function ApiStrip({ name, reference: r }: { name: string; reference: ApiReference }) {
+  return (
+    <div className={d.strip} data-pagefind-ignore>
+      {r.kind === "site" && (
+        <>
+          <span>
+            API reference: <a href={r.href}>{name} {r.version}</a>
+          </span>
+          <code>dev.glassworks:{name}:{r.version}</code>
+        </>
+      )}
+      {r.kind === "javadoc.io" && (
+        <span>
+          API reference: <a href={r.href}>on javadoc.io</a>
+        </span>
+      )}
+      {r.kind === "unreleased" && <span>API reference: after the first release</span>}
+    </div>
+  );
+}
+
 /** One published doc: its header from the README's, the Markdown, and where to edit it. */
-export function DocArticle({ doc, prev, next, after }: { doc: Doc; prev?: Doc; next?: Doc; after?: ReactNode }) {
+export function DocArticle({
+  doc,
+  prev,
+  next,
+  after,
+  api,
+}: {
+  doc: Doc;
+  prev?: Doc;
+  next?: Doc;
+  after?: ReactNode;
+  /** a library's README: its API reference */
+  api?: { name: string; reference: ApiReference };
+}) {
   const section = SECTIONS.find((s) => s.id === doc.section)!.label;
   const frame = doc.frame ? frameById(doc.frame) : undefined;
   const toc = doc.toc.length >= 2 ? doc.toc : [];
@@ -31,6 +67,7 @@ export function DocArticle({ doc, prev, next, after }: { doc: Doc; prev?: Doc; n
               <StageChip support={frame.status} />
             </div>
           )}
+          {api && <ApiStrip {...api} />}
           <h1 id={doc.titleId || undefined} className={d.h1} data-pagefind-meta="title">
             {doc.title}
           </h1>

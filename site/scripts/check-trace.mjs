@@ -5,7 +5,8 @@
  * again on revalidation (src/lib/docs/index.ts), and a file missing from its bundle would fail it.
  * The docs' Markdown comes from src/lib/docs/sources.ts, the same map the site renders from, and the
  * posts are every site/blog/<folder>/index.md, as src/lib/blog/posts.ts reads them, so a new doc or
- * post that next.config.ts's outputFileTracingIncludes misses fails here. Reads .next only.
+ * post that next.config.ts's outputFileTracingIncludes misses fails here. The list of the libraries' API
+ * references (.api-docs/libraries.json, scripts/api-docs.mjs) is read the same way. Reads .next only.
  *
  *   npm run check:trace -w site
  */
@@ -30,7 +31,7 @@ const posts = readdirSync(join(site, "blog"), { withFileTypes: true })
   .filter((e) => e.isDirectory())
   .map((e) => `site/blog/${e.name}/index.md`);
 const markdown = [...new Set([...SOURCES.map((s) => s.file), ...posts])];
-const need = [...markdown, ...images].sort();
+const need = [...markdown, ...images, "site/.api-docs/libraries.json"].sort();
 
 /* every page and route handler the build made, from Next's own list of them, so a route
    without a trace file is reported rather than skipped */

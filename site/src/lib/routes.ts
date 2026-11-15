@@ -5,6 +5,7 @@ import { panes } from "./site";
 import { lastChanged } from "./docs";
 import { SOURCES as DOC_SOURCES } from "./docs/sources";
 import { POSTS } from "./blog/posts";
+import { apiReferences } from "./apiDocs";
 
 /*
  * Every page search engines should know about, for app/sitemap.ts. Each section of the site is one
@@ -47,10 +48,13 @@ const docs: RouteSource = () => [
   ...DOC_SOURCES.map((s) => ({ path: s.url as SitePath, modified: lastChanged(s.file) })),
 ];
 
+/** The index of each library's API reference this site serves: static Dokka pages (scripts/api-docs.mjs). */
+const apiDocs: RouteSource = () => [...apiReferences().values()].flatMap((r) => (r.kind === "site" ? [{ path: r.href }] : []));
+
 /** /blog and each post this build shows. A draft is noindex but listed, so preview builds stay checkable. */
 const blog: RouteSource = () => [{ path: "/blog" }, ...POSTS.map((p) => ({ path: p.url as SitePath, modified: p.date }))];
 
-export const SOURCES: Record<string, RouteSource> = { pages, frames: framePages, panes: panePages, docs, blog };
+export const SOURCES: Record<string, RouteSource> = { pages, frames: framePages, panes: panePages, docs, apiDocs, blog };
 
 export function siteRoutes(): SiteRoute[] {
   const all = Object.values(SOURCES).flatMap((s) => s());

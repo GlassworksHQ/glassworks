@@ -25,6 +25,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // the libraries' API reference: Dokka's own pages and scripts, unpacked by scripts/api-docs.mjs
+    "public/docs/libraries/**",
+    ".api-docs/**",
   ]),
 ]);
 
