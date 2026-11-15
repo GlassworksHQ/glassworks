@@ -46,6 +46,14 @@ export function fsck(file: string): { code: number; out: string } {
   return { code: r.status ?? -1, out: `${r.stdout}${r.stderr}` };
 }
 
+/**
+ * Clean, as e2fsck -fn means it: exit 0, and nothing it noticed and let pass. e2fsck -n exits 0 for a
+ * group descriptor checksum it finds wrong ("checksum is …, should be …. IGNORED").
+ */
+export function clean(r: { code: number; out: string }): boolean {
+  return r.code === 0 && !/checksum is|IGNORED/i.test(r.out);
+}
+
 export function debugfs(file: string, cmd: string): string {
   return execFileSync(tools.debugfs!, ['-R', cmd, file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }

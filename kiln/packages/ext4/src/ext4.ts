@@ -14,7 +14,10 @@ import {
 } from './layout';
 
 /** Owner, mode and label for something new. `mode` is the permission bits (e.g. 0o644). */
-export interface Attrs { mode: number; uid: number; gid: number; label?: string; time?: number }
+/** `xattrs`: more than the label (e.g. security.capability), kept in the inode. `time`: seconds since 1970, default now. */
+export interface Attrs { mode: number; uid: number; gid: number; label?: string; time?: number; xattrs?: Xattr[] }
+
+const now = () => Math.floor(Date.now() / 1000);
 
 export interface Stat { ino: number; mode: number; uid: number; gid: number; size: number; links: number; isDir: boolean; isFile: boolean; isSymlink: boolean }
 export interface DirEntry { name: string; ino: number; type: number }
@@ -256,10 +259,10 @@ export class Ext4 {
         if (dir) gd.usedDirs++;
         if (this.gdtCsum && i >= this.inodesPerGroup - gd.itableUnused) gd.itableUnused = this.inodesPerGroup - i - 1;
         if (gd.flags & BgFlag.InodeUninit) {
-          // the rest of this group's table was never written: zero the inodes up to this one
-          const itStart = gd.inodeTable;
-          const upto = Math.ceil(((i + 1) * this.inodeSize) / this.blockSize);
-          for (let b = 0; b < upto; b++) await this.disk.write(itStart + b, new Uint8Array(this.blockSize));
+          // this group's table was never written: zero all of it once, now, and mark it so, or the
+          // next allocation here would zero the inode just written
+          await this.disk.zeroFill(gd.inodeTable, Math.ceil((this.inodesPerGroup * this.inodeSize) / this.blockSize));
+          gd.flags = (gd.flags & ~BgFlag.InodeUninit) | BgFlag.ItableZeroed;
         }
         this.addFree(0, -1);
         this.touch(g);
@@ -560,6 +563,36 @@ export class Ext4 {
     }
   }
 
+  /**
+   * @internal The inode's xattrs in a block of their own (EXT4_XATTR_MAGIC, refcount 1): entries
+   * sorted as the kernel searches them (index, name length, name), values from the end, with the entry
+   * and block hashes e2fsck checks. Adds the block to i_file_acl and i_blocks.
+   */
+  async writeXattrBlock(n: Inode, list: Xattr[]): Promise<void> {
+    const sorted = [...list].sort((a, b) => a.index - b.index || a.name.length - b.name.length || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    const b = new Uint8Array(this.blockSize);
+    const dv = new DataView(b.buffer);
+    dv.setUint32(0, XATTR_MAGIC, true); dv.setUint32(4, 1, true); dv.setUint32(8, 1, true);
+    let eo = 32, vend = b.length, blockHash = 0;
+    for (const x of sorted) {
+      const name = enc.encode(x.name);
+      const esize = (16 + name.length + 3) & ~3, vsize = (x.value.length + 3) & ~3;
+      vend -= vsize;
+      if (eo + esize + 4 > vend) throw new Error('the xattrs don\'t fit in a block');
+      const h = xattrHash(name, x.value);
+      b[eo] = name.length; b[eo + 1] = x.index;
+      dv.setUint16(eo + 2, vend, true); dv.setUint32(eo + 4, 0, true); dv.setUint32(eo + 8, x.value.length, true); dv.setUint32(eo + 12, h, true);
+      b.set(name, eo + 16);
+      b.set(x.value, vend);
+      blockHash = ((blockHash << 16) ^ (blockHash >>> 16) ^ h) >>> 0;
+      eo += esize;
+    }
+    dv.setUint32(12, blockHash, true);
+    const [r] = await this.allocBlocks(1, this.groups[Math.floor((n.ino - 1) / this.inodesPerGroup)]!.inodeTable);
+    await this.disk.write(r!.start, b);
+    n.fileAcl = r!.start;
+  }
+
   /** Sets the SELinux label of an existing file (in the inode). */
   async setLabel(path: string, label: string): Promise<void> {
     const n = await this.inode(await this.resolve(path));
@@ -610,7 +643,7 @@ export class Ext4 {
     for (const t of old.tree) await this.freeBlocks_(t, 1);
     const treeBlocks = await this.setExtents(dir, merged, nr!.start);
     dir.size = (logical + 1) * this.blockSize;
-    dir.sectors = ((logical + 1) + treeBlocks) * (this.blockSize / 512);
+    dir.sectors = ((logical + 1) + treeBlocks + (dir.fileAcl ? 1 : 0)) * (this.blockSize / 512);
     await this.putInode(dir);
   }
 
@@ -641,9 +674,16 @@ export class Ext4 {
     const n = new Inode(ino, new Uint8Array(this.inodeSize));
     n.mode = type | (attrs.mode & 0o7777);
     n.uid = attrs.uid; n.gid = attrs.gid;
-    n.setTimes(attrs.time ?? 0);
+    n.setTimes(attrs.time ?? now());
+    const list = [...(attrs.xattrs ?? []).filter((x) => !isLabel(x)), ...(attrs.label ? [selinux(attrs.label)] : [])];
     if (this.inodeSize > 128) n.dv.setUint16(128, Math.min(this.inodeSize - 128, Math.max(this.sbv.getUint16(350, true), this.sbv.getUint16(348, true), 28)) & ~3, true);
-    this.writeIbodyXattrs(n, attrs.label ? [selinux(attrs.label)] : []);
+    try {
+      this.writeIbodyXattrs(n, list);
+    } catch {
+      // more than fits in the inode (a label and security.capability, say): all of them in an xattr block
+      this.writeIbodyXattrs(n, []);
+      await this.writeXattrBlock(n, list);
+    }
     return n;
   }
 
@@ -659,7 +699,7 @@ export class Ext4 {
     dv.setUint32(12, dir, true); dv.setUint16(16, this.blockSize - 12, true); data[18] = 2; data[19] = FileType.Dir; data[20] = 0x2e; data[21] = 0x2e;
     await this.disk.write(r!.start, data);
     await this.setExtents(n, [{ logical: 0, start: r!.start, count: 1 }], r!.start);
-    n.size = this.blockSize; n.links = 2; n.sectors = this.blockSize / 512;
+    n.size = this.blockSize; n.links = 2; n.sectors = (1 + (n.fileAcl ? 1 : 0)) * (this.blockSize / 512);
     await this.putInode(n);
     await this.addEntry(dir, name, n.ino, FileType.Dir);
     const parent = await this.inode(dir);
@@ -699,18 +739,19 @@ export class Ext4 {
     } else {
       await this.setExtents(n, [], 0);
     }
-    n.size = data.length; n.links = 1; n.sectors = (count + tree) * (this.blockSize / 512);
+    n.size = data.length; n.links = 1; n.sectors = (count + tree + (n.fileAcl ? 1 : 0)) * (this.blockSize / 512);
     if (data.length >= 2 ** 31 && !(this.roCompat & RoCompat.LargeFile)) throw new Error('a file over 2 GiB needs large_file');
     await this.putInode(n);
     await this.addEntry(dir, name, n.ino, FileType.Reg);
     return n.ino;
   }
 
-  /** Replaces a file's contents, keeping its owner, mode and xattrs. */
+  /** Replaces a file's contents, keeping its owner, mode and every xattr (the label, security.capability, …). */
   async replaceFile(path: string, data: Uint8Array, time?: number): Promise<void> {
     const old = await this.inode(await this.resolve(path));
-    const label = (await this.xattrs(old)).find((x) => x.index === XattrIndex.Security && x.name === 'selinux');
-    const attrs: Attrs = { mode: old.mode & 0o7777, uid: old.uid, gid: old.gid, label: label ? dec.decode(label.value).replace(/\0+$/, '') : undefined, time };
+    const xattrs = await this.xattrs(old);
+    const label = xattrs.find(isLabel);
+    const attrs: Attrs = { mode: old.mode & 0o7777, uid: old.uid, gid: old.gid, label: label ? dec.decode(label.value).replace(/\0+$/, '') : undefined, time, xattrs: xattrs.filter((x) => !isLabel(x)) };
     await this.remove(path, { time });
     await this.writeFile(path, data, attrs);
   }
@@ -727,7 +768,7 @@ export class Ext4 {
       for (const k of kids) await this.remove(`${path.replace(/\/$/, '')}/${k.name}`, o);
     }
     await this.removeEntry(dir, name);
-    const time = o.time ?? 0;
+    const time = o.time ?? now();
     if (n.isDir) {
       const parent = await this.inode(dir);
       parent.links--;
@@ -757,6 +798,8 @@ export class Ext4 {
     await this.freeInode(n, time);
   }
 }
+
+const isLabel = (x: Xattr) => x.index === XattrIndex.Security && x.name === 'selinux';
 
 /** The security.selinux xattr for `label` (stored with its NUL, as libselinux writes it). */
 export function selinux(label: string): Xattr {

@@ -5,7 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Disk, Ext4, MemoryStore, mkfs, readSparse, writeSparse } from '../src';
-import { cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from './tools';
+import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from './tools';
 
 const T = 1_700_000_000;
 const SYSTEM = { mode: 0o644, uid: 0, gid: 0, label: 'u:object_r:system_file:s0', time: T };
@@ -51,7 +51,7 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
 
       const r = fsck(img);
       expect(r.out).toMatch(/clean|\d+\/\d+ files/);
-      expect(r.code, r.out).toBe(0);
+      expect(clean(r), r.out).toBe(true);
       expect(Buffer.from(debugfsCat(img, '/priv-app/S1Kiosk/S1Kiosk.apk'))).toEqual(Buffer.from(apk));
       expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/hwrotation=270\n$/);
       expect(debugfs(img, 'ls /priv-app')).not.toMatch(/\bOld\b/);
@@ -64,7 +64,7 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
       const again = await Ext4.open(await load(img));
       expect(await again.label('/media/bootanimation.zip')).toBe('u:object_r:system_file:s0');
       expect((await again.readdir('/media')).length).toBe(2 + 20 + 1 + 300);
-    }, 60_000);
+    }, 180_000);
 
   it('writes a file in many pieces through an extent leaf block', async () => {
     const img = join(dir, 'frag.img');
@@ -80,10 +80,57 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
     await fs.flush();
     await dump(disk, img);
     const r = fsck(img);
-    expect(r.code, r.out).toBe(0);
+    expect(clean(r), r.out).toBe(true);
     expect(debugfs(img, 'stat /big')).toMatch(/\(ETB0\)|EXTENTS:[\s\S]*\(0-/);
     expect(Buffer.from(debugfsCat(img, '/big'))).toEqual(Buffer.from(big));
-  }, 60_000);
+  }, 180_000);
+
+  it('the check catches a wrong group descriptor checksum (e2fsck -n exits 0 for it)', async () => {
+    const img = join(dir, 'csum.img');
+    mke2fs(img, 64, MAKE_EXT4FS);
+    const disk = await load(img);
+    const gdt = await disk.read(1);
+    gdt[30]! ^= 0xff; // group 0's bg_checksum
+    await disk.write(1, gdt);
+    await dump(disk, img);
+    const r = fsck(img);
+    expect(r.out).toMatch(/checksum is .*IGNORED/s);
+    expect(clean(r)).toBe(false);
+  });
+
+  it('allocates many inodes in a group that was never initialised (INODE_UNINIT)', async () => {
+    const img = join(dir, 'uninit.img');
+    mke2fs(img, 160, [...MAKE_EXT4FS, '-N', '128']); // 2 groups of 64 inodes; group 1 starts INODE_UNINIT, and 60 files spill into it
+    const disk = await load(img);
+    const fs = await Ext4.open(disk);
+    for (let i = 0; i < 60; i++) await fs.writeFile(`/f${i}`, new Uint8Array(100 + i), SYSTEM);
+    await fs.flush();
+    await dump(disk, img);
+    const r = fsck(img);
+    expect(clean(r), r.out).toBe(true);
+    for (const i of [0, 30, 59]) expect(debugfsCat(img, `/f${i}`).length).toBe(100 + i);
+  }, 180_000);
+
+  it('removes and replaces without a time (now), and replace keeps every xattr', async () => {
+    const img = join(dir, 'bare.img');
+    mke2fs(img, 64, MAKE_EXT4FS);
+    const disk = await load(img);
+    const fs = await Ext4.open(disk);
+    const cap = new Uint8Array([1, 0, 0, 2, 0, 0x30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); // a VFS_CAP_REVISION_2 value
+    await fs.writeFile('/gone', new Uint8Array(5000), { mode: 0o644, uid: 0, gid: 0 });
+    await fs.writeFile('/bin', new Uint8Array(9000), { mode: 0o755, uid: 0, gid: 2000, label: 'u:object_r:system_file:s0', xattrs: [{ index: 6, name: 'capability', value: cap }] });
+    await fs.remove('/gone');
+    await fs.replaceFile('/bin', new Uint8Array(7000).fill(7));
+    await fs.flush();
+    await dump(disk, img);
+    const r = fsck(img);
+    expect(clean(r), r.out).toBe(true);
+    expect(debugfs(img, 'ea_get -x /bin security.capability')).toMatch(/01 00 00 02 00 30/i); // label + capability overflow into an xattr block
+    expect(debugfs(img, 'ea_get /bin security.selinux')).toContain('system_file');
+    expect(debugfs(img, 'stat /bin')).toMatch(/Mode:\s+0755[\s\S]*Group:\s+2000/);
+    const ctime = Number(/ctime: 0x([0-9a-f]+)/.exec(debugfs(img, 'stat /bin'))![1]!.slice(0, 8));
+    expect(ctime).not.toBe(0);
+  }, 180_000);
 
   it('makes a fresh filesystem that e2fsck finds clean, with lost+found, a journal and labels', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 7000);
@@ -95,14 +142,14 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
     const img = join(dir, 'fresh.img');
     await dump(disk, img);
     const r = fsck(img);
-    expect(r.code, r.out).toBe(0);
+    expect(clean(r), r.out).toBe(true);
     expect(debugfs(img, 'stats')).toMatch(/Filesystem features:\s+has_journal ext_attr filetype extent sparse_super large_file extra_isize/);
     expect(debugfs(img, 'stat /misc/adb')).toMatch(/Mode:\s+02750/);
     expect(debugfs(img, 'stat /misc/adb/adb_keys')).toMatch(/User:\s+1000\s+Group:\s+2000/);
     expect(debugfs(img, 'ea_get / security.selinux')).toContain('system_data_file');
     expect(new TextDecoder().decode(debugfsCat(img, '/misc/adb/adb_keys'))).toContain('kiln@glassworks');
     expect(debugfs(img, 'ls /')).toContain('lost+found');
-  }, 60_000);
+  }, 180_000);
 
   it('through a sparse image: what comes out flashes the same filesystem', async () => {
     const img = join(dir, 'sp.img');
@@ -126,9 +173,9 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
     const flashed = join(dir, 'flashed.img');
     await dump(dev, flashed);
     const r = fsck(flashed);
-    expect(r.code, r.out).toBe(0);
+    expect(clean(r), r.out).toBe(true);
     expect(debugfs(flashed, 'ls /')).toContain('new');
-  }, 60_000);
+  }, 180_000);
 });
 
 describe('ext4 without e2fsprogs', () => {

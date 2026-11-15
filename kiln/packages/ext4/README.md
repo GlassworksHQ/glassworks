@@ -53,9 +53,10 @@ checksums:
 - htree directories, which it changes as linear ones.
 
 It refuses rather than half-handles anything else: 64bit, meta_bg, inline data, metadata_csum,
-bigalloc, encryption, a journal that needs recovery, block-mapped (non-extent) files, and xattrs
-kept in blocks for a file it changes. New files get their xattrs inside the inode (256-byte
-inodes), as `make_ext4fs` writes them.
+bigalloc, encryption, a journal that needs recovery, and block-mapped (non-extent) files. New files
+get their xattrs inside the inode (256-byte inodes), as `make_ext4fs` writes them, or in an xattr
+block when they don't fit (a label and `security.capability`, say). `replaceFile` keeps every xattr
+the old file had. Times default to now: an inode freed with `dtime` 0 is an e2fsck error.
 
 It doesn't journal. It edits an image that isn't mounted, as `make_ext4fs` and `e2fsdroid` do.
 It writes the primary superblock and descriptors. The backups keep their counts, as the kernel's do.
@@ -64,7 +65,7 @@ It writes the primary superblock and descriptors. The backups keep their counts,
 
 `e2fsprogs` is the judge. The tests make images with `mke2fs`: one in the `make_ext4fs` style (no
 flex_bg, uninit_bg, a resize inode) and one as `mke2fs`'s own ext4. They change those images, then
-require `e2fsck -fn` to find them clean. `debugfs` must read back the same bytes, owner, mode and
+require `e2fsck -fn` to find them clean: exit 0, and no "checksum is … IGNORED" (which `-n` lets pass). `debugfs` must read back the same bytes, owner, mode and
 SELinux label.
 
 Other cases:
