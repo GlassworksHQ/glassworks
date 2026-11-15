@@ -54,11 +54,19 @@ export async function zipEntry(zip: Uint8Array, name: string): Promise<Uint8Arra
   return undefined;
 }
 
-/** The value of attribute `attr` on the first element `element` in binary XML. */
-export function axmlAttribute(xml: Uint8Array, element: string, attr: string): string | undefined {
+/** Android's resource ids for the manifest attributes read here (android.R.attr). */
+const ATTR_IDS: Record<string, number> = { minSdkVersion: 0x0101020c };
+
+/**
+ * The value of attribute `attr` on the first element `element` in binary XML: a string, or a number
+ * for an integer value (TYPE_INT_DEC or TYPE_INT_HEX). The attribute is found by name, or by its
+ * resource id when the build left the name out.
+ */
+export function axmlAttribute(xml: Uint8Array, element: string, attr: string): string | number | undefined {
   const dv = new DataView(xml.buffer, xml.byteOffset, xml.byteLength);
   if (dv.getUint16(0, true) !== 0x0003) throw new Error('AndroidManifest.xml isn\'t binary XML');
   let strings: string[] = [];
+  let resIds: number[] = [];
   for (let at = dv.getUint16(2, true); at + 8 <= xml.length;) {
     const type = dv.getUint16(at, true), hsize = dv.getUint16(at + 2, true), size = dv.getUint32(at + 4, true);
     if (size < 8) break;
@@ -78,16 +86,22 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
           strings.push(td16.decode(xml.subarray(p, p + len * 2)));
         }
       }
+    } else if (type === 0x0180) {
+      resIds = [];
+      for (let o = at + hsize; o < at + size; o += 4) resIds.push(dv.getUint32(o, true));
     } else if (type === 0x0102) {
       const ext = at + hsize;
       if (strings[dv.getUint32(ext + 4, true)] === element) {
         const aStart = dv.getUint16(ext + 8, true), aSize = dv.getUint16(ext + 10, true), aCount = dv.getUint16(ext + 12, true);
         for (let i = 0; i < aCount; i++) {
           const a = ext + aStart + i * aSize;
-          if (strings[dv.getUint32(a + 4, true)] !== attr) continue;
-          const raw = dv.getUint32(a + 8, true);
+          const nameIdx = dv.getUint32(a + 4, true);
+          if (strings[nameIdx] !== attr && (ATTR_IDS[attr] === undefined || resIds[nameIdx] !== ATTR_IDS[attr])) continue;
+          const raw = dv.getUint32(a + 8, true), kind = xml[a + 15], data = dv.getUint32(a + 16, true);
           if (raw !== 0xffffffff) return strings[raw];
-          return xml[a + 15] === 0x03 ? strings[dv.getUint32(a + 16, true)] : undefined; // TYPE_STRING
+          if (kind === 0x03) return strings[data];                 // TYPE_STRING
+          if (kind === 0x10 || kind === 0x11) return data | 0;      // TYPE_INT_DEC, TYPE_INT_HEX
+          return undefined;
         }
         return undefined;
       }
@@ -97,11 +111,26 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
   return undefined;
 }
 
-/** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */
-export async function apkPackage(apk: Uint8Array): Promise<string> {
+export interface ApkInfo {
+  package: string;
+  /** android:minSdkVersion: a number, or a codename for a preview SDK; undefined when not set (API 1) */
+  minSdk?: number | string;
+  /** the ABIs it has native code for (lib/<abi>/), none for a pure-Java APK */
+  abis: string[];
+}
+
+/** What an APK needs of a device, read in the browser before anything goes to it. */
+export async function apkInfo(apk: Uint8Array): Promise<ApkInfo> {
   const manifest = await zipEntry(apk, 'AndroidManifest.xml');
   if (!manifest) throw new Error('this file isn\'t an APK (no AndroidManifest.xml)');
   const pkg = axmlAttribute(manifest, 'manifest', 'package');
-  if (!pkg) throw new Error('this APK\'s manifest names no package');
-  return pkg;
+  if (typeof pkg !== 'string' || !pkg) throw new Error('this APK\'s manifest names no package');
+  const min = axmlAttribute(manifest, 'uses-sdk', 'minSdkVersion');
+  const abis = [...new Set(zipNames(apk).map((n) => /^lib\/([^/]+)\/[^/]+\.so$/.exec(n)?.[1]).filter((x): x is string => !!x))];
+  return { package: pkg, ...(min !== undefined ? { minSdk: typeof min === 'string' && /^\d+$/.test(min) ? Number(min) : min } : {}), abis };
+}
+
+/** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */
+export async function apkPackage(apk: Uint8Array): Promise<string> {
+  return (await apkInfo(apk)).package;
 }

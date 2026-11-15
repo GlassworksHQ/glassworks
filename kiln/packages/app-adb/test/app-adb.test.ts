@@ -73,6 +73,14 @@ describe('the APK\'s package, read before anything is installed', () => {
     expect(await apkPackage(new Uint8Array(Buffer.concat([local, z, central, end])))).toBe('sh.edm.s1kiosk');
   });
 
+  it('reads minSdkVersion (by name, or by resource id when the name is stripped) and the ABIs', async () => {
+    const { fakeApk } = await import('./fakes');
+    const { apkInfo } = await import('../src');
+    expect(await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'arm64-v8a': { 'libxul.so': new Uint8Array(1) } } }))).toEqual({ package: 'sh.edm.s1kiosk', minSdk: 23, abis: ['arm64-v8a'] });
+    expect(await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, stripNames: true, utf8: true }))).toEqual({ package: 'sh.edm.s1kiosk', minSdk: 26, abis: [] });
+    expect((await apkInfo(fakeApk('sh.edm.s1kiosk'))).minSdk).toBeUndefined();
+  });
+
   it('refuses a file that isn\'t an APK', async () => {
     const { apkPackage } = await import('../src');
     await expect(apkPackage(new TextEncoder().encode('not a real APK'))).rejects.toThrow(/isn't an APK/);

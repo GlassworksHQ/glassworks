@@ -5,7 +5,7 @@
 // answer "Allow USB debugging?". Nothing here is downloaded from or uploaded to anyone: the person's
 // file goes in, and the patched copy stays in their browser until fastboot writes it.
 // The findings behind each step: frames/lululemon-mirror/research/image-patch.md.
-import { PKG, apkPackage, zipEntry, zipNames } from '@glassworks/app-adb';
+import { PKG, apkInfo, zipEntry, zipNames } from '@glassworks/app-adb';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
@@ -31,6 +31,9 @@ export const LABELS = {
 
 /** Android's ids (system/core/include/private/android_filesystem_config.h). */
 const AID = { root: 0, system: 1000, shell: 2000, misc: 9998 } as const;
+
+/** The Mirror's Android: 6.0.1. */
+const MIRROR_API = 23;
 
 /** S1 Kiosk in the system image: a privileged app, so Android 6 grants its privileged permissions. */
 export const APP_DIR = '/priv-app/S1Kiosk';
@@ -66,8 +69,12 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const prop = new TextDecoder().decode(await fs.readFile('/build.prop'));
   if (!prop.includes(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`)) throw new Error('this isn\'t the Glass Panes Mirror image Kiln knows (its build fingerprint differs). Nothing was changed.');
-  const pkg = await apkPackage(o.apk);
-  if (pkg !== PKG) throw new Error(`this APK is ${pkg}, not S1 Kiosk (${PKG}). Nothing was changed.`);
+  const info = await apkInfo(o.apk);
+  if (info.package !== PKG) throw new Error(`this APK is ${info.package}, not S1 Kiosk (${PKG}). Nothing was changed.`);
+  // the Mirror runs Android 6 (API 23) on arm64 with 32-bit arm too (frame.json abis): the legacy build fits
+  const min = info.minSdk ?? 1;
+  if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): pick S1 Kiosk's legacy build. Nothing was changed.`);
+  if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: pick S1 Kiosk's legacy build for arm64-v8a. Nothing was changed.`);
   const names = zipNames(o.apk);
   const abi = LIB_DIRS.find(([a]) => names.some((n) => n.startsWith(`lib/${a}/`)));
   const libs = abi ? names.filter((n) => n.startsWith(`lib/${abi[0]}/`) && n.endsWith('.so') && !n.slice(`lib/${abi[0]}/`.length).includes('/')) : [];

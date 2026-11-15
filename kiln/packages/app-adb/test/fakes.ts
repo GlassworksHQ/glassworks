@@ -1,8 +1,9 @@
 // A tiny stand-in APK: a zip with only an AndroidManifest.xml in binary XML, naming `pkg`. Enough for
 // apkPackage, the tests and Kiln's demos. Nothing in it would install.
 
-function axml(pkg: string, utf8: boolean): Uint8Array {
-  const strs = ['manifest', 'package', pkg];
+function axml(pkg: string, utf8: boolean, minSdk?: number, stripNames = false): Uint8Array {
+  // strings: 0 manifest, 1 package, 2 pkg, 3 uses-sdk, 4 minSdkVersion (left empty, as some builds do, with stripNames)
+  const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion'];
   const enc = new TextEncoder();
   const bodies = strs.map((s) => {
     if (utf8) { const b = enc.encode(s); return Uint8Array.of(s.length, b.length, ...b, 0); }
@@ -16,8 +17,9 @@ function axml(pkg: string, utf8: boolean): Uint8Array {
   const offsets: number[] = [];
   bodies.reduce((o, b) => { offsets.push(o); data.set(b, o); return o + b.length; }, 0);
   const poolHdr = 28, poolSize = poolHdr + strs.length * 4 + data.length;
+  const mapSize = 8 + 5 * 4; // resource ids for strings 0-4: only minSdkVersion has one
   const elemSize = 16 + 20 + 20;
-  const total = 8 + poolSize + elemSize;
+  const total = 8 + poolSize + mapSize + elemSize + (minSdk !== undefined ? elemSize : 0);
   const x = new Uint8Array(total);
   const v = new DataView(x.buffer);
   v.setUint16(0, 0x0003, true); v.setUint16(2, 8, true); v.setUint32(4, total, true);
@@ -28,13 +30,21 @@ function axml(pkg: string, utf8: boolean): Uint8Array {
   offsets.forEach((o, i) => v.setUint32(p + poolHdr + i * 4, o, true));
   x.set(data, p + poolHdr + strs.length * 4);
   p += poolSize;
-  v.setUint16(p, 0x0102, true); v.setUint16(p + 2, 16, true); v.setUint32(p + 4, elemSize, true);
-  v.setUint32(p + 8, 1, true); v.setUint32(p + 12, 0xffffffff, true);
-  const e = p + 16;
-  v.setUint32(e, 0xffffffff, true); v.setUint32(e + 4, 0, true); v.setUint16(e + 8, 20, true); v.setUint16(e + 10, 20, true); v.setUint16(e + 12, 1, true);
-  const a = e + 20;
-  v.setUint32(a, 0xffffffff, true); v.setUint32(a + 4, 1, true); v.setUint32(a + 8, 2, true);
-  v.setUint16(a + 12, 8, true); x[a + 15] = 0x03; v.setUint32(a + 16, 2, true);
+  v.setUint16(p, 0x0180, true); v.setUint16(p + 2, 8, true); v.setUint32(p + 4, mapSize, true);
+  v.setUint32(p + 8 + 4 * 4, 0x0101020c, true);
+  p += mapSize;
+  const element = (name: number, attr: number, kind: number, data: number) => {
+    v.setUint16(p, 0x0102, true); v.setUint16(p + 2, 16, true); v.setUint32(p + 4, elemSize, true);
+    v.setUint32(p + 8, 1, true); v.setUint32(p + 12, 0xffffffff, true);
+    const e = p + 16;
+    v.setUint32(e, 0xffffffff, true); v.setUint32(e + 4, name, true); v.setUint16(e + 8, 20, true); v.setUint16(e + 10, 20, true); v.setUint16(e + 12, 1, true);
+    const a = e + 20;
+    v.setUint32(a, 0xffffffff, true); v.setUint32(a + 4, attr, true); v.setUint32(a + 8, kind === 0x03 ? data : 0xffffffff, true);
+    v.setUint16(a + 12, 8, true); x[a + 15] = kind; v.setUint32(a + 16, data, true);
+    p += elemSize;
+  };
+  element(0, 1, 0x03, 2);
+  if (minSdk !== undefined) element(3, 4, 0x10, minSdk);
   return x;
 }
 
@@ -67,7 +77,8 @@ function zip(files: [string, Uint8Array][]): Uint8Array {
 }
 
 /** `libs`: native libraries by ABI, e.g. { 'arm64-v8a': { 'libxul.so': bytes } }. */
-export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Record<string, Record<string, Uint8Array>> } = {}): Uint8Array {
+/** `minSdk`: a <uses-sdk android:minSdkVersion>; `stripNames`: its attribute named only by resource id. */
+export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Record<string, Record<string, Uint8Array>>; minSdk?: number; stripNames?: boolean } = {}): Uint8Array {
   const libs = Object.entries(o.libs ?? {}).flatMap(([abi, fs]) => Object.entries(fs).map(([n, b]): [string, Uint8Array] => [`lib/${abi}/${n}`, b]));
-  return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs]);
+  return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8, o.minSdk, o.stripNames)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs]);
 }
