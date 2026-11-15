@@ -1,8 +1,4 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-
-package dev.glassworks.generic
+package sh.edm.s1kiosk.manage
 
 import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
@@ -57,20 +53,35 @@ import java.net.NetworkInterface
 import java.util.Locale
 
 /**
- * The generic app's Manage page (#23): S1 Kiosk's (S1Manage), less what only the S1 has: the radio's link and
- * the root side's properties. The core's [ManageServer] on port 8099 with the QR-code pages ([SignInServer])
- * behind it. Made by [HaAuth.startServer], which owns the port. Once the #269 stack has landed in S1Manage,
- * the two become one class in the core.
+ * An app's Manage page (#33): the core's [ManageServer] on port 8099 with the QR-code pages ([SignInServer])
+ * behind it, what the page shows about this panel, and its actions. Made by [HaAuth.startServer], which owns
+ * the port. Every app on the core serves this one; what only one app has (the S1's radio link and root side)
+ * comes in [own] (#23).
  */
-class GenericManage(
+open class AppManage(
     context: Context, private val runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, private val prefs: KioskPrefs,
     /** The version the page shows ([dev.glassworks.platform.AppBuild.shown]); a test passes a test build's. */
     private val version: String = runtime.build.shown,
+    private val own: Own = Own(),
 ) : ManagePage {
+
+    /** What one app adds to the page. The defaults add nothing. */
+    class Own(
+        /** Extra links on a pane's row, by pane id: (text, path). */
+        val paneLinks: (String) -> List<Pair<String, String>> = { emptyList() },
+        /** Paths the QR-code pages serve beyond the dashboard's sign-in. */
+        val qrPaths: Set<String> = emptySet(),
+        /** Lines the diagnostics file ends with. */
+        val diagnostics: StringBuilder.() -> Unit = {},
+        /** The app's own log tags, in words, before [AppManage.logSource]'s. */
+        val logSource: (String) -> String? = { null },
+        /** The About section's licence line. */
+        val licence: String = "MPL-2.0 and MIT (Open source licences has each)",
+    )
     private val app = context.applicationContext
     private val dir = File(app.filesDir, "manage")
     val log = ManageLog(File(dir, "log"))
-    private val tail = LogcatTail(log, ::logSource, onError = { Log.w(TAG, it) })
+    private val tail = LogcatTail(log, { tag -> own.logSource(tag) ?: logSource(tag) }, onError = { Log.w(TAG, it) })
 
     private val host = Host()
 
@@ -85,7 +96,7 @@ class GenericManage(
         code = runtime.panelCode,
         signIn = HaSignIn(HaGatewayClient(tokens) { url -> WsHaSocket.connect(url) }, warn = { Log.w(TAG, it) }),
         log = log,
-        qrPaths = setOf("/signin", SignInServer.CONTINUE, "/callback"),
+        qrPaths = setOf("/signin", SignInServer.CONTINUE, "/callback") + own.qrPaths,
         qr = { req -> qr(signIn, req) },
         ownHosts = ::ownHosts,
         event = { msg -> Log.i(TAG, msg); runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) } },
@@ -126,14 +137,14 @@ class GenericManage(
                 haBase = prefs.haBase,
                 tiles = listOf(haTile(), wifiTile(), engineTile(), memoryTile()),
                 // The panes the panel's rail lists, no more: one the frame can't run has no section, so it isn't shown (#23).
-                panes = panes.map { paneRow(it.id, it) },
+                panes = panes.map { paneRow(it.id, it, own.paneLinks(it.id)) },
                 sections = model.sections,
                 // After the About section's own items (the version, the licences).
                 about = listOf(
                     "Frame" to runtime.frame.hardware.let { "${it.manufacturer} ${it.model}" },
                     "Android" to Build.VERSION.RELEASE,
                     "Engine" to runtime.engine.name.ifEmpty { "Unknown" },
-                    "Licence" to "MPL-2.0 and MIT (Open source licences has each)",
+                    "Licence" to own.licence,
                     "Source" to "github.com/GlassworksHQ/glassworks",
                 ),
             )
@@ -164,6 +175,7 @@ class GenericManage(
                 appendLine("  [${sec.id}] ${sec.title}")
                 for (line in itemLines(sec.items)) appendLine("    $line")
             }
+            own.diagnostics(this)
         }
     }
 
@@ -173,7 +185,7 @@ class GenericManage(
     }
 
     /** A section's items as the diagnostics file lists them. */
-    internal fun itemLines(items: List<SettingsItem>): List<String> = items.flatMap { i ->
+    fun itemLines(items: List<SettingsItem>): List<String> = items.flatMap { i ->
         fun v(f: () -> Any?) = runCatching { f()?.toString().orEmpty() }.getOrDefault("?")
         when (i) {
             is SettingsItem.Text -> listOf("${i.title}: ${v(i.value)}")
@@ -196,7 +208,10 @@ class GenericManage(
             // What each button does now, without its links (they carry the Home Assistant address).
             is SettingsItem.Blueprints -> listOf("${dev.glassworks.pane.BLUEPRINTS}:") + runCatching { i.card(dev.glassworks.pane.BlueprintSurface.PANEL) }.getOrNull()
                 ?.let { c -> listOfNotNull(c.note?.let { "  $it" }) + c.rows.map { (bp, a) -> "  ${bp.name}: ${a::class.simpleName}" } }.orEmpty()
-            is SettingsItem.Link, is SettingsItem.Native -> emptyList()
+            is SettingsItem.Action -> listOf("${i.title}: ${v(i.detail)}")
+            // A native view's typed twin, as the Manage page shows it; never a secret (SettingsItem.Native).
+            is SettingsItem.Native -> itemLines(dev.glassworks.pane.SettingsChange.twinOf(i))
+            is SettingsItem.Link -> emptyList()
         }
     }
 
@@ -278,7 +293,7 @@ class GenericManage(
      * covers a panel that signed in on its own screen ("Sign in on this panel instead") and so holds no
      * HA credentials. Every QR code names its own path (`/signin`, `/thread`), so none of them needs `/`.
      */
-    internal fun setUp(): Boolean =
+    fun setUp(): Boolean =
         HaAuth.signedIn || SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped)
 
     /** The panel's IP addresses now, `localhost`, its ESPHome name and its Android host name, as `.local`. */
@@ -294,23 +309,24 @@ class GenericManage(
         return out
     }
 
-    private fun prop(key: String): String = runCatching {
-        val c = Class.forName("android.os.SystemProperties")
-        c.getMethod("get", String::class.java, String::class.java).invoke(null, key, "") as String
-    }.getOrDefault("")
-
     private fun qr(signIn: SignInServer, req: HttpRequest): HttpResponse {
         val r = signIn.handle(SignInServer.Request(req.method, req.path, req.query, req.headers))
         return HttpResponse(r.status, r.headers, r.body)
     }
 
     companion object {
-        const val TAG = "S1Kiosk.Manage"
+        const val TAG = "S1Manage"
 
         /** How long a restart or reboot waits, so the page that started it reaches the browser first. */
         const val ACTION_DELAY_MS = 1_000L
 
-        /** The app's log tags, in words, for the Manage log. The rest (Gecko, Android) stays out. */
+        /** An Android system property, "" when unset or unreadable. */
+        fun prop(key: String): String = runCatching {
+            val c = Class.forName("android.os.SystemProperties")
+            c.getMethod("get", String::class.java, String::class.java).invoke(null, key, "") as String
+        }.getOrDefault("")
+
+        /** The core's log tags, in words, for the Manage log. The rest (Gecko, Android) stays out; an app adds its own ([Own.logSource]). */
         fun logSource(tag: String): String? = when {
             tag.startsWith("S1Kiosk.Screen") -> "Screen"
             tag.startsWith("S1Kiosk.Wifi") -> "Wi-Fi"

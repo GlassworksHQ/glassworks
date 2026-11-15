@@ -37,6 +37,7 @@ import sh.edm.s1kiosk.auth.HttpPoster
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.esphome.MdnsAdvertiser
 import sh.edm.s1kiosk.esphome.PanelDevice
+import sh.edm.s1kiosk.manage.AppManage
 import sh.edm.s1kiosk.settings.S1Settings
 import sh.edm.s1kiosk.voice.AssistDefinition
 
@@ -89,18 +90,27 @@ class GenericAppTest {
         return announced.single() to device
     }
 
-    private fun manage(runtime: GlassworksRuntime): GenericManage {
+    private fun manage(runtime: GlassworksRuntime): AppManage {
         val tokens = HaTokenClient(object : HttpPoster {
             override fun postForm(url: String, body: String) = 0 to ""
             override fun get(url: String, maxBytes: Int) = 0 to ""
         })
-        return GenericManage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app))
+        return AppManage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app))
     }
 
     @Test fun itIsItsOwnAppNotS1Kiosk() {
         assertEquals("dev.glassworks.generic_android", BuildConfig.APPLICATION_ID)
         assertEquals("Glassworks", app.getString(R.string.app_name))
         assertEquals("Glassworks", GenericApp().build.product)
+    }
+
+    /** #23: the service's notification says the app's name, which the core once hard-coded as "S1 Kiosk". */
+    @Test @Config(application = GenericApp::class)
+    fun theServicesNotificationSaysTheAppsName() {
+        val service = org.robolectric.Robolectric.buildService(sh.edm.s1kiosk.KioskService::class.java).get()
+        val build = sh.edm.s1kiosk.KioskService::class.java.getDeclaredMethod("buildNotification").apply { isAccessible = true }
+        val n = build.invoke(service) as android.app.Notification
+        assertEquals("Glassworks", n.extras.getString(android.app.Notification.EXTRA_TITLE))
     }
 
     @Test fun theManifestRunsTheCoresShellAndCanBeTheHomeApp() {
@@ -175,5 +185,8 @@ class GenericAppTest {
         val diagnostics = manage(runtime()).diagnostics()
         assertTrue(diagnostics, diagnostics.lineSequence().first().startsWith("Version: Glassworks 1.0.0 "))
         assertFalse("no root side here", "Root side" in diagnostics)
+        val status = manage(runtime()).status()
+        assertEquals("MPL-2.0 and MIT (Open source licences has each)", status.about.toMap()["Licence"])
+        assertTrue("no pane links of the S1's", status.panes.all { it.links.isEmpty() })
     }
 }
