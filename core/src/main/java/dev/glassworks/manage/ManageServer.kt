@@ -265,9 +265,10 @@ class ManageServer(
         val item = SettingsChange.find(section, key) ?: return HttpResponse.seeOther("$page?done=gone")
         val what = "${section.title} › " + if (key == SettingsChange.MASTER) "on/off" else key.replace("/", " › ")
         if (item is SettingsItem.SignIn) return changeSignIn(req, s, viewer, page, key, what, item)
-        // The time window's dialog sends On, From and To; the rest send their value as text.
-        val raw = if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
-            else req.form["value"].orEmpty()
+        // The time window's dialog sends On, From and To; the rest send their value as text. Trimmed here, as
+        // SettingsChange.change trims it, so a padded value (" run ") can't skip the question (CodeRabbit on #331).
+        val raw = (if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
+            else req.form["value"].orEmpty()).trim()
         if (item is SettingsItem.Switch && req.form["confirmed"] != "1" && (raw == "on" || raw == "off")) {
             val ask = runCatching { item.confirm(raw == "on") }.getOrNull()
             if (ask != null) return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, ask))!!

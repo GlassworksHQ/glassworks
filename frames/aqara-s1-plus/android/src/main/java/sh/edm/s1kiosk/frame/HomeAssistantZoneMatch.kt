@@ -14,25 +14,29 @@ internal class HomeAssistantZoneMatch(
     private val choices: TimeZoneChoices,
     /** Runs the match; false when it couldn't take the work (the pane's thread had stopped). */
     private val background: (Runnable) -> Boolean,
+    private val clock: () -> Long = SystemClock::elapsedRealtime,
 ) {
     /** The last answer, by (rule, zone). */
     private var done: Pair<Pair<String, String>, TimeZoneChoices.HomeAssistantZone?>? = null
 
     /** The rule and zone being matched now, and who waits for it. */
     private var running: Pair<String, String>? = null
+    private var runningSince = 0L
     private val waiting = ArrayList<() -> Unit>()
 
     /**
      * The match for [rule] against [zone], or null until it is done; then [then] runs, on the background
-     * thread. A refused match is tried again on the next call (#235 verifier).
+     * thread. A refused match is tried again on the next call (#235 verifier), and so is one taken but never
+     * run (the pane stopped and its thread dropped the work) after [LOST_MS] (CodeRabbit on #331).
      */
     fun get(rule: String, zone: String, then: () -> Unit = {}): TimeZoneChoices.HomeAssistantZone? {
         val key = rule to zone
         synchronized(this) {
             done?.let { (k, v) -> if (k == key) return v }
             waiting += then
-            if (running == key) return null
+            if (running == key && clock() - runningSince < LOST_MS) return null
             running = key
+            runningSince = clock()
         }
         val queued = background(Runnable {
             val started = SystemClock.elapsedRealtimeNanos()
@@ -52,5 +56,10 @@ internal class HomeAssistantZoneMatch(
             // Run at once (a test's inline thread): the answer is here already.
             return done?.takeIf { it.first == key }?.second
         }
+    }
+
+    companion object {
+        /** A match takes well under a second on the panel (#235): one still running after this was dropped. */
+        const val LOST_MS = 30_000L
     }
 }

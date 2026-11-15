@@ -54,16 +54,24 @@ class TimeZoneDefinition(file: SharedPreferences) : PaneDefinition {
          */
         fun twin(p: TimeZonePane, choices: TimeZoneChoices, match: HomeAssistantZoneMatch): List<SettingsItem> {
             fun current() = choices.name(p.kept.ifEmpty { TimeZone.getDefault().id })
+            fun options(): List<Pair<String, String>> {
+                val now = Instant.now()
+                return choices.regions.flatMap { r ->
+                    choices.zones(r).map { (id, name) -> id to if (r == TimeZoneChoices.UTC) name else "$name · ${TimeZoneChoices.offset(id, now)}" }
+                }
+            }
+            // The option for the zone kept: its own id, else the one with the same current name (UTC's is
+            // Etc/UTC; CodeRabbit on #331).
+            fun picked(): String {
+                val c = current()
+                val all = options()
+                return all.firstOrNull { it.first == c }?.first ?: all.firstOrNull { choices.name(it.first) == c }?.first ?: c
+            }
             val zone = SettingsItem.Choice(
-                ZONE, ::current,
-                options = {
-                    val now = Instant.now()
-                    choices.regions.flatMap { r ->
-                        choices.zones(r).map { (id, name) -> id to if (r == TimeZoneChoices.UTC) name else "$name · ${TimeZoneChoices.offset(id, now)}" }
-                    }
-                },
+                ZONE, ::picked, ::options,
                 group = choices::regionOf,
-                line = { TimeZoneChoices.line(it, Instant.now()) },
+                // As the panel's page says it: the zone's current name.
+                line = { TimeZoneChoices.line(choices.name(it), Instant.now()) },
             ) { id, done -> done(p.keep(id)) }
             val kept = SettingsItem.Info({ TimeZoneChoices.kept(p.status).first }, { TimeZoneChoices.kept(p.status).second })
             val ha = p.homeAssistantRule?.let { match.get(it, current()) }

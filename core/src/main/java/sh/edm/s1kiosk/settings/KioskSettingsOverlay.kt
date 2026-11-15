@@ -429,6 +429,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         is SettingsItem.Link -> i.title
         is SettingsItem.Choice -> i.title
         is SettingsItem.SignIn -> i.title
+        // A changed action (Connect for Disconnect) draws the page again, with its own run (CodeRabbit on #331).
+        is SettingsItem.Action -> i.title
         else -> null
     }
 

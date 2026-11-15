@@ -120,6 +120,8 @@ class ManageTwinsTest {
         assertTrue(dlg.contains("Reset the Thread network?") && dlg.contains("Thread devices drop off.") && dlg.contains(">Reset</button>"))
         assertTrue(dlg.contains("name=\"value\" value=\"run\"") && dlg.contains("name=\"confirmed\" value=\"1\""))
         assertEquals("asked, not done", 0, resets)
+        assertEquals("a padded run asks too", 200, b.post("/settings", form(b, "Thread network", "value" to " run ")).status)
+        assertEquals(0, resets)
         assertEquals(303, b.post("/settings", form(b, "Thread network", "value" to "run", "confirmed" to "1")).status)
         assertEquals(1, resets)
     }
