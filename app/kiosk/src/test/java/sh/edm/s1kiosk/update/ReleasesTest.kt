@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.update
 
+import dev.glassworks.testing.RepoFiles
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
@@ -151,10 +152,11 @@ class ReleasesTest {
     }
 
     @Test fun summaryFromTheChangelogNeverCutsInsideMarkdown() {
-        // The v0.3.0 section of CHANGELOG.md (read from the repo when available).
-        val notes = java.io.File("../../CHANGELOG.md").takeIf { it.isFile }?.readText()
-            ?.substringAfter("## [0.3.0]")?.substringAfter("\n")?.substringBefore("\n## [")
-            ?: "**Summary line.**\n\n### Added\n- **Radio modes**, chosen in the setup or in Home Assistant, with\n  a long continuation line that does not fit in the limit at all when added to the rest of it.\n  - nested\n- Another bullet."
+        // The v0.3.0 section of the repo's CHANGELOG.md: long, nested, with bold text across lines.
+        val changelog = RepoFiles.file("CHANGELOG.md").readText()
+        assertTrue("CHANGELOG.md has no ## [0.3.0] section", "## [0.3.0]" in changelog)
+        val notes = changelog.substringAfter("## [0.3.0]").substringAfter("\n").substringBefore("\n## [")
+        assertTrue("the 0.3.0 notes are too short to test the cut: ${notes.length}", notes.length > Releases.MAX_SUMMARY)
         val s = Releases.summary(notes)
         assertTrue(s, s.length <= Releases.MAX_SUMMARY)
         assertTrue(s, s.startsWith("**"))

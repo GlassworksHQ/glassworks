@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.update
 
+import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -11,19 +12,19 @@ import kotlin.io.path.createTempDirectory
 /**
  * Each frame declares the ABIs its device runs (`abis` in frames/<id>/design/frame.json, #98). The
  * release builds one APK for each of them (tools/release/frame-abis.sh, which the workflows run, and
- * app/kiosk/build.gradle.kts), and both workflows name the APKs in their own `apk_name`. The app's
+ * the S1 app's build.gradle.kts), and both workflows name the APKs in their own `apk_name`. The app's
  * [ApkAbi] must know exactly those ABIs: an APK the app doesn't know is never installed, and an ABI
  * the app knows but no release builds is looked for in vain.
  */
 class ApkAbiListsTest {
-    private val repo: File = generateSequence(File("").absoluteFile) { it.parentFile }
-        .first { File(it, ".github/workflows").isDirectory && File(it, "app/kiosk").isDirectory }
+    private val repo: File = RepoFiles.root
     private val ids = ApkAbi.entries.map { it.id }
     private val workflows = listOf(".github/workflows/release.yml", ".github/workflows/test-build.yml", ".github/workflows/pr.yml")
 
     /** Every frame's `abis`, in frame-id order, each once. */
     private val frameAbis: List<String> = File(repo, "frames").listFiles().orEmpty()
         .map { File(it, "design/frame.json") }.filter { it.isFile }.sortedBy { it.parentFile.parentFile.name }
+        .also { if (it.isEmpty()) throw AssertionError("no frames/<id>/design/frame.json in $repo") }
         .flatMap { f -> JSONObject(f.readText()).getJSONArray("abis").let { a -> List(a.length()) { a.getString(it) } } }
         .distinct()
 
@@ -64,7 +65,8 @@ class ApkAbiListsTest {
 
     @Test fun `no workflow or build script lists ABIs of its own`() {
         val abiName = Regex(""""(${ApkAbi.entries.joinToString("|") { Regex.escape(it.id) }})"""")
-        assertEquals("app/kiosk/build.gradle.kts", null, abiName.find(File(repo, "app/kiosk/build.gradle.kts").readText())?.value)
+        val build = File(RepoFiles.s1App, "build.gradle.kts")
+        assertEquals(RepoFiles.rel(build), null, abiName.find(build.readText())?.value)
         for (wf in workflows) {
             val lines = File(repo, wf).readLines().map { it.trim() }
             assertEquals("$wf: ABIS comes from frame-abis.sh", 1, lines.count { it == """abis="${'$'}(tools/release/frame-abis.sh)"""" })

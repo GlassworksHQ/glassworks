@@ -18,8 +18,9 @@
 set -euo pipefail
 
 # Every place a Gradle module, or what builds it, can live in either layout (#21 move plan, S-ci).
-# frames/<id>/design etc. aren't Android code; :(glob) so * stays inside one folder.
-ANDROID_ROOTS=(app libs core pane-api engines panes ':(glob)frames/*/android/**' ':(glob)frames/*/panes/**'
+# frames/<id>/design etc. aren't Android code; :(glob) so * stays inside one folder. testing/ holds
+# test sources every module compiles (RepoFiles, S-roots).
+ANDROID_ROOTS=(app libs core pane-api engines panes testing ':(glob)frames/*/android/**' ':(glob)frames/*/panes/**'
   settings.gradle.kts build.gradle.kts gradle.properties gradlew gradlew.bat gradle
   .github/workflows/pr.yml tools/release/android-layout.sh)
 

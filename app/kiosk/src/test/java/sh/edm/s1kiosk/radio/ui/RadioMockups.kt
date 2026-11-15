@@ -26,7 +26,6 @@ import sh.edm.s1kiosk.radio.ui.RadioFollowUp.Action
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp.Request
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
 import sh.edm.s1kiosk.settings.MenuFixture
-import sh.edm.s1kiosk.ui.Inter
 import sh.edm.s1kiosk.ui.Mockup
 import java.io.File
 import java.time.Duration
@@ -45,10 +44,7 @@ class RadioMockups {
     private val dir = System.getProperty("s1.mockupDir")
 
     /** Robolectric runs without the app's resources: read Inter from the source tree, as the app does from res/font. */
-    @Before fun interFromSources() {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        Inter.load = { File(root, "app/kiosk/src/main/res/font/inter.ttf").readBytes() }
-    }
+    @Before fun interFromSources() = Mockup.interFromSources()
     private val ha = "http://homeassistant.local:8123"
     private val ip = "192.0.2.10"
 

@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk
 
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,8 +21,7 @@ class LicencesTest {
     /** Every SPDX id the notices name must have its text in LICENSES/, or the app's screen would lack it. */
     @Test
     fun everyLicenceTheNoticesNameHasItsText() {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }
-            .first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
+        val root = RepoFiles.root
         val texts = File(root, "LICENSES").list().orEmpty().map { it.removeSuffix(".txt") }.toSet()
         val notices = File(root, "THIRD-PARTY-NOTICES.md").readText()
         val needed = mapOf(

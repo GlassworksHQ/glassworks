@@ -34,6 +34,11 @@ A new library in `libs/` or a new pane needs a branded README header: see
 - `./gradlew test` needs `jq` on the `PATH`: `ApkAbiListsTest` runs `tools/release/frame-abis.sh`,
   which reads every frame's `abis` with it. GitHub's runners and macOS 15+ have it; else
   `brew install jq` or `apt install jq`.
+- A test that reads the source tree (a confinement scan, the pane catalog, a golden, the font) finds
+  its files with `RepoFiles` ([`../testing/kotlin`](../testing/kotlin/dev/glassworks/testing/RepoFiles.kt)),
+  never with a path like `app/kiosk/src/main` or `../../`. It searches every module from the repo root,
+  so the test keeps working when code moves between modules (#21). Give each scan an `atLeast` floor:
+  a scan that finds nothing must fail, not pass.
 - Put protocol logic (ESPHome, Improv, EZSP/ASH, the wall base, Sendspin, FLAC) in plain Kotlin
   that a JVM test can drive, and keep the Android glue thin. `app/libs/esphome-api` must stay free of
   Android imports.

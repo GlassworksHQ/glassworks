@@ -15,6 +15,7 @@ import dev.glassworks.pane.SetupHost
 import dev.glassworks.pane.SetupOp
 import dev.glassworks.pane.SetupStep
 import dev.glassworks.pane.settingsOrder
+import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,7 +33,6 @@ import sh.edm.s1kiosk.setup.SetupChannel
 import sh.edm.s1kiosk.setup.SetupChannelServer
 import sh.edm.s1kiosk.setup.SetupFlow
 import sh.edm.s1kiosk.setup.SetupOverlay
-import java.io.File
 import java.util.concurrent.ScheduledExecutorService
 
 /**
@@ -143,24 +143,21 @@ class FramePanesTest {
      * Only GlassworksRuntime reads PaneDefinition.setupSteps. Everything else (MainActivity's setup
      * screen and `--es setup_step`, SetupChannelServer) calls GlassworksRuntime.setupSteps(...), so a
      * clashing step can't reach them. A source scan: it matches `.setupSteps` or `::setupSteps` that
-     * isn't a call, outside comments.
+     * isn't a call, outside comments, in every module but the libraries ([RepoFiles]).
      */
     @Test
     fun onlyTheRuntimeReadsAPanesSetupSteps() {
-        val appRoot = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "kiosk/src/main").isDirectory }
-        val main = File(appRoot, "kiosk/src/main/java")
         val read = Regex("""(\.|::)setupSteps\b(?!\s*\()""")
-        val sources = main.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
-        assertTrue("scan found no sources", sources.size > 100)
+        val sources = RepoFiles.sources(atLeast = 100, inModules = RepoFiles.appModules) { it.extension == "kt" }
         val found = sources.filter { it.name != "GlassworksRuntime.kt" }.flatMap { f ->
             f.readLines().mapIndexedNotNull { i, line ->
                 val code = line.trim()
                 val comment = code.startsWith("*") || code.startsWith("/*") || code.startsWith("//")
-                if (!comment && read.containsMatchIn(code)) "${f.relativeTo(appRoot).path}:${i + 1}: $code" else null
+                if (!comment && read.containsMatchIn(code)) "${RepoFiles.rel(f)}:${i + 1}: $code" else null
             }
         }
         assertTrue("PaneDefinition.setupSteps read outside GlassworksRuntime; use GlassworksRuntime.setupSteps:\n${found.joinToString("\n")}", found.isEmpty())
-        assertTrue(read.containsMatchIn(File(main, "sh/edm/s1kiosk/GlassworksRuntime.kt").readText()))
+        assertTrue(read.containsMatchIn(RepoFiles.source("sh/edm/s1kiosk/GlassworksRuntime.kt").readText()))
     }
 
     @Test

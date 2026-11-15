@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Check that relative links and #anchors in README.md, docs/**/*.md and frames/**/*.md resolve.
+"""Check that relative links and #anchors in the repo's Markdown resolve.
 
-Usage: tools/check-doc-links.py [files...]   (default: README.md, docs/**/*.md and frames/**/*.md)
+Usage: tools/check-doc-links.py [files...]
+  default: README.md, docs/**/*.md, frames/**/*.md, and the Markdown in every Android module root
+  (app/**, libs/**, core/**, pane-api/**, engines/**, panes/**) and testing/**, so a module's README stays checked
+  wherever the module moves (#21). Build output and node_modules are skipped.
 Exits 1 and lists each broken link. External (http/https/mailto) links are not fetched.
 Anchors follow GitHub's heading slugs, plus explicit <a name/id="..."> tags.
 """
@@ -10,6 +13,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Folders whose Markdown is checked, besides README.md. frames/ holds frames/<id>/android and /panes.
+DOC_ROOTS = ('docs', 'frames', 'app', 'libs', 'core', 'pane-api', 'engines', 'panes', 'testing')
+SKIP = {'node_modules', 'build', '.gradle', '.kotlin'}
 LINK = re.compile(r'(?<!!)\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)|!\[[^\]]*\]\(\s*<?([^)\s>]+)>?[^)]*\)'
                   r'|<(?:a|img)\b[^>]*?\b(?:href|src)="([^"]+)"')
 HEADING = re.compile(r'^(#{1,6})\s+(.*?)\s*#*\s*$')
@@ -73,8 +79,7 @@ def check(path):
 def main(argv):
     files = [Path(a).resolve() for a in argv] or [
         ROOT / 'README.md',
-        *sorted((ROOT / 'docs').rglob('*.md')),
-        *sorted(p for p in (ROOT / 'frames').rglob('*.md') if 'node_modules' not in p.parts),
+        *(p for d in DOC_ROOTS for p in sorted((ROOT / d).rglob('*.md')) if not SKIP & set(p.relative_to(ROOT).parts)),
     ]
     failures = 0
     for f in files:

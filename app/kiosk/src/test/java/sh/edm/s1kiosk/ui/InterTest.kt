@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.ui
 
+import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,8 +25,8 @@ class InterTest {
     /** The bundled file is the variable Inter, and its licence ships with the app's licence texts. */
     @Test
     fun fontAndLicenceAreInTheTree() {
-        val root = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "THIRD-PARTY-NOTICES.md").isFile }
-        val font = File(root, "app/kiosk/src/main/res/font/inter.ttf")
+        val root = RepoFiles.root
+        val font = RepoFiles.inModule("src/main/res/font/inter.ttf")
         assertTrue(font.isFile && font.length() > 100_000)
         val ofl = File(root, "LICENSES/OFL-1.1.txt").readText()
         assertTrue("SIL OPEN FONT LICENSE Version 1.1" in ofl)

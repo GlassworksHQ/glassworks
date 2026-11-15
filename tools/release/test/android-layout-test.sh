@@ -60,7 +60,7 @@ put frames/aqara-s1-plus/design/frame.json y; put README.md y; put frames/aqara-
 git_ add -A; git_ commit -qm "not android"
 check "changed: frame design, docs, a look-alike folder: nothing" "" "$layout" changed HEAD~1
 for f in frames/aqara-s1-plus/android/src/main/A.kt frames/x/panes/radio/B.kt core/C.kt pane-api/D.kt engines/gecko/E.kt \
-         panes/voice/F.kt libs/improv/G.kt build.gradle.kts gradle.properties gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties \
+         panes/voice/F.kt libs/improv/G.kt testing/kotlin/H.kt build.gradle.kts gradle.properties gradlew gradlew.bat gradle/wrapper/gradle-wrapper.properties \
          .github/workflows/pr.yml tools/release/android-layout.sh; do
   put "$f"; git_ add -A; git_ commit -qm "$f"
   check "changed: $f" "$f" "$layout" changed HEAD~1 HEAD
