@@ -25,7 +25,10 @@ public interface NoiseKeyStore {
 /** What a [NoiseKeyStore] holds, from one read ([NoiseKeyStore.read]). */
 public sealed interface StoredKey {
     /** The stored key. */
-    public class Present(public val key: ByteArray) : StoredKey
+    public class Present(
+        /** The 32-byte key as stored. */
+        public val key: ByteArray,
+    ) : StoredKey
 
     /** No key: the device is unprovisioned. */
     public data object Absent : StoredKey
