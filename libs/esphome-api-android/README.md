@@ -53,8 +53,19 @@ It publishes `<name>._esphomelib._tcp` with the TXT records ESPHome uses: `frien
 `api_encryption` when a key is set, or `api_encryption_supported` plus `api_provisioning=zero-psk`
 while HA can still provision one.
 
+## Gradle
+
+On Maven Central as `dev.glassworks:esphome-api-android` ([changelog](CHANGELOG.md)). The first release,
+0.1.0, is not out yet: until it is, use the module from this repository
+(`implementation(project(":esphome-api-android"))`).
+
 ```kotlin
-implementation(project(":esphome-api-android"))
+repositories { mavenCentral() }
+dependencies {
+    implementation("dev.glassworks:esphome-api-android:0.1.0")
+}
 ```
 
-The module's manifest adds `INTERNET`, which the API server's socket needs. minSdk 23 (Android 6).
+An Android library (AAR), minSdk 23 (Android 6). It brings in `dev.glassworks:esphome-api`. A Kotlin
+build needs Kotlin 2.0 or newer; a Java build needs nothing more. The module's manifest adds
+`INTERNET`, which the API server's socket needs.

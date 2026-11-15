@@ -13,6 +13,8 @@ name, `aqara_s1_plus_` on a new S1, [Names](esphome.md#names))
 - `s1-kiosk-arm64-v8a-<version>.apk`, the same app for `arm64-v8a` devices;
 - `s1-kiosk-<version>.apk.sha256` and `s1-kiosk-arm64-v8a-<version>.apk.sha256`, their `sha256sum` lines.
 
+The libraries in `libs/` are released to Maven Central on their own tags: see [Libraries](#libraries).
+
 Every release **must be signed with the same key**. Android only installs an update signed with the
 key of the installed app, and the app refuses anything else before trying. Lose the key and every
 panel needs a manual reinstall, which clears its settings.
@@ -342,3 +344,96 @@ to releases takes a one-time reinstall: uninstall the debug app, then install th
 Both installers do that for you, after asking, and keep the panel on its Wi-Fi. The app's data is
 kept only where adb has root; on a normal panel the switch **resets the app's settings** (sign-in,
 pairing key, options). See [install.md](../frames/aqara-s1-plus/docs/install.md#switching-a-development-build-to-a-release).
+
+## Libraries
+
+The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): `esphome-api` (a jar),
+`esphome-api-android` and `improv` (AARs). Each has its own semver version, in `version=` in
+`libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
+release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
+developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. The
+libraries bundle no third-party code; their dependencies come from Maven Central with their own
+licences. They're built for Kotlin 2.1 with kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can
+use them.
+
+`bluetooth-proxy` isn't published yet. It's alpha, and GATT connections will change its API. To publish
+a library, apply `id("org.jetbrains.dokka")` and `id("com.vanniktech.maven.publish")` in its build file,
+and give it a `gradle.properties` with `version` and `description` and a `CHANGELOG.md`. The rest of
+the setup is in the root `build.gradle.kts`.
+
+**A release can't be deleted from Maven Central**, and its version can't be used again.
+
+### Cut a release
+
+The tag is `libs/<name>/v<MAJOR.MINOR.PATCH>`. It must match `version` in that library's
+`gradle.properties`. `release.yml` takes only `v*` and `aqara-s1-plus-v*` tags, and the app's update
+check skips any other tag (`Releases.tagVersion`). So a library tag never makes an app release.
+
+1. In a PR: set `version` in `libs/<name>/gradle.properties`, and rename `## [Unreleased]` in
+   `libs/<name>/CHANGELOG.md` to `## [<version>] - <date>`. Merge it.
+2. Tag the merged commit on `main` and push the tag:
+
+   ```sh
+   git fetch origin
+   git tag libs/esphome-api/v0.1.0 origin/main
+   git push origin libs/esphome-api/v0.1.0
+   ```
+
+3. [`libs-release.yml`](../.github/workflows/libs-release.yml) uploads the release (below). While
+   `MANUAL_PUBLISH` is `'true'`, open [Deployments](https://central.sonatype.com/publishing/deployments)
+   on the Central Portal, check the files, and press **Publish**. It's on Maven Central 10 to 30
+   minutes later.
+4. Publish the draft GitHub release that the workflow made:
+   `gh release edit libs/esphome-api/v0.1.0 --draft=false --latest=false`.
+
+Release `esphome-api` before `esphome-api-android`: the workflow refuses a library whose
+`dev.glassworks` dependency isn't on Maven Central yet. Once a few releases have gone out cleanly,
+set `MANUAL_PUBLISH: 'false'`. The workflow then publishes the deployment itself and makes the
+GitHub release public.
+
+### What the workflow does
+
+The job runs in the `maven-central` environment, which deploys only from `libs/*/v*` tags.
+
+1. Reads the library and version from the tag. It stops if the library doesn't apply the publish
+   plugin, if the version isn't `version` in its `gradle.properties`, if the commit isn't on `main`,
+   or if `CHANGELOG.md` has no section for it.
+2. Runs the library's tests (`./gradlew :<name>:test`).
+3. Publishes it to mavenLocal unsigned and checks the files with
+   `tools/release/check-lib-artifact.sh`: the jar or AAR, sources, KDoc, POM and licence, and no
+   class under the old `sh.edm` packages.
+4. Signs it and uploads it to the Central Portal (`publishToMavenCentral`). It then polls the Portal
+   until the deployment is validated, and fails if the Portal refuses it. (The plugin validates only
+   deployments it publishes itself.)
+5. Makes the GitHub release `<name> <version>`, with the changelog section as notes and
+   `--latest=false`, so `releases/latest` stays the S1 app's release.
+
+Every PR that touches `libs/`, the Gradle build or these scripts runs a dry run (`libs-publish` in
+`pr.yml`). It needs no secrets, so it runs on forks too:
+
+```sh
+./gradlew publishToMavenLocal                        # no key: unsigned
+tools/release/check-lib-artifact.sh esphome-api      # and esphome-api-android, improv
+tools/release/lib-consumer-check.sh                  # a fresh minSdk 23 app builds against them
+```
+
+### Rotate the token or the signing key
+
+The secrets are in the `maven-central` environment (Settings → Environments, or
+`gh secret set <NAME> --env maven-central`):
+
+| Secret | What |
+|---|---|
+| `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD` | A Central Portal user token (not the login) |
+| `SIGNING_IN_MEMORY_KEY` | The ASCII-armoured private signing key (`gpg --export-secret-keys --armor <id>`) |
+| `SIGNING_IN_MEMORY_KEY_PASSWORD` | Its passphrase |
+| `SIGNING_IN_MEMORY_KEY_ID` | The last 8 hex digits of its fingerprint |
+
+- **The token.** On the Portal, open Account → Generate User Token. Set both secrets to the new pair,
+  then revoke the old token there.
+- **The signing key.** Make a new RSA-4096 key and upload its public key to keys.openpgp.org and
+  keyserver.ubuntu.com. The Portal checks signatures against those servers. Set the three
+  `SIGNING_*` secrets. Leave the old public key on the servers, so older releases still verify. If
+  the old key leaked, publish its revocation certificate too.
+- No dry run tests the secrets; the next release tag does. The workflow checks that all five are set
+  before it builds.

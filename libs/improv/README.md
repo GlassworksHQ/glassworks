@@ -165,12 +165,18 @@ example.
 
 ## Gradle
 
-For now it's a module of this repository (an Android library, minSdk 23, Android 6). Nothing is published to a
-Maven repository yet.
+On Maven Central as `dev.glassworks:improv` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is
+not out yet: until it is, use the module from this repository (`implementation(project(":improv"))`).
 
 ```kotlin
-implementation(project(":improv"))
+repositories { mavenCentral() }
+dependencies {
+    implementation("dev.glassworks:improv:0.1.0")
+}
 ```
+
+An Android library (AAR), minSdk 23 (Android 6). A Kotlin build needs Kotlin 2.0 or newer; a Java
+build needs nothing more.
 
 ## Tests
 
