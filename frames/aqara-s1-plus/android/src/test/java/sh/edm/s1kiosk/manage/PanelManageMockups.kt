@@ -13,6 +13,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
+import sh.edm.s1kiosk.settings.MenuFixture
 import sh.edm.s1kiosk.settings.PaneFixtures
 import sh.edm.s1kiosk.ui.Mockup
 import java.io.File
@@ -111,6 +112,44 @@ class PanelManageMockups {
             f.statusFn = { model().let { m -> f.status.copy(panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }, sections = m.sections) } }
             val b = f.Browser().also { it.signInWithHa() }
             File(out, "$name-manage.html").writeBytes(b.get("/wall-base").body)
+        }
+    }
+
+    /**
+     * #269: the radio page's twin on the Manage page, next to the panel's: a Zigbee coordinator, a Thread
+     * repeater joined and not yet, the radio off, and the question before a new role.
+     */
+    @Test
+    fun radio() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val out = File(Mockup.dir!!, "269").apply { mkdirs() }
+        val base = panes.coordinator
+        val cases = listOf(
+            "radio-coordinator" to base,
+            "radio-thread-joined" to base.copy(mode = sh.edm.s1kiosk.radio.RadioMode.THREAD_ROUTER, status = "ok Thread router: joined as a router",
+                threadStored = true, thread = sh.edm.s1kiosk.radio.ThreadRouterState(true, "router", "Example-Thread")),
+            "radio-thread-not-joined" to base.copy(mode = sh.edm.s1kiosk.radio.RadioMode.THREAD_ROUTER, status = "ok Thread router: not on a Thread network yet",
+                threadStored = false, thread = sh.edm.s1kiosk.radio.ThreadRouterState(false, null, null)),
+            "radio-off" to base.copy(mode = sh.edm.s1kiosk.radio.RadioMode.OFF, status = "ok Off: Aqara radio services stopped, radio idle"),
+        )
+        for ((name, facts) in cases) {
+            val radio = sh.edm.s1kiosk.radio.radioDefinition(app, sh.edm.s1kiosk.radio.FixedReadout(facts, running = true, allowedNow = "192.0.2.20"))
+            val model = { MenuFixture.model(app, radio, status = "screen on", panes = listOf(radio)) }
+            val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+            o.reload = model
+            o.show(model())
+            o.previewSection("radio")
+            Mockup.idle()
+            Mockup.save("269/$name-panel", o)
+            val f = ManageFixture()
+            f.statusFn = { model().let { m -> f.status.copy(panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }, sections = m.sections) } }
+            val b = f.Browser().also { it.signInWithHa() }
+            File(out, "$name-manage.html").writeBytes(b.get("/radio").body)
+            if (name == "radio-thread-joined") {
+                File(out, "radio-role-edit-manage.html").writeBytes(b.get("/radio?edit=Role").body)
+                File(out, "radio-role-confirm-manage.html").writeBytes(b.post("/settings", mapOf("csrf" to b.csrf(), "section" to "radio", "key" to "Role", "value" to "zigbee_tcp")).body)
+                File(out, "radio-leave-confirm-manage.html").writeBytes(b.post("/settings", mapOf("csrf" to b.csrf(), "section" to "radio", "key" to "Leave Thread network", "value" to "run")).body)
+            }
         }
     }
 

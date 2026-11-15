@@ -353,6 +353,8 @@ sealed interface SettingsItem {
         val group: ((String) -> String)? = null,
         /** The row's line for the picked id, when it says more than its option's name (`Europe/Madrid · UTC+01:00 · 14:32 now`). */
         val line: ((String) -> String)? = null,
+        /** Asked before picking the id given, or null to apply it at once (the radio's role, #269), as [Switch.confirm]. */
+        val confirm: (String) -> Confirm? = { null },
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
