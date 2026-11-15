@@ -287,8 +287,9 @@ class MemoryBudget(unittest.TestCase):
         self.assertEqual(set(s1["panes"]), ids)
         # #67 gave every pane a switch: the radio's is its mode, and timers come with voice. The Bluetooth
         # proxy has one, but only scans while HA listens, which the reference run doesn't (#121). The S1
-        # has no camera, so the camera pane can't run there (#117).
-        unswitched = {"radio", "timers", "bluetooth-proxy", "camera"}
+        # has no camera, so the camera pane can't run there (#117). Notifications is off by default and
+        # idle until a notify call (#118).
+        unswitched = {"radio", "timers", "bluetooth-proxy", "camera", "notifications"}
         self.assertEqual({k for k, v in s1["panes"].items() if v.get("not_switched")}, unswitched)
         self.assertEqual(set(s1["panes"]), switchable | unswitched)
 

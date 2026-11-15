@@ -44,14 +44,18 @@ class SettingsMockups {
         val radio = radioDefinition(app, FixedReadout(if (radioRunning) facts else null, running = radioRunning))
         val panes = listOf(
             MenuFixture.cardOnly("voice", "Voice", "Assist and timers"),
-            MenuFixture.cardOnly("sendspin", "Music", "A Sendspin speaker"), radio,
+            MenuFixture.cardOnly("sendspin", "Music", "A Sendspin speaker"),
+            dev.glassworks.notifications.NotificationsDefinition(
+                KioskPrefs(app).paneFile("notifications"), dev.glassworks.notifications.NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L },
+            ),
+            radio,
         ) + MenuFixture.switchOnly(app) + extra
         o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes))
         Mockup.idle()
         return o
     }
 
-    /** Made up: a pane that can't run on this panel, to show how the menu says so (none can't on the S1 today). */
+    /** Made up: a pane that can't run on this panel, to show how the menu says so (on the S1 the camera can't run either: settings-21). */
     private val cantRun = object : dev.glassworks.pane.PaneDefinition {
         override val id = "example"
         override fun settings() = listOf(dev.glassworks.pane.SettingsSection(

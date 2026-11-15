@@ -7,6 +7,7 @@ import dev.glassworks.bluetoothproxy.BluetoothProxyPrefs
 import dev.glassworks.bluetoothproxy.ProxyRadio
 import dev.glassworks.camera.CameraPrefs
 import dev.glassworks.diagnostics.DiagnosticsPrefs
+import dev.glassworks.notifications.NotificationsPrefs
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
@@ -62,7 +63,8 @@ class PanePrefsTest {
     /** The prefs class of each namespace, built over a file. */
     private val owners: Map<String, (SharedPreferences) -> Any> = mapOf(
         "sendspin" to ::SendspinPrefs, "assist" to ::VoicePrefs, "wall-base" to ::WallBasePrefs, "radio" to ::RadioPrefs,
-        "time-zone" to ::TimeZonePrefs, "diagnostics" to ::DiagnosticsPrefs, "bluetooth-proxy" to ::BluetoothProxyPrefs, "camera" to { sp -> CameraPrefs(sp) },
+        "time-zone" to ::TimeZonePrefs, "diagnostics" to ::DiagnosticsPrefs, "bluetooth-proxy" to ::BluetoothProxyPrefs,
+        "notifications" to ::NotificationsPrefs, "camera" to { sp -> CameraPrefs(sp) },
     )
 
     @After fun tearDown() {

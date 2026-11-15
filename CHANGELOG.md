@@ -109,13 +109,14 @@ below as the release notes.
   let Home Assistant take snapshots, and turn on an ONVIF and RTSP stream (ports 8554 and 8000) for
   Home Assistant's ONVIF integration, Frigate or UniFi Protect. The first time you turn the stream
   on, the panel makes its own sign-in: the username `glassworks` and a random password, never shared
-  between panels; the Camera page shows the username and, when you tap it, the password. Everything
-  is off until you turn it on, and *Camera privacy* closes the camera. The camera has its own page
-  in the panel's settings, with the panel's address and the stream's URLs, and a Camera step in
-  setup that asks Android for the camera. Whenever images leave the panel, Android 12 and later show
-  their own camera indicator, and older Android a small green dot in the top-right corner. On the
-  S1, which has no camera, the panel's settings say the pane can't run, and Home Assistant gets
-  nothing new.
+  between panels. You can change it on the panel and on the Manage page; the password shows only
+  when you press Show (on the Manage page, only after signing in with Home Assistant), and it hides
+  again after a minute or when the screen goes off. Everything is off until you turn it on, and
+  *Camera privacy* closes the camera. The camera has its own page in the panel's settings, with the
+  panel's address and the stream's URLs, and a Camera step in setup that asks Android for the
+  camera. Whenever images leave the panel, Android 12 and later show their own camera indicator, and
+  older Android a small green dot in the top-right corner. On the S1, which has no camera, the
+  panel's settings say the pane can't run, and Home Assistant gets nothing new.
 - **The panel can be a Bluetooth proxy for Home Assistant.** Turn on *Bluetooth proxy* in the
   panel's settings or on setup's Panes step, and Home Assistant finds it by itself and hears the
   Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a
@@ -124,6 +125,13 @@ below as the release notes.
   Home Assistant 2026.11 and later sets when you add the panel.
 - **Setup's Panes step scrolls when there are more panes than fit.** Continue stays where it is,
   below the list, and every pane's name shows in full.
+- **Notifications from Home Assistant on the panel.** Call `esphome.<panel>_notify` with a title, a
+  message and the Companion app's fields, and the panel shows a card over the dashboard, with a
+  camera's picture, up to three buttons and a sound. A button press fires `esphome.notification_action`
+  in Home Assistant. A high or critical one wakes the screen, `url` opens a dashboard view full screen
+  and comes back after the timeout, and *Do not disturb* holds everything but critical. Off until you
+  turn it on, on the setup screen or in the settings. A doorbell blueprint is in the repo. Examples:
+  docs/notifications.md.
 - **Turn any pane off, and back on, without a restart.** Voice, music, the wall base, the time zone
   and diagnostics each have an on/off: at the top of the pane's page in the panel's settings, in
   Home Assistant (new switches Voice, Wall base, Keep time zone and Diagnostics, off on the device
