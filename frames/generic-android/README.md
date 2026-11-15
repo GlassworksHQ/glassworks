@@ -63,7 +63,9 @@ no proximity sensor; then the screen goes off after the idle time and wakes on a
 | Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin |
 | Presence and light | None | Android's proximity and light sensors |
 
-The two are separate apps with their own data and keys, so both can be installed on one device.
+The two are separate apps with their own data and keys, so both can be installed on one device. Only one
+can run at a time: both serve Home Assistant on port 6053 and the Manage page on 8099. Stop the other
+first (`adb shell am force-stop <id>`).
 
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
 

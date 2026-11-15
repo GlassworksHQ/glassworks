@@ -13,6 +13,7 @@ import android.widget.FrameLayout
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
+import dev.glassworks.secrets.SecretStore
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import sh.edm.s1kiosk.AppParts
@@ -21,6 +22,7 @@ import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.MainActivity
 import sh.edm.s1kiosk.OverlayHost
 import sh.edm.s1kiosk.PaneOverlay
+import sh.edm.s1kiosk.SecretFiles
 import sh.edm.s1kiosk.TimerOverlay
 import sh.edm.s1kiosk.VoiceOverlay
 import sh.edm.s1kiosk.auth.HaTokenClient
@@ -86,10 +88,13 @@ class GenericParts : AppParts {
         voiceUi = VoiceUi(runtime.voiceState)
     }
 
-    /** Every pane's settings in `kiosk.xml`, with the core's, as S1 Kiosk keeps them. */
+    /**
+     * Every pane's settings in `kiosk.xml`, with the core's, as S1 Kiosk keeps them. That file holds sealed
+     * secrets, so it opens through [SecretFiles] (KeystoreSecretsTest checks every opener).
+     */
     override fun paneFile(context: Context, namespace: String): SharedPreferences {
         require(namespace in PANES) { "No settings file for pane '$namespace'" }
-        return context.getSharedPreferences("kiosk", Context.MODE_PRIVATE)
+        return SecretFiles.open(context, "kiosk", SecretStore.keystore())
     }
 
     override fun managePage(context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
