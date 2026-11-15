@@ -62,6 +62,19 @@ interface Frame {
     /** The frame's way to install app updates without Android's confirmation; null to use PackageInstaller. */
     val rootUpdates: RootUpdates? get() = null
 
+    /** A short name for the panel on its own pages (the S1's "S1 Plus"); null to use its friendly name. */
+    val shortName: String? get() = null
+
+    /** What the settings call the device's own settings app when it isn't Android's (the S1's: Aqara's); null for Android's. */
+    val systemSettingsTitle: String? get() = null
+
+    /**
+     * Work the frame runs while the app's service runs, or null for none (the S1's: Wi-Fi scans while the
+     * screen is off, #3). [onForegroundOnly] asks the service to take the types it may have now, when the
+     * work found it needs one it didn't have (the location type for a scan).
+     */
+    fun serviceWork(context: Context, onForegroundOnly: () -> Unit): ServiceWork? = null
+
     fun systemSettingsIntents(): List<Intent>
 
     /** Where to choose a Wi-Fi network, best first (the setup screen's "Choose network"). */

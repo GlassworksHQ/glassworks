@@ -49,6 +49,7 @@ import sh.edm.s1kiosk.setup.SetupOverlay
 import sh.edm.s1kiosk.setup.SetupPane
 import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
+import sh.edm.s1kiosk.setup.s1SetupOverlay
 import sh.edm.s1kiosk.ui.Mockup
 import java.util.concurrent.Executors
 
@@ -197,7 +198,7 @@ class CameraMockups {
             SetupPane(PaneChoice("Bluetooth proxy", "For BLE sensors", on = { false }, apply = { null }), emptyList()),
             SetupPane(def.setupChoice!!, def.setupSteps),
         )
-        val s = SetupOverlay(a, panes)
+        val s = s1SetupOverlay(a, panes)
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         val flow = SetupFlow.ids(true, listOf("camera"))
         s.render(SetupOverlay.Model(

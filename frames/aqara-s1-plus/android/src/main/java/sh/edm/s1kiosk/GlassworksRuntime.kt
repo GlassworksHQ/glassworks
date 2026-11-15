@@ -130,3 +130,6 @@ class GlassworksRuntime(
         const val TAG = "S1Kiosk"
     }
 }
+
+/** The runtime the app runs, with its parts ([GlassworksRuntime.app]), for Android entry points that start them. */
+val Context.glassworksRuntime: GlassworksRuntime get() = glassworks as GlassworksRuntime

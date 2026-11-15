@@ -96,6 +96,13 @@ class GenericFrameTest {
         assertNull(GenericAndroid(app).rootUpdates)
     }
 
+    @Test fun aTabletUsesItsOwnNameAndAndroidsSettingsAndRunsNoServiceWork() {
+        val generic = GenericAndroid(app)
+        assertNull(generic.shortName)
+        assertNull(generic.systemSettingsTitle)
+        assertNull(generic.serviceWork(app) {})
+    }
+
     @Test fun aTabletAnnouncesItselfAsWhatItIs() {
         val (id, _) = run(generic())
         assertEquals("pixel-tablet-a1b2c3", id.name)

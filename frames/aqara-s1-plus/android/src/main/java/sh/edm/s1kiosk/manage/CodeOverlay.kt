@@ -30,7 +30,7 @@ class CodeOverlay(private val context: Context, private val onClose: () -> Unit)
         view = null
         if (shown == null) return
         if (!Settings.canDrawOverlays(context)) {
-            Log.w(S1Manage.TAG, "can't show the Manage code: the app may not draw over other apps")
+            Log.w(TAG, "can't show the Manage code: the app may not draw over other apps")
             return
         }
         val v = build(context, shown, onClose)
@@ -40,10 +40,13 @@ class CodeOverlay(private val context: Context, private val onClose: () -> Unit)
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.OPAQUE,
         )
-        runCatching { wm.addView(v, lp); view = v }.onFailure { Log.w(S1Manage.TAG, "can't show the Manage code", it) }
+        runCatching { wm.addView(v, lp); view = v }.onFailure { Log.w(TAG, "can't show the Manage code", it) }
     }
 
     companion object {
+        /** The Manage page's log tag, which this overlay belongs to. */
+        private const val TAG = "S1Manage"
+
         /** The overlay's view, also for the mock-ups. */
         fun build(context: Context, shown: PanelCode.Shown, onClose: () -> Unit): View {
             val dp = context.resources.displayMetrics.density

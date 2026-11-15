@@ -1,6 +1,5 @@
 package sh.edm.s1kiosk
 
-import android.app.Application
 import android.content.Intent
 import dev.glassworks.camera.CameraUse
 import dev.glassworks.testing.RepoFiles
@@ -17,7 +16,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34], application = Application::class)
+@Config(sdk = [34], application = KioskApp::class)
 class CameraAdbActivityTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private val camera get() = PanePrefs(app).camera

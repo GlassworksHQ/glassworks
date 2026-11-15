@@ -56,7 +56,7 @@ import kotlin.system.exitProcess
 class MainActivity : Activity() {
 
     /** The app's runtime, for its parts: the panes' layers over the dashboard ([AppParts.overlays]). */
-    private val runtime get() = (application as KioskApp).glassworks
+    private val runtime get() = glassworksRuntime
     private lateinit var prefs: KioskPrefs
     private lateinit var loadingOverlay: LoadingOverlay
     private lateinit var settingsOverlay: KioskSettingsOverlay
@@ -243,8 +243,8 @@ class MainActivity : Activity() {
         startSession()
         intent?.let { i -> handler.post { applySetupPreview(i) } }
         handler.post(setupTick)
-        // The direct-boot splash (our look before unlock at the next boot): on only while it's safe.
-        Thread({ BootSplashActivity.sync(applicationContext) }, "s1-boot-splash").start()
+        // The app's upkeep on each start (the S1's direct-boot splash).
+        Thread({ runtime.app.activityStarted(applicationContext) }, "s1-boot-splash").start()
         requestRuntimePermissions()
         hideSystemUi()
     }

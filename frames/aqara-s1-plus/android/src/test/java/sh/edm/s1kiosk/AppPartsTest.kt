@@ -26,6 +26,7 @@ import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.esphome.DeviceHost
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import sh.edm.s1kiosk.voice.VoicePrefs
 
 /** The runtime runs the panes its app gives it ([AppParts]), and asks the app for its activity and pane files. */
 @RunWith(RobolectricTestRunner::class)
@@ -74,8 +75,18 @@ class AppPartsTest {
 
     @Test fun theS1AppsRuntimeRunsTheS1Panes() {
         val s1 = KioskApp.runtime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))
-        assertTrue("the activity and the service read the S1 panes' state through it", s1.app is S1Panes)
-        assertSame(s1.app, s1.s1Panes)
+        assertTrue("the S1 app's overlays and hooks are the S1 panes'", s1.app is S1Panes)
+    }
+
+    @Test fun theS1AppsVoiceStateStartsFromTheAssistantsSwitch() {
+        val s1 = KioskApp.runtime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))
+        val panes = s1.app as S1Panes
+        for ((on, state) in listOf(true to "idle", false to "off")) {
+            PanePrefs(app).paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, on).commit()
+            panes.serviceStarted(app, s1)
+            assertEquals(state, s1.voiceState)
+            assertEquals("the overlay starts from it", state, panes.voiceUi.state)
+        }
     }
 
     @Test fun theAppDecidesItsActivityAndWherePaneSettingsLive() {

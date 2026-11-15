@@ -13,6 +13,7 @@ import dev.glassworks.diagnostics.DiagnosticsDefinition
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.WallBaseDefinition
+import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.frame.TimeZoneDefinition
 import sh.edm.s1kiosk.radio.RadioDefinition
 
@@ -50,7 +51,7 @@ object MenuFixture {
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
-            deviceSettings = if (deviceSettings) SettingsItem.Link(SettingsMenu.AQARA_TITLE, SettingsMenu.AQARA_DETAIL) {} else null,
+            deviceSettings = if (deviceSettings) SettingsItem.Link(AqaraS1Plus.SETTINGS_TITLE, SettingsMenu.AQARA_DETAIL) {} else null,
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             live = live,
             account = { account },

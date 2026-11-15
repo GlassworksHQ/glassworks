@@ -40,6 +40,12 @@ class AqaraS1PlusTest {
         assertTrue(frame.rootUpdates is RootUpdateInstaller)
     }
 
+    @Test fun itsOwnNamesAndWorkComeFromTheFrame() {
+        assertEquals("S1 Plus", frame.shortName)
+        assertEquals("Aqara's own settings", frame.systemSettingsTitle)
+        assertTrue("Wi-Fi scans while the screen is off (#3)", frame.serviceWork(app) {} is ScreenOffWifiScanner)
+    }
+
     @Test fun theSettingsChainIsAndroidSettingsThenLumiSettings() {
         assertEquals(
             listOf("android.settings.SETTINGS" to null, "lumi.settings.SETTINGS" to "com.lumi.settings"),
