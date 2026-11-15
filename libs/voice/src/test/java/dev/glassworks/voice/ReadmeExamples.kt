@@ -18,6 +18,7 @@ internal object ReadmeExamples {
         val controller = VoiceAssistantController(
             send = { type, payload -> server.sendVoice(type, payload) },
             player = player, // plays the response and announcements: your media player
+            resolveUrl = { url -> if (url.startsWith("/")) "http://homeassistant.local:8123$url" else url }, // HA may send paths
             wakeWords = engine, // Home Assistant's wake word select picks from these
             emit = { event -> println(event) }, // WakeDetected, Listening, Thinking, Speaking, Idle, ...
         )
