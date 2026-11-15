@@ -17,8 +17,9 @@ import org.json.JSONObject
  * Setup's Camera step under Panes (#117's approved design): what the camera may do, then Android's
  * permission ("Allow the camera"). Shown while the camera pane's card is on. Done once a use is picked
  * and Android allows the camera. [granted] reads Android's permission; [pickers] draws the cards.
+ * Public for tests.
  */
-internal class CameraSetupStep(
+class CameraSetupStep(
     private val prefs: CameraPrefs,
     private val on: () -> Boolean,
     private val turnOff: () -> Unit,

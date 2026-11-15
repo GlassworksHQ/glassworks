@@ -61,8 +61,8 @@ class LoadingOverlay(context: Context, private val bootRest: BootRest? = null) :
     private var shownSince = 0L
 
     private val g = Glass(context)
-    /** The boot's last frame, by resource id; null when it can't load (the live screen shows at once). */
-    internal var loadRest: (Int) -> android.graphics.drawable.Drawable? = { id -> runCatching { context.getDrawable(id) }.getOrNull() }
+    /** The boot's last frame, by resource id; null when it can't load (the live screen shows at once). Public for tests. */
+    var loadRest: (Int) -> android.graphics.drawable.Drawable? = { id -> runCatching { context.getDrawable(id) }.getOrNull() }
 
     private val rest = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_XY; visibility = View.GONE }
     private val stack = StackView(context).apply { viewBox = true }
@@ -194,8 +194,8 @@ class LoadingOverlay(context: Context, private val bootRest: BootRest? = null) :
         line.animate().alpha(0f).setStartDelay(0).setDuration(160).withEndAction { fadedOut(t) }.start()
     }
 
-    /** The line has faded out for [asked]: show the newest state asked for, if it changed meanwhile. */
-    internal fun fadedOut(asked: State) {
+    /** The line has faded out for [asked]: show the newest state asked for, if it changed meanwhile. Public for tests. */
+    fun fadedOut(asked: State) {
         bind(target ?: asked, SystemClock.uptimeMillis())
         line.animate().alpha(1f).setDuration(260).start()
     }
@@ -281,13 +281,13 @@ class LoadingOverlay(context: Context, private val bootRest: BootRest? = null) :
     }
 
     /** The boot's last frame is on screen (tests). */
-    internal val showsBootFrame get() = rest.visibility == View.VISIBLE && rest.alpha > 0f
+    val showsBootFrame get() = rest.visibility == View.VISIBLE && rest.alpha > 0f
 
     /** What the status line says (tests). */
-    internal val lineText get() = line.text.toString()
+    val lineText get() = line.text.toString()
 
     /** For the mock-ups: the handoff stopped at [t] ms, the rising light where it would be then. */
-    internal fun previewBoot(t: Long) {
+    fun previewBoot(t: Long) {
         boot?.cancel()
         boot = null
         stack.held = (t % StackView.CYCLE_MS) / StackView.CYCLE_MS.toFloat()
@@ -329,7 +329,7 @@ class LoadingOverlay(context: Context, private val bootRest: BootRest? = null) :
     }
 
     /** For the mock-ups: hold the rising light at one frame. */
-    internal fun previewPhase(p: Float) { stack.held = p }
+    fun previewPhase(p: Float) { stack.held = p }
 
     companion object {
         const val CONNECTING = "Connecting to Home Assistant"

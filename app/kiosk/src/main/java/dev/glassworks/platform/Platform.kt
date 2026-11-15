@@ -25,7 +25,7 @@ import android.os.Build
  * The queries live in an open class so a test can build one for any level without Robolectric:
  * [Platform] is the one for the device the app runs on.
  */
-open class PlatformApi internal constructor(
+open class PlatformApi(
     /** The API level this instance answers for. Use it for logs, not for decisions. */
     val apiLevel: Int,
 ) {

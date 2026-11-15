@@ -24,9 +24,9 @@ import java.util.concurrent.TimeUnit
  *   then the link's poll list; reports update immediately;
  * - link failures: logged, "Base: unavailable", retried by the link.
  *
- * The only write is [setRelay] (from Home Assistant).
+ * The only write is [setRelay] (from Home Assistant). The constructor is public for tests.
  */
-class WallBase internal constructor(
+class WallBase(
     context: Context,
     initial: BaseLayout,
     private val listener: Listener,
