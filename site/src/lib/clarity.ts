@@ -205,7 +205,10 @@ export function measured(page: Page | undefined, task: string): string | null {
   if (task === "camera") {
     return cameraNow(page);
   }
-  return page.updates?.latency_p95_ms == null ? null : msAt(page.updates.latency_p95_ms, UPDATE_EDGES);
+  // the runs' unrounded p95s, as goal() and grade.ts judge them; summary.py rounds the aggregate
+  const runs = page.updates?.runs ?? [];
+  const late = runs.length ? medianOf(runs.map((r) => r.latency_p95_ms)) : (page.updates?.latency_p95_ms ?? null);
+  return late == null ? null : msAt(late, UPDATE_EDGES);
 }
 
 /**

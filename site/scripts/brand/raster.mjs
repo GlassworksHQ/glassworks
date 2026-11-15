@@ -109,18 +109,21 @@ const send = (method, params = {}) =>
     ws.send(JSON.stringify({ id: i, method, params }));
   });
 
-await send("Page.enable");
-const tmp = mkdtempSync(join(tmpdir(), "brand-html-"));
-for (const [out, w, h, html] of jobs) {
-  const file = join(tmp, "page.html");
-  writeFileSync(file, html);
-  await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false });
-  await send("Page.navigate", { url: pathToFileURL(file).href });
-  await sleep(900);
-  await send("Runtime.evaluate", { expression: "document.fonts.ready.then(() => true)", awaitPromise: true });
-  const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: w, height: h, scale: 1 } });
-  writeFileSync(join(root, out), Buffer.from(shot.result.data, "base64"));
-  console.log(`  ${out}`);
+try {
+  await send("Page.enable");
+  const tmp = mkdtempSync(join(tmpdir(), "brand-html-"));
+  for (const [out, w, h, html] of jobs) {
+    const file = join(tmp, "page.html");
+    writeFileSync(file, html);
+    await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false });
+    await send("Page.navigate", { url: pathToFileURL(file).href });
+    await sleep(900);
+    await send("Runtime.evaluate", { expression: "document.fonts.ready.then(() => true)", awaitPromise: true });
+    const shot = await send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: w, height: h, scale: 1 } });
+    writeFileSync(join(root, out), Buffer.from(shot.result.data, "base64"));
+    console.log(`  ${out}`);
+  }
+} finally {
+  ws.close();
+  chrome.kill();
 }
-ws.close();
-chrome.kill();
