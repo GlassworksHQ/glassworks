@@ -40,7 +40,9 @@ files change.
 2. **No data is written by hand in `site/`.** Frames come from `../frames/<id>/design/frame.json`,
    panes from `@glassworks/frame-card` (each pane's `pane.json`), Clarity's grade from
    `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric, the latest
-   release from `../CHANGELOG.md`. A data change
+   release from `../CHANGELOG.md`. Blueprints are read from GitHub at the latest release tag when the
+   site is built (`src/lib/blueprints.ts`), so the build needs github.com; `BLUEPRINTS_REF=<tag or
+   commit>` builds from another ref. A data change
    and the page that shows it go in one PR. The site's own words for that data are in
    `src/lib/frameText.ts`.
 3. **Brand files are generated.** `public/brand/` comes from `scripts/brand/` (`npm run brand`).

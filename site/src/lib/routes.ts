@@ -27,6 +27,7 @@ const pages: RouteSource = () => [
   { path: "/" },
   { path: "/frames" },
   { path: "/panes" },
+  { path: "/blueprints" },
   { path: "/brand" },
   { path: "/trademarks" },
 ];

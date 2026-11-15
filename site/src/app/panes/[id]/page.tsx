@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { PaneBlueprints } from "@/components/Blueprints";
 import { paneIcon } from "@/components/DeviceBits";
 import { Chip, ListCard, PageHead, Row, Sq, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
 import { frameById, frames } from "@/lib/frames";
@@ -92,6 +93,8 @@ async function Pane({ params }: { params: Params }) {
         <Tile label="Runs on" value={`${runsOn} of ${rows.length} ${rows.length === 1 ? "frame" : "frames"}`} />
         <Tile label="Kind" value={frame ? "Frame pane" : "General"} sub={frame ? `Lives in the ${frame.name} frame` : "Any frame with the hardware"} />
       </Tiles>
+
+      <PaneBlueprints pane={p.id} />
 
       <ListCard id="where" title="Where it runs">
         {rows.map((d) => {
