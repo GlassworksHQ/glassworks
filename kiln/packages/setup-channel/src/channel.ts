@@ -13,6 +13,9 @@
 //     ← {"id":3,"ok":true,"state":SetupState}            or {"id":3,"ok":false,"error":"…"}
 //     → {"id":4,"op":"set_radio_allow","allow":"192.0.2.10 198.51.100.0/24"}   ("" = Home Assistant only, "any")
 //     ← {"id":4,"ok":true,"state":SetupState}            or {"id":4,"ok":false,"error":"…"}
+//     → {"id":5,"op":"radio.thread_join"}   (apps after 0.4.3; the radio must be in thread_router and signed in)
+//     ← {"id":5,"ok":true,"state":SetupState}            or {"id":5,"ok":false,"error":"…"}
+//       Progress follows in state.radio.threadJoin.
 //   The app may also push {"event":"state","state":SetupState} whenever something changes
 //   (signed in, radio status, Wi-Fi), so the installer doesn't have to poll.
 //   No secrets ever cross this channel (no tokens, no keys, no passwords).
@@ -21,6 +24,17 @@ import type { ByteStream } from 'improv-serial';
 export const SETUP_SOCKET = 'localabstract:s1kiosk_setup';
 
 export interface RadioOption { id: string; label: string; detail: string; experimental?: boolean; repeater?: boolean }
+
+/** How "Join Home Assistant's Thread network" goes (`radio.thread_join`). Never carries the dataset. */
+export interface ThreadJoinState {
+  phase: 'idle' | 'fetching' | 'needs_admin' | 'joining' | 'joined' | 'failed';
+  /** Why, in plain words, for `needs_admin` and `failed`. */
+  reason?: string;
+  /** `needs_admin`: where an administrator signs in once (the panel shows it as a QR code). */
+  adminUrl?: string;
+  /** The radio's Thread role once it has a dataset: `detached`, `child`, `router`, `leader`, … */
+  role?: string;
+}
 
 export interface SetupState {
   /** Panel's Wi-Fi IPv4 address, if connected. */
@@ -52,6 +66,8 @@ export interface SetupState {
      * Absent from apps that don't send it; their same-mode `set_radio` restarts the radio.
      */
     answered?: boolean;
+    /** Only in `thread_router`, and only from apps that have `radio.thread_join`. */
+    threadJoin?: ThreadJoinState;
   };
 }
 
@@ -100,6 +116,9 @@ export class SetupChannel {
   getState(): Promise<SetupState> { return this.request('state'); }
   setHa(url: string): Promise<SetupState> { return this.request('set_ha', { url }, 15_000); }
   setRadio(mode: string): Promise<SetupState> { return this.request('set_radio', { mode }, 30_000); }
+  // TODO(#166): once a release has radio.thread_join, use it in Kiln's Thread step instead of sending the
+  // person to Home Assistant: start it, then follow state.radio.threadJoin. Older apps answer "Unknown request".
+  joinThread(): Promise<SetupState> { return this.request('radio.thread_join'); }
   close(): Promise<void> { return this.io.close(); }
 }
 

@@ -334,7 +334,10 @@ requests that finish it. The radio's step is
 only the ids the step offers (`RadioStep.OPTIONS`, the state's `radio.options`). Any other mode is
 refused, so a mode only appears to the installer once the step offers it. Asking for the mode in
 effect, running or on its way, answers the step and leaves the radio alone, and the state's
-`radio.answered` says whether the step is answered. Kiln uses both for a fresh panel kept on Off.
+`radio.answered` says whether the step is answered. Kiln uses both for a fresh panel kept on Off. A
+request can also start work that outlives its reply: `radio.thread_join` starts the join from Home
+Assistant and answers at once, and the state's `radio.threadJoin` follows it to the end. No request,
+reply or state carries a secret.
 
 **A step id is the step's own.** `GlassworksRuntime.setupSteps` gathers the steps through
 `SetupFlow.usable`. It leaves out, with an error in the `S1Kiosk` log, a step whose id is a core
