@@ -187,32 +187,32 @@ Without root, the app can install over adb on its own, but you lose the radio mo
 
 Kiln runs entirely in your browser and uploads nothing. It walks you through five steps:
 
-1. **Check this browser.** One-time setup on Windows (a Zadig driver) or Linux (a udev rule). On
-   macOS there is nothing to set up.
-2. **Enter FEL mode.** With the back cover off, hold the small button on the board while you plug
-   in USB-C. FEL is the chip's built-in recovery mode. The installer shows a photo of where the
-   button is.
-3. **Back up and install.** The installer starts its own bootloader in RAM, then backs up the
-   panel's partitions to your computer. Only after that does it patch `boot` (Magisk plus the S1
-   helper), flash it and read it back to verify.
-4. **Set up the app.** S1 Kiosk is installed as the home screen. From the same page you set the
-   panel's Wi-Fi (sent over USB), sign it in to Home Assistant, and choose the radio role,
-   language and time zone.
-5. **Done.** Home Assistant finds the panel as an ESPHome device. Click **Add**.
+1. **Panel.** Pick the Aqara S1 Plus.
+2. **Connect.** With the back cover off, hold the small button on the board while you plug in
+   USB-C. That's recovery mode (FEL), built into the chip. Windows needs a Zadig driver once, and
+   Linux a udev rule; macOS needs nothing.
+3. **Install.** Kiln starts its own bootloader in RAM, then backs up the panel's partitions in the
+   browser. Only after that does it patch `boot` (Magisk plus the S1 helper), flash it and read it
+   back to verify.
+4. **Set up.** S1 Kiosk is installed as the home screen, with your language, time zone and clock.
+   From the same page you set the panel's Wi-Fi (sent over USB), sign it in to Home Assistant, and
+   choose the radio role.
+5. **Done.** Download the backup and keep it. Home Assistant finds the panel as an ESPHome device.
+   Click **Add**.
 
 <table>
 <tr>
-<td width="50%"><img src="../../docs/img/installer/fel.webp" alt="Installer step 2: a photo of the board with the FEL button circled, and the steps hold, plug in, keep holding for 10 seconds."></td>
-<td width="50%"><img src="../../docs/img/installer/install.webp" alt="Installer step 3: a progress ring at 80 percent with the phases back up, patch, flash and verify."></td>
+<td width="50%"><img src="../../docs/img/kiln/connect.webp" alt="Kiln's Connect step: Hold the button. Plug it in. An animation of the back cover coming off, and the steps take out the screws, remove the back cover, hold the button, plug in the USB cable."></td>
+<td width="50%"><img src="../../docs/img/kiln/install.webp" alt="Kiln's Install step: Keep it plugged in. A progress bar at 68 percent, writing the new software, after found your S1 Plus, started the installer in its memory, backed up and checked, prepared the new software."></td>
 </tr>
 <tr>
-<td width="50%"><img src="../../docs/img/installer/wifi.webp" alt="Installer step 4: a list of Wi-Fi networks in range of the panel and a password field."></td>
-<td width="50%"><img src="../../docs/img/installer/ha.webp" alt="Installer step 4: the Home Assistant address found on the network, signed in, and a prompt to add the discovered panel."></td>
+<td width="50%"><img src="../../docs/img/kiln/wifi-new.webp" alt="Kiln's Wi-Fi step: Which Wi-Fi? A list of networks in range of the panel and a password field."></td>
+<td width="50%"><img src="../../docs/img/kiln/home-assistant.webp" alt="Kiln's Home Assistant step: Sign in to Home Assistant. The address found on the network, and a Sign in button."></td>
 </tr>
 </table>
 
-Per-OS setup, updating, undo and troubleshooting are in **[docs/install.md](../../docs/install.md)**. Its
-screenshots and step names are still the old S1 installer's.
+Every screen, per-OS setup, what to do when something fails, undo, updating and troubleshooting
+are in **[docs/install.md](../../docs/install.md)**.
 
 > [!NOTE]
 > The web installer has been tested end to end on a real S1 Plus (firmware 4.5.80), from FEL mode
