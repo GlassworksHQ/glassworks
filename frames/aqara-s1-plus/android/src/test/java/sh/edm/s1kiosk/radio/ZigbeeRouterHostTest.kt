@@ -218,8 +218,13 @@ class ZigbeeRouterHostTest {
         val until = System.currentTimeMillis() + 2_000
         while (ncp.nvm != null && System.currentTimeMillis() < until) Thread.sleep(20)
         assertEquals(null, ncp.nvm)
+        // The host publishes the state before it calls onStatus, so wait for the status too, and copy
+        // the list under its lock: iterating it while the host thread appends throws.
+        fun statuses() = synchronized(seen) { seen.toList() }
+        while (statuses().none { it.startsWith("ready to join: left") } && System.currentTimeMillis() < until) Thread.sleep(20)
+        assertTrue("no left status: ${statuses()}", statuses().any { it.startsWith("ready to join: left") })
         // the NETWORK_DOWN that an explicit leave causes is not reported as "rejoining"
-        assertTrue(seen.toString(), seen.none { "rejoining" in it })
+        assertTrue(statuses().toString(), statuses().none { "rejoining" in it })
     }
 
     @Test
