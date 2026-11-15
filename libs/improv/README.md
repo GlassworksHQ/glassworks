@@ -48,13 +48,12 @@ Package `dev.glassworks.improv`, MIT licensed.
 
 | | |
 |---|---|
-| `Improv`, `RpcAssembler`, `RpcCommand` | [Improv BLE](https://www.improv-wifi.com/ble/) packet format: RPC encode and decode, checksums, chunk reassembly, UUIDs and constants. Pure Kotlin. |
+| `Improv`, `ImprovState`, `ImprovError`, `ScannedNetwork` | [Improv BLE](https://www.improv-wifi.com/ble/)'s UUIDs, capability flags, commands, states and errors. The packet format (RPC encode and decode, checksums, chunk reassembly) runs inside `ImprovSession`. Pure Kotlin. |
 | `ImprovSession` | The Improv BLE state machine (authorization, provisioning, errors, auth timeout). Pure Kotlin: Bluetooth and Wi-Fi sit behind `ImprovSession.Effects`, and time is passed in, so it is unit-testable. Behaviour follows the spec and ESPHome's `improv_ble`. |
 | `ImprovBleServer` | The Android GATT server and advertiser: service, characteristics, 0x4677 service data, queued notifications, MTU tracking, legacy or extended advertising (only legacy below Android 8). Turns Bluetooth on if needed. |
 | `ImprovSerial`, `SerialPacketReader`, `ImprovSerialSession` | [Improv Serial](https://www.improv-wifi.com/serial/): framing and its session. Transport-agnostic: feed it bytes from a UART, a socket or an adb stream. Pure Kotlin. |
-| `ImprovAdbServer`, `AdbSocketServer`, `AdbPeer` | Improv Serial over adb: an abstract Unix socket that only adb may open, with one serial session per connection. The browser client is the [`improv-serial`](../../kiln/packages/improv-serial/README.md) TypeScript package. `AdbSocketServer` is also usable on its own, for any browser-to-app channel over USB. |
-| `WifiProvisioner` | Joins the network and verifies the connection, putting the previous network back on failure. Also scans. See [Joining Wi-Fi](#joining-wi-fi). |
-| `WifiSecurity`, `WifiSecurityRules` | Maps Android scan capabilities to Improv's auth labels, and picks the security type to configure (open, OWE, WEP, PSK, SAE, EAP), including for hidden networks. Pure Kotlin. |
+| `ImprovAdbServer`, `AdbSocketServer` | Improv Serial over adb: an abstract Unix socket that only adb may open, with one serial session per connection. The browser client is the [`improv-serial`](../../kiln/packages/improv-serial/README.md) TypeScript package. `AdbSocketServer` is also usable on its own, for any browser-to-app channel over USB. |
+| `WifiProvisioner` | Joins the network and verifies the connection, putting the previous network back on failure. Picks the security type from the scan (open, OWE, WEP, PSK, SAE, EAP), hidden networks included. Also scans. See [Joining Wi-Fi](#joining-wi-fi). |
 
 The UI is yours. That covers how the user physically authorizes (a button or a prompt, then
 `session.authorize(now)`) and what the screen shows while provisioning.
@@ -65,8 +64,8 @@ From Android 10 (API 29), `WifiManager.addNetwork` and `enableNetwork` fail for 
 that target API 29 or later. `WifiProvisioner` uses whichever of these routes the app has:
 
 1. **Device owner** (`adb shell dpm set-device-owner <pkg>/<YourAdminReceiver>`): the legacy API
-   works. The app can also grant itself location access (`ensureLocationIfDeviceOwner()`), which it
-   needs to see scan results and the current SSID.
+   works. The provisioner also grants the app location access, which it needs to see scan results
+   and the current SSID.
 2. **The `SYSTEM_ALERT_WINDOW` app-op** (`adb shell appops set <pkg> SYSTEM_ALERT_WINDOW allow`):
    AOSP still allows the legacy API for apps that hold it.
 3. Otherwise, a **network suggestion**. Android 10 shows the user a notification to approve, and
@@ -75,8 +74,8 @@ that target API 29 or later. `WifiProvisioner` uses whichever of these routes th
 Below Android 10 every app may use the legacy API, so that is the route there. WPA3 (`SAE`) and
 Enhanced Open (`OWE`) networks need Android 10 or later; older versions fail to join them.
 
-It turns Wi-Fi on if needed. It waits for the network to show up in a scan, picks the security type
-(`WifiSecurity`), watches for authentication errors, and reports `Outcome.Connected(ssid, ip,
+It turns Wi-Fi on if needed. It waits for the network to show up in a scan, picks the security type,
+watches for authentication errors, and reports `Outcome.Connected(ssid, ip,
 method)` or `Outcome.Failed(reason, restored)`. On failure it removes what it added and selects the
 previous network again.
 

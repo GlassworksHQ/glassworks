@@ -1,0 +1,279 @@
+public final class dev/glassworks/improv/AdbSocketServer {
+	public static final field MAX_CONNECTIONS I
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function2;)V
+	public final fun start ()V
+	public final fun stop ()V
+}
+
+public final class dev/glassworks/improv/Improv {
+	public static final field CAPABILITIES_UUID Ljava/lang/String;
+	public static final field CAP_DEVICE_INFO I
+	public static final field CAP_HOSTNAME I
+	public static final field CAP_IDENTIFY I
+	public static final field CAP_SCAN_WIFI I
+	public static final field CMD_DEVICE_INFO I
+	public static final field CMD_DEVICE_NAME I
+	public static final field CMD_HOSTNAME I
+	public static final field CMD_IDENTIFY I
+	public static final field CMD_SCAN_WIFI I
+	public static final field CMD_WIFI_SETTINGS I
+	public static final field ERROR_UUID Ljava/lang/String;
+	public static final field INSTANCE Ldev/glassworks/improv/Improv;
+	public static final field MAX_PACKET I
+	public static final field RPC_COMMAND_UUID Ljava/lang/String;
+	public static final field RPC_RESULT_UUID Ljava/lang/String;
+	public static final field SERVICE_DATA_UUID Ljava/lang/String;
+	public static final field SERVICE_UUID Ljava/lang/String;
+	public static final field STATE_UUID Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/ImprovAdbServer {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun start ()V
+	public final fun stop ()V
+}
+
+public final class dev/glassworks/improv/ImprovBleServer {
+	public static final field Companion Ldev/glassworks/improv/ImprovBleServer$Companion;
+	public fun <init> (Landroid/content/Context;Landroid/os/Handler;Ldev/glassworks/improv/ImprovBleServer$Listener;)V
+	public final fun capabilityReport ()Ljava/lang/String;
+	public final fun maxNotify ()I
+	public final fun sendResult ([B)V
+	public final fun setError (Ldev/glassworks/improv/ImprovError;)V
+	public final fun setState (Ldev/glassworks/improv/ImprovState;)V
+	public final fun start (Ldev/glassworks/improv/ImprovState;I)Z
+	public final fun stop ()V
+}
+
+public final class dev/glassworks/improv/ImprovBleServer$Companion {
+	public final fun getLogTag ()Ljava/lang/String;
+	public final fun setLogTag (Ljava/lang/String;)V
+}
+
+public abstract interface class dev/glassworks/improv/ImprovBleServer$Listener {
+	public abstract fun onAdvertising (ZLjava/lang/String;)V
+	public abstract fun onClientConnected (Ljava/lang/String;)V
+	public abstract fun onClientDisconnected (Ljava/lang/String;)V
+	public abstract fun onRpcWrite ([B)V
+}
+
+public final class dev/glassworks/improv/ImprovError : java/lang/Enum {
+	public static final field BAD_HOSTNAME Ldev/glassworks/improv/ImprovError;
+	public static final field INVALID_RPC Ldev/glassworks/improv/ImprovError;
+	public static final field NONE Ldev/glassworks/improv/ImprovError;
+	public static final field NOT_AUTHORIZED Ldev/glassworks/improv/ImprovError;
+	public static final field UNABLE_TO_CONNECT Ldev/glassworks/improv/ImprovError;
+	public static final field UNKNOWN Ldev/glassworks/improv/ImprovError;
+	public static final field UNKNOWN_RPC Ldev/glassworks/improv/ImprovError;
+	public final fun getCode ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/improv/ImprovError;
+	public static fun values ()[Ldev/glassworks/improv/ImprovError;
+}
+
+public final class dev/glassworks/improv/ImprovSerial {
+	public static final field ERROR_INVALID_RPC I
+	public static final field ERROR_UNABLE_TO_CONNECT I
+	public static final field ERROR_UNKNOWN I
+	public static final field ERROR_UNKNOWN_RPC I
+	public static final field INSTANCE Ldev/glassworks/improv/ImprovSerial;
+	public static final field RPC_REQUEST_INFO I
+	public static final field RPC_REQUEST_STATE I
+	public static final field RPC_SCAN_WIFI I
+	public static final field RPC_WIFI_SETTINGS I
+	public static final field STATE_PROVISIONED I
+	public static final field STATE_PROVISIONING I
+	public static final field STATE_READY I
+	public static final field TYPE_ERROR I
+	public static final field TYPE_RPC I
+	public static final field TYPE_RPC_RESULT I
+	public static final field TYPE_STATE I
+	public static final field VERSION I
+	public final fun info (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)[B
+	public final fun rpc (ILjava/util/List;)[B
+	public static synthetic fun rpc$default (Ldev/glassworks/improv/ImprovSerial;ILjava/util/List;ILjava/lang/Object;)[B
+}
+
+public final class dev/glassworks/improv/ImprovSerialSession {
+	public fun <init> (Ldev/glassworks/improv/ImprovSerialSession$Effects;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Ldev/glassworks/improv/ImprovSerialSession$Effects;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getState ()I
+	public final fun onBytes ([BI)V
+	public static synthetic fun onBytes$default (Ldev/glassworks/improv/ImprovSerialSession;[BIILjava/lang/Object;)V
+}
+
+public abstract interface class dev/glassworks/improv/ImprovSerialSession$Effects {
+	public abstract fun connect (Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+	public abstract fun info ()[B
+	public abstract fun online ()Z
+	public abstract fun redirectUrl ()Ljava/lang/String;
+	public abstract fun scan ()Ljava/util/List;
+	public abstract fun send ([B)V
+}
+
+public final class dev/glassworks/improv/ImprovSession {
+	public static final field DEFAULT_AUTH_TIMEOUT_MS J
+	public static final field FRAGMENT_TIMEOUT_MS J
+	public fun <init> (Ldev/glassworks/improv/ImprovSession$Effects;IJ)V
+	public synthetic fun <init> (Ldev/glassworks/improv/ImprovSession$Effects;IJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun authorize (JZ)V
+	public static synthetic fun authorize$default (Ldev/glassworks/improv/ImprovSession;JZILjava/lang/Object;)V
+	public final fun getAuthorizedUntil ()J
+	public final fun getCapabilities ()I
+	public final fun getError ()Ldev/glassworks/improv/ImprovError;
+	public final fun getStarted ()Z
+	public final fun getState ()Ldev/glassworks/improv/ImprovState;
+	public final fun onDisconnect ()V
+	public final fun onProvisionedExternally ()V
+	public final fun onRpcWrite ([BJ)V
+	public final fun onWifiResult (ZLjava/lang/String;J)V
+	public final fun start (ZJ)V
+	public final fun stop ()V
+	public final fun tick (J)V
+}
+
+public abstract interface class dev/glassworks/improv/ImprovSession$Effects {
+	public abstract fun deviceInfo ()Ljava/util/List;
+	public abstract fun identify ()V
+	public abstract fun maxResultSize ()I
+	public abstract fun publishError (Ldev/glassworks/improv/ImprovError;)V
+	public abstract fun publishState (Ldev/glassworks/improv/ImprovState;)V
+	public abstract fun scanNetworks ()Ljava/util/List;
+	public abstract fun sendResult ([B)V
+	public abstract fun startWifi (Ljava/lang/String;Ljava/lang/String;)V
+}
+
+public final class dev/glassworks/improv/ImprovSession$Effects$DefaultImpls {
+	public static fun maxResultSize (Ldev/glassworks/improv/ImprovSession$Effects;)I
+}
+
+public final class dev/glassworks/improv/ImprovState : java/lang/Enum {
+	public static final field AUTHORIZATION_REQUIRED Ldev/glassworks/improv/ImprovState;
+	public static final field AUTHORIZED Ldev/glassworks/improv/ImprovState;
+	public static final field PROVISIONED Ldev/glassworks/improv/ImprovState;
+	public static final field PROVISIONING Ldev/glassworks/improv/ImprovState;
+	public final fun getCode ()I
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ldev/glassworks/improv/ImprovState;
+	public static fun values ()[Ldev/glassworks/improv/ImprovState;
+}
+
+public final class dev/glassworks/improv/ScannedNetwork {
+	public fun <init> (Ljava/lang/String;ILjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;ILjava/lang/String;)Ldev/glassworks/improv/ScannedNetwork;
+	public static synthetic fun copy$default (Ldev/glassworks/improv/ScannedNetwork;Ljava/lang/String;ILjava/lang/String;ILjava/lang/Object;)Ldev/glassworks/improv/ScannedNetwork;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAuth ()Ljava/lang/String;
+	public final fun getRssi ()I
+	public final fun getSsid ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/SerialNetwork {
+	public fun <init> (Ljava/lang/String;IZ)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Z
+	public final fun copy (Ljava/lang/String;IZ)Ldev/glassworks/improv/SerialNetwork;
+	public static synthetic fun copy$default (Ldev/glassworks/improv/SerialNetwork;Ljava/lang/String;IZILjava/lang/Object;)Ldev/glassworks/improv/SerialNetwork;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getRssi ()I
+	public final fun getSecure ()Z
+	public final fun getSsid ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/SerialPacketReader {
+	public fun <init> ()V
+	public fun <init> (I)V
+	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun push ([BI)Ljava/util/List;
+	public static synthetic fun push$default (Ldev/glassworks/improv/SerialPacketReader;[BIILjava/lang/Object;)Ljava/util/List;
+}
+
+public abstract class dev/glassworks/improv/SerialPacketReader$Item {
+}
+
+public final class dev/glassworks/improv/SerialPacketReader$Item$Bad : dev/glassworks/improv/SerialPacketReader$Item {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Ldev/glassworks/improv/SerialPacketReader$Item$Bad;
+	public static synthetic fun copy$default (Ldev/glassworks/improv/SerialPacketReader$Item$Bad;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/improv/SerialPacketReader$Item$Bad;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/SerialPacketReader$Item$Packet : dev/glassworks/improv/SerialPacketReader$Item {
+	public fun <init> (I[B)V
+	public final fun component1 ()I
+	public final fun component2 ()[B
+	public final fun copy (I[B)Ldev/glassworks/improv/SerialPacketReader$Item$Packet;
+	public static synthetic fun copy$default (Ldev/glassworks/improv/SerialPacketReader$Item$Packet;I[BILjava/lang/Object;)Ldev/glassworks/improv/SerialPacketReader$Item$Packet;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getData ()[B
+	public final fun getType ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/WifiProvisioner {
+	public static final field Companion Ldev/glassworks/improv/WifiProvisioner$Companion;
+	public fun <init> (Landroid/content/Context;Landroid/os/Handler;Landroid/content/ComponentName;)V
+	public synthetic fun <init> (Landroid/content/Context;Landroid/os/Handler;Landroid/content/ComponentName;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun cancel ()V
+	public final fun connect (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Lkotlin/jvm/functions/Function1;)V
+	public static synthetic fun connect$default (Ldev/glassworks/improv/WifiProvisioner;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)V
+	public final fun getHasLocationAccess ()Z
+	public final fun getLegacyApiAllowed ()Z
+	public final fun getOnProgress ()Lkotlin/jvm/functions/Function1;
+	public final fun requestScan ()Z
+	public final fun scan ()Ljava/util/List;
+	public final fun scanFresh (JLkotlin/jvm/functions/Function1;)V
+	public final fun setOnProgress (Lkotlin/jvm/functions/Function1;)V
+	public final fun status ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/WifiProvisioner$Companion {
+	public final fun getLogTag ()Ljava/lang/String;
+	public final fun setLogTag (Ljava/lang/String;)V
+}
+
+public abstract class dev/glassworks/improv/WifiProvisioner$Outcome {
+}
+
+public final class dev/glassworks/improv/WifiProvisioner$Outcome$Connected : dev/glassworks/improv/WifiProvisioner$Outcome {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/glassworks/improv/WifiProvisioner$Outcome$Connected;
+	public static synthetic fun copy$default (Ldev/glassworks/improv/WifiProvisioner$Outcome$Connected;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/improv/WifiProvisioner$Outcome$Connected;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIp ()Ljava/lang/String;
+	public final fun getMethod ()Ljava/lang/String;
+	public final fun getSsid ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/improv/WifiProvisioner$Outcome$Failed : dev/glassworks/improv/WifiProvisioner$Outcome {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Ldev/glassworks/improv/WifiProvisioner$Outcome$Failed;
+	public static synthetic fun copy$default (Ldev/glassworks/improv/WifiProvisioner$Outcome$Failed;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Ldev/glassworks/improv/WifiProvisioner$Outcome$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public final fun getRestored ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

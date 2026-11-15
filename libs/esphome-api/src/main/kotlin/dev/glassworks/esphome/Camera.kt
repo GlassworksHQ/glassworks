@@ -7,7 +7,7 @@ import kotlin.concurrent.withLock
 /**
  * A camera entity (`ListEntitiesCameraResponse` 43). Home Assistant asks for images with
  * `CameraImageRequest` (45): `single` for one frame (a picture card, a snapshot), `stream` for
- * frames until [ApiServer.CAMERA_STREAM_MS] pass without another stream request (the more-info
+ * frames until 5 seconds pass without another stream request (the more-info
  * dialog's MJPEG stream asks again after every frame). Each image goes out as `CameraImageResponse`
  * (44) chunks of [CHUNK_BYTES], the last one with `done` set.
  *
@@ -17,18 +17,21 @@ import kotlin.concurrent.withLock
  * are leaving the device. A stream calls it at most [maxFps] times a second per connection. Return
  * promptly: a connection's camera thread ends only after [frame] returns.
  * With [authOnly] set, only an authenticated connection (Noise with the provisioned key) gets images.
+ *
+ * @property maxFps The most frames a second a stream sends to one connection.
+ * @param frame Returns the current JPEG, or null for none.
  */
-class CameraEntity(
+public class CameraEntity(
     objectId: String, name: String, icon: String = "", category: EntityCategory = EntityCategory.NONE,
     disabledByDefault: Boolean = false,
-    val maxFps: Float = 10f,
+    public val maxFps: Float = 10f,
     private val frame: () -> ByteArray?,
 ) : ApiEntity(objectId, name, icon, category, disabledByDefault) {
     init { require(maxFps > 0f) { "maxFps must be positive" } }
 
-    override val listType = Msg.LIST_ENTITIES_CAMERA
+    override val listType: Int = Msg.LIST_ENTITIES_CAMERA
 
-    override fun info() = base().bool(5, disabledByDefault).string(6, icon).uint32(7, category.value)
+    override fun info(): ProtoWriter = base().bool(5, disabledByDefault).string(6, icon).uint32(7, category.value)
 
     internal val frameIntervalMs: Long get() = (1000f / maxFps).toLong()
 
@@ -57,15 +60,19 @@ class CameraEntity(
         return jpeg
     }
 
-    companion object {
+    /** The image size limit. */
+    public companion object {
         /**
          * Small enough that other messages (states, pings) go out between the chunks of a big
          * image, big enough to keep the writes per frame low. ESPHome uses 1390, for its MTU.
          */
-        const val CHUNK_BYTES = 8 * 1024
+        internal const val CHUNK_BYTES = 8 * 1024
 
-        /** aioesphomeapi drops a bigger image (client_base.py `MAX_CAMERA_FRAME_BYTES`). */
-        const val MAX_FRAME_BYTES = 8 * 1024 * 1024
+        /**
+         * The biggest JPEG [frame] may return. aioesphomeapi drops a bigger image (client_base.py
+         * `MAX_CAMERA_FRAME_BYTES`), so the server sends none instead.
+         */
+        public const val MAX_FRAME_BYTES: Int = 8 * 1024 * 1024
     }
 }
 

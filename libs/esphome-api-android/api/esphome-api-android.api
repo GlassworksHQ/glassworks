@@ -1,0 +1,8 @@
+public final class dev/glassworks/esphome/android/EspHomeMdns {
+	public fun <init> (Landroid/content/Context;Ljava/lang/String;)V
+	public synthetic fun <init> (Landroid/content/Context;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun start (Ldev/glassworks/esphome/DeviceIdentity;IZZ)V
+	public final fun start (Ldev/glassworks/esphome/DeviceIdentity;Ldev/glassworks/esphome/ApiServer;)V
+	public final fun stop ()V
+}
+

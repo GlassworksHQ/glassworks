@@ -20,13 +20,20 @@ import android.net.nsd.NsdServiceInfo
  * Re-advertise ([stop] then [start]) when the encryption state changes, e.g. from
  * [ApiServer.onKeyActivated], so HA sees that a key is now required.
  *
+ * Call it from one thread, or synchronize: it keeps one registration and isn't thread-safe.
+ *
+ * @param context Any context; the application context is kept.
  * @param board The `board` TXT record (ESPHome puts its board id there), or null to leave it out.
  */
-class EspHomeMdns(context: Context, private val board: String? = null) {
+public class EspHomeMdns(context: Context, private val board: String? = null) {
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
     private var listener: NsdManager.RegistrationListener? = null
 
-    fun start(identity: DeviceIdentity, port: Int, encrypted: Boolean, provisionable: Boolean) {
+    /**
+     * Advertises [identity] on [port]. [encrypted]: a key is in use, so Home Assistant asks for it.
+     * [provisionable]: no key yet, and Home Assistant may set one. Does nothing while already advertising.
+     */
+    public fun start(identity: DeviceIdentity, port: Int, encrypted: Boolean, provisionable: Boolean) {
         if (listener != null) return
         val info = NsdServiceInfo().apply {
             serviceName = identity.name
@@ -38,9 +45,9 @@ class EspHomeMdns(context: Context, private val board: String? = null) {
             board?.let { setAttribute("board", it) }
             setAttribute("network", "wifi")
             if (encrypted) {
-                setAttribute("api_encryption", NoiseResponder.PROTOCOL_NAME)
+                setAttribute("api_encryption", ApiServer.NOISE_PROTOCOL)
             } else if (provisionable) {
-                setAttribute("api_encryption_supported", NoiseResponder.PROTOCOL_NAME)
+                setAttribute("api_encryption_supported", ApiServer.NOISE_PROTOCOL)
                 setAttribute("api_provisioning", "zero-psk")
             }
         }
@@ -65,11 +72,12 @@ class EspHomeMdns(context: Context, private val board: String? = null) {
         }
     }
 
-    /** Advertises [server] (started) with its current encryption state. */
-    fun start(identity: DeviceIdentity, server: ApiServer) =
+    /** Advertises [server], which must be started, with its port and current encryption state. */
+    public fun start(identity: DeviceIdentity, server: ApiServer): Unit =
         start(identity, server.localPort, encrypted = server.encrypted, provisionable = server.provisionable)
 
-    fun stop() {
+    /** Stops advertising. Does nothing when not advertising. */
+    public fun stop() {
         val l = listener ?: return
         listener = null
         try { nsd.unregisterService(l) } catch (e: Exception) { EspHomeLog.w("mDNS: unregister threw", e) }

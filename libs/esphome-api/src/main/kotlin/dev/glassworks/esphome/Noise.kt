@@ -10,14 +10,17 @@ import java.security.SecureRandom
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/** Thrown when a Noise message fails AEAD authentication (wrong PSK or tampering). */
-class NoiseMacException : Exception("Handshake MAC failure")
+/** Thrown when a Noise message fails AEAD authentication: a wrong key, or tampering. */
+public class NoiseMacException : Exception("Handshake MAC failure")
 
 /**
  * Noise `CipherState` with ChaChaPoly (Noise spec §5.1): 96-bit nonce = 32 zero bits followed by
- * the 64-bit little-endian counter.
+ * the 64-bit little-endian counter. One instance encrypts or decrypts one direction of a session; the
+ * nonce counts up with each message, so messages must be handled in order. Not thread-safe.
+ *
+ * @param key The 32-byte cipher key from the handshake.
  */
-class NoiseCipher(private val key: ByteArray) {
+public class NoiseCipher(private val key: ByteArray) {
     private var n = 0L
 
     private fun nonce(): ByteArray {
@@ -27,7 +30,8 @@ class NoiseCipher(private val key: ByteArray) {
         return iv
     }
 
-    fun encrypt(ad: ByteArray, plaintext: ByteArray): ByteArray {
+    /** Encrypts [plaintext] with associated data [ad]; returns the ciphertext with its 16-byte tag. */
+    public fun encrypt(ad: ByteArray, plaintext: ByteArray): ByteArray {
         val c = ChaCha20Poly1305()
         c.init(true, AEADParameters(KeyParameter(key), 128, nonce(), ad))
         val out = ByteArray(c.getOutputSize(plaintext.size))
@@ -37,7 +41,8 @@ class NoiseCipher(private val key: ByteArray) {
         return out
     }
 
-    fun decrypt(ad: ByteArray, ciphertext: ByteArray): ByteArray {
+    /** Decrypts [ciphertext] with associated data [ad]. Throws [NoiseMacException] if it doesn't authenticate. */
+    public fun decrypt(ad: ByteArray, ciphertext: ByteArray): ByteArray {
         val c = ChaCha20Poly1305()
         c.init(false, AEADParameters(KeyParameter(key), 128, nonce(), ad))
         val out = ByteArray(c.getOutputSize(ciphertext.size))
@@ -63,7 +68,7 @@ class NoiseCipher(private val key: ByteArray) {
  * ```
  * Written from the Noise Protocol Framework spec, revision 34 (§5.2 SymmetricState, §9 PSK).
  */
-class NoiseResponder(psk: ByteArray, prologue: ByteArray, private val random: SecureRandom = SecureRandom()) {
+internal class NoiseResponder(psk: ByteArray, prologue: ByteArray, private val random: SecureRandom = SecureRandom()) {
     private var ck: ByteArray
     private var h: ByteArray
     private var cipher: NoiseCipher? = null
@@ -137,7 +142,7 @@ class NoiseResponder(psk: ByteArray, prologue: ByteArray, private val random: Se
     }
 
     companion object {
-        const val PROTOCOL_NAME = "Noise_NNpsk0_25519_ChaChaPoly_SHA256"
+        const val PROTOCOL_NAME = ApiServer.NOISE_PROTOCOL
 
         private fun sha256(data: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(data)
 

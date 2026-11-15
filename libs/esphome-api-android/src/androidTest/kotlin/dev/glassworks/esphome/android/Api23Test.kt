@@ -13,6 +13,9 @@ import dev.glassworks.esphome.MemoryKeyStore
 import dev.glassworks.esphome.Msg
 import dev.glassworks.esphome.NoiseCipher
 import dev.glassworks.esphome.NoiseKeys
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
+import java.io.DataInputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -25,9 +28,26 @@ class Api23Test {
 
     @Test fun aKeyFromHomeAssistantIsAccepted() {
         val store = MemoryKeyStore()
-        val r = NoiseKeys(store).handleSetKey("AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=".toByteArray())
-        assertTrue(r.message, r.success)
-        assertArrayEquals(key, store.key)
+        val loopback = InetAddress.getByName("127.0.0.1")
+        val server = ApiServer(0, { identity }, emptyList(), NoiseKeys(store), loopback)
+        try {
+            server.start()
+            Socket().use { s ->
+                s.connect(InetSocketAddress(loopback, server.localPort), 2_000)
+                s.soTimeout = 5_000
+                // NoiseEncryptionSetKeyRequest { key = base64 of the 32-byte key }, as Home Assistant sends it.
+                val request = ProtoWriter().bytes(1, "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=".toByteArray()).toByteArray()
+                s.getOutputStream().write(byteArrayOf(0, request.size.toByte(), Msg.NOISE_ENCRYPTION_SET_KEY_REQUEST.toByte()) + request)
+                val input = s.getInputStream()
+                val header = ByteArray(3).also { DataInputStream(input).readFully(it) }
+                assertEquals(Msg.NOISE_ENCRYPTION_SET_KEY_RESPONSE, header[2].toInt())
+                val response = ByteArray(header[1].toInt()).also { DataInputStream(input).readFully(it) }
+                assertTrue("the key is accepted", ProtoMessage(response).bool(1))
+            }
+            assertArrayEquals(key, store.load())
+        } finally {
+            server.stop()
+        }
     }
 
     @Test fun noiseCipherRoundTrips() {

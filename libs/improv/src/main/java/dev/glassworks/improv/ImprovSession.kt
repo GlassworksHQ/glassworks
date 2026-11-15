@@ -13,43 +13,57 @@ package dev.glassworks.improv
  *    authorization timeout.
  *  - Identify and device info work in both pre-provisioning states and don't need authorization.
  *  - Every complete packet first resets the error to NONE, so a repeated error notifies again.
+ *
+ * @param effects The device side: BLE publishing, Wi-Fi and device info.
+ * @property capabilities The [Improv] `CAP_*` flags to advertise.
+ * @param authTimeoutMs How long an authorization lasts: 2 minutes by default.
  */
-class ImprovSession(
+public class ImprovSession(
     private val effects: Effects,
-    val capabilities: Int = Improv.CAP_IDENTIFY or Improv.CAP_DEVICE_INFO or Improv.CAP_SCAN_WIFI,
+    public val capabilities: Int = Improv.CAP_IDENTIFY or Improv.CAP_DEVICE_INFO or Improv.CAP_SCAN_WIFI,
     private val authTimeoutMs: Long = DEFAULT_AUTH_TIMEOUT_MS,
 ) {
-    interface Effects {
+    /** What the session needs from the device. Called on the session's thread. */
+    public interface Effects {
         /** Update the state characteristic (+notify) and the advertisement's service data. */
-        fun publishState(state: ImprovState)
+        public fun publishState(state: ImprovState)
         /** Update the error characteristic (+notify). */
-        fun publishError(error: ImprovError)
+        public fun publishError(error: ImprovError)
         /** Write the RPC result characteristic (+notify). */
-        fun sendResult(packet: ByteArray)
-        fun identify()
+        public fun sendResult(packet: ByteArray)
+        /** Show the user which device this is: blink, beep or show something. */
+        public fun identify()
         /** Start connecting; report back with [onWifiResult]. */
-        fun startWifi(ssid: String, password: String)
-        fun scanNetworks(): List<ScannedNetwork>
+        public fun startWifi(ssid: String, password: String)
+        /** The Wi-Fi networks the device sees now. */
+        public fun scanNetworks(): List<ScannedNetwork>
         /** Firmware name, firmware version, hardware chip/variant, device name. */
-        fun deviceInfo(): List<String>
+        public fun deviceInfo(): List<String>
         /** Largest RPC result that fits in one notification for the current connection(s). */
-        fun maxResultSize(): Int = Improv.MAX_PACKET
+        public fun maxResultSize(): Int = Improv.MAX_PACKET
     }
 
-    var state: ImprovState = ImprovState.AUTHORIZATION_REQUIRED
+    /** The current state. */
+    public var state: ImprovState = ImprovState.AUTHORIZATION_REQUIRED
         private set
-    var error: ImprovError = ImprovError.NONE
+    /** The current error. */
+    public var error: ImprovError = ImprovError.NONE
         private set
-    var started = false
+    /** True between [start] and [stop]. */
+    public var started: Boolean = false
         private set
     /** Wall time (same clock as `now`) when authorization lapses; 0 when not authorized. */
-    var authorizedUntil = 0L
+    public var authorizedUntil: Long = 0L
         private set
 
     private val assembler = RpcAssembler()
     private var lastWriteAt = 0L
 
-    fun start(requireAuthorization: Boolean, now: Long) {
+    /**
+     * Starts the session at [now]: in AUTHORIZATION_REQUIRED when [requireAuthorization], else
+     * authorized right away. Publishes the state and clears the error.
+     */
+    public fun start(requireAuthorization: Boolean, now: Long) {
         started = true
         assembler.clear()
         if (requireAuthorization) setState(ImprovState.AUTHORIZATION_REQUIRED, force = true)
@@ -57,21 +71,25 @@ class ImprovSession(
         setError(ImprovError.NONE, force = true)
     }
 
-    fun stop() {
+    /** Stops the session and drops a half-received command. */
+    public fun stop() {
         started = false
         assembler.clear()
         authorizedUntil = 0L
     }
 
-    /** Physical authorization on the panel (button tap, proximity...). */
-    fun authorize(now: Long, force: Boolean = false) {
+    /**
+     * Physical authorization on the device (button tap, proximity...): authorized until
+     * [now] + the timeout. With [force], also from PROVISIONING or PROVISIONED.
+     */
+    public fun authorize(now: Long, force: Boolean = false) {
         if (!force && state != ImprovState.AUTHORIZATION_REQUIRED && state != ImprovState.AUTHORIZED) return
         authorizedUntil = now + authTimeoutMs
         setState(ImprovState.AUTHORIZED, force)
     }
 
-    /** Called periodically; lapses authorization after the timeout. */
-    fun tick(now: Long) {
+    /** Call it every second or so; lapses the authorization once it times out. */
+    public fun tick(now: Long) {
         if (state == ImprovState.AUTHORIZED && now >= authorizedUntil) {
             authorizedUntil = 0L
             setState(ImprovState.AUTHORIZATION_REQUIRED)
@@ -79,13 +97,13 @@ class ImprovSession(
     }
 
     /** A client disconnected: drop half-received packets, clear the error (like ESPHome). */
-    fun onDisconnect() {
+    public fun onDisconnect() {
         assembler.clear()
         setError(ImprovError.NONE)
     }
 
-    /** Bytes written to the RPC command characteristic (possibly a fragment). */
-    fun onRpcWrite(chunk: ByteArray, now: Long) {
+    /** Bytes written to the RPC command characteristic at [now] (possibly a fragment). */
+    public fun onRpcWrite(chunk: ByteArray, now: Long) {
         // Fragments of one packet arrive back to back; a stale half packet would swallow the next one.
         if (assembler.pending > 0 && now - lastWriteAt > FRAGMENT_TIMEOUT_MS) assembler.clear()
         lastWriteAt = now
@@ -114,8 +132,11 @@ class ImprovSession(
         }
     }
 
-    /** Result of [Effects.startWifi]. [redirectUrl] null/empty = no URL entry. */
-    fun onWifiResult(success: Boolean, redirectUrl: String?, now: Long) {
+    /**
+     * The result of [Effects.startWifi]: on [success], PROVISIONED with [redirectUrl] (null or empty
+     * for none) as the result; else the UNABLE_TO_CONNECT error and authorized again.
+     */
+    public fun onWifiResult(success: Boolean, redirectUrl: String?, now: Long) {
         if (state != ImprovState.PROVISIONING) return
         if (success) {
             // ESPHome order: RPC result first, then the PROVISIONED state.
@@ -128,8 +149,8 @@ class ImprovSession(
         }
     }
 
-    /** The panel got a network some other way while Improv was running. */
-    fun onProvisionedExternally() {
+    /** The device got a network some other way while Improv was running: PROVISIONED. */
+    public fun onProvisionedExternally() {
         if (state == ImprovState.AUTHORIZATION_REQUIRED || state == ImprovState.AUTHORIZED) {
             setState(ImprovState.PROVISIONED)
         }
@@ -157,9 +178,9 @@ class ImprovSession(
         return out
     }
 
-    companion object {
+    internal companion object {
         /** 2 minutes: long enough to type a Wi-Fi password on a phone after tapping Allow. */
-        const val DEFAULT_AUTH_TIMEOUT_MS = 120_000L
-        const val FRAGMENT_TIMEOUT_MS = 2_000L
+        const val DEFAULT_AUTH_TIMEOUT_MS: Long = 120_000L
+        const val FRAGMENT_TIMEOUT_MS: Long = 2_000L
     }
 }

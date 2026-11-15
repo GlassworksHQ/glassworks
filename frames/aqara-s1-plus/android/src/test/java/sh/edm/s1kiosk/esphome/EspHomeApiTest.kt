@@ -185,7 +185,7 @@ class EspHomeApiTest {
                         )
                         line.startsWith("PROVISIONED ") -> provisionedKey = line.removePrefix("PROVISIONED ")
                         line == "RESTART" -> {
-                            keyAtRestart = store.key
+                            keyAtRestart = store.load()
                             prov.stop()
                             prov = provServer(provPort)
                             prov.start()
@@ -300,7 +300,7 @@ class EspHomeApiTest {
             assertTrue("the provisioned key was persisted",
                 Base64.getDecoder().decode(provisionedKey).contentEquals(keyAtRestart))
             assertEquals(2, activations) // set, then clear (after the restart: new server instance counts)
-            assertEquals("cleared at the end", null, store.key)
+            assertEquals("cleared at the end", null, store.load())
             assertTrue("hello client_info + peer address reported: $hellos",
                 hellos.any { it == "Home Assistant 2026.11.0@127.0.0.1" })
         } finally {

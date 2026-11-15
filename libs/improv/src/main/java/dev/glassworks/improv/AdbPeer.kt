@@ -5,7 +5,7 @@ package dev.glassworks.improv
  * `localabstract:<name>` service, so the peer is adbd as the shell user (uid 2000), or root (uid 0)
  * after `adb root`. Any other app on the device is refused. Pure (AdbPeerTest).
  */
-object AdbPeer {
+internal object AdbPeer {
     const val ROOT_UID = 0
     const val SHELL_UID = 2000
 

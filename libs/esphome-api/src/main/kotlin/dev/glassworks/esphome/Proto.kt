@@ -6,11 +6,15 @@ import java.io.ByteArrayOutputStream
  * Minimal protobuf (proto3) encoder for the ESPHome native API messages we send.
  * Default values (0, false, "", empty bytes) are omitted, like proto3 does, unless `force` is set.
  * Field numbers are taken from aioesphomeapi `api.proto` (see [Msg]).
+ *
+ * Each method appends one field and returns the writer, so calls chain:
+ * `ProtoWriter().fixed32(1, key, force = true).bool(2, on)`.
  */
-class ProtoWriter {
+public class ProtoWriter {
     private val out = ByteArrayOutputStream(64)
 
-    fun toByteArray(): ByteArray = out.toByteArray()
+    /** The encoded message so far. */
+    public fun toByteArray(): ByteArray = out.toByteArray()
 
     private fun rawVarint(value: Long) {
         var v = value
@@ -24,32 +28,34 @@ class ProtoWriter {
     private fun tag(field: Int, wire: Int) = rawVarint(((field shl 3) or wire).toLong())
 
     /** uint32 (also used for enums with non-negative values). */
-    fun uint32(field: Int, v: Int): ProtoWriter {
+    public fun uint32(field: Int, v: Int): ProtoWriter {
         if (v != 0) { tag(field, 0); rawVarint(v.toLong() and 0xFFFFFFFFL) }
         return this
     }
 
     /** uint64 (e.g. a Bluetooth address); [v] is read as unsigned. */
-    fun uint64(field: Int, v: Long): ProtoWriter {
+    public fun uint64(field: Int, v: Long): ProtoWriter {
         if (v != 0L) { tag(field, 0); rawVarint(v) }
         return this
     }
 
     /** sint32: zigzag, so small negative values (an RSSI) stay short. */
-    fun sint32(field: Int, v: Int): ProtoWriter = uint32(field, (v shl 1) xor (v shr 31))
+    public fun sint32(field: Int, v: Int): ProtoWriter = uint32(field, (v shl 1) xor (v shr 31))
 
     /** int32: negative values are sign-extended to 10 bytes, as protobuf does. */
-    fun int32(field: Int, v: Int): ProtoWriter {
+    public fun int32(field: Int, v: Int): ProtoWriter {
         if (v != 0) { tag(field, 0); rawVarint(v.toLong()) }
         return this
     }
 
-    fun bool(field: Int, v: Boolean): ProtoWriter {
+    /** bool. */
+    public fun bool(field: Int, v: Boolean): ProtoWriter {
         if (v) { tag(field, 0); out.write(1) }
         return this
     }
 
-    fun fixed32(field: Int, v: Int, force: Boolean = false): ProtoWriter {
+    /** fixed32 (an entity key), 4 bytes little-endian. */
+    public fun fixed32(field: Int, v: Int, force: Boolean = false): ProtoWriter {
         if (v != 0 || force) {
             tag(field, 5)
             out.write(v and 0xFF); out.write((v ushr 8) and 0xFF)
@@ -58,18 +64,21 @@ class ProtoWriter {
         return this
     }
 
-    fun float(field: Int, v: Float): ProtoWriter {
+    /** float, 4 bytes. Only +0.0 is a default value; -0.0 and NaN are written. */
+    public fun float(field: Int, v: Float): ProtoWriter {
         val bits = java.lang.Float.floatToRawIntBits(v)
         if (bits != 0) fixed32(field, bits, force = true)
         return this
     }
 
-    fun string(field: Int, v: String?, force: Boolean = false): ProtoWriter {
+    /** string, as UTF-8. Null counts as "". */
+    public fun string(field: Int, v: String?, force: Boolean = false): ProtoWriter {
         if (!v.isNullOrEmpty() || force) bytes(field, (v ?: "").toByteArray(Charsets.UTF_8), force)
         return this
     }
 
-    fun bytes(field: Int, v: ByteArray, force: Boolean = false): ProtoWriter {
+    /** bytes. */
+    public fun bytes(field: Int, v: ByteArray, force: Boolean = false): ProtoWriter {
         if (v.isNotEmpty() || force) {
             tag(field, 2)
             rawVarint(v.size.toLong())
@@ -79,9 +88,10 @@ class ProtoWriter {
     }
 
     /** Embedded message; always written (a present sub-message differs from an absent one). */
-    fun message(field: Int, w: ProtoWriter): ProtoWriter = bytes(field, w.toByteArray(), force = true)
+    public fun message(field: Int, w: ProtoWriter): ProtoWriter = bytes(field, w.toByteArray(), force = true)
 
-    fun strings(field: Int, values: Iterable<String>): ProtoWriter {
+    /** repeated string: one field per value, empty ones included. */
+    public fun strings(field: Int, values: Iterable<String>): ProtoWriter {
         for (s in values) bytes(field, s.toByteArray(Charsets.UTF_8), force = true)
         return this
     }
@@ -91,8 +101,14 @@ class ProtoWriter {
  * Minimal protobuf decoder: parses every field of one message into a map. Our messages are tiny,
  * so this is simpler than a streaming API. Varints are kept as Long, fixed32 as Int, fixed64 as
  * Long and length-delimited fields as ByteArray.
+ *
+ * The getters return the field's last value, or its default (0, false, "", empty) when it is
+ * missing or of another wire type, as proto3 does. The constructor throws [ProtoException] on
+ * malformed data.
+ *
+ * @param data One encoded message.
  */
-class ProtoMessage(data: ByteArray) {
+public class ProtoMessage(data: ByteArray) {
     private val fields = HashMap<Int, MutableList<Any>>()
 
     init {
@@ -139,29 +155,46 @@ class ProtoMessage(data: ByteArray) {
         }
     }
 
-    fun has(field: Int): Boolean = fields.containsKey(field)
+    /** True if the message has [field]. */
+    public fun has(field: Int): Boolean = fields.containsKey(field)
 
     private fun last(field: Int): Any? = fields[field]?.lastOrNull()
 
-    fun long(field: Int): Long = when (val v = last(field)) {
+    /** A varint field (int64, uint64), or a fixed32 one read as unsigned. */
+    public fun long(field: Int): Long = when (val v = last(field)) {
         is Long -> v
         is Int -> v.toLong() and 0xFFFFFFFFL
         else -> 0L
     }
 
-    fun uint32(field: Int): Int = long(field).toInt()
-    fun bool(field: Int): Boolean = long(field) != 0L
-    fun fixed32(field: Int): Int = (last(field) as? Int) ?: 0
-    fun float(field: Int): Float = java.lang.Float.intBitsToFloat(fixed32(field))
-    fun bytes(field: Int): ByteArray = (last(field) as? ByteArray) ?: ByteArray(0)
-    fun string(field: Int): String = String(bytes(field), Charsets.UTF_8)
-    fun strings(field: Int): List<String> =
+    /** uint32, or an enum. */
+    public fun uint32(field: Int): Int = long(field).toInt()
+
+    /** bool. */
+    public fun bool(field: Int): Boolean = long(field) != 0L
+
+    /** fixed32 (an entity key). */
+    public fun fixed32(field: Int): Int = (last(field) as? Int) ?: 0
+
+    /** float. */
+    public fun float(field: Int): Float = java.lang.Float.intBitsToFloat(fixed32(field))
+
+    /** bytes. */
+    public fun bytes(field: Int): ByteArray = (last(field) as? ByteArray) ?: ByteArray(0)
+
+    /** string, decoded as UTF-8. */
+    public fun string(field: Int): String = String(bytes(field), Charsets.UTF_8)
+
+    /** Every value of a repeated string field. */
+    public fun strings(field: Int): List<String> =
         fields[field].orEmpty().mapNotNull { (it as? ByteArray)?.toString(Charsets.UTF_8) }
-    fun messages(field: Int): List<ProtoMessage> =
+
+    /** Every value of a repeated message field, decoded. */
+    public fun messages(field: Int): List<ProtoMessage> =
         fields[field].orEmpty().mapNotNull { (it as? ByteArray)?.let(::ProtoMessage) }
 
     /** Every value of a repeated varint field, packed or not (a parser must accept both). */
-    fun longs(field: Int): List<Long> = fields[field].orEmpty().flatMap { v ->
+    public fun longs(field: Int): List<Long> = fields[field].orEmpty().flatMap { v ->
         when (v) {
             is Long -> listOf(v)
             is ByteArray -> packedVarints(v)
@@ -170,7 +203,7 @@ class ProtoMessage(data: ByteArray) {
     }
 
     /** Every value of a repeated fixed32 field (float, fixed32), packed or not. */
-    fun fixed32s(field: Int): List<Int> = fields[field].orEmpty().flatMap { v ->
+    public fun fixed32s(field: Int): List<Int> = fields[field].orEmpty().flatMap { v ->
         when (v) {
             is Int -> listOf(v)
             is ByteArray -> {
@@ -203,10 +236,12 @@ class ProtoMessage(data: ByteArray) {
         return out
     }
 
-    companion object {
-        /** sint32 zigzag decoding. */
-        fun zigzag(v: Long): Int = ((v ushr 1) xor -(v and 1)).toInt()
+    /** Decoding helpers. */
+    public companion object {
+        /** Decodes a sint32 read with [long]: protobuf's zigzag encoding. */
+        public fun zigzag(v: Long): Int = ((v ushr 1) xor -(v and 1)).toInt()
     }
 }
 
-class ProtoException(message: String) : Exception(message)
+/** Thrown by [ProtoMessage] for data that isn't a valid protobuf message. */
+public class ProtoException(message: String) : Exception(message)

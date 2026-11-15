@@ -17,16 +17,28 @@ import java.util.concurrent.atomic.AtomicInteger
  * no Android dependency) under [tag] on Android, stdout elsewhere. Replace [sink] to route it into
  * your own logger.
  */
-object EspHomeLog {
-    enum class Level { DEBUG, INFO, WARN }
-
-    fun interface Sink {
-        fun log(level: Level, tag: String, msg: String, t: Throwable?)
+public object EspHomeLog {
+    /** How much a line matters. */
+    public enum class Level {
+        /** Detail for debugging, such as an ignored message type. */
+        DEBUG,
+        /** Normal events: connections, commands, key changes. */
+        INFO,
+        /** Something failed or was refused. */
+        WARN,
     }
 
-    @Volatile var tag: String = "ESPHomeApi"
+    /** Takes each log line. Called on whichever thread logs, so it must be thread-safe. */
+    public fun interface Sink {
+        /** Logs [msg] at [level] under [tag], with [t] when an exception caused it. */
+        public fun log(level: Level, tag: String, msg: String, t: Throwable?)
+    }
 
-    @Volatile var sink: Sink = defaultSink()
+    /** The tag (Android's log tag) every line carries. */
+    @Volatile public var tag: String = "ESPHomeApi"
+
+    /** Where the lines go. */
+    @Volatile public var sink: Sink = defaultSink()
 
     private fun defaultSink(): Sink {
         val android = runCatching {
@@ -48,55 +60,122 @@ object EspHomeLog {
         }
     }
 
-    fun d(msg: String) = sink.log(Level.DEBUG, tag, msg, null)
-    fun i(msg: String) = sink.log(Level.INFO, tag, msg, null)
-    fun w(msg: String, t: Throwable? = null) = sink.log(Level.WARN, tag, msg, t)
+    /** Logs [msg] at [Level.DEBUG]. */
+    public fun d(msg: String): Unit = sink.log(Level.DEBUG, tag, msg, null)
+
+    /** Logs [msg] at [Level.INFO]. */
+    public fun i(msg: String): Unit = sink.log(Level.INFO, tag, msg, null)
+
+    /** Logs [msg] at [Level.WARN], with the exception [t] if there is one. */
+    public fun w(msg: String, t: Throwable? = null): Unit = sink.log(Level.WARN, tag, msg, t)
 }
 
-/** The device's Sendspin client as the ESPHome API exposes it (DeviceCapabilities + pairing token). */
-interface SendspinTokenSource {
+/**
+ * The device's Sendspin client, as the native API exposes it: its client id in
+ * `DeviceCapabilitiesResponse`, and the pairing token Home Assistant hands to Music Assistant. Set it
+ * as [ApiServer.sendspin].
+ */
+public interface SendspinTokenSource {
     /** The Sendspin client_id, or "" until the client has started since boot. */
-    fun clientIdIfStarted(): String
+    public fun clientIdIfStarted(): String
 
-    /** (SendspinApi.STATUS_*, token when OK). The token is a credential: never log it. */
-    fun pairingToken(): Pair<Int, String?>
+    /**
+     * A [SendspinApi] `STATUS_*` value, and the token when it is [SendspinApi.STATUS_OK]. The token is a
+     * credential: never log it. Called only over an encrypted connection with the device's key.
+     */
+    public fun pairingToken(): Pair<Int, String?>
 }
 
-/** What `DeviceInfoResponse` / `HelloResponse` / mDNS report. */
-data class DeviceIdentity(
-    /** ESPHome node name (hostname-style), e.g. `aqara-s1-plus-a1b2c3`. */
-    val name: String,
-    val friendlyName: String,
-    /** `AA:BB:CC:DD:EE:FF`; Home Assistant's config entry unique id is derived from it. */
-    val macAddress: String,
-    val esphomeVersion: String,
-    val compilationTime: String,
-    val manufacturer: String,
-    val model: String,
-    val voiceFeatures: Int,
-    /**
-     * The port of the device's own web page, or 0 for none. Home Assistant then links the device page's
-     * "Visit" to `http://<host>:<port>` (`configuration_url`, components/esphome/manager.py).
-     */
-    val webserverPort: Int = 0,
+/**
+ * Who the device is: what `HelloResponse`, `DeviceInfoResponse` and the mDNS record report. Home
+ * Assistant shows these on its device page.
+ *
+ * @property name The ESPHome node name, hostname-style, such as `aqara-s1-plus-a1b2c3`.
+ * @property friendlyName The name Home Assistant shows, such as `Aqara S1 Plus`.
+ * @property macAddress `AA:BB:CC:DD:EE:FF`. Home Assistant derives the config entry's unique id from it,
+ *   so keep it stable.
+ * @property esphomeVersion The ESPHome version the device claims, such as `2026.10.2`. Home Assistant
+ *   checks it for features, so claim one it supports.
+ * @property compilationTime When the firmware was built, as text.
+ * @property manufacturer Shown as the device's manufacturer.
+ * @property model Shown as the device's model.
+ * @property voiceFeatures [VoiceFeature] flags, or 0 for no voice assistant.
+ * @property webserverPort The port of the device's own web page, or 0 for none. Home Assistant then
+ *   links the device page's "Visit" to `http://<host>:<port>` (`configuration_url`,
+ *   components/esphome/manager.py).
+ */
+public data class DeviceIdentity(
+    public val name: String,
+    public val friendlyName: String,
+    public val macAddress: String,
+    public val esphomeVersion: String,
+    public val compilationTime: String,
+    public val manufacturer: String,
+    public val model: String,
+    public val voiceFeatures: Int,
+    public val webserverPort: Int = 0,
 ) {
     /** Lowercase hex without separators, as in ESPHome's mDNS `mac` TXT and Noise ServerHello. */
-    val macHex: String get() = macAddress.replace(":", "").lowercase()
+    public val macHex: String get() = macAddress.replace(":", "").lowercase()
 }
 
-data class WakeWordInfo(val id: String, val wakeWord: String, val trainedLanguages: List<String> = listOf("en"))
+/**
+ * A wake word the device can listen for, offered in Home Assistant's voice settings.
+ *
+ * @property id The id Home Assistant passes back in [VoiceAssistantHandler.setActiveWakeWords].
+ * @property wakeWord The phrase, as shown, such as `Okay Nabu`.
+ * @property trainedLanguages The languages it was trained for, as language codes.
+ */
+public data class WakeWordInfo(
+    public val id: String,
+    public val wakeWord: String,
+    public val trainedLanguages: List<String> = listOf("en"),
+)
 
-data class VoiceConfiguration(val available: List<WakeWordInfo>, val active: List<String>, val maxActive: Int)
+/**
+ * The device's wake word settings, for `VoiceAssistantConfigurationResponse`.
+ *
+ * @property available Every wake word the device has.
+ * @property active The ids of the ones it listens for now.
+ * @property maxActive How many can be active at once.
+ */
+public data class VoiceConfiguration(
+    public val available: List<WakeWordInfo>,
+    public val active: List<String>,
+    public val maxActive: Int,
+)
 
-/** Voice assistant messages from Home Assistant (called on the connection's reader thread). */
-interface VoiceAssistantHandler {
-    fun onSubscribe(subscribed: Boolean)
-    fun onStartResponse(port: Int, error: Boolean)
-    fun onEvent(type: Int, data: Map<String, String>)
-    fun onTimer(type: Int, id: String, name: String, totalSeconds: Int, secondsLeft: Int, active: Boolean)
-    fun onAnnounce(mediaId: String, text: String, preannounceMediaId: String, startConversation: Boolean)
-    fun configuration(): VoiceConfiguration
-    fun setActiveWakeWords(ids: List<String>)
+/**
+ * The device side of Home Assistant's voice assistant: the messages Home Assistant sends to a voice
+ * satellite. Set it as [ApiServer.voice] and send the device's own messages (`VoiceAssistantRequest`,
+ * audio) with [ApiServer.sendVoice]. Every method runs on the connection's reader thread, so return
+ * quickly.
+ */
+public interface VoiceAssistantHandler {
+    /** Home Assistant subscribed to the device's voice messages ([subscribed]), or left. */
+    public fun onSubscribe(subscribed: Boolean)
+
+    /** Home Assistant answered a `VoiceAssistantRequest`: a UDP [port] for audio (0 for API audio), or an [error]. */
+    public fun onStartResponse(port: Int, error: Boolean)
+
+    /** A pipeline event: [type] is a [VoiceEventType], [data] its key-value data. */
+    public fun onEvent(type: Int, data: Map<String, String>)
+
+    /** A timer changed: [type] is a [TimerEventType]; times are in seconds; [active] is false while paused. */
+    public fun onTimer(type: Int, id: String, name: String, totalSeconds: Int, secondsLeft: Int, active: Boolean)
+
+    /**
+     * Home Assistant asks the device to announce [text] by playing [mediaId], after [preannounceMediaId]
+     * (a chime) if not empty. With [startConversation], listen right after it. Answer with
+     * `VoiceAssistantAnnounceFinished` through [ApiServer.sendVoice].
+     */
+    public fun onAnnounce(mediaId: String, text: String, preannounceMediaId: String, startConversation: Boolean)
+
+    /** The wake words to offer in Home Assistant's settings. */
+    public fun configuration(): VoiceConfiguration
+
+    /** Home Assistant chose these wake word [ids] (from [WakeWordInfo.id]). */
+    public fun setActiveWakeWords(ids: List<String>)
 }
 
 /**
@@ -112,28 +191,42 @@ interface VoiceAssistantHandler {
  * without a key the server accepts plaintext and zero-PSK Noise clients and lets Home Assistant
  * provision a key (`NoiseEncryptionSetKeyRequest`); with a key, only Noise with that key.
  *
+ * Construct it, then [start] it; [publishStates] after an entity's value changes; [stop] it to close
+ * every connection.
+ *
+ * @param port The TCP port, usually [DEFAULT_PORT]. 0 picks a free one ([localPort]).
+ * @param identity Who the device is. Called for every connection and request, so it can change.
+ * @param entities The entities Home Assistant sees, with unique object ids. [setEntities] replaces them.
  * @param keys Noise key state, or null for a plaintext-only server (no encryption support at all).
  * @param bindAddress The address to listen on, or null for every address (a device: Home Assistant
  *   reaches it on the LAN). Tests pass the loopback address they connect to. On macOS a wildcard
  *   listener can get a port another process holds on 127.0.0.1, and that process then answers
  *   127.0.0.1 (#113).
  */
-class ApiServer(
+public class ApiServer(
     private val port: Int,
     private val identity: () -> DeviceIdentity,
     entities: List<ApiEntity>,
     private val keys: NoiseKeys?,
     private val bindAddress: InetAddress? = null,
 ) {
-    /** A server with a fixed key (or plaintext-only for null), as before dynamic keys. */
-    constructor(port: Int, identity: () -> DeviceIdentity, entities: List<ApiEntity>, psk: ByteArray?) :
+    /**
+     * A server with a fixed 32-byte [psk] that Home Assistant can't change, or a plaintext-only one when
+     * [psk] is null.
+     */
+    public constructor(port: Int, identity: () -> DeviceIdentity, entities: List<ApiEntity>, psk: ByteArray?) :
         this(port, identity, entities, psk?.let { NoiseKeys(MemoryKeyStore(it)) })
 
-    companion object {
-        const val DEFAULT_PORT = 6053
-        const val API_MAJOR = 1
+    /** The server's constants. */
+    public companion object {
+        /** ESPHome's native API port. Home Assistant tries it unless told otherwise. */
+        public const val DEFAULT_PORT: Int = 6053
+
+        /** The Noise protocol of an encrypted connection, as ESPHome's mDNS TXT `api_encryption` names it. */
+        public const val NOISE_PROTOCOL: String = "Noise_NNpsk0_25519_ChaChaPoly_SHA256"
+        internal const val API_MAJOR = 1
         /** ESPHome 2026.10/11 reports 1.20 (api_connection.cpp); we implement DeviceCapabilities (1.15+). */
-        const val API_MINOR = 20
+        internal const val API_MINOR = 20
         /**
          * Keepalive, as ESPHome's api_connection.cpp does it: after [KEEPALIVE_MS] without anything from
          * the client the *device* sends a PingRequest, and only if [UNRESPONSIVE_MS] pass with no traffic at
@@ -142,14 +235,14 @@ class ApiServer(
          * device that keeps sending state updates hears nothing back from Home Assistant at all. The old
          * 90 s read timeout therefore dropped HA's connection every 90 s (seen on the panel 2026-11-10).
          */
-        const val KEEPALIVE_MS = 60_000L
-        const val UNRESPONSIVE_MS = 150_000L // ESPHome: KEEPALIVE_TIMEOUT_MS * 5 / 2
+        internal const val KEEPALIVE_MS = 60_000L
+        internal const val UNRESPONSIVE_MS = 150_000L // ESPHome: KEEPALIVE_TIMEOUT_MS * 5 / 2
         /** ESPHome activates a newly saved PSK 100 ms after answering (api_server.cpp update_noise_psk_). */
-        const val KEY_ACTIVATION_DELAY_MS = 100L
+        internal const val KEY_ACTIVATION_DELAY_MS = 100L
         /** Action calls waiting for the action thread; more are refused, so a client can't fill the memory. */
-        const val MAX_PENDING_ACTIONS = 32
+        internal const val MAX_PENDING_ACTIONS = 32
         /** A camera stream runs this long after the last stream request (ESPHome api_connection.cpp `CAMERA_STOP_STREAM`). */
-        const val CAMERA_STREAM_MS = 5_000L
+        internal const val CAMERA_STREAM_MS = 5_000L
         /**
          * Messages other than states that may wait for one client before it is dropped. Room for the
          * voice pre-roll (2 s of 16 kHz audio, 64 KiB) and several seconds of audio after it.
@@ -157,20 +250,21 @@ class ApiServer(
         internal const val MAX_QUEUED_BYTES = 512 * 1024
     }
 
-    @Volatile var voice: VoiceAssistantHandler? = null
+    /** The device's voice assistant, or null for none (voice messages are then ignored). */
+    @Volatile public var voice: VoiceAssistantHandler? = null
 
     /**
      * The device's Sendspin client, for Home Assistant's pairing-token hand-off to Music Assistant
      * (HA `esphome/sendspin.py`, `websocket_api.py` `sendspin/get_pairing_token`). Null = no Sendspin.
      */
-    @Volatile var sendspin: SendspinTokenSource? = null
+    @Volatile public var sendspin: SendspinTokenSource? = null
 
     /**
      * The device's Bluetooth proxy, or null for none (no flags in DeviceInfo, subscriptions ignored).
      * Its [BluetoothProxyHandler.onSubscribed] is called under a lock, so it must not block. Replacing
      * it while a client is subscribed tells the old one the subscriber left and the new one it came.
      */
-    @Volatile var bluetooth: BluetoothProxyHandler? = null
+    @Volatile public var bluetooth: BluetoothProxyHandler? = null
         set(value) {
             synchronized(bluetoothLock) {
                 val old = field
@@ -182,20 +276,23 @@ class ApiServer(
             }
         }
 
-    /** Called after a command message was handled (state may have changed). */
-    @Volatile var onCommand: (() -> Unit)? = null
+    /**
+     * Called after a command or an action call was handled, when a state may have changed. A device
+     * usually calls [publishStates] here.
+     */
+    @Volatile public var onCommand: (() -> Unit)? = null
 
-    /** Called (on a connection thread) for every HelloRequest: client_info and the peer address. */
-    @Volatile var onClientHello: ((clientInfo: String, remote: InetAddress?) -> Unit)? = null
+    /** Called (on a connection thread) for every `HelloRequest`, with its client_info and the peer address. */
+    @Volatile public var onClientHello: ((clientInfo: String, remote: InetAddress?) -> Unit)? = null
 
     /**
      * Called (on a connection thread) when a client subscribes to states, with its Hello
      * client_info and peer address. Home Assistant only does this once it has added the device (its
      * config flow's discovery probe just reads DeviceInfo), so it is the "HA has added the panel"
-     * signal. [authenticated]: the connection is Noise with the provisioned key (not plaintext, not
+     * signal. `authenticated`: the connection is Noise with the provisioned key (not plaintext, not
      * the zero-PSK provisioning handshake), so the client really holds the device's API key.
      */
-    @Volatile var onStatesSubscribed: ((clientInfo: String, remote: InetAddress?, authenticated: Boolean) -> Unit)? = null
+    @Volatile public var onStatesSubscribed: ((clientInfo: String, remote: InetAddress?, authenticated: Boolean) -> Unit)? = null
 
     /**
      * Called (on a connection thread) with Home Assistant's time zone. The server asks for the time
@@ -203,10 +300,10 @@ class ApiServer(
      * carries its zone (`GetTimeResponse.timezone`) as a POSIX `TZ` rule, like
      * `CET-1CEST,M3.5.0,M10.5.0/3`: aioesphomeapi turns HA's IANA zone into one.
      */
-    @Volatile var onTimeZone: ((String) -> Unit)? = null
+    @Volatile public var onTimeZone: ((String) -> Unit)? = null
 
     /** Called after a provisioned key became active (or was cleared), e.g. to update the mDNS TXT. */
-    @Volatile var onKeyActivated: (() -> Unit)? = null
+    @Volatile public var onKeyActivated: (() -> Unit)? = null
 
     // Replaced as a whole by setEntities (the wall base adds/removes entities at runtime).
     @Volatile private var entities: List<ApiEntity> = entities.toList()
@@ -214,13 +311,13 @@ class ApiServer(
     private val connections = CopyOnWriteArrayList<Connection>()
 
     /** A client has subscribed to the states now (Home Assistant, once it has added the device). */
-    val hasSubscriber: Boolean get() = connections.any { it.subscribedStates }
+    public val hasSubscriber: Boolean get() = connections.any { it.subscribedStates }
     private val ids = AtomicInteger()
     private var serverSocket: ServerSocket? = null
     @Volatile private var running = false
     /** [KEEPALIVE_MS] / [UNRESPONSIVE_MS]; shorter in tests. Set before [start]. */
-    @Volatile var keepaliveMs = KEEPALIVE_MS
-    @Volatile var unresponsiveMs = UNRESPONSIVE_MS
+    @Volatile internal var keepaliveMs = KEEPALIVE_MS
+    @Volatile internal var unresponsiveMs = UNRESPONSIVE_MS
     /** The keepalive's time source, in ms; tests drive it by hand. */
     @Volatile internal var clock: () -> Long = System::currentTimeMillis
     /** Makes the listening socket; a test passes one whose sockets it can hold mid-write. Set before [start]. */
@@ -239,9 +336,10 @@ class ApiServer(
     private val stateLock = Any()
     private val lastStates = HashMap<Int, ByteArray>()
 
-    val localPort: Int get() = serverSocket?.localPort ?: -1
-    val hasVoiceClient: Boolean get() = voiceConn?.isOpen == true
-    val connectionCount: Int get() = connections.size
+    /** The port the server listens on (useful with port 0), or -1 when it isn't running. */
+    public val localPort: Int get() = serverSocket?.localPort ?: -1
+    internal val hasVoiceClient: Boolean get() = voiceConn?.isOpen == true
+    internal val connectionCount: Int get() = connections.size
 
     init {
         require(byKey.size == entities.size) { "duplicate entity keys" }
@@ -252,7 +350,7 @@ class ApiServer(
      * socket closed after the ack or 2 s). Home Assistant reconnects and lists the entities again,
      * which is how it picks up added ones, like after an ESPHome firmware update.
      */
-    fun setEntities(newEntities: List<ApiEntity>) {
+    public fun setEntities(newEntities: List<ApiEntity>) {
         val list = newEntities.toList()
         val map = list.associateBy { it.key }
         require(map.size == list.size) { "duplicate entity keys" }
@@ -265,8 +363,12 @@ class ApiServer(
         for (c in connections) c.requestDisconnect()
     }
 
-    /** Fires an event entity on every subscribed connection (no-op if it isn't in the current set). */
-    fun sendEvent(entity: EventEntity, type: String): Boolean {
+    /**
+     * Fires [entity] with event [type], one of its [EventEntity.eventTypes], on every subscribed
+     * connection. False if the entity isn't in the current set, the type isn't declared, or no client
+     * took it.
+     */
+    public fun sendEvent(entity: EventEntity, type: String): Boolean {
         if (byKey[entity.key] !== entity) return false
         if (type !in entity.eventTypes) {
             EspHomeLog.w("event type '$type' not declared by ${entity.objectId}")
@@ -285,7 +387,7 @@ class ApiServer(
      * that asked for them with `SubscribeHomeassistantServicesRequest`; Home Assistant asks on each
      * connection. Queued like the states, on the connection's writer. True when at least one took it.
      */
-    fun sendHomeAssistantEvent(event: HomeAssistantEvent): Boolean {
+    public fun sendHomeAssistantEvent(event: HomeAssistantEvent): Boolean {
         val frame = Frame(Msg.HOMEASSISTANT_ACTION_REQUEST, event.encode().toByteArray())
         var sent = false
         synchronized(stateLock) {
@@ -295,8 +397,9 @@ class ApiServer(
         return sent
     }
 
+    /** Binds the port and starts accepting connections. Throws [IOException] if the port is taken. */
     @Throws(IOException::class)
-    fun start() {
+    public fun start() {
         val ss = newServerSocket()
         ss.reuseAddress = true
         ss.bind(InetSocketAddress(bindAddress, port))
@@ -320,17 +423,18 @@ class ApiServer(
         else -> "no key yet: plaintext + zero-PSK Noise, key provisionable"
     }
 
-    /** True while the server accepts new connections without a key (unprovisioned). */
-    val provisionable: Boolean get() = keys?.provisionable == true
+    /** True while the device has no key: it accepts connections without one, and Home Assistant may set one. */
+    public val provisionable: Boolean get() = keys?.provisionable == true
 
-    /** True if a Noise key is active. */
-    val encrypted: Boolean get() = keys?.hasKey == true
+    /** True when a Noise key is active: only encrypted connections with that key get in. */
+    public val encrypted: Boolean get() = keys?.hasKey == true
 
     /**
-     * Applies a key change made outside the API (panel settings): every open session is dropped, as
-     * ESPHome does when a key is activated.
+     * Applies a key change made outside the API, such as in the device's own settings: [key] is the
+     * new 32-byte key, already saved by the caller, or null to remove it. Every open session is dropped,
+     * as ESPHome does when a key is activated. Does nothing on a plaintext-only server.
      */
-    fun replaceKey(key: ByteArray?) {
+    public fun replaceKey(key: ByteArray?) {
         val k = keys ?: return
         if (!k.replace(key)) return
         EspHomeLog.i("API key replaced locally; now ${modeName()}")
@@ -375,7 +479,8 @@ class ApiServer(
         }
     }
 
-    fun stop() {
+    /** Stops listening and closes every connection. */
+    public fun stop() {
         keepaliveTimer?.shutdownNow()
         keepaliveTimer = null
         actionThread?.shutdownNow()
@@ -400,7 +505,7 @@ class ApiServer(
     }
 
     /** Sends the states that changed since the last call to every subscribed connection. */
-    fun publishStates() {
+    public fun publishStates() {
         // Sent under the lock so a connection that is subscribing can't get updates out of order.
         synchronized(stateLock) {
             val changed = ArrayList<Pair<Int, Frame>>()
@@ -425,8 +530,11 @@ class ApiServer(
         null
     }
 
-    /** Sends one batch of advertisements to the client that subscribed to them. False if none did. */
-    fun sendBluetoothAdvertisements(batch: List<RawAdvertisement>): Boolean {
+    /**
+     * Sends one batch of advertisements, at most [RawAdvertisement.BATCH_SIZE], to the client that
+     * subscribed to them. False if none did.
+     */
+    public fun sendBluetoothAdvertisements(batch: List<RawAdvertisement>): Boolean {
         val frame = Frame(BluetoothMsg.LE_RAW_ADVERTISEMENTS_RESPONSE, rawAdvertisements(batch).toByteArray())
         // Under the lock, so a batch never reaches a client another one has just replaced. send only queues.
         synchronized(bluetoothLock) {
@@ -436,7 +544,7 @@ class ApiServer(
     }
 
     /** Takes [handler] out if it is still [bluetooth] (not if another one replaced it). True if it was. */
-    fun removeBluetooth(handler: BluetoothProxyHandler): Boolean = synchronized(bluetoothLock) {
+    public fun removeBluetooth(handler: BluetoothProxyHandler): Boolean = synchronized(bluetoothLock) {
         if (bluetooth !== handler) return false
         bluetooth = null
         true
@@ -466,8 +574,11 @@ class ApiServer(
         }
     }
 
-    /** Sends a voice assistant message to the subscribed Home Assistant connection. */
-    fun sendVoice(type: Int, payload: ProtoWriter): Boolean {
+    /**
+     * Sends a voice assistant message of [type] (a [Msg] id, such as [Msg.VOICE_ASSISTANT_REQUEST]) to
+     * the connection that subscribed to voice. False if none did.
+     */
+    public fun sendVoice(type: Int, payload: ProtoWriter): Boolean {
         val c = voiceConn ?: return false
         return c.send(listOf(Frame(type, payload.toByteArray())))
     }

@@ -21,7 +21,7 @@ class ReadmeExampleTest {
         val uptime = SensorEntity("uptime", "Uptime", unit = "s", deviceClass = "duration",
             category = EntityCategory.DIAGNOSTIC, get = { 42f })
         val keys = NoiseKeys(MemoryKeyStore()) // persist the key in real code: HA provisions it
-        val server = ApiServer(port = 0 /* ApiServer.DEFAULT_PORT */, identity = { identity },
+        val server = ApiServer(port = 0 /* README: ApiServer.DEFAULT_PORT */, identity = { identity },
             entities = listOf(lamp, uptime), keys = keys)
         server.start()
         // Later, when something changes outside a command: server.publishStates()

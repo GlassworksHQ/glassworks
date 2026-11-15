@@ -8,8 +8,9 @@
 #   libs-api23  the libraries' lint (NewApi) and their androidTest checks on an API 23 emulator:
 #            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy is
 #            linted only (an emulator has no Bluetooth to scan with)
-#   libs-publish  a dry run of the Maven Central release (#153, docs/releasing.md "Libraries"): every
-#            published library to mavenLocal, unsigned, its files checked, then fresh apps built
+#   libs-publish  a dry run of the Maven Central release (#153, docs/releasing.md "Libraries"): each
+#            library's public API checked against its api/<name>.api dump, every published library
+#            to mavenLocal, unsigned, its files checked, then fresh apps built
 #            against them (minSdk 23 at compileSdk 37.2 and 23, and Kotlin 2.0.21 on the JVM). Only when
 #            libs/, the Gradle build, the licence files or these scripts change
 #   wake-word  MicroWakeWordClipTest: the four real microWakeWord models (LiteRT in a hash-locked
@@ -237,6 +238,12 @@ jobs:
       - name: Android SDK platforms
         if: steps.changed.outputs.run == 'true'
         run: sdkmanager --install "platforms;android-37.2" "platforms;android-23"
+
+      # Fails when a library's public API changed and libs/<name>/api/<name>.api didn't: run
+      # ./gradlew apiDump and commit the dump (docs/releasing.md "The public API").
+      - name: The public API matches its dump
+        if: steps.changed.outputs.run == 'true'
+        run: ./gradlew --no-daemon apiCheck
 
       # No secrets here, so nothing is signed (the root build.gradle.kts signs only with a key).
       - name: Publish to mavenLocal

@@ -20,6 +20,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.glassworks
 import sh.edm.s1kiosk.setup.ImprovFacts
 import sh.edm.s1kiosk.setup.InstallerWifi
@@ -401,7 +402,7 @@ object ImprovController {
         val now = SystemClock.elapsedRealtime()
         when (o) {
             is WifiProvisioner.Outcome.Connected -> {
-                provisionedUrl = WifiSecurityRules.redirectUrl(o.ip)
+                provisionedUrl = o.ip?.let { "http://$it:${OAuth.SIGNIN_PORT}/" }
                 Log.i(TAG, "connected to '${o.ssid}' via ${o.method}; ip=${o.ip}; redirect=$provisionedUrl")
                 s.onWifiResult(true, provisionedUrl, now)
             }
