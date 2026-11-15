@@ -107,6 +107,53 @@ class HttpServerTest {
         }
     }
 
+    @Test fun aHundredTurnedAwayTricklersDontHoldUpTheNextGoodConnection() {
+        val release = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val server = HttpServer(0, { if (started.count > 0) { started.countDown(); release.await(10, TimeUnit.SECONDS) }; HttpResponse.text(200, "ok") },
+            bindAddress = loopback, workers = 1, queued = 1)
+        server.start()
+        val tricklers = mutableListOf<Socket>()
+        var t: Thread? = null
+        try {
+            val busy = open(server.localPort)
+            assertTrue(started.await(3, TimeUnit.SECONDS))
+            val waiting = open(server.localPort)
+            Thread.sleep(200)
+            val startNs = System.nanoTime()
+            repeat(100) { runCatching { Socket(loopback, server.localPort) }.getOrNull()?.let(tricklers::add) }
+            // Each sends a byte every 100 ms, so a drain on the accept thread would read on for its whole 300 ms.
+            t = Thread {
+                while (true) {
+                    for (s in tricklers) runCatching { s.getOutputStream().write('x'.code); s.getOutputStream().flush() }
+                    try { Thread.sleep(100) } catch (_: InterruptedException) { return@Thread }
+                }
+            }.apply { isDaemon = true; start() }
+            val deadlineNs = startNs + 1_500_000_000L
+            val turnedAway = tricklers.count { s ->
+                val left = ((deadlineNs - System.nanoTime()) / 1_000_000).toInt()
+                left > 0 && try { s.soTimeout = left; s.getInputStream().read(); true }
+                    catch (_: java.net.SocketTimeoutException) { false }
+                    catch (_: java.io.IOException) { true } // reset: refused without the drain
+            }
+            assertTrue("$turnedAway of ${tricklers.size} (of 100 opened) turned away within 1.5 s", tricklers.size == 100 && turnedAway == 100)
+            release.countDown()
+            assertTrue(busy.getInputStream().readBytes().toString(Charsets.UTF_8).startsWith("HTTP/1.1 200"))
+            assertTrue(waiting.getInputStream().readBytes().toString(Charsets.UTF_8).startsWith("HTTP/1.1 200"))
+            val goodNs = System.nanoTime()
+            val answer = open(server.localPort).use { it.getInputStream().readBytes().toString(Charsets.UTF_8) }
+            val tookMs = (System.nanoTime() - goodNs) / 1_000_000
+            assertTrue("the good connection got: $answer", answer.startsWith("HTTP/1.1 200"))
+            assertTrue("answered in $tookMs ms", tookMs < 1_000)
+            listOf(busy, waiting).forEach { it.close() }
+        } finally {
+            t?.interrupt()
+            release.countDown()
+            tricklers.forEach { runCatching { it.close() } }
+            server.stop()
+        }
+    }
+
     @Test fun stopClosesConnectionsStillWaitingForAWorker() {
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)

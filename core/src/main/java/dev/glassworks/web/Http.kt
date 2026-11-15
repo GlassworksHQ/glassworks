@@ -91,6 +91,10 @@ class HttpServer(
     private val pool = ThreadPoolExecutor(workers, workers, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(queued)) { r ->
         Thread(r, "glassworks-http").apply { isDaemon = true }
     }
+    /** Turns connections away when [pool] is full, so a slow refused client never holds up `accept()`. */
+    private val refusals = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, ArrayBlockingQueue(BUSY_QUEUED)) { r ->
+        Thread(r, "glassworks-http-busy").apply { isDaemon = true }
+    }
     private val ids = AtomicInteger()
     /** Every connection accepted and not yet closed, also those still waiting for a worker, so [stop] can close them. */
     private val open: MutableSet<Socket> = ConcurrentHashMap.newKeySet()
@@ -124,6 +128,7 @@ class HttpServer(
         serverSocket = null
         // Tasks still in the queue never run: close their connections here, and the running ones' too.
         pool.shutdownNow()
+        refusals.shutdownNow()
         for (s in open) try { s.close() } catch (_: IOException) {}
         open.clear()
     }
@@ -167,31 +172,50 @@ class HttpServer(
         override fun read(b: ByteArray, off: Int, len: Int): Int { arm(); return inp.read(b, off, len) }
     }
 
-    /** Every worker is busy and the queue is full: say so and close, without reading the request. */
+    /**
+     * Every worker is busy and the queue is full: say so and close, without handling the request. Runs on the accept
+     * thread, so it must not wait on the client. The 503 is small and the socket new, so the write lands in the send
+     * buffer at once. Closing with the request unread would reset the connection before the client reads the 503,
+     * so [refusals] reads it away first; when that is full too, the socket closes at once and the client may see
+     * only the reset.
+     */
     private fun busy(s: Socket) {
-        open -= s
-        s.use { sock ->
-            try {
-                sock.soTimeout = 200
-                write(sock.getOutputStream(), HttpResponse.text(503, "The panel is busy. Try again in a moment."))
-                // Closing with the client's request unread would reset the connection before it reads the 503.
-                // This runs on the accept thread: at most 300 ms per refused connection, however slowly its bytes
-                // come. Refusals run one after another there, so many at once add up (20 ≈ 5 s, measured).
+        try {
+            write(s.getOutputStream(), HttpResponse.text(503, "The panel is busy. Try again in a moment."))
+        } catch (_: IOException) {}
+        try {
+            refusals.execute { drainAndClose(s) }
+        } catch (_: RejectedExecutionException) {
+            try { s.close() } catch (_: IOException) {}
+            open -= s
+        }
+        log("busy: refused a connection")
+    }
+
+    /** Reads the refused client's request for at most [BUSY_DRAIN_MS], however slowly its bytes come, then closes. */
+    private fun drainAndClose(s: Socket) {
+        try {
+            s.use { sock ->
                 sock.shutdownOutput()
                 val drain = DeadlineInput(sock, System.nanoTime() + BUSY_DRAIN_MS * 1_000_000)
                 val buf = ByteArray(4096)
                 var total = 0
                 while (total < 16 * 1024 && drain.read(buf, 0, buf.size).also { total += it } >= 0) Unit
-            } catch (_: IOException) {}
+            }
+        } catch (_: IOException) {
+        } finally {
+            open -= s
         }
-        log("busy: refused a connection")
     }
 
     private class TooLarge : IOException("request too large")
 
     companion object {
-        /** How long a refused connection may keep the accept thread reading its request, in all. */
+        /** How long the refusal thread reads a refused connection's request, in all. */
         private const val BUSY_DRAIN_MS = 300L
+
+        /** Refused connections that may wait for the refusal thread. Beyond that they close without the drain. */
+        private const val BUSY_QUEUED = 8
 
         private val REASONS = mapOf(
             200 to "OK", 302 to "Found", 303 to "See Other", 400 to "Bad Request", 401 to "Unauthorized", 403 to "Forbidden",
