@@ -22,7 +22,7 @@ const postBySlug = async (slug: string) => (await getPosts()).find((p) => p.slug
 
 export async function generateMetadata(props: PageProps<"/blog/[slug]">): Promise<Metadata> {
   const p = await postBySlug((await props.params).slug);
-  if (!p) return {};
+  if (!p) notFound();
   return pageMetadata({
     title: p.title,
     description: p.summary,
