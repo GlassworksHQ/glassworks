@@ -41,6 +41,31 @@ class ManageCssTest {
         }
     }
 
+    /**
+     * The phone's menu button styles its own summary only (2026-11-15): `.menu summary` also hit the nav's
+     * "Off · 1" group inside the dropdown, squashing it into a 28 px column. Nothing in the dropdown takes a
+     * `.menu` rule, and the hamburger keeps its look.
+     */
+    @Test
+    fun menuButtonRulesStayOnTheButton() {
+        val rules = rules(ManagePages.MANAGE_CSS)
+        val menu = listOf(El("header", "top"), El("details", "menu"))
+        val button = menu + El("summary")
+        assertEquals("28px", computed(rules, button, "width"))
+        assertEquals("column", computed(rules, button, "flex-direction"))
+        assertEquals("2px", computed(rules, button + El("span"), "height"))
+        val nav = menu + El("div", "drop") + El("nav")
+        val off = nav + El("details", "off") + El("summary")
+        for (prop in listOf("width", "height", "flex-direction", "gap")) assertEquals("Off group's $prop", null, computed(rules, off, prop))
+        assertEquals("flex", computed(rules, off, "display"))
+        val inside = listOf(off, nav + El("h3"), nav + El("a", "ni") + El("span", "nt"), nav + El("details", "off") + El("a", "ni"),
+            menu + El("div", "drop") + El("form", "who") + El("span") + El("span", "nm"))
+        for (path in inside) {
+            val hit = rules.filter { "menu" in it.selector && matches(it.selector, path) }.map { it.selector }
+            assertEquals("${path.last().tag} in the dropdown", emptyList<String>(), hit)
+        }
+    }
+
     /** The cascade keeps up with the stylesheet: a row's text still gets its own look. */
     @Test
     fun rowTextStillStyled() {

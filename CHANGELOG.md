@@ -219,6 +219,8 @@ below as the release notes.
   between the dot and the word again ("● Running", not "●Running"). The radio's line says its role once,
   in plain words: "Thread router (repeater) · not on a Thread network yet" instead of repeating the role
   after "ok". The same line shows on the panel's Overview. The radio's `Radio status` entity is unchanged.
+  On a phone, the Manage page's menu shows the "Off · 1" group of turned-off panes on one line again,
+  instead of squashed into a narrow column over "System".
 - **A pane's "In Home Assistant" list says when Home Assistant doesn't have the panel.** On a panel
   Home Assistant never added, it says so once, with where to add it (Settings → Devices & services),
   instead of "Unknown" on each row. When Home Assistant was added but isn't connected now, it says so
