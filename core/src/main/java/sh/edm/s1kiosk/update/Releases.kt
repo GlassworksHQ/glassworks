@@ -36,7 +36,7 @@ data class UpdateOffer(
  * The ABIs this app is built for, each with its release APK's name stem: every ABI a frame runs
  * (`abis` in frames/<id>/design/frame.json; ApkAbiListsTest checks the two agree). Every ABI's APK has the same version and versionCode (docs/releasing.md "ABIs").
  */
-enum class ApkAbi(val id: String, private val stem: String) {
+enum class ApkAbi(val id: String, /** S1 Kiosk's APK name before the version. */ val stem: String) {
     /** The S1's ABI. Its name has been `s1-kiosk-<version>.apk` since the first release, and panels up to 0.4.3 look only for that name. */
     ARMEABI_V7A("armeabi-v7a", "s1-kiosk"),
     ARM64_V8A("arm64-v8a", "s1-kiosk-arm64-v8a");
@@ -47,6 +47,35 @@ enum class ApkAbi(val id: String, private val stem: String) {
     companion object {
         /** This app's ABIs among [deviceAbis] (`Build.SUPPORTED_ABIS`), in the device's order of preference. */
         fun among(deviceAbis: List<String>): List<ApkAbi> = deviceAbis.mapNotNull { id -> entries.firstOrNull { it.id == id } }.distinct()
+    }
+}
+
+/**
+ * One app's releases in the shared repo (#23): its tag prefix, and the name of its APK for each ABI. Each app
+ * on the core has its own, so an app never offers itself another app's APK.
+ */
+class ReleaseLine(
+    /** The app in the update check's user agent ("s1-kiosk/0.4.3"). */
+    val id: String,
+    /** This app's tag prefix: `<prefix>v1.2.3`. */
+    val tagPrefix: String,
+    /** Whether a tag without the prefix (`v1.2.3`) is also this app's: S1 Kiosk's releases before the prefix. */
+    val plainTags: Boolean,
+    private val stem: (ApkAbi) -> String,
+) {
+    /** The version in one of this app's tags; null for any other tag. */
+    fun tagVersion(tag: String): AppVersion? =
+        if (plainTags || tag.startsWith(tagPrefix)) AppVersion.parse(tag.removePrefix(tagPrefix)) else null
+
+    fun apkName(abi: ApkAbi, v: AppVersion) = "${stem(abi)}-$v.apk"
+    fun shaName(abi: ApkAbi, v: AppVersion) = "${apkName(abi, v)}.sha256"
+
+    companion object {
+        /** S1 Kiosk: `v1.2.3` or `aqara-s1-plus-v1.2.3`, with [ApkAbi]'s names. */
+        val S1_KIOSK = ReleaseLine("s1-kiosk", Releases.TAG_PREFIX, plainTags = true) { it.stem }
+
+        /** Glassworks for generic Android (frames/generic-android): `generic-android-v1.2.3`, `glassworks-generic-android-<abi>-1.2.3.apk`. */
+        val GENERIC_ANDROID = ReleaseLine("glassworks-generic-android", "generic-android-", plainTags = false) { abi -> "glassworks-generic-android-${abi.id}" }
     }
 }
 
@@ -75,8 +104,8 @@ object Releases {
     /** This app's tag prefix in the shared repo. Plain `v1.2.3` tags (all releases so far) stay valid. */
     const val TAG_PREFIX = "aqara-s1-plus-"
 
-    /** The version in one of this app's release tags (`v1.2.3`, `aqara-s1-plus-v1.2.3`); null for any other tag. */
-    fun tagVersion(tag: String): AppVersion? = AppVersion.parse(tag.removePrefix(TAG_PREFIX))
+    /** The version in one of S1 Kiosk's release tags (`v1.2.3`, `aqara-s1-plus-v1.2.3`); null for any other tag. */
+    fun tagVersion(tag: String): AppVersion? = ReleaseLine.S1_KIOSK.tagVersion(tag)
 
     /** HA caps `release_summary` at 255 characters; the full notes are behind `release_url`. */
     const val MAX_SUMMARY = 255
@@ -123,13 +152,13 @@ object Releases {
      * pre-release, odd assets), the newest acceptable one is still offered, and [ReleasePick.problem]
      * says what was wrong with the newer one. No release of this app at all: no offer, no problem.
      */
-    fun newest(releases: List<GithubRelease>, deviceAbis: List<String>): ReleasePick {
+    fun newest(releases: List<GithubRelease>, deviceAbis: List<String>, line: ReleaseLine = ReleaseLine.S1_KIOSK): ReleasePick {
         var best: UpdateOffer? = null
         var refused: Pair<AppVersion, String>? = null
         for (r in releases) {
-            val v = tagVersion(r.tag) ?: continue
+            val v = line.tagVersion(r.tag) ?: continue
             try {
-                val o = offer(r, deviceAbis)
+                val o = offer(r, deviceAbis, line)
                 if (best == null || o.version > best.version) best = o
             } catch (e: ReleaseFormatException) {
                 if (refused == null || v > refused.first) refused = v to e.message.orEmpty()
@@ -147,10 +176,10 @@ object Releases {
      * preferred first; an ABI with half its pair is skipped for the next one), or
      * missing/odd assets. Download URLs must be HTTPS release downloads on github.com for this tag.
      */
-    fun offer(r: GithubRelease, deviceAbis: List<String>): UpdateOffer {
+    fun offer(r: GithubRelease, deviceAbis: List<String>, line: ReleaseLine = ReleaseLine.S1_KIOSK): UpdateOffer {
         if (r.draft) throw ReleaseFormatException("release ${r.tag} is a draft")
         if (r.prerelease) throw ReleaseFormatException("release ${r.tag} is a pre-release")
-        val v = tagVersion(r.tag) ?: throw ReleaseFormatException("tag '${r.tag.take(40)}' is not a version of this app")
+        val v = line.tagVersion(r.tag) ?: throw ReleaseFormatException("tag '${r.tag.take(40)}' is not a version of this app")
         if (v.isPreRelease) throw ReleaseFormatException("release ${r.tag} is a pre-release")
         if (v.versionCode == null) throw ReleaseFormatException("version $v is out of range")
         fun asset(name: String): ReleaseAsset {
@@ -161,10 +190,10 @@ object Releases {
         val abis = ApkAbi.among(deviceAbis)
         if (abis.isEmpty()) throw ReleaseFormatException("no APK is built for this device's ABIs (${deviceAbis.joinToString()})")
         fun one(name: String) = r.assets.count { it.name == name } == 1
-        val abi = abis.firstOrNull { one(it.apkName(v)) && one(it.shaName(v)) }
-            ?: throw ReleaseFormatException("release ${r.tag} has no ${abis.joinToString(" or ") { "${it.apkName(v)} with ${it.shaName(v)}" }}")
-        val apk = asset(abi.apkName(v))
-        val sha = asset(abi.shaName(v))
+        val abi = abis.firstOrNull { one(line.apkName(it, v)) && one(line.shaName(it, v)) }
+            ?: throw ReleaseFormatException("release ${r.tag} has no ${abis.joinToString(" or ") { "${line.apkName(it, v)} with ${line.shaName(it, v)}" }}")
+        val apk = asset(line.apkName(abi, v))
+        val sha = asset(line.shaName(abi, v))
         if (apk.size > MAX_APK_BYTES) throw ReleaseFormatException("${apk.name} is too large (${apk.size} bytes)")
         if (apk.size == 0L) throw ReleaseFormatException("${apk.name} is empty")
         return UpdateOffer(v, r.tag, r.body, r.htmlUrl.takeIf(::isHttps).orEmpty(), apk, sha)

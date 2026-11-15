@@ -189,6 +189,55 @@ class ReleasesTest {
         assertNull(Releases.tagVersion("installer-files-3"))
     }
 
+    // ---------------------------------------------------------------- the generic app's own releases (#23)
+
+    /** The fixture as a release of Glassworks for generic Android: its tag, and its APK names for [abis]. */
+    private fun genericRelease(version: String = "1.3.0", abis: List<String> = listOf("arm64-v8a", "armeabi-v7a")): JSONObject {
+        val tag = "generic-android-v$version"
+        val base = JSONObject(release(tag, version).toString())
+        val template = base.getJSONArray("assets")
+        val assets = JSONArray()
+        for (abi in abis) for (i in 0 until template.length()) {
+            val a = JSONObject(template.getJSONObject(i).toString())
+            val name = a.getString("name").replace("s1-kiosk-", "glassworks-generic-android-$abi-")
+            a.put("name", name).put("browser_download_url", "https://github.com/GlassworksHQ/glassworks/releases/download/$tag/$name")
+            assets.put(a)
+        }
+        return base.put("assets", assets)
+    }
+
+    private val tablet = listOf("arm64-v8a")
+
+    @Test fun theGenericAppReadsOnlyItsOwnTags() {
+        val line = ReleaseLine.GENERIC_ANDROID
+        assertEquals(AppVersion(1, 2, 3), line.tagVersion("generic-android-v1.2.3"))
+        assertNull("S1 Kiosk's plain tags aren't its", line.tagVersion("v1.2.3"))
+        assertNull(line.tagVersion("aqara-s1-plus-v1.2.3"))
+        assertNull("nor are its tags S1 Kiosk's", Releases.tagVersion("generic-android-v1.2.3"))
+        assertNull(ReleaseLine.S1_KIOSK.tagVersion("generic-android-v1.2.3"))
+    }
+
+    @Test fun theGenericAppTakesItsOwnApkForTheDevicesAbi() {
+        val o = Releases.offer(Releases.parse(genericRelease().toString()), tablet, ReleaseLine.GENERIC_ANDROID)
+        assertEquals(AppVersion(1, 3, 0), o.version)
+        assertEquals("glassworks-generic-android-arm64-v8a-1.3.0.apk", o.apk.name)
+        assertEquals("glassworks-generic-android-arm64-v8a-1.3.0.apk.sha256", o.sha256.name)
+        val armv7 = Releases.offer(Releases.parse(genericRelease().toString()), listOf("armeabi-v7a", "armeabi"), ReleaseLine.GENERIC_ANDROID)
+        assertEquals("glassworks-generic-android-armeabi-v7a-1.3.0.apk", armv7.apk.name)
+    }
+
+    @Test fun neitherAppTakesTheOthersRelease() {
+        // Newest first: S1 Kiosk 2.0.0 after the generic app's 1.3.0, and the other way round.
+        val both = Releases.parseList(list(release("aqara-s1-plus-v2.0.0", "2.0.0"), genericRelease("1.3.0")))
+        val generic = Releases.newest(both, tablet, ReleaseLine.GENERIC_ANDROID)
+        assertEquals(AppVersion(1, 3, 0), generic.offer!!.version)
+        assertNull(generic.problem)
+        val s1 = Releases.newest(Releases.parseList(list(genericRelease("2.0.0"), release("v1.3.0"))), S1)
+        assertEquals(AppVersion(1, 3, 0), s1.offer!!.version)
+        assertNull(s1.problem)
+        assertNull("S1 Kiosk's APK under a generic tag is no offer", Releases.newest(Releases.parseList(list(release("generic-android-v2.0.0", "2.0.0"))), tablet, ReleaseLine.GENERIC_ANDROID).offer)
+    }
+
     @Test fun prefixedTagIsInstallable() {
         val o = Releases.offer(Releases.parse(release("aqara-s1-plus-v1.3.0").toString()), S1)
         assertEquals(AppVersion(1, 3, 0), o.version)

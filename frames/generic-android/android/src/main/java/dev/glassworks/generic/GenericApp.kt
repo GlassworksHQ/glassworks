@@ -18,6 +18,7 @@ import dev.glassworks.screen.ProximityPresence
 import sh.edm.s1kiosk.GlassworksApp
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.update.ReleaseLine
 
 /** Glassworks for generic Android (#23): the core on any Android 8+ device, as its own app. */
 class GenericApp : Application(), GlassworksApp {
@@ -41,7 +42,8 @@ class GenericApp : Application(), GlassworksApp {
             GenericAndroid(app, presence = ProximityPresence("S1Kiosk.Screen"), light = AmbientLight("S1Kiosk.Screen"))
 
         /** The runtime on [frame]: GeckoView with the kiosk's extension, and this app's panes ([GenericParts]). */
-        internal fun runtime(frame: Frame, build: AppBuild): GlassworksRuntime = GlassworksRuntime(frame, build, engine(build), GenericParts())
+        internal fun runtime(frame: Frame, build: AppBuild): GlassworksRuntime =
+            GlassworksRuntime(frame, build, engine(build), GenericParts(), releases = ReleaseLine.GENERIC_ANDROID)
 
         /** GeckoView with the kiosk's helper extension: the same engine, extension and page API as S1 Kiosk's. */
         private fun engine(build: AppBuild): Engine = GeckoEngine(
