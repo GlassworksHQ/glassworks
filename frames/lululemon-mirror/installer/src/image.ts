@@ -74,7 +74,7 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   // the Mirror runs Android 6 (API 23) on arm64 with 32-bit arm too (frame.json abis): the legacy build fits
   const min = info.minSdk ?? 1;
   if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): pick S1 Kiosk's legacy build. Nothing was changed.`);
-  if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: pick S1 Kiosk's legacy build for arm64-v8a. Nothing was changed.`);
+  if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: pick S1 Kiosk's legacy build. Nothing was changed.`);
   const names = zipNames(o.apk);
   const abi = LIB_DIRS.find(([a]) => names.some((n) => n.startsWith(`lib/${a}/`)));
   const libs = abi ? names.filter((n) => n.startsWith(`lib/${abi[0]}/`) && n.endsWith('.so') && !n.slice(`lib/${abi[0]}/`.length).includes('/')) : [];
