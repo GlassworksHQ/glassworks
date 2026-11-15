@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.sendspin
 
+import dev.glassworks.platform.AppBuild
 import sh.edm.esphome.DeviceIdentity
 import android.content.Context
 import android.media.AudioAttributes
@@ -11,7 +12,6 @@ import android.net.Network
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.os.Process
-import sh.edm.s1kiosk.BuildConfig
 import java.net.URI
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -179,6 +179,8 @@ class SendspinPlayer(
     private val haBase: () -> String?,
     /** The device as Home Assistant knows it: Music Assistant shows the player under its friendly name. */
     private val device: DeviceIdentity,
+    /** The app's build: Music Assistant shows its version. */
+    private val build: AppBuild,
     private val onStatusChanged: () -> Unit = {},
     val store: SsStore = PrefsSsStore(context),
     private val connect: (url: String, hello: SsHelloInfo, hooks: SsPlayerHooks) -> SsConnection =
@@ -221,7 +223,7 @@ class SendspinPlayer(
         name = device.friendlyName,
         productName = device.model,
         manufacturer = device.manufacturer,
-        softwareVersion = "S1 Kiosk ${BuildConfig.VERSION_NAME}",
+        softwareVersion = "S1 Kiosk ${build.versionName}",
         macAddress = device.macAddress.lowercase().takeIf { MAC_RE.matches(it) },
         formats = offeredFormats(),
         bufferCapacity = BUFFER_CAPACITY,

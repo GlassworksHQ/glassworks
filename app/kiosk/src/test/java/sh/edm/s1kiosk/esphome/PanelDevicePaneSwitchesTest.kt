@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
 import android.app.Application
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,7 +35,7 @@ import java.net.Socket
 class PanelDevicePaneSwitchesTest {
     private val app = RuntimeEnvironment.getApplication()
     private val exec = ManualExecutor()
-    private val runtime = GlassworksRuntime(AqaraS1Plus())
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val mdns = RecordingMdns()
     private lateinit var device: PanelDevice
     private val port get() = mdns.starts.single().port

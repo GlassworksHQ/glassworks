@@ -7,6 +7,7 @@ import dev.glassworks.diagnostics.Probe
 import dev.glassworks.diagnostics.Sample
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
+import dev.glassworks.platform.AppBuild
 import sh.edm.esphome.DeviceIdentity
 import sh.edm.esphome.TextSensorEntity
 import sh.edm.s1kiosk.GlassworksRuntime
@@ -53,6 +54,7 @@ class PaneFixtures(private val app: Application) {
         app, KioskPrefs(app)::paneFile,
         DeviceIdentity("aqara-s1-plus-000001", "Aqara S1 Plus", "02:00:00:00:00:01", "2026.10.2", "x", "Aqara", "Panel Hub S1 Plus", 0),
         publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+        build = AppBuild("1.0.0", 10000, debug = false),
     )
 
     val coordinator = RadioFollowUp.Facts(
@@ -153,7 +155,7 @@ class PaneFixtures(private val app: Application) {
     fun model(running: List<Pane>, off: Set<String> = emptySet()): () -> KioskSettingsOverlay.Model {
         KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel" }
         val radio = radioDefinition(app, FixedReadout(coordinator, running = true, allowedNow = "192.0.2.20"))
-        val definitions = GlassworksRuntime(AqaraS1Plus()).paneDefinitions(app).map { if (it.id == "radio") radio else it }
+        val definitions = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { if (it.id == "radio") radio else it }
         definitions.forEach { d -> d.switch?.on = d.id !in off }
         val byId = running.associateBy { it.id }
         return { MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = definitions, running = { byId[it] }) }

@@ -391,7 +391,7 @@ object ImprovController {
 
         override fun scanNetworks(): List<ScannedNetwork> = wifi.scan()
 
-        override fun deviceInfo(): List<String> = ImprovIdentity.ble(app.glassworks.frame)
+        override fun deviceInfo(): List<String> = app.glassworks.let { ImprovIdentity.ble(it.frame, it.build) }
 
         override fun maxResultSize(): Int = ble?.maxNotify()?.coerceAtMost(Improv.MAX_PACKET) ?: Improv.MAX_PACKET
     }

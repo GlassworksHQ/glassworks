@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.screen
 
 import android.app.Application
 import android.os.PowerManager
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -23,7 +24,7 @@ class ScreenTagsTest {
         val context = RuntimeEnvironment.getApplication()
         ShadowLog.clear()
         ShadowPowerManager.reset()
-        val screen = GlassworksRuntime(AqaraS1Plus()).screen
+        val screen = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen
         screen.start(context)
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(false)
         screen.wake("test")

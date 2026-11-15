@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.improv
 
 import dev.glassworks.frame.Frame
+import dev.glassworks.platform.AppBuild
 import sh.edm.improv.*
 import android.util.Log
 import sh.edm.s1kiosk.InstallerGlue
@@ -25,10 +26,10 @@ object ImprovSerialServer {
 
     private var server: ImprovAdbServer? = null
 
-    /** [frame]: the device it speaks for ([ImprovIdentity.serial]). */
-    fun start(frame: Frame) {
+    /** [frame] and [build]: the device and app it speaks for ([ImprovIdentity.serial]). */
+    fun start(frame: Frame, build: AppBuild) {
         if (server != null) return
-        val info = ImprovIdentity.serial(frame)
+        val info = ImprovIdentity.serial(frame, build)
         server = ImprovAdbServer(SOCKET, TAG) { output -> Effects(output, info) }.also { it.start() }
     }
 

@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.setup
 
 import android.app.Application
 import dev.glassworks.pane.SetupStep
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
 import org.json.JSONArray
 import org.json.JSONObject
@@ -65,7 +66,7 @@ class SetupChannelStepsTest {
     }
 
     @Before fun s1() {
-        runtime = GlassworksRuntime(AqaraS1Plus())
+        runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val prefs = KioskPrefs(app)
         runtime.radio = RadioController(
             TestInit(), load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,

@@ -95,8 +95,8 @@ object TimerBoard {
         return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
     }
 
-    /** Test hook: back to the start state. */
-    internal fun reset() {
+    /** Test hook: back to the start state. Public for tests. */
+    fun reset() {
         timers = emptyList()
         done = emptyList()
         onDismissed = null

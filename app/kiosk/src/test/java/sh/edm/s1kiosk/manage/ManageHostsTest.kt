@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.manage
 
 import android.app.Application
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.web.HttpRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -34,7 +35,7 @@ class ManageHostsTest {
         override fun postForm(url: String, body: String) = 0 to ""
         override fun get(url: String, maxBytes: Int) = 0 to ""
     })
-    private val runtime = GlassworksRuntime(AqaraS1Plus())
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
     private val manage = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, prefs)
 
     private fun status(host: String) = manage.server.handle(HttpRequest("GET", "/manage/code", emptyMap(), mapOf("host" to "$host:8099"))).status

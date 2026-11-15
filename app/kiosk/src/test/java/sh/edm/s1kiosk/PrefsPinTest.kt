@@ -113,6 +113,7 @@ class PrefsPinTest {
         kiosk.noiseKeyStore.save(ByteArray(32))
         kiosk.noiseKeyStore.save(null)
         KioskPrefs.PANE_FILES.keys.forEach(kiosk::paneFile)
+        kiosk.remoteDebugging(BuildConfig.DEBUG) // the default the runtime passes (GlassworksRuntime.build)
         kiosk.camera.use = dev.glassworks.camera.CameraUse.PRESENCE_AND_SNAPSHOTS
         kiosk.camera.signIn = "pin-user" to "pin-pass"
         kiosk.camera.signIn = null
@@ -235,7 +236,7 @@ class PrefsPinTest {
 
         /** Methods with arguments that [exerciseComposite] calls by hand, by class suffix and name. */
         val COMPOSITE = setOf(
-            "KioskPrefs.setHaUrl", "KioskPrefs.setAuth", "KioskPrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
+            "KioskPrefs.setHaUrl", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "KioskPrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
             ".save", "PrefsSsStore.putRecord", "PrefsSsStore.touchRecord", "PrefsSsStore.removeRecord",
             "CameraPrefs.setUse", "CameraPrefs.setSignIn",
         )

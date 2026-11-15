@@ -3,6 +3,7 @@ package sh.edm.s1kiosk.sendspin
 import android.app.Application
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.SettingsItem
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +26,7 @@ class MusicPageTest {
             app, KioskPrefs(app)::paneFile,
             DeviceIdentity("test", "Test", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000, debug = false),
         )
         val pane = SendspinPane(ctx, haBase = { null })
         pane.player.setVolume(40)
@@ -47,10 +49,11 @@ class MusicPageTest {
             app, KioskPrefs(app)::paneFile,
             DeviceIdentity("test", "Test", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000, debug = false),
         )
         val pane = SendspinPane(ctx, haBase = { null })
         // The app's own definition, with the runtime's settings worker.
-        val definition = sh.edm.s1kiosk.GlassworksRuntime(sh.edm.s1kiosk.frame.AqaraS1Plus()).paneDefinitions(app).single { it.id == "sendspin" }
+        val definition = sh.edm.s1kiosk.GlassworksRuntime(sh.edm.s1kiosk.frame.AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).single { it.id == "sendspin" }
         val volume = definition.settings(pane).single().items.filterIsInstance<SettingsItem.Slider>().single()
         val answered = java.util.Collections.synchronizedList(ArrayList<Int>())
         val all = java.util.concurrent.CountDownLatch(50)

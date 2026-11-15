@@ -13,7 +13,6 @@ import dev.glassworks.pane.settingsOrder
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.Licences
-import sh.edm.s1kiosk.update.AppVersion
 
 /**
  * The panel's settings: the one model the menu ([KioskSettingsOverlay]) and the Manage page both draw
@@ -31,7 +30,7 @@ object S1Settings {
         deviceSettings: Boolean,
         fullScreen: () -> Unit,
         /** The app's version as the menu and About show it ("0.4.3 · test build abc1234" on a test build). */
-        version: String = AppVersion.shown,
+        version: String = runtime.build.shown,
     ): KioskSettingsOverlay.Model {
         val frame = runtime.frame
         val core = CoreSettings(

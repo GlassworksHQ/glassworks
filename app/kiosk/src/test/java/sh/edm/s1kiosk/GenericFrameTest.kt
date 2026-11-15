@@ -6,6 +6,7 @@ import dev.glassworks.frame.Capability
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.PaneState
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
 import org.junit.After
@@ -70,7 +71,7 @@ class GenericFrameTest {
 
     @After fun tearDown() = devices.forEach { runCatching { it.stop() } }
 
-    private fun generic() = GlassworksRuntime(GenericAndroid(app))
+    private fun generic() = GlassworksRuntime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false))
 
     /** Starts the device the way KioskService does, and returns what it announced and the panes it built. */
     private fun run(runtime: GlassworksRuntime): Pair<DeviceIdentity, PanelDevice> {
@@ -100,7 +101,7 @@ class GenericFrameTest {
     }
 
     @Test fun theS1StillAnnouncesItselfAsAnS1() {
-        val (id, _) = run(GlassworksRuntime(AqaraS1Plus()))
+        val (id, _) = run(GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)))
         assertEquals("aqara-s1-plus-a1b2c3", id.name)
         assertEquals("Aqara S1 Plus", id.friendlyName)
         assertEquals("Aqara", id.manufacturer)
@@ -148,21 +149,21 @@ class GenericFrameTest {
         prefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, true).commit()
         for ((runtime, name, product, maker) in listOf(
             Quad(generic(), "Pixel Tablet", "Pixel Tablet (S1 Kiosk)", "Google"),
-            Quad(GlassworksRuntime(AqaraS1Plus()), "Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara"),
+            Quad(GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), "Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara"),
         )) {
             val (_, device) = run(runtime)
             val hello = (device.paneList().single { it.id == "sendspin" } as SendspinPane).player.hello()
             assertEquals(name, hello.name)
             assertEquals(product, hello.productName)
             assertEquals(maker, hello.manufacturer)
-            assertEquals(name, ImprovIdentity.ble(runtime.frame)[3])
-            assertEquals(name, ImprovIdentity.serial(runtime.frame)[3])
+            assertEquals(name, ImprovIdentity.ble(runtime.frame, runtime.build)[3])
+            assertEquals(name, ImprovIdentity.serial(runtime.frame, runtime.build)[3])
             device.stop()
         }
-        assertEquals("Aqara Panel Hub S1 Plus/tangorpro", ImprovIdentity.ble(AqaraS1Plus())[2])
-        assertEquals("Allwinner A133", ImprovIdentity.serial(AqaraS1Plus())[2])
-        assertEquals("Google Pixel Tablet/tangorpro", ImprovIdentity.ble(GenericAndroid(app))[2])
-        assertEquals("tangorpro", ImprovIdentity.serial(GenericAndroid(app))[2])
+        assertEquals("Aqara Panel Hub S1 Plus/tangorpro", ImprovIdentity.ble(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))[2])
+        assertEquals("Allwinner A133", ImprovIdentity.serial(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))[2])
+        assertEquals("Google Pixel Tablet/tangorpro", ImprovIdentity.ble(GenericAndroid(app), AppBuild("1.0.0", 10000, debug = false))[2])
+        assertEquals("tangorpro", ImprovIdentity.serial(GenericAndroid(app), AppBuild("1.0.0", 10000, debug = false))[2])
     }
 
     @Test fun theAppLogsTheFrameItPicked() {
@@ -188,7 +189,7 @@ class GenericFrameTest {
 
         val paneJson = RepoFiles.sources(atLeast = 8) { it.name == "pane.json" }
             .map { JSONObject(it.readText()) }.associate { it.getString("id") to words(it.getJSONArray("requires")) }
-        val definitions = GlassworksRuntime(AqaraS1Plus()).paneDefinitions(app)
+        val definitions = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
         for (d in definitions) assertEquals(d.id, paneJson.getValue(d.id), d.requires.map { it.id }.toSet())
         // The other way: a pane.json that requires something has a definition that gates it, or rides with one.
         val ridesWith = mapOf("timers" to "assist")

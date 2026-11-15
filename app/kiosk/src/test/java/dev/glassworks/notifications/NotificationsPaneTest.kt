@@ -8,6 +8,7 @@ import android.app.Application
 import android.content.Context
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -54,6 +55,7 @@ class NotificationsPaneTest {
             DeviceIdentity("test", "Test", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
             publishStates = { published++ }, emit = { e -> onEmit?.invoke(e); events += e }, entitiesChanged = {}, sendEvent = { _, _ -> },
             fireEvent = { fired += it },
+            build = AppBuild("1.0.0", 10000, debug = false),
         ),
         prefs, hub,
         screen = object : NotificationScreen {

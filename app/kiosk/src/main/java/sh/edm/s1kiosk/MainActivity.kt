@@ -50,7 +50,6 @@ import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
 import sh.edm.s1kiosk.improv.ImprovController
 import sh.edm.s1kiosk.improv.ImprovWifiStatus
-import sh.edm.s1kiosk.update.AppVersion
 import org.json.JSONObject
 import kotlin.system.exitProcess
 
@@ -702,7 +701,7 @@ class MainActivity : Activity() {
             needsRestart = true
         }
         if (intent.hasExtra("remote_debug")) {
-            prefs.remoteDebugging = intent.getBooleanExtra("remote_debug", false)
+            prefs.setRemoteDebugging(intent.getBooleanExtra("remote_debug", false))
             needsRestart = true
         }
         if (intent.hasExtra("hide_header") || intent.hasExtra("hide_sidebar")) {

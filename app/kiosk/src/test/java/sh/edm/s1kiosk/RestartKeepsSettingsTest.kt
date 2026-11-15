@@ -9,6 +9,7 @@ import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.intentExtras
 import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.applyFrom
+import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,14 +38,14 @@ class RestartKeepsSettingsTest {
     private fun process() = Disk.Process(RuntimeEnvironment.getApplication(), disk)
 
     private fun switches(ctx: Context): Map<String, Boolean> =
-        GlassworksRuntime(AqaraS1Plus()).paneDefinitions(ctx).mapNotNull { d -> d.switch?.let { d.id to it.on } }.toMap()
+        GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(ctx).mapNotNull { d -> d.switch?.let { d.id to it.on } }.toMap()
 
     private val allOff = mapOf(
         "assist" to false, "sendspin" to false, "notifications" to false, "bluetooth-proxy" to false, "wall-base" to false,
         "time-zone" to false, "diagnostics" to false,
     )
 
-    private fun definitions(ctx: Context): List<PaneDefinition> = GlassworksRuntime(AqaraS1Plus()).paneDefinitions(ctx)
+    private fun definitions(ctx: Context): List<PaneDefinition> = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(ctx)
 
     @Test fun aPaneTurnedOffInTheSettingsStaysOffAfterARestart() {
         val ctx = process()
@@ -92,12 +93,12 @@ class RestartKeepsSettingsTest {
         KioskPrefs(process()).apply {
             zoom = 1.25f
             extraSecureHosts = "192.0.2.40"
-            remoteDebugging = true
+            setRemoteDebugging(true)
             urlSetting = "http://192.0.2.10:8123/lovelace/0"
         }
         val after = KioskPrefs(process())
         assertEquals(listOf<Any>(1.25f, "192.0.2.40", true, "http://192.0.2.10:8123/lovelace/0"),
-            listOf<Any>(after.zoom, after.extraSecureHosts, after.remoteDebugging, after.urlSetting))
+            listOf<Any>(after.zoom, after.extraSecureHosts, after.remoteDebugging(debugBuild = false), after.urlSetting))
     }
 
     /** The files on "disk": only what was committed. */

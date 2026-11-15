@@ -159,8 +159,8 @@ class CriticalOrb(
         for ((i, r) in rings.withIndex()) r.ripple(((t / RIPPLE_MS + i / 2f) % 1f), 0.6f)
     }
 
-    /** Its layers are in: the orb isn't empty. For tests. */
-    internal val layersIn: Boolean get() = core.drawable != null && sphere.drawable != null
+    /** Its layers are in: the orb isn't empty. Public for tests. */
+    val layersIn: Boolean get() = core.drawable != null && sphere.drawable != null
 
     /** The core's scale now, for tests: it pulses while the loop runs. */
     val coreScale: Float get() = core.scaleX

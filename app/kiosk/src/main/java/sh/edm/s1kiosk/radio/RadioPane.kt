@@ -10,7 +10,6 @@ import sh.edm.esphome.EntityCategory
 import sh.edm.esphome.SelectEntity
 import sh.edm.esphome.TextEntity
 import sh.edm.esphome.TextSensorEntity
-import sh.edm.s1kiosk.BuildConfig
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.ThreadFetch
@@ -136,7 +135,7 @@ class RadioPane(
                 stackStore = prefs,
                 bundle = RadioBundle(ShellProps, AssetBundleSource(app.assets), app.filesDir, log = { Log.i(RadioController.TAG, it) }),
                 zigbeedFetcher = { dest, progress ->
-                    SisdkZigbeed.fetch(dest, app.cacheDir, "s1-kiosk/${BuildConfig.VERSION_NAME} (+https://github.com/GlassworksHQ/glassworks)", progress)
+                    SisdkZigbeed.fetch(dest, app.cacheDir, "s1-kiosk/${ctx.build.versionName} (+https://github.com/GlassworksHQ/glassworks)", progress)
                 },
             )
         }

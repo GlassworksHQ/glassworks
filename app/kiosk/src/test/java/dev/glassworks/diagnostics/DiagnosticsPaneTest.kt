@@ -6,6 +6,7 @@ package dev.glassworks.diagnostics
 
 import android.app.Application
 import dev.glassworks.pane.PaneContext
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,6 +57,7 @@ class DiagnosticsPaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = { published++ }, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000, debug = false),
         ),
         hasTemperature, exec, probe,
     )

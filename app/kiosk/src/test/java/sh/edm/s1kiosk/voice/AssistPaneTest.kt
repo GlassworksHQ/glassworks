@@ -4,6 +4,7 @@ import android.app.Application
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
 import dev.glassworks.pane.PanelTimer
+import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -47,6 +48,7 @@ class AssistPaneTest {
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
             ),
             publishStates = {}, emit = { events += it }, entitiesChanged = { reconnects++ }, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000, debug = false),
         ),
         player = object : UrlPlayer {
             override fun play(urls: List<String>, onDone: (Boolean) -> Unit) {}
