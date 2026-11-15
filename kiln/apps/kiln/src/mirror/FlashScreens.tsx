@@ -32,8 +32,8 @@ export function flashLevel(s: FlashState): number {
 
 /** Glass Panes, from the Mirror's frame.json `credits` (frames/README.md#credits). */
 const glassPanes = () => stepCredits('lululemon-mirror', credits, ['image']);
-/** The Mirror's reversibility, as frame.json rates it (issue 146). */
-const REVERSIBLE = FRAMES.find((x) => x.id === 'lululemon-mirror')?.ratings.reversible.detail;
+/** The Mirror's reversibility, as frame.json labels it (issue 146). */
+const REVERSIBLE = FRAMES.find((x) => x.id === 'lululemon-mirror')?.ratings.reversible.label;
 
 /** At the step that hands over the image: who built it, and whose its vendor files are. */
 function ImageCredit() {
@@ -225,7 +225,7 @@ export function FlashConfirm({ f, s }: P) {
       </ol>
       <p className="lede">
         Kiln can&apos;t back up the Mirror first: its bootloader can&apos;t read anything back. So lululemon&apos;s software can&apos;t be
-        restored, by Kiln or anyone. The way back from here is the Glass Panes image. Everything on the Mirror is replaced.
+        restored, by Kiln or anyone. The way back from here is the plain Glass Panes image. Everything on the Mirror is replaced.
       </p>
       {REVERSIBLE && !s.back && <p className="small">{REVERSIBLE}.</p>}
       <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} /> I understand lululemon&apos;s software can&apos;t be restored.</label>

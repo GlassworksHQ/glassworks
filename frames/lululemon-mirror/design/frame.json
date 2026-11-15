@@ -299,7 +299,8 @@
     },
     "reversible": {
       "value": "partly",
-      "detail": "Reversible to the community image, not to lululemon's software"
+      "label": "Reversible to the community image, not to lululemon's software",
+      "detail": "lululemon's software can't be restored: the way back is the plain Glass Panes image"
     },
     "modifiesAndroid": {
       "value": "yes",

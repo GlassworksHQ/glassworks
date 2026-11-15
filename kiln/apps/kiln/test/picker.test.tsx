@@ -54,6 +54,12 @@ describe('the picker', () => {
     expect(described).toMatch(/Medium install.*Reversible.*Modifies Android/);
   });
 
+  it('labels the Mirror reversible to the community image, never red "Not reversible" (issue 146)', () => {
+    render(<Picker />);
+    expect(screen.getAllByText("Reversible to the community image, not to lululemon's software").length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(/Not reversible/);
+  });
+
   it('during an install: says so, leads back to it, and Continue goes there too', () => {
     const store = installing();
     render(<Picker />);

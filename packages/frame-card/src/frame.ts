@@ -61,7 +61,8 @@ export interface FrameDesign {
   provides?: string[];
   /** href: where it installs from, only for a frame without `kiln` */
   install: { how: string; href?: string };
-  ratings: Record<RatingKey, { value: string; detail?: string }>;
+  /** `label`: the card's tag in the frame's own words, instead of the value's default (e.g. reversible: partly). */
+  ratings: Record<RatingKey, { value: string; detail?: string; label?: string }>;
   ratingsNote?: string;
   notice?: string;
   unverified?: boolean;
@@ -133,7 +134,7 @@ export function cardTags(r: FrameDesign['ratings']) {
   if (d !== 'unknown') tags.push({ key: 'difficulty', value: d, text: level[d] ?? d, severity: d === 'hard' ? 'warn' : d === 'medium' ? 'caution' : undefined });
   const rev = r.reversible.value;
   if (rev !== 'unknown') {
-    tags.push({ key: 'reversible', value: rev, text: rev === 'yes' ? 'Reversible' : rev === 'partly' ? 'Partly reversible' : 'Not reversible',
+    tags.push({ key: 'reversible', value: rev, text: r.reversible.label ?? (rev === 'yes' ? 'Reversible' : rev === 'partly' ? 'Partly reversible' : 'Not reversible'),
       severity: rev === 'no' ? 'warn' : rev === 'partly' ? 'caution' : undefined });
   }
   const m = r.modifiesAndroid.value;
