@@ -11,6 +11,7 @@ import android.net.Network
 import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.platform.Platform
+import dev.glassworks.platform.PlatformApi
 import sh.edm.s1kiosk.GlassworksRuntime
 import java.io.File
 import java.io.IOException
@@ -32,7 +33,8 @@ import java.util.concurrent.TimeUnit
  * - **Install:** download the `.sha256` and the APK over HTTPS into `files/update/`, verify the
  *   digest, then the APK's package, version and signing certificate against this app ([ApkCheck]),
  *   then hand `files/update/pending.apk` to the boot image's root service ([UpdateHelper]); without
- *   it (older boot image), Android's PackageInstaller, which asks for confirmation on the panel.
+ *   it (older boot image, generic Android), Android's PackageInstaller. That asks for confirmation on
+ *   the screen, except on Android 12+ where the app updates itself without a tap when Android allows it.
  *
  * Everything runs on one "s1-update" thread. [onChange] fires (on that thread) whenever the entity's
  * state may have changed.
@@ -63,7 +65,7 @@ class UpdateManager(
             cleanup()
             root?.lastFailure()?.let { model.onInfo("Last update failed: $it") }
             model.installNote = when {
-                root == null -> CONFIRM_NOTE
+                root == null -> if (Platform.canInstallWithoutUserAction) NO_TAP_NOTE else CONFIRM_NOTE
                 root.present() -> ""
                 else -> NO_HELPER_NOTE
             }
@@ -361,17 +363,14 @@ class UpdateManager(
     // ------------------------------------------------------------------ PackageInstaller fallback
 
     /**
-     * No root service (boot image from before it existed): a PackageInstaller session. Android asks
-     * for confirmation on the panel's screen ([UpdateInstallReceiver] shows it), unless the app is
-     * device owner, which installs silently.
+     * No root service (generic Android, or an S1 boot image from before it existed): a PackageInstaller
+     * session. Android asks for confirmation on the screen ([UpdateInstallReceiver] shows it and
+     * [onWaitingForTap] says so in HA), unless the app is device owner, or on Android 12+ the session
+     * asks for no user action and Android allows it ([sessionParams]).
      */
     private fun installWithPackageInstaller(a: UpdateModel.Attempt, apk: File) {
         val pi = ctx.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setAppPackageName(ctx.packageName)
-            setSize(apk.length())
-        }
-        val id = pi.createSession(params)
+        val id = pi.createSession(sessionParams(ctx.packageName, apk.length(), Platform))
         try {
             pi.openSession(id).use { s ->
                 s.openWrite("base.apk", 0, apk.length()).use { out ->
@@ -380,9 +379,11 @@ class UpdateManager(
                 }
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or Platform.mutablePendingIntentFlag
                 val pending = PendingIntent.getBroadcast(ctx, id, Intent(ctx, UpdateInstallReceiver::class.java), flags)
-                model.onInstalling(a, SystemClock.elapsedRealtime(),
-                    if (root == null) "Installing ${a.offer.version}: confirm on the screen"
-                    else "Installing ${a.offer.version}: confirm on the panel's screen (no root update service in this boot image)")
+                model.onInstalling(a, SystemClock.elapsedRealtime(), when {
+                    Platform.canInstallWithoutUserAction -> "Installing ${a.offer.version} without a tap"
+                    root == null -> "Installing ${a.offer.version}: confirm on the screen"
+                    else -> "Installing ${a.offer.version}: confirm on the panel's screen (no root update service in this boot image)"
+                })
                 onChange()
                 s.commit(pending.intentSender)
             }
@@ -391,6 +392,14 @@ class UpdateManager(
         } catch (e: Exception) {
             runCatching { pi.abandonSession(id) }
             throw e
+        }
+    }
+
+    /** From [UpdateInstallReceiver]: Android asks for a tap before it installs (STATUS_PENDING_USER_ACTION). */
+    internal fun onWaitingForTap() = exec.execute {
+        if (model.onWaitingForTap()) {
+            Log.i(TAG, "package installer: waiting for a tap on the screen")
+            onChange()
         }
     }
 
@@ -456,14 +465,29 @@ class UpdateManager(
         const val CMD_CHECK = 2
         const val NO_HELPER_NOTE =
             "Installing asks for confirmation on the panel's screen: this panel's boot image has no root update service yet."
-        /** A frame with no root update service at all (generic Android). */
+        /** A frame with no root update service at all (generic Android) below Android 12. */
         const val CONFIRM_NOTE = "Installing asks for confirmation on the screen."
+        /** The same on Android 12+, where the app updates itself unless Android asks for a tap. */
+        const val NO_TAP_NOTE = "Installs without a tap, unless Android asks for one on the screen."
         private const val FIRST_CHECK_DELAY_S = 30L
         private const val TICK_S = 15 * 60L
         private const val NETWORK_SETTLE_S = 10L
         private const val MAX_JSON_BYTES = 1024 * 1024
         private const val FREE_SPACE_MARGIN = 32L * 1024 * 1024
         private const val PROGRESS_PUBLISH_MS = 1_000L
+
+        /**
+         * The PackageInstaller session for an update of [packageName]. On Android 12+ ([platform])
+         * it asks for no user action; below, it is the session the app has always used.
+         */
+        internal fun sessionParams(packageName: String, size: Long, platform: PlatformApi): PackageInstaller.SessionParams =
+            PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                setAppPackageName(packageName)
+                setSize(size)
+                if (platform.canInstallWithoutUserAction) {
+                    setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+                }
+            }
 
         private fun readCapped(input: InputStream, max: Int): ByteArray = input.use {
             val out = java.io.ByteArrayOutputStream()

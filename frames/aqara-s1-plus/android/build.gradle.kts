@@ -40,7 +40,10 @@ android {
     defaultConfig {
         applicationId = "sh.edm.s1kiosk"
         minSdk = 26
-        targetSdk = 34
+        // Opts into newer Android rules on newer devices only; minSdk decides who can install it.
+        // 35: Android 17 updates an app without a tap only if the new APK targets 35+ (#277,
+        // docs/releasing.md "Raising targetSdk").
+        targetSdk = 35
         versionCode = s1VersionCode ?: 1
         versionName = s1Version ?: "0.1.0"
         buildConfigField("String", "TEST_BUILD", "\"$s1TestBuild\"")

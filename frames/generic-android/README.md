@@ -61,6 +61,69 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 It will install as a normal app. It doesn't install from Kiln yet.
 
+## Updates
+
+App updates come from Home Assistant's update entity, as on the S1
+([docs/esphome.md](../../docs/esphome.md#app-updates)). There is no root update service here, so the
+app installs the new APK through Android's PackageInstaller. Two routes install it without anyone
+touching the screen:
+
+| Route | Android | What you set up once |
+|---|---|---|
+| Silent self-update | 12 or newer | Allow "Install unknown apps" for S1 Kiosk |
+| Device owner | 8.0 or newer | `dpm set-device-owner` over adb, on a device with no accounts |
+
+Without either, Android asks for a tap on the screen before it installs. The *Update status* sensor
+says which one happens: "Installing 1.2.3 without a tap", or "Installing 1.2.3: waiting for a tap on
+the screen".
+
+### Silent self-update (Android 12+)
+
+The app asks Android to install its own update with no user action (#277). Android allows it when:
+
+1. "Install unknown apps" is allowed for S1 Kiosk: *Settings → Apps → S1 Kiosk → Install unknown
+   apps*, or `adb shell appops set sh.edm.s1kiosk REQUEST_INSTALL_PACKAGES allow`.
+2. The app that runs the install has this feature. An app from before it asks for a tap once, and
+   the version it installs updates silently from then on.
+3. The new APK targets a recent enough API for the device's Android
+   ([`setRequireUserAction`](https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setRequireUserAction(int)),
+   read 2026-11-14):
+
+| Device runs | The new APK must target at least |
+|---|---|
+| Android 12 (API 31) | 29 |
+| Android 13 (33) | 30 |
+| Android 14 (34) | 31 |
+| Android 15 (35) | 33 |
+| Android 16 (36) | 34 |
+| Android 17 (37) | 35 |
+
+The app targets 35, so every Android up to 17 qualifies. Android raises the bar by one level each
+year, so the target goes up with each new Android
+([releasing.md](../../docs/releasing.md#raising-targetsdk)).
+
+Status: unit-tested only (2026-11-15). The first run on a real device (the Pixel Tablet, Android 17)
+waits for a release that has the feature.
+
+### Device owner
+
+A device-owner app installs its updates silently on any Android version it runs on. It also lets the
+app do more on the device (Wi-Fi, permissions), and Settings shows "managed by your organization".
+Android allows it only on a device with no accounts and a single user: remove the Google account
+first, or set it up right after a factory reset.
+
+```sh
+adb shell dpm set-device-owner sh.edm.s1kiosk/.AdminReceiver
+adb shell dumpsys device_policy | grep -A3 "Device Owner"
+# undo (`dpm remove-active-admin` doesn't work for a release build):
+adb shell am start -n sh.edm.s1kiosk/.improv.ImprovActivity --ez release_device_owner true
+```
+
+While it is device owner, the app can't be uninstalled until you undo it. The details are in
+[docs/onboarding.md](../../docs/onboarding.md#device-owner-optional). Silent installs as device owner
+are Android's documented behaviour (Android 6.0 and later); they haven't been tried on a generic
+device yet.
+
 ## Panes
 
 | Pane | Support | Note |

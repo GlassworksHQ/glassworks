@@ -24,8 +24,10 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- App updates without the boot image's root update service (update/UpdateManager.kt): a
-         PackageInstaller session, confirmed on the panel's screen. -->
+         PackageInstaller session, confirmed on the panel's screen. On Android 12+ the second one lets
+         the app update itself without the tap, once "Install unknown apps" is allowed (#277). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!-- Optional, granted over adb (`pm grant <pkg> android.permission.WRITE_SECURE_SETTINGS`):
          lets the app set the proximity sensor's presence range (secure proximity_threshold). -->
     <uses-permission

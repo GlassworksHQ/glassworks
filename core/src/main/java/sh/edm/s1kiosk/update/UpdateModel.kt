@@ -96,6 +96,19 @@ class UpdateModel(val currentVersion: String, val title: String = TITLE) {
         setStatus(detail, StatusKind.INFO)
     }
 
+    /**
+     * Android asks for a tap before it installs. Says so while installing; false (nothing changed)
+     * in any other phase or when it already said so.
+     */
+    @Synchronized fun onWaitingForTap(): Boolean {
+        val a = attempt ?: return false
+        if (phase != Phase.INSTALLING) return false
+        val s = "Installing ${a.offer.version}: waiting for a tap on the screen"
+        if (status == s) return false
+        setStatus(s, StatusKind.INFO)
+        return true
+    }
+
     /** Ends [a] with an error; false if it had already ended. */
     @Synchronized fun onFailed(a: Attempt, reason: String): Boolean {
         if (!isActive(a)) return false

@@ -10,7 +10,8 @@ import sh.edm.s1kiosk.glassworks
 
 /**
  * Status of the PackageInstaller fallback session ([UpdateManager.installWithPackageInstaller]):
- * shows Android's confirmation when it asks for one, and reports failures to the update entity.
+ * shows Android's confirmation when it asks for one (and tells the update entity it waits for a
+ * tap), and reports failures to the update entity.
  * Success is never seen here: installing the new version kills this process.
  */
 class UpdateInstallReceiver : BroadcastReceiver() {
@@ -25,6 +26,7 @@ class UpdateInstallReceiver : BroadcastReceiver() {
                     return
                 }
                 Log.i(UpdateManager.TAG, "package installer asks for confirmation on the panel")
+                context.glassworks.updates?.onWaitingForTap()
                 try {
                     context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 } catch (e: Exception) {

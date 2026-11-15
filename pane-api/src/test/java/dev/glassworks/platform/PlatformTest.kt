@@ -31,6 +31,7 @@ class PlatformTest {
         Triple("hasFontBuilder", 29) { it.hasFontBuilder },
         Triple("hasWindowInsetsController", 30) { it.hasWindowInsetsController },
         Triple("hasSystemCameraIndicator", 31) { it.hasSystemCameraIndicator },
+        Triple("canInstallWithoutUserAction", 31) { it.canInstallWithoutUserAction },
         Triple("hasApplicationExitInfo", 30) { it.hasApplicationExitInfo },
         Triple("foregroundServiceTypesNeedTheirPermission", 34) { it.foregroundServiceTypesNeedTheirPermission },
     )

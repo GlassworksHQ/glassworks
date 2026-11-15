@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **On Android 12 and newer, app updates from Home Assistant install without a tap.** On a device
+  that isn't an Aqara S1, such as a tablet, pressing Install in Home Assistant now updates the app
+  with nobody at the screen, once "Install unknown apps" is allowed for it. If Android still asks,
+  *Update status* says "waiting for a tap on the screen". The first update to this version still
+  asks once. The S1 is unchanged: it updates through its root service as before.
 - **Change the panel's settings from the Manage page.** Every setting in the panel's own menu is on
   the Manage page too, in the same order and words, and you can change it there: switches, sliders,
   addresses, times and choices, and each pane's on/off (that one needs a Home Assistant sign-in). The

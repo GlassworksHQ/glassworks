@@ -497,9 +497,17 @@ usual `--ez camera_enabled true` on the main activity.
   4. The verified file becomes `files/update/pending.apk`, and the root update service installs it
      ([frames/aqara-s1-plus/research/root.md](../frames/aqara-s1-plus/research/root.md)). On success the app is replaced and restarted, and the
      new version reports the result in *Update status*.
-  5. Boot images from before the service (`sys.s1kiosk.update.version` unset) use a
-     PackageInstaller session instead. Android then asks for confirmation on the panel's screen,
-     which the summary says while an update waits.
+  5. Without the service (generic Android, or an S1 boot image from before it:
+     `sys.s1kiosk.update.version` unset), a PackageInstaller session instead.
+     - Below Android 12, Android asks for confirmation on the screen, unless the app is device owner.
+       The summary says so while an update waits.
+     - On Android 12+ the session asks for no user action (`setRequireUserAction(USER_ACTION_NOT_REQUIRED)`,
+       with the `UPDATE_PACKAGES_WITHOUT_USER_ACTION` permission), and the status is "Installing
+       1.2.3 without a tap". Android can still ask: when "Install unknown apps" isn't allowed, or
+       when the new APK targets too old an API for the device
+       ([frames/generic-android](../frames/generic-android/README.md#updates)). Then the status
+       becomes "Installing 1.2.3: waiting for a tap on the screen" (`STATUS_PENDING_USER_ACTION`),
+       and the app shows Android's confirmation.
   6. Any failure, or a phase stuck for 30 min (download) or 10 min (verify/install), ends with
      `in_progress` off and the reason on top of the summary.
 - A debug build can't update to a release: the keys differ, and the entity says so.

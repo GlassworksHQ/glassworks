@@ -75,6 +75,14 @@ open class PlatformApi(
      */
     val hasSystemCameraIndicator: Boolean get() = apiLevel >= 31
 
+    /**
+     * An app may update itself without a tap (Android 12): a PackageInstaller session can ask for
+     * `USER_ACTION_NOT_REQUIRED`. Android still asks when the app lacks
+     * `UPDATE_PACKAGES_WITHOUT_USER_ACTION` or "Install unknown apps", or when the new APK targets
+     * too old an API for the device. Below it the session cannot ask, and Android always asks.
+     */
+    val canInstallWithoutUserAction: Boolean get() = apiLevel >= 31
+
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 
