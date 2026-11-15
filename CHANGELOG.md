@@ -12,6 +12,10 @@ below as the release notes.
   the done screen say "Built on sunxi-tools by linux-sunxi and Magisk by topjohnwu", with links to
   both. The frames' pages on glassworks.dev have a "Built on community work" section, and the Mirror's
   card names the Glass Panes image it runs.
+- **Pick the panel's time zone from the Manage page.** The time zone page in the browser now has
+  what the panel's own page has: the zone, picked from a list grouped by region, whether the panel
+  keeps it, and Home Assistant's time zone. When Home Assistant keeps another zone's clock, **Use it**
+  sets that zone, as on the panel.
 - **Add a pane's Home Assistant blueprints from its settings page.** Notifications and Camera have a
   *Blueprints for Home Assistant* card: the doorbell, a question with buttons on the panels, lights on
   when someone is at the panel, and a snapshot to your phone when nobody is home. **Add to Home

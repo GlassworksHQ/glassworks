@@ -197,7 +197,7 @@ ${foot(viewer)}"""
          */
         class Edit(override val key: String, val problem: String? = null, val typed: String? = null) : Dialog
 
-        /** Ask [ask] before setting the switch at [key] to [value] (`on`/`off`). */
+        /** Ask [ask] before setting the switch at [key] to [value] (`on`/`off`), or running the action there ([SettingsItem.Action.RUN]). */
         class Confirm(override val key: String, val value: String, val ask: SettingsItem.Confirm) : Dialog
     }
 
@@ -236,8 +236,15 @@ ${foot(viewer)}"""
                 """<a class="row" href="/${esc(id)}"><div><b>${esc(item.title)}</b>${if (item.detail.isNotEmpty()) "<span>${esc(item.detail)}</span>" else ""}</div><i class="chev" aria-hidden="true">›</i></a>"""
             } ?: row(item.title, item.detail, right = ON_THE_PANEL, dim = item.detail.isEmpty())
             is SettingsItem.Group -> """<div class="grp"><div class="gl">${esc(item.title)}</div>${items(v, path, section, item.items, "$prefix${item.title}/")}</div>"""
-            // A view only the panel can draw: say so, rather than drop the row.
-            is SettingsItem.Native -> row(item.title.ifEmpty { nativeTitle(section) }, "Shown on the panel's own settings", right = ON_THE_PANEL)
+            // A view only the panel draws: its typed twin's rows here (#269), or a row that says so, rather than drop it.
+            is SettingsItem.Native -> SettingsChange.twinOf(item).takeIf { it.isNotEmpty() }?.let { items(v, path, section, it, prefix) }
+                ?: row(item.title.ifEmpty { nativeTitle(section) }, "Shown on the panel's own settings", right = ON_THE_PANEL)
+            // A button on its row; one that asks first on the panel asks here too (ManageServer).
+            is SettingsItem.Action -> {
+                val detail = safe { item.detail() }
+                """<form class="row" method="post" action="/settings">${fields(v, section, key)}<div><b>${esc(item.title)}</b>${if (detail.isNotEmpty()) "<span>${esc(detail)}</span>" else ""}</div>""" +
+                    """<button class="pill sm" type="submit" name="value" value="${SettingsItem.Action.RUN}">${esc(item.label)}</button></form>"""
+            }
             // As the panel: green while it works, rose for a problem the person can fix, else quiet.
             is SettingsItem.Status -> {
                 val tone = when {
@@ -342,7 +349,8 @@ ${foot(viewer)}"""
                             """<input class="fld" type="password" name="password" value="" placeholder="${if (set) SettingsChange.NEW_PASSWORD else "Password"}" autocomplete="new-password" aria-label="Password"></div>""",
                         "Save", d.problem, more = if (set) """<button class="pill" type="submit" name="clear" value="1">Clear</button>""" else "")
                 }
-                is SettingsItem.Choice -> sheet(item.title, "", chips(safe { item.value() }, runCatching { item.options() }.getOrDefault(emptyList())), null, d.problem)
+                is SettingsItem.Choice -> item.group?.let { group -> sheet(item.title, "", select(item, group), "Save", d.problem) }
+                    ?: sheet(item.title, "", chips(safe { item.value() }, runCatching { item.options() }.getOrDefault(emptyList())), null, d.problem)
                 is SettingsItem.TimeRange -> {
                     val now = safe { item.value() }
                     val (from, to) = SettingsChange.parseRange(now) ?: (22 * 60 to 7 * 60)
@@ -354,6 +362,24 @@ ${foot(viewer)}"""
                 else -> ""
             }
         }
+    }
+
+    /**
+     * A long choice as one `<select>`, its options under their groups (the time zone's regions), the picked
+     * one selected. With none picked (a zone the list doesn't have), a first line says to pick, so Save
+     * never sends the list's first option by accident.
+     */
+    private fun select(item: SettingsItem.Choice, group: (String) -> String): String {
+        val now = safe { item.value() }
+        val options = runCatching { item.options() }.getOrDefault(emptyList())
+        val groups = LinkedHashMap<String, MutableList<Pair<String, String>>>()
+        for (o in options) groups.getOrPut(safe { group(o.first) }) { ArrayList() } += o
+        val none = if (options.none { it.first == now }) """<option value="" disabled selected>${esc(PICK_ONE)}</option>""" else ""
+        return """<select class="fld" name="value" required autofocus aria-label="${esc(item.title)}">$none""" + groups.entries.joinToString("") { (g, list) ->
+            """<optgroup label="${esc(g)}">""" + list.joinToString("") { (id, name) ->
+                """<option value="${esc(id)}"${if (id == now) " selected" else ""}>${esc(name)}</option>"""
+            } + "</optgroup>"
+        } + "</select>"
     }
 
     private fun nativeTitle(section: String) = section.split('-', '_', '.').joinToString(" ").replaceFirstChar { it.uppercase() }
@@ -449,6 +475,8 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
 
         /** A row that opens something only the panel has. */
         const val ON_THE_PANEL = "On the panel"
+        /** A long choice's first line while nothing in it is picked. */
+        const val PICK_ONE = "Pick one"
         /** The Blueprints card's line with the panel's code: Manage doesn't know who you are in Home Assistant. */
         const val BLUEPRINTS_CODE = "You signed in with the panel's code. Home Assistant asks who you are, and only an administrator can add blueprints."
 
@@ -556,7 +584,7 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 .scrim .dlg{max-height:calc(100vh - 32px);overflow:auto}
 .pcs{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0}.pc{padding:10px 17px;border-radius:999px;border:1px solid var(--edge);background:var(--glass);color:var(--muted);font:inherit;font-size:15.5px;font-weight:500;cursor:pointer}
 .pc:hover{background:var(--hover)}.pc.on{background:linear-gradient(90deg,var(--sky),var(--violet));color:#0a0b0f;border-color:transparent}
-.dflt{position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.flds{display:flex;flex-direction:column;gap:12px}.fld{width:100%;padding:14px 18px;border-radius:16px;border:1px solid var(--edge);background:var(--field);color:var(--fg);font:inherit;font-size:17px}.fld:focus{outline:none;border-color:rgba(56,189,248,.55)}
+.dflt{position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.flds{display:flex;flex-direction:column;gap:12px}.fld{width:100%;padding:14px 18px;border-radius:16px;border:1px solid var(--edge);background:var(--field);color:var(--fg);font:inherit;font-size:17px}.fld:focus{outline:none;border-color:rgba(56,189,248,.55)}select.fld{cursor:pointer}select.fld option,select.fld optgroup{background:var(--bg);color:var(--fg)}
 .sw{display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--fg);font-size:16.5px;cursor:pointer}
 .sw input{appearance:none;-webkit-appearance:none;margin:0;width:${Tokens.Toggle.W}px;height:${Tokens.Toggle.H}px;border-radius:999px;background:var(--field);border:1px solid var(--edge);position:relative;cursor:pointer;flex:none;order:2}
 .sw input::after{content:"";position:absolute;top:${Tokens.Toggle.KNOB_INSET - 1}px;left:${Tokens.Toggle.KNOB_INSET - 1}px;width:${Tokens.Toggle.H - 2 * Tokens.Toggle.KNOB_INSET}px;height:${Tokens.Toggle.H - 2 * Tokens.Toggle.KNOB_INSET}px;border-radius:50%;background:var(--muted)}

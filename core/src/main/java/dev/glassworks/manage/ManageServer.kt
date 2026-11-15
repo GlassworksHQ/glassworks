@@ -238,7 +238,7 @@ class ManageServer(
         // An edit link for an item the page doesn't have now, or one changed in its row (a switch, a slider), is the page itself.
         val shown = dialog?.takeIf { d ->
             val item = section?.let { SettingsChange.find(it, d.key) }
-            d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider)
+            d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider && item !is SettingsItem.Action)
         }
         return html(code, pages.section(status, viewer, "/$id", pane?.title ?: section!!.title, pane?.state, section, pane?.links.orEmpty(),
             dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done)))
@@ -253,8 +253,8 @@ class ManageServer(
     /**
      * `/settings`, POST: change one item, as the panel's menu does (#242). The form names the section, the
      * item's key ([SettingsChange.changeable]) and the value; [SettingsChange.change] checks it and calls the
-     * item's own save, on the panel's main thread ([ManageHost.onMain]). A switch that asks first on the panel
-     * asks here too, then comes back with `confirmed`, for either sign-in, as on the panel.
+     * item's own save, on the panel's main thread ([ManageHost.onMain]). A switch or an action that asks first
+     * on the panel asks here too, then comes back with `confirmed`, for either sign-in, as on the panel.
      */
     private fun changeSetting(req: HttpRequest, s: Session, viewer: ManagePages.Viewer): HttpResponse {
         val status = host.status()
@@ -272,15 +272,20 @@ class ManageServer(
             val ask = runCatching { item.confirm(raw == "on") }.getOrNull()
             if (ask != null) return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, ask))!!
         }
+        // An action that asks first on the panel (a reset, the radio's roles) asks here too (#269).
+        if (item is SettingsItem.Action && req.form["confirmed"] != "1" && raw == SettingsItem.Action.RUN) {
+            item.confirm?.let { return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, it))!! }
+        }
         val problem = apply(item, raw)
+        val did = if (item is SettingsItem.Action) "ran" else "changed"
         if (problem == PENDING) {
-            event("${who(s)} changed $what (still applying)")
+            event("${who(s)} $did $what (still applying)")
             return HttpResponse.seeOther("$page?done=pending")
         }
-        event(if (problem == null) "${who(s)} changed $what" else "${who(s)} couldn't change $what: $problem")
+        event(if (problem == null) "${who(s)} $did $what" else "${who(s)} couldn't ${if (item is SettingsItem.Action) "run" else "change"} $what: $problem")
         if (problem == null) return HttpResponse.seeOther(if (SettingsChange.restarts(item)) "$page?done=restart" else page)
         // As the panel: a typed value, a duration, a choice or a window keeps its sheet open with why; the rest say it on the page.
-        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider) null
+        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action) null
             else ManagePages.Dialog.Edit(key, problem, typed = raw.takeIf { item is SettingsItem.Text })
         return settingsPage(host.status(), viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422)!!
     }

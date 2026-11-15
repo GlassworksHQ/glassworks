@@ -356,7 +356,7 @@ no pane. `GlassworksRuntime.setupPanes` pairs each choice with its steps and lea
 steps but no card, with an error in the log: the person could never turn it on or off.
 
 **A settings section is data.** Items are `Text`, `Switch`, `Slider`, `Duration`, `TimeRange`, `Choice`,
-`Link`, `Note`, `Info` and `Group`, each with its value and a `save(value, done)`, and the read-only
+`Action`, `Link`, `Note`, `Info` and `Group`, each with its value and a `save(value, done)`, and the read-only
 `Status` (the line under a page's heading), `Tiles` (readings with their last hour, #212) and `States`
 (entities as Home Assistant shows them). A slider, a duration (picked from its choices, with units), a
 choice and a daily window are never typed (#63 round 2), so a browser can draw the same controls.
@@ -370,8 +370,14 @@ the button's word). Each change applies on its own, as the person makes it
 reports a problem in words. An item that only takes effect when the app starts again sets
 `restartsApp`; the menu then says so and offers *Restart now*. A `Text` says its value in words with
 `shown` ("After 2 minutes"). A section's `heading` is its page's title when it says more than its
-name in the list. `Native` is the one panel-only item: a view for what has no typed item yet (the
-radio's modes and card). A browser can't draw it, so new sections should not need it.
+name in the list. An `Action` is a button on a row ("Use it", a reset): `run(done)`, asked first with
+its `confirm` when it costs something, as a `Switch` asks. A long `Choice` gives each option a `group`
+(the time zone's regions), and a browser lists it as one grouped list, not chips; its `line` is the row's
+words for the picked one when they say more than its name. `Native` is a view only the panel draws,
+where its own layout is nicer than rows (the time zone's picker). Give it a `twin` (#269): the same
+rows and actions as typed items, which every other surface draws instead, so the Manage page has the
+same features. Never put a secret in a twin: it goes to a browser and the diagnostics. A native view
+with no twin says "On the panel" on the Manage page, and `PanelManageParityTest` lists the ones left.
 
 **One way to change a setting (#242).** The panel's menu and the Manage page change an item through
 `SettingsChange.change(item, raw, done)`: it checks the value as the panel's control limits it (a
@@ -492,8 +498,9 @@ dialog. Each change is a POST to `/settings` (CSRF token, `Origin` check) with t
 key and the value, applied with `SettingsChange.change` on the thread `ManageHost.onMain` gives (the
 main thread on Android), so a change from the browser takes the panel's own path. A `Switch` that
 asks first on the panel asks here too. Either sign-in may change any item, a pane's `master`
-included (maintainer, 2026-11-15: the sign-in is the only extra layer). `Link` and `Native` say "On
-the panel". A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
+included (maintainer, 2026-11-15: the sign-in is the only extra layer). An `Action` is a button that
+posts `run`; one with a `confirm` asks first. A `Native` draws its `twin`'s rows (#269), or says "On the
+panel" when it has none, as a `Link` to something outside the menu does. A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
 `unavailable` for Can't run, the `master` switch (#67) for Off; its chip is `chipWord` and
 `chipTone`, as on the rail. Off panes fold under "Off · N" in the nav, as in the rail.
 `PanelManageParityTest` walks every item the menu draws and fails when one is missing on the Manage

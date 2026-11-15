@@ -198,7 +198,10 @@ class S1Manage(
             // What each button does now, without its links (they carry the Home Assistant address).
             is SettingsItem.Blueprints -> listOf("${dev.glassworks.pane.BLUEPRINTS}:") + runCatching { i.card(dev.glassworks.pane.BlueprintSurface.PANEL) }.getOrNull()
                 ?.let { c -> listOfNotNull(c.note?.let { "  $it" }) + c.rows.map { (bp, a) -> "  ${bp.name}: ${a::class.simpleName}" } }.orEmpty()
-            is SettingsItem.Link, is SettingsItem.Native -> emptyList()
+            is SettingsItem.Action -> listOf("${i.title}: ${v(i.detail)}")
+            // A native view's typed twin, as the Manage page shows it; never a secret (SettingsItem.Native).
+            is SettingsItem.Native -> itemLines(dev.glassworks.pane.SettingsChange.twinOf(i))
+            is SettingsItem.Link -> emptyList()
         }
     }
 

@@ -27,8 +27,10 @@ On a phone the menu folds behind the ☰ button. Light or dark follows your phon
 
 Not on the page, because they need someone at the panel: the first Wi-Fi, Bluetooth's "Allow", and
 Aqara's own settings app. Some pane pages still have parts only the panel draws, and the page says
-"On the panel" for them: the radio's roles and Thread network, the time zone picker, the wall base's
-relays, and the Bluetooth proxy's devices.
+"On the panel" for them: the radio's roles and Thread network, the wall base's relays, and the
+Bluetooth proxy's devices. The time zone page has everything the panel's has: the zone, picked from a
+list grouped by region, whether the panel keeps it, and Home Assistant's zone, with **Use it** when
+Home Assistant keeps another zone's clock.
 
 ## Changing settings
 
