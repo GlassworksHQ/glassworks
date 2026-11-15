@@ -140,7 +140,7 @@ Home Assistant actions" option. Listen for it in *Developer tools → Events* to
 | `critical` | The alert screen, until answered or dismissed | the alert, every 4 s for about 2 minutes (the last one may end 1.45 s past) | Wakes it, at full brightness also at night |
 
 The sounds are made by the app from sine tones
-([`NotificationSounds.kt`](../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/notifications/NotificationSounds.kt),
+([`NotificationSounds.kt`](../panes/notifications/src/main/java/dev/glassworks/notifications/NotificationSounds.kt),
 MPL-2.0 like the rest of the core). There are no recordings, so no other licence applies.
 
 The screen stays on for a high or critical one while it is up, for at most 10 minutes, so one nobody
