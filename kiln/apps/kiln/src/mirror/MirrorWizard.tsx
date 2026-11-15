@@ -3,7 +3,7 @@
 // the Mirror is a planned frame, and the only APK for it is a test build picked from this computer.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
-import { fmtSize } from '@glassworks/kiln-core';
+import { Assets, fmtSize } from '@glassworks/kiln-core';
 import { credits, type MirrorPhase } from '@glassworks/lululemon-mirror-installer';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import Link from 'next/link';
@@ -50,7 +50,10 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
   }
   const keys = adbKeyHolder(loadOrCreateAdbKey);
   const mirror = new MirrorSession({ connect: keys.connectWith((k) => Panel.connect(k)) }, true);
+  const assets = new Assets<'mirror-bootanimation'>('/assets/');
   const flash = new FlashSession({
+    // branding/lululemon-mirror/bootanimation.zip, staged with Kiln's other assets and checked by SHA-256
+    bootAnimation: async () => ((await assets.has('mirror-bootanimation')) ? assets.get('mirror-bootanimation') : undefined),
     images: workerImages(),
     // Refract, Kiln's release proxy (PR 347); NEXT_PUBLIC_KILN_PROXY at build time points it elsewhere, e.g. a local Worker
     imageUrl: `${process.env.NEXT_PUBLIC_KILN_PROXY ?? IMAGE_PROXY.base}/${IMAGE_PROXY.systemImg}`,
