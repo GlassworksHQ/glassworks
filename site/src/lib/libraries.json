@@ -1,0 +1,11 @@
+[
+  { "name": "esphome-api", "description": "The device side of the ESPHome native API, in Kotlin." },
+  { "name": "esphome-api-android", "description": "Android helpers for esphome-api: mDNS discovery." },
+  { "name": "improv", "description": "Improv Wi-Fi for Android, over BLE, serial or adb." },
+  { "name": "bluetooth-proxy", "description": "An ESPHome Bluetooth proxy on Android." },
+  { "name": "improv-serial", "description": "Improv Wi-Fi Serial for the browser, and over adb." },
+  { "name": "ha-auth", "description": "Home Assistant sign-in and tokens." },
+  { "name": "sendspin-protocol", "description": "The Sendspin synced-audio protocol." },
+  { "name": "fastboot", "description": "Fastboot over WebUSB, for every frame Kiln installs." },
+  { "name": "frame-card", "description": "The frame card and 3D renderer, for Kiln and the site." }
+]

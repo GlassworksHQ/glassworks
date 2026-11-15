@@ -1,0 +1,141 @@
+/* pane support on a device */
+.support {
+  font-size: 13px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.s_stable,
+.s_beta,
+.s_alpha {
+  color: var(--fg);
+}
+
+.s_development,
+.s_planned,
+.s_depends {
+  color: var(--muted);
+}
+
+.s_unknown,
+.s_no {
+  color: var(--faint);
+}
+
+/* stage markers: the same marks as the status badges */
+.mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  box-sizing: border-box;
+}
+
+.m_stable {
+  background: var(--green);
+}
+
+.m_alpha,
+.m_beta {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  font: 600 12px/1 var(--f-sans);
+  color: var(--work-ink);
+}
+
+.m_alpha::before {
+  content: "α";
+}
+
+.m_beta::before {
+  content: "β";
+}
+
+.m_development {
+  border: 1.5px dashed currentColor;
+}
+
+.m_planned,
+.m_depends {
+  border: 1.5px solid currentColor;
+}
+
+.m_unknown {
+  border: 1.5px dotted currentColor;
+}
+
+.m_no {
+  width: 8px;
+  height: 1.5px;
+  border-radius: 0;
+  background: currentColor;
+}
+
+/* warnings: a harder install, or one you can't fully undo */
+.ratingValue.caution {
+  color: color-mix(in srgb, var(--amber) 70%, var(--fg));
+}
+
+.ratingValue.warn {
+  color: color-mix(in srgb, var(--rose) 75%, var(--fg));
+}
+
+.rating {
+  display: grid;
+  gap: 1px;
+}
+
+.ratingValue {
+  font-weight: 500;
+}
+
+/* the difficulty meter replaces the status dot; other warnings keep a dot */
+.ratingValue.caution:not(.withMeter)::before,
+.ratingValue.warn:not(.withMeter)::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: 0.1em;
+  background: currentColor;
+}
+
+.withMeter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meter {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.labelIcon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--faint);
+}
+
+.unknownValue {
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.ratingDetail {
+  font-size: 12.5px;
+  color: var(--faint);
+}
