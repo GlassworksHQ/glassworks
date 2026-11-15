@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Glassworks stack for the Android 12+ launch splash (values-v31/themes.xml), as the
+     connecting screen's first frame draws it. Made by branding/boot/splash_mark.py; don't edit. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="172.8"
+    android:viewportHeight="172.8">
+    <path
+        android:pathData="M94.194,81.55L130.567,102.55C134.872,105.035 134.872,109.065 130.567,111.55L94.194,132.55C89.89,135.035 82.91,135.035 78.606,132.55L42.233,111.55C37.928,109.065 37.928,105.035 42.233,102.55L78.606,81.55C82.91,79.065 89.89,79.065 94.194,81.55Z"
+        android:strokeColor="#33F4F4F5"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M94.194,61.95L130.567,82.95C134.872,85.435 134.872,89.465 130.567,91.95L94.194,112.95C89.89,115.435 82.91,115.435 78.606,112.95L42.233,91.95C37.928,89.465 37.928,85.435 42.233,82.95L78.606,61.95C82.91,59.465 89.89,59.465 94.194,61.95Z"
+        android:strokeColor="#72F4F4F5"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <group>
+        <clip-path android:pathData="M94.194,40.25L130.567,61.25C134.872,63.735 134.872,67.765 130.567,70.25L94.194,91.25C89.89,93.735 82.91,93.735 78.606,91.25L42.233,70.25C37.928,67.765 37.928,63.735 42.233,61.25L78.606,40.25C82.91,37.765 89.89,37.765 94.194,40.25Z" />
+        <path android:pathData="M94.194,40.25L130.567,61.25C134.872,63.735 134.872,67.765 130.567,70.25L94.194,91.25C89.89,93.735 82.91,93.735 78.606,91.25L42.233,70.25C37.928,67.765 37.928,63.735 42.233,61.25L78.606,40.25C82.91,37.765 89.89,37.765 94.194,40.25Z" android:fillColor="#FF0B0C11" />
+        <path
+            android:pathData="M94.194,64.45L130.567,85.45C134.872,87.935 134.872,91.965 130.567,94.45L94.194,115.45C89.89,117.935 82.91,117.935 78.606,115.45L42.233,94.45C37.928,91.965 37.928,87.935 42.233,85.45L78.606,64.45C82.91,61.965 89.89,61.965 94.194,64.45Z"
+            android:strokeColor="#28F4F4F5"
+            android:strokeWidth="11"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M94.194,84.05L130.567,105.05C134.872,107.535 134.872,111.565 130.567,114.05L94.194,135.05C89.89,137.535 82.91,137.535 78.606,135.05L42.233,114.05C37.928,111.565 37.928,107.535 42.233,105.05L78.606,84.05C82.91,81.565 89.89,81.565 94.194,84.05Z"
+            android:strokeColor="#11F4F4F5"
+            android:strokeWidth="11"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+        <path android:pathData="M94.194,40.25L130.567,61.25C134.872,63.735 134.872,67.765 130.567,70.25L94.194,91.25C89.89,93.735 82.91,93.735 78.606,91.25L42.233,70.25C37.928,67.765 37.928,63.735 42.233,61.25L78.606,40.25C82.91,37.765 89.89,37.765 94.194,40.25Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="39.004" android:startY="38.386" android:endX="133.796" android:endY="93.114">
+                    <item android:offset="0" android:color="#DA38BDF8" />
+                    <item android:offset="0.55" android:color="#C3818CF8" />
+                    <item android:offset="1" android:color="#D3A78BFA" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M94.194,40.25L130.567,61.25C134.872,63.735 134.872,67.765 130.567,70.25L94.194,91.25C89.89,93.735 82.91,93.735 78.606,91.25L42.233,70.25C37.928,67.765 37.928,63.735 42.233,61.25L78.606,40.25C82.91,37.765 89.89,37.765 94.194,40.25Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="67.442" android:centerY="46.595" android:gradientRadius="38.31">
+                    <item android:offset="0" android:color="#44FFFFFF" />
+                    <item android:offset="1" android:color="#00000000" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+    <path
+        android:pathData="M94.194,40.25L130.567,61.25C134.872,63.735 134.872,67.765 130.567,70.25L94.194,91.25C89.89,93.735 82.91,93.735 78.606,91.25L42.233,70.25C37.928,67.765 37.928,63.735 42.233,61.25L78.606,40.25C82.91,37.765 89.89,37.765 94.194,40.25Z"
+        android:strokeWidth="2.2"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear" android:startX="39.004" android:startY="38.386" android:endX="39.004" android:endY="93.114">
+                <item android:offset="0" android:color="#DAFFFFFF" />
+                <item android:offset="0.5" android:color="#50E0F2FE" />
+                <item android:offset="1" android:color="#7EC4B5FD" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
