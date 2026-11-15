@@ -262,7 +262,9 @@ line, both ways:
   `phase` is `idle`, `fetching` (getting the dataset with the panel's sign-in), `needs_admin` (the
   panel's HA user isn't an administrator: the panel shows a QR code for `adminUrl`,
   `http://<ip>:8099/thread`), `joining` (the dataset is fetched and handed to the radio), `joined` or
-  `failed` (also when the radio reports an error after the hand-off). `reason` says why for `needs_admin` and `failed`, in plain words. `role` is the radio's
+  `failed` (also when the radio reports an error after the hand-off). Until the root helper has taken
+  the dataset and reported a new status, the phase stays `joining` and `role` is left out: the status
+  before that is the previous network's. `reason` says why for `needs_admin` and `failed`, in plain words. `role` is the radio's
   Thread role once it has a dataset (`detached`, `child`, `router`, `leader`, …). `idle` is also what a
   restart shows, so a panel already on a network reads `idle` with a `role`. Never the dataset, network
   key or PSKc: `RadioThreadJoinTest` checks every reply and log.

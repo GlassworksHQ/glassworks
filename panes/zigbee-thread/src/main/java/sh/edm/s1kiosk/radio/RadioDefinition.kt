@@ -215,7 +215,10 @@ class RadioDefinition(
             helper = helperInstalled(),
             allowed = r?.allowedNow(),
             answered = step.done(),
-            threadJoin = threadJoinJson(readout.mode(), threadJoin().state, r?.threadRouterState(), r?.statusText(), readout::panelIp),
+            threadJoin = threadJoinJson(
+                readout.mode(), threadJoin().state, r?.threadRouterState()?.takeUnless { r.threadHandOffPending() },
+                r?.statusText()?.takeUnless { r.threadHandOffPending() }, readout::panelIp,
+            ),
         )
     }
 
@@ -519,6 +522,8 @@ class RadioDefinition(
          *    `reason` says why.
          *  - `joining`: the dataset is fetched and handed to the radio; the radio hasn't attached yet.
          *    The radio's error after the hand-off ([status], RadioController.statusText) is `failed`.
+         *    [router] and [status] are null until the helper answered the hand-off
+         *    (RadioController.threadHandOffPending): until then they describe the network before it.
          *  - `joined`: the radio is on the network; `role` is `child`, `router` or `leader`.
          *  - `failed`: `reason` says why, in plain words.
          */

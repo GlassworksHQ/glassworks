@@ -83,6 +83,7 @@ class RadioThreadJoinTest {
     private var signedIn = true
     private val init = TestInit(helper = true)
     private val radioLog = ArrayList<String>()
+    private var now = 1_000_000L
     private lateinit var radio: RadioController
     private lateinit var definition: RadioDefinition
     private lateinit var channel: SetupChannel
@@ -96,7 +97,7 @@ class RadioThreadJoinTest {
         System.setOut(PrintStream(stdout, true))
         ShadowLog.clear()
         threadRouter("ready to join: waiting for a Thread dataset")
-        radio = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = { radioLog += it }, filesDir = tmp.root)
+        radio = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
             .also { it.start() }
         // As RadioPane wires it: the join hands the dataset to this radio.
         join.deliver = { r -> radio.joinThreadNetwork(r.tlv) }
@@ -125,6 +126,13 @@ class RadioThreadJoinTest {
         init.props[RadioHelper.PROP_STATUS] = "ok thread_router: $detail"
     }
 
+    /** The helper's loop: it takes the hand-off file, then reports [status]. */
+    private fun helperTakes(status: String) {
+        File(tmp.root, RadioHelper.DATASET_FILE).delete()
+        init.props[RadioHelper.PROP_STATUS] = status
+        radio.refresh()
+    }
+
     private fun send(line: String): JSONObject = channel.handle(line).first.also { seen += it }.let(::JSONObject)
 
     private fun state(): JSONObject = send("""{"id":0,"op":"state"}""").getJSONObject("state").getJSONObject("radio")
@@ -146,8 +154,7 @@ class RadioThreadJoinTest {
         assertEquals("the radio got the dataset", TLV, File(tmp.root, RadioHelper.DATASET_FILE).readText())
         assertEquals("joining", joinState().getString("phase"))
 
-        threadRouter("detached: looking for network \"$NETWORK\"")
-        radio.refresh()
+        helperTakes("ok thread_router: detached: looking for network \"$NETWORK\"")
         assertEquals("joining", joinState().getString("phase"))
         assertEquals("detached", joinState().getString("role"))
 
@@ -213,11 +220,44 @@ class RadioThreadJoinTest {
     fun theRadioFailingAfterTheHandOffEndsTheJoin() {
         startJoin()
         runQueued()
-        init.props[RadioHelper.PROP_STATUS] = "error thread_router: otbr-agent didn't start"
-        radio.refresh()
+        helperTakes("error thread_router: otbr-agent didn't start")
         val s = joinState()
         assertEquals("failed", s.getString("phase"))
         assertTrue(s.getString("reason"), s.getString("reason").contains("otbr-agent didn't start"))
+    }
+
+    @Test
+    fun theNetworkBeforeTheHandOffIsNotTheAnswer() {
+        threadRouter("joined as router, network \"older-net\"")
+        radio.refresh()
+        assertEquals(JSONObject("""{"phase":"idle","role":"router"}""").toString(), joinState().toString())
+        startJoin()
+        runQueued()
+        radio.refresh()
+        assertEquals("the old network's role, the helper hasn't taken the dataset", JSONObject("""{"phase":"joining"}""").toString(), joinState().toString())
+        threadRouter("joined as child, network \"older-net\"")
+        radio.refresh()
+        assertEquals("the old network still changes until the helper takes the file", "joining", joinState().getString("phase"))
+        File(tmp.root, RadioHelper.DATASET_FILE).delete()
+        radio.refresh()
+        assertEquals("taken, but the status is still the old one", "joining", joinState().getString("phase"))
+        helperTakes("ok thread_router: starting Thread, network \"$NETWORK\"")
+        helperTakes("ok thread_router: joined as router, network \"$NETWORK\"")
+        assertEquals(JSONObject("""{"phase":"joined","role":"router"}""").toString(), joinState().toString())
+    }
+
+    @Test
+    fun anErrorBeforeTheHandOffIsNotTheAnswer() {
+        init.props[RadioHelper.PROP_STATUS] = "error thread_router: ot-ctl join steps failed (dataset rejected?)"
+        radio.refresh()
+        startJoin()
+        runQueued()
+        assertEquals("joining", joinState().getString("phase"))
+        helperTakes("error thread_router: ot-ctl join steps failed (dataset rejected?)")
+        assertEquals("the same error, a moment later, may still be the old one", "joining", joinState().getString("phase"))
+        now += RadioController.HANDOFF_MS + 1
+        radio.refresh()
+        assertEquals("unchanged for a minute after the helper took it: it's this join's", "failed", joinState().getString("phase"))
     }
 
     @Test

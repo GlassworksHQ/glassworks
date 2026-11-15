@@ -98,6 +98,7 @@ class RadioController(
     private val bundle: RadioBundle? = null,
     /** Downloads Silicon Labs' zigbeed into the given file (tests: a fake). */
     private val zigbeedFetcher: ((dest: File, progress: (String) -> Unit) -> Unit)? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     companion object {
         const val TAG = "S1Kiosk.Radio"
@@ -105,6 +106,8 @@ class RadioController(
         private val RANGE = Regex("""\(clients from ([^)]+)\)""")
         private const val WAIT_STEPS = 20
         private const val WAIT_STEP_MS = 100L
+        /** The helper takes a hand-off within one 3 s loop; past this, a status that never changed is its answer. */
+        const val HANDOFF_MS = 60_000L
     }
 
     private val exec: ScheduledExecutorService? = if (inline) null else Executors.newSingleThreadScheduledExecutor { r ->
@@ -241,6 +244,11 @@ class RadioController(
             ?.let { ThreadRouterState.parse(it.detail) }
         var s = if (helper) helperStatusText(raw, allowed) else status
         if (s.length > 250) s = s.take(249) + "…" // ESPHome text sensors are capped at 255 bytes
+        handOff?.let { h ->
+            val taken = filesDir == null || !File(filesDir, RadioHelper.DATASET_FILE).exists()
+            // Until the helper takes the file, any status is still the old network's: it's the new baseline.
+            handOff = if (!taken) HandOff(s, h.at) else if (s != h.status || clock() - h.at > HANDOFF_MS) null else h
+        }
         val h = helperText().let { if (it.length > 250) it.take(249) + "…" else it }
         val fw = firmware.statusText().let { if (it.length > 250) it.take(249) + "…" else it }
         val sel = firmware.selected()
@@ -265,6 +273,16 @@ class RadioController(
 
     /** The Thread router's state from the helper's status (cached by [refresh]); null outside that mode. */
     fun threadRouterState(): ThreadRouterState? = threadShown
+
+    /**
+     * A dataset was handed over ([setThreadDataset]) and the status may still be the one from before it:
+     * the helper hasn't taken the file, or no status since then differs from the last one before it took
+     * it (for at most [HANDOFF_MS]). The helper takes the file before it writes a new status. Cleared by [refresh]. The status has no timestamp to tell otherwise.
+     */
+    fun threadHandOffPending(): Boolean = handOff != null
+
+    private class HandOff(val status: String, val at: Long)
+    @Volatile private var handOff: HandOff? = null
 
     /** Helper installed and its contract version, as of the last [refresh] (for the UI thread: no getprop). */
     fun helperShown(): HelperFacts = helperFactsShown
@@ -403,6 +421,7 @@ class RadioController(
             tmp.setReadable(false, false); tmp.setReadable(true, true)
             tmp.setWritable(false, false); tmp.setWritable(true, true)
             if (!tmp.renameTo(f)) throw java.io.IOException("rename failed")
+            handOff = HandOff(shown, clock())
             log("Thread dataset handed to the helper (${d.length / 2} bytes)")
             refreshSoon()
             null
