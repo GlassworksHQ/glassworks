@@ -177,7 +177,7 @@ class SettingsMenuTest {
     @Test
     fun aqaraEntryText() {
         assertEquals("Aqara's own settings", AqaraS1Plus.SETTINGS_TITLE)
-        assertEquals("", SettingsMenu.AQARA_DETAIL)
+        assertEquals("", SettingsMenu.DEVICE_SETTINGS_DETAIL)
     }
 
     @Test

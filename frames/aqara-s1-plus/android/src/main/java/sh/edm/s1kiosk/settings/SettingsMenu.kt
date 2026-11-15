@@ -21,8 +21,8 @@ object SettingsMenu {
     fun requested(boolExtra: (String) -> Boolean?): Boolean =
         boolExtra(EXTRA) == true || boolExtra(LEGACY_EXTRA) == true
 
-    /** The device's own settings app, last on the Screen page, quieter than the rest (#63). */
-    const val AQARA_DETAIL = ""
+    /** The detail under the link to the device's own settings app, last on the Screen page, quieter than the rest (#63): none. */
+    const val DEVICE_SETTINGS_DETAIL = ""
     /** The link on a device whose own settings app is the system's. */
     const val ANDROID_TITLE = "Android settings"
 

@@ -44,7 +44,7 @@ object S1Settings {
         val core = CoreSettings(
             prefs, version,
             status = { runtime.screen.statusLine() + " · voice=" + runtime.voiceState },
-            deviceSettings = if (!deviceSettings) null else SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.AQARA_DETAIL) { c ->
+            deviceSettings = if (!deviceSettings) null else SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.DEVICE_SETTINGS_DETAIL) { c ->
                 if (!frame.openSystemSettings(c)) Toast.makeText(c, "No settings app on this panel", Toast.LENGTH_LONG).show()
             },
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) { c -> (c as? Activity)?.let(Licences::show) },

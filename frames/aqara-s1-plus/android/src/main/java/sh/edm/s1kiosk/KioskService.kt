@@ -155,7 +155,7 @@ class KioskService : Service() {
         @Suppress("DEPRECATION")
         val b = if (Platform.hasNotificationChannels) Notification.Builder(this, CHANNEL)
         else Notification.Builder(this)
-        b.setSmallIcon(applicationInfo.icon)
+        b.setSmallIcon(notificationIcon())
             .setContentTitle("S1 Kiosk")
             .setContentText("Tap for kiosk settings · screen, sensors & ESPHome API running")
             .setContentIntent(menu)
@@ -164,10 +164,13 @@ class KioskService : Service() {
         glassworks.frame.systemSettings(this)?.let { settings ->
             val pi = PendingIntent.getActivity(this, REQ_PANEL_SETTINGS, settings, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             @Suppress("DEPRECATION")
-            b.addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, applicationInfo.icon), "Panel settings", pi).build())
+            b.addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, notificationIcon()), "Panel settings", pi).build())
         }
         return b.build()
     }
+
+    /** The app's icon, from its manifest; Android's default app icon for an APK without one, so the service still starts. */
+    private fun notificationIcon(): Int = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
         private const val CHANNEL = "kiosk"

@@ -534,8 +534,9 @@ The app makes one frame at start, and `GlassworksRuntime` holds it. The device s
 The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
 presence source is the VI5300 time-of-flight sensor, with Lumi's `proximity_threshold` range table,
 and its light source is the MK6212 sensor. Its panes are the wall base (with Aqara's cloud daemon,
-which holds the wall base UART) and the time zone. It also holds the root update service. The rest of
-the planned frame (screen off, installer) comes in the next migration steps.
+which holds the wall base UART) and the time zone. It also holds the root update service (`rootUpdates`) and
+the Wi-Fi scans while the screen is off (`serviceWork`). The rest of the planned frame (installer) comes in
+the next migration steps.
 
 ## Engine
 

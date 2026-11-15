@@ -51,7 +51,7 @@ object MenuFixture {
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
-            deviceSettings = if (deviceSettings) SettingsItem.Link(AqaraS1Plus.SETTINGS_TITLE, SettingsMenu.AQARA_DETAIL) {} else null,
+            deviceSettings = if (deviceSettings) SettingsItem.Link(AqaraS1Plus.SETTINGS_TITLE, SettingsMenu.DEVICE_SETTINGS_DETAIL) {} else null,
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             live = live,
             account = { account },

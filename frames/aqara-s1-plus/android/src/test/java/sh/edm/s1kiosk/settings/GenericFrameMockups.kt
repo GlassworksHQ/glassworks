@@ -61,7 +61,7 @@ class GenericFrameMockups {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val core = CoreSettings(
             KioskPrefs(app), "0.4.3", status = { "screen on" },
-            deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.AQARA_DETAIL) {},
+            deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.DEVICE_SETTINGS_DETAIL) {},
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
         )
         val sections = paneSections(KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app))
