@@ -7,7 +7,10 @@ package dev.glassworks.engine.gecko
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The process names are the S1's under GeckoView 159 (`ps -A`, 2026-11-12). */
+/**
+ * The process names are the S1's under GeckoView 159 (`ps -A`, 2026-11-12), and the legacy engine's under
+ * GeckoView 144 on Android 6 (an API 23 emulator, `ps`, 2026-11-15).
+ */
 class GeckoContentProcessTest {
     private val engine = GeckoEngine(
         settings = { error("not opened") }, extension = GeckoEngine.Extension("", "", ""), logTag = "test", generatedBy = "test",
@@ -21,6 +24,11 @@ class GeckoContentProcessTest {
             "sh.edm.s1kiosk:crashhelper_disable_art_image_" to false,
             "sh.edm.s1kiosk:sandboxed_tab_disable_art_image_38" to true,
             "sh.edm.s1kiosk:sandboxed_tab_disable_art_image_0" to true,
+            "sh.edm.s1kiosk.legacy:tab7" to true,
+            "sh.edm.s1kiosk.legacy:tab0" to true,
+            "sh.edm.s1kiosk.legacy:gpu" to false,
+            "sh.edm.s1kiosk.legacy:crashhelper" to false,
+            "sh.edm.s1kiosk.legacy:tablet" to false,
         )
         assertEquals(names, names.keys.associateWith(engine::isContentProcess))
     }
