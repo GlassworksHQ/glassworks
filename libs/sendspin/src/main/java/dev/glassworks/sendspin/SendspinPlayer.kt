@@ -113,8 +113,9 @@ internal class AudioTrackSink(
 /**
  * A native [Sendspin](https://github.com/Sendspin/spec) player for Music Assistant:
  * Music Assistant sees the device as one of its own players and plays to it in sync with the others.
- * [start] runs it on threads of its own until [stop]. Every method is safe from any thread. [setVolume] and
- * [setMuted] block on the server's socket: don't call them from the main thread. [stop] blocks for up to
+ * [start] runs it on threads of its own until [stop]. Every method is safe from any thread. [setVolume],
+ * [setMuted], [restartSession] and [onFlacSettingChanged] block on the server's socket: don't call them
+ * from the main thread. [stop] blocks for up to
  * about 2.5 s, but does its network I/O on a thread of its own, so the main thread may call it.
  *
  * - The player connects to the server: `_sendspin-server._tcp` via mDNS, else Music Assistant's
@@ -407,10 +408,17 @@ public class SendspinPlayer internal constructor(
         return interrupted
     }
 
-    /** Reconnects, so the server sees a changed [Settings.server] or [Settings.unpairedAccess]. */
+    /**
+     * Reconnects, so the server sees a changed [Settings.server] or [Settings.unpairedAccess]. Safe from any
+     * thread, but blocking (it says goodbye and waits up to 1 s for the server to hang up): don't call it
+     * from the main thread.
+     */
     public fun restartSession() { session?.close("restart") }
 
-    /** Call when [Settings.flac] changed: it reconnects, and turning FLAC on also retries it after a failure. */
+    /**
+     * Call when [Settings.flac] changed: it reconnects, and turning FLAC on also retries it after a failure.
+     * Blocking like [restartSession]: don't call it from the main thread.
+     */
     public fun onFlacSettingChanged() {
         if (settings.flac) { flacFailure = null; current?.pipeline?.resetFlacFailure() }
         onStatusChanged()

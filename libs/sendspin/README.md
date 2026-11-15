@@ -72,8 +72,8 @@ println(player.statusText()) // "ready, paired with Music Assistant", "playing f
 ```
 
 Call `player.stop()` when you're done. It blocks for up to about 2.5 s, but does its network I/O on a
-thread of its own, so the main thread may call it. `setVolume` and `setMuted` block on the server's
-socket: don't call them from the main thread. `setDucked(true)` silences the output
+thread of its own, so the main thread may call it. `setVolume`, `setMuted`, `restartSession` and
+`onFlacSettingChanged` block on the server's socket: don't call them from the main thread. `setDucked(true)` silences the output
 while your app speaks, and keeps the player in sync with its group.
 
 `MemoryStore` forgets the pairing at every restart. Keep it with your own `SsStore`: it stores an
