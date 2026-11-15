@@ -12,6 +12,6 @@
   },
   "ratelimits": [
     { "name": "FULL_DOWNLOADS", "namespace_id": "1001", "simple": { "limit": 3, "period": 60 } },
-    { "name": "RESUMES", "namespace_id": "1002", "simple": { "limit": 20, "period": 60 } }
+    { "name": "RESUMES", "namespace_id": "1002", "simple": { "limit": 8, "period": 60 } }
   ]
 }

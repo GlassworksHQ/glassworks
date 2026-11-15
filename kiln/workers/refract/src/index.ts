@@ -33,7 +33,8 @@ const BASE = 'https://refract.glassworks.dev';
 const ASSETS: Readonly<Record<string, Asset>> = allowlist;
 /** Where GitHub's release downloads redirect to. A redirect anywhere else is refused. */
 const UPSTREAM_HOSTS = new Set(['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com']);
-const MAX_HOPS = 3;
+/** Requests to GitHub per download: the releases URL and up to three redirects. */
+const MAX_HOPS = 4;
 
 const SINGLE_RANGE = /^bytes=(?:(\d+)-\d*|-\d+)$/;
 const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(\d+)$/;
@@ -72,40 +73,46 @@ export default {
 };
 
 async function proxy(req: Request, env: Env, asset: Asset, headers: Headers): Promise<Response> {
-  const range = req.headers.get('Range');
+  // Range and If-Range mean something only on GET (RFC 9110 §14.2); HEAD describes the whole file.
+  const range = req.method === 'GET' ? req.headers.get('Range') : null;
   const m = range === null ? null : SINGLE_RANGE.exec(range);
   if (range !== null && !m) {
     headers.set('Content-Range', `bytes */${asset.size}`);
     return text(416, 'one range only, as bytes=a-b, bytes=a- or bytes=-n', headers);
   }
+  const ifRange = range === null ? null : req.headers.get('If-Range');
+  // Only an ETag can be checked against GitHub's copy. With a date, the whole file is the safe answer.
+  const partial = m !== null && (ifRange === null || ETAG.test(ifRange));
+  const resume = partial && Number(m?.[1] ?? 0) > 0;
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
 
-  if (req.method === 'GET') {
-    const resume = Number(m?.[1] ?? 0) > 0;
-    const { success } = await (resume ? env.RESUMES : env.FULL_DOWNLOADS).limit({ key: req.headers.get('CF-Connecting-IP') ?? 'unknown' });
-    if (!success) {
-      headers.set('Retry-After', '60');
-      return text(429, resume ? 'too many resumed downloads from your address; try again in a minute' : 'too many downloads from your address; try again in a minute', headers);
-    }
+  if (req.method === 'GET' && !(await (resume ? env.RESUMES : env.FULL_DOWNLOADS).limit({ key: ip })).success) {
+    return tooMany(resume, headers);
   }
 
   const ask = new Headers({ 'User-Agent': 'glassworks-refract (+https://github.com/GlassworksHQ/glassworks)' });
-  if (range !== null) ask.set('Range', range);
-  const ifRange = req.headers.get('If-Range');
-  if (range !== null && ifRange !== null) ask.set('If-Range', ifRange);
+  if (partial) ask.set('Range', range!);
+  if (partial && ifRange !== null) ask.set('If-Range', ifRange);
+  const timeoutMs = Number(env.UPSTREAM_TIMEOUT_MS) || 30_000;
 
   let up: Response;
   try {
-    up = await github(source(asset), req.method, ask, Number(env.UPSTREAM_TIMEOUT_MS));
+    up = await github(source(asset), req.method, ask, timeoutMs);
     // If-Range names an older copy than GitHub has now, and GitHub sent the range anyway: the
     // client's partial file is stale, so it gets the whole file, as RFC 9110 asks.
-    if (up.status === 206 && ifRange !== null && ETAG.test(ifRange) && up.headers.get('ETag') !== ifRange) {
+    if (up.status === 206 && ifRange !== null && up.headers.get('ETag') !== ifRange) {
       await up.body?.cancel();
       ask.delete('Range');
       ask.delete('If-Range');
-      up = await github(source(asset), req.method, ask, Number(env.UPSTREAM_TIMEOUT_MS));
+      up = await github(source(asset), req.method, ask, timeoutMs);
     }
   } catch (e) {
     return text(502, e instanceof Upstream ? e.message : 'GitHub could not be reached', headers);
+  }
+  // A resume that became the whole file costs a full download too.
+  if (resume && up.status === 200 && !(await env.FULL_DOWNLOADS.limit({ key: ip })).success) {
+    await up.body?.cancel();
+    return tooMany(false, headers);
   }
 
   const length = up.headers.get('Content-Length');
@@ -121,6 +128,11 @@ async function proxy(req: Request, env: Env, asset: Asset, headers: Headers): Pr
   if (total !== asset.size) {
     await up.body?.cancel();
     return text(502, `the release changed: GitHub sends ${total ?? 'an unknown number of'} bytes, the allowlist pins ${asset.size}`, headers);
+  }
+  if (up.status === 416) {
+    await up.body?.cancel();
+    headers.set('Content-Range', `bytes */${asset.size}`);
+    return text(416, 'the range starts past the end of the file', headers);
   }
 
   headers.set('Content-Type', 'application/octet-stream');
@@ -164,6 +176,11 @@ function parse(location: string | null, base: string): URL | null {
   } catch {
     return null;
   }
+}
+
+function tooMany(resume: boolean, headers: Headers): Response {
+  headers.set('Retry-After', '60');
+  return text(429, resume ? 'too many resumed downloads from your address; try again in a minute' : 'too many downloads from your address; try again in a minute', headers);
 }
 
 function index(headers: Headers): Response {

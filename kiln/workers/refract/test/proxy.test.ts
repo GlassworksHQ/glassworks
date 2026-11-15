@@ -19,6 +19,10 @@ const SUMS_TEXT =
   '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908  userdata.sparse\n';
 const ETAG = '"0xFAKE"';
 const TIMEOUT_MS = 300;
+const limit = (name: string): number => config.ratelimits.find((r: { name: string }) => r.name === name).simple.limit;
+const FULL = limit('FULL_DOWNLOADS');
+const RESUMES = limit('RESUMES');
+const DATE = 'Thu, 05 Nov 2026 00:58:46 GMT';
 
 /** A release file the fake host serves: its length and the byte at each offset. */
 interface FakeFile { size: number; byte: (i: number) => number }
@@ -70,12 +74,12 @@ async function github(req: MfRequest): Promise<MfResponse> {
 
 let script: string;
 let mf: Miniflare;
-const worker = (outboundService: MiniflareOptions['outboundService']) =>
+const worker = (outboundService: MiniflareOptions['outboundService'], vars: Record<string, string> = { ...config.vars, UPSTREAM_TIMEOUT_MS: String(TIMEOUT_MS) }) =>
   new Miniflare({
     modules: true,
     script,
     compatibilityDate: config.compatibility_date,
-    bindings: { ...config.vars, UPSTREAM_TIMEOUT_MS: String(TIMEOUT_MS) },
+    bindings: vars,
     ratelimits: Object.fromEntries(
       (config.ratelimits as { name: string; namespace_id: string; simple: { limit: number; period: 10 | 60 } }[]).map((r) => [
         r.name,
@@ -169,12 +173,12 @@ describe("GitHub's redirect", () => {
     expect(await res.text()).toBe(SUMS_TEXT);
   });
 
-  it('is refused after three hops', async () => {
+  it('is refused after three redirects', async () => {
     releases = (req) => new MfResponse(null, { status: 302, headers: { Location: `${req.url}x` } });
     const res = await get(SUMS);
     expect(res.status).toBe(502);
     expect(await res.text()).toBe('GitHub redirected too many times\n');
-    expect(seen).toHaveLength(3);
+    expect(seen).toHaveLength(4);
   });
 });
 
@@ -188,11 +192,13 @@ describe('ranges, If-Range and HEAD', () => {
     expect(seen.map((r) => r.headers.get('Range'))).toEqual(['bytes=850905800-', 'bytes=850905800-']);
   });
 
-  it('passes a range past the end through as 416', async () => {
+  it('answers a range past the end with 416 and a plain reason, not a file', async () => {
     const res = await get(IMG, { headers: { Range: 'bytes=900000000-' } });
     expect(res.status).toBe(416);
     expect(res.headers.get('Content-Range')).toBe('bytes */850905808');
-    await res.arrayBuffer();
+    expect(res.headers.get('Content-Type')).toBe('text/plain; charset=utf-8');
+    expect(res.headers.get('Content-Disposition')).toBeNull();
+    expect(await res.text()).toBe('the range starts past the end of the file\n');
   });
 
   it.each(['bytes=0-1,5-6', 'bytes=abc', 'bytes 0-1', 'items=0-1', 'bytes=-'])(
@@ -228,6 +234,21 @@ describe('ranges, If-Range and HEAD', () => {
     expect(seen.map((r) => r.headers.get('Range'))).toEqual(['bytes=100-', 'bytes=100-', null, null]);
   });
 
+  it('sends the whole file, without asking GitHub for a range, when If-Range is a date', async () => {
+    const res = await get(SUMS, { headers: { Range: 'bytes=100-', 'If-Range': DATE } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(SUMS_TEXT);
+    expect(seen.every((r) => !r.headers.has('Range') && !r.headers.has('If-Range'))).toBe(true);
+  });
+
+  it.each(['bytes=0-0', 'bytes=abc'])('answers HEAD for the whole file, ignoring Range %j and If-Range', async (range) => {
+    const res = await get(IMG, { method: 'HEAD', headers: { Range: range, 'If-Range': ETAG } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Length')).toBe('850905808');
+    expect(res.headers.get('Content-Range')).toBeNull();
+    expect(seen.every((r) => !r.headers.has('Range') && !r.headers.has('If-Range'))).toBe(true);
+  });
+
   it('answers HEAD with the size and no body, from a HEAD upstream', async () => {
     const res = await get(IMG, { method: 'HEAD' });
     expect(res.status).toBe(200);
@@ -240,9 +261,9 @@ describe('ranges, If-Range and HEAD', () => {
 });
 
 describe('rate limits, per address', () => {
-  it('allows three full downloads a minute, then answers 429 with a reason Kiln can read', async () => {
+  it('allows FULL_DOWNLOADS full downloads a minute, then answers 429 with a reason Kiln can read', async () => {
     const ip = '198.51.100.7';
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < FULL; i++) {
       const res = await get(SUMS, { ip });
       expect(res.status).toBe(200);
       await res.arrayBuffer();
@@ -252,7 +273,7 @@ describe('rate limits, per address', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(KILN);
     expect(res.headers.get('Retry-After')).toBe('60');
     expect(await res.text()).toBe('too many downloads from your address; try again in a minute\n');
-    expect(seen).toHaveLength(6);
+    expect(seen).toHaveLength(2 * FULL);
   });
 
   it('counts bytes=0- and a suffix range as full downloads', async () => {
@@ -263,15 +284,15 @@ describe('rate limits, per address', () => {
 
   it('keeps resumes working after the full downloads are used up', async () => {
     const ip = '198.51.100.9';
-    for (let i = 0; i < 4; i++) await (await get(IMG, { ip, headers: { Range: 'bytes=0-0' } })).arrayBuffer();
+    for (let i = 0; i <= FULL; i++) await (await get(IMG, { ip, headers: { Range: 'bytes=0-0' } })).arrayBuffer();
     const res = await get(IMG, { ip, headers: { Range: 'bytes=850905800-' } });
     expect(res.status).toBe(206);
     await res.arrayBuffer();
   });
 
-  it('allows twenty resumes a minute', async () => {
+  it('allows RESUMES resumes a minute', async () => {
     const ip = '198.51.100.10';
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < RESUMES; i++) {
       const res = await get(IMG, { ip, headers: { Range: `bytes=${850905800 - i}-` } });
       expect(res.status).toBe(206);
       await res.arrayBuffer();
@@ -279,6 +300,21 @@ describe('rate limits, per address', () => {
     const res = await get(IMG, { ip, headers: { Range: 'bytes=850905800-' } });
     expect(res.status).toBe(429);
     expect(await res.text()).toBe('too many resumed downloads from your address; try again in a minute\n');
+  });
+
+  it('counts a resume that becomes the whole file as a full download too', async () => {
+    const ip = '198.51.100.14';
+    for (let i = 0; i < FULL; i++) await (await get(SUMS, { ip })).arrayBuffer();
+    const res = await get(SUMS, { ip, headers: { Range: 'bytes=100-', 'If-Range': '"0xOLD"' } });
+    expect(res.status).toBe(429);
+    expect(await res.text()).toBe('too many downloads from your address; try again in a minute\n');
+  });
+
+  it('counts a range with a date If-Range as a full download', async () => {
+    const ip = '198.51.100.15';
+    for (let i = 0; i < FULL; i++) await (await get(SUMS, { ip, headers: { Range: 'bytes=100-', 'If-Range': DATE } })).arrayBuffer();
+    expect((await get(SUMS, { ip, headers: { Range: 'bytes=100-' } })).status).toBe(206);
+    expect((await get(SUMS, { ip })).status).toBe(429);
   });
 
   it("doesn't count HEAD, the index or a preflight", async () => {
@@ -290,7 +326,7 @@ describe('rate limits, per address', () => {
   });
 
   it("keeps one address's limit off another's", async () => {
-    for (let i = 0; i < 4; i++) await (await get(SUMS, { ip: '198.51.100.12' })).arrayBuffer();
+    for (let i = 0; i <= FULL; i++) await (await get(SUMS, { ip: '198.51.100.12' })).arrayBuffer();
     expect((await get(SUMS, { ip: '198.51.100.13' })).status).toBe(200);
   });
 });
@@ -367,6 +403,18 @@ describe('when the release changed or GitHub fails', () => {
       expect(await res.text()).toBe('GitHub could not be reached\n');
     } finally {
       await down.dispose();
+    }
+  });
+
+  it('waits 30 s for GitHub when UPSTREAM_TIMEOUT_MS is missing, instead of failing every request', async () => {
+    const { UPSTREAM_TIMEOUT_MS: _, ...vars } = config.vars;
+    const bare = worker(github, vars);
+    try {
+      const res = await get(SUMS, {}, bare);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(SUMS_TEXT);
+    } finally {
+      await bare.dispose();
     }
   });
 

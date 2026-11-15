@@ -23,9 +23,10 @@ with CORS headers for Kiln. It serves only the files in [`allowlist.json`](allow
 | Request | Answer |
 |---|---|
 | `GET /` | JSON: every asset with its Refract URL, source URL, size, SHA-256 and credit |
-| `GET` or `HEAD /<id>` | The file, streamed from its GitHub release |
+| `GET` or `HEAD /<id>` | The file, streamed from its GitHub release. HEAD always describes the whole file and ignores `Range` and `If-Range` (RFC 9110 §14.2) |
 | `GET /<id>` with one `Range` | 206 with that range, so Kiln can resume. `If-Range` is honoured |
 | `GET /<id>` with a malformed or multi-part `Range` | 416, `Content-Range: bytes */<size>`, and GitHub isn't asked |
+| `GET /<id>` with a range past the end | 416, `Content-Range: bytes */<size>`, as plain text |
 | Too many downloads from one address | 429 with `Retry-After: 60` and a one-line reason |
 | `OPTIONS /<id>` | The CORS preflight: `GET, HEAD`, the `Range` and `If-Range` headers |
 | Any other path | 404, and GitHub is never asked |
@@ -52,16 +53,17 @@ Each file answer carries:
 
 - **The allowlist.** An id must match exactly. Refract never builds a GitHub URL from the request.
 - **The redirect.** Refract follows GitHub's redirects itself (`redirect: "manual"`), up to three
-  hops, and only to `https://` on `github.com`, `release-assets.githubusercontent.com` or
+  redirects (four requests), and only to `https://` on `github.com`, `release-assets.githubusercontent.com` or
   `objects.githubusercontent.com` on the default port. A redirect anywhere else is a 502, and the
   other host is never fetched. So it can't be turned into an open proxy, even by a changed release.
 - **The size.** GitHub's `Content-Length` (for 200) or the total in `Content-Range` (for 206 and
   416) must equal the pinned `size`. If not, the release changed, and Refract answers 502 without
   sending a byte.
-- **The time.** GitHub must answer with headers within 30 s (`UPSTREAM_TIMEOUT_MS`), or it's a
-  502. The body may take as long as it needs.
-- **If-Range.** It is passed to GitHub. If GitHub still sends a range of a newer copy than the
-  `If-Range` ETag names, Refract fetches the whole file instead, as RFC 9110 asks.
+- **The time.** GitHub must answer with headers within 30 s (`UPSTREAM_TIMEOUT_MS`, and 30 s if
+  that's missing or not a number), or it's a 502. The body may take as long as it needs.
+- **If-Range.** An ETag is passed to GitHub. If GitHub still sends a range of a newer copy than the
+  ETag names, Refract fetches the whole file instead, as RFC 9110 asks. A date in `If-Range` can't
+  be checked against GitHub's copy, so Refract sends the whole file.
 - **Not the hash.** Refract streams; it never reads the whole file. Kiln checks the SHA-256 itself.
 
 When GitHub answers anything but 200, 206 or 416, or can't be reached, Refract answers 502 with a
@@ -75,12 +77,16 @@ keyed on the caller's address (`CF-Connecting-IP`), in `wrangler.json`:
 
 | Binding | Counts | Limit |
 |---|---|---|
-| `FULL_DOWNLOADS` | GETs from the first byte: no `Range`, `bytes=0-…`, or a suffix range (`bytes=-n`) | 3 a minute |
-| `RESUMES` | GETs that start at a later byte (`bytes=n-`, n > 0): Kiln resuming a dropped download | 20 a minute |
+| `FULL_DOWNLOADS` | GETs that send the file from the first byte: no `Range`, `bytes=0-…`, a suffix range (`bytes=-n`), a date in `If-Range`, or a resume that became the whole file because its `If-Range` ETag was stale | 3 a minute |
+| `RESUMES` | GETs that start at a later byte (`bytes=n-`, n > 0): Kiln resuming a dropped download | 8 a minute |
 
 HEAD, the index and preflights aren't counted. Kiln makes one full GET, then resumes with
-`Range: bytes=<got>-` if the connection drops, so a normal install uses one full download. Cloudflare
-counts per location and may let a few extra through; the limit is for abuse, not accounting.
+`Range: bytes=<got>-` if the connection drops, so a normal install uses one full download.
+
+The limits are for abuse, not accounting. A resume from byte 1 carries nearly the whole file, so
+`RESUMES` is kept low. Cloudflare counts per location and may let a few extra through. Two panels
+behind one address (a carrier-grade NAT, a shared office) share the limits, so **Kiln must honour
+`Retry-After`**: on a 429, wait that many seconds and try again rather than fail the install.
 
 ## It stores nothing
 
@@ -191,6 +197,11 @@ The reasoning and the earlier decision are in
 
 Refract's own code is MIT, like the rest of Kiln. It ships no third-party code: wrangler, Miniflare
 and esbuild are only used to build, test and deploy it.
+
+`npm audit` reports 4 high findings (2026-11-15), all in dev-only tooling: wrangler 4.116.0 →
+Miniflare 4.20260730.0 → sharp (libheif, librsvg) and undici. None of it is in the deployed
+Worker, which is our own 8 KiB. They go away with a wrangler on the Miniflare 5 line once one is
+stable.
 
 ## Tests
 
