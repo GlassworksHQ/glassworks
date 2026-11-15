@@ -38,6 +38,8 @@ class EngineCheckActivity : Activity() {
     private lateinit var status: TextView
     private var helper = "not connected"
     private var lastUrl = ""
+    /** The URL this check was opened with: loaded again after the content process goes. */
+    private var target: String? = null
     private var loads = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,8 +59,13 @@ class EngineCheckActivity : Activity() {
         page = p
         root.addView(p.view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         root.addView(status, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.END))
-        if (url == null) show("no URL: am start … --es url http://<home-assistant>/") else p.load(url)
-        show("opening")
+        target = url
+        if (url == null) {
+            show("no URL: am start … --es url http://<home-assistant>/")
+        } else {
+            p.load(url)
+            show("opening")
+        }
     }
 
     private fun show(state: String) {
@@ -81,6 +88,7 @@ class EngineCheckActivity : Activity() {
         override fun onContentGone(killed: Boolean) {
             show(if (killed) "content process killed" else "content process crashed")
             page?.restart()
+            target?.let { page?.load(it) }
         }
         override fun onAndroidPermissions(permissions: List<String>, answer: (Boolean) -> Unit) = answer(false)
         override fun onConnect(port: PagePort) {
