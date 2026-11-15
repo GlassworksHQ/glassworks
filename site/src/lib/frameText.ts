@@ -1,4 +1,4 @@
-import { RATING_KEYS, type RatingKey, type Support } from "@glassworks/frame-card";
+import { RATING_KEYS, STAGE_TEXT, type FrameDesign, type RatingKey, type Support } from "@glassworks/frame-card";
 
 /*
  * The site's words for a frame's data. The data itself is each frame's `frame.json` in this repo
@@ -120,3 +120,38 @@ export const supportText: Record<Support, string> = {
   unknown: "Not checked",
   no: "No",
 };
+
+/* ---------- titles and descriptions for search and link previews (src/lib/seo.ts) ---------- */
+
+/** "Wake word and voice overlay." → "wake word and voice overlay"; leaves "CPU, …" and "BLE …" alone. */
+const inline = (t: string) => {
+  const s = t.replace(/\.\s*$/, "");
+  return /^[A-Z][a-z]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+};
+
+/** Search titles stay under about 60 characters with " · Glassworks" (13) added. */
+const TITLE_MAX = 47;
+
+export function frameSeo(f: Pick<FrameDesign, "name" | "status" | "summary">) {
+  return {
+    title: `${f.name} as a Home Assistant panel`,
+    description: `${f.name} as an open Home Assistant wall panel with Glassworks (${STAGE_TEXT[f.status].toLowerCase()}). ${f.summary}`,
+  };
+}
+
+/**
+ * A pane: "Assist pane: wake word and voice overlay". When what it does is too long for a search
+ * title, "Bluetooth proxy pane for Home Assistant panels". `frameName` marks a frame pane.
+ */
+export function paneSeo(p: { name: string; does: string; requires: string }, frameName?: string) {
+  const short = `${p.name} pane: ${inline(p.does)}`;
+  // "A microphone and a speaker" → "Needs a microphone and a speaker."; "Bluetooth LE" stays as it is
+  const needs =
+    p.requires === "Nothing special" ? "Runs on any panel." : `Needs ${p.requires.replace(/^(A|An|The) /, (a) => a.toLowerCase())}.`;
+  return {
+    title: short.length <= TITLE_MAX ? short : `${p.name} pane for Home Assistant panels`,
+    description: frameName
+      ? `${p.does} Runs only on the ${frameName}.`
+      : `${p.does} ${needs} A Glassworks pane for Home Assistant panels.`,
+  };
+}

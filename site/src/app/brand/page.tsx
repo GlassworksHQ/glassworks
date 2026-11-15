@@ -1,5 +1,5 @@
 import { SITE, readmeImage } from "@/lib/site";
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import type { CSSProperties, ReactNode } from "react";
 import { GlassTile } from "@/components/GlassTile";
 import { Mark } from "@/components/Mark";
@@ -21,10 +21,12 @@ import libraries from "@/lib/libraries.json";
 import { frameBanners } from "@/lib/frameBanners";
 import s from "./brand.module.css";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Brand",
-  description: "The Glassworks mark, colour, type and motion, with SVGs.",
-};
+  description:
+    "The Glassworks mark, colour, type and motion, with SVGs, and the badges and banners for READMEs.",
+  path: "/brand",
+});
 
 const swatches: {
   group: string;

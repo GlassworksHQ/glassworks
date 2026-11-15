@@ -4,11 +4,21 @@ import Link from "next/link";
 import { FrameCard } from "@/components/FrameCard";
 import { ClarityCardLine } from "@/components/clarity/Clarity";
 import { frames } from "@/lib/frames";
+import { JsonLd } from "@/components/JsonLd";
+import { SITE_DESCRIPTION, organizationLd, pageMetadata, softwareLd, websiteLd } from "@/lib/seo";
 import styles from "./page.module.css";
+
+export const metadata = pageMetadata({
+  title: "Glassworks: the open core for Home Assistant wall panels",
+  absoluteTitle: true,
+  description: SITE_DESCRIPTION,
+  path: "/",
+});
 
 export default function Home() {
   return (
     <div className={`wrap ${styles.page}`}>
+      <JsonLd nodes={[organizationLd(), websiteLd(), softwareLd(SITE_DESCRIPTION)]} />
       <StackStory />
 
       <section className={styles.section} aria-labelledby="panes">

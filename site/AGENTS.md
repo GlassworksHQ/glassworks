@@ -23,6 +23,7 @@ npm run dev -w site          # http://localhost:3000
 npm run lint -w site
 npm run typecheck -w site
 npm run build -w site        # every route is static; this is what Vercel runs
+npm run check:seo -w site    # after a build: every page has a title, description, canonical and preview
 npm run brand -w site        # regenerate public/brand/ after a frame.json or libraries.json change
 ```
 
@@ -47,7 +48,12 @@ CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frame
    `vercel.json` keeps Vercel's Git builds off.
 5. **Plain CSS with the tokens in `src/app/globals.css`**, CSS modules per page and component, no UI
    kit. A new web-only layout needs a mockup the maintainer approves first.
-6. **ESLint runs on TypeScript 6's API.** typescript-eslint can't use the root's TypeScript 7, so
+6. **Every page in the sitemap uses `pageMetadata`** from `src/lib/seo.ts` for its title, description, canonical
+   and link preview, and is listed by a source in `src/lib/routes.ts` (the sitemap). Docs and blog
+   pages add their source there and pass `type: "article"`. `check:seo` fails the build otherwise.
+   Titles and descriptions are short and plain: what the page is, no filler. The 404
+   (`app/not-found.tsx`) has no address of its own, so it sets a plain title and no canonical.
+7. **ESLint runs on TypeScript 6's API.** typescript-eslint can't use the root's TypeScript 7, so
    `site/package.json` has `typescript@6`, nested in `site/node_modules`, and `eslint.config.mjs`
    points typescript-eslint at it. Don't use the `@typescript/typescript6` alias: its dependency
    hoists to the root and takes every workspace's `tsc`. A bare `tsc` inside `site/` is 6; the

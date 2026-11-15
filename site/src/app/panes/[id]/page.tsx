@@ -6,7 +6,9 @@ import { SupportTag, paneIcon } from "@/components/DeviceBits";
 import { PaneLift } from "@/components/PaneLift";
 import { TiltCard } from "@/components/TiltCard";
 import { frameById, frames } from "@/lib/frames";
-import { ships } from "@/lib/frameText";
+import { paneSeo, ships } from "@/lib/frameText";
+import { JsonLd } from "@/components/JsonLd";
+import { breadcrumbLd, pageMetadata } from "@/lib/seo";
 import { panes } from "@/lib/site";
 import { support } from "@/lib/paneSupport";
 import s from "./pane.module.css";
@@ -21,7 +23,12 @@ export async function generateMetadata(props: PageProps<"/panes/[id]">): Promise
   const { id } = await props.params;
   const p = paneById(id);
   if (!p) return {};
-  return { title: p.name, description: `${p.does} Needs: ${p.requires}.` };
+  const frame = p.frame ? frameById(p.frame) : undefined;
+  return pageMetadata({
+    ...paneSeo(p, frame?.name),
+    path: `/panes/${p.id}`,
+    image: { path: `/panes/${p.id}/card.png`, alt: `${p.name}, a Glassworks pane` },
+  });
 }
 
 type Params = PageProps<"/panes/[id]">["params"];
@@ -30,7 +37,7 @@ type Params = PageProps<"/panes/[id]">["params"];
    fallback keeps the page's outline so nothing jumps. */
 export default function PanePage(props: PageProps<"/panes/[id]">) {
   return (
-    <Suspense fallback={<div className={`wrap ${s.page}`} aria-busy="true" />}>
+    <Suspense fallback={<div className={`wrap ${s.page} ${s.fallback}`} aria-busy="true" />}>
       <Pane params={props.params} />
     </Suspense>
   );
@@ -49,6 +56,14 @@ async function Pane({ params }: { params: Params }) {
 
   return (
     <div className={`wrap ${s.page}`}>
+      <JsonLd
+        nodes={[
+          breadcrumbLd([
+            { name: "Panes", path: "/panes" },
+            { name: p.name, path: `/panes/${p.id}` },
+          ]),
+        ]}
+      />
       <nav className={s.crumbs} aria-label="Breadcrumb">
         <Link href="/panes">Panes</Link>
         <span aria-hidden="true">/</span>
