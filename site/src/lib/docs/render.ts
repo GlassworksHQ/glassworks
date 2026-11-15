@@ -187,10 +187,6 @@ function transform(r: Resolver, out: { toc: Toc[]; ids: Set<string> }) {
         if (l.kind === "external") addClass(node, "md-ext");
         if (l.kind === "source") addClass(node, "md-src");
       }
-      if (node.tagName === "table" && parent && index !== undefined) {
-        parent.children[index] = el("div", { className: ["md-tbl"] }, [node]);
-        return SKIP;
-      }
       if (/^h[2-6]$/.test(node.tagName) && node.properties.id) {
         const id = String(node.properties.id);
         const depth = Number(node.tagName[1]);
@@ -201,6 +197,12 @@ function transform(r: Resolver, out: { toc: Toc[]; ids: Set<string> }) {
       if (node.tagName === "p" && node.children.length && node.children.every((c) => blank(c) || (isEl(c) && (c.tagName === "picture" || c.tagName === "img" || (c.tagName === "a" && hasImg(c)))))) {
         addClass(node, "md-badges");
       }
+    });
+    // tables scroll inside a frame; wrapped after the links in them are rewritten
+    visit(tree, "element", (node: Element, index, parent) => {
+      if (node.tagName !== "table" || !parent || index === undefined) return;
+      parent.children[index] = el("div", { className: ["md-tbl"] }, [node]);
+      return SKIP;
     });
   };
 }
