@@ -23,6 +23,7 @@ const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLI
 export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbKey) => Promise<PanelShell>): () => Promise<PanelShell> {
   let key: AdbKey | undefined;
   const ready = loadKey().then((k) => { key = k; });
+  ready.catch(() => {}); // a click reports it, below
   return () => (key ? connect(key) : ready.then(() => { throw new Error('Kiln was still making its key for this browser. Click Connect again.'); }));
 }
 

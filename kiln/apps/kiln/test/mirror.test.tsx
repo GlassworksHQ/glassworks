@@ -119,6 +119,9 @@ describe('the test install', () => {
     const connect = vi.fn(() => new Promise<never>(() => {}));
     const go = keyedConnect(async () => ({}) as never, connect);
     await expect(go()).rejects.toThrow(/still making its key/); // clicked before the key was ready: says so
+    const broken = keyedConnect(async () => { throw new Error('indexedDB is not defined'); }, connect);
+    await new Promise((r) => setTimeout(r, 0)); // no unhandled rejection while nobody has clicked
+    await expect(broken()).rejects.toThrow(/indexedDB is not defined/);
     void go();
     expect(connect).toHaveBeenCalledTimes(1); // no await in front of the device request
   });
