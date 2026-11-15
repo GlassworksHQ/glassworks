@@ -49,7 +49,8 @@ test("origins match Origin.kt (OriginTest's cases)", () => {
     "http://example.com\\@192.0.2.10:8123/", "http://192.0.2.10:8123\\@example.com/", "http://exa\tmple.com@192.0.2.10:8123/",
     "http://exa\nmple.com@192.0.2.10:8123/", "http://exa mple.com@192.0.2.10:8123/", "http://exa\u0001mple.com@192.0.2.10:8123/",
     "http://192.0.2.10:+80/", "http://192.0.2.10:-1/", "http://192.0.2.10: 80/", "http://[2001:db8::1]8123/",
-    "http://faß.example.org:8123/", "http://ς.example.org/", "http://a\u200db.example.org/", "http://a\u200cb.example.org/"]) {
+    "http://faß.example.org:8123/", "http://ς.example.org/", "http://a\u200db.example.org/", "http://a\u200cb.example.org/",
+    "http://fa%C3%9F.example.org:8123/", "http://%78n--fa-hia.example.org/", "http://[fe80::1%25eth0]:8123/"]) {
     assert.equal(P.origin(none), null, String(none));
   }
 });
@@ -85,6 +86,15 @@ test("map tiles, web cards and other origins are blocked", () => {
 test("the app's Unicode dashboard URL matches Gecko's punycode requests", () => {
   const ha = P.origin("http://ält.example.org:8123/");
   assert.equal(P.decide(req("http://xn--lt-uia.example.org:8123/frontend_latest/app.js", "script"), ha).allow, true);
+});
+
+test("a dashboard URL whose host Gecko would write differently allows nothing (fails closed)", () => {
+  // Gecko writes each of these hosts as xn--fa-hia.example.org; neither parser stores an origin for them.
+  for (const configured of ["http://faß.example.org:8123/", "http://fa%C3%9F.example.org:8123/"]) {
+    const ha = P.origin(configured);
+    assert.equal(ha, null, configured);
+    assert.equal(P.decide(req("http://fass.example.org:8123/x.js", "script", { documentUrl: undefined }), ha).allow, false, configured);
+  }
 });
 
 test("the app's origin wins over the document's", () => {

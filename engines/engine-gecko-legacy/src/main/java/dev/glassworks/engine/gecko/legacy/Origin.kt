@@ -16,7 +16,8 @@ import java.util.Locale
  * A non-ASCII host is written in punycode (`ält.example.org` → `xn--lt-uia.example.org`), as Gecko writes it in the
  * URLs it reports: the app may load a Unicode URL, and Home Assistant's requests then arrive in punycode. A host
  * with an IDNA deviation character (ß, ς, ZWNJ, ZWJ) doesn't parse: Android 6-7's IDN (IDNA 2003) maps `faß` to
- * `fass`, Gecko (UTS 46, non-transitional) to `xn--fa-hia`, so the two would name different hosts.
+ * `fass`, Gecko (UTS 46, non-transitional) to `xn--fa-hia`, so the two would name different hosts. Nor does a host
+ * with a percent escape (`fa%C3%9F`): Gecko decodes it before writing the host.
  *
  * Plain string work, no java.net.URI: Home Assistant's URLs carry characters URI refuses, and a refused URL
  * must not open the lockdown either way. The same rules are in assets/lockdown/policy.js.
@@ -52,7 +53,7 @@ internal object Origin {
             port.all { it in '0'..'9' } -> port.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
             else -> return null
         }
-        if (deviation.containsMatchIn(host)) return null
+        if (deviation.containsMatchIn(host) || '%' in host) return null
         val ascii = if (host.all { it.code < 0x80 }) host else runCatching { IDN.toASCII(host, IDN.ALLOW_UNASSIGNED) }.getOrNull() ?: return null
         val h = ascii.lowercase(Locale.ROOT).trimEnd('.')
         return if (p == default.getValue(scheme)) "$scheme://$h" else "$scheme://$h:$p"
