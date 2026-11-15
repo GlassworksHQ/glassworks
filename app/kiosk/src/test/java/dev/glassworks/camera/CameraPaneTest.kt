@@ -59,7 +59,7 @@ class CameraPaneTest {
         override fun setMotion(active: Boolean) { motion += active }
     }
 
-    private inner class Rig(permitted: Boolean = true, ownSensor: Boolean = false, random: java.security.SecureRandom = java.security.SecureRandom()) {
+    private inner class Rig(permitted: Boolean = true, ownSensor: Boolean = false, random: java.security.SecureRandom = java.security.SecureRandom(), facts: CameraFacts? = null) {
         val prefs = CameraPrefs(file) { random }
         val camera = Camera()
         val stream = Stream()
@@ -78,6 +78,7 @@ class CameraPaneTest {
             FrameEgress({ now }, { _, _ -> }) {},
             permitted = { allowed }, ownSensor = { ownSensor }, toScreen = { n, r -> screen += n to r }, exec = exec,
             release = { releases++ },
+            facts = facts,
             presenceFactory = { source, onMotion, onProblem ->
                 CameraPresence(source, { prefs.sensitivity }, clock = { now }, post = { it.run() }, after = { _, _ -> },
                     onProblem = onProblem, onMotion = onMotion)
@@ -351,5 +352,19 @@ class CameraPaneTest {
         r.pane.apply(CameraPlan(detect = true, feedScreen = true, stream = true), signIn = null)
         assertNull(r.stream.running)
         assertEquals(0, r.stream.starts)
+    }
+
+    @Test fun theCameraTileSaysItsOwnRateWhileStreamingWithoutA15FpsRange() {
+        // CodeRabbit on #252: the camera's own rate (null) became 0, and the tile said "Not in use" mid-stream.
+        val own = object : CameraFacts {
+            override val lens = CameraFacts.Lens.FRONT
+            override fun frameRate(): Int? = null
+        }
+        val r = Rig(facts = own)
+        r.pane.start()
+        assertNull(r.pane.reading().frameRate)
+        val streaming = r.pane.reading().copy(watchers = listOf("192.0.2.20"), streaming = true)
+        assertEquals("Its own frame rate", CameraPage.tiles(streaming) { "14:31" }[1].detail)
+        assertEquals("no facts at all: nothing asked", 0, Rig().pane.reading().frameRate)
     }
 }

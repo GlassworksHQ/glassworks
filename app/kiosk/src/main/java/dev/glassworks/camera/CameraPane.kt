@@ -82,7 +82,8 @@ class CameraPane(
             running = running, problem = problem, detecting = plan.detect, near = near, nearSince = nearSince,
             leaving = egress.leaving, lastStill = egress.lastStillAt, streaming = open,
             watchers = if (open) stream.watchers() else emptyList(),
-            lens = facts?.lens, frameRate = facts?.frameRate() ?: 0,
+            // 0 only without facts; null from the camera means its own rate (streaming with no 15 fps range).
+            lens = facts?.lens, frameRate = if (facts == null) 0 else facts.frameRate(),
         )
     }
 
