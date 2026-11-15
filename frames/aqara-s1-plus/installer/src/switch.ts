@@ -15,12 +15,10 @@
 //
 // The Wi-Fi password never goes into a command line, a log line or an error message.
 import type { PanelShell } from '@glassworks/adb';
+import { ADMIN, PKG, dropAdmin } from '@glassworks/app-adb';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
 import switchScript from '../../tools/install/s1kiosk-switch.sh?raw';
 
-const PKG = 'sh.edm.s1kiosk';
-const ACT = `${PKG}/.MainActivity`;
-const ADMIN = `${PKG}/.AdminReceiver`;
 export const SWITCH_SCRIPT: string = switchScript;
 export const SWITCH_SH = '/data/local/tmp/s1kiosk-switch.sh';
 export const OLD_APK = '/data/local/tmp/s1kiosk-old.apk';
@@ -180,16 +178,6 @@ export function describeSwitch(plan: SwitchPlan): string {
 export type SwitchLog = (detail: string) => void;
 
 const lastLine = (s: string) => s.trim().split(/\r?\n/).pop() || 'no detail';
-
-/** am start --ez remove_admin true, then waits until Android no longer lists the app as an admin. */
-export async function dropAdmin(p: PanelShell, sleep: (ms: number) => Promise<void>): Promise<boolean> {
-  await p.run(`am start -n ${ACT} --ez remove_admin true`);
-  for (let i = 0; i < 30; i++) {
-    if (!(await p.run('dumpsys device_policy')).out.includes(PKG)) return true;
-    await sleep(500);
-  }
-  return false;
-}
 
 /**
  * The switch itself: uninstall the installed app, install `apk`, with the data carried over when

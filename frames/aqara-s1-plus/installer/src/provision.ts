@@ -3,12 +3,13 @@
 // their license (CC BY-NC-SA) keeps them out of our hosting and GitHub sends no CORS headers, so the
 // kiosk app downloads them on the panel itself.
 import type { PanelShell } from '@glassworks/adb';
+import { ACT, PKG, Steps, deviceInfo, dropAdmin, grantPermissions, q, startApp, type StepFn } from '@glassworks/app-adb';
 import {
-  type SwitchOutcome, type SwitchPlan, dropAdmin, isKeyMismatch, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
+  type SwitchOutcome, type SwitchPlan, isKeyMismatch, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
 } from './switch';
 
-export const PKG = 'sh.edm.s1kiosk';
-const ACT = `${PKG}/.MainActivity`;
+export { PKG, deviceInfo, kioskVersion, q, type StepFn } from '@glassworks/app-adb';
+
 const LAUNCHER = 'com.aqara.inhome.launcher';
 const AQARA_HOME = `${LAUNCHER}/.MainActivity`;
 const BAIDU_IME = 'com.baidu.input_auto';
@@ -125,76 +126,9 @@ export async function scanWifi(p: PanelShell, sleep: (ms: number) => Promise<voi
   return [];
 }
 
-export type StepFn = (step: string, detail?: string) => void;
-
-/** Shell-quotes one argument (single quotes). */
-export function q(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
-
-class Runner {
-  constructor(private readonly p: PanelShell, private readonly onStep: StepFn) {}
-  step(s: string) { this.onStep(s); }
-  detail(s: string) { this.onStep('', s); }
-  /** Must succeed. */
-  async run(cmd: string): Promise<string> {
-    const r = await this.p.run(cmd);
-    if (r.code !== 0) throw new Error(`panel command failed (${r.code}): ${cmd}\n${r.out.trim()}`);
-    return r.out;
-  }
-  /** Never fails (idempotent steps such as re-granting). */
-  async try(cmd: string): Promise<string> {
-    const r = await this.p.run(cmd);
-    return r.out;
-  }
-  async install(name: string, apk: Uint8Array, grant: boolean, pushed?: () => void) {
-    const out = await this.tryInstall(name, apk, grant, pushed);
-    if (!/Success/.test(out)) throw new Error(`installing ${name} failed: ${out.trim()}`);
-  }
-  /** pm install -r; returns pm's output either way (the caller decides what a failure means). `pushed`: the APK is on the panel. */
-  async tryInstall(name: string, apk: Uint8Array, grant: boolean, pushed?: () => void): Promise<string> {
-    const tmp = `/data/local/tmp/${name}.apk`;
-    await this.p.push(tmp, apk, 0o644);
-    pushed?.();
-    try {
-      return (await this.p.run(`pm install -r ${grant ? '-g ' : ''}${tmp}`)).out;
-    } finally {
-      await this.try(`rm -f ${tmp}`);
-    }
-  }
-  /** debloat.sh op disable: skip packages the firmware already disabled itself (state 2). */
-  async disable(pkg: string) {
-    const listed = await this.try(`pm list packages -d ${pkg}`);
-    if (listed.split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`)) { this.detail(`already   ${pkg} (disabled)`); return; }
-    const r = await this.p.run(`pm disable-user --user 0 ${pkg}`);
-    this.detail(`${r.code === 0 ? 'disabled ' : 'skip/err '} ${pkg}`);
-  }
-  async enable(pkg: string) {
-    const r = await this.p.run(`pm enable ${pkg}`);
-    this.detail(`${r.code === 0 ? 'enabled  ' : 'skip/err '} ${pkg}`);
-  }
-}
-
-/**
- * S1 Kiosk's version on the panel, from `dumpsys package` (read-only); undefined when it isn't
- * installed. `signal` cancels the read.
- */
-export async function kioskVersion(p: PanelShell, signal?: AbortSignal): Promise<{ name?: string; code: number } | undefined> {
-  const dump = (await p.run(`dumpsys package ${PKG}`, signal)).out;
-  const code = /versionCode=(\d+)/.exec(dump)?.[1];
-  const name = /versionName=(\S+)/.exec(dump)?.[1];
-  return code ? { name: name === 'null' ? undefined : name, code: Number(code) } : undefined;
-}
-
-export async function deviceInfo(p: PanelShell): Promise<{ model: string; sdk: string }> {
-  const model = (await p.run('getprop ro.product.model')).out.trim();
-  const sdk = (await p.run('getprop ro.build.version.sdk')).out.trim();
-  return { model, sdk };
-}
-
 export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: StepFn = () => {},
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<Provisioned> {
-  const r = new Runner(p, onStep);
+  const r = new Steps(p, onStep);
   r.step('Device');
   const { model, sdk } = await deviceInfo(p);
   r.detail(`model=${model} sdk=${sdk}`);
@@ -216,13 +150,7 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
   }
 
   phase({ step: 'home' });
-  r.step('Permissions');
-  await r.try(`pm grant ${PKG} android.permission.RECORD_AUDIO`);
-  await r.try(`pm grant ${PKG} android.permission.CAMERA`);
-  await r.try(`pm grant ${PKG} android.permission.WRITE_SECURE_SETTINGS`);
-  await r.try(`appops set ${PKG} SYSTEM_ALERT_WINDOW allow`);
-  await r.try(`pm grant ${PKG} android.permission.CHANGE_CONFIGURATION`);   // language from the installer
-  await r.try(`dpm set-active-admin ${PKG}/.AdminReceiver`);
+  await grantPermissions(r);
 
   r.step('Make the kiosk the HOME app');
   await r.run(`cmd package set-home-activity ${ACT}`);
@@ -271,8 +199,7 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
 
   phase({ step: 'start' });
   r.step('Start the kiosk');
-  const extras = [opts.haUrl ? `--es url ${q(opts.haUrl)}` : '', opts.locale ? `--es set_locale ${q(opts.locale)}` : ''].filter(Boolean);
-  await r.run(`am start -n ${ACT}${extras.length ? ` ${extras.join(' ')}` : ''}`);
+  await startApp(r, opts);
 
   let switched: SwitchResult | undefined;
   if (sw) {
@@ -300,7 +227,7 @@ const HOME_QUERY = 'cmd package resolve-activity --brief -a android.intent.actio
  */
 export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<void> {
-  const r = new Runner(p, onStep);
+  const r = new Steps(p, onStep);
   r.step('Removing S1 Kiosk\'s device admin');
   const adminGone = await dropAdmin(p, sleep);
   r.detail(adminGone ? 'device admin removed' : 'device admin still active: removing the app may fail');

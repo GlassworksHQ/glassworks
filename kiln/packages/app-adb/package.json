@@ -1,0 +1,19 @@
+{
+  "name": "@glassworks/app-adb",
+  "version": "0.0.0",
+  "private": true,
+  "description": "S1 Kiosk over adb, the same on every frame: install it, grant its permissions, start it with the Home Assistant URL, read its version, take back its device admin.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fakes": "./test/fakes.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glassworks/adb": "0.0.0"
+  }
+}
