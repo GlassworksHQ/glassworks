@@ -20,7 +20,9 @@ type Pagefind = {
 };
 type Hit = { title: string; url: string; excerpt: string; where?: string };
 type Group = { section: string; hits: Hit[] };
-type State = "idle" | "loading" | "ready" | "unavailable";
+/** results always say which query they answer, so Enter never opens an older search's pick */
+type Results = { q: string; groups: Group[] } | { q: string; failed: true };
+type Index = "idle" | "loading" | "ready" | "unavailable";
 
 /** Pagefind's URLs are its file paths: /docs/x.html#y → /docs/x#y */
 const clean = (u: string) => u.replace(/\/index\.html/, "/").replace(/\.html(?=#|$)/, "");
@@ -42,26 +44,27 @@ function group(data: Data[]): Group[] {
 export function SearchDialog() {
   const dialog = useRef<HTMLDialogElement>(null);
   const pf = useRef<Pagefind | null>(null);
-  const [state, setState] = useState<State>("idle");
+  const [index, setIndex] = useState<Index>("idle");
   const [q, setQ] = useState("");
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [results, setResults] = useState<Results>({ q: "", groups: [] });
   const [at, setAt] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const router = useRouter();
 
   const open = useCallback(async () => {
     dialog.current?.showModal();
-    if (pf.current || state === "loading") return;
-    setState("loading");
+    if (pf.current || index === "loading") return;
+    setIndex("loading");
     try {
       const mod = (await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ PAGEFIND)) as Pagefind;
       // the index lives under /_next/static; its pages live at the site's root
       await mod.options({ baseUrl: "/" });
       pf.current = mod;
-      setState("ready");
+      setIndex("ready");
     } catch {
-      setState("unavailable");
+      setIndex("unavailable");
     }
-  }, [state]);
+  }, [index]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -80,22 +83,32 @@ export function SearchDialog() {
   }, [open]);
 
   useEffect(() => {
-    if (state !== "ready" || !pf.current) return;
+    if (index !== "ready" || !pf.current) return;
     let live = true;
+    const query = q;
     const t = setTimeout(async () => {
-      const r = q.trim() ? await pf.current!.search(q) : null;
-      const data = r ? await Promise.all(r.results.slice(0, 10).map((x) => x.data())) : [];
+      let next: Results;
+      try {
+        const r = query.trim() ? await pf.current!.search(query) : null;
+        const data = r ? await Promise.all(r.results.slice(0, 10).map((x) => x.data())) : [];
+        next = { q: query, groups: group(data) };
+      } catch {
+        next = { q: query, failed: true };
+      }
       if (!live) return;
-      setGroups(group(data));
+      setResults(next);
       setAt(0);
     }, 120);
     return () => {
       live = false;
       clearTimeout(t);
     };
-  }, [q, state]);
+  }, [q, index, attempt]);
 
-  const flat = groups.flatMap((g) => g.hits);
+  const current = results.q === q && !("failed" in results) ? results.groups : [];
+  const failed = results.q === q && "failed" in results;
+  const flat = current.flatMap((g) => g.hits);
+  const idOf = (i: number) => `search-hit-${i}`;
   const go = (hit: Hit | undefined) => {
     if (!hit) return;
     dialog.current?.close();
@@ -117,6 +130,11 @@ export function SearchDialog() {
           </svg>
           <input
             type="search"
+            role="combobox"
+            aria-expanded={flat.length > 0}
+            aria-controls="search-results"
+            aria-activedescendant={flat.length ? idOf(at) : undefined}
+            aria-autocomplete="list"
             value={q}
             placeholder="Search the docs"
             aria-label="Search the docs"
@@ -133,36 +151,51 @@ export function SearchDialog() {
           <kbd>esc</kbd>
         </label>
         <div className={s.results} aria-live="polite">
-          {state === "unavailable" && <p className={s.note}>Search works on the built site.</p>}
-          {state === "ready" && q.trim() && !flat.length && <p className={s.note}>No results.</p>}
-          {groups.map((g) => (
-            <div key={g.section} className={s.group}>
-              <span className="label">{g.section}</span>
-              {g.hits.map((h) => {
-                const i = flat.indexOf(h);
-                return (
-                  <a
-                    key={h.url}
-                    href={h.url}
-                    className={`${s.hit} ${i === at ? s.on : ""}`}
-                    onMouseEnter={() => setAt(i)}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      go(h);
-                    }}
-                  >
-                    <b>
-                      {h.title}
-                      {h.where && h.where !== h.title && <span> › {h.where}</span>}
-                    </b>
-                    {/* Pagefind's excerpt is the page's own text with <mark> around the matches */}
-                    <span className={s.excerpt} dangerouslySetInnerHTML={{ __html: h.excerpt }} />
-                    <small>{h.url}</small>
-                  </a>
-                );
-              })}
-            </div>
-          ))}
+          {index === "unavailable" && <p className={s.note}>Search works on the built site.</p>}
+          {failed && (
+            <p className={s.note}>
+              Search failed.{" "}
+              <button type="button" className={s.retry} onClick={() => setAttempt((n) => n + 1)}>
+                Try again
+              </button>
+            </p>
+          )}
+          {index === "ready" && q.trim() && results.q === q && !failed && !flat.length && <p className={s.note}>No results.</p>}
+          <div id="search-results" role="listbox" aria-label="Results">
+            {current.map((g) => (
+              <div key={g.section} className={s.group} role="group" aria-label={g.section}>
+                <span className="label" aria-hidden="true">
+                  {g.section}
+                </span>
+                {g.hits.map((h) => {
+                  const i = flat.indexOf(h);
+                  return (
+                    <a
+                      key={h.url}
+                      id={idOf(i)}
+                      role="option"
+                      aria-selected={i === at}
+                      href={h.url}
+                      className={`${s.hit} ${i === at ? s.on : ""}`}
+                      onMouseEnter={() => setAt(i)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        go(h);
+                      }}
+                    >
+                      <b>
+                        {h.title}
+                        {h.where && h.where !== h.title && <span> › {h.where}</span>}
+                      </b>
+                      {/* Pagefind's excerpt is the page's own text with <mark> around the matches */}
+                      <span className={s.excerpt} dangerouslySetInnerHTML={{ __html: h.excerpt }} />
+                      <small>{h.url}</small>
+                    </a>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
         <div className={s.foot}>
           <span>↑↓ to move</span>

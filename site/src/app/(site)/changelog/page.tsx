@@ -6,6 +6,7 @@ export const metadata = pageMetadata({
   title: "Changelog",
   description: "What changed in each Glassworks app release, for people running a panel. The newest release is first.",
   path: "/changelog",
+  type: "article",
 });
 
 export default async function Changelog() {

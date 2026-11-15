@@ -41,6 +41,13 @@ export const lastChanged = (file: string) => {
   }
 };
 
+/*
+ * The build checks every link and fails on a bad one. A deployed function can render a doc again
+ * (a revalidation) with only the Markdown and images in its bundle (next.config.ts), so there a
+ * file it can't see is one the build already checked: it links to GitHub instead of failing.
+ */
+const BUILDING = process.env.NEXT_PHASE === "phase-production-build";
+
 const inRepo = (p: string) => fs.existsSync(path.join(/* turbopackIgnore: true */ REPO, p));
 const isDir = (p: string) => inRepo(p) && fs.statSync(path.join(/* turbopackIgnore: true */ REPO, p)).isDirectory();
 
@@ -90,7 +97,7 @@ async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
         errors.push(`${s.file}: ${href}: ${target} has no #${hash}`);
         return { href: url, kind: "site" };
       }
-      if (target === "." || inRepo(target)) {
+      if (target === "." || inRepo(target) || !BUILDING) {
         const kind = target === "." || isDir(target) ? "tree" : "blob";
         return { href: `${GH}/${kind}/main/${target === "." ? "" : target}${anchor}`, kind: "source" };
       }
@@ -128,7 +135,7 @@ async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
       updated: lastChanged(s.file),
     });
   }
-  if (errors.length) throw new Error(`Docs: ${errors.length} link(s) the site can't resolve (fix the Markdown):\n${errors.join("\n")}`);
+  if (errors.length && BUILDING) throw new Error(`Docs: ${errors.length} link(s) the site can't resolve (fix the Markdown):\n${errors.join("\n")}`);
   return { docs, assets: [...assets] };
 }
 
@@ -141,7 +148,11 @@ let memo: ReturnType<typeof build> | undefined;
 async function rendered() {
   "use cache";
   cacheLife("max");
-  return (memo ??= build());
+  // a failed build isn't kept: the next call tries again
+  return (memo ??= build().catch((e) => {
+    memo = undefined;
+    throw e;
+  }));
 }
 
 /** Every published doc. */

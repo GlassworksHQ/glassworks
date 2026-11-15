@@ -29,10 +29,14 @@ export default function DocPage(props: PageProps<"/docs/[...slug]">) {
 }
 
 async function Doc({ params }: { params: PageProps<"/docs/[...slug]">["params"] }) {
-  const doc = await getDoc(urlOf((await params).slug));
+  const url = urlOf((await params).slug);
+  // an address that isn't a doc is a 404 before anything renders
+  if (!SOURCES.some((s) => s.url === url)) notFound();
+  const doc = await getDoc(url);
   if (!doc) notFound();
   const same = (await getDocs()).filter((d) => d.section === doc.section && d.url.startsWith("/docs/"));
-  const i = same.indexOf(doc);
+  // matched by URL: each cached call hands back its own copies
+  const i = same.findIndex((d) => d.url === doc.url);
   return (
     <>
       <JsonLd
