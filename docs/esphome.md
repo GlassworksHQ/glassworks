@@ -419,7 +419,7 @@ Presence comes from lighting-insensitive motion on the panel; no image leaves it
 | binary_sensor `Camera presence` (occupancy) | `camera_presence` | none, on | Someone moving in view; ends 8 s after the last movement. Lighting changes don't count |
 | switch `Camera privacy` | `camera_privacy` | none, on | Closes the camera: no presence, no stills, no stream |
 | select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + camera` (snapshots for Home Assistant, and the stream if you turn it on) |
-| switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*; turned on, it runs with the panel's own sign-in; encrypted connections only |
+| switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*; runs only once you set its sign-in on the Camera page; encrypted connections only |
 | number `Camera sensitivity` | `camera_sensitivity` | config, off | 1 (least) to 10 (most), default 5 |
 | switch `Camera pane` | `camera_pane` | config, off | The pane's on/off (#67) |
 
@@ -453,11 +453,10 @@ client that signs in wrong is refused: the device and media services answer with
 HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. The panel logs the
 refusal once a minute per client.
 
-The camera's settings are set from adb until the Manage page edits settings (#178), through an
-activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
+The camera's settings can also be set from adb, through an activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
 the stream): `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
-`--es camera_stream_sign_in 'user:password'` sets your own sign-in in place of the panel's, and an
-empty value clears it (the next time the stream turns on, a new one is made). The pane's on/off is the
+`--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
+it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity.
 
 ### App updates
