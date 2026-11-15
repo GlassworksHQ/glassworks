@@ -29,6 +29,7 @@ import kotlin.math.log10
  *  - Brightness follows ambient light (log curve), capped lower at night.
  *  - [hold] keeps the screen on at the day's brightness, past night dimming and the idle timeout,
  *    while something urgent is on it (a high or critical notification), until [release].
+ *  - [testHold] is such a hold for a test run, which ends by itself.
  *
  * Turning the screen off uses DevicePolicyManager.lockNow() when [admin] is an active device admin.
  *
@@ -59,6 +60,9 @@ class ScreenPolicy(
          */
         const val AWAKE_MAX_MS = 10 * 60_000L
         const val AWAKE_REFRESH_MS = 60_000L
+        const val TEST_HOLD = "test hold"
+        /** The longest [testHold]: a runner renews it, so a lost runner can't hold the screen for long. */
+        const val TEST_HOLD_MAX_S = 3600
 
         /** The most automatic brightness may reach: lower at night, unless something [held] the screen. */
         fun brightnessCap(night: Boolean, held: Boolean, max: Float, nightMax: Float): Float =
@@ -209,6 +213,32 @@ class ScreenPolicy(
         holds += reason
         if (started) wake(reason)
         if (first && started) updateBrightness(immediate = true)
+    }
+
+    /**
+     * A [hold] for a test run, such as Clarity's (#240): on for [seconds] from now, or ended at once
+     * when [seconds] is 0 or less. A new one while it is on moves the end. It lives in memory only, so it
+     * changes no setting and ends with the process. It ends by itself, so a test that crashed can't
+     * leave the screen on.
+     */
+    fun testHold(seconds: Int) {
+        handler.removeCallbacks(testHoldExpiry)
+        val on = TEST_HOLD in holds
+        if (seconds <= 0) {
+            if (on) endTestHold("ended")
+            return
+        }
+        val s = minOf(seconds, TEST_HOLD_MAX_S)
+        Log.i(logTag, "test hold ${if (on) "renewed" else "on"} for $s s")
+        hold(TEST_HOLD)
+        handler.postDelayed(testHoldExpiry, s * 1000L)
+    }
+
+    private val testHoldExpiry = Runnable { endTestHold("expired") }
+
+    private fun endTestHold(why: String) {
+        Log.i(logTag, "test hold off ($why)")
+        release(TEST_HOLD)
     }
 
     /** Lets go of a [hold]. The idle timeout counts from now, so the screen doesn't go dark at once. */

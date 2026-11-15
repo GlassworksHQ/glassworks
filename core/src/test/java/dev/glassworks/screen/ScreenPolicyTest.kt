@@ -29,9 +29,15 @@ class ScreenPolicyTest {
     private val context: Context = RuntimeEnvironment.getApplication()
 
     private class Settings(
-        override var autoBrightness: Boolean = true,
-        override var manualBrightness: Float = -1f,
+        autoBrightness: Boolean = true,
+        manualBrightness: Float = -1f,
     ) : ScreenSettings {
+        /** The saved settings the policy wrote. */
+        val writes = mutableListOf<String>()
+        override var autoBrightness = autoBrightness
+            set(v) { writes += "autoBrightness"; field = v }
+        override var manualBrightness = manualBrightness
+            set(v) { writes += "manualBrightness"; field = v }
         override val screenMode = "presence"
         override val idleOffSec = 120
         override var nightWindow = ""
@@ -196,6 +202,88 @@ class ScreenPolicyTest {
         assertEquals(emptyList<Boolean>(), keepOn.filter { !it })
         advance(1_000)
         assertEquals(listOf(false), keepOn.filter { !it })
+        screen.stop()
+    }
+
+    /** Clarity's test hold (#240): the screen on at day brightness past the night timeout, then night again. */
+    @Test fun aTestHoldKeepsTheScreenOnAtDayBrightnessUntilItExpires() {
+        ShadowLog.clear()
+        val light = FakeSource()
+        val settings = Settings().apply { nightWindow = "00:00-23:59" }
+        val screen = policy(light = light, settings = settings)
+        screen.start(context)
+        light.lux!!(1000f)
+        advance(10)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+
+        screen.testHold(600)
+        assertEquals("day brightness at once", 1f, screen.brightness, 0.001f)
+        advance(599_000)
+        assertEquals("on far past the 20 s night timeout", emptyList<Boolean>(), keepOn.filter { !it })
+        assertTrue(screen.held)
+
+        advance(1_000)
+        assertFalse("expired by itself", screen.held)
+        assertEquals("night dimming is back", 0.2f, screen.brightness, 0.001f)
+        advance(19_000)
+        assertEquals(emptyList<Boolean>(), keepOn.filter { !it })
+        advance(2_000) // the next tick
+        assertEquals("the night timeout counts from the end", listOf(false), keepOn.filter { !it })
+
+        assertEquals("no saved setting written", emptyList<String>(), settings.writes)
+        assertEquals(
+            listOf("test hold on for 600 s", "test hold off (expired)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
+        screen.stop()
+    }
+
+    @Test fun zeroEndsATestHoldAtOnceAndLeavesOtherHolds() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(600)
+        screen.hold("notification")
+        screen.testHold(0)
+        assertTrue("the notification still holds it", screen.held)
+        screen.release("notification")
+        assertFalse(screen.held)
+        advance(600_000)
+        assertEquals(
+            listOf("test hold on for 600 s", "test hold off (ended)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
+        screen.stop()
+    }
+
+    @Test fun aNewTestHoldMovesTheEnd() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(30)
+        advance(20_000)
+        screen.testHold(30)
+        advance(20_000)
+        assertTrue("held 40 s after the first, 20 s after the second", screen.held)
+        advance(10_000)
+        assertFalse(screen.held)
+        assertEquals(
+            listOf("test hold on for 30 s", "test hold renewed for 30 s", "test hold off (expired)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
+        screen.stop()
+    }
+
+    @Test fun aTestHoldLastsAnHourAtMost() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(86_400)
+        advance(3_599_000)
+        assertTrue(screen.held)
+        advance(1_000)
+        assertFalse(screen.held)
         screen.stop()
     }
 }
