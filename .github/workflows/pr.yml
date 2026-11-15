@@ -3,14 +3,14 @@
 # release.yml makes releases.
 #
 #   app      every module's JVM unit tests, an unsigned release build, and
-#            tools/release/check-update-compat.sh (the APK still updates panels in place). When app/
-#            changes, also the ESPHome keepalive test against the real aioesphomeapi client
+#            tools/release/check-update-compat.sh (the APK still updates panels in place). When the
+#            Android code changes, also the ESPHome keepalive test against the real aioesphomeapi client
 #   libs-api23  the libraries' lint (NewApi) and their androidTest checks on an API 23 emulator:
 #            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy is
 #            linted only (an emulator has no Bluetooth to scan with)
 #   wake-word  MicroWakeWordClipTest: the four real microWakeWord models (LiteRT in a hash-locked
-#            Python venv) behind the Kotlin pipeline, over a synthesised clip (#184). Only when app/
-#            or this file changes
+#            Python venv) behind the Kotlin pipeline, over a synthesised clip (#184). Only when the
+#            Android code or this file changes
 #   web     the npm workspaces from the repo root (job id kept, as branch protection names it):
 #            Kiln, its packages, the frame recipes and packages/*: typecheck, tests, both builds
 #   scripts  tools/install.sh's off-device tests, the perf test's rubric, report and grade
@@ -21,6 +21,8 @@
 #            the relay in the runner's Firefox (Gecko, the panel's engine)
 #   root     the root side (radio helper, bundle checks, s1kiosk_verify) in a 32-bit ARM container
 #            under QEMU. Slow, so it runs only when tools/root, tools/radio or this file changes
+#   Android code: every Gradle module and build file in either layout of #21's move, the Gradle root
+#            (app/ or the repo root) and APKs found by name: tools/release/android-layout.sh
 #   size     builds the release APKs (one per frame ABI) of this branch and of its base, splits them into the
 #            engine, the core, each pane and the shared libraries (tools/size/apksize.py), shows the
 #            change and fails over the frame's size budget (frames/<id>/budgets.json). The report is
@@ -52,6 +54,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # app/ today, the repo root after #21's move (tools/release/android-layout.sh).
+      - name: Gradle root
+        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+
       # Same toolchain as release.yml.
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
@@ -72,19 +78,21 @@ jobs:
           node-version: '24'
 
       - name: Unit tests
-        working-directory: app
+        working-directory: ${{ env.GRADLE_ROOT }}
         run: ./gradlew --no-daemon test
 
       - name: Release build (unsigned)
-        working-directory: app
+        working-directory: ${{ env.GRADLE_ROOT }}
         run: ./gradlew --no-daemon :kiosk:assembleRelease
 
       - name: Still updates panels in place
-        run: tools/release/check-update-compat.sh app/kiosk/build/outputs/apk/release/kiosk-release-unsigned.apk
+        run: |
+          apk=$(tools/release/android-layout.sh file "$GRADLE_ROOT" build/outputs/apk/release/kiosk-release-unsigned.apk)
+          tools/release/check-update-compat.sh "$apk"
 
       # EspHomeKeepaliveTest (#180), EspHomeActionsCameraTest (#120) and BluetoothProxyHomeAssistantTest (#121) against the real aioesphomeapi
       # client. They skip without ESPHOME_PYTHON, so this step fails if one skipped. About 30 s (venv
-      # from hashed wheels, then those tests only), and only when app/ or this file changed. The kiosk's EspHomeApiTest uses the same
+      # from hashed wheels, then those tests only), and only when the Android code or this file changed. The kiosk's EspHomeApiTest uses the same
       # client but isn't here yet. It failed once in two CI runs (#184).
       - name: aioesphomeapi tests needed?
         id: esphome
@@ -93,8 +101,8 @@ jobs:
         # Fails closed: without a base commit to compare with, or when git fails, the tests run.
         run: |
           if [ -n "$BASE" ] && git fetch -q --depth=1 origin "$BASE" 2>/dev/null \
-             && changed=$(git diff --name-only "$BASE" HEAD -- app .github/workflows/pr.yml) && [ -z "$changed" ]; then
-            echo "Nothing under app/ changed; skipping the aioesphomeapi tests."
+             && changed=$(tools/release/android-layout.sh changed "$BASE") && [ -z "$changed" ]; then
+            echo "No Android code changed; skipping the aioesphomeapi tests."
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -107,14 +115,17 @@ jobs:
 
       - name: Keepalive, actions, camera and Bluetooth proxy tests (real aioesphomeapi client)
         if: steps.esphome.outputs.run == 'true'
-        working-directory: app
+        working-directory: ${{ env.GRADLE_ROOT }}
         run: |
+          layout="$GITHUB_WORKSPACE/tools/release/android-layout.sh"
+          esphome_api=$(dirname "$("$layout" file . esphome-api/test-requirements.txt)")
+          bluetooth_proxy=$(dirname "$("$layout" file . bluetooth-proxy/build.gradle.kts)")
           python -m venv "$RUNNER_TEMP/esphome-venv"
           "$RUNNER_TEMP/esphome-venv/bin/pip" install --quiet --require-hashes --only-binary :all: \
-            -r libs/esphome-api/test-requirements.txt
-          results=libs/esphome-api/build/test-results/test
+            -r "$esphome_api/test-requirements.txt"
+          results=$esphome_api/build/test-results/test
           reports="$results/TEST-sh.edm.esphome.EspHomeKeepaliveTest.xml $results/TEST-sh.edm.esphome.EspHomeActionsCameraTest.xml
-            libs/bluetooth-proxy/build/test-results/testDebugUnitTest/TEST-sh.edm.bluetoothproxy.BluetoothProxyHomeAssistantTest.xml"
+            $bluetooth_proxy/build/test-results/testDebugUnitTest/TEST-sh.edm.bluetoothproxy.BluetoothProxyHomeAssistantTest.xml"
           # --rerun: Gradle doesn't see ESPHOME_PYTHON, and the Unit tests step left the task up to date.
           # On a failure, the report's message holds the Python client's output.
           ESPHOME_PYTHON="$RUNNER_TEMP/esphome-venv/bin/python" ./gradlew --no-daemon --continue \
@@ -133,6 +144,8 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
+      - name: Gradle root (app/ today, the repo root after #21's move)
+        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
@@ -144,10 +157,10 @@ jobs:
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
       - name: Lint (NewApi at minSdk 23)
-        working-directory: app
+        working-directory: ${{ env.GRADLE_ROOT }}
         run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug
       - name: Build the androidTest APKs
-        working-directory: app
+        working-directory: ${{ env.GRADLE_ROOT }}
         run: ./gradlew --no-daemon :esphome-api-android:assembleDebugAndroidTest :improv:assembleDebugAndroidTest
       - name: Enable KVM
         run: |
@@ -161,7 +174,7 @@ jobs:
           arch: x86_64
           target: default
           disable-animations: true
-          working-directory: app
+          working-directory: ${{ env.GRADLE_ROOT }}
           script: ./gradlew --no-daemon :esphome-api-android:connectedDebugAndroidTest :improv:connectedDebugAndroidTest
 
   # MicroWakeWordClipTest (#181, #184): each official microWakeWord model, run by LiteRT over a pipe to
@@ -183,8 +196,8 @@ jobs:
         # Fails closed: without a base commit to compare with, or when git fails, the test runs.
         run: |
           if [ -n "$BASE" ] && git fetch -q --depth=1 origin "$BASE" 2>/dev/null \
-             && changed=$(git diff --name-only "$BASE" HEAD -- app .github/workflows/pr.yml) && [ -z "$changed" ]; then
-            echo "Nothing under app/ changed; skipping the wake word test."
+             && changed=$(tools/release/android-layout.sh changed "$BASE") && [ -z "$changed" ]; then
+            echo "No Android code changed; skipping the wake word test."
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -212,19 +225,24 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Gradle root (app/ today, the repo root after #21's move)
+        if: steps.changed.outputs.run == 'true'
+        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+
       - name: LiteRT venv (hashed wheels)
         if: steps.changed.outputs.run == 'true'
         run: |
+          requirements=$(tools/release/android-layout.sh file . mww-test-requirements.txt)
           python -m venv "$RUNNER_TEMP/mww-venv"
           "$RUNNER_TEMP/mww-venv/bin/pip" install --quiet --require-hashes --only-binary :all: \
-            -r app/kiosk/mww-test-requirements.txt
+            -r "$requirements"
 
       - name: Models commit
         id: models
         if: steps.changed.outputs.run == 'true'
         run: |
-          commit=$(sed -n 's/.*const val MODELS_COMMIT = "\([0-9a-f]\{40\}\)".*/\1/p' \
-            app/kiosk/src/main/java/sh/edm/s1kiosk/voice/WakeWords.kt)
+          wake_words=$(tools/release/android-layout.sh file . src/main/java/sh/edm/s1kiosk/voice/WakeWords.kt)
+          commit=$(sed -n 's/.*const val MODELS_COMMIT = "\([0-9a-f]\{40\}\)".*/\1/p' "$wake_words")
           [ -n "$commit" ] || { echo "::error::no MODELS_COMMIT in WakeWords.kt"; exit 1; }
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
@@ -237,13 +255,16 @@ jobs:
 
       - name: MicroWakeWordClipTest (real models)
         if: steps.changed.outputs.run == 'true'
-        working-directory: app
+        working-directory: ${{ env.GRADLE_ROOT }}
         run: |
-          report=kiosk/build/test-results/testDebugUnitTest/TEST-sh.edm.s1kiosk.voice.MicroWakeWordClipTest.xml
           # --rerun: Gradle doesn't see MWW_PYTHON, so a cached result must not stand in for a run.
+          failed=""
           MWW_PYTHON="$RUNNER_TEMP/mww-venv/bin/python" ./gradlew --no-daemon \
             :kiosk:testDebugUnitTest --tests sh.edm.s1kiosk.voice.MicroWakeWordClipTest --rerun \
-            || { cat "$report"; exit 1; }
+            || failed=1
+          report=$("$GITHUB_WORKSPACE/tools/release/android-layout.sh" file . \
+            build/test-results/testDebugUnitTest/TEST-sh.edm.s1kiosk.voice.MicroWakeWordClipTest.xml)
+          [ -z "$failed" ] || { cat "$report"; exit 1; }
           grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: the test skipped"; exit 1; }
 
   web:
@@ -275,6 +296,8 @@ jobs:
           persist-credentials: false
       - name: tools/install.sh off-device tests
         run: tools/install/test/install-tests.sh
+      - name: The Android layout helper, in both layouts of #21's move
+        run: tools/release/test/android-layout-test.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
@@ -369,6 +392,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # This branch's: app/ today, the repo root after #21's move (tools/release/android-layout.sh).
+      - name: Gradle root
+        run: echo "GRADLE_ROOT=$(tools/release/android-layout.sh gradle-root)" >> "$GITHUB_ENV"
+
       # Same toolchain as the app job and release.yml.
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
@@ -401,17 +428,20 @@ jobs:
           echo "ABIS=$abis" >> "$GITHUB_ENV"
 
       - name: Release APKs of this branch
-        working-directory: app
+        working-directory: ${{ env.GRADLE_ROOT }}
         run: |
           mkdir -p "$RUNNER_TEMP/apk" "$RUNNER_TEMP/size"
           for abi in $ABIS; do
             bundle="$RUNNER_TEMP/bundle-head"; [ "$abi" = armeabi-v7a ] || bundle=""   # as release.yml
             S1_RADIO_BUNDLE_ASSETS="$bundle" ./gradlew --no-daemon :kiosk:assembleRelease -Ps1Abi="$abi"
-            cp kiosk/build/outputs/apk/release/kiosk-release-unsigned.apk "$RUNNER_TEMP/apk/head-$abi.apk"
+            apk=$("$GITHUB_WORKSPACE/tools/release/android-layout.sh" file . build/outputs/apk/release/kiosk-release-unsigned.apk)
+            cp "$apk" "$RUNNER_TEMP/apk/head-$abi.apk"
           done
 
       # The base: the PR's base commit, or the commit before a push. Without one, or for an ABI it
-      # doesn't build, the report says so (base_missing) and the budget is still checked.
+      # doesn't build, the report says so (base_missing) and the budget is still checked. Its Gradle
+      # root and APK come from this branch's android-layout.sh: during #21's move the base has the
+      # other layout, and the change column is the evidence that a move changed nothing.
       - name: Release APKs of the base
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -429,7 +459,8 @@ jobs:
             bundle="$RUNNER_TEMP/bundle-base"
             SISDK_DIR="$RUNNER_TEMP/sisdk-base" tools/size/radio-bundle.sh "$RUNNER_TEMP/base" "$bundle" || bundle=""
           fi
-          cd "$RUNNER_TEMP/base/app"
+          layout="$PWD/tools/release/android-layout.sh"
+          cd "$RUNNER_TEMP/base/$("$layout" gradle-root "$RUNNER_TEMP/base")"
           for abi in $ABIS; do
             b="$bundle"; [ "$abi" = armeabi-v7a ] || b=""
             if [ "$abi" = armeabi-v7a ] && [ -z "$bundle" ]; then
@@ -437,7 +468,8 @@ jobs:
               echo "$abi=base-build-failed" >> "$missing"; continue
             fi
             if S1_RADIO_BUNDLE_ASSETS="$b" ./gradlew --no-daemon :kiosk:assembleRelease -Ps1Abi="$abi"; then
-              cp kiosk/build/outputs/apk/release/kiosk-release-unsigned.apk "$RUNNER_TEMP/apk/base-$abi.apk"
+              apk=$("$layout" file . build/outputs/apk/release/kiosk-release-unsigned.apk)
+              cp "$apk" "$RUNNER_TEMP/apk/base-$abi.apk"
             else
               echo "The base didn't build for $abi; no change column for it."
               echo "$abi=base-build-failed" >> "$missing"
