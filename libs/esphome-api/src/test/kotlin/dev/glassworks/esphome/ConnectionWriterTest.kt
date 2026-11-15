@@ -245,9 +245,51 @@ class ConnectionWriterTest {
         }
     }
 
-    /** Writes go through until [stop]; after it they block until [resume]. */
+    /**
+     * The server asks a client to disconnect when a key changes (500 ms to answer) or the entities do
+     * (2 s). That time starts once the request is written, so a client that is slow to read still gets
+     * it before the socket closes (#223).
+     */
+    @Test
+    fun aKeyChangeClosesOnlyAfterItsDisconnectRequestIsWritten() =
+        disconnectWaitsForItsRequest(graceMs = 500, keys = NoiseKeys(MemoryKeyStore())) { replaceKey(ByteArray(32) { 1 }) }
+
+    @Test
+    fun anEntityChangeClosesOnlyAfterItsDisconnectRequestIsWritten() =
+        disconnectWaitsForItsRequest(graceMs = 2_000) { setEntities(listOf(sensor)) }
+
+    private fun disconnectWaitsForItsRequest(graceMs: Long, keys: NoiseKeys? = null, change: ApiServer.() -> Unit) {
+        val s = server(keys = keys)
+        val (c, sock) = stuckClient(s)
+        c.use {
+            s.change()
+            awaitBlocked(sock)
+            Thread.sleep(graceMs + 500)
+            assertEquals("closed while the DisconnectRequest was still waiting", 1, s.connectionCount)
+            sock.resume()
+            c.await(Msg.DISCONNECT_REQUEST)
+            assertTrue("closed once the client had time to answer", c.closedByServer())
+        }
+    }
+
+    /** An Error on the writer closes the connection, so a caller waiting for a write isn't left hanging (#223). */
+    @Test
+    fun anErrorOnTheWriterClosesTheConnection() {
+        val s = server()
+        PlainClient(s.localPort).use { c ->
+            c.roundTrip()
+            sockets.last().fail = object : Error("test: the writer fails") {}
+            // The reader waits for this answer to be written before it closes.
+            c.send(Msg.DISCONNECT_REQUEST)
+            assertTrue("the connection stayed open\n${serverThreads()}", c.closedByServer())
+            assertEquals(0, s.connectionCount)
+        }
+    }
+
+    /** Writes go through until [stop]; after it they block until [resume]. Once [fail] is set, writes throw it. */
     private class StoppableSocket : Socket() {
         @Volatile private var stopped = false
+        @Volatile var fail: Throwable? = null
         private val resumed = CountDownLatch(1)
         val blocked = CountDownLatch(1)
 
@@ -257,6 +299,7 @@ class ConnectionWriterTest {
         private val out by lazy {
             object : FilterOutputStream(super.getOutputStream()) {
                 override fun write(b: ByteArray, off: Int, len: Int) {
+                    fail?.let { throw it }
                     if (stopped) { blocked.countDown(); resumed.await() }
                     out.write(b, off, len)
                 }

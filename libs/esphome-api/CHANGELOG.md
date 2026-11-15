@@ -20,6 +20,15 @@ unchanged.
 - **`ApiServer.keyed`**: the device has a key, active or unreadable now. Advertise it as
   `api_encryption`, so a client tries Noise while the key can't be read.
 
+### Fixed
+- **A client that is slow to read still gets the DisconnectRequest.** When the entities or the key
+  change, the server waits for its request to be written before the 2 s (or 500 ms) for the answer
+  start, so the socket no longer closes with the request unsent. `setEntities` and `replaceKey` still
+  return at once.
+- **An `Error` while writing to a client closes that connection.** Before, a caller waiting for a
+  write (the camera, the answers to Disconnect and to a new key) waited until the keepalive dropped
+  the client, up to 150 s.
+
 ## [0.1.0] - 2026-11-15
 
 ### Added

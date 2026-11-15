@@ -250,7 +250,8 @@ public class ApiServer(
         internal const val CAMERA_STREAM_MS = 5_000L
         /**
          * Messages other than states that may wait for one client before it is dropped. Room for the
-         * voice pre-roll (2 s of 16 kHz audio, 64 KiB) and several seconds of audio after it.
+         * voice pre-roll (2 s of 16 kHz audio, 64 KiB) and several seconds of audio after it. The batch
+         * the writer is sending doesn't count, so a client that stops reading can hold about twice this.
          */
         internal const val MAX_QUEUED_BYTES = 512 * 1024
     }
@@ -352,8 +353,9 @@ public class ApiServer(
 
     /**
      * Replaces the entity set and asks every connected client to disconnect (`DisconnectRequest`,
-     * socket closed after the ack or 2 s). Home Assistant reconnects and lists the entities again,
-     * which is how it picks up added ones, like after an ESPHome firmware update.
+     * socket closed after the ack, or 2 s after the request is written). Returns without waiting for
+     * either. Home Assistant reconnects and lists the entities again, which is how it picks up added
+     * ones, like after an ESPHome firmware update.
      */
     public fun setEntities(newEntities: List<ApiEntity>) {
         val list = newEntities.toList()
@@ -703,8 +705,10 @@ public class ApiServer(
             } catch (e: IOException) {
                 if (isOpen) EspHomeLog.w("[$id] write failed: ${e.message}")
                 close()
-            } catch (e: Exception) {
-                EspHomeLog.w("[$id] writer error", e)
+            } catch (t: Throwable) {
+                // An Error too: left open, the connection would hold every caller waiting for a write
+                // (the camera, the Disconnect and set-key answers) until the keepalive dropped it.
+                EspHomeLog.w("[$id] writer error", t)
                 close()
             }
         }
@@ -744,9 +748,19 @@ public class ApiServer(
         fun requestDisconnect() {
             subscribedStates = false
             subscribedHaServices = false
-            if (!reply(Msg.DISCONNECT_REQUEST)) { close(); return }
+            askToDisconnect(2_000)
+        }
+
+        /**
+         * Sends a DisconnectRequest and closes [graceMs] after it is written, or on the client's answer.
+         * The wait for the write runs on a thread of its own, so the caller doesn't wait for a slow client;
+         * one that never reads is dropped by the keepalive.
+         */
+        private fun askToDisconnect(graceMs: Long) {
             Thread({
-                try { Thread.sleep(2_000) } catch (_: InterruptedException) {}
+                if (send(listOf(Frame(Msg.DISCONNECT_REQUEST, ByteArray(0))), wait = true)) {
+                    try { Thread.sleep(graceMs) } catch (_: InterruptedException) {}
+                }
                 close()
             }, "esphome-disc-$id").apply { isDaemon = true; start() }
         }
@@ -762,11 +776,7 @@ public class ApiServer(
                 voice?.onSubscribe(false)
             }
             unsubscribeBluetooth(this)
-            if (!reply(Msg.DISCONNECT_REQUEST)) { close(); return }
-            Thread({
-                try { Thread.sleep(500) } catch (_: InterruptedException) {}
-                close()
-            }, "esphome-retire-$id").apply { isDaemon = true; start() }
+            askToDisconnect(500)
         }
 
         fun close() {
