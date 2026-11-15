@@ -3,7 +3,9 @@
 S1 Unleashed's own code is MIT ([LICENSE](LICENSE)). This file lists the third-party code that the
 project distributes: in the S1 Kiosk APK (with the signed radio bundle that release APKs carry), and in
 the files the web installer at https://s1.edm.sh serves. For each part it gives the version, the licence
-(as an SPDX identifier), where it comes from and where its source is.
+(as an SPDX identifier), where it comes from and where its source is. The libraries published to Maven
+Central (`dev.glassworks:*`, [docs/releasing.md](docs/releasing.md#libraries)) contain only this
+project's MIT code; their dependencies come from Maven Central under their own licences.
 
 The full licence texts are in [`LICENSES/`](LICENSES), named by SPDX identifier. Those files are the
 standard texts. The copyright holders are named under each component below. The app shows this file

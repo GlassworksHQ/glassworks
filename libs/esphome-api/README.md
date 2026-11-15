@@ -160,14 +160,19 @@ camera entity `camera.my_device_porch`.
 
 ## Gradle
 
-For now it's a module of this repository. Nothing is published to a Maven repository yet.
+On Maven Central as `dev.glassworks:esphome-api` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is
+not out yet: until it is, use the module from this repository (`implementation(project(":esphome-api"))`).
 
 ```kotlin
-implementation(project(":esphome-api"))
+repositories { mavenCentral() }
+dependencies {
+    implementation("dev.glassworks:esphome-api:0.1.0")
+}
 ```
 
-Dependency: BouncyCastle `bcprov-jdk18on` (X25519 and ChaCha20-Poly1305 through the lightweight
-API, not the JCA provider). JVM 17 bytecode.
+JVM 17 bytecode, so a Java build needs Java 17. A Kotlin build needs Kotlin 2.0 or newer (the library is
+built for Kotlin 2.1 and its kotlin-stdlib). Dependency: BouncyCastle `bcprov-jdk18on` (X25519 and
+ChaCha20-Poly1305 through the lightweight API, not the JCA provider).
 
 On Android it runs from API 23 (Android 6). `./gradlew :esphome-api:test` runs Expediter first, which
 checks the library's classes, and the BouncyCastle classes they reach, against API 23.

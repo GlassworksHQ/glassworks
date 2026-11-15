@@ -1,6 +1,8 @@
 // Android helpers for esphome-api: mDNS advertising with NsdManager. See README.md in this directory.
 plugins {
     id("com.android.library")
+    id("org.jetbrains.dokka")
+    id("com.vanniktech.maven.publish") // dev.glassworks:esphome-api-android, set up in the root build.gradle.kts
 }
 
 android {

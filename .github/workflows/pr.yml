@@ -8,6 +8,10 @@
 #   libs-api23  the libraries' lint (NewApi) and their androidTest checks on an API 23 emulator:
 #            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy is
 #            linted only (an emulator has no Bluetooth to scan with)
+#   libs-publish  a dry run of the Maven Central release (#153, docs/releasing.md "Libraries"): every
+#            published library to mavenLocal, unsigned, its files checked, then fresh apps built
+#            against them (minSdk 23 at compileSdk 37.2 and 23, and Kotlin 2.0.21 on the JVM). Only when
+#            libs/, the Gradle build, the licence files or these scripts change
 #   wake-word  MicroWakeWordClipTest: the four real microWakeWord models (LiteRT in a hash-locked
 #            Python venv) behind the Kotlin pipeline, over a synthesised clip (#184). Only when the
 #            Android code or this file changes
@@ -188,6 +192,67 @@ jobs:
           disable-animations: true
           working-directory: ${{ env.GRADLE_ROOT }}
           script: ./gradlew --no-daemon :esphome-api-android:connectedDebugAndroidTest :improv:connectedDebugAndroidTest
+
+  libs-publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        # Fails closed like the root job's: without a base commit, or when git diff fails, it runs.
+        run: |
+          paths="libs build.gradle.kts settings.gradle.kts gradle.properties gradle LICENSE THIRD-PARTY-NOTICES.md tools/release/check-lib-artifact.sh
+            tools/release/lib-consumer-check.sh .github/workflows/pr.yml .github/workflows/libs-release.yml"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No base commit to compare with ($BASE); running the dry run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
+            echo "git diff failed; running the dry run."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$changed" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing the libraries' publishing reads changed; skipping the dry run."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        if: steps.changed.outputs.run == 'true'
+        with:
+          packages: platform-tools
+      # 23: lib-consumer-check.sh builds an app at compileSdk 23, the AARs' minCompileSdk.
+      - name: Android SDK platforms
+        if: steps.changed.outputs.run == 'true'
+        run: sdkmanager --install "platforms;android-37.2" "platforms;android-23"
+
+      # No secrets here, so nothing is signed (the root build.gradle.kts signs only with a key).
+      - name: Publish to mavenLocal
+        if: steps.changed.outputs.run == 'true'
+        run: ./gradlew --no-daemon publishToMavenLocal
+
+      - name: Check each library's files
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          for build in $(grep -l 'id("com.vanniktech.maven.publish")' libs/*/build.gradle.kts); do
+            tools/release/check-lib-artifact.sh "$(basename "$(dirname "$build")")"
+          done
+
+      - name: A fresh minSdk 23 app builds against them
+        if: steps.changed.outputs.run == 'true'
+        run: tools/release/lib-consumer-check.sh
 
   # MicroWakeWordClipTest (#181, #184): each official microWakeWord model, run by LiteRT over a pipe to
   # Python, must fire in its own word only and score within 0.01 of pymicro-wakeword. It skips without

@@ -2,6 +2,8 @@
 // See README.md in this directory.
 plugins {
     id("com.android.library")
+    id("org.jetbrains.dokka")
+    id("com.vanniktech.maven.publish") // dev.glassworks:improv, set up in the root build.gradle.kts
 }
 
 android {

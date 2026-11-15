@@ -184,6 +184,7 @@ class ReleasesTest {
         assertEquals(AppVersion(1, 2, 3), Releases.tagVersion("aqara-s1-plus-v1.2.3"))
         assertNull(Releases.tagVersion("lululemon-mirror-v1.2.3"))
         assertNull(Releases.tagVersion("esphome-api-v1.2.3"))
+        assertNull(Releases.tagVersion("libs/esphome-api/v1.2.3")) // libs-release.yml's tags (#153)
         assertNull(Releases.tagVersion("aqara-s1-v1.2.3"))
         assertNull(Releases.tagVersion("installer-files-3"))
     }
@@ -197,7 +198,7 @@ class ReleasesTest {
     @Test fun picksThisAppsNewestReleaseAmongOthers() {
         // Newest first, as GitHub lists them: another frame and a library released after this app.
         val other = release("lululemon-mirror-v2.0.0", "2.0.0")
-        val lib = release("esphome-api-v1.1.0", "1.1.0")
+        val lib = release("libs/esphome-api/v1.1.0", "1.1.0")
         val pick = Releases.newest(Releases.parseList(list(other, lib, release("aqara-s1-plus-v1.4.0", "1.4.0"), release("v1.3.0"))), S1)
         assertEquals(AppVersion(1, 4, 0), pick.offer!!.version)
         assertNull(pick.problem)
