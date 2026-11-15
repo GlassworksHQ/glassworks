@@ -1,6 +1,8 @@
 package sh.edm.s1kiosk
 
+import android.app.Activity
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.Intent
 import dev.glassworks.engine.Engine
 import dev.glassworks.frame.Frame
@@ -93,6 +95,12 @@ interface Glassworks {
 
     /** Cancels the current voice run (stops streaming and playback); null while the service isn't running. */
     var voiceCancel: (() -> Unit)?
+
+    /** The app's activity: the one that shows the dashboard, and that Home Assistant's commands go to. */
+    val mainActivity: Class<out Activity>
+
+    /** The file that holds the settings of the pane with id [namespace]: the app decides (PaneContext.prefs). */
+    fun paneFile(context: Context, namespace: String): SharedPreferences
 
     /** The app's Manage page behind the sign-in pages ([signIn]), for the panel's web server. */
     fun managePage(context: Context, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage

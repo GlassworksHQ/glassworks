@@ -1,32 +1,18 @@
 package sh.edm.s1kiosk.esphome
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import dev.glassworks.bluetoothproxy.BluetoothProxyDefinition
-import dev.glassworks.camera.CameraDefinition
-import dev.glassworks.camera.CameraHub
-import dev.glassworks.camera.CameraIdentity
-import dev.glassworks.camera.CameraPane
-import dev.glassworks.camera.CameraStream
-import dev.glassworks.camera.FrameEgress
-import dev.glassworks.camera.stillGate
-import dev.glassworks.diagnostics.DiagnosticsPane
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.nodeName
-import dev.glassworks.notifications.NotificationScreen
-import dev.glassworks.notifications.NotificationSounds
-import dev.glassworks.notifications.NotificationsPane
 import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.EntityRegistry
 import dev.glassworks.pane.Pane
@@ -46,10 +32,8 @@ import java.util.concurrent.TimeUnit
 import dev.glassworks.esphome.*
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.android.EspHomeMdns
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.MainActivity
-import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.dashboard.Dashboard
@@ -57,34 +41,26 @@ import sh.edm.s1kiosk.dashboard.DashboardOptions
 import sh.edm.s1kiosk.dashboard.Dashboards
 import sh.edm.s1kiosk.dashboard.StableChange
 import sh.edm.s1kiosk.discovery.HaUrls
-import sh.edm.s1kiosk.radio.RadioDefinition
-import sh.edm.s1kiosk.sendspin.SendspinPane
 import sh.edm.s1kiosk.setup.SetupSignals
-import sh.edm.s1kiosk.timers.TimersPane
 import sh.edm.s1kiosk.update.UpdateManager
-import sh.edm.s1kiosk.voice.AssistPane
 import sh.edm.s1kiosk.voice.ExoAudioPlayer
-import sh.edm.s1kiosk.voice.SpeakerMedia
 import sh.edm.s1kiosk.voice.TtsPlayer
-import sh.edm.s1kiosk.voice.VoiceEngine
-import sh.edm.s1kiosk.voice.VoiceEvent
-import sh.edm.s1kiosk.voice.VoiceLevels
-import sh.edm.s1kiosk.voice.chime
-import sh.edm.s1kiosk.voice.wakeChime
 
 /**
  * The panel as one ESPHome device for Home Assistant: native API server (port 6053), mDNS,
- * entities bound to the kiosk settings / the screen policy, a media player, and the panes
- * (Sendspin, the voice assistant, timers, the radio, and the frame's own). Owned by KioskService.
+ * entities bound to the kiosk settings / the screen policy, a media player, and the panes the app
+ * builds for it ([buildPanes], from [DeviceHost]). Owned by KioskService.
  *
  * Entity values are read from [KioskPrefs] / [screen] (thread-safe); anything touching
  * the screen or the activity is posted to the main thread. Kiosk actions (URL, reload, zoom,
- * header, restart) go to [MainActivity] as intents, exactly like the `adb am start` extras.
+ * header, restart) go to the app's activity ([Glassworks.mainActivity]) as intents, exactly like the
+ * `adb am start` extras.
  */
-class PanelDevice internal constructor(
+class PanelDevice(
     context: Context,
-    private val runtime: GlassworksRuntime,
-    private val onVoiceEvent: (VoiceEvent) -> Unit,
+    private val runtime: Glassworks,
+    /** The app's panes for this device, in order, built from what the device gives them (GlassworksRuntime.devicePanes). */
+    private val buildPanes: (DeviceHost) -> List<Pane>,
     /** HelloRequest from an API client (Home Assistant discovery, HaDiscovery.onApiHello). */
     private val onApiHello: (String, java.net.InetAddress?) -> Unit,
     /** esphome-main. A test passes one it runs by hand, to choose when queued work happens. */
@@ -98,11 +74,11 @@ class PanelDevice internal constructor(
 
     constructor(
         context: Context,
-        runtime: GlassworksRuntime,
-        onVoiceEvent: (VoiceEvent) -> Unit,
+        runtime: Glassworks,
+        buildPanes: (DeviceHost) -> List<Pane>,
         onApiHello: (String, java.net.InetAddress?) -> Unit = { _, _ -> },
     ) : this(
-        context, runtime, onVoiceEvent, onApiHello,
+        context, runtime, buildPanes, onApiHello,
         exec = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "esphome-main").apply { isDaemon = true } },
         mdns = EspHomeMdnsAdvertiser(EspHomeMdns(context.applicationContext, board = runtime.frame.board)),
         apiPort = ApiServer.DEFAULT_PORT,
@@ -125,7 +101,6 @@ class PanelDevice internal constructor(
 
     private val ctx = context.applicationContext
     private val prefs = KioskPrefs(ctx)
-    private val panePrefs = PanePrefs(ctx)
     private val main = Handler(Looper.getMainLooper())
     /** Typed as the interface. The device-only parts come in through [Frame.panes]. */
     private val frame: Frame = runtime.frame
@@ -153,7 +128,6 @@ class PanelDevice internal constructor(
     private var chimePlayer: TtsPlayer? = null
     /** The features that add entities and react to the panel (Sendspin, voice, timers, ...); built in [initEntities]. */
     @Volatile private var panes: List<Pane> = emptyList()
-    private var assist: AssistPane? = null
     /**
      * App updates from GitHub Releases (docs/releasing.md); the "App update" entity. runCatching:
      * the update thread may still report while [stop] has already shut [exec] down.
@@ -191,9 +165,8 @@ class PanelDevice internal constructor(
         panes = emptyList()
         // A newer device may have published its own already.
         if (runtime.panes === gone) runtime.panes = emptyList()
-        cameraHub?.release()
-        cameraHub = null
-        assist = null
+        synchronized(stopHooks) { stopHooks.toList().also { stopHooks.clear() } }.forEach { it() }
+        host.cancelVoice = null
         exec.shutdownNow()
         mdns.stop()
         synchronized(lifecycle) { server.also { server = null } }?.stop()
@@ -216,8 +189,8 @@ class PanelDevice internal constructor(
         if (stopped) false else { block(); true }
     }
 
-    /** esphome-main. Each step checks [stopped], so a [stop] during startup leaves nothing running. */
-    internal fun startInternal() {
+    /** esphome-main. Each step checks [stopped], so a [stop] during startup leaves nothing running. Public for tests. */
+    fun startInternal() {
         if (synchronized(lifecycle) { stopped }) return
         val mac = stableMac()
         val name = frame.nodeName(mac) ?: run { EspHomeLog.w("No ESPHome node name for MAC '$mac': the device isn't announced"); return }
@@ -239,7 +212,7 @@ class PanelDevice internal constructor(
         applyVolume()
         mediaPlayer.onStateChanged = { exec.execute { server?.publishStates() } }
         voicePlayer.onStateChanged = {
-            VoiceLevels.ttsPlaying = voicePlayer.isPlaying // drives the voice overlay's speaking pulse
+            host.onVoicePlaying?.invoke(voicePlayer.isPlaying)
             exec.execute { server?.publishStates() }
         }
 
@@ -264,68 +237,22 @@ class PanelDevice internal constructor(
 
     /**
      * The entity list Home Assistant gets at start, built without starting anything (the entity pin
-     * test calls it too). esphome-main.
+     * test calls it too). esphome-main. Public for tests.
      */
-    internal fun initEntities(identity: DeviceIdentity) {
+    fun initEntities(identity: DeviceIdentity) {
         this.identity = identity
         val paneContext = PaneContext(
-            ctx, panePrefs::paneFile, identity, runtime.build,
+            ctx, { namespace -> runtime.paneFile(ctx, namespace) }, identity, runtime.build,
             publishStates = { runCatching { exec.execute { server?.publishStates() } } },
             emit = ::emit,
             entitiesChanged = { runCatching { exec.execute { rebuildEntities() } } },
             sendEvent = { entity, type -> runCatching { exec.execute { server?.sendEvent(entity, type) } } },
             fireEvent = { event -> runCatching { exec.execute { server?.sendHomeAssistantEvent(event) } } },
         )
-        val assistPane = AssistPane(
-            paneContext,
-            player = voicePlayer,
-            speaker = speakerMedia,
-            resolveUrl = ::resolveUrl,
-            wakeChime = { chimes().wakeChime() },
-            onVoiceEvent = onVoiceEvent,
-            createInput = { cfg, model, onModelChanged -> VoiceEngine(ctx, cfg, model, onModelChanged) },
-        )
-        assist = assistPane
-        panes = listOf(
-            SendspinPane(paneContext, haBase = { prefs.haBase }),
-            assistPane,
-            // Timers only come from the voice assistant: without it the pane has nothing to do.
-            TimersPane(
-                paneContext,
-                screen,
-                schedule = { ms, action -> exec.schedule({ action() }, ms, TimeUnit.MILLISECONDS) },
-                play = { chimes().chime() },
-                silence = { synchronized(this) { chimePlayer }?.cancel() },
-            ),
-            NotificationsPane(
-                paneContext, panePrefs.notifications, runtime.notifications,
-                screen = object : NotificationScreen {
-                    override fun wake() = ui { screen.wake("notification") }
-                    override fun hold() = ui { screen.hold("notification") }
-                    override fun release() = ui { screen.release("notification") }
-                },
-                play = { sound, done ->
-                    val pcm = NotificationSounds.pcm(sound)
-                    if (pcm == null) done() else chimes().run { begin(pcm.rate, 2, 1); write(pcm.data); end(done) }
-                },
-                silence = { synchronized(this) { chimePlayer }?.cancel() },
-                schedule = { ms, action -> exec.schedule({ action() }, ms, TimeUnit.MILLISECONDS) },
-                haBase = { prefs.haBase },
-                now = android.os.SystemClock::elapsedRealtime,
-            ),
-        ) + frame.panes(paneContext, exec) +
-            runtime.paneDefinitions(ctx).filterIsInstance<RadioDefinition>().map { it.pane(paneContext, panelIp = ::ipAddress) } +
-            runtime.paneDefinitions(ctx).filterIsInstance<BluetoothProxyDefinition>().map { it.pane(paneContext, exec) } +
-            listOfNotNull(cameraPane(paneContext, identity)) +
-            DiagnosticsPane(paneContext, frame.cpuThermalZone, runtime.engine::isContentProcess, exec)
         // A pane the frame lacks the hardware for (CantRun) isn't built: no entities, nothing started.
         val cantRun = runtime.paneDefinitions(ctx).filterIsInstance<CantRun>().map { it.id }.toSet()
-        panes = panes.filter { it.id !in cantRun }
-        // Timers ride with Assist (their pane.json requires the same): without it they go too.
-        if (assistPane !in panes) {
-            assist = null
-            panes = panes.filter { it !is TimersPane }
-        }
+        host = Host(paneContext, cantRun)
+        panes = buildPanes(host).filter { it.id !in cantRun }
         runtime.panes = panes
         // Every pane's on/off, also while the pane is off.
         coreEntities = buildEntities() + switches.values.map { it.entity() }
@@ -334,41 +261,11 @@ class PanelDevice internal constructor(
         entities = assemble()
     }
 
-    internal fun entityList(): List<ApiEntity> = entities
+    /** The entities Home Assistant gets now. Public for tests. */
+    fun entityList(): List<ApiEntity> = entities
 
-    /** The camera, while the camera pane exists. Released in [stop]. */
-    private var cameraHub: CameraHub? = null
-
-    /** The camera pane (#117), on a device with a camera only: elsewhere its definition is CantRun (#23), and this finds none. */
-    private fun cameraPane(paneContext: PaneContext, identity: DeviceIdentity): CameraPane? {
-        val def = runtime.paneDefinitions(ctx).filterIsInstance<CameraDefinition>().firstOrNull() ?: return null
-        val hub = CameraHub(ctx).also { cameraHub = it }
-        val egress = FrameEgress(SystemClock::elapsedRealtime, { ms, r -> main.postDelayed(r, ms) }) { leaving ->
-            EspHomeLog.i("Camera frames ${if (leaving) "leaving the panel" else "no longer leaving"}")
-            runtime.cameraLeaving = leaving
-            main.post { runtime.onCameraLeaving?.invoke() }
-        }
-        var pane: CameraPane? = null
-        // The pane's own judgement: no still while it is off or Android doesn't allow the camera.
-        val gate = stillGate(hub, { pane?.stillPolicy() ?: def.prefs.policy.copy(privacy = true) }, egress)
-        val stream = CameraStream(
-            ctx, hub, egress,
-            identity = { CameraIdentity(identity.friendlyName, "Glassworks ${runtime.build.versionName}", identity.macAddress) },
-            host = ::ipAddress,
-            snapshot = gate,
-        )
-        return CameraPane(
-            paneContext, def.prefs, hub, hub, stream, egress,
-            permitted = { ctx.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
-            ownSensor = { runtime.presence.ownSensor(ctx) },
-            toScreen = runtime.presence::offer,
-            exec = exec,
-            release = hub::idle,
-            facts = hub,
-        ).also { pane = it }
-    }
-
-    internal fun paneList(): List<Pane> = panes
+    /** The panes this device built. Public for tests. */
+    fun paneList(): List<Pane> = panes
 
     // ------------------------------------------------------------------ dashboard select
 
@@ -536,28 +433,41 @@ class PanelDevice internal constructor(
 
     /** The user cancelled the current voice run (tap on the overlay). */
     fun cancelVoice() {
-        exec.execute { assist?.cancel() }
+        exec.execute { host.cancelVoice?.invoke() }
     }
 
-    /** The speaker's music, which the assistant pauses while it listens and talks. */
-    private val speakerMedia = object : SpeakerMedia {
-        override val playing get() = mediaPlayer.isPlaying
+    /** Hooks the app's panes left for [stop] ([DeviceHost.onStop]). */
+    private val stopHooks = ArrayList<() -> Unit>()
+
+    /** What the app's panes get from this device; made with the pane context in [initEntities]. */
+    @Volatile private var host: Host = Host(null, emptySet())
+
+    private inner class Host(private val context: PaneContext?, override val cantRun: Set<String>) : DeviceHost {
+        override val paneContext get() = context ?: error("The device has no pane context before it builds its panes")
+        override val exec get() = this@PanelDevice.exec
+        override val voicePlayer get() = this@PanelDevice.voicePlayer
+        override val mediaPlayer get() = this@PanelDevice.mediaPlayer
         override val announcing get() = this@PanelDevice.announcing
-        override fun pause() = mediaPlayer.pause()
-        override fun resume() = mediaPlayer.resume()
+        override fun chimes() = this@PanelDevice.chimes()
+        override fun silenceChimes() { synchronized(this@PanelDevice) { chimePlayer }?.cancel() }
+        override fun resolveUrl(url: String) = this@PanelDevice.resolveUrl(url)
+        override fun ipAddress() = this@PanelDevice.ipAddress()
+        override fun onStop(block: () -> Unit) { synchronized(stopHooks) { stopHooks += block } }
+        @Volatile override var cancelVoice: (() -> Unit)? = null
+        @Volatile override var onVoicePlaying: ((Boolean) -> Unit)? = null
     }
 
     // ------------------------------------------------------------------ entities
 
     private fun ui(block: () -> Unit) { main.post(block) }
 
-    /** Sends extras to MainActivity (same as `adb shell am start ... --e* key value`). */
+    /** Sends extras to the app's activity (same as `adb shell am start ... --e* key value`). */
     private fun toActivity(build: Intent.() -> Unit) {
-        val i = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply(build)
+        val i = Intent(ctx, runtime.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply(build)
         ui {
             val sink = runtime.commandSink
             if (sink != null) sink(i) else try { ctx.startActivity(i) } catch (e: Exception) {
-                EspHomeLog.w("Cannot start MainActivity", e)
+                EspHomeLog.w("Cannot start ${runtime.mainActivity.simpleName}", e)
             }
         }
     }

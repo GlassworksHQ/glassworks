@@ -47,7 +47,7 @@ class PanelNameTest {
     private fun announced(): dev.glassworks.esphome.DeviceIdentity {
         val exec = ManualExecutor()
         val mdns = RecordingMdns()
-        val device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,
+        val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = mdns, apiPort = 0,
             apiBindAddress = InetAddress.getLoopbackAddress())
         devices += device
         device.start()

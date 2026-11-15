@@ -5,13 +5,6 @@ import sh.edm.s1kiosk.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceLog
 import sh.edm.s1kiosk.voice.nowMs
 
-/** Plays audio URLs (TTS responses, announcements) one after another. */
-interface UrlPlayer {
-    /** Plays [urls] in order; [onDone] runs once (success = all played) when done, failed or stopped. */
-    fun play(urls: List<String>, onDone: (Boolean) -> Unit)
-    fun stop()
-}
-
 /** The wake words the panel can detect locally (VoiceEngine: microWakeWord, legacy openWakeWord). */
 interface WakeWordCatalog {
     fun available(): List<WakeWordInfo>
