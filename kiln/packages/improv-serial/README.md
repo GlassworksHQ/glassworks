@@ -81,6 +81,12 @@ the packet helpers `frame`, `rpc`, `strings`, `wifiSettings`, `parseResult` and 
 the constants `PacketType`, `Rpc` and `State`, and `errorMessage`. From `improv-serial/adb`:
 `openAdbStream` and `localAbstract`.
 
+## Compared with the Improv spec
+
+One table covers both sides, this client and the device library: [improv](../../../libs/improv/README.md#compared-with-the-improv-spec).
+In short, the client does the serial spec's first four commands. It doesn't do hostname, device
+name or network state, or BLE.
+
 ## Status
 
 Not on npm yet (`"private": true`). It ships as TypeScript source, so use it from a bundler (Vite,

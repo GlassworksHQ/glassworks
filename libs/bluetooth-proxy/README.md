@@ -102,6 +102,43 @@ Nothing here logs an address. Addresses go only to the subscribed client, and on
 connection (Noise with the device's provisioned key) may subscribe: `BluetoothProxyHandler.authOnly`,
 on by default. On a device without a key, nobody on the LAN can listen in plaintext.
 
+## Compared with ESPHome
+
+What ESPHome's [`bluetooth_proxy`](https://esphome.io/components/bluetooth_proxy/) does on an ESP32,
+and what this library does on Android. Checked on 2026-11-15 against ESPHome **2026.10.2** (its
+`bluetooth_proxy` component and `api.proto`). Numbers are api.proto message ids. The
+library isn't on Maven Central yet, so "Since" says Unreleased. The messages themselves are in
+esphome-api ([its table](../esphome-api/README.md#bluetooth-proxy)).
+
+Status words:
+
+- **Supported**: works today, since the version given.
+- **Partial**: works, with the gaps named.
+- **Planned**: we mean to do it; the issue is linked.
+- **Not yet**: no decision either way.
+- **Not planned**: we won't, for the reason given.
+
+**Count for bluetooth-proxy** (against ESPHome 2026.10.2): 3 supported, 1 partial, 4 planned, 4 not yet, 2 not planned.
+
+| Feature | ESPHome | bluetooth-proxy | Since | Notes |
+|---|---|---|---|---|
+| Forward advertisements to HA | `PASSIVE_SCAN` flag, subscription (66, 87) | Supported | Unreleased | Scans only while a client is subscribed; ESPHome's tracker scans all the time |
+| Raw, batched advertisements | `RAW_ADVERTISEMENTS`, `BluetoothLERawAdvertisementsResponse` (93) | Supported | Unreleased | 16 per message or every 200 ms, as ESPHome on Wi-Fi. Data up to 62 bytes, as in ESPHome |
+| Scan responses | `esp32_ble_tracker` `active: true` | Supported | Unreleased | Android always scans actively and hands over the scan response with the advertisement |
+| Scan timing | `esp32_ble_tracker` `scan_parameters` (interval, window, duration) | Partial: three Android scan modes | Unreleased | `ScanPower`; Android takes no exact interval or window. The engine also restarts the scan every 25 min (Android's 30-minute rule) |
+| Passive scan and mode switching | `STATE_AND_MODE`, `BluetoothScannerStateResponse`, `BluetoothScannerSetModeRequest` (126, 127) | Not planned: Android apps can't stop scan requests | | One ESPHome flag covers both the state report and the switch |
+| Old-style advertisements | `BluetoothLEAdvertisementResponse` (67) | Not planned: raw advertisements replaced them, and HA asks for raw | | |
+| Active connections | `ACTIVE_CONNECTIONS`, `BluetoothDeviceRequest` connect and disconnect (68, 69) | Planned | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246) |
+| Connection slots | `SubscribeBluetoothConnectionsFreeRequest`, `BluetoothConnectionsFreeResponse` (80, 81) | Planned | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246): starts at 3, like ESPHome's default |
+| GATT services, read, write, descriptors, notify | 70–79, 82–84 | Planned | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246) |
+| Remote caching | `REMOTE_CACHING`, connect with or without cache | Planned | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246). Android keeps its own GATT cache |
+| Pairing and bonding | `PAIRING`, pair and unpair (85, 86) | Not yet | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246) leaves it out at first: a PIN raises Android's dialog over the app |
+| Clearing the GATT cache | `CACHE_CLEARING` (88) | Not yet | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246): only if the hidden `BluetoothGatt.refresh()` works |
+| Connection parameters | `CONNECTION_PARAMS_SETTING` (145, 146) | Not yet | | Android offers three connection priorities, not exact parameters |
+| The adapter's own MAC address | `bluetooth_mac_address` in DeviceInfo | Not yet | | Android hides it from apps. HA keys the scanner on the device MAC instead; [#246](https://github.com/GlassworksHQ/glassworks/issues/246) decides |
+
+`tools/check-parity-tables.py` checks the status words and the count.
+
 ## Tests
 
 `./gradlew :bluetooth-proxy:testDebugUnitTest`. `AndroidBleScannerTest` runs the Android glue on

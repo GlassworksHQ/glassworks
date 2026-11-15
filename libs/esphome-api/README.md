@@ -161,6 +161,138 @@ camera entity `camera.my_device_porch`.
 - **Not in yet:** the camera's idle image every few seconds (ESPHome's `idle_update_interval`), and
   argument descriptions (HA doesn't show them).
 
+## Compared with ESPHome
+
+What a real ESPHome device does over the native API, and what this library does. Checked on
+2026-11-15 against ESPHome **2026.10.2** (released 2026-11-02), its
+[`api.proto`](https://github.com/esphome/esphome/blob/2026.10.2/esphome/components/api/api.proto) and
+`api_connection.cpp`, aioesphomeapi v46.30.0 and Home Assistant's `esphome` integration (`dev` on the
+same day). Numbers are api.proto message ids: in the entity table, the list, state and command
+messages. Rows marked "android" come from
+[esphome-api-android](../esphome-api-android/README.md); the rest from this library. For an entity
+type the library doesn't ship, you can subclass `ApiEntity` and write its messages yourself.
+
+Status words:
+
+- **Supported**: works today, since the version given.
+- **Partial**: works, with the gaps named.
+- **Planned**: we mean to do it; the issue is linked.
+- **Not yet**: no decision either way.
+- **Not planned**: we won't, for the reason given.
+
+**Count for esphome-api** (against ESPHome 2026.10.2): 26 supported, 10 partial, 1 planned, 14 not yet, 15 not planned.
+
+`tools/check-parity-tables.py` checks these words and the count. `ParityTableTest` checks that the
+entity types marked Supported or Partial are exactly the ones the server lists.
+
+### Connection and encryption
+
+| Feature | ESPHome | esphome-api | Since | Notes |
+|---|---|---|---|---|
+| Plaintext connection | Without `api: encryption:` | Supported | 0.1.0 | Only while no key is set, or always with no `NoiseKeys` |
+| Noise encryption | `Noise_NNpsk0_25519_ChaChaPoly_SHA256` | Supported | 0.1.0 | Once a key is active, only Noise with that key gets in |
+| Key provisioning from HA | `NoiseEncryptionSetKeyRequest` (124, 125), zero-PSK handshake | Supported | 0.1.0 | Sends `api_encryption_provisionable`; persists the key through your `NoiseKeyStore` |
+| Provisioning window | `provisioning:` timeout, then `DisconnectRequest` with `PROVISIONING_CLOSED` | Not yet | | The device stays provisionable until HA sets a key |
+| Hello | `HelloRequest`, `HelloResponse` (1, 2) | Supported | 0.1.0 | Reports API 1.20, like ESPHome's `dev` branch; 2026.10.2 reports 1.19 |
+| Password authentication | `AuthenticationRequest` (3, 4) | Not planned: removed from ESPHome in 2026.1 | | Ignored, as ESPHome does now |
+| Ping and keepalive | `PingRequest`, `PingResponse` (7, 8), both ways | Supported | 0.1.0 | Keepalive timing follows `api_connection.cpp` |
+| Disconnect | `DisconnectRequest`, `DisconnectResponse` (5, 6), both ways | Supported | 0.1.0 | |
+| Outgoing connection (the device dials HA) | `HelloRequest.outgoing_connection_target`, `api_outgoing_connection_supported` | Not yet | | |
+
+### Device info and discovery
+
+| Feature | ESPHome | esphome-api | Since | Notes |
+|---|---|---|---|---|
+| Device identity | `DeviceInfoResponse` (10): name, MAC, version, compilation time, model, manufacturer, friendly name | Supported | 0.1.0 | From `DeviceIdentity` |
+| Web page link | `webserver_port` | Supported | 0.1.0 | `DeviceIdentity(webserverPort)` |
+| Project name and version | `project_name`, `project_version`, and the same mDNS TXT records | Not yet | | |
+| Sub-devices and areas | `devices`, `areas`, `area`, `suggested_area`, and `device_id` on every entity | Not yet | | Every entity belongs to the one device |
+| Deep sleep flag | `has_deep_sleep` | Not planned: a microcontroller power mode | | |
+| Device capabilities | `DeviceCapabilitiesResponse` (149, 150) | Partial: voice and Sendspin blocks only | 0.1.0 | No `bluetooth_proxy` block. The proxy flags go in DeviceInfo, which HA still reads ([#337](https://github.com/GlassworksHQ/glassworks/issues/337)) |
+| Time from Home Assistant | `GetTimeRequest`, `GetTimeResponse` (36, 37) | Partial: the time zone only | 0.1.0 | `onTimeZone` gets the `timezone` string, which ESPHome deprecated in 2026.9 for `parsed_timezone` ([#337](https://github.com/GlassworksHQ/glassworks/issues/337)). The epoch is ignored: Android keeps its own clock |
+| mDNS discovery | `_esphomelib._tcp`, TXT `friendly_name`, `version`, `mac`, `network`, `board`, `api_encryption`, `api_encryption_supported`, `api_provisioning` | Supported (android) | Unreleased (esphome-api-android 0.1.0) | `EspHomeMdns`. Without Android, advertise it yourself ([Use](#use)) |
+| Firmware mDNS records | TXT `platform`, `config_hash`, `ota_signed`, `package_import_url` | Not planned: they describe an ESPHome firmware build (chip, YAML hash, signed OTA, dashboard import) | | |
+
+### Entities
+
+| Feature | ESPHome | esphome-api | Since | Notes |
+|---|---|---|---|---|
+| Binary sensor (`binary_sensor`) | 12, 21 | Supported | 0.1.0 | No `is_status_binary_sensor`, which only ESPHome's own `status` sensor sets |
+| Sensor (`sensor`) | 16, 25 | Partial: no `force_update` | 0.1.0 | |
+| Text sensor (`text_sensor`) | 18, 27 | Partial: no `device_class` (`timestamp`, `date`) | 0.1.0 | |
+| Switch (`switch`) | 17, 26, 33 | Partial: no `assumed_state` | 0.1.0 | The state is always known, so `missing_state` is never sent |
+| Button (`button`) | 61, 62 | Supported | 0.1.0 | |
+| Number (`number`) | 49–51 | Supported | 0.1.0 | |
+| Select (`select`) | 52–54 | Supported | 0.1.0 | |
+| Text (`text`) | 97–99 | Supported | 0.1.0 | |
+| Light (`light`) | 15, 24, 32 | Partial: on, off and brightness only | 0.1.0 | `BrightnessLightEntity`. No color modes, effects, transition or flash, and no category or disabled-by-default |
+| Media player (`media_player`) | 63–65 | Partial: no category or disabled-by-default | 0.1.0 | Supported formats carry the format and purpose, not the sample rate, channels or sample size |
+| Camera (`camera`) | 43–45 | Partial: no idle image | 0.1.0 | Single images and streams work. ESPHome also sends a frame every `idle_update_interval` |
+| Event (`event`) | 107, 108 | Supported | 0.1.0 | |
+| Update (`update`) | 116–118 | Supported | 0.1.0 | Install and check commands go to your callback |
+| Date (`date`) | 100–102 | Not yet | | |
+| Time (`time`) | 103–105 | Not yet | | |
+| Date and time (`datetime`) | 112–114 | Not yet | | |
+| Siren (`siren`) | 55–57 | Not yet | | A device with a speaker could be one |
+| Alarm control panel (`alarm_control_panel`) | 94–96 | Not planned: HA's alarm panel card does the job ([#126](https://github.com/GlassworksHQ/glassworks/issues/126)) | | |
+| Lock (`lock`) | 58–60 | Not planned: drives hardware a phone or panel doesn't have | | An app that bridges a real lock can subclass `ApiEntity` |
+| Cover (`cover`) | 13, 22, 30 | Not planned: drives motor hardware | | As for locks |
+| Fan (`fan`) | 14, 23, 31 | Not planned: drives fan hardware | | As for locks |
+| Valve (`valve`) | 109–111 | Not planned: drives valve hardware | | As for locks |
+| Climate (`climate`) | 46–48 | Not planned: drives HVAC hardware, and thermostat logic belongs in HA | | As for locks |
+| Water heater (`water_heater`) | 132–134 | Not planned: drives heater hardware | | As for locks |
+| Infrared and RF (`infrared`, `radio_frequency`) | 135–137, 148, 153 | Not planned: needs an IR or sub-GHz transceiver, which few Android devices have | | |
+
+### Actions and Home Assistant
+
+| Feature | ESPHome | esphome-api | Since | Notes |
+|---|---|---|---|---|
+| User-defined actions | `ListEntitiesServicesResponse`, `ExecuteServiceRequest` (41, 42) | Partial: no descriptions | 0.1.0 | All eight argument types. The action's and arguments' `description` and `example` aren't sent |
+| Action responses | `ExecuteServiceResponse` (131) | Supported | 0.1.0 | Status, error message and JSON data |
+| Events on HA's bus | `HomeassistantActionRequest` (35) with `is_event` | Supported | 0.1.0 | `sendHomeAssistantEvent` |
+| Calling HA actions from the device | `HomeassistantActionRequest` (35), `homeassistant.action` | Not yet | | Events only. HA needs "Allow the device to perform Home Assistant actions" for these |
+| HA action responses | `HomeassistantActionResponse` (130) | Not yet | | |
+| HA state subscription | `SubscribeHomeAssistantStatesRequest` and its responses (38–40) | Not yet | | ESPHome's `homeassistant` sensors |
+| Logs to HA | `SubscribeLogsRequest`, `SubscribeLogsResponse` (28, 29) | Not yet | | Logs go to `EspHomeLog.sink` |
+
+### Voice assistant
+
+| Feature | ESPHome | esphome-api | Since | Notes |
+|---|---|---|---|---|
+| Subscription | `SubscribeVoiceAssistantRequest` (89) | Supported | 0.1.0 | `VoiceAssistantHandler.onSubscribe` |
+| Start and stop a pipeline | `VoiceAssistantRequest`, `VoiceAssistantResponse` (90, 91) | Supported | 0.1.0 | The UDP port reaches `onStartResponse`; a UDP stream is the app's to run |
+| Pipeline events | `VoiceAssistantEventResponse` (92) | Supported | 0.1.0 | |
+| Audio over the API | `VoiceAssistantAudio` (106), both ways | Partial: microphone to HA only | 0.1.0 | Audio HA streams to a `SPEAKER` device is dropped; play the TTS URL from the events instead |
+| Timers | `VoiceAssistantTimerEventResponse` (115) | Supported | 0.1.0 | |
+| Announcements | `VoiceAssistantAnnounceRequest`, `VoiceAssistantAnnounceFinished` (119, 120) | Supported | 0.1.0 | Including start-a-conversation |
+| Wake word configuration | `VoiceAssistantConfigurationRequest`, its response, `VoiceAssistantSetConfiguration` (121–123) | Supported | 0.1.0 | |
+
+### Bluetooth proxy
+
+The messages are here; the Android scanner and its own comparison are in
+[bluetooth-proxy](../bluetooth-proxy/README.md#compared-with-esphome).
+
+| Feature | ESPHome | esphome-api | Since | Notes |
+|---|---|---|---|---|
+| Advertisements | `SubscribeBluetoothLEAdvertisementsRequest`, `UnsubscribeBluetoothLEAdvertisementsRequest`, `BluetoothLERawAdvertisementsResponse` (66, 87, 93) | Supported | 0.1.0 | One subscriber at a time, as in ESPHome; `authOnly` by default |
+| Old-style advertisements | `BluetoothLEAdvertisementResponse` (67) | Not planned: replaced by raw advertisements, which HA asks for | | |
+| Active connections and GATT | `BluetoothDeviceRequest` and the GATT messages (68–86, 88), connection parameters (145, 146) | Planned | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246) |
+| Scanner state and mode | `BluetoothScannerStateResponse`, `BluetoothScannerSetModeRequest` (126, 127) | Not planned: Android apps can't switch to a passive scan | | |
+| Bluetooth MAC address | `bluetooth_mac_address` in DeviceInfo and capabilities | Not yet | | HA keys the scanner on the device MAC instead. Decided with GATT ([#246](https://github.com/GlassworksHQ/glassworks/issues/246)) |
+
+### Other proxies and newer messages
+
+| Feature | ESPHome | esphome-api | Since | Notes |
+|---|---|---|---|---|
+| Sendspin pairing token | `SendspinPairingTokenRequest`, its response (159, 160) | Supported | 0.1.0 | Only over Noise with the provisioned key |
+| Onboarding wizard | `DeviceWizardRequest`, its response, `WizardInputSetRequest` (156–158) | Not yet | | |
+| Z-Wave proxy | `ZWaveProxyFrame`, `ZWaveProxyRequest` (128, 129, 151) | Not planned: a Z-Wave radio on the microcontroller's UART | | |
+| Serial proxy | `SerialProxy*` (138–147, 152, 154, 155) | Not planned: the microcontroller's UART pins; Android rarely gives apps a UART | | |
+
+ESPHome's `dev` branch adds `GetYamlRequest` (161, 162) and `CrashReportRequest` (163, 164) after
+2026.10.2. Both are about firmware (the YAML the device was built from, a crash dump), so they are
+not planned. They aren't counted above.
+
 ## Gradle
 
 On Maven Central as `dev.glassworks:esphome-api` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is
