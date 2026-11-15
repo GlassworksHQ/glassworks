@@ -332,9 +332,10 @@ is ours.
 
 Do this only with a backup whose `boot` and `vbmeta` are both Aqara's: one made at your first
 install, or one refused only because its splash is ours and taken after both `boot` and `vbmeta` were
-put back. A backup taken after only `boot` was put back holds our `vbmeta`, with verification off.
-The check below shows that the two files are intact, not that they are Aqara's. A backup made on an already-installed panel holds our patched `boot`, and putting it
-back by hand reinstalls our software instead of Aqara's.
+put back. A backup taken after only `boot` was put back, or after an install that stopped between
+writing `vbmeta` and `boot`, holds our `vbmeta`, with verification off. A backup made on an
+already-installed panel holds our patched `boot`. Putting either back by hand leaves our software in
+place of Aqara's. The check below shows that the two files are intact, not that they are Aqara's.
 
 First check those two, in the backup's folder. It needs both entries in `SHA256SUMS` and both files
 to match. Go on only if it ends with `boot and vbmeta OK: go on`:
@@ -346,8 +347,9 @@ grep -q '  boot\.img$' SHA256SUMS && grep -q '  vbmeta\.img$' SHA256SUMS &&
   echo "boot and vbmeta OK: go on"
 ```
 
-Then put the panel in FEL mode and run this from the repository's folder, with `B` set to the
-backup's folder. Each command runs only if the one before it worked, so a failed flash stops
+This needs what the [command line](#command-line) needs: macOS or Linux (not Windows), a checkout of
+this repository, and its U-Boot build. Then put the panel in FEL mode and run this from the
+repository's folder, with `B` set to the backup's folder. Each command runs only if the one before it worked, so a failed flash stops
 before the restart. If a flash fails, the panel stays in our U-Boot's fastboot: run that
 `fastboot flash` line again, then the rest.
 
