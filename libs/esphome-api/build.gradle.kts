@@ -4,6 +4,8 @@ plugins {
     `java-library`
     id("org.jetbrains.kotlin.jvm")
     id("com.toasttab.expediter") version "0.2.0"
+    id("org.jetbrains.dokka")
+    id("com.vanniktech.maven.publish") // dev.glassworks:esphome-api, set up in the root build.gradle.kts
 }
 
 java {

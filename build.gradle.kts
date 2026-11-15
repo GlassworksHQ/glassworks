@@ -7,6 +7,9 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.4.20" apply false
     // The pure-JVM libraries under libs/ (esphome-api).
     id("org.jetbrains.kotlin.jvm") version "2.4.20" apply false
+    // Maven Central publishing of the libraries (#153), and their KDoc jars. Both Apache-2.0, build time only.
+    id("com.vanniktech.maven.publish") version "0.37.0" apply false
+    id("org.jetbrains.dokka") version "2.2.0" apply false
 }
 
 // The ABI this APK is built for: -Ps1Abi=arm64-v8a or S1_ABI. Unset: the S1's. One APK per ABI, because
@@ -52,6 +55,86 @@ subprojects {
             .withPathSensitivity(PathSensitivity.NONE)
         // The pane catalog (#231), the confinement scans, goldens, the font and the repo files the tests read.
         readsRepoFiles(rootProject.projectDir)
+    }
+}
+
+// The libraries published to Maven Central as dev.glassworks:<module name> (#153, docs/releasing.md
+// "Libraries"). A library opts in by applying com.vanniktech.maven.publish and org.jetbrains.dokka, and
+// keeps its own `version` and `description` in its gradle.properties. Only the release workflow has the
+// signing key, so publishToMavenLocal runs unsigned without it.
+subprojects {
+    pluginManager.withPlugin("com.vanniktech.maven.publish") {
+        val repo = "https://github.com/GlassworksHQ/glassworks"
+        extensions.configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
+            coordinates("dev.glassworks", project.name, project.version.toString())
+            publishToMavenCentral(automaticRelease = false)
+            if (providers.gradleProperty("signingInMemoryKey").isPresent) signAllPublications()
+            pom {
+                name.set(project.name)
+                description.set(provider { project.description ?: throw GradleException("${project.path}: set description in gradle.properties") })
+                url.set("$repo/tree/main/libs/${project.name}")
+                inceptionYear.set("2026")
+                licenses {
+                    license {
+                        name.set("MIT")
+                        url.set("https://opensource.org/license/mit")
+                        distribution.set("repo")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("GlassworksHQ")
+                        name.set("Glassworks")
+                        url.set("https://github.com/GlassworksHQ")
+                    }
+                }
+                scm {
+                    url.set(repo)
+                    connection.set("scm:git:$repo.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/GlassworksHQ/glassworks.git")
+                }
+            }
+        }
+        // Kotlin 2.1 metadata and kotlin-stdlib 2.1, so apps on Kotlin 2.0 or newer can compile against them. A
+        // compiler reads metadata up to one minor version ahead, and AGP 9's built-in Kotlin is 2.2: built at the
+        // repo's 2.4, a fresh minSdk 23 app fails (tools/release/lib-consumer-check.sh).
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension> { coreLibrariesVersion = "2.1.21" }
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask<*>>().configureEach {
+            compilerOptions {
+                languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+                apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_1)
+            }
+        }
+        // The licence in the jar, and in the AAR's classes.jar, as META-INF/LICENSE. Apps drop that path
+        // when they package (AGP's default excludes), so it never reaches an APK.
+        val licence = tasks.register<LicenceResources>("licenceResources") {
+            licence.set(rootProject.file("LICENSE"))
+            outputDir.set(layout.buildDirectory.dir("generated/licence"))
+        }
+        pluginManager.withPlugin("java-library") {
+            extensions.getByType<SourceSetContainer>()["main"].resources.srcDir(licence)
+        }
+        pluginManager.withPlugin("com.android.library") {
+            extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+                // A default exclude, in libraries too. The androidTest APK gets two (this library's and
+                // esphome-api's): the same text, so keep one.
+                packaging.resources.excludes.remove("/META-INF/LICENSE")
+                packaging.resources.pickFirsts.add("/META-INF/LICENSE")
+            }
+            extensions.configure<com.android.build.api.variant.LibraryAndroidComponentsExtension> {
+                onVariants { it.sources.resources?.addGeneratedSourceDirectory(licence, LicenceResources::outputDir) }
+            }
+        }
+    }
+}
+
+abstract class LicenceResources : DefaultTask() {
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val licence: RegularFileProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        licence.get().asFile.copyTo(outputDir.file("META-INF/LICENSE").get().asFile, overwrite = true)
     }
 }
 
