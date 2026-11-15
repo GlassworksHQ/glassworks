@@ -1,0 +1,26 @@
+{
+  "name": "@glassworks/mirror-root-run",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The root's headless run of Kiln's Mirror install (option A, #40): the same packages as the page, over Node's WebUSB for fastboot and the host's adb. WRITES the Mirror's system and userdata.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glassworks/adb": "0.0.0",
+    "@glassworks/app-adb": "0.0.0",
+    "@glassworks/ext4": "0.0.0",
+    "@glassworks/fastboot": "0.0.0",
+    "@glassworks/lululemon-mirror-installer": "0.0.0",
+    "improv-serial": "0.1.0"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  },
+  "optionalDependencies": {
+    "usb": "3.2.1"
+  }
+}

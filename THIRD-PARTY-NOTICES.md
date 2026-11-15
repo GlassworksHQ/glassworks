@@ -508,6 +508,11 @@ renders above:
   LGPL-3.0-or-later. It is downloaded to the tester's computer only, into a venv of about 93 MB; the
   peer only packs the H.264 that ffmpeg made, and decodes nothing. None of these ships in the app, the bundle or the repo,
   and the project doesn't host them.
+- **node-usb and tsx** (host only, #40). `tools/mirror/flash-node.ts`, the Mirror install run from a
+  computer, reaches fastboot through `usb` 3.2.1 (MIT, Copyright Rob Moran, https://github.com/node-usb/node-usb,
+  with its prebuilt `@node-usb/usb-<platform>` binary, MIT) and runs under `tsx` 4.23.15 (MIT, Copyright
+  Hiroki Osame, https://github.com/privatenumber/tsx). npm installs them on that computer from the
+  lockfile. Neither ships in the app, the installer page or the repo.
 - **Aqara/Lumi firmware.** None is included. The installer's partition backup stays with the owner. On
   the panel, the radio helper uses Aqara's own `cpcd` and stock radio firmware where they already are.
 
