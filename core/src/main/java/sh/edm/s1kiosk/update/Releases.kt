@@ -98,7 +98,11 @@ class ReleasePick(val offer: UpdateOffer?, val problem: String?)
 object Releases {
     /** owner/repo of the official releases. Renamed on 2026-11-13; the old name must never be reused (docs/releasing.md "The repo name"). */
     const val REPO = "GlassworksHQ/glassworks"
-    /** Recent releases, newest first. 30 leaves room for other frames' and libraries' releases. */
+    /**
+     * Recent releases, newest first. 30 leaves room for other frames' and libraries' releases; an app whose
+     * newest release is older than the repo's 30 newest sees no update until its next one
+     * (frames/generic-android/README.md, "Updates").
+     */
     const val LIST_URL = "https://api.github.com/repos/$REPO/releases?per_page=30"
 
     /** This app's tag prefix in the shared repo. Plain `v1.2.3` tags (all releases so far) stay valid. */

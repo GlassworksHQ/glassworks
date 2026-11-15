@@ -101,7 +101,13 @@ repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
 | Glassworks for generic Android | `generic-android-v1.2.3` | `glassworks-generic-android-arm64-v8a-1.2.3.apk`, `glassworks-generic-android-armeabi-v7a-1.2.3.apk` |
 | S1 Kiosk | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
 
-So neither app ever offers itself the other's APK. The release workflow doesn't build the generic app
+So neither app ever offers itself the other's APK.
+
+The check reads the repo's 30 newest releases (`Releases.LIST_URL`, `per_page=30`), all apps and libraries
+together, and takes the newest of its own among them. So if more than 30 releases of other parts come
+out after this app's newest one, the app sees no update until its next release: every app should release
+at least once in any 30 of the repo's releases. One page keeps each check (after the app starts, then every 24 hours) to one request
+against GitHub's limit of 60 an hour without a token. The release workflow doesn't build the generic app
 yet, and there has been no release of it. Its first release needs its key ([Signing](#signing)) and
 `release.yml` steps for the names above.
 
