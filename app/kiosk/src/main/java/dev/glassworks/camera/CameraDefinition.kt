@@ -90,8 +90,13 @@ class CameraDefinition(
                             val no = CameraPage.streamRefusal(prefs.privacy, prefs.use)
                             if (on && no != null) done(no) else { prefs.onvif = on; done(null) }
                         },
-                        // The username; the password only while the row is tapped, on the panel (maintainer, 2026-11-14).
-                        SettingsItem.Info({ "Sign-in" }, { CameraPage.signIn(prefs.signIn) }, reveal = { CameraPage.signInShown(prefs.signIn) }),
+                        // The username; the password only on Show, on the panel and on the Manage page with a Home
+                        // Assistant sign-in, and editable on both (maintainer, 2026-11-14; #242). Cleared while the
+                        // stream runs, the pane makes a new one for this panel (CameraPrefs.ensureSignIn).
+                        SettingsItem.SignIn(
+                            "Sign-in", isSet = { prefs.signIn != null }, user = { prefs.signIn?.first }, reveal = { prefs.signIn?.second },
+                            shown = { CameraPage.signIn(prefs.signIn) },
+                        ) { v, done -> prefs.signIn = v; done(null) },
                         SettingsItem.Info({ "Address" }, { CameraPage.address(read().address) }),
                         SettingsItem.Info({ "Stream" }, { CameraPage.stream(read()) }),
                         SettingsItem.Info({ "ONVIF device" }, { CameraPage.device(read()) }),

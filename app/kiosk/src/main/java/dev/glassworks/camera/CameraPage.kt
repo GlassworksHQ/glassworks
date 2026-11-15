@@ -120,13 +120,9 @@ object CameraPage {
     fun streamDetail(privacy: Boolean, use: CameraUse): String =
         streamRefusal(privacy, use) ?: "For Frigate, go2rtc, Home Assistant's ONVIF integration and UniFi Protect."
 
-    /** The username, never the password: that is [signInShown], on a tap. None yet: made when the stream turns on. */
+    /** The username, never the password: the sign-in's Show has that. None yet: made when the stream turns on. */
     fun signIn(signIn: Pair<String, String>?): String =
-        signIn?.let { "${it.first} · password hidden, tap to show" } ?: SIGN_IN_NOT_MADE
-
-    /** The row while tapped: the username and the password, for typing into Home Assistant or Protect. */
-    fun signInShown(signIn: Pair<String, String>?): String =
-        signIn?.let { "${it.first} · ${it.second} · tap to hide" } ?: SIGN_IN_NOT_MADE
+        signIn?.let { "${it.first} · password hidden" } ?: SIGN_IN_NOT_MADE
 
     fun address(a: StreamAddress?): String =
         a?.let { "${it.host} · RTSP port ${it.rtspPort}, ONVIF port ${it.onvifPort}" } ?: "The panel has no address yet"

@@ -435,10 +435,11 @@ older Android the panel shows a small green dot in the top-right corner, over no
 the panel makes its own: the username `glassworks` and a random 20-character password (letters and
 digits without the ones that read alike, from `SecureRandom`). It is never a default shared between
 panels, and it never changes by itself; clear it and turn the stream on again for a new one. The
-stream never runs without a sign-in. The Camera page's *Sign-in* row shows the username; tap it to
-show the password, and again to hide it (editing it on the panel comes with the editable settings,
-#253). The password is never logged, never on the Manage page, and no entity or diagnostic carries
-it. Use this sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate or UniFi
+stream never runs without a sign-in. The Camera page's *Sign-in* row shows the username; tap it and
+press **Show** to read the password. It hides again after a minute, when the screen goes off or when
+you close it. You can change the username and password there, or **Clear** them (with the stream on,
+the panel makes a new one). The Manage page has the same row and **Show**, for a browser signed in
+with Home Assistant. The password is never logged, and no entity or diagnostic carries it. Use this sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate or UniFi
 Protect. A client that signs in wrong is refused: the device and media services answer with a SOAP
 `NotAuthorized` fault (Home Assistant then asks you to sign in again), the event service with a bare
 HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. The panel logs the
