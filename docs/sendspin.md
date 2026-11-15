@@ -380,9 +380,11 @@ the player (it arrives as `set_output_delay`).
 ## Tests
 
 ```sh
-python3 -m venv /tmp/sendspin-venv && /tmp/sendspin-venv/bin/pip install 'aiosendspin[server]==10.2.1'
-SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :sendspin:testDebugUnitTest
+python3.12 -m venv /tmp/sendspin-venv && /tmp/sendspin-venv/bin/pip install 'aiosendspin[server]==10.2.1'
+SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :sendspin:testDebugUnitTest :pane-sendspin:testDebugUnitTest
 ```
+
+aiosendspin 10.2.1 needs Python 3.12 or newer (pip finds no release for 3.11).
 
 `aiosendspin[server]` brings PyAV with FFmpeg's FLAC encoder, which the FLAC stream test needs.
 

@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
  *   send whole FLAC frames on a contiguous timeline that decode (PyAV) back to the tone.
  * - guest: unpaired access enabled + operator approval → player role → audio.
  *
- *     python3 -m venv /tmp/sendspin-venv && /tmp/sendspin-venv/bin/pip install 'aiosendspin[server]==10.2.1'
+ *     python3.12 -m venv /tmp/sendspin-venv && /tmp/sendspin-venv/bin/pip install 'aiosendspin[server]==10.2.1'
  *     SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :sendspin:testDebugUnitTest
  *
  * Skipped without SENDSPIN_PYTHON.
