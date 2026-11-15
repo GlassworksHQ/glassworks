@@ -4,7 +4,7 @@
 Off-device and read-only: reads a logcat saved on the computer and touches nothing.
 
     adb shell 'logcat -d -b all -v time' > all.txt
-    tools/install/install-churn.py all.txt
+    frames/aqara-s1-plus/tools/install/install-churn.py all.txt
 
 One row per force-stop of the kiosk. An install shows up as `install`: Android force-stops the app
 when the install starts ("installPackageLI") and again after dexopt ("pkg removed"). Columns:

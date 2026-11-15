@@ -266,7 +266,7 @@ unplug the panel, plug it back in, and use **Finish setting up**. The titles Kil
 Open **Undo an install** from Kiln's first screen, or **Undo** on the Done screen. The rail shows
 **Backup → Connect → Restore → Done**.
 
-<img src="../../../docs/img/kiln/undo.webp" alt="Put it back. Two choices: As it came from Aqara (selected): the original software, then a factory reset on the panel, everything is removed. Keep its settings: Aqara's apps come back first, over USB with the panel running; Wi-Fi and the rest stay. A row: The backup in this browser, with Download this backup. Link: Use a backup file. Button: Continue. From a terminal instead: tools/install/fel-install.sh --undo ~/s1-backup." width="100%">
+<img src="../../../docs/img/kiln/undo.webp" alt="Put it back. Two choices: As it came from Aqara (selected): the original software, then a factory reset on the panel, everything is removed. Keep its settings: Aqara's apps come back first, over USB with the panel running; Wi-Fi and the rest stay. A row: The backup in this browser, with Download this backup. Link: Use a backup file. Button: Continue. From a terminal instead: frames/aqara-s1-plus/tools/install/fel-install.sh --undo ~/s1-backup." width="100%">
 
 *Choose how far back, and which backup. Kiln uses the backup in this browser, or **Use a backup
 file** for the `.zip`.*
@@ -301,8 +301,8 @@ file** for the `.zip`.*
    A factory reset alone doesn't restore the software, so restore first. With *Keep its settings*
    the panel restarts with Aqara's software and apps, and your settings and Wi-Fi as they were.
 
-From the CLI: `tools/install/fel-install.sh --undo ~/s1-backup` restores the software, and
-`tools/install.sh --undo` over adb gives Aqara's apps back. It re-enables Aqara's apps and
+From the CLI: `frames/aqara-s1-plus/tools/install/fel-install.sh --undo ~/s1-backup` restores the software, and
+`frames/aqara-s1-plus/tools/install.sh --undo` over adb gives Aqara's apps back. It re-enables Aqara's apps and
 launcher, restores Do Not Disturb and the keyboard, removes S1 Kiosk, and starts Aqara's radio
 services again. Run on its own, without the restore, it keeps your Wi-Fi and settings and the
 patched `boot`, but drops the kiosk.
@@ -356,7 +356,7 @@ before the restart. If a flash fails, the panel stays in our U-Boot's fastboot: 
 ```sh
 B=~/s1-backup                                 # the backup's folder
 unset ANDROID_SERIAL                          # our U-Boot's fastboot serial isn't the panel's adb one
-NO_BL31=1 tools/fel/fel-boot.sh &&            # our U-Boot in RAM; it starts fastboot
+NO_BL31=1 frames/aqara-s1-plus/tools/fel/fel-boot.sh &&            # our U-Boot in RAM; it starts fastboot
   fastboot flash boot "$B/boot.img" &&
   fastboot flash vbmeta "$B/vbmeta.img" &&
   fastboot reboot
@@ -391,14 +391,14 @@ Linux and needs `sunxi-fel`, `fastboot`, `adb`, Docker (for the boot patch) and 
 
 ```sh
 # 0. Build U-Boot for the panel (once) and the kiosk app
-UBOOT_SRC=~/src/u-boot BL31=<bl31.bin> tools/fel/build-uboot.sh
+UBOOT_SRC=~/src/u-boot BL31=<bl31.bin> frames/aqara-s1-plus/tools/fel/build-uboot.sh
 ./gradlew :kiosk:assembleDebug
 
 # 1. FEL → boot U-Boot from RAM → back up → patch → vbmeta → splash → flash → verify → adb
-tools/install/fel-install.sh ~/s1-backup
+frames/aqara-s1-plus/tools/install/fel-install.sh ~/s1-backup
 
 # 2. Install and configure S1 Kiosk over adb
-tools/install.sh --url http://homeassistant.local:8123 \
+frames/aqara-s1-plus/tools/install.sh --url http://homeassistant.local:8123 \
     --timezone America/Los_Angeles --locale en-US \
     --keyboard rkr.simplekeyboard.inputmethod_149.apk     # optional, from F-Droid
 ```
@@ -408,7 +408,7 @@ tools/install.sh --url http://homeassistant.local:8123 \
 - `install.sh` installs the app, grants its permissions, makes it the home screen, disables
   Aqara's bloat and night screen-off, and pushes the wake word models. `--dry-run` prints what
   it would do. `--help` lists every option.
-- Already have adb on a panel? `tools/install.sh` alone sets up the app without root. You only
+- Already have adb on a panel? `frames/aqara-s1-plus/tools/install.sh` alone sets up the app without root. You only
   get the radio modes with the root helper from `fel-install.sh`.
 - Undo from the CLI: see [Undo](#undo).
 
@@ -425,7 +425,7 @@ the app and installs the release. On its own, that has two side effects:
 - Android 10 also forgets every Wi-Fi network the app saved. S1 Kiosk saves the panel's Wi-Fi itself
   (Improv), so the panel would drop off the network.
 
-Both installers handle this. Install as usual (Kiln's **Finish setting up**, or `tools/install.sh
+Both installers handle this. Install as usual (Kiln's **Finish setting up**, or `frames/aqara-s1-plus/tools/install.sh
 --apk <release APK>`). When Android refuses the new version, nothing has been changed yet. The
 installer then says what will happen on this panel and asks you to confirm: a dialog in the browser,
 or typing `yes` in the terminal (`--switch` confirms in advance, for scripts). `--dry-run` shows the

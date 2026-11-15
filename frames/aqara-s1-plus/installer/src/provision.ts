@@ -1,4 +1,4 @@
-// tools/install.sh (and tools/debloat/debloat.sh) over adb from the browser. Same steps, same order,
+// frames/aqara-s1-plus/tools/install.sh (and frames/aqara-s1-plus/tools/debloat/debloat.sh) over adb from the browser. Same steps, same order,
 // same "try" (never fails) vs "run" (must succeed) split. Wake-word models are not pushed from here:
 // their license (CC BY-NC-SA) keeps them out of our hosting and GitHub sends no CORS headers, so the
 // kiosk app downloads them on the panel itself.

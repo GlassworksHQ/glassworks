@@ -6,7 +6,7 @@ package sh.edm.s1kiosk.radio
  *
  * There is no "Aqara (stock)" mode: with Aqara's launcher/apps disabled and its cloud blocked nothing
  * can use the hub's own Zigbee network. Stock comes back by uninstalling the app (or
- * `tools/install.sh --undo`): Aqara's services are init services started on every boot.
+ * `frames/aqara-s1-plus/tools/install.sh --undo`): Aqara's services are init services started on every boot.
  *
  * Roles: Zigbee coordinator (EZSP over TCP for ZHA), Zigbee router (repeater in an existing mesh, no
  * endpoints), Thread border router, Thread router (repeater joining an existing network).
@@ -97,7 +97,7 @@ object AqaraRadio {
     const val AGENT = "zigbee_agent"   // zigbee_agent (Aqara's MQTT glue around Z3Gateway)
     const val MATTER = "ha_matter"     // Aqara's Matter bridge (Wi-Fi, :5540) for its Zigbee devices
 
-    /** Services [RadioMode.aqaraServices] manages; `tools/install.sh --undo` starts them again. */
+    /** Services [RadioMode.aqaraServices] manages; `frames/aqara-s1-plus/tools/install.sh --undo` starts them again. */
     val ALL = listOf(CPCD, SOCAT, ZIGBEED, HOST, AGENT, MATTER)
 
     /**
@@ -113,7 +113,7 @@ object AqaraRadio {
 
 /**
  * Contract with the root helper that the boot-image patch will install (frames/aqara-s1-plus/docs/radio.md).
- * The app writes [PROP_MODE] and `ctl.restart`s [SERVICE]; the helper (tools/radio/s1kiosk_radio.sh)
+ * The app writes [PROP_MODE] and `ctl.restart`s [SERVICE]; the helper (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh)
  * applies the mode, supervises its processes and reports in [PROP_STATUS].
  */
 object RadioHelper {
@@ -125,7 +125,7 @@ object RadioHelper {
     /** Helper -> app: "<state> <mode-id>[: detail]", state = applying | ok | error. */
     const val PROP_STATUS = "sys.s1kiosk.radio.status"
     /**
-     * Helper -> app: contract version the installed helper implements. v2 (tools/radio/s1kiosk_radio.sh
+     * Helper -> app: contract version the installed helper implements. v2 (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh
      * 2026-11): zigbee_router = EZSP bridge on 127.0.0.1:[ZIGBEE_ROUTER_PORT] for the app's host,
      * thread_router = dataset hand-off from the app ([DATASET_FILE]), "applying <mode>: waiting for …"
      * until the stack answers, [PROP_OTBR].

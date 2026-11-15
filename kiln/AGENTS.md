@@ -10,7 +10,7 @@ own (like `improv-serial`), or the Kiln badge if it's part of Kiln. See
 ## What it is
 
 Plain TypeScript (ES2022, no framework), built with Vite, running over WebUSB in Chrome or Edge.
-It does in the browser what the CLI does in `tools/install/fel-install.sh` and `tools/install.sh`:
+It does in the browser what the CLI does in `frames/aqara-s1-plus/tools/install/fel-install.sh` and `frames/aqara-s1-plus/tools/install.sh`:
 FEL boot → our U-Boot's fastboot → backup → byte-exact Magisk patch → flash and read back → adb
 provisioning. **The CLI is the reference.** When the two disagree, fix the browser side, or change
 both in the same PR.
@@ -42,7 +42,7 @@ workspace's dependencies resolve, to the one copy at the root.
 
 ## Rules
 
-- **The boot patch must be byte-identical to `tools/root/patch-boot-magisk.sh`.** That is why
+- **The boot patch must be byte-identical to `frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh`.** That is why
   `packages/bootpatch/src/wasm/` compiles magiskboot's exact compression crates (`zlib-rs` level 9,
   `lzma-rust2` with the ARM Thumb BCJ filter). Don't swap in `CompressionStream`, pako or liblzma. If
   you change the overlay, change the shell script too and regenerate the goldens

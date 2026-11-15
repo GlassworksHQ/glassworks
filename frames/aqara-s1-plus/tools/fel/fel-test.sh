@@ -3,7 +3,7 @@
 # A power cycle (unplug/replug USB-C) returns the panel to normal Android.
 #
 # 1. Enter FEL: hold the unlabeled PCB button while plugging in USB-C (~10 s). Screen stays black.
-# 2. SUNXI_FEL=~/src/sunxi-tools/sunxi-fel UBOOT_BIN=.../u-boot-sunxi-with-spl.bin tools/fel/fel-test.sh
+# 2. SUNXI_FEL=~/src/sunxi-tools/sunxi-fel UBOOT_BIN=.../u-boot-sunxi-with-spl.bin frames/aqara-s1-plus/tools/fel/fel-test.sh
 #
 # Watch the UART console (115200 8N1) at the same time to see SPL/U-Boot output.
 set -euo pipefail

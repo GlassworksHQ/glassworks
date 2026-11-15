@@ -1,5 +1,5 @@
 // bootpatch: unit tests + byte-exact comparisons against goldens made by the real CLI
-// (tools/root/patch-boot-magisk.sh in Docker, tools/branding/set-bootlogo.py).
+// (frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh in Docker, tools/branding/set-bootlogo.py).
 //
 // The goldens contain Aqara's boot images and Magisk binaries, so they live outside the repo:
 //   S1_WEB_GOLDEN=~/src/aqara-panel-backups/web-golden npm test
@@ -178,7 +178,7 @@ describe.skipIf(!HAVE_GOLDEN)('golden: compressors == magiskboot', () => {
   });
 });
 
-describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == tools/root/patch-boot-magisk.sh', () => {
+describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh', () => {
   const ov = (f: string) => g(`fixtures/overlay/${f}`);
   const overlay = (opts: { key?: boolean; anim?: boolean } = {}): OverlayFile[] => s1Overlay({
     radioRc: ov('s1kiosk_radio.rc'), radioSh: ov('s1kiosk_radio.sh'), otbrAgent: ov('otbr-agent'), otCtl: ov('ot-ctl'),

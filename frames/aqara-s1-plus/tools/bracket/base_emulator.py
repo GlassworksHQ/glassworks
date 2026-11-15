@@ -15,7 +15,7 @@ Default identity: a 2-channel switch base (200.1.159 = 0xF1100002 -> model 0xF11
 dock class 14.160.85 = 0x0100F110 as derived by libha_bracket).
 
 Expose it to the panel without hardware:
-    python3 tools/bracket/base_emulator.py --port 9999
+    python3 frames/aqara-s1-plus/tools/bracket/base_emulator.py --port 9999
     adb reverse tcp:9999 tcp:9999
     adb shell 'cd /data/local/tmp && /vendor/bin/socat pty,link=s3a,raw,echo=0 tcp:127.0.0.1:9999 &'
     adb shell /vendor/bin/bracket_cli /data/local/tmp/s3a 115200 200.1.159

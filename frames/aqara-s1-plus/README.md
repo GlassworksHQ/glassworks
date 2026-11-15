@@ -230,8 +230,8 @@ The same steps as shell scripts, for people who would rather run them by hand (m
 needs `sunxi-fel`, `fastboot`, `adb`, Docker and a U-Boot build):
 
 ```sh
-tools/install/fel-install.sh ~/s1-backup          # FEL → back up → patch → flash → verify
-tools/install.sh --url http://homeassistant.local:8123 \
+frames/aqara-s1-plus/tools/install/fel-install.sh ~/s1-backup          # FEL → back up → patch → flash → verify
+frames/aqara-s1-plus/tools/install.sh --url http://homeassistant.local:8123 \
     --timezone America/Los_Angeles --locale en-US # install and configure S1 Kiosk over adb
 ```
 
@@ -307,7 +307,7 @@ Each update is checked against its checksum and the project's signing key first.
   from Aqara* writes your backed-up partitions back over FEL; a factory reset on the panel then
   removes S1 Kiosk and its settings. *Keep the panel's settings* removes S1 Kiosk over USB (or turns it off, if it
   saved the panel's Wi-Fi) and brings Aqara's apps back; the panel keeps its Wi-Fi. From the CLI:
-  `tools/install/fel-install.sh --undo <backup-dir>` or `tools/install.sh --undo`.
+  `frames/aqara-s1-plus/tools/install/fel-install.sh --undo <backup-dir>` or `frames/aqara-s1-plus/tools/install.sh --undo`.
 - **Hard to brick.** FEL lives in the chip's mask ROM, so it can't be erased. As long as you
   have your backup, you can always get back in.
 

@@ -133,7 +133,7 @@ From AOSP `android10-release` `frameworks/opt/net/wifi` `WifiServiceImpl.java`:
 check `isTargetSdkLessThanQOrPrivileged()`, which is true for target < Q, privileged/system apps,
 **device/profile owners**, and **apps holding the SYSTEM_ALERT_WINDOW app-op**
 (`WifiPermissionsUtil.checkSystemAlertWindowPermission`). The panel already grants our app that
-app-op (`tools/install.sh`), so the "legacy" path works **without device owner** on this Android
+app-op (`frames/aqara-s1-plus/tools/install.sh`), so the "legacy" path works **without device owner** on this Android
 version. (That SAW exemption is gone from Android 11; there only device owner works.)
 `setWifiEnabled` is not covered: if Wi-Fi is off we report "unable to connect".
 

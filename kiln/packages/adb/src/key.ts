@@ -1,5 +1,5 @@
 // This browser's adb key. The public half is baked into the patched boot image
-// (overlay.d/sbin/s1kiosk_adb_keys, see tools/root/s1kiosk_firstboot.sh), so the panel authorizes
+// (overlay.d/sbin/s1kiosk_adb_keys, see frames/aqara-s1-plus/tools/root/s1kiosk_firstboot.sh), so the panel authorizes
 // this browser on its first boot without a prompt on the screen. Kept in IndexedDB so a later visit
 // (undo, re-run) is still authorized.
 import { adbGeneratePublicKey, type AdbCredentialStore, type AdbPrivateKey } from '@yume-chan/adb';

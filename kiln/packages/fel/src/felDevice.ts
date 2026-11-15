@@ -1,4 +1,4 @@
-// FEL over WebUSB: the subset of sunxi-fel that tools/fel/fel-boot.sh and fel-install.sh use.
+// FEL over WebUSB: the subset of sunxi-fel that frames/aqara-s1-plus/tools/fel/fel-boot.sh and fel-install.sh use.
 import { A133, FEL_CHUNK } from './a133';
 import {
   AW_FEL_1_EXEC, AW_FEL_1_READ, AW_FEL_1_WRITE, AW_FEL_VERSION, AW_USB_READ, AW_USB_WRITE,

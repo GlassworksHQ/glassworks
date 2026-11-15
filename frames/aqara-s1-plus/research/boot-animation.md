@@ -39,7 +39,7 @@ loops 7.2 s at 30 fps. Can the panel's boot animation carry that, and what does 
    (1.8 GB if the driver pads to a power of two), on a 2 GiB panel that is still booting.
 
 2. **Measured the boot image's room** (2026-11-12, verified on a host). The zip ships in the boot
-   image's gzip ramdisk (`tools/root/patch-boot-magisk.sh`). A throwaway vitest ran Kiln's `patchBoot`
+   image's gzip ramdisk (`frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh`). A throwaway vitest ran Kiln's `patchBoot`
    on the stock 4.5.80 `boot` with the overlay inputs of the 2026-11-10 goldens (same `otbr-agent`
    and `ot-ctl` sizes as the pinned `installer-files-2` release) and a given zip, then read the
    header of the result:

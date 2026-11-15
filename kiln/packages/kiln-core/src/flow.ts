@@ -1,4 +1,4 @@
-// tools/install/fel-install.sh in the browser, without the DOM: the UI drives it and renders its
+// A frame's FEL install script (fel-install.sh) in the browser, without the DOM: the UI drives it and renders its
 // events, and a Recipe supplies what is particular to the device. WebUSB only opens a new device from
 // a click, so where the panel re-enumerates (U-Boot's fastboot, then Android's adb) the flow asks the
 // UI for a click unless permission was given before.

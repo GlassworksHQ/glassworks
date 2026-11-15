@@ -24,7 +24,7 @@ class WallBasePrefs(private val sp: SharedPreferences) {
         get() = sp.getString(KEY_BACKEND, BaseBackend.AUTO) ?: BaseBackend.AUTO
         set(v) = sp.edit().putString(KEY_BACKEND, v.trim().lowercase().takeIf { it in BaseBackend.PREF_VALUES } ?: BaseBackend.AUTO).apply()
 
-    /** UART backend port: `/dev/ttyS3` (default, "") or `tcp:host:port` for tools/bracket/base_emulator.py. */
+    /** UART backend port: `/dev/ttyS3` (default, "") or `tcp:host:port` for frames/aqara-s1-plus/tools/bracket/base_emulator.py. */
     var transport: String
         get() = sp.getString(KEY_TRANSPORT, "")?.trim()?.takeIf { it.isNotEmpty() } ?: UartBaseLink.SERIAL_PATH
         set(v) = sp.edit().putString(KEY_TRANSPORT, v.trim()).apply()

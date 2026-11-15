@@ -11,7 +11,7 @@ run on a panel yet.
 
 Device: Aqara Panel Hub S1 Plus, Android 10 (security patch 2020-09-05), armeabi-v7a,
 `ro.config.low_ram=true`. S1 Kiosk: main test build `5d0a0d2` (the panel's baseline) and test builds
-installed over it. Tools: adb (platform-tools), `tools/install/install-churn.py`, the AOSP sources of
+installed over it. Tools: adb (platform-tools), `frames/aqara-s1-plus/tools/install/install-churn.py`, the AOSP sources of
 `frameworks/base` (`android10-release`, `android11-release`, `android12-release`).
 
 This answers the open questions in [framework-restart.md](framework-restart.md), which found the
@@ -47,7 +47,7 @@ installed or changed for this note.
 2. **Every install in the panel's logcat, one row each** (2026-11-14, verified)
    ```
    $ adb shell 'logcat -d -b all -v time' > all.txt     # covers 03:08 to 08:50
-   $ tools/install/install-churn.py all.txt | grep -E 'time|install'
+   $ frames/aqara-s1-plus/tools/install/install-churn.py all.txt | grep -E 'time|install'
    time          kind        killed  dexopt  dex2oat wall/cpu starts bindfail  restart
    03:08:39.504  install         12   27.7s       27.5s/17.9s      6        0  -
    03:24:27.399  install         10   18.3s       18.2s/16.8s      5        0  -
@@ -210,7 +210,7 @@ installed or changed for this note.
    | Afterwards | kiosk resumed, the same APK hash, radio `thread_router`; LRU 27 total, starts 24 |
 
    Armed, the watchdog would have killed `system_server` at 09:16:11, 66 s before it crashed by
-   itself. `tools/install/install-churn.py` found no rows in these dumps: the loop's stack traces
+   itself. `frames/aqara-s1-plus/tools/install/install-churn.py` found no rows in these dumps: the loop's stack traces
    overwrote the `system` buffer (it began at 09:16:13), so the force-stop lines were gone. The
    `events` buffer kept the loop itself.
 
@@ -290,7 +290,7 @@ mode. This needs root and works on any boot image:
 ```sh
 adb shell "su -c 'setprop ctl.stop s1kiosk_netwatch'"      # the armed copy (or the old one) stops
 adb shell getprop init.svc.s1kiosk_netwatch                  # stopped
-adb push tools/root/s1kiosk_netwatch.sh /data/local/tmp/
+adb push frames/aqara-s1-plus/tools/root/s1kiosk_netwatch.sh /data/local/tmp/
 adb shell "su -c 'S1N_AM_DRY=1 setsid sh /data/local/tmp/s1kiosk_netwatch.sh </dev/null >/dev/null 2>&1 &'"
 adb shell 'getprop sys.s1kiosk.am.status'     # "would restart the framework at uptime …s (dry run; …)"
 # afterwards: stop the hand copy, put the boot image's copy back

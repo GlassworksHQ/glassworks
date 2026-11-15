@@ -1,63 +1,17 @@
-# Agent guide: FEL, U-Boot, the root side and the radio (`tools/`)
+# Agent guide: the shared tools (`tools/`)
 
-The repo-wide rules are in [`../AGENTS.md`](../AGENTS.md). This is the part of the repo that can
-brick a panel, so read [`../docs/research/bringup.md`](../docs/research/bringup.md) before you
-change the boot path.
+The repo-wide rules are in [`../AGENTS.md`](../AGENTS.md). The tools here serve every frame. The
+S1's own tools (FEL, U-Boot, the root side, the radio, the CLI installer) are in
+[`frames/aqara-s1-plus/tools/`](../frames/aqara-s1-plus/tools/AGENTS.md), with the rules for the part
+of the repo that can brick a panel.
 
 ## Map
 
 | Path | What | Notes |
 |---|---|---|
-| `fel/` | `build-uboot.sh`, `fel-boot.sh`, the board defconfig and DTS, patches against mainline U-Boot | RAM only: nothing is written to eMMC |
-| `fel/uboot/patches/0001` | A133 DDR4 controller setup matching boot0 (MR0 is the actual fix) | MR0 was sent upstream on 2026-11-11; drop that hunk once it lands |
-| `fel/uboot/patches/0002` | fastboot `upload`, for reading partitions back (`fastboot get_staged`) | |
-| `install/` | `fel-install.sh` (FEL → backup → patch → flash → verify), `fb-read-partition.sh`, the `--undo` path; `install-churn.py`: one row per kiosk install or force-stop from a saved logcat (#248) | Has off-device tests in `install/test/`; `install-churn.py` reads a file only |
-| `root/` | Init services baked into `boot` via Magisk `overlay.d`: first boot, update, bundle, netwatch (Wi-Fi, and Android 10's ActivityManager loop from #248), branding; `s1kiosk_verify` (C) | Runs as root under permissive SELinux. netwatch may kill `system_server` (a framework restart), at most once per 10 min |
-| `radio/` | Root helper `s1kiosk_radio.sh` (contract v4), the otbr/zigbeed builds, the bundle maker | Tests: `radio/test/run.sh` |
 | `perf/` | `run.sh`: Clarity, the performance test and grade for any frame; `summary.py` exports a frame's measurements, `grade.ts` computes the letter from them ([docs/perf.md](../docs/perf.md)); `threadcpu.py`: per-thread CPU of the app over a window, read-only ([idle-cpu.md](../frames/aqara-s1-plus/research/idle-cpu.md)); `transportwatch.py`: the panel's sockets and threads during a run, read-only (#202); `lanprobe.py`: whether the panel reaches this computer over the LAN for camera video (two connections from the panel, #202); `debug/screencam_moments.py`: which frames of a screen-camera recording to check against a run (debugging only: nothing in the grading path reads it) | Opens test pages and restarts the app; points the dashboard setting at its fake Home Assistant for the graded part (and turns panes off and on with `--pane-ram`), then puts them back |
 | `perf-lab/` | `profile-view.sh`: one Clarity view open in desktop Firefox with the Gecko profiler, split by `split.py` (`mquit.py` quits that Firefox through Marionette so it writes its profile); `cpu-trace.sh` and `cpu-align.py`: who uses the panel's cores during each view open of a Clarity run, at which clock and temperature; `freq-around.sh`: the CPU clock at 20 Hz around one action; `pin-ceiling.sh`: holds the CPU ceiling at one frequency as root, with a temperature and time limit ([view-open.md](../frames/aqara-s1-plus/research/view-open.md)) | `profile-view.sh` touches no device; `cpu-trace.sh` only reads `/proc` and sysfs over adb, and adds a little load; `freq-around.sh` runs the action you give it; `pin-ceiling.sh` writes `scaling_max_freq` (RAM) and `/data/local/tmp`, and puts the ceiling back itself |
 | `release/` | `frame-abis.sh`: the ABIs the release builds, from every frame's `abis` (#98); `check-update-compat.sh`; `changelog-section.sh`; `android-layout.sh`: the workflows' Gradle root, APKs found by name and the Android change filter, in both layouts of #21's move (test: `test/android-layout-test.sh`) | `frame-abis.sh` needs `jq` (GitHub's runners and macOS 15+ have it; else `brew install jq` or `apt install jq`) |
 | `showcase/` | `render.mjs`: each frame's card render (`frames/<id>/design/render.webp`), HA's real frontend drawing `home.py`'s made-up home from Clarity's fake Home Assistant in headless Chrome ([frames/README.md](../frames/README.md#the-render)) | Writes only `frames/*/design/render.webp` (or `--out <dir>`); the fake HA listens on 127.0.0.1, Chrome runs with a throwaway profile. Needs Chrome and Node 22+ |
 | `size/` | `apksize.py`: the APK's size per frame and per pane, the change and the frame's size budget, for CI ([docs/size.md](../docs/size.md)) | Reads APKs only |
-| `bracket/` | The wall base emulator and the proof script | |
 | `esp32-uart-bridge/` | ESP32-S3 USB↔UART bridge for the debug console | |
-
-## The root side
-
-- Scripts run under **`/system/bin/sh` on Android 10, which is mksh with toybox**, not bash and not
-  busybox. No arrays, no `[[ ]]`, no GNU flags. `tools/radio/test/run.sh` runs them under mksh in a
-  32-bit ARM container. Add a case there for every behaviour you change.
-- **Threat model:** SELinux is permissive, so any app may set properties or start init services.
-  Services take no input except files owned by the kiosk's uid, which they check. They don't follow
-  symlinks (`s1kiosk_verify --copy`), and they report through `sys.s1kiosk.*.status`. Don't add an
-  input path that skips those checks. Read [`../frames/aqara-s1-plus/research/root.md`](../frames/aqara-s1-plus/research/root.md) first.
-- Helper fixes reach panels through the **signed radio bundle**, not by reflashing `boot`. A change
-  that needs a new boot image is a much bigger deal, because every user reruns the installer. Say
-  which of the two your change needs.
-- `.rc` and service changes must be tested on a real panel. Off-device tests can't see init.
-
-## FEL and fastboot gotchas
-
-- FEL: hold the PCB button while plugging in USB-C, and keep holding for about 10 s. The screen
-  stays black. Check with `sunxi-fel ver` (SoC `0x1855`).
-- Boot with `NO_BL31=1 tools/fel/fel-boot.sh <build-dir>`. **Don't use `sunxi-fel uboot`.** At
-  408 MHz the boot ROM's USB is too slow for large transfers and they hit its 10 s timeout. The
-  script uploads in 64 KiB chunks and starts the CPU with `reset64`.
-- **`unset ANDROID_SERIAL` before running `fastboot`.** fastboot honours it, and our U-Boot's serial
-  is not the panel's adb serial.
-- Each `fastboot oem run:<cmd>` must fit in 64 bytes, hence the short env names (`$s`, `$n`).
-- The fastboot buffer is 512 MiB at `0x50000000`, so `super` can't be read in one go. eMMC is
-  `mmc 1` in our U-Boot, but `mmc 2` / `mmcblk0` in the stock BSP.
-- `ENV_IS_NOWHERE` is set on purpose: `saveenv` must never write the panel's Android `env` partition.
-- `build-uboot.sh` builds in an arm64 Ubuntu container, because U-Boot's host tools don't build
-  cleanly on macOS.
-- Unplug and replug without the button to get back to Android.
-
-## Testing on the panel
-
-- Keep backups outside the repo, with a `SHA256SUMS` file. `fel-install.sh --undo` refuses a backup
-  whose `boot` is already patched, so always keep the first install's backup.
-- Root on a dev panel: either a dev boot image (`DEV_SU_HOURS`), or a time-limited Magisk policy for
-  uid 2000 (in `root.md`). Revoke it before the panel goes to anyone else.
-- Put the panel back the way you found it (radio mode, app version, dev overrides), or say in the
-  PR what you left behind.

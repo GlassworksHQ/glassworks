@@ -1,5 +1,5 @@
 // bootpatch: byte-exact boot image + partition edits for the web installer (pure, no USB).
-// patchBoot() == tools/root/patch-boot-magisk.sh, byte for byte. See frames/aqara-s1-plus/research/web-installer.md §4, §6.
+// patchBoot() == frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh, byte for byte. See frames/aqara-s1-plus/research/web-installer.md §4, §6.
 
 import { describeBootImage, findBytes, parseBootImage, repackBootImage, sha1Hex } from './bootimg';
 import { loadCompressor } from './compress';
@@ -10,7 +10,7 @@ export interface OverlayFile { path: string; mode: number; data: Uint8Array }  /
 export interface PatchInput {
   boot: Uint8Array;               // the panel's boot.img: stock, or already Magisk-patched (restored first)
   magiskApk: Uint8Array;          // Magisk v31.1 APK (sha256 verified by the caller)
-  overlay: OverlayFile[];         // exactly what tools/root/patch-boot-magisk.sh adds (see there)
+  overlay: OverlayFile[];         // exactly what frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh adds (see there)
   preinitDevice?: string;         // default 'cache'
 }
 export interface PatchResult { image: Uint8Array; wasMagisk: boolean; magiskConfig: string; log: string[] }

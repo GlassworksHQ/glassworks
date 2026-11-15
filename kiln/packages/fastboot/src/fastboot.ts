@@ -1,8 +1,8 @@
 // Fastboot over WebUSB, for every frame. A fork of fastboot.js (kdrag0n, MIT, see README.md):
 // its flashBlob, sparse splitting and bootBlob, on our transport (the one FEL uses, so the tests
-// can run against simulated devices), plus what our FEL-booted U-Boot (tools/fel/uboot) adds:
+// can run against simulated devices), plus what our FEL-booted U-Boot (frames/aqara-s1-plus/tools/fel/uboot) adds:
 // 'oem run' and the 'upload' of patch 0002, which reads partitions back
-// (tools/install/fb-read-partition.sh).
+// (frames/aqara-s1-plus/tools/install/fb-read-partition.sh).
 import { WebUsbBulk, type BulkTransport } from '@glassworks/fel/transport';
 import * as Sparse from './sparse';
 

@@ -2,7 +2,7 @@
 # Runs Aqara's own /vendor/bin/bracket_cli on the panel against base_emulator.py (on this host),
 # through adb reverse + a socat pty. Never touches /dev/ttyS3.
 #
-#   tools/bracket/cli_proof.sh [emulator args...]      e.g. --fault crc
+#   frames/aqara-s1-plus/tools/bracket/cli_proof.sh [emulator args...]      e.g. --fault crc
 #
 # Needs: adb with ANDROID_SERIAL set, python3. Prints bracket_cli's output and the emulator log.
 set -u

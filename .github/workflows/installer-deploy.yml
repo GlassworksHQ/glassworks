@@ -33,12 +33,12 @@ on:
       - '!frames/**/*.md'
       - 'branding/**'
       - 'docs/img/fel-button.jpg'
-      - 'tools/install/s1kiosk-switch.sh'
-      - 'tools/radio/s1kiosk_radio.rc'
-      - 'tools/radio/s1kiosk_radio.sh'
-      - 'tools/root/s1kiosk_*.rc'
-      - 'tools/root/s1kiosk_*.sh'
-      - 'tools/root/s1kiosk_*.pub'
+      - 'frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh'
+      - 'frames/aqara-s1-plus/tools/radio/s1kiosk_radio.rc'
+      - 'frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh'
+      - 'frames/aqara-s1-plus/tools/root/s1kiosk_*.rc'
+      - 'frames/aqara-s1-plus/tools/root/s1kiosk_*.sh'
+      - 'frames/aqara-s1-plus/tools/root/s1kiosk_*.pub'
       - '.github/workflows/installer-deploy.yml'
   workflow_dispatch:
 

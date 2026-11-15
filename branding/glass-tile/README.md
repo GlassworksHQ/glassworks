@@ -8,8 +8,8 @@ its old name because the installers read these files from here.
 
 | File | What | Installed by |
 |---|---|---|
-| `bootlogo.bmp` | Splash shown by the bootloader at power-on: frame 0 of the animation. 720x1440, 24-bit, uncompressed, the landscape picture rotated 90° clockwise, 3,110,454 bytes (same format as stock) | `tools/install/fel-install.sh` (step 7) and Kiln's S1 recipe, both swapping it into the panel's own `bootloader` (boot-resource, FAT16) partition in place (`tools/branding/set-bootlogo.py`, `replaceBootlogo()`) |
-| `bootanimation.zip` | Android boot animation: 1440x720 @ 30 fps, STORED, each frame trimmed (`trim.txt`) | `tools/root/patch-boot-magisk.sh` and Kiln: shipped in the boot image and bind-mounted over `/system/media/bootanimation.zip` (`tools/root/s1kiosk_branding.rc`) |
+| `bootlogo.bmp` | Splash shown by the bootloader at power-on: frame 0 of the animation. 720x1440, 24-bit, uncompressed, the landscape picture rotated 90° clockwise, 3,110,454 bytes (same format as stock) | `frames/aqara-s1-plus/tools/install/fel-install.sh` (step 7) and Kiln's S1 recipe, both swapping it into the panel's own `bootloader` (boot-resource, FAT16) partition in place (`tools/branding/set-bootlogo.py`, `replaceBootlogo()`) |
+| `bootanimation.zip` | Android boot animation: 1440x720 @ 30 fps, STORED, each frame trimmed (`trim.txt`) | `frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh` and Kiln: shipped in the boot image and bind-mounted over `/system/media/bootanimation.zip` (`frames/aqara-s1-plus/tools/root/s1kiosk_branding.rc`) |
 | `splash-landscape.png`, `preview.webp` | Previews only | - |
 | `outputs.json` | What the build used and wrote (below, Rebuild). CI checks the files against it | - |
 

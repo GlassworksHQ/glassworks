@@ -142,7 +142,7 @@ adb shell pm grant sh.edm.s1kiosk android.permission.WRITE_SECURE_SETTINGS
 adb shell service call A_device_control 7 i32 0 i32 0
 ```
 
-Then de-bloat with [`tools/debloat/debloat.sh`](../../../tools/debloat/debloat.sh)
+Then de-bloat with [`frames/aqara-s1-plus/tools/debloat/debloat.sh`](../tools/debloat/debloat.sh)
 (`disable`, then `disable-launcher`).
 
 **Undo:** `debloat.sh enable`, then
@@ -182,7 +182,7 @@ $A --es sendspin_server 192.168.1.100 # Sendspin server: auto (default: mDNS, el
 $A --ez sendspin_unpaired_access true # let a server play without pairing (guest mode; default off)
 $A --ez sendspin_flac false           # offer only PCM to Music Assistant (default: FLAC first, PCM fallback)
 $A --es base_backend auto      # wall base: auto (UART unless Aqara cloud blocking is off) | uart | localservice
-$A --es base_transport tcp:127.0.0.1:9999   # UART backend on tools/bracket/base_emulator.py (adb reverse); "" = /dev/ttyS3
+$A --es base_transport tcp:127.0.0.1:9999   # UART backend on frames/aqara-s1-plus/tools/bracket/base_emulator.py (adb reverse); "" = /dev/ttyS3
 ```
 
 Do **not** change `wm density` to scale the UI. On this panel it breaks GeckoView's surface

@@ -5,7 +5,7 @@
 # frames/aqara-s1-plus/docs/install.md#command-line for how to enable it. Everything below is reversible: see --undo.
 #
 #   export ANDROID_SERIAL=<panel serial>        # if more than one device is attached
-#   tools/install.sh --url http://homeassistant.local:8123/my-dashboard [options]
+#   frames/aqara-s1-plus/tools/install.sh --url http://homeassistant.local:8123/my-dashboard [options]
 #
 # Options:
 #   --apk PATH          kiosk APK (default: frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk)
@@ -26,7 +26,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$HERE/.." && pwd)"
+ROOT="$(cd "$HERE/../../.." && pwd)"
 PKG=sh.edm.s1kiosk
 ACT="$PKG/.MainActivity"
 APK="$ROOT/frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk"
@@ -349,7 +349,7 @@ if [[ $DRY -eq 1 ]]; then
     echo "  + adb shell pm uninstall $PKG"
     echo "  + adb install -r -g $APK      # on failure: pm install -r -g $OLD_APK$([[ $HAS_ROOT -eq 1 ]] && echo ' + restore')"
     if [[ $HAS_ROOT -eq 1 ]]; then echo "  + (as root) $SW_SH restore; $SW_SH discard"; fi
-    if wifi_at_risk; then echo "  + after starting the kiosk: Wi-Fi $(net_name) to the new app over Improv (tools/install/improv-send.py)"; fi
+    if wifi_at_risk; then echo "  + after starting the kiosk: Wi-Fi $(net_name) to the new app over Improv (frames/aqara-s1-plus/tools/install/improv-send.py)"; fi
   fi
 else
   out=$(adb install -r -g "$APK" 2>&1) || true
@@ -405,7 +405,7 @@ fi
 
 if [[ $MODELS -eq 1 ]]; then
   step "Wake word models"
-  run "$HERE/voice/fetch-models.sh"
+  run "$ROOT/tools/voice/fetch-models.sh"
 fi
 
 step "Start the kiosk"

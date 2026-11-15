@@ -98,7 +98,7 @@ followed:
 Then came fastboot over USB-C, plus a small `upload` extension to **read** partitions back
 at about 20 MB/s.
 
-→ [fel.md](../../frames/aqara-s1-plus/research/fel.md) · patches in [`tools/fel/uboot/patches`](../../tools/fel/uboot/patches)
+→ [fel.md](../../frames/aqara-s1-plus/research/fel.md) · patches in [`frames/aqara-s1-plus/tools/fel/uboot/patches`](../../frames/aqara-s1-plus/tools/fel/uboot/patches)
 
 ## 4. Persistent root with Magisk
 

@@ -42,7 +42,7 @@ this monorepo and changed for Kiln (#111). It has two kinds of methods:
 | For | Methods | Bootloader |
 |---|---|---|
 | Every frame | `getvar`, `download`, `flashBlob` (raw or sparse, split at `max-download-size`), `bootBlob` (`fastboot boot`) | Any fastboot |
-| Our U-Boot only (the S1) | `oemRun`, `partitionSize`, `readPartition` (`oem run` + `upload`, patch 0002), `flash`, `flashVerified` (write, read back, compare), `reboot` | `tools/fel/uboot` |
+| Our U-Boot only (the S1) | `oemRun`, `partitionSize`, `readPartition` (`oem run` + `upload`, patch 0002), `flash`, `flashVerified` (write, read back, compare), `reboot` | `frames/aqara-s1-plus/tools/fel/uboot` |
 
 Kiln's S1 install uses only the second row. `flashBlob` is for frames whose bootloader cannot read
 partitions back, such as the Mirror's Qualcomm LK (#41).

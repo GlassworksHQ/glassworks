@@ -6,7 +6,7 @@
 # transfers, which hit its 10 s USB timeout. 64 KiB writes always complete, so upload in chunks
 # and trigger the AArch64 warm reset ourselves.
 #
-# Usage: tools/fel/fel-boot.sh [build-dir]   (default ~/src/u-boot-s1/build-s1)
+# Usage: frames/aqara-s1-plus/tools/fel/fel-boot.sh [build-dir]   (default ~/src/u-boot-s1/build-s1)
 set -euo pipefail
 FEL=${SUNXI_FEL:-sunxi-fel}
 B=${1:-$HOME/src/u-boot-s1/build-s1}

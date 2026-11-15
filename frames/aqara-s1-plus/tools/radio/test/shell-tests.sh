@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs inside the arm32v7 container of tools/radio/test/run.sh (as root, disposable filesystem).
+# Runs inside the arm32v7 container of frames/aqara-s1-plus/tools/radio/test/run.sh (as root, disposable filesystem).
 # /repo is the checkout (read-only). Builds an Android-like layout with mocks, then tests:
 #   s1kiosk_verify + make-bundle.py, s1kiosk_bundle.sh (install, --check, every refusal),
 #   the helper's loader (bundle helper, fallback, quick-exit marking, dev override),
@@ -131,7 +131,7 @@ echo 0017 > "$T/radio-app"; : > "$T/fw-apps"
 touch /dev/shm/cpcd/cpcd_0/ctrl.cpcd.sock
 
 # The boot image: helper + loader, bundle service, verifier, a throwaway test key, fake otbr.
-cp "$R/tools/radio/s1kiosk_radio.sh" "$R/tools/root/s1kiosk_bundle.sh" "$R/tools/root/out/s1kiosk_verify" "$TB/"
+cp "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh" "$R/frames/aqara-s1-plus/tools/root/s1kiosk_bundle.sh" "$R/frames/aqara-s1-plus/tools/root/out/s1kiosk_verify" "$TB/"
 openssl genpkey -algorithm ed25519 -out "$T/key.pem" 2>/dev/null
 openssl pkey -in "$T/key.pem" -pubout -outform DER | tail -c 32 | xxd -p -c 64 > "$TB/s1kiosk_bundle.pub"
 openssl genpkey -algorithm ed25519 -out "$T/other.pem" 2>/dev/null
@@ -175,7 +175,7 @@ echo "$STOCK_SHA 0017" >> "$T/fw-apps"
 
 mkbundle() { # out version key extra-args...
   local out=$1 v=$2 k=$3; shift 3
-  python3 "$R/tools/radio/make-bundle.py" --version "$v" --key "$k" --out "$out" --created test --force "$@" >/dev/null
+  python3 "$R/frames/aqara-s1-plus/tools/radio/make-bundle.py" --version "$v" --key "$k" --out "$out" --created test --force "$@" >/dev/null
 }
 stage() { # bundle-dir: copy it where the app stages it, owned by the kiosk
   rm -rf "$APP/files/radio/bundle-in"; cp -r "$1/radio-bundle" "$APP/files/radio/bundle-in"
@@ -189,23 +189,23 @@ helper() { # env... : run the boot helper for a couple of loops
 
 # ------------------------------------------------------------------------------------- verifier
 echo "--- s1kiosk_verify / make-bundle.py"
-mkbundle "$T/b1" 100 "$T/key.pem" --file "s1kiosk_radio.sh=$R/tools/radio/s1kiosk_radio.sh:0700" \
-  --file "otbr-agent=$TB/otbr-agent:0700" --dir "sisdk=$R/tools/radio/sisdk"
+mkbundle "$T/b1" 100 "$T/key.pem" --file "s1kiosk_radio.sh=$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700" \
+  --file "otbr-agent=$TB/otbr-agent:0700" --dir "sisdk=$R/frames/aqara-s1-plus/tools/radio/sisdk"
 check "make-bundle writes manifest + signature" test -s "$T/b1/radio-bundle/manifest" -a -s "$T/b1/radio-bundle/manifest.sig"
 check "verifier accepts it" "$TB/s1kiosk_verify" "$TB/s1kiosk_bundle.pub" "$T/b1/radio-bundle/manifest" "$T/b1/radio-bundle/manifest.sig"
-mkbundle "$T/bx" 100 "$T/other.pem" --file "s1kiosk_radio.sh=$R/tools/radio/s1kiosk_radio.sh:0700"
+mkbundle "$T/bx" 100 "$T/other.pem" --file "s1kiosk_radio.sh=$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700"
 "$TB/s1kiosk_verify" "$TB/s1kiosk_bundle.pub" "$T/bx/radio-bundle/manifest" "$T/bx/radio-bundle/manifest.sig" 2>/dev/null
 check "verifier rejects another key (exit 1)" test $? = 1
 printf '\x7fELFfake' > "$T/zigbeed"
-python3 "$R/tools/radio/make-bundle.py" --version 1 --key "$T/key.pem" --out "$T/bz" --file "sisdk/bin/zigbeed=$T/zigbeed" >/dev/null 2>&1
+python3 "$R/frames/aqara-s1-plus/tools/radio/make-bundle.py" --version 1 --key "$T/key.pem" --out "$T/bz" --file "sisdk/bin/zigbeed=$T/zigbeed" >/dev/null 2>&1
 check "make-bundle refuses to package zigbeed (MSLA)" test $? != 0
-python3 "$R/tools/radio/make-bundle.py" --version 1 --key "$T/key.pem" --out "$T/bp" --force --file "../x=$TB/ot-ctl" >/dev/null 2>&1
+python3 "$R/frames/aqara-s1-plus/tools/radio/make-bundle.py" --version 1 --key "$T/key.pem" --out "$T/bp" --force --file "../x=$TB/ot-ctl" >/dev/null 2>&1
 check "make-bundle refuses a bad path" test $? != 0
-python3 "$R/tools/radio/make-bundle.py" --version 3020000 --app-version 3.2.0 --key "$T/key.pem" --out "$T/bv" --file "ot-ctl=$TB/ot-ctl" >/dev/null 2>&1
+python3 "$R/frames/aqara-s1-plus/tools/radio/make-bundle.py" --version 3020000 --app-version 3.2.0 --key "$T/key.pem" --out "$T/bv" --file "ot-ctl=$TB/ot-ctl" >/dev/null 2>&1
 check "make-bundle refuses a version above the app's versionCode" test $? != 0
-python3 "$R/tools/radio/make-bundle.py" --version 30200 --app-version 3.2.0 --key "$T/key.pem" --out "$T/bv" --file "ot-ctl=$TB/ot-ctl" >/dev/null 2>&1
+python3 "$R/frames/aqara-s1-plus/tools/radio/make-bundle.py" --version 30200 --app-version 3.2.0 --key "$T/key.pem" --out "$T/bv" --file "ot-ctl=$TB/ot-ctl" >/dev/null 2>&1
 check "...and accepts the versionCode itself" test $? = 0
-python3 "$R/tools/radio/make-bundle.py" --version 30200 --key "$T/key.pem" --out "$T/bv" --file "ot-ctl=$TB/ot-ctl" >/dev/null 2>&1
+python3 "$R/frames/aqara-s1-plus/tools/radio/make-bundle.py" --version 30200 --key "$T/key.pem" --out "$T/bv" --file "ot-ctl=$TB/ot-ctl" >/dev/null 2>&1
 check "...and needs --app-version (or --force)" test $? != 0
 
 # ------------------------------------------------------------------------------- bundle service
@@ -413,7 +413,7 @@ check "sisdk without a bundle: needs the runtime" has "$(prop sys.s1kiosk.radio.
 check "...zigbee state no-runtime" test "$(prop sys.s1kiosk.radio.zigbee)" = "sisdk no-runtime"
 check "...Aqara's zigbeed not started" test "$(prop init.svc.zigbee_zigbeed)" != running
 # The runtime with a fake loader that just runs the binary, and a fake zigbeed that holds the pty.
-mkdir -p "$T/rt/lib"; cp "$R/tools/radio/sisdk/zigbeed.sh" "$T/rt/"
+mkdir -p "$T/rt/lib"; cp "$R/frames/aqara-s1-plus/tools/radio/sisdk/zigbeed.sh" "$T/rt/"
 w "$T/rt/lib/ld-linux-armhf.so.3" <<'EOF'
 #!/bin/sh
 while [ "$1" != --argv0 ]; do shift; done; shift 2; exec "$@"
@@ -574,7 +574,7 @@ rm -f /data/s1kiosk/radio/radio.conf
 
 # ------------------------------------------------------------------------------- app updates
 echo "--- s1kiosk_update.sh"
-cp "$R/tools/root/s1kiosk_update.sh" "$TB/"
+cp "$R/frames/aqara-s1-plus/tools/root/s1kiosk_update.sh" "$TB/"
 mkdir -p "$APP/files/update"; printf 'PK-apk' > "$APP/files/update/pending.apk"; chown -R 10050 "$APP/files/update"
 echo 30200 > "$T/pm-version"
 /system/bin/sh "$TB/s1kiosk_update.sh" >/dev/null 2>&1
@@ -609,7 +609,7 @@ rm -f "$T/pm-mode"; pkill -x system_server
 
 # --------------------------------------------------------------- ActivityManager watchdog (#248)
 echo "--- s1kiosk_netwatch.sh: ActivityManager"
-cp "$R/tools/root/s1kiosk_netwatch.sh" "$TB/"
+cp "$R/frames/aqara-s1-plus/tools/root/s1kiosk_netwatch.sh" "$TB/"
 # dumpsys prints /t/lru (one "total non-act non-svc" line) as Android 10's header; none = no answer.
 # /t/lru-seq instead: one call per line, printed as is ("-" prints nothing), for odd outputs in turn.
 w "$T/bin/dumpsys" <<'EOF2'
