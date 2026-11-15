@@ -7,12 +7,12 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { MemoryStore, writeSparse } from '@glassworks/ext4';
-import { cleanup, debugfs, debugfsCat, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
+import { clean, cleanup, debugfs, debugfsCat, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
 import { FirstBootMirror } from './fakes';
 import {
-  GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, type FastbootLike,
+  GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, makeOnlyHome, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, type FastbootLike,
 } from '../src';
 
 const T = 1_700_000_000;
@@ -32,6 +32,7 @@ describe('fastboot checks (read-only)', () => {
   it('passes the partition sizes the image is made for, and shows the rest', async () => {
     const r = await checkFastboot(lk({ 'partition-size:system': `0x${SYSTEM_BYTES.toString(16)}`, 'partition-size:userdata': '0x14cc00000', product: 'MSM8916', 'max-download-size': '0x20000000' }));
     expect(r.ok).toBe(true);
+    expect(r.checks.map((c) => c.what)).toEqual(['System partition', 'Userdata partition', 'Download size']);
     expect(r.userdataBytes).toBe(0x14cc00000);
     expect(r.info).toEqual(['product MSM8916', 'max-download-size 0x20000000', 'secure not reported']);
   });
@@ -40,7 +41,14 @@ describe('fastboot checks (read-only)', () => {
     expect((await checkFastboot(lk({ 'partition-size:system': '0x60000000', 'partition-size:userdata': '0x14cc00000' }))).ok).toBe(false);
     const none = await checkFastboot(lk({}));
     expect(none.ok).toBe(false);
-    expect(none.checks.map((c) => c.found)).toEqual(['not reported', 'not reported']);
+    expect(none.checks.map((c) => c.found)).toEqual(['not reported', 'not reported', 'not reported']);
+  });
+
+  it('refuses a bootloader that doesn\'t report max-download-size, or reports less than a block (fastboot.js would assume 512 MiB)', async () => {
+    const sizes = { 'partition-size:system': `0x${SYSTEM_BYTES.toString(16)}`, 'partition-size:userdata': '0x14cc00000' };
+    expect((await checkFastboot(lk(sizes))).ok).toBe(false);
+    expect((await checkFastboot(lk({ ...sizes, 'max-download-size': '0x800' }))).ok).toBe(false);
+    expect((await checkFastboot(lk({ ...sizes, 'max-download-size': '268435456' }))).ok).toBe(true);
   });
 });
 
@@ -90,7 +98,7 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
     const sys = join(dir, 'flashed-system.raw'), data = join(dir, 'flashed-userdata.raw');
     writeFileSync(sys, fake.parts.get('system')!);
     writeFileSync(data, fake.parts.get('userdata')!);
-    for (const img of [sys, data]) { const r = fsck(img); expect(r.code, r.out).toBe(0); }
+    for (const img of [sys, data]) { const r = fsck(img); expect(clean(r), r.out).toBe(true); }
     expect(debugfs(sys, 'ls /priv-app')).toContain('S1Kiosk');
     expect(new TextDecoder().decode(debugfsCat(data, '/misc/adb/adb_keys'))).toBe(`${KEY}\n`);
   }, 120_000);
@@ -121,11 +129,22 @@ describe('first boot', () => {
   it('checks the image, grants, hides the other launcher, starts S1 Kiosk with Home Assistant', async () => {
     const p = new FirstBootMirror();
     const r = await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async () => {} });
-    expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: '270' });
+    expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: '270',
+      home: { result: 'set', focused: 'sh.edm.s1kiosk/.MainActivity', left: [] } });
     const at = (c: string) => p.cmds.findIndex((x) => x.startsWith(c));
-    expect(at('pm grant')).toBeLessThan(at('pm hide com.android.launcher3'));
-    expect(at('pm hide com.android.launcher3')).toBeLessThan(at(`am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://homeassistant.local:8123'`));
+    expect(at('pm grant')).toBeLessThan(at(`am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://homeassistant.local:8123'`));
+    expect(at(`am start -n sh.edm.s1kiosk/.MainActivity --es url`)).toBeLessThan(at('pm hide com.android.launcher3'));
+    expect(at('pm hide com.android.launcher3')).toBeLessThan(at('dumpsys activity activities'));
     expect(p.cmds).not.toContain('pm hide com.cyanogenmod.trebuchet'); // not on this image
+  });
+
+  it('says when Launcher3 survives and HOME shows the chooser, and the same step fixes it once hiding works', async () => {
+    const p = new FirstBootMirror();
+    p.hideFails = true;
+    const r = await firstBoot(p, { sleep: async () => {} });
+    expect(r.home).toEqual({ result: 'chooser', focused: 'android/com.android.internal.app.ResolverActivity', left: ['com.android.launcher3'] });
+    p.hideFails = false;
+    expect((await makeOnlyHome(p, () => {}, async () => {})).home.result).toBe('set');
   });
 
   it('stops if the Mirror didn\'t start the image Kiln wrote, or S1 Kiosk is missing', async () => {

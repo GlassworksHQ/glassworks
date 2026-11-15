@@ -225,7 +225,7 @@ export function FlashConfirm({ f, s }: P) {
       </ol>
       <p className="lede">
         Kiln can&apos;t back up the Mirror first: its bootloader can&apos;t read anything back. So lululemon&apos;s software can&apos;t be
-        restored, by Kiln or anyone. The way back from here is the Glass Panes image. Everything on the Mirror is erased.
+        restored, by Kiln or anyone. The way back from here is the Glass Panes image. Everything on the Mirror is replaced.
       </p>
       {REVERSIBLE && !s.back && <p className="small">{REVERSIBLE}.</p>}
       <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} /> I understand lululemon&apos;s software can&apos;t be restored.</label>
@@ -281,15 +281,28 @@ export function FlashAdb({ f, s }: P) {
   );
 }
 
-export function FlashDone({ s }: P) {
+export function FlashDone({ f, s }: P) {
   const fb = s.firstBoot;
+  const stranded = !s.back && fb && fb.home.result !== 'set';
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{s.back ? 'The Glass Panes image is back on the Mirror.' : 'Glassworks is on the Mirror.'}</h2>
+      {stranded && (
+        <div className="well" role="alert">
+          <div className="grow">
+            <span className="status err">S1 Kiosk isn&apos;t the only home screen yet.</span>
+            <span className="small">
+              Android opened {fb.home.result === 'chooser' ? 'its list of home screens' : <code>{fb.home.focused ?? 'something else'}</code>}{fb.home.left.length ? <>: <code>{fb.home.left.join(', ')}</code> is still a home app</> : ''}.
+              {' '}The Mirror has no touchscreen, so after a restart it would wait on that list. Hide the other launcher again, or plug in a USB mouse and choose S1 Kiosk, then Always.
+            </span>
+          </div>
+          <button type="button" className="btn ghost" disabled={s.fixing} onClick={() => void f.fixHome()}>{s.fixing ? 'Hiding it…' : 'Hide the other launcher again'}</button>
+        </div>
+      )}
       {!s.back && fb && (
         <p className="lede">
-          S1 Kiosk {fb.app.name ?? fb.app.code} is its home screen{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
+          S1 Kiosk {fb.app.name ?? fb.app.code} {stranded ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
           {fb.wifi === false && ' It didn’t confirm the Wi-Fi: set it in S1 Kiosk’s settings.'}
           {fb.rotation !== '270' && ' The screen’s rotation isn’t set (ro.sf.hwrotation): check it is upright.'}
         </p>
@@ -309,9 +322,15 @@ export function FlashError({ f, s }: P) {
       <h2 id="h">The install stopped.</h2>
       <pre className="raw">{s.error}</pre>
       <p className="small">If it stopped while flashing, the Mirror may not start: put it in fastboot again and install again, or write the Glass Panes image (Way back).</p>
+      {s.flashFailed && !s.back && !s.noFill && (
+        <p className="small">If the bootloader refused a FILL chunk (a sparse image&apos;s run of zeros), try again without FILL: Kiln builds the zeros as plain blocks, about 200 MB more to send.</p>
+      )}
       <div className="foot">
         <Log s={s} />
-        <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the files</button>
+        <span className="links">
+          {s.flashFailed && !s.back && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
+          <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the files</button>
+        </span>
       </div>
     </section>
   );

@@ -3,7 +3,7 @@
 // the order of the writes, the first start over adb, the credit to Glass Panes, and the way back.
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { fakeApk } from '@glassworks/app-adb/fakes';
-import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -25,7 +25,8 @@ afterEach(() => cleanup());
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
-function setup(o: { system?: number; flashFails?: boolean; proxy?: 'ok' | 'down' } = {}) {
+function setup(o: { system?: number; flashFails?: number; proxy?: 'ok' | 'down' } = {}) {
+  let fails = o.flashFails ?? 0;
   const calls: string[] = [];
   const images: ImageMaker = {
     async load() { calls.push('load'); },
@@ -34,13 +35,14 @@ function setup(o: { system?: number; flashFails?: boolean; proxy?: 'ok' | 'down'
       if (o.proxy === 'down') throw new ProxyError('the download proxy answered 502: GitHub answered 503');
       onProgress(0.5); onProgress(1);
     },
-    async build(b, onProgress) { calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
+    async build(b, onProgress) { calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
+    check: (file, which, onProgress) => { calls.push(`check ${which}`); return checkDownload(file, which === 'system' ? GLASS_PANES.system : GLASS_PANES_USERDATA, onProgress); },
     async discard() { calls.push('discard'); },
   };
   const fb: FastbootLike = {
-    async getvar() { throw new Error('FAIL'); },
+    async getvar(n) { if (n === 'max-download-size') return '0x10000000'; throw new Error('FAIL'); },
     async partitionSize(n) { return n === 'system' ? (o.system ?? SYSTEM_BYTES) : USERDATA_BYTES; },
-    async flashBlob(p, blob) { if (o.flashFails) throw new Error('flash:system: FAILwrite'); calls.push(`flash ${p} ${blob.size}`); },
+    async flashBlob(p, blob) { if (fails > 0) { fails--; throw new Error('flash:system: FAILUnkown chunk type'); } calls.push(`flash ${p} ${blob.size}`); },
     async reboot() { calls.push('reboot'); },
   };
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
@@ -94,6 +96,44 @@ describe('installing Glassworks over fastboot', () => {
     expect(f.state.proxyFailed).toMatch(/no download proxy/);
   });
 
+  it('a USB drop while writing: back to the files, and installing again builds again from the loaded image', async () => {
+    const { f, mirror, calls } = setup({ flashFails: 1 });
+    await f.downloadImage();
+    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    const go = async () => { f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash(); };
+    await go();
+    expect(f.state).toMatchObject({ screen: 'error', flashFailed: true });
+    f.retry();
+    expect(f.state.image?.state).toBe('ok'); // nothing to select again
+    await go();
+    expect(f.state.screen).toBe('adb');
+    expect(calls.filter((c) => c.startsWith('build'))).toHaveLength(2);
+    expect(calls.filter((c) => c.startsWith('fetch'))).toHaveLength(1);
+  });
+
+  it('after a refused write, "Try again without FILL" builds the zeros as RAW blocks', async () => {
+    const { f, mirror, calls } = setup({ flashFails: 1 });
+    await f.downloadImage();
+    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
+    render(<Flash flash={f} mirror={mirror} />);
+    expect(screen.getByText('Try again without FILL')).toBeTruthy();
+    cleanup();
+    f.retryWithoutFill();
+    expect(f.state.screen).toBe('fastboot');
+    await f.connectFastboot(); f.understand(true); await f.flash();
+    expect(calls.filter((c) => c.startsWith('build')).at(-1)).toMatch(/ nofill$/);
+    expect(f.state.screen).toBe('adb');
+  });
+
+  it('Done says when another launcher is still a home app, and its button hides it again', async () => {
+    const { flash, mirror } = await flashDemo('flash-done-chooser', true);
+    expect(flash.state.firstBoot?.home.result).toBe('chooser');
+    render(<Flash flash={flash} mirror={mirror} />);
+    expect(screen.getByText('S1 Kiosk isn\'t the only home screen yet.')).toBeTruthy();
+    expect(screen.getByText(/no touchscreen, so after a restart it would wait on that list/)).toBeTruthy();
+  });
+
   it('asks for the fastboot device inside the click, before anything is awaited', () => {
     const { f, requestFastboot } = setup();
     void f.connectFastboot();
@@ -128,12 +168,13 @@ describe('installing Glassworks over fastboot', () => {
 
 describe('the way back', () => {
   it('needs both Glass Panes files, each checked against the release\'s SHA-256', async () => {
-    const { f } = setup();
+    const { f, calls } = setup();
     f.wayBack(true);
     await f.selectImage(image());
     expect(f.state.image).toMatchObject({ state: 'bad', error: /isn't system\.img, or the download stopped early/ });
     await f.selectUserdata(Object.assign(new Blob(['y']), { name: 'userdata.sparse' }));
     expect(f.state.userdataFile).toMatchObject({ state: 'bad' });
+    expect(calls).toEqual(['check system', 'check userdata']); // hashed in the worker, not on the page's thread
     expect(f.blocked()).toMatch(/system\.img/);
   });
 });
@@ -179,7 +220,7 @@ describe('every flash demo screen', () => {
     const { flash, mirror } = await flashDemo('flash-confirm', true);
     render(<Flash flash={flash} mirror={mirror} />);
     expect(screen.getByText('This replaces lululemon’s software for good.')).toBeTruthy();
-    expect(screen.getByText(/can't be\s+restored, by Kiln or anyone/)).toBeTruthy();
+    expect(screen.getByText(/can't be\s+restored, by Kiln or anyone.*Everything on the Mirror is replaced\./s)).toBeTruthy();
     expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy(); // #146
     expect((screen.getByText('Install Glassworks') as HTMLButtonElement).disabled).toBe(true);
   });

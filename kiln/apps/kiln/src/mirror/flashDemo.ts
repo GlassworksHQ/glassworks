@@ -2,13 +2,13 @@
 // simulated Mirror, so each screen can be seen and captured without one. The images aren't built (a
 // stand-in reports progress); the fastboot and first-boot answers are the recipe's fakes.
 import { fakeApk } from '@glassworks/app-adb/fakes';
-import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
 export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-done', 'flash-error', 'flash-back', 'flash-run'] as const;
+  'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-error', 'flash-back', 'flash-run'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
 export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash: FlashSession; mirror: MirrorSession }> {
@@ -33,6 +33,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
       }
       return { system: new Blob([new Uint8Array(16)]), userdata: new Blob([new Uint8Array(16)]) };
     },
+    check: (file, which, onProgress) => checkDownload(file, which === 'system' ? GLASS_PANES.system : GLASS_PANES_USERDATA, onProgress),
     async discard() {},
   };
   const fastboot = (system: number): FastbootLike => ({
@@ -49,7 +50,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
     images,
     imageUrl: 'https://refract.glassworks.dev/glass-panes/mirror-android-1/system.img',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x60000000 : SYSTEM_BYTES),
-    requestAdb: async () => new FirstBootMirror(),
+    requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; return m; },
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
     sleep: (ms) => tick(ms / 20),

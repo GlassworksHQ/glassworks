@@ -96,13 +96,20 @@ export class Disk {
     this.zero.setRange(block, count, false);
   }
 
-  /** Marks blocks as zeros: written as zeros to the store, and sent as FILL 0. */
+  /**
+   * Marks blocks as zeros: written as zeros to the store, and sent as FILL 0. With `zeroed`, blocks
+   * never written are zeros already and skip the write; blocks that hold data are still overwritten.
+   */
   async zeroFill(block: number, count: number): Promise<void> {
     this.check(block, count);
     const chunk = new Uint8Array(Math.min(count, 256) * this.blockSize);
-    for (let b = block; !this.o.zeroed && b < block + count; b += 256) {
-      const n = Math.min(256, block + count - b);
-      await this.store.write(b * this.blockSize, n === 256 ? chunk : chunk.subarray(0, n * this.blockSize));
+    const needs = (b: number) => !this.o.zeroed || (this.care.get(b) && !this.zero.get(b));
+    for (let b = block; b < block + count;) {
+      if (!needs(b)) { b++; continue; }
+      let n = 1;
+      while (n < 256 && b + n < block + count && needs(b + n)) n++;
+      await this.store.write(b * this.blockSize, chunk.subarray(0, n * this.blockSize));
+      b += n;
     }
     this.care.setRange(block, count);
     this.zero.setRange(block, count);

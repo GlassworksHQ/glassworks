@@ -28,6 +28,7 @@ export function workerImages(): ImageMaker {
   return {
     load: (f, onProgress) => call({ op: 'load', file: f }, (_, x) => onProgress(x)),
     fetch: (url, onProgress) => call({ op: 'fetch', url }, (_, x) => onProgress(x)),
+    check: (file, which, onProgress) => call({ op: 'check', file, which }, (_, x) => onProgress(x)),
     async build(o, onProgress) {
       await call({ op: 'build', ...o }, (step, x) => onProgress(step as Parameters<typeof onProgress>[0], x));
       return { system: await file('system.sparse'), userdata: await file('userdata.sparse') };

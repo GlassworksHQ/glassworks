@@ -101,6 +101,11 @@ boot Kiln runs `pm hide com.android.launcher3` (and `com.cyanogenmod.trebuchet` 
 Kiosk is the only home app left: Android opens it with no chooser. **Untested** on the unit. The way
 back (the plain Glass Panes image) brings the launcher back, because it comes with a fresh userdata.
 
+Kiln then checks what HOME opened (`dumpsys activity activities`, `mFocusedActivity`). If it isn't
+S1 Kiosk (the chooser, or a launcher that survived `pm hide`), Done says so plainly. Without a
+touchscreen, the Mirror would wait on that chooser after a restart. Done offers "Hide the other
+launcher again", or a USB mouse to choose S1 Kiosk, then Always.
+
 The boot logo before Android stays lululemon's: it lives in the signed `aboot`/splash path that the
 locked bootloader checks, and option A writes only `system` and `userdata`.
 
@@ -122,7 +127,9 @@ Off-device only:
   with `hwrotation` 90 or off. Off falls back to `settings put system user_rotation 3` over adb
   after the first boot.
 - Does the Mirror's LK take sparse FILL chunks? `userdata` uses them for zeros (inode tables,
-  journal). `writeSparse(…, { fill: false })` sends RAW zeros instead, at about 200 MB more.
+  journal). After a refused write, Kiln offers "Try again without FILL", which builds the zeros as
+  RAW blocks (about 200 MB more to send). Kiln refuses an LK that reports no `max-download-size`
+  before anything is written, rather than assume fastboot.js's 512 MiB.
 - The LK's `max-download-size`, and how long the first boot takes while `dex2oat` optimises S1 Kiosk.
 - Whether the stock unit's `userdata` partition is the same 5,583,458,304 bytes. Kiln reads it
   with `fastboot getvar partition-size:userdata` before it builds the image.

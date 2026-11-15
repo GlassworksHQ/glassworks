@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
-import { cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
+import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { APP_DIR, GLASS_PANES, buildUserdata, patchSystem, setProp } from '../src';
 
 const T = 1_700_000_000;
@@ -51,7 +51,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     await dump(disk, img);
 
     const r = fsck(img);
-    expect(r.code, r.out).toBe(0);
+    expect(clean(r), r.out).toBe(true);
     expect(Buffer.from(debugfsCat(img, `${APP_DIR}/S1Kiosk.apk`))).toEqual(Buffer.from(APK));
     expect(Buffer.from(debugfsCat(img, `${APP_DIR}/lib/arm64/libxul.so`))).toEqual(Buffer.from(libs['arm64-v8a']['libxul.so']));
     expect(debugfs(img, `ls ${APP_DIR}/lib`)).not.toContain('arm '); // only the primary ABI's
@@ -139,7 +139,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const img = join(dir, 'userdata.img');
     await dump(disk, img);
     const r = fsck(img);
-    expect(r.code, r.out).toBe(0);
+    expect(clean(r), r.out).toBe(true);
     expect(new TextDecoder().decode(debugfsCat(img, '/misc/adb/adb_keys'))).toBe(`${key}\n`);
     expect(debugfs(img, 'stat /')).toMatch(/Mode:\s+0771[\s\S]*User:\s+1000\s+Group:\s+1000/);
     expect(debugfs(img, 'stat /misc')).toMatch(/Mode:\s+01771[\s\S]*User:\s+1000\s+Group:\s+9998/);
@@ -169,8 +169,8 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       const { disk } = await readSparse(createReadStream(REAL!, { highWaterMark: 1 << 20 }), (h) => new Disk(fileStore(work), h.blockSize, h.blocks), { onBytes: (b) => sha.update(b) });
       expect(hex(sha.digest())).toBe(GLASS_PANES.system.sha256);
       await dump(disk, join(dir, 'original.raw'));
-      // every question e2fsck -n asks (Fix?, Clear?, Salvage?, …) answers itself "no": compare them all
-      const problems = (out: string) => out.split('\n').filter((l) => /\?\s+(no|yes)\s*$/.test(l) || /Fix\?/.test(l));
+      // every question e2fsck -n asks (Fix?, Clear?, Salvage?, …) answers itself "no", and every ignored checksum: compare them all
+      const problems = (out: string) => out.split('\n').filter((l) => /\?\s+(no|yes)\s*$/.test(l) || /Fix\?|IGNORED|checksum is/i.test(l));
       const baseline = problems(fsck(join(dir, 'original.raw')).out);
 
       await patchSystem(await Ext4.open(disk), { apk: APK, bootAnimation: ANIM, hwrotation: 270 });
@@ -190,8 +190,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       closeSync(dev);
       void flashed;
       const r = fsck(join(dir, 'flashed.raw'));
-      const findings = problems(r.out);
-      expect(findings).toEqual(baseline); // the image's own make_ext4fs quirk, nothing new
+      expect(problems(r.out)).toEqual(baseline); // the image's own make_ext4fs quirk, nothing new
       const img = join(dir, 'flashed.raw');
       expect(Buffer.from(debugfsCat(img, `${APP_DIR}/S1Kiosk.apk`))).toEqual(Buffer.from(APK));
       expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.sf\.hwrotation=270\n$/);

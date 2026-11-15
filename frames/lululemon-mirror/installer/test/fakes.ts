@@ -154,6 +154,8 @@ export class FakeMirror implements PanelShell {
 export class FirstBootMirror implements PanelShell {
   cmds: string[] = [];
   hidden = new Set<string>();
+  /** `pm hide` answers false (Launcher3 survives): HOME shows Android's chooser */
+  hideFails = false;
   constructor(private readonly fp: string = FINGERPRINT, private readonly app = true) {}
   async run(cmd: string) {
     this.cmds.push(cmd);
@@ -162,10 +164,18 @@ export class FirstBootMirror implements PanelShell {
     if (cmd === 'getprop ro.build.fingerprint') return ok(`${this.fp}\n`);
     if (cmd === 'getprop ro.sf.hwrotation') return ok('270\n');
     if (cmd === 'dumpsys package sh.edm.s1kiosk') return ok(this.app ? '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n' : '');
-    if (cmd === 'pm list packages com.android.launcher3') return ok('package:com.android.launcher3\n');
+    if (cmd === 'pm list packages com.android.launcher3') return ok(this.hidden.has('com.android.launcher3') ? '' : 'package:com.android.launcher3\n');
     if (cmd.startsWith('pm list packages')) return ok('');
     const m = /^pm hide (\S+)$/.exec(cmd);
-    if (m) { this.hidden.add(m[1]!); return ok(`Package ${m[1]} new hidden state: true\n`); }
+    if (m) {
+      if (this.hideFails) return ok(`Package ${m[1]} new hidden state: false\n`);
+      this.hidden.add(m[1]!);
+      return ok(`Package ${m[1]} new hidden state: true\n`);
+    }
+    if (cmd === 'dumpsys activity activities') {
+      const front = this.hidden.has('com.android.launcher3') ? 'sh.edm.s1kiosk/.MainActivity' : 'android/com.android.internal.app.ResolverActivity';
+      return ok(`  Stack #0:\n  mFocusedActivity: ActivityRecord{b2c93df u0 ${front} t243}\n`);
+    }
     return ok();
   }
   async push() {}

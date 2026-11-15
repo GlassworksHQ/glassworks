@@ -98,6 +98,13 @@ describe('sparse images', () => {
     expect((await d.read(500)).every((x) => x === 0)).toBe(true);
   });
 
+  it('a zeroed store still overwrites blocks that hold data with zeros', async () => {
+    const d = new Disk(new MemoryStore(), BS, 100, { zeroed: true });
+    await d.write(10, new Uint8Array(3 * BS).fill(0xee));
+    await d.zeroFill(0, 100);
+    expect((await d.read(10, 3)).every((x) => x === 0)).toBe(true);
+  });
+
   it('SHA-256 matches node\'s for any split', () => {
     for (const n of [0, 1, 55, 56, 63, 64, 65, 1000, 100_000]) {
       const b = new Uint8Array(randomBytes(n));

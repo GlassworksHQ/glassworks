@@ -130,7 +130,7 @@ InstallFlow. Other `?demo=` names jump to one screen (`src/wizard/demo.ts`), for
 `radio-thread` and `radio-thread-old` (a Thread router on an S1 Kiosk that gets the network from
 Home Assistant, and on 0.4.3, which can't). The Mirror's test page has its own. The fastboot install: `?demo=flash-image`, `flash-downloading`, `flash-proxy-failed`
 (the fallback), `flash-checking`, `flash-wrong` (a wrong file), `flash-ready`, `flash-fastboot`, `flash-fastboot-wrong`, `flash-confirm` (the stock warning),
-`flash-working`, `flash-adb`, `flash-done`, `flash-error` and `flash-back` (the way back). The adb-only path: `?demo=run`
+`flash-working`, `flash-adb`, `flash-done`, `flash-done-chooser` (another launcher survived), `flash-error` (a refused write, with the retry without FILL) and `flash-back` (the way back). The adb-only path: `?demo=run`
 clicks through a simulated Mirror (`src/mirror/demo.ts`); `pick`, `pick-wrong` (an APK that isn't S1 Kiosk),
 `checks`, `checks-fail`, `installing`, `home` (waiting for the person's choice on the Mirror), `home-clear`
 (another app's defaults to clear first), `done`, `done-unconfirmed`, `undo-done`, `undo-pending` (undo again to

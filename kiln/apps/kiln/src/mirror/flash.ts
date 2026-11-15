@@ -4,7 +4,7 @@
 // this browser's own key. Test only, behind ?apk=local, like the rest of the Mirror's page.
 import type { PanelShell } from '@glassworks/adb';
 import {
-  GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, WrongImage, checkDownload, checkFastboot, firstBoot, flashImages,
+  GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, WrongImage, checkFastboot, firstBoot, flashImages, makeOnlyHome,
   type FastbootLike, type FastbootReport, type FirstBoot, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -14,8 +14,11 @@ export interface ImageMaker {
   load(file: Blob, onProgress: (x: number) => void): Promise<void>;
   /** The same from Kiln's release proxy, resuming with Range. Throws ProxyError when the proxy can't serve it. */
   fetch(url: string, onProgress: (x: number) => void): Promise<void>;
-  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number },
+  /** Builds both images from the loaded one; can run again (after a failed flash) until discard(). */
+  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
+  /** The way back: a downloaded Glass Panes file against its published size and SHA-256, off the page's thread. */
+  check(file: Blob, which: 'system' | 'userdata', onProgress: (x: number) => void): Promise<void>;
   /** Deletes what it kept (the image, the built copies). */
   discard(): Promise<void>;
 }
@@ -58,6 +61,12 @@ export interface FlashState {
   understood: boolean;
   work?: { step: WorkStep; x: number };
   firstBoot?: FirstBoot;
+  /** build zeros as RAW blocks: the retry for a bootloader that refused a FILL chunk */
+  noFill?: boolean;
+  /** the HOME fix on Done is running */
+  fixing?: boolean;
+  /** the error came while writing: offer the retry without FILL */
+  flashFailed?: boolean;
   error?: string;
   log: string[];
 }
@@ -66,6 +75,7 @@ export class FlashSession {
   state: FlashState = { screen: 'image', back: false, haUrl: '', wifi: { ssid: '', password: '' }, understood: false, log: [] };
   private listeners = new Set<() => void>();
   private fb?: FastbootLike;
+  private panel?: PanelShell;
   private files: { system?: Blob; userdata?: Blob } = {};
   private picks = 0;
 
@@ -120,7 +130,7 @@ export class FlashSession {
     this.set({ image: { name, size: file.size, state: 'checking', progress: 0 } });
     const progress = (x: number) => { if (pick === this.picks) this.set({ image: { name, size: file.size, state: 'checking', progress: x } }); };
     try {
-      if (this.state.back) await checkDownload(file, GLASS_PANES.system, progress);
+      if (this.state.back) await this.d.images.check(file, 'system', progress);
       else await this.d.images.load(file, progress);
       if (pick !== this.picks) return;
       this.files.system = file;
@@ -137,7 +147,7 @@ export class FlashSession {
     this.files.userdata = undefined;
     this.set({ userdataFile: { name, size: file.size, state: 'checking', progress: 0 } });
     try {
-      await checkDownload(file, GLASS_PANES_USERDATA, (x) => this.set({ userdataFile: { name, size: file.size, state: 'checking', progress: x } }));
+      await this.d.images.check(file, 'userdata', (x) => this.set({ userdataFile: { name, size: file.size, state: 'checking', progress: x } }));
       this.files.userdata = file;
       this.set({ userdataFile: { name, size: file.size, state: 'ok', progress: 1 } });
     } catch (e) {
@@ -178,7 +188,7 @@ export class FlashSession {
     const s = this.state;
     if (!this.fb || !s.fastboot?.ok || !s.understood || s.screen === 'working') return;
     const work = (step: WorkStep, x: number) => this.set({ work: { step, x } });
-    this.set({ screen: 'working', error: undefined, work: { step: s.back ? 'flash-system' : 'patch', x: 0 } });
+    this.set({ screen: 'working', error: undefined, flashFailed: false, work: { step: s.back ? 'flash-system' : 'patch', x: 0 } });
     try {
       let images: { system: Blob; userdata: Blob };
       if (s.back) {
@@ -188,11 +198,13 @@ export class FlashSession {
         const adbKey = this.d.adbKey();
         if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
         this.log('Building the images');
-        images = await this.d.images.build({ apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), adbKey, userdataBytes: s.fastboot.userdataBytes },
+        images = await this.d.images.build({ apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill },
           (step, x) => work(step, x));
       }
-      this.log('Flashing');
+      this.log(`Flashing${s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
+      this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
       await flashImages(this.fb, images, (part, x) => work(part === 'system' ? 'flash-system' : 'flash-userdata', x));
+      this.set({ flashFailed: false });
       work('restart', 1);
       this.log('Restarting the Mirror');
       this.fb = undefined;
@@ -210,6 +222,7 @@ export class FlashSession {
     this.set({ connecting: true, connectError: undefined });
     let p: PanelShell;
     try { p = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
+    this.panel = p;
     this.set({ connecting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
     try {
       const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
@@ -226,6 +239,26 @@ export class FlashSession {
     }
   }
 
-  /** From an error: back to the files, keeping what checked out. */
-  retry() { this.set({ screen: this.state.back ? 'back' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false }); }
+  /** From an error: back to the files, keeping what checked out (a loaded image builds again). */
+  retry() { this.set({ screen: this.state.back ? 'back' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false }); }
+
+  /**
+   * After a write the bootloader refused: build again with zeros as RAW blocks instead of FILL
+   * chunks (whether the Mirror's LK takes FILL is the open question), then fastboot again.
+   */
+  retryWithoutFill() { this.set({ noFill: true, screen: 'fastboot', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false }); }
+
+  /** Done, with another launcher still a home app: hide it again and check HOME (the Mirror can't answer a chooser). */
+  async fixHome(): Promise<void> {
+    if (!this.panel || !this.state.firstBoot || this.state.fixing) return;
+    this.set({ fixing: true });
+    try {
+      const { home } = await makeOnlyHome(this.panel, this.log, this.d.sleep);
+      this.set({ firstBoot: { ...this.state.firstBoot, home } });
+    } catch (e) {
+      this.log('', `fixing the home screen failed: ${(e as Error).message}`);
+    } finally {
+      this.set({ fixing: false });
+    }
+  }
 }

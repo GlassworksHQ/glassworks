@@ -3,7 +3,7 @@
 // own key. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
 // lululemon's software: the screens say so before anything is written (#40).
 import type { PanelShell } from '@glassworks/adb';
-import { ACT, PKG, Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
+import { PKG, Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
 import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
@@ -39,9 +39,12 @@ export async function checkFastboot(fb: FastbootLike): Promise<FastbootReport> {
   const system = await size('system'), userdata = await size('userdata');
   const product = await optional(fb, 'product'), max = await optional(fb, 'max-download-size'), secure = await optional(fb, 'secure');
   const mb = (n?: number) => (n === undefined ? 'not reported' : `${(n / 1024 / 1024).toFixed(0)} MiB (${n} bytes)`);
+  // fastboot.js falls back to 512 MiB without it: on a unit with less, a download would fail mid-write
+  const maxBytes = max !== undefined && /^(0x[0-9a-f]+|\d+)$/i.test(max.trim()) ? Number(max.trim()) : undefined;
   const checks: Check[] = [
     { what: 'System partition', found: mb(system), ok: system === SYSTEM_BYTES, need: `${SYSTEM_BYTES} bytes, the size the Glass Panes image is made for` },
     { what: 'Userdata partition', found: mb(userdata), ok: !!userdata && userdata >= 1024 ** 3 && userdata % 4096 === 0, need: 'at least 1 GiB, whole 4 KiB blocks' },
+    { what: 'Download size', found: mb(maxBytes), ok: !!maxBytes && maxBytes >= 4096, need: 'max-download-size reported, at least one 4 KiB block' },
   ];
   const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`];
   return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info };
@@ -91,22 +94,61 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
  * S1 Kiosk and the rest (patchSystem), and a fresh userdata the partition's size with this browser's
  * adb key (buildUserdata).
  */
-export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number },
+/** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
+export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
   onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
   onProgress('patch', 0);
   await patchSystem(await Ext4.open(loaded.disk), o);
   onProgress('patch', 1);
-  await writeSparse(loaded.disk, sinks.system, { onProgress: (b) => onProgress('system', b / loaded.disk.blocks) });
+  await writeSparse(loaded.disk, sinks.system, { fill: o.fill, onProgress: (b) => onProgress('system', b / loaded.disk.blocks) });
   const ud = new Disk(new MemoryStore(), 4096, Math.floor(o.userdataBytes / 4096), { zeroed: true });
   await buildUserdata(ud, { adbKey: o.adbKey, time: o.time });
-  await writeSparse(ud, sinks.userdata, { onProgress: (b) => onProgress('userdata', b / ud.blocks) });
+  await writeSparse(ud, sinks.userdata, { fill: o.fill, onProgress: (b) => onProgress('userdata', b / ud.blocks) });
 }
 
 /** Launchers the image ships, hidden on the first boot so S1 Kiosk is the only home screen: no chooser to tap. */
 export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'];
 
-export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; wifi?: boolean; rotation?: string }
+/**
+ * `home`: what Android opened for HOME after the other launchers were hidden: `set` (S1 Kiosk),
+ * `chooser` (its list of home apps: the Mirror has no touchscreen to answer it), or `other`.
+ */
+export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean; rotation?: string }
+export interface HomeCheck { result: 'set' | 'chooser' | 'other'; focused?: string; left: string[] }
+
+/** The activity in front, from `dumpsys activity activities` (Android 6's mFocusedActivity). */
+export async function focusedActivity(p: PanelShell): Promise<string | undefined> {
+  return /mFocusedActivity: ActivityRecord\{\S+ u\d+ (\S+\/\S+)/.exec((await p.run('dumpsys activity activities')).out)?.[1];
+}
+
+/**
+ * Hides the image's other launchers (pm hide: adb's shell has MANAGE_USERS on Android 6), asks for
+ * HOME, and checks what Android opened. Running it again is the fix when a launcher survived.
+ */
+export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<{ hidden: string[]; home: HomeCheck }> {
+  const r = new Steps(p, onStep);
+  const installed = async (pkg: string) => (await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`);
+  const hidden: string[] = [];
+  for (const pkg of OTHER_HOMES) {
+    if (!(await installed(pkg))) continue;
+    const out = await r.try(`pm hide ${pkg}`);
+    if (/true/.test(out)) hidden.push(pkg);
+    r.detail(`${pkg}: ${out.trim() || 'no answer'}`);
+  }
+  const left: string[] = [];
+  for (const pkg of OTHER_HOMES) if (await installed(pkg)) left.push(pkg); // a hidden app isn't listed
+  await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
+  let focused: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    focused = await focusedActivity(p);
+    if (focused?.startsWith(`${PKG}/`)) break;
+    await sleep(1000);
+  }
+  const result: HomeCheck['result'] = focused?.startsWith(`${PKG}/`) ? 'set' : /ResolverActivity|ChooserActivity/.test(focused ?? '') ? 'chooser' : 'other';
+  r.detail(`home: ${focused ?? 'unknown'}${left.length ? `; still a home app: ${left.join(', ')}` : ''}`);
+  return { hidden, home: { result, ...(focused ? { focused } : {}), left } };
+}
 
 /**
  * The Mirror's first start on Glassworks, over adb with Kiln's own key: checks it is the patched
@@ -126,19 +168,11 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   r.detail(`S1 Kiosk ${app.name ?? app.code}, ro.sf.hwrotation=${rotation ?? 'unset'}`);
   await grantPermissions(r);
 
-  r.step('Make S1 Kiosk the only home screen');
-  const hidden: string[] = [];
-  for (const pkg of OTHER_HOMES) {
-    if (!(await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`)) continue;
-    const out = await r.try(`pm hide ${pkg}`);
-    if (/true/.test(out)) hidden.push(pkg);
-    r.detail(`${pkg}: ${out.trim() || 'no answer'}`);
-  }
-
   r.step('Start S1 Kiosk');
   await startApp(r, o);
-  await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
-  r.detail(`home: ${ACT}`);
+
+  r.step('Make S1 Kiosk the only home screen');
+  const { hidden, home } = await makeOnlyHome(p, o.onStep, sleep);
 
   let wifi: boolean | undefined;
   if (o.wifi) {
@@ -146,7 +180,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : 'S1 Kiosk didn\'t confirm it joined: set the Wi-Fi in its settings');
   }
-  return { app, hidden, ...(wifi !== undefined ? { wifi } : {}), ...(rotation ? { rotation } : {}) };
+  return { app, hidden, home, ...(wifi !== undefined ? { wifi } : {}), ...(rotation ? { rotation } : {}) };
 }
 
 /** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */
