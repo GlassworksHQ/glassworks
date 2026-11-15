@@ -330,9 +330,10 @@ the steps below. If you only have `boot.img` and `vbmeta.img`, you can still put
 two back by hand. The splash then stays ours. The same goes for a backup refused because its splash
 is ours.
 
-Do this only with a backup whose `boot` is Aqara's: one made at your first install, or one refused
-only because its splash is ours. The check below shows that the two files are intact, not that they
-are Aqara's. A backup made on an already-installed panel holds our patched `boot`, and putting it
+Do this only with a backup whose `boot` and `vbmeta` are both Aqara's: one made at your first
+install, or one refused only because its splash is ours and taken after both `boot` and `vbmeta` were
+put back. A backup taken after only `boot` was put back holds our `vbmeta`, with verification off.
+The check below shows that the two files are intact, not that they are Aqara's. A backup made on an already-installed panel holds our patched `boot`, and putting it
 back by hand reinstalls our software instead of Aqara's.
 
 First check those two, in the backup's folder. It needs both entries in `SHA256SUMS` and both files
