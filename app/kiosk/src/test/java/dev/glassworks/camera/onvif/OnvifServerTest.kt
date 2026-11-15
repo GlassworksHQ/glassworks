@@ -26,6 +26,8 @@ class OnvifServerTest {
 
     private val logged = java.util.Collections.synchronizedList(mutableListOf<String>())
 
+    private var now = 1_000_000L
+
     private fun newServer(withCreds: Boolean = true, snapshot: (() -> ByteArray?)? = { byteArrayOf(1, 2, 3) }) = OnvifServer(
         port = 0,
         host = { "192.0.2.41" },
@@ -35,6 +37,7 @@ class OnvifServerTest {
         snapshot = snapshot,
         enableDiscovery = false,
         onLog = { logged += it },
+        clock = { now },
     ).also { server = it }
 
     @After fun tearDown() { server?.stop() }
@@ -160,6 +163,36 @@ class OnvifServerTest {
         // A forgotten nonce with the wrong password isn't stale: it's refused.
         assertEquals(400, profiles(digest("fedcba9876543210fedcba9876543210", password = "an-old-apps-password")).status)
         assertTrue("a stale nonce isn't logged as refused", logged.none { "refused" in it && "GetProfiles" in it && "match" !in it })
+    }
+
+    private fun digestWith(nonce: String, realm: String = "Glassworks", uri: String = "/onvif/media_service"): Map<String, String> {
+        val ha1 = OnvifXml.md5Hex("$user:$realm:$pass")
+        val ha2 = OnvifXml.md5Hex("POST:$uri")
+        val resp = OnvifXml.md5Hex("$ha1:$nonce:00000001:abc:auth:$ha2")
+        return mapOf("authorization" to "Digest username=\"$user\", realm=\"$realm\", nonce=\"$nonce\", uri=\"$uri\", qop=auth, nc=00000001, cnonce=\"abc\", response=\"$resp\"")
+    }
+
+    @Test fun `digest needs our realm and the requested resource, as RTSP does`() {
+        val s = newServer()
+        fun profiles(headers: Map<String, String>) = s.handle("POST", "/onvif/media_service", headers, soap("<trt:GetProfiles/>", "").toByteArray())
+        val nonce = Regex("nonce=\"([^\"]+)\"").find(profiles(emptyMap()).headers.first { it.second.startsWith("Digest") }.second)!!.groupValues[1]
+        assertEquals("ours", 200, profiles(digestWith(nonce)).status)
+        assertEquals("another realm, even with a response made for it", 400, profiles(digestWith(nonce, realm = "SomeoneElse")).status)
+        assertEquals("another resource", 400, profiles(digestWith(nonce, uri = "/onvif/device_service")).status)
+        assertEquals("the absolute form of the same resource", 200, profiles(digestWith(nonce, uri = "http://192.0.2.41:${s.localPort}/onvif/media_service")).status)
+        assertEquals("the absolute form of another one", 400, profiles(digestWith(nonce, uri = "http://192.0.2.41:${s.localPort}/onvif/device_service")).status)
+    }
+
+    @Test fun `a digest nonce lives 12 h, then the client signs in again`() {
+        val s = newServer()
+        fun profiles(headers: Map<String, String>) = s.handle("POST", "/onvif/media_service", headers, soap("<trt:GetProfiles/>", "").toByteArray())
+        val nonce = Regex("nonce=\"([^\"]+)\"").find(profiles(emptyMap()).headers.first { it.second.startsWith("Digest") }.second)!!.groupValues[1]
+        now += 12 * 3600_000L
+        assertEquals("12 h old: still good", 200, profiles(digestWith(nonce)).status)
+        now += 1
+        val old = profiles(digestWith(nonce))
+        assertEquals("older: a fresh challenge", 401, old.status)
+        assertTrue(old.headers.first { it.second.startsWith("Digest") }.second.contains("stale=true"))
     }
 
     @Test fun `a refused event call is a bare 401, so Home Assistant's pull loop waits instead of looping`() {

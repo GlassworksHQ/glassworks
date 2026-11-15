@@ -57,6 +57,8 @@ class OnvifServer(
     private val credentials: () -> Pair<String, String>?,
     private val snapshot: (() -> ByteArray?)? = null,
     private val onLog: (String) -> Unit = {},
+    /** The time for Digest nonces' age ([NONCE_MS]); a test passes its own. */
+    private val clock: () -> Long = System::currentTimeMillis,
     private val discoveryPort: Int = 3702,
     private val enableDiscovery: Boolean = true,
     /** Glassworks: the panel's name, for the auth realm, the Server header and the host name fallback. */
@@ -71,6 +73,8 @@ class OnvifServer(
         private const val DEFAULT_SUB_MS = 10 * 60_000L
         private const val MAX_PULL_WAIT_MS = 60_000L
         private const val REFUSAL_LOG_MS = 60_000L
+        /** A Digest nonce's life, as RTSP's (RtspAuth): 12 h. */
+        private const val NONCE_MS = 12 * 3600_000L
         private const val TOPIC_DIALECT = "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet"
         private const val TOPIC_CELL = "tns1:RuleEngine/CellMotionDetector/Motion"
         private const val TOPIC_ALARM = "tns1:VideoSource/MotionAlarm"
@@ -360,7 +364,7 @@ class OnvifServer(
 
     private fun unauthorized(ct: String, body: ByteArray, stale: Boolean = false): HttpResponse {
         val nonce = OnvifXml.randomHex()
-        synchronized(issuedNonces) { issuedNonces[nonce] = System.currentTimeMillis() }
+        synchronized(issuedNonces) { issuedNonces[nonce] = clock() }
         return HttpResponse(401, body, ct, listOf(
             "WWW-Authenticate" to "Digest realm=\"$realm\", qop=\"auth\", nonce=\"$nonce\", algorithm=MD5" + if (stale) ", stale=true" else "",
             "WWW-Authenticate" to "Basic realm=\"$realm\""
@@ -419,21 +423,36 @@ class OnvifServer(
             auth.startsWith("Digest ", true) -> {
                 val p = parseAuthParams(auth.substring(7))
                 if (p["username"] != c.first) return AuthResult.BAD
+                // Our realm only, and the request's own path, as RTSP checks (#239 verifier f41eab5d).
+                if (p["realm"] != realm) return AuthResult.BAD
+                val digestUri = p["uri"] ?: return AuthResult.BAD
+                if (!sameResource(digestUri, uri)) return AuthResult.BAD
                 val nonce = p["nonce"] ?: return AuthResult.BAD
-                val r = p["realm"] ?: realm
-                val ha1 = OnvifXml.md5Hex("${c.first}:$r:${c.second}")
-                val ha2 = OnvifXml.md5Hex("$method:${p["uri"] ?: uri}")
+                val ha1 = OnvifXml.md5Hex("${c.first}:$realm:${c.second}")
+                val ha2 = OnvifXml.md5Hex("$method:$digestUri")
                 val expected = if (p["qop"] != null)
                     OnvifXml.md5Hex("$ha1:$nonce:${p["nc"]}:${p["cnonce"]}:${p["qop"]}:$ha2")
                 else OnvifXml.md5Hex("$ha1:$nonce:$ha2")
+                val issued = synchronized(issuedNonces) { issuedNonces[nonce] }
                 when {
                     !OnvifXml.constantTimeEquals(expected, p["response"].orEmpty()) -> AuthResult.BAD
-                    synchronized(issuedNonces) { !issuedNonces.containsKey(nonce) } -> AuthResult.STALE
+                    // Not ours, forgotten, or older than RTSP's 12 h: the right password signs in again once.
+                    issued == null || clock() - issued > NONCE_MS -> AuthResult.STALE
                     else -> AuthResult.OK
                 }
             }
             else -> AuthResult.BAD
         }
+    }
+
+    /**
+     * The Digest `uri` names the resource requested ([request]: its path and query): as sent, or in
+     * absolute form (`http://host:port/path`, RFC 7616 allows it) with the same path.
+     */
+    private fun sameResource(digestUri: String, request: String): Boolean {
+        val abs = Regex("^https?://[^/]*(/.*)?$", RegexOption.IGNORE_CASE).find(digestUri)
+        val path = if (abs != null) abs.groupValues[1].ifEmpty { "/" } else digestUri
+        return path == request
     }
 
     private fun parseAuthParams(s: String): Map<String, String> {

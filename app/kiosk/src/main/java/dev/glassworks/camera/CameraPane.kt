@@ -121,7 +121,8 @@ class CameraPane(
         if (!allowed || policy.privacy) release() // a still's linger mustn't keep the camera open
     }
 
-    @Synchronized private fun apply(next: CameraPlan, signIn: Pair<String, String>?) {
+    /** Internal for a test: its own guard keeps the stream off without a sign-in, whatever [next] says. */
+    @Synchronized internal fun apply(next: CameraPlan, signIn: Pair<String, String>?) {
         if (next.detect && presence == null) {
             presence = presenceFactory(hardware, ::onMotion) { why -> problem = why; log("presence: $why") }.also { p ->
                 p.start(ctx.context) { isNear, raw -> onReading(isNear, raw) }

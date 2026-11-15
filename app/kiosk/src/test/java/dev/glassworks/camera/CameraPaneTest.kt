@@ -326,4 +326,13 @@ class CameraPaneTest {
         assertTrue(logs.toString(), logs.none { password in it || user in it })
         assertTrue("no entity carries it", r.pane.entities().none { e -> e.name.contains(password) || e.objectId.contains(password) })
     }
+
+    @Test fun applyNeverStartsTheStreamWithoutASignIn() {
+        // The plan already asks for one (CameraPlan), and reconcile makes one; this pins apply's own guard.
+        val r = Rig()
+        r.pane.start()
+        r.pane.apply(CameraPlan(detect = true, feedScreen = true, stream = true), signIn = null)
+        assertNull(r.stream.running)
+        assertEquals(0, r.stream.starts)
+    }
 }
