@@ -31,6 +31,7 @@ import dev.glassworks.pane.SettingsChange
 import dev.glassworks.pane.SettingsChange.couldNot
 import dev.glassworks.pane.SettingsChange.hhmm
 import dev.glassworks.pane.SettingsChange.parseRange
+import dev.glassworks.pane.shown
 import sh.edm.s1kiosk.setup.Backdrop
 import sh.edm.s1kiosk.ui.Glass
 import sh.edm.s1kiosk.ui.Glass.Companion.AMBER
@@ -550,33 +551,39 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     /**
      * "In Home Assistant" (#212): its label, then a name on the left and its value on the right, one line
-     * each. Rows off by default in Home Assistant are dimmed, with a line that says why. Read again on [refresh].
+     * each. Rows off by default in Home Assistant are dimmed, with a line that says why. Without Home Assistant,
+     * a line says so instead (#261). Read again on [refresh].
      */
     private fun states(i: SettingsItem.States): View {
         val box = card(i.title)
-        var names: List<String>? = null
+        var drawn: List<Any?>? = null
         val values = ArrayList<TextView>()
         fun bind() {
-            val list = i.rows()
-            if (list.map { it.name } == names) {
+            val now = i.shown()
+            val list = now.rows
+            val shape = listOf(now.note, now.dimmed) + list.map { it.name }
+            if (shape == drawn) {
                 list.forEachIndexed { n, r -> if (values[n].text != r.value) values[n].text = r.value }
                 return
             }
-            names = list.map { it.name }
+            drawn = shape
             values.clear()
             while (box.childCount > 1) box.removeViewAt(1)
+            now.note?.let { box.addView(g.text(14.5f, MU).apply { text = it; setLineSpacing(0f, 1.25f); setPadding(0, 0, 0, if (list.isEmpty()) 0 else px(10f)) }, LinearLayout.LayoutParams(-1, -2)) }
             list.forEach { r ->
+                val dim = r.offByDefault || now.dimmed
                 box.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)))
                 box.addView(LinearLayout(context).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     minimumHeight = px(OverviewPage.ROW_MIN)
-                    addView(g.text(16f, if (r.offByDefault) MU else TX).apply { text = r.name; setSingleLine(); ellipsize = TextUtils.TruncateAt.END },
+                    addView(g.text(16f, if (dim) MU else TX).apply { text = r.name; setSingleLine(); ellipsize = TextUtils.TruncateAt.END },
                         LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(16f) })
-                    addView(g.text(15f, if (r.offByDefault) FA else MU).apply { text = r.value; setSingleLine(); ellipsize = TextUtils.TruncateAt.END; maxWidth = valueMax }.also { values += it })
+                    addView(g.text(15f, if (dim) FA else MU).apply { text = r.value; setSingleLine(); ellipsize = TextUtils.TruncateAt.END; maxWidth = valueMax }.also { values += it })
                 }, LinearLayout.LayoutParams(-1, -2))
             }
-            if (list.any { it.offByDefault }) box.addView(g.text(13.5f, FA).apply { text = OFF_BY_DEFAULT; setLineSpacing(0f, 1.2f) },
+            // Every row dimmed for the link: the off-by-default line would explain the wrong thing.
+            if (!now.dimmed && list.any { it.offByDefault }) box.addView(g.text(13.5f, FA).apply { text = OFF_BY_DEFAULT; setLineSpacing(0f, 1.2f) },
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         }
         bind()

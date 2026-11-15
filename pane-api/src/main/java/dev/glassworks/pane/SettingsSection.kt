@@ -127,6 +127,52 @@ fun inHomeAssistant(pane: Pane?, on: Boolean = true, only: (ApiEntity) -> Boolea
 }
 
 const val IN_HOME_ASSISTANT = "In Home Assistant"
+
+/**
+ * Whether Home Assistant has the panel (#261). Every "In Home Assistant" list says so, where it would
+ * otherwise read "Unknown" on each row.
+ */
+enum class HaLink {
+    /** No Home Assistant has added the panel yet. */
+    NOT_ADDED,
+
+    /** Added before, but not connected now: the rows are the last known states. */
+    NOT_CONNECTED,
+    CONNECTED;
+
+    companion object {
+        /** From whether Home Assistant listens to the panel's states now, and whether it ever [added] it. */
+        fun of(connected: Boolean, added: Boolean): HaLink = when {
+            connected -> CONNECTED
+            added -> NOT_CONNECTED
+            else -> NOT_ADDED
+        }
+    }
+}
+
+const val HA_NOT_ADDED = "Not in Home Assistant yet. Add it from Settings → Devices & services."
+const val HA_NOT_CONNECTED = "Home Assistant isn't connected. These are the last known states."
+
+/** What a [SettingsItem.States] list shows now: a line above its rows ([note]), and whether the rows are [dimmed]. */
+class StatesShown(val note: String?, val rows: List<SettingsItem.StateRow>, val dimmed: Boolean)
+
+/** [this] list as [SettingsItem.States.link] has Home Assistant now, read once, for every surface (#261). */
+fun SettingsItem.States.shown(): StatesShown = when (link()) {
+    HaLink.CONNECTED -> StatesShown(null, rows(), dimmed = false)
+    HaLink.NOT_CONNECTED -> StatesShown(HA_NOT_CONNECTED, rows(), dimmed = true)
+    HaLink.NOT_ADDED -> StatesShown(HA_NOT_ADDED, emptyList(), dimmed = false)
+}
+
+/** [sections] with each "In Home Assistant" list following [link], which is read again with the rows. */
+fun withHaLink(sections: List<SettingsSection>, link: () -> HaLink): List<SettingsSection> = sections.map { s ->
+    if (s.items.none(::inHa)) s
+    else SettingsSection(
+        s.id, s.title, s.items.map { i -> if (inHa(i)) SettingsItem.States((i as SettingsItem.States).title, link, i.rows) else i },
+        s.heading, s.master, s.status, s.unavailable, s.source, s.covers,
+    )
+}
+
+private fun inHa(i: SettingsItem) = i is SettingsItem.States && i.title == IN_HOME_ASSISTANT
 /** A pane's page while the panel's Home Assistant device isn't running, so its entities can't be read. */
 const val NOT_RUNNING = "The panel's Home Assistant device isn't running yet. Its state shows here once it is."
 /** Home Assistant's words for an entity with no state now, and for one whose device can't give it. */
@@ -297,9 +343,10 @@ sealed interface SettingsItem {
     /**
      * Read-only states under [title], one line each: a name on the left, its value on the right
      * ([inHomeAssistant]). [rows] is read again every couple of seconds while the page is open. A row
-     * [StateRow.offByDefault] is dimmed, with a line under the list that says why.
+     * [StateRow.offByDefault] is dimmed, with a line under the list that says why. [link]: whether Home
+     * Assistant has the panel now; surfaces read the list through [shown], which says so instead of the rows.
      */
-    class States(val title: String, val rows: () -> List<StateRow>) : SettingsItem
+    class States(val title: String, val link: () -> HaLink = { HaLink.CONNECTED }, val rows: () -> List<StateRow>) : SettingsItem
 
     class StateRow(val name: String, val value: String, val offByDefault: Boolean = false)
 

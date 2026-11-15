@@ -162,6 +162,8 @@ class GlassworksRuntime(
     /** Set while KioskService runs: the ESPHome device, for the Manage page's status. */
     @Volatile var device: PanelDevice? = null
 
+    override fun homeAssistantConnected(): Boolean = device?.homeAssistantConnected() == true
+
     override val panelCode = PanelCode()
 
     override val dashboardAccount = sh.edm.s1kiosk.auth.DashboardAccount({ sh.edm.s1kiosk.auth.HaAuth.stored }, sh.edm.s1kiosk.auth.HaAuth::askAccount)

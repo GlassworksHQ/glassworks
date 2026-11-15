@@ -411,6 +411,10 @@ a few words, why the pane can't run now (the radio without its root helper): the
 - While a pane's `switch` is off, its page is the switch's `offNote` (what being off means, in a
   sentence) and its entities, each `Unavailable`. Its own sections wait until it is on.
 - Without a running device, the page says so (`NOT_RUNNING`).
+- Every "In Home Assistant" list, the core's and a pane's own `States(IN_HOME_ASSISTANT)`, follows
+  whether Home Assistant has the panel (`HaLink`, #261). Never added: one line says so, with no rows.
+  Added but not connected now: a line says so, and the rows (the last known states) are dimmed. Each
+  surface reads the list through `States.shown()`.
 
 ## On and off
 
