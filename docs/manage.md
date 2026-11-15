@@ -16,7 +16,7 @@ changes them the same way.
 
 | Page | What it has |
 |---|---|
-| Overview | Running or not, version and uptime; Home Assistant, Wi-Fi, the web engine, memory; every pane with its state (running, off, or can't run and why). Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
+| Overview | Running or not, the app's version ("· test build <commit>" on a test build) and how long the app has run; Home Assistant, Wi-Fi (connected or not from Android's connectivity service; the network's name and signal where Android gives them to the app), the web engine, memory; every pane with its state (running, off, or can't run and why). Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
 | Dashboard, Screen, each pane | Every setting the panel's own menu has, in the same order and words, and you can change each one here. A pane's page has its on/off at the top right and shows what it's doing; a pane that's off says what that means. The radio's page links to the Thread join |
 | Log | The last 7 days, kept across reboots. Filter by warnings or errors, search, and **Download diagnostics** |
 | Security | The browsers signed in, each with **Sign out** |

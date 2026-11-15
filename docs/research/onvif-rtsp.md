@@ -1,6 +1,6 @@
 # ONVIF and RTSP: what HA and UniFi Protect need from a panel's camera, and what to build it on
 
-**Status (2026-11-14): ported, not yet run on a panel.** First desk research for the camera pane's
+**Status (2026-11-14): ported; met Home Assistant on a tablet** ([its pull loop](#home-assistants-pull-loop-on-a-refused-sign-in-2026-11-14)). First desk research for the camera pane's
 opt-in stream (#117). Then the maintainer decided that Glassworks follows their own implementation,
 which they tested against Home Assistant's ONVIF integration and UniFi Protect (see [Result](#result)).
 HA's needs below are read from its source; UniFi Protect's from Ubiquiti's help page and an MIT proxy
@@ -119,16 +119,31 @@ setup and two Protect notes (read 2026-11-14):
 **What Glassworks changes** (each ported file lists its own changes in its header):
 
 - With no sign-in set, both servers refuse every request that needs a user. Upstream let everyone
-  in. The approved design has no default stream password; the sign-in comes from the Manage page.
-  A username with a blank password counts as no sign-in.
+  in. A username with a blank password counts as no sign-in. Since 2026-11-14 (maintainer) the pane
+  makes each panel its own sign-in the first time the stream turns on, so the stream never runs
+  without one; there is still no default shared between panels.
 - XML with a DTD is refused before it is parsed, in SOAP and in WS-Discovery: parsing runs before
   any sign-in, and Android's parser ignores upstream's `disallow-doctype-decl` flag, so an entity
   bomb or an external entity would otherwise reach it. An entity resolver refuses the rest.
 - The RTSP server binds its port before it counts as running, so a port clash throws and a later
   start can still bind.
 - Nothing listens until the pane starts the servers, and the pane starts them only while
-  `onvif_stream` is on, the camera is in Presence + snapshots, and privacy is off
+  `onvif_stream` is on, the camera is in Presence + camera, and privacy is off
   (`CameraPolicy.streamMayRun`).
+
+**Limits we accept, and what bounds them** (2026-11-14):
+
+| Limit | Why it stays | What bounds it |
+|---|---|---|
+| Plain HTTP and RTSP, no TLS. Basic auth and WS-Security `PasswordText` send the password in a form anyone on the LAN can read | HA's ONVIF integration and UniFi Protect speak ONVIF over HTTP; they choose Digest or `PasswordDigest` when offered | The stream is off by default and needs its own sign-in, not the panel's or HA's. Use a password for nothing else |
+| HTTP Digest (ONVIF, RTSP): a nonce stays valid for 12 h (both; an older one gets a fresh challenge), the realm and the requested resource must be the panel's, and `nc` isn't tracked, so a captured `Authorization` header can be replayed within those 12 h | ffmpeg and other RTSP clients reuse the first nonce for a whole session; refusing a reused `nc` breaks them | Replaying needs a captured header from the LAN; it gives what that client already saw. A future round can bind nonces to a connection |
+| WS-Security `UsernameToken`: `Created` isn't range-checked and nonces aren't remembered, so a captured token can be replayed | Panel and client clocks differ, and HA corrects for that skew itself | As above: a LAN capture, for the operations that client already made |
+| RTSP over UDP: a session ends when its control connection closes (upstream's choice), although RTSP 1.0 lets it outlive the connection | HA and Protect stream over TCP; ending with the connection stops video to an address whose client is gone | Clients that keep their control connection open, as ffmpeg does, are unaffected |
+
+Bounds added in the camera pane PR: at most 16 RTSP connections, a 30 s read timeout on an RTSP
+connection until a session plays (none after, since a playing client may stay silent), and at most 64
+headers and 32 KiB in an ONVIF request head. The ONVIF server already had a 30 s read timeout and at
+most 32 connection threads.
 
 **Ports.** 8554 (RTSP) and 8000 (ONVIF), as upstream. Neither clashes with the panel's own listeners,
 read from the code on 2026-11-14: 6053 (ESPHome API), 8099 (Manage page and setup sign-in), 6638 and
@@ -148,6 +163,62 @@ curl -sfL https://raw.githubusercontent.com/connorgallopo/rtsp-to-onvif/d07f08ad
 
 The library table's commands are in step 3.
 
+## Home Assistant's pull loop on a refused sign-in (2026-11-14)
+
+**Seen on a tablet (verified, 2026-11-14 10:57–10:59, the root's tablet run on build `28c157d`).** The
+stream turned on with a sign-in set. Within a second, the maintainer's Home Assistant (an ONVIF entry
+for the tablet's address and port 8000, left from the IP camera app the tablet ran before) sent
+`Renew`, then `CreatePullPointSubscription`, about every 0.75 s: 127 Renews in about 90 s, and still
+going. HA's motion sensor for the tablet stayed `on`. HA logged nothing for ONVIF at WARNING. The
+panel's log showed only those two calls: no `PullMessages`, and no subscription created.
+
+**Read (HA 2026.11.1, `homeassistant/components/onvif/event_manager.py`; onvif-zeep-async 4.3.0,
+`onvif/managers.py`).** HA's PullPoint manager pulls every 0.75 s (`PULLPOINT_COOLDOWN_TIME`), with a
+60 s timeout. When `PullMessages` answers with a SOAP Fault, it assumes the camera restarted and calls
+`resume()`, which renews the subscription at once and, when the Renew fails too, creates a new one
+(`_renew_or_restart_subscription`). Other errors wait 60 s. The renewal itself runs at 80 % of
+`TerminationTime - CurrentTime`; HA asks for `PT600S`, so about every 8 minutes.
+
+**Lab (verified, 2026-11-14):** the pane's `OnvifServer` on this computer, and HA's client driven as HA
+drives it (`tools/camera/onvif-lab.sh`, `tools/camera/onvif-ha-client.py`):
+
+| Case | What happened |
+|---|---|
+| The right sign-in; the server restarts at 30 s and forgets the subscription | One Fault ("Unknown subscription"), one Renew and one Create, then pulls resume. Motion arrives on and off. `TerminationTime` is `CurrentTime` + 600 s, in UTC with a `Z`; no loop |
+| The server's sign-in changes at 20 s; the client keeps the old one | Every pull answers "Sender not authorized". HA renews and re-creates: 34 Renews and 35 Creates in 25 s. The server's log shows only those two calls, as on the tablet |
+
+**What it rules out:** the timestamps. Our `CurrentTime` and `TerminationTime` are in UTC with a `Z`,
+last the interval asked for, and a Renew moves the end on; `OnvifServerTest` pins all three.
+
+**Confirmed on the tablet (verified, 2026-11-14, root and maintainer):** HA's old entry held the old
+app's sign-in. About 110 Creates in a few minutes; once the maintainer re-added it with the new
+sign-in (11:13), one CreatePullPointSubscription, then normal pulls. UniFi Protect, also holding an
+old sign-in, polled `GetProfiles` about 59 times until it was adopted again. Both PASS after.
+
+**How the panel answers a refused sign-in now (verified in the lab, 2026-11-14):**
+
+| Call | Answer | What HA 2026.11.1 does with it |
+|---|---|---|
+| Device and media (`GetDeviceInformation`, `GetProfiles`, …) | HTTP 400, SOAP 1.2 fault `s:Sender` / `ter:NotAuthorized` | `is_auth_error()` is true: "auth failed" in the config flow, a reauth flow at setup |
+| Events (`PullMessages`, `Renew`, `CreatePullPointSubscription`, …) | HTTP 401 with the Digest and Basic challenge, no body | a `TransportError` 401: the pull loop waits 60 s instead of 0.75 s; reauth at setup |
+| RTSP (`DESCRIBE`, `SETUP`) | `RTSP/1.0 401` with the challenge | |
+| Digest with the right password on a nonce the panel forgot | HTTP 401, challenge with `stale=true` | the client signs in again once |
+
+A wrong sign-in in the events now costs about two requests a minute, not one every 0.75 s: a pull
+each minute, and its one retry when the client answers the 401's Digest challenge (aiohttp's
+`DigestAuthMiddleware` retries once; the lab's second case again: no Renew or Create after the
+change, only refused pulls). HA has no reauth path in its pull
+loop; a loaded entry with a stale sign-in asks to reauth the next time it is set up (an HA restart or
+a reload). The panel logs a refused sign-in once a minute per client, never with the sign-in:
+`ONVIF PullMessages from <address> refused: the sign-in doesn't match the stream's`.
+
+`tools/camera/onvif-lab.sh` reruns the pull loop; the setup and config-flow answers were read with the
+same client (`ONVIFCamera(...).create_devicemgmt_service().GetDeviceInformation()` and the media and
+events services, with a wrong password).
+
+To run the lab again: `tools/camera/onvif-lab.sh 45 ONVIF_LAB_CREDS_CHANGE_AT=20` (or
+`ONVIF_LAB_RESTART_AT=30`). It serves on 127.0.0.1:18000 only.
+
 ## Open questions
 
 - Adoption by a real Protect console (an acceptance criterion of #117). Needs a console and a frame
@@ -156,5 +227,7 @@ The library table's commands are in step 3.
   differ by SoC; measure on the target device.
 - RootEncoder + RTSP-Server's APK cost, and whether we accept a JitPack dependency.
 - Which ports. ONVIF has no fixed port; RTSP's is 554, which an app can't bind, so 8554.
-- Events: whether to publish presence as an ONVIF motion event, so Protect and Frigate get motion
-  from the panel's own detector. Optional for both clients.
+- Events: presence is published as ONVIF motion (cell motion and motion alarm), on and off with
+  `camera_presence`. Frigate and Protect's use of it is untested.
+- Whether to slow down a client whose sign-in keeps being refused, so a stale entry costs less than
+  a request every 0.75 s. Not done: HA would still loop, only slower.

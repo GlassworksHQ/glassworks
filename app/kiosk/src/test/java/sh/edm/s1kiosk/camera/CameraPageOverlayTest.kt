@@ -1,0 +1,127 @@
+package sh.edm.s1kiosk.camera
+
+import android.app.Application
+import android.graphics.drawable.GradientDrawable
+import android.view.ViewGroup
+import dev.glassworks.camera.CameraDefinition
+import dev.glassworks.camera.CameraPage
+import dev.glassworks.camera.CameraPane
+import dev.glassworks.camera.CameraReading
+import dev.glassworks.camera.CameraReadout
+import dev.glassworks.camera.CameraUse
+import dev.glassworks.camera.CameraUsePickers
+import dev.glassworks.pane.Pane
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.radio.FixedReadout
+import sh.edm.s1kiosk.radio.radioDefinition
+import sh.edm.s1kiosk.settings.KioskSettingsOverlay
+import sh.edm.s1kiosk.settings.MenuFixture
+import sh.edm.s1kiosk.ui.Glass
+import sh.edm.s1kiosk.ui.Mockup
+
+/** The camera's page in the real settings menu (#117): the status dot's colour, and rows that follow a card tapped above them. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "w960dp-h480dp-land-hdpi")
+class CameraPageOverlayTest {
+    private val app get() = RuntimeEnvironment.getApplication()
+    private val file get() = KioskPrefs(app).paneFile("camera")
+
+    @After fun tearDown() { file.edit().clear().commit() }
+
+    private fun pane(problem: String? = null) = object : Pane, CameraReadout {
+        override val id = CameraPane.ID
+        override fun reading() = CameraReading(CameraUse.PRESENCE, false, false, false, true, problem, problem == null, null, null, false, null, false, emptyList())
+    }
+
+    private fun menu(def: CameraDefinition, running: Pane): KioskSettingsOverlay {
+        val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+        val radio = radioDefinition(app, FixedReadout(null, running = false))
+        fun model() = MenuFixture.model(app, radio, panes = listOf(radio, def), running = { if (it == CameraPane.ID) running else null })
+        o.reload = ::model
+        o.show(model())
+        Mockup.idle()
+        o.previewSection(CameraPane.ID)
+        Mockup.idle()
+        return o
+    }
+
+    private fun dotBeside(o: KioskSettingsOverlay, text: String): Int {
+        val row = Mockup.label(o, text).parent as ViewGroup
+        return (row.getChildAt(0).background as GradientDrawable).color!!.defaultColor
+    }
+
+    @Test fun aProblemIsARoseDotAndWorkingIsGreen() {
+        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
+        assertEquals(Glass.ROSE, dotBeside(menu(def, pane(CameraPane.NOT_ALLOWED)), "${CameraPage.NOT_ALLOWED_LINE}."))
+        assertEquals(Glass.GREEN, dotBeside(menu(def, pane()), "Watching for people · no image leaves the panel"))
+    }
+
+    @Test fun pickingPresenceOnlyUpdatesTheStreamRowWhileThePageIsOpen() {
+        val def = CameraDefinition(file, granted = { true }, pickers = CameraUsePickers { CameraUseCards(it) }).apply { switch.on = true }
+        def.prefs.use = CameraUse.PRESENCE_AND_SNAPSHOTS
+        def.prefs.onvif = true
+        val o = menu(def, pane())
+        val forWhat = CameraPage.streamDetail(false, CameraUse.PRESENCE_AND_SNAPSHOTS)
+        Mockup.label(o, forWhat) // drawn
+        val cards = o.previewNative(CameraDefinition.USE_KEY)!!.view as CameraUseCards
+        val clicked = cards.getChildAt(0).performClick()
+        assertEquals("the card picked it (clicked=$clicked, enabled=${cards.alpha})", CameraUse.PRESENCE, def.prefs.use)
+        o.refresh()
+        Mockup.idle()
+        Mockup.label(o, CameraPage.NEEDS_CAMERA) // the switch's line follows the card
+        assertEquals(false, def.prefs.onvif)
+    }
+
+    private fun all(v: android.view.View): List<android.view.View> =
+        listOf(v) + ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+
+    private fun onScreen(o: KioskSettingsOverlay, text: String) =
+        all(o).filterIsInstance<android.widget.TextView>().any { it.text.toString().contains(text) }
+
+    /** Opens the sign-in's sheet from its row ("glassworks · password hidden"), then presses Show. */
+    private fun show(o: KioskSettingsOverlay) {
+        val row = all(o).filterIsInstance<android.widget.TextView>().first { it.text.toString().startsWith("glassworks ·") }
+        generateSequence(row as android.view.View) { it.parent as? android.view.View }.first { it.isClickable }.performClick()
+        Mockup.idle()
+        Mockup.label(o, "Show").performClick()
+        Mockup.idle()
+    }
+
+    @Test fun thePasswordShowsOnlyOnShow() {
+        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
+        def.prefs.signIn = "glassworks" to "made-up-pass-1234"
+        val o = menu(def, pane())
+        assertEquals("hidden at first", false, onScreen(o, "made-up-pass-1234"))
+        assertEquals(true, onScreen(o, "glassworks · password hidden"))
+        show(o)
+        assertEquals("shown on Show", true, onScreen(o, "made-up-pass-1234"))
+        o.back(); Mockup.idle()
+        assertEquals("hidden when the sheet closes", false, onScreen(o, "made-up-pass-1234"))
+    }
+
+    @Test fun aRevealedPasswordHidesWhenTheScreenGoesOffOrAfterAMinute() {
+        val def = CameraDefinition(file, granted = { true }).apply { switch.on = true }
+        def.prefs.signIn = "glassworks" to "made-up-pass-1234"
+        val o = menu(def, pane())
+        show(o)
+        assertEquals(true, onScreen(o, "made-up-pass-1234"))
+        o.screenChanged(on = true)
+        assertEquals("the screen staying on changes nothing", true, onScreen(o, "made-up-pass-1234"))
+        o.screenChanged(on = false)
+        assertEquals("hidden when the screen goes off", false, onScreen(o, "made-up-pass-1234"))
+
+        Mockup.label(o, "Show").performClick()
+        assertEquals("Show is back, and shows it again", true, onScreen(o, "made-up-pass-1234"))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(KioskSettingsOverlay.REVEAL_MS - 1_000, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals("still shown just before the minute", true, onScreen(o, "made-up-pass-1234"))
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(2_000, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertEquals("hidden after it", false, onScreen(o, "made-up-pass-1234"))
+    }
+}

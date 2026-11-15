@@ -12,6 +12,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 
 /**
@@ -66,6 +69,12 @@ open class PlatformApi internal constructor(
     /** `WindowInsetsController` and `setDecorFitsSystemWindows` exist (Android 11). */
     val hasWindowInsetsController: Boolean get() = apiLevel >= 30
 
+    /**
+     * Android shows its own indicator while an app uses the camera (Android 12): the panel's own camera
+     * dot would only repeat it. Below it, nothing says the camera is in use unless the app does.
+     */
+    val hasSystemCameraIndicator: Boolean get() = apiLevel >= 31
+
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 
@@ -105,6 +114,16 @@ open class PlatformApi internal constructor(
         return am.getHistoricalProcessExitReasons(context.packageName, 0, 0)
             .firstOrNull { it.processName == processName }?.reason
     }
+
+    /**
+     * The Wi-Fi link's details: from the network's capabilities from Android 12, where `getConnectionInfo`
+     * hides them from an app without the location permission, and from [wifi] below it, or where a
+     * device leaves the capabilities without them.
+     */
+    @Suppress("DEPRECATION")
+    fun wifiInfo(capabilities: NetworkCapabilities?, wifi: WifiManager?): WifiInfo? =
+        (if (apiLevel >= 31) capabilities?.transportInfo as? WifiInfo else null)
+            ?: runCatching { wifi?.connectionInfo }.getOrNull()
 
     /** An [Intent] extra, read with the typed getter from Android 13 and the deprecated one below. */
     fun intentExtra(intent: Intent, name: String): Intent? =

@@ -40,7 +40,8 @@ class RestartKeepsSettingsTest {
         GlassworksRuntime(AqaraS1Plus()).paneDefinitions(ctx).mapNotNull { d -> d.switch?.let { d.id to it.on } }.toMap()
 
     private val allOff = mapOf(
-        "assist" to false, "sendspin" to false, "bluetooth-proxy" to false, "wall-base" to false, "time-zone" to false, "diagnostics" to false,
+        "assist" to false, "sendspin" to false, "bluetooth-proxy" to false, "wall-base" to false, "time-zone" to false,
+        "diagnostics" to false,
     )
 
     private fun definitions(ctx: Context): List<PaneDefinition> = GlassworksRuntime(AqaraS1Plus()).paneDefinitions(ctx)

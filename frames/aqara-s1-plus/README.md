@@ -104,7 +104,12 @@ announcements, with a calm full-screen overlay while you talk.
 
 **Status: beta.**
 
-The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
+**Clarity v2: D**, a good wall panel for light dashboards (measured 2026-11-15 UTC, 3 of 3 runs, not
+provisional). Typical dashboards hold it back: without a camera their view is drawn in 1.2 s, but the main
+thread then stays blocked for 2.9 s. The report is in
+[clarity/report.md](clarity/report.md), and the summary the site grades in
+[clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)). The Clarity
+badge shows the grade once glassworks.dev publishes it.
 
 What works on `main`, as of 2026-11-14. The latest release is v0.4.3, and rows marked New come with
 the next one. "Verified" means tested on a real panel in a real home.
@@ -182,32 +187,32 @@ Without root, the app can install over adb on its own, but you lose the radio mo
 
 Kiln runs entirely in your browser and uploads nothing. It walks you through five steps:
 
-1. **Check this browser.** One-time setup on Windows (a Zadig driver) or Linux (a udev rule). On
-   macOS there is nothing to set up.
-2. **Enter FEL mode.** With the back cover off, hold the small button on the board while you plug
-   in USB-C. FEL is the chip's built-in recovery mode. The installer shows a photo of where the
-   button is.
-3. **Back up and install.** The installer starts its own bootloader in RAM, then backs up the
-   panel's partitions to your computer. Only after that does it patch `boot` (Magisk plus the S1
-   helper), flash it and read it back to verify.
-4. **Set up the app.** S1 Kiosk is installed as the home screen. From the same page you set the
-   panel's Wi-Fi (sent over USB), sign it in to Home Assistant, and choose the radio role,
-   language and time zone.
-5. **Done.** Home Assistant finds the panel as an ESPHome device. Click **Add**.
+1. **Panel.** Pick the Aqara S1 Plus.
+2. **Connect.** With the back cover off, hold the small button on the board while you plug in
+   USB-C. That's recovery mode (FEL), built into the chip. Windows needs a Zadig driver once, and
+   Linux a udev rule; macOS needs nothing.
+3. **Install.** Kiln starts its own bootloader in RAM, then backs up the panel's partitions in the
+   browser. Only after that does it patch `boot` (Magisk plus the S1 helper), flash it and read it
+   back to verify.
+4. **Set up.** S1 Kiosk is installed as the home screen, with your language, time zone and clock.
+   From the same page you set the panel's Wi-Fi (sent over USB), sign it in to Home Assistant, and
+   choose the radio role.
+5. **Done.** Download the backup and keep it. Home Assistant finds the panel as an ESPHome device.
+   Click **Add**.
 
 <table>
 <tr>
-<td width="50%"><img src="../../docs/img/installer/fel.webp" alt="Installer step 2: a photo of the board with the FEL button circled, and the steps hold, plug in, keep holding for 10 seconds."></td>
-<td width="50%"><img src="../../docs/img/installer/install.webp" alt="Installer step 3: a progress ring at 80 percent with the phases back up, patch, flash and verify."></td>
+<td width="50%"><img src="../../docs/img/kiln/connect.webp" alt="Kiln's Connect step: Hold the button. Plug it in. An animation of the back cover coming off, and the steps take out the screws, remove the back cover, hold the button, plug in the USB cable."></td>
+<td width="50%"><img src="../../docs/img/kiln/install.webp" alt="Kiln's Install step: Keep it plugged in. A progress bar at 68 percent, writing the new software, after found your S1 Plus, started the installer in its memory, backed up and checked, prepared the new software."></td>
 </tr>
 <tr>
-<td width="50%"><img src="../../docs/img/installer/wifi.webp" alt="Installer step 4: a list of Wi-Fi networks in range of the panel and a password field."></td>
-<td width="50%"><img src="../../docs/img/installer/ha.webp" alt="Installer step 4: the Home Assistant address found on the network, signed in, and a prompt to add the discovered panel."></td>
+<td width="50%"><img src="../../docs/img/kiln/wifi-new.webp" alt="Kiln's Wi-Fi step: Which Wi-Fi? A list of networks in range of the panel and a password field."></td>
+<td width="50%"><img src="../../docs/img/kiln/home-assistant.webp" alt="Kiln's Home Assistant step: Sign in to Home Assistant. The address found on the network, and a Sign in button."></td>
 </tr>
 </table>
 
-Per-OS setup, updating, undo and troubleshooting are in **[docs/install.md](../../docs/install.md)**. Its
-screenshots and step names are still the old S1 installer's.
+Every screen, per-OS setup, what to do when something fails, undo, updating and troubleshooting
+are in **[docs/install.md](../../docs/install.md)**.
 
 > [!NOTE]
 > The web installer has been tested end to end on a real S1 Plus (firmware 4.5.80), from FEL mode
@@ -392,6 +397,7 @@ browser, the radio and the wall base protocol: it's all written up in
 | Time zone | Beta | Worked out: needs no special hardware. |
 | Diagnostics | Alpha | Worked out: needs no special hardware. Not yet checked on a panel. |
 | Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 (2026-11-14); the pane itself not yet. |
+| Camera | No | Worked out: needs a camera. The S1 has none; its settings say the pane can't run. |
 | Wall base | Alpha | The driver passes against an emulator that Aqara's own `bracket_cli` accepts. It has not yet been tried on a real base ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)). |
 
 "Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).
@@ -417,6 +423,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [idle-cpu.md](research/idle-cpu.md): Why the kiosk uses ~40% of a core at idle: the wake word's embedding model, per-thread numbers, and the options (#105)
 - [bluetooth.md](research/bluetooth.md): The panel's Bluetooth (RTL8821CS, shared with Wi-Fi), Android 10's scan rules from AOSP, and what HA needs from an ESPHome Bluetooth proxy (#121)
 - [view-open.md](research/view-open.md): Where typical's 4.7 s view open goes: HA's JavaScript on one Gecko thread at 1.5 GHz; the app candidates tried on the panel (none helped), and what's left upstream (#244)
+- [install-crash-loop.md](research/install-crash-loop.md): Why the kiosk crash-looped after installs: Android 10's ActivityManager LRU bug (one step per kiosk force-stop), not dex2oat; the netwatch check that restarts the framework (#248)
 
 ## Files
 

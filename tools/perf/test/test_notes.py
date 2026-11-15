@@ -352,6 +352,28 @@ class TypicalWithoutACamera(unittest.TestCase):
         # The camera page's limit isn't said twice; heavy's still is.
         self.assertEqual(n["limits"], "Bigger dashboards slow down: heavy shows 40% of its camera's frames.")
 
+    def test_blocking_that_fluid_accepts_is_not_a_limit(self):
+        """s1rtc10: light's 233 ms of blocking (needs improvement, which fluid accepts for blocking, as for
+        the open) was quoted as blocking's limit, and typical's 2.9 s (poor, what holds it back) wasn't.
+        Limits are what the lowest level doesn't accept, from rubric.json; a tap of needs improvement
+        still is one (fluid accepts only good taps)."""
+        rep = self.rep()
+        tiers = rep["graded"]["reference"]["tiers"]
+        for p, v, b in (("light", 233.0, "needs-improvement"), ("typical-nocam", 2862.0, "poor"),
+                        ("typical", 2900.0, "poor"), ("heavy", 3100.0, "poor")):
+            tiers[p]["blocking_ms"] = {"median": v, "min": v, "max": v, "n": 3}
+            rep["grade"]["bands"][p]["blocking"] = b
+        rep["grade"]["levels"] = {"light": "fluid", "typical-nocam": None, "typical": None, "heavy": None}
+        n = N.notes(rep)
+        self.assertIn("typical without a camera blocks for 2.9 s after it is drawn", n["limits"])
+        self.assertNotIn("light blocks", n["limits"])
+        self.assertTrue(n["limits"].startswith("Bigger dashboards slow down: "), n["limits"])
+        self.assertFalse(N._is_limit("blocking", "needs-improvement"))
+        self.assertFalse(N._is_limit("load", "needs-improvement"))
+        self.assertTrue(N._is_limit("tap", "needs-improvement"))
+        self.assertTrue(N._is_limit("blocking", "poor"))
+        self.assertFalse(N._is_limit("blocking", None))
+
     def test_a_report_from_before_v10_keeps_typical_s_name(self):
         rep = run("s1v7")
         self.assertNotIn("with a camera", N.notes(rep)["text"])

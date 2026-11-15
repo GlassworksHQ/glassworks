@@ -222,7 +222,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             // the device started): draw it again from the new model. Otherwise only its values move.
             if (s == null || shape(s) != builtShape) {
                 if (s == null) current = next.sections.firstOrNull()?.id
+                // The same page drawn again stays where the person had scrolled it.
+                val y = if (s != null) scroll.scrollY else 0
                 build()
+                if (y > 0) scroll.post { scroll.scrollTo(0, y) }
                 return
             }
         }
@@ -242,6 +245,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             when (i) {
                 is SettingsItem.Group -> listOf("group ${i.title}") + of(i.items)
                 is SettingsItem.Native -> listOf("native ${i.key}")
+                // A switch's line can say why it is refused (the camera's stream): a new line draws the page again.
+                is SettingsItem.Switch -> listOf("Switch ${i.title} ${i.detail}")
                 else -> listOf("${i::class.simpleName} ${titleOf(i).orEmpty()}")
             }
         }
@@ -250,6 +255,17 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     /** The page's read-only rows ([SettingsItem.States]) that read their values again on [refresh]. */
     private val live = ArrayList<() -> Unit>()
+
+    /** What shows a revealed secret now (a sign-in's Show): each hides it when called. */
+    private val concealers = ArrayList<() -> Unit>()
+
+    /** Hides every revealed secret (the camera stream's password). */
+    fun conceal() = concealers.toList().forEach { it() }
+
+    /** The screen went off or on (MainActivity): off, nothing revealed stays for the next person. */
+    fun screenChanged(on: Boolean) {
+        if (!on) conceal()
+    }
 
     /** Previews (the mock-ups): a section's page, an open editor or picker, a native view, the restart banner. */
     internal fun previewSection(id: String) { current = id; build() }
@@ -451,6 +467,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             name.text = i.title()
             val v = i.detail()
             if (value.text != v) value.text = v
+            value.setTextColor(if (i.fixable()) AMBER else MU)
             value.visibility = if (v.isEmpty()) View.GONE else View.VISIBLE
         }
         bind()
@@ -512,7 +529,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         val dot = View(context)
         val words = g.text(15f, MU)
         fun bind() {
-            dot.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(if (i.ok()) Glass.GREEN else FA) }
+            dot.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(if (i.problem()) ROSE else if (i.ok()) Glass.GREEN else FA) }
             words.text = i.text()
         }
         bind()
@@ -569,8 +586,11 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     private fun toggleRow(i: SettingsItem.Switch): View {
         lateinit var t: Glass.Toggle
+        var saving = false
         fun apply(on: Boolean) {
+            saving = true
             save({ done -> i.save(on, done) }) { why ->
+                saving = false
                 if (why != null) { t.checked = !on; showProblem(why) }
                 else {
                     problem.visibility = View.GONE // what went wrong before is over
@@ -583,8 +603,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             if (ask == null) apply(on)
             else { t.checked = !on; sheet.confirm(ask) { t.checked = on; apply(on) } }
         }
-        // Follows a change made elsewhere (the Manage page, #242), as the master does.
-        live += { val v = i.value(); if (t.checked != v) t.checked = v }
+        // Changed elsewhere while the page is open (Home Assistant, the Manage page, a card above it): follow, unless a change is on its way.
+        live += { if (!saving && !sheet.isOpen) i.value().let { v -> if (t.checked != v) t.checked = v } }
         return LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -707,7 +727,18 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         val field = edit()
         /** A sign-in's password ([signIn]): empty until Show, emptied and hidden again when the sheet closes. */
         val password = edit()
+        /** Hides a password shown with Show: after [REVEAL_MS], when the screen goes off ([conceal]), or when the sheet closes. */
+        private val hideTimer = Runnable { concealShown() }
+        private val concealer: () -> Unit = { concealShown() }
+        /** The open sheet is a sign-in that is set: hidden again, its Show comes back. */
+        private var showable = false
+        private fun concealShown() {
+            hidePassword()
+            if (showable) showButton.visibility = View.VISIBLE
+        }
         private fun hidePassword() {
+            removeCallbacks(hideTimer)
+            concealers.remove(concealer)
             password.setText("")
             password.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             password.typeface = Inter.typeface(context, Inter.REGULAR, 18f) // the password type sets monospace
@@ -760,6 +791,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             (field.parent as? android.view.ViewGroup)?.removeView(field)
             passwordRow.removeAllViews()
             (passwordRow.parent as? android.view.ViewGroup)?.removeView(passwordRow)
+            showable = false
             hidePassword()
             clearButton.visibility = View.GONE
             onClear = null
@@ -829,11 +861,15 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             if (set) {
                 password.hint = "Password · leave empty to keep it"
                 showButton.visibility = View.VISIBLE
+                showable = true
                 showButton.setOnClickListener {
                     password.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
                     password.typeface = Inter.typeface(context, Inter.REGULAR, 18f)
                     password.setText(runCatching { i.reveal() }.getOrNull().orEmpty())
                     showButton.visibility = View.GONE
+                    // Not for the next person at a hallway panel: hidden after a minute or when the screen goes off.
+                    concealers += concealer
+                    postDelayed(hideTimer, REVEAL_MS)
                 }
                 passwordRow.addView(showButton, LinearLayout.LayoutParams(-2, -2).apply { marginStart = px(6f) })
             } else password.hint = "Password"
@@ -935,6 +971,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     companion object {
+        /** How long a revealed secret stays shown without another tap. */
+        const val REVEAL_MS = 60_000L
         const val RESTART_TEXT = SettingsChange.RESTART_TEXT
         const val OFF_BY_DEFAULT = SettingsChange.OFF_BY_DEFAULT
         private const val PANES = "panes"

@@ -209,14 +209,23 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
             is SettingsItem.TimeRange -> edit(item.title, safe { item.shown(item.value()) })
             is SettingsItem.Choice -> edit(item.title, safe { SettingsChange.shown(item) })
             is SettingsItem.SignIn -> edit(item.title, safe { item.shown(item.isSet()) })
-            is SettingsItem.Info -> row(safe { item.title() }, safe { item.detail() })
+            // As the panel: a line that says what's missing and can be set is amber (fixable).
+            is SettingsItem.Info -> row(safe { item.title() }, safe { item.detail() }, fix = runCatching { item.fixable() }.getOrDefault(false))
             is SettingsItem.Note -> """<div class="row static note"><span>${esc(safe { item.text() })}</span></div>"""
             // Opens something on the panel itself (another app, the licences): say so, rather than drop the row.
             is SettingsItem.Link -> row(item.title, item.detail, right = ON_THE_PANEL, dim = item.detail.isEmpty())
             is SettingsItem.Group -> """<div class="grp"><div class="gl">${esc(item.title)}</div>${items(v, path, section, item.items, "$prefix${item.title}/")}</div>"""
             // A view only the panel can draw: say so, rather than drop the row.
             is SettingsItem.Native -> row(item.title.ifEmpty { nativeTitle(section) }, "Shown on the panel's own settings", right = ON_THE_PANEL)
-            is SettingsItem.Status -> """<div class="st"><i class="dot ${if (runCatching { item.ok() }.getOrDefault(false)) "ok" else "off"}"></i><span>${esc(safe { item.text() })}</span></div>"""
+            // As the panel: green while it works, rose for a problem the person can fix, else quiet.
+            is SettingsItem.Status -> {
+                val tone = when {
+                    runCatching { item.problem() }.getOrDefault(false) -> "bad"
+                    runCatching { item.ok() }.getOrDefault(false) -> "ok"
+                    else -> "off"
+                }
+                """<div class="st${if (tone == "bad") " bad" else ""}"><i class="dot $tone"></i><span>${esc(safe { item.text() })}</span></div>"""
+            }
             is SettingsItem.States -> {
                 val list = runCatching { item.rows() }.getOrDefault(emptyList())
                 """<div class="grp"><div class="gl">${esc(item.title)}</div>${list.joinToString("") { r ->
@@ -313,8 +322,8 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
     private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
 
     /** A name with its value under it, as the panel's rows; [right]: a word at the row's end. */
-    private fun row(title: String, value: String, right: String? = null, dim: Boolean = false) =
-        """<div class="row static${if (dim) " quiet" else ""}"><div><b>${esc(title)}</b>${if (value.isNotEmpty()) "<span>${esc(value)}</span>" else ""}</div>${right?.let { "<em>${esc(it)}</em>" }.orEmpty()}</div>"""
+    private fun row(title: String, value: String, right: String? = null, dim: Boolean = false, fix: Boolean = false) =
+        """<div class="row static${if (dim) " quiet" else ""}"><div><b>${esc(title)}</b>${if (value.isNotEmpty()) "<span${if (fix) " class=\"fix\"" else ""}>${esc(value)}</span>" else ""}</div>${right?.let { "<em>${esc(it)}</em>" }.orEmpty()}</div>"""
 
     /** The core's own section with [id] (Log's, About's) as a card, or nothing. */
     private fun ownCard(v: Viewer, s: PanelStatus, id: String): String =
@@ -456,7 +465,7 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 .row.sl{flex-direction:column;align-items:stretch;gap:8px}.slh{display:flex;align-items:baseline;gap:16px}.slh b{flex:1;min-width:0}.row.sl .slh em{flex:none;max-width:60%;text-align:right;font-style:normal;color:var(--muted);font-size:15px}
 .slr{display:flex;align-items:center;gap:14px}.slr input{flex:1;min-width:0;accent-color:var(--sky)}.pill.sm{padding:7px 16px;font-size:14px}
 .gl{margin:24px 0 4px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-weight:600}
-.st{display:flex;align-items:center;gap:10px;padding:16px 0 8px;color:var(--muted);font-size:15px}
+.st{display:flex;align-items:center;gap:10px;padding:16px 0 8px;color:var(--muted);font-size:15px}.st.bad span{color:var(--rose)}.row span.fix{color:var(--work-ink)}
 .sr{display:flex;align-items:center;gap:16px;min-height:46px;border-top:1px solid var(--edge);font-size:15.5px}.sr span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sr em{font-style:normal;color:var(--muted);text-align:right}.sr.quiet span{color:var(--muted)}.sr.quiet em{color:var(--faint)}
 .ptl{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:12px;padding:10px 0 14px}
