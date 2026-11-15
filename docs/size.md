@@ -83,7 +83,7 @@ without the bundle, 97.84 MB, which is not what ships; v0.4.3's released APK was
 Glassworks for generic Android (#23) has its own budgets, in `frames/generic-android/budgets.json`,
 by the same rules: its 2026-11-15 release build plus about 2.5% (100.82 MB `arm64-v8a`, so 103.40 MB;
 97.88 MB `armeabi-v7a`, so 100.40 MB), and each of its three panes about twice its own size. CI's
-`size-generic` job checks them on every pull request. It builds this branch only, so its report has no
+`size-generic` job checks them on every pull request that changes what goes into that APK. It builds this branch only, so its report has no
 change column ("this check builds no base"). Its per-pane RAM budgets wait for a measured run on a
 tablet; the file's `_todo_ram` says what to add.
 
