@@ -149,7 +149,12 @@ class SettingsMenuTest {
         val row = page.items.filterIsInstance<SettingsItem.Info>().single()
         assertEquals(CoreSettings.ACCOUNT_TITLE, row.title())
         assertEquals("Signed in as Alex", row.detail())
-        assertEquals("not signed in on this test's panel", sh.edm.s1kiosk.auth.HaAuth.NOT_SIGNED_IN, sh.edm.s1kiosk.auth.HaAuth.account())
+        // Without a stored sign-in (one made on the panel's own screen leaves none) the row is left out.
+        val none = CoreSettings(
+            KioskPrefs(RuntimeEnvironment.getApplication()), "0.4.3", status = { "" }, deviceSettings = null,
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { null },
+        )
+        assertTrue(none.sections().getValue(SettingsPlace.DASHBOARD).items.none { it is SettingsItem.Info })
     }
 
     @Test

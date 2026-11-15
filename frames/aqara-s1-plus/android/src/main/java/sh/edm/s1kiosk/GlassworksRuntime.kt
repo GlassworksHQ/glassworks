@@ -164,6 +164,8 @@ class GlassworksRuntime(
 
     override val panelCode = PanelCode()
 
+    override val dashboardAccount = sh.edm.s1kiosk.auth.DashboardAccount({ sh.edm.s1kiosk.auth.HaAuth.stored }, sh.edm.s1kiosk.auth.HaAuth::askAccount)
+
     @Volatile override var voiceState: String = "off"
 
     /** What the voice overlay shows (state, heard text, reply). Main thread. */

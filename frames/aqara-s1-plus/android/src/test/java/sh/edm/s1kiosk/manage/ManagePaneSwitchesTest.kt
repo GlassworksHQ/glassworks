@@ -73,6 +73,12 @@ class ManagePaneSwitchesTest {
         assertEquals(listOf("ONVIF stream:", "  Sign-in: Set"), lines)
     }
 
+    /** #299 verifier: who the dashboard is signed in as stays on the screens; the file says whether it is set. */
+    @Test fun diagnosticsNeverNameTheDashboardsAccount() {
+        val item = dev.glassworks.pane.SettingsItem.Info({ sh.edm.s1kiosk.settings.CoreSettings.ACCOUNT_TITLE }, { "Signed in as Made-up Person" })
+        assertEquals(listOf("Dashboard sign-in: set"), manage.itemLines(listOf(item)))
+    }
+
     @Test fun thePanesTheManagePageLists() {
         val ids = manage.status().panes.map { it.id }
         assertTrue(ids.toString(), ids.containsAll(listOf("assist", "sendspin", "radio", "wall-base", "time-zone", "diagnostics")))

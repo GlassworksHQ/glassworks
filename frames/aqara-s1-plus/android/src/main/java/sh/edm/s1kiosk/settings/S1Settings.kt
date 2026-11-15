@@ -14,7 +14,6 @@ import dev.glassworks.pane.settingsOrder
 import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.Licences
-import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 
 /**
@@ -50,7 +49,7 @@ object S1Settings {
                 presenceRange = { runtime.screen.applyPresenceRange() },
                 brightness = { runtime.screen.refreshBrightness() },
             ),
-            account = HaAuth::account,
+            account = runtime.dashboardAccount::shown,
         )
         // One pane's failure leaves the others' pages.
         val sections = panes.flatMap { d ->

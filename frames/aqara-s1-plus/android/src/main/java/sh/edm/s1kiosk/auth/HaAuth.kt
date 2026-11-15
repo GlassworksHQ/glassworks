@@ -63,51 +63,27 @@ object HaAuth {
     /** The HA base URL the stored token belongs to, if signed in. */
     val signedInBase: String? get() = if (::prefs.isInitialized) prefs.auth?.haBase else null
 
+    /** The stored sign-in, if any (its token is redacted from toString). */
+    val stored: StoredAuth? get() = if (::prefs.isInitialized) prefs.auth else null
+
     /** Listener gets the new signed-in state on the main thread. */
     fun addListener(l: (Boolean) -> Unit) { listeners += l }
     fun removeListener(l: (Boolean) -> Unit) { listeners -= l }
 
-    /** The Home Assistant user the dashboard is signed in as, once asked ([account]). Forgotten when the sign-in changes. */
-    @Volatile private var accountName: String? = null
-    @Volatile private var accountAskedAt = 0L
-    /** Counts sign-ins and sign-outs: an answer about an earlier one is dropped. */
-    @Volatile private var accountGen = 0
-
     /**
-     * Who the dashboard is signed in as: "Signed in as Alex", "Signed in" until Home Assistant has said, or
-     * "Not signed in". Asks Home Assistant (`auth/current_user`) once per sign-in, off the main thread, and
-     * again a minute after an ask that got no name.
+     * Asks [base]'s Home Assistant who the panel's stored sign-in is (`auth/current_user`) and answers
+     * with the name, or null, on a thread of its own: the page's token refreshes don't wait for it.
      */
-    fun account(): String {
-        if (!signedIn) return NOT_SIGNED_IN
-        accountName?.let { return "Signed in as $it" }
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (accountAskedAt == 0L || now - accountAskedAt > 60_000) {
-            accountAskedAt = now
-            val base = signedInBase
-            val gen = accountGen
-            accessToken(force = false) { a ->
-                val token = (a as? Access.Ok)?.accessToken ?: return@accessToken
-                if (base == null) return@accessToken
-                // Not on the auth thread: the page's token refreshes wait for it.
-                Thread({
-                    val name = S1Manage.Gateway(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.name
-                    synchronized(this) { if (name != null && gen == accountGen) accountName = name }
-                }, "ha-account").apply { isDaemon = true }.start()
-            }
+    fun askAccount(base: String, done: (String?) -> Unit) {
+        accessToken(force = false) { a ->
+            val token = (a as? Access.Ok)?.accessToken ?: return@accessToken done(null)
+            Thread({
+                done(S1Manage.Gateway(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.name)
+            }, "ha-account").apply { isDaemon = true }.start()
         }
-        return SIGNED_IN
     }
 
-    const val SIGNED_IN = "Signed in"
-    const val NOT_SIGNED_IN = "Not signed in"
-
     private fun notifyChanged() {
-        synchronized(this) {
-            accountGen++
-            accountName = null
-            accountAskedAt = 0L
-        }
         val v = signedIn
         main.post { listeners.forEach { runCatching { it(v) } } }
     }

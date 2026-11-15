@@ -24,8 +24,8 @@ class CoreSettings(
     private val licences: SettingsItem.Link,
     /** What the running app does when a setting it follows live changes. */
     private val live: Live = Live(),
-    /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"). */
-    private val account: () -> String = { "" },
+    /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"); null leaves the row out. */
+    private val account: () -> String? = { null },
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -37,13 +37,13 @@ class CoreSettings(
     )
 
     fun sections(): Map<SettingsPlace, SettingsSection> = mapOf(
-        SettingsPlace.DASHBOARD to SettingsSection("dashboard", DASHBOARD_TITLE, listOf(
+        SettingsPlace.DASHBOARD to SettingsSection("dashboard", DASHBOARD_TITLE, listOfNotNull(
             text(
                 "Home Assistant", "Found automatically", TextKind.ADDRESS,
                 value = { prefs.urlSetting.takeIf { it != KioskPrefs.AUTO }.orEmpty() },
                 shown = { it.ifBlank { found() } }, restartsApp = true,
             ) { prefs.urlSetting = it.ifBlank { KioskPrefs.AUTO } },
-            SettingsItem.Info(title = { ACCOUNT_TITLE }, detail = account),
+            account()?.let { SettingsItem.Info(title = { ACCOUNT_TITLE }, detail = { account().orEmpty() }) },
             switch("Full screen", "Hide Home Assistant's header and sidebar", { prefs.hideHeader }) {
                 prefs.hideHeader = it
                 prefs.hideSidebar = it
