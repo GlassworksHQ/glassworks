@@ -171,7 +171,7 @@ $A --es screen_mode always # or presence (default)
 $A --ei idle_off_sec 120 --ei night_idle_off_sec 20 --es night_window 22:00-07:00
 $A --ef presence_range_m 1.0   # VI5300 range (needs WRITE_SECURE_SETTINGS)
 $A --es screen off         # or on
-$A --ez test_hold true --ei test_hold_s 1800   # screen on at day brightness, no idle timeout or night dimming, for 1800 s (at most 3600); in memory only, ends early with test_hold false or an app restart (Clarity, #240)
+$A --ez test_hold true --ei test_hold_s 1800   # screen on past the idle timeout for 1800 s (at most 3600), brightness unchanged; in memory only, ends early with test_hold false or an app restart (Clarity, #240)
 $A --ez restart true       # restart the app process
 $A --es wake_model okay_nabu --ef wake_threshold 0.9 --ef mic_gain 2.0 --ez mic_muted false  # wake word id (an old *.tflite name maps to its microWakeWord model); the threshold of that word
 $A --es api_key $(openssl rand -base64 32) --ez api_encryption true   # manual ESPHome API key (HA normally provisions one)

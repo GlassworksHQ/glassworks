@@ -11,9 +11,10 @@
 #     (`--ez voice_enabled`, `--ez sendspin_enabled`, `--ez wall_base_enabled`, `--ez time_zone_enabled`,
 #     `--ez diagnostics_enabled`), restarts the app after each change (`--ez restart true`), and puts
 #     them back to the given settings on exit.
-#   - Sets the kiosk's test hold (`--ez test_hold true --ei test_hold_s 1800`, #240) at the start and
-#     after each restart, and ends it on exit (`--ez test_hold false`): the screen stays on at day
-#     brightness without changing a setting. The hold lives in the app's memory and expires by itself.
+#   - Sets the kiosk's test hold (`--ez test_hold true --ei test_hold_s 1800`, #240) at the start,
+#     before each part and each view, and ends it on exit (`--ez test_hold false`): the screen stays
+#     on past the idle timeout, at the brightness it would have anyway, without changing a setting.
+#     The hold lives in the app's memory and expires by itself.
 #     Refuses to run if the kiosk doesn't say in its log that it took the hold.
 #   - Sends Android's wake key (`input keyevent KEYCODE_WAKEUP`) through each restart, while the app
 #     is down or starting and has no hold.

@@ -142,14 +142,15 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
   back to the settings you gave. While a pane is off, the panel doesn't play music, hear its wake
   word, drive the wall base, keep the time zone or sample its diagnostics.
 - **The screen stays on** through the kiosk's test hold (#240): `--ez test_hold true --ei
-  test_hold_s 1800`. While it lasts, the kiosk keeps the screen on at its day brightness, with no
-  idle timeout and no night dimming. The hold lives in the app's memory only: it changes no setting,
+  test_hold_s 1800`. While it lasts, the kiosk's idle timeout doesn't turn the screen off. It changes
+  nothing else: brightness and night dimming stay what the panel shows without it, so a run at night
+  is measured at the night's brightness, as before #240. The hold lives in the app's memory only: it changes no setting,
   Home Assistant sees no setting change, and it ends after its time, when the app stops, or at
   `--ez test_hold false`. The runner sets it first and checks the kiosk's log for its answer
   (`test hold on for 1800 s`). An app that doesn't answer within 15 s is refused, with no fallback.
-  It sets it again before each part and once each restart is done (the restart ended it), and ends
-  it on exit. During the restart, from the force-stop until the restart page is done (and through a
-  recovery's restart), the app is down or starting, so Android's own wake key (`input keyevent
+  It sets it again before each part and before each view opens (a restart ends it, and a long run
+  would outlast one), and ends it on exit. From the force-stop until the first view's hold (and
+  through a recovery's restart), the app is down or starting, so Android's own wake key (`input keyevent
   KEYCODE_WAKEUP`) goes at the stop, at the relaunch and every 8 s: the kiosk's intent would launch
   the stopped app and change the restart being measured. In s1rtc7 run 2 (2026-11-14, 01:12) the
   screen went off 20.4 s after the stop, before the kiosk's first frame, which then waited 280 s
@@ -809,7 +810,7 @@ Before, the whole run waited out its 900 s and was dropped (smoke 7); then the r
 weren't opened (s1rtc3); then heavy, usable after 43 s and still working, ran out of a 300 s
 per-view deadline before its swipes (s1rtc4). A page stuck on a busy panel can outlast the kiosk's idle
 timeout (20 s at night on the S1), and with the screen off nothing measured is the panel's: the
-test hold keeps it on (`holds`, once after each restart), and Android's wake key through each
+test hold keeps it on (`holds`, one before each view), and Android's wake key through each
 restart (`restart_wakes`): see "The screen stays on". A graded run may take up to 1800 s (`--timeout`).
 None of this moves a threshold.
 

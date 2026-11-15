@@ -29,7 +29,8 @@ import kotlin.math.log10
  *  - Brightness follows ambient light (log curve), capped lower at night.
  *  - [hold] keeps the screen on at the day's brightness, past night dimming and the idle timeout,
  *    while something urgent is on it (a high or critical notification), until [release].
- *  - [testHold] is such a hold for a test run, which ends by itself.
+ *  - [testHold] keeps the screen on past the idle timeout for a test run, and changes nothing else:
+ *    brightness and night dimming stay as they are. It ends by itself.
  *
  * Turning the screen off uses DevicePolicyManager.lockNow() when [admin] is an active device admin.
  *
@@ -63,6 +64,8 @@ class ScreenPolicy(
         const val TEST_HOLD = "test hold"
         /** The longest [testHold]: a runner renews it, so a lost runner can't hold the screen for long. */
         const val TEST_HOLD_MAX_S = 3600
+        const val TEST_HOLD_EXTRA = "test_hold"
+        const val TEST_HOLD_S_EXTRA = "test_hold_s"
 
         /** The most automatic brightness may reach: lower at night, unless something [held] the screen. */
         fun brightnessCap(night: Boolean, held: Boolean, max: Float, nightMax: Float): Float =
@@ -90,6 +93,9 @@ class ScreenPolicy(
 
     /** Something holds the screen on ([hold]). */
     val held: Boolean get() = holds.isNotEmpty()
+
+    /** A [testHold] is on. Main thread. */
+    var testHeld = false; private set
 
     /** Activity hooks: keep-screen-on flag and window brightness (0..1, or -1 = system). */
     var onKeepScreenOn: ((Boolean) -> Unit)? = null
@@ -149,6 +155,7 @@ class ScreenPolicy(
         runCatching { ctx.unregisterReceiver(screenReceiver) }
         brightnessObserver?.let { ctx.contentResolver.unregisterContentObserver(it) }
         brightnessObserver = null
+        if (testHeld) endTestHold("stopped")
         letGo()
     }
 
@@ -216,29 +223,43 @@ class ScreenPolicy(
     }
 
     /**
-     * A [hold] for a test run, such as Clarity's (#240): on for [seconds] from now, or ended at once
-     * when [seconds] is 0 or less. A new one while it is on moves the end. It lives in memory only, so it
-     * changes no setting and ends with the process. It ends by itself, so a test that crashed can't
-     * leave the screen on.
+     * Keeps the screen on past the idle timeout for a test run, such as Clarity's (#240), for [seconds]
+     * from now, or ends that at once when [seconds] is 0 or less. A new one while it is on moves the end.
+     * Brightness and night dimming stay as they are, so a test measures the panel as it would be. It
+     * lives in memory only, so it changes no setting, and it ends with the process, at [stop], and by
+     * itself, so a test that crashed can't leave the screen on.
      */
     fun testHold(seconds: Int) {
         handler.removeCallbacks(testHoldExpiry)
-        val on = TEST_HOLD in holds
         if (seconds <= 0) {
-            if (on) endTestHold("ended")
+            if (testHeld) endTestHold("ended")
             return
         }
         val s = minOf(seconds, TEST_HOLD_MAX_S)
-        Log.i(logTag, "test hold ${if (on) "renewed" else "on"} for $s s")
-        hold(TEST_HOLD)
+        Log.i(logTag, "test hold ${if (testHeld) "renewed" else "on"} for $s s")
+        testHeld = true
+        if (started) wake(TEST_HOLD)
         handler.postDelayed(testHoldExpiry, s * 1000L)
+    }
+
+    /**
+     * An intent's [TEST_HOLD_EXTRA]: `true` holds for [TEST_HOLD_S_EXTRA] seconds (1800 without it),
+     * `false` ends it. Removed once applied, so a recreated activity doesn't apply it again.
+     */
+    fun applyTestHoldExtra(intent: Intent) {
+        if (!intent.hasExtra(TEST_HOLD_EXTRA)) return
+        testHold(if (intent.getBooleanExtra(TEST_HOLD_EXTRA, false)) intent.getIntExtra(TEST_HOLD_S_EXTRA, 1800) else 0)
+        intent.removeExtra(TEST_HOLD_EXTRA)
     }
 
     private val testHoldExpiry = Runnable { endTestHold("expired") }
 
+    /** The idle timeout counts from now, so the screen doesn't go dark at once. */
     private fun endTestHold(why: String) {
+        handler.removeCallbacks(testHoldExpiry)
+        testHeld = false
         Log.i(logTag, "test hold off ($why)")
-        release(TEST_HOLD)
+        lastActivity = SystemClock.elapsedRealtime()
     }
 
     /** Lets go of a [hold]. The idle timeout counts from now, so the screen doesn't go dark at once. */
@@ -283,7 +304,7 @@ class ScreenPolicy(
                 return
             }
             val now = SystemClock.elapsedRealtime()
-            if (near || holds.isNotEmpty()) lastActivity = now
+            if (near || holds.isNotEmpty() || testHeld) lastActivity = now
             val timeoutSec = if (isNight()) prefs.nightIdleOffSec else prefs.idleOffSec
             if (timeoutSec > 0 && keepOn && now - lastActivity >= timeoutSec * 1000L) {
                 sleep("idle ${timeoutSec}s")

@@ -695,10 +695,7 @@ class MainActivity : Activity() {
             "off" -> glassworks.screen.sleep("intent")
             "on" -> glassworks.screen.wake("intent")
         }
-        if (intent.hasExtra("test_hold")) {
-            glassworks.screen.testHold(if (intent.getBooleanExtra("test_hold", false)) intent.getIntExtra("test_hold_s", 1800) else 0)
-            intent.removeExtra("test_hold") // not again when the activity is recreated
-        }
+        glassworks.screen.applyTestHoldExtra(intent)
         if (intent.getBooleanExtra("remove_admin", false)) glassworks.screen.removeAdmin()
         // The kiosk settings menu: the notification, or `--ez kiosk_settings true` (also from a cold start).
         if (SettingsMenu.requested { k -> if (intent.hasExtra(k)) intent.getBooleanExtra(k, false) else null }) {

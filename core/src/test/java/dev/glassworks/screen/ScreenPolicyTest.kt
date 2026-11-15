@@ -205,8 +205,8 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
-    /** Clarity's test hold (#240): the screen on at day brightness past the night timeout, then night again. */
-    @Test fun aTestHoldKeepsTheScreenOnAtDayBrightnessUntilItExpires() {
+    /** Clarity's test hold (#240): the screen on past the 20 s night timeout, at the night's brightness. */
+    @Test fun aTestHoldKeepsTheScreenOnAndLeavesNightBrightnessAlone() {
         ShadowLog.clear()
         val light = FakeSource()
         val settings = Settings().apply { nightWindow = "00:00-23:59" }
@@ -219,14 +219,16 @@ class ScreenPolicyTest {
         keepOn.clear()
 
         screen.testHold(600)
-        assertEquals("day brightness at once", 1f, screen.brightness, 0.001f)
+        assertEquals("the night cap stays", 0.2f, screen.brightness, 0.001f)
+        light.lux!!(1000f)
         advance(599_000)
+        assertEquals("still the night cap", 0.2f, screen.brightness, 0.001f)
         assertEquals("on far past the 20 s night timeout", emptyList<Boolean>(), keepOn.filter { !it })
-        assertTrue(screen.held)
+        assertTrue(screen.testHeld)
+        assertFalse("not a hold that lifts night dimming", screen.held)
 
         advance(1_000)
-        assertFalse("expired by itself", screen.held)
-        assertEquals("night dimming is back", 0.2f, screen.brightness, 0.001f)
+        assertFalse("expired by itself", screen.testHeld)
         advance(19_000)
         assertEquals(emptyList<Boolean>(), keepOn.filter { !it })
         advance(2_000) // the next tick
@@ -247,9 +249,9 @@ class ScreenPolicyTest {
         screen.testHold(600)
         screen.hold("notification")
         screen.testHold(0)
+        assertFalse(screen.testHeld)
         assertTrue("the notification still holds it", screen.held)
         screen.release("notification")
-        assertFalse(screen.held)
         advance(600_000)
         assertEquals(
             listOf("test hold on for 600 s", "test hold off (ended)"),
@@ -266,9 +268,9 @@ class ScreenPolicyTest {
         advance(20_000)
         screen.testHold(30)
         advance(20_000)
-        assertTrue("held 40 s after the first, 20 s after the second", screen.held)
+        assertTrue("held 40 s after the first, 20 s after the second", screen.testHeld)
         advance(10_000)
-        assertFalse(screen.held)
+        assertFalse(screen.testHeld)
         assertEquals(
             listOf("test hold on for 30 s", "test hold renewed for 30 s", "test hold off (expired)"),
             ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
@@ -281,9 +283,45 @@ class ScreenPolicyTest {
         screen.start(context)
         screen.testHold(86_400)
         advance(3_599_000)
-        assertTrue(screen.held)
+        assertTrue(screen.testHeld)
         advance(1_000)
-        assertFalse(screen.held)
+        assertFalse(screen.testHeld)
+        screen.stop()
+    }
+
+    /** stop() then start() (the activity recreated) doesn't leave the panel held. */
+    @Test fun stopEndsATestHold() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(600)
+        screen.stop()
+        assertFalse(screen.testHeld)
+        screen.start(context)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+        advance(121_000)
+        assertEquals("the 120 s idle timeout runs again", listOf(false), keepOn.filter { !it })
+        screen.stop()
+    }
+
+    /** The kiosk's intent extra (MainActivity.applyIntent): `--ez test_hold true --ei test_hold_s 90`. */
+    @Test fun theIntentExtraHoldsAndIsUsedOnce() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        val on = Intent().putExtra("test_hold", true).putExtra("test_hold_s", 90)
+        screen.applyTestHoldExtra(on)
+        assertTrue(screen.testHeld)
+        assertFalse("removed, so a recreated activity doesn't apply it again", on.hasExtra("test_hold"))
+        screen.applyTestHoldExtra(Intent().putExtra("test_hold", true))
+        screen.applyTestHoldExtra(Intent())
+        screen.applyTestHoldExtra(Intent().putExtra("test_hold", false))
+        assertFalse(screen.testHeld)
+        assertEquals(
+            listOf("test hold on for 90 s", "test hold renewed for 1800 s", "test hold off (ended)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
         screen.stop()
     }
 }

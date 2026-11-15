@@ -268,7 +268,7 @@ class Runner(unittest.TestCase):
         self.assertTrue(am[0].startswith("shell am start -W") and am[0].endswith(hold), am[:2])
         self.assertTrue(am[-1].endswith("--ez test_hold false"), am[-2:])
         self.assertEqual([c for c in self.commands if "--es screen" in c], [])
-        # Again after each restart, and before each part: the restart ended the last one.
+        # Again after each restart (before each part and view): the restart ended the last one.
         stops = [i for i, c in enumerate(self.commands) if c.startswith("shell am force-stop")]
         for i in stops:
             self.assertTrue(any(c.endswith(hold) for c in self.commands[i + 1:]), self.commands[i])
@@ -899,7 +899,7 @@ class Restart(unittest.TestCase):
         self.assertIsNone(c["error"])
         self.assertEqual(c["timed_out"], ["typical"])
         self.assertEqual(len(c["recoveries"]), 1)
-        self.assertEqual(c["holds"], 2)                      # the restart and the recovery's each ended one
+        self.assertEqual(c["holds"], sum(1 for x in log if x.startswith("view ")))   # one before each view
         self.assertEqual((c["recoveries"][0]["after"], c["recoveries"][0]["launch"]), ("typical", "am-start"))
         self.assertTrue(c["tiers"]["heavy"].get("done"))                       # opened after the restart
         self.assertTrue(c["fallback"]["typical-hls"].get("done"))
@@ -995,18 +995,39 @@ class Restart(unittest.TestCase):
         self.assertEqual(t["blocking_ms"]["median"], c["tiers"]["typical"]["timed_out_s"] * 1000)
         self.assertIsNone((t.get("usable_ms") or {}).get("median"))
 
-    def test_one_test_hold_after_the_restart_and_no_wake_intent(self):
-        """#240: the hold comes once the restart page is done, before the first view, and nothing
-        else wakes the screen while the views run."""
+    def test_a_test_hold_before_each_view_and_no_wake_after_it(self):
+        """#240: the hold goes out before each view opens (a long run would outlast one), and from the
+        first one on nothing else wakes the screen."""
         p, c, log = self.run_short(90)
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
-        self.assertEqual(c["holds"], 1)
+        self.assert_held_views(c, log)
+
+    def test_the_views_get_the_hold_without_the_restart_page_too(self):
+        """CodeRabbit on #332: a kiosk that comes back on its own page, with no restart page, opens the
+        views by the other path. They get the hold too, and the wake key stops."""
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, GW_PERF_COLD_SETTLE="0", FAKE_SCREEN_SLEEP_S="4", GW_PERF_RESTART_WAKE_S="1")
+        p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "perfrun.py"), "refstart",
+                            "--out", tmp, "--run", "1", "--settle", "0", "--url", HA.url,
+                            "--taps", "0"], env=env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(p.returncode, 0, p.stderr[-2000:])
+        with open(os.path.join(tmp, "refstart-1.json")) as f:
+            c = json.load(f)
+        with open(os.path.join(state, "commands.log")) as f:
+            log = f.read().splitlines()
+        self.assertNotEqual(c["own_page_state"], "reference")
+        self.assert_held_views(c, log)
+        self.assertNotIn("screen_off", c)
+
+    def assert_held_views(self, c, log):
+        views = [i for i, x in enumerate(log) if x.startswith("view ")]
         holds = [i for i, x in enumerate(log) if "--ez test_hold true" in x]
-        stop = next(i for i, x in enumerate(log) if x.startswith("shell am force-stop"))
-        first_view = next(i for i, x in enumerate(log) if x.startswith("view "))
-        self.assertEqual(len(holds), 1)
-        self.assertLess(stop, holds[0])
-        self.assertLess(holds[0], first_view)
+        self.assertEqual(len(views), c["holds"])
+        self.assertEqual(len(holds), c["holds"])
+        for h, v in zip(holds, views):
+            self.assertLess(h, v)
+        self.assertLess(next(i for i, x in enumerate(log) if x.startswith("shell am force-stop")), holds[0])
+        self.assertEqual([x for x in log[holds[0]:] if "KEYCODE_WAKEUP" in x], [])
         self.assertEqual([x for x in log if "--es screen" in x], [])
 
     def test_a_warm_up_view_that_is_also_graded_is_refused(self):

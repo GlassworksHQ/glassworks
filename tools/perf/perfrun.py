@@ -13,8 +13,8 @@ What it touches on the device:
              `am force-stop` the app. A home-app kiosk is relaunched by the system; otherwise
              `am start -W` starts it. Either way it comes back on the saved dashboard.
   refstart   As coldstart, with `input keyevent KEYCODE_WAKEUP` through the restart; once the kiosk's
-             own page has finished, the test hold again (the restart ended it), then each reference
-             dashboard in turn (opened by the fake Home Assistant; the saved URL is not changed),
+             own page has finished, the test hold again before each view (the restart ended it), and
+             each reference dashboard in turn (opened by the fake Home Assistant; the saved URL is not changed),
              `input tap` on its toggle when --taps > 0, and `input swipe` where the page asks (only
              on our page, only for the run's nonce).
   idle       The test hold before the sample; otherwise read-only.
@@ -261,9 +261,9 @@ def cmd_panes(dev, a):
     sys.exit(0 if res["ok"] else 1)
 
 
-# The kiosk's test hold (#240): the screen on at day brightness, past night dimming and the idle
-# timeout, for TEST_HOLD_S. It lives in the app's memory, so it ends with the process: the runner sends
-# it again after every restart, and before each part. The app logs it as TEST_HOLD_RE.
+# The kiosk's test hold (#240): the screen on past the idle timeout for TEST_HOLD_S, and nothing else
+# changed (brightness and night dimming stay as they are). It lives in the app's memory, so it ends with
+# the process: the runner sends it again before each part and each view. The app logs it as TEST_HOLD_RE.
 TEST_HOLD_S = 1800
 HOLD_ON = f"--ez test_hold true --ei test_hold_s {TEST_HOLD_S}"
 TEST_HOLD_RE = re.compile(r"test hold (?:on|renewed) for \d+ s")
@@ -275,11 +275,19 @@ def cmd_hold(dev, a):
     if a.off:
         dev.sh(f"am start -n {dev.component} --ez test_hold false")
         return
-    mark = last_mono(dev.sh("logcat -d -v monotonic -t 1", timeout=60))
-    dev.sh(f"am start -W -n {dev.component} {HOLD_ON}", timeout=120)
     end = C.now() + a.timeout
+
+    def sh(cmd):
+        """adb within what is left of --timeout: a stalled adb fails the check instead of outlasting it."""
+        try:
+            return dev.sh(cmd, timeout=max(1.0, C.real(end - C.now())))
+        except subprocess.TimeoutExpired:
+            sys.exit(1)
+
+    mark = last_mono(sh("logcat -d -v monotonic -t 1"))
+    sh(f"am start -W -n {dev.component} {HOLD_ON}")
     while True:
-        for line in dev.sh("logcat -d -v monotonic", timeout=120).splitlines():
+        for line in sh("logcat -d -v monotonic").splitlines():
             rec = P.parse_logcat_line(line)
             if rec and (mark is None or rec["mono"] > mark) and TEST_HOLD_RE.search(rec["msg"]):
                 print(json.dumps({"hold_s": TEST_HOLD_S, "said": rec["msg"]}))
@@ -459,11 +467,11 @@ def cmd_coldstart(dev, a):
             stop.wait(C.real(1.0))
 
     def keep_awake():
-        """Android's wake key through the restart (and a recovery's). After it, the test hold (hold)."""
+        """Android's wake key from the force-stop (and a recovery's) until the next view's test hold."""
         last_nudge = 0.0
         relaunch_seen = False
         while not stop.wait(C.real(min(1.0, RESTART_WAKE_S / 2))):
-            if st.get("restart_done_at") and not st.get("recovering"):
+            if st.get("held"):
                 continue
             # The wake key at once when the app comes back up, and every RESTART_WAKE_S.
             relaunched = res["proc_mono"] is not None and not relaunch_seen
@@ -491,7 +499,9 @@ def cmd_coldstart(dev, a):
                     res.setdefault("cpu_khz", []).append([cur[0], round(C.now(), 1), khz])
 
     def hold():
-        """The restart ended the test hold: again, before the next view opens."""
+        """The test hold, for TEST_HOLD_S from now, before each view opens: a restart ended the last one,
+        and a long run would outlast it. Not in a timed window: the view's open starts after it."""
+        st["held"] = True                      # keep_awake's wake key stops now
         dev.hold()
         res["holds"] = res.get("holds", 0) + 1
 
@@ -569,6 +579,7 @@ def cmd_coldstart(dev, a):
         for th in st["gestures"]:
             th.join(timeout=15)
         st["gestures"] = []
+        hold()
         slot = slots[st["opened"]]
         st["opened"] += 1
         st["opened_at"] = C.now()
@@ -642,7 +653,6 @@ def cmd_coldstart(dev, a):
                 res["recoveries"][-1].update(back_s=round(C.now() - rv["at"], 1), launch=rv.get("launch") or "relaunched-by-system",
                                              **({"error": pl.get("message")} if pl.get("t") == "error" else {}))
                 st["no_memory"] = True        # RAM right after a restart isn't the views' peak
-                hold()
                 st["next_at"] = C.now()
                 print(f"  the kiosk is back after {res['recoveries'][-1]['back_s']} s; carrying on", file=sys.stderr)
             return False
@@ -824,6 +834,7 @@ def cmd_coldstart(dev, a):
                     pass
                 paused.clear()
                 st["recovering"] = {"at": C.now()}
+                st["held"] = False            # the restart ends the hold
                 res.setdefault("recoveries", []).append({"after": view})
                 dev.nudge()
                 dev.sh(f"am force-stop {dev.package}")
@@ -858,7 +869,6 @@ def cmd_coldstart(dev, a):
             # Protocol 4: the kiosk came back to the reference dashboard and it is usable: open the
             # graded pages once the screen is still (the next_at branch below).
             res["own_page_state"] = "reference"
-            hold()
             st["next_at"] = C.now()
         if ref and st["current"] is None and st["engine_at"] and not st.get("restart_done_at") and not st["opened"] \
                 and not res.get("restart_page"):
