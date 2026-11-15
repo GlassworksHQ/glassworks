@@ -195,14 +195,15 @@ app's sign-in. About 110 Creates in a few minutes; once the maintainer re-added 
 sign-in (11:13), one CreatePullPointSubscription, then normal pulls. UniFi Protect, also holding an
 old sign-in, polled `GetProfiles` about 59 times until it was adopted again. Both PASS after.
 
-**How the panel answers a refused sign-in now (verified in the lab, 2026-11-14):**
+**How the panel answers a refused sign-in now (verified in the lab, 2026-11-14, except where the row
+says otherwise):**
 
 | Call | Answer | What HA 2026.11.1 does with it |
 |---|---|---|
 | Device and media (`GetDeviceInformation`, `GetProfiles`, …) | HTTP 400, SOAP 1.2 fault `s:Sender` / `ter:NotAuthorized` | `is_auth_error()` is true: "auth failed" in the config flow, a reauth flow at setup |
 | Events (`PullMessages`, `Renew`, `CreatePullPointSubscription`, …) | HTTP 401 with the Digest and Basic challenge, no body | a `TransportError` 401: the pull loop waits 60 s instead of 0.75 s; reauth at setup |
 | RTSP (`DESCRIBE`, `SETUP`) | `RTSP/1.0 401` with the challenge | |
-| Digest with the right password on a nonce the panel forgot | HTTP 401, challenge with `stale=true` | the client signs in again once |
+| Digest with the right password on a nonce the panel forgot or that is over 12 h old (the SOAP services; the snapshot: `OnvifServerTest`, not yet met a real client) | HTTP 401, challenge with `stale=true` | the client signs in again once |
 
 A wrong sign-in in the events now costs about two requests a minute, not one every 0.75 s: a pull
 each minute, and its one retry when the client answers the 401's Digest challenge (aiohttp's
@@ -220,6 +221,10 @@ To run the lab again: `tools/camera/onvif-lab.sh 45 ONVIF_LAB_CREDS_CHANGE_AT=20
 `ONVIF_LAB_RESTART_AT=30`). It serves on 127.0.0.1:18000 only.
 
 ## Open questions
+
+- Digest `nc` isn't tracked (RTSP or ONVIF), so a captured response can be replayed for the nonce's
+  12 h. Tracking it breaks clients that reuse a nonce for a session; binding nonces to a connection
+  is the follow-up.
 
 - Adoption by a real Protect console (an acceptance criterion of #117). Needs a console and a frame
   with a camera.

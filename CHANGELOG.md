@@ -109,13 +109,14 @@ below as the release notes.
   let Home Assistant take snapshots, and turn on an ONVIF and RTSP stream (ports 8554 and 8000) for
   Home Assistant's ONVIF integration, Frigate or UniFi Protect. The first time you turn the stream
   on, the panel makes its own sign-in: the username `glassworks` and a random password, never shared
-  between panels; the Camera page shows the username and, when you tap it, the password. Everything
-  is off until you turn it on, and *Camera privacy* closes the camera. The camera has its own page
-  in the panel's settings, with the panel's address and the stream's URLs, and a Camera step in
-  setup that asks Android for the camera. Whenever images leave the panel, Android 12 and later show
-  their own camera indicator, and older Android a small green dot in the top-right corner. On the
-  S1, which has no camera, the panel's settings say the pane can't run, and Home Assistant gets
-  nothing new.
+  between panels. You can change it on the panel and on the Manage page; the password shows only
+  when you press Show (on the Manage page, only after signing in with Home Assistant), and it hides
+  again after a minute or when the screen goes off. Everything is off until you turn it on, and
+  *Camera privacy* closes the camera. The camera has its own page in the panel's settings, with the
+  panel's address and the stream's URLs, and a Camera step in setup that asks Android for the
+  camera. Whenever images leave the panel, Android 12 and later show their own camera indicator, and
+  older Android a small green dot in the top-right corner. On the S1, which has no camera, the
+  panel's settings say the pane can't run, and Home Assistant gets nothing new.
 - **The panel can be a Bluetooth proxy for Home Assistant.** Turn on *Bluetooth proxy* in the
   panel's settings or on setup's Panes step, and Home Assistant finds it by itself and hears the
   Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a

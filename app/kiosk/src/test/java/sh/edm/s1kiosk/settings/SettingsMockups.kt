@@ -51,7 +51,7 @@ class SettingsMockups {
         return o
     }
 
-    /** Made up: a pane that can't run on this panel, to show how the menu says so (none can't on the S1 today). */
+    /** Made up: a pane that can't run on this panel, to show how the menu says so (on the S1 the camera can't run either: settings-21). */
     private val cantRun = object : dev.glassworks.pane.PaneDefinition {
         override val id = "example"
         override fun settings() = listOf(dev.glassworks.pane.SettingsSection(
