@@ -18,6 +18,10 @@ STUB_CAMERA = tempfile.mkdtemp(prefix="clarity-camera-")  # nor make camera segm
 os.environ.setdefault("GW_PERF_CAMERA", STUB_CAMERA)
 RESTORE = "http://192.0.2.10:8123/lovelace/0"
 os.environ.setdefault("GW_PERF_FRONTEND", STUB_FRONTEND)
+# The runs against the fake panel go at this speed (clock.py; #268): 0.2 waits a fifth of the real
+# seconds. GW_PERF_TIME_SCALE=1 runs them in real time. Set per run, never in this process's environ,
+# which the other test modules share.
+TIME_SCALE = os.environ.get("GW_PERF_TIME_SCALE", "0.2")
 sys.path.insert(0, os.path.dirname(HERE))
 import fakeha  # noqa: E402
 import perfrun  # noqa: E402
@@ -67,7 +71,7 @@ class Runner(unittest.TestCase):
         env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="2",
                    GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.5", GW_PERF_FRONTEND=STUB_FRONTEND,
                    GW_PERF_SWITCH_SETTLE="0", FAKE_HA_URL="http://127.0.0.1:18089", GW_PERF_CAMERA=STUB_CAMERA,
-                   GW_PERF_FAKE_PYTHON=sys.executable)
+                   GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
         env.pop("ANDROID_SERIAL", None)
         cls.state = state
         cls.out = os.path.join(cls.tmp, "out")
@@ -147,6 +151,13 @@ class Runner(unittest.TestCase):
         self.assertEqual({g[2] for g in sent}, {"tap", "swipe"})
         self.assertTrue(all(isinstance(g[1], float) and g[3] >= 0 for g in sent))
         self.assertEqual(sum(1 for g in sent if g[0] == "heavy" and g[2] == "tap"), 2)
+        # On fakeha.jsonl's clock: each gesture comes after its view's open there, and before the next.
+        with open(os.path.join(self.out, "fakeha.jsonl")) as f:
+            opens = [(e["t"], e["open"]["view"]) for e in map(json.loads, f) if (e.get("open") or {}).get("view")]
+        for g in sent:
+            i = max(k for k, (t, v) in enumerate(opens) if v == g[0])
+            self.assertGreater(g[1], opens[i][0], g)
+            self.assertLess(g[1], opens[i + 1][0] if i + 1 < len(opens) else float("inf"), g)
         self.assertEqual(c["order"], ["light", "typical-nocam", "typical", "heavy"])
         ref = self.rep["graded"]["reference"]
         for t in ("typical", "heavy"):
@@ -250,9 +261,62 @@ def fake_env(tmp, **extra):
     extra.setdefault("FAKE_HA_URL", HA.url if HA else "")
     env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="1",
                GW_PERF_FRONTEND=STUB_FRONTEND, GW_PERF_CAMERA=STUB_CAMERA, GW_PERF_SWITCH_SETTLE="0", GW_PERF_PANES_SAVE_S="0",
-               GW_PERF_FAKE_PYTHON=sys.executable, **extra)
+               GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
+    env.update(extra)
     env.pop("ANDROID_SERIAL", None)
     return env, state
+
+
+class RealTime(unittest.TestCase):
+    """#268: the time scale is for these tests only. A real run keeps real seconds, and a scaled
+    clock is refused on any device that isn't the fake, before anything on it is touched."""
+    PERF = os.path.dirname(HERE)
+
+    def env(self, scale):
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, FAKE_REAL_DEVICE="1")
+        env.pop("GW_PERF_TIME_SCALE")
+        if scale is not None:
+            env["GW_PERF_TIME_SCALE"] = scale
+        return tmp, env, os.path.join(state, "commands.log")
+
+    def test_without_the_setting_the_clock_is_real(self):
+        tmp, env, log = self.env(None)
+        code = "import clock, time; print(clock.SCALE, clock.real(90), abs(clock.now() - time.time()) < 0.5)"
+        p = subprocess.run([sys.executable, "-c", code], cwd=self.PERF, env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(p.stdout.split(), ["1.0", "90.0", "True"], p.stderr)
+        p = subprocess.run([sys.executable, os.path.join(self.PERF, "perfrun.py"), "device", "--out", tmp],
+                           env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stderr[-800:])
+        with open(log) as f:
+            self.assertNotIn("gw.perf.fake_device", f.read())          # a real run doesn't even ask
+
+    def test_a_scaled_clock_is_refused_on_a_real_device(self):
+        runs = {"perfrun": [sys.executable, os.path.join(self.PERF, "perfrun.py"), "refstart", "--url", HA.url, "--out"],
+                "run.sh": [RUN, "--frame", "test-frame", "--port", "18079", "--restore-dashboard", RESTORE, "--out"],
+                "lanprobe": [sys.executable, os.path.join(self.PERF, "lanprobe.py"), "--port", "18078", "--out"]}
+        for name, cmd in runs.items():
+            with self.subTest(name):
+                tmp, env, log = self.env("0.2")
+                out = os.path.join(tmp, "out")
+                os.makedirs(out)
+                p = subprocess.run(cmd + [out], env=env, capture_output=True, text=True, timeout=60)
+                self.assertNotEqual(p.returncode, 0)
+                self.assertIn("GW_PERF_TIME_SCALE=0.2 is for the off-device tests only", p.stderr)
+                with open(log) as f:
+                    shell = [c for c in f.read().splitlines() if c.startswith("shell ")]
+                self.assertEqual([c for c in shell if not c.startswith(("shell getprop", "shell pm path"))], [])
+                self.assertEqual(os.listdir(out), [])
+
+    def test_a_scale_out_of_range_is_refused(self):
+        for bad in ("0", "-1", "2", "fast"):
+            with self.subTest(bad):
+                tmp, env, log = self.env(bad)
+                p = subprocess.run([sys.executable, os.path.join(self.PERF, "perfrun.py"), "device", "--out", tmp],
+                                   env=env, capture_output=True, text=True, timeout=60)
+                self.assertNotEqual(p.returncode, 0)
+                self.assertIn("give a number above 0 and at most 1", p.stderr)
+                self.assertFalse(os.path.exists(log))
 
 
 class StopsPartway(unittest.TestCase):
@@ -350,7 +414,9 @@ class CpuClock(unittest.TestCase):
 
     def test_each_view_has_its_clock(self):
         tmp = tempfile.mkdtemp()
-        p, c = refstart(tmp, GW_PERF_CPU_CLOCK_S="0.3")
+        # In real time: the margin below is the runner's own latency after the last swipe, which a
+        # compressed clock would count five times over.
+        p, c = refstart(tmp, GW_PERF_CPU_CLOCK_S="0.3", GW_PERF_TIME_SCALE="1")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertEqual(c["cpu_max_khz"], {"0": 1608000, "1": 1608000, "2": 1608000, "3": 1608000})
         views = {v for v, _, _ in c["cpu_khz"]}
@@ -744,17 +810,17 @@ class Restart(unittest.TestCase):
 
     def test_a_view_that_never_finishes_fails_the_run(self):
         """smoke10's heavy: usable, then nothing (the screen was off) until the run's limit."""
-        p, c, _ = self.run_short(25, FAKE_HANG="heavy")
+        p, c, _ = self.run_short(60, FAKE_HANG="heavy")
         self.assertNotEqual(p.returncode, 0)
-        self.assertEqual(c["error"], "heavy didn't finish within 25 s")
+        self.assertEqual(c["error"], "heavy didn't finish within 60 s")
 
     def test_a_fallback_view_that_never_finishes_fails_only_itself(self):
         """#202: the HLS copies come after the graded views; one that hangs (or a screen that goes off
         during it) leaves the graded run standing, and says why."""
-        p, c, _ = self.run_short(40, fallback="typical-hls,heavy-hls", FAKE_HANG="heavy-hls", FAKE_SCREEN_OFF="heavy-hls")
+        p, c, _ = self.run_short(90, fallback="typical-hls,heavy-hls", FAKE_HANG="heavy-hls", FAKE_SCREEN_OFF="heavy-hls")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertIsNone(c["error"])
-        self.assertEqual(c["fallback_error"], "heavy-hls didn't finish within 40 s")
+        self.assertEqual(c["fallback_error"], "heavy-hls didn't finish within 90 s")
         self.assertTrue(c["fallback"]["typical-hls"]["done"])
         self.assertEqual(sorted(c["tiers"]), ["heavy", "light", "typical", "typical-nocam"])
         self.assertTrue(all(e.get("done") for e in c["tiers"].values()))
@@ -772,7 +838,7 @@ class Restart(unittest.TestCase):
         Now the view times out at the deadline, a live view nothing touches gets the wake intent so the
         screen stays on, what heavy measured stands, and what it didn't fails: measured, not missing,
         so the grade isn't provisional for it."""
-        p, c, _ = self.run_short(60, FAKE_HANG_LIVE="heavy", GW_PERF_STAGE_IDLE_S="12", GW_PERF_LIVE_IDLE_WAKE_S="2",
+        p, c, _ = self.run_short(90, FAKE_HANG_LIVE="heavy", GW_PERF_STAGE_IDLE_S="12", GW_PERF_LIVE_IDLE_WAKE_S="2",
                                  GW_PERF_KEEP_AWAKE_S="0.5")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertIsNone(c["error"])

@@ -1907,6 +1907,24 @@ GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.e2e.test.mjs
 GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.gecko.test.mjs
 ```
 
+`test_runner.py` runs `run.sh` and `perfrun.py` end to end against a fake panel (`test/fake_adb.py`)
+and the fake Home Assistant. A panel's waits are real seconds (a wake every 8 s, a 180 s stage
+deadline), so these runs go on a compressed clock: every wait and timestamp of the runner,
+`lanprobe.py` and the fake panel goes through `clock.py`, and the tests set `GW_PERF_TIME_SCALE=0.2`.
+A wait then takes a fifth of its seconds, and the clock runs five times as fast, so recorded times
+keep their units and the tests their numbers. `GW_PERF_TIME_SCALE=1` runs them in real time. A real
+run never sets it, and the runner refuses it on any device that isn't the fake, before it touches
+anything. The whole suite took 10 minutes on a Mac on 2026-11-14 (28 minutes before the scale).
+
+For a grading, report or notes change, the fast set is enough (seconds); run `test_runner.py` too
+when you change `perfrun.py`, `run.sh`, `lanprobe.py`, `clock.py` or the fakes. CI runs all of it on
+every PR.
+
+```sh
+cd tools/perf/test && python3 -m unittest test_grade test_report test_summary test_notes   # the fast set
+python3 -m unittest test_runner                                                             # the runner
+```
+
 `test_webrtc.py` checks the relay (its credentials, one allocation over TCP) and a whole session
 through the fake's websocket API, with aiortc as a relay-only browser. `webrtc.e2e.test.mjs` runs
 HA's real frontend (the pinned build, fetched once) in headless Chrome: Chrome's own build has
