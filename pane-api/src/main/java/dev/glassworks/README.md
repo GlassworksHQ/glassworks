@@ -545,7 +545,8 @@ first `open`, so a change needs a process restart. `engine.started` says what it
 
 `GeckoEngine` takes the S1's values: the built-in extension (`assets/extension`, id
 `helper@s1kiosk.edm.sh`, native app `s1kiosk`), the log tag and the settings from `KioskPrefs`.
-GeckoView allows one runtime per process, so `GlassworksRuntime` holds the one engine.
+GeckoView allows one runtime per process, so the app makes the one engine (the S1's: `KioskApp`) and
+hands it to the `GlassworksRuntime` it runs, which holds it.
 `EngineConfinementTest` fails `./gradlew test` if code outside `dev.glassworks.engine.gecko` names
 `org.mozilla.gecko`.
 

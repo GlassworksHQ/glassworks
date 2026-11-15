@@ -71,6 +71,12 @@ class AppPartsTest {
         assertEquals(1, parts.asked)
     }
 
+    @Test fun theS1AppsRuntimeRunsTheS1Panes() {
+        val s1 = KioskApp.runtime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))
+        assertTrue("the activity and the service read the S1 panes' state through it", s1.app is S1Panes)
+        assertSame(s1.app, s1.s1Panes)
+    }
+
     @Test fun theAppDecidesItsActivityAndWherePaneSettingsLive() {
         assertEquals(Activity::class.java, runtime.mainActivity)
         assertSame(parts.file, runtime.paneFile(app, "anything"))

@@ -25,8 +25,11 @@ class KioskApp : Application(), GlassworksApp {
     }
 
     companion object {
-        /** The S1 app's runtime on [frame]: GeckoView with the kiosk's extension, and the S1 app's panes. Tests pass a fake [paneFrame]. */
-        fun runtime(frame: Frame, build: AppBuild, paneFrame: Frame = frame): GlassworksRuntime =
+        /**
+         * The S1 app's runtime on [frame]: GeckoView with the kiosk's extension, and the S1 app's panes. Tests
+         * pass a fake [paneFrame]. Internal: the app makes one per process (one GeckoView runtime, one hub).
+         */
+        internal fun runtime(frame: Frame, build: AppBuild, paneFrame: Frame = frame): GlassworksRuntime =
             GlassworksRuntime(frame, build, engine(build), S1Panes(), paneFrame)
 
         /**

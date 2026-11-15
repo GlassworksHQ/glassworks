@@ -211,5 +211,6 @@ class S1Panes : AppParts {
     }
 }
 
+// TODO(S-shell): remove once the activity and the service no longer read the S1 app's panes' state.
 /** The S1 app's parts of a runtime it made ([KioskApp.runtime]). */
 val GlassworksRuntime.s1Panes: S1Panes get() = app as S1Panes
