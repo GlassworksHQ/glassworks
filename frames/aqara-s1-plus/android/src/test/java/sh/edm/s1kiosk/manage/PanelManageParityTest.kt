@@ -51,7 +51,6 @@ class PanelManageParityTest {
      */
     private val panelOnly = mapOf(
         "radio" to "the roles picker, the Thread dataset and the radio's actions (RadioSettingsView)",
-        "wall-base" to "the relays' cards, or what a base adds (WallBaseViews)",
     )
 
     /** Every item and its key, a native view's twin too: its items' keys are their titles, as if they sat in the section (#269). */
@@ -116,7 +115,24 @@ class PanelManageParityTest {
     }
 
     @Test fun everySettingOnThePanelIsOnTheManagePageAndChangesThere() {
-        val model = panes.model(panes.all())
+        val (natives, drawnOnlyThere) = parity(panes.all())
+        assertTrue("the panes with native views ran: $natives", natives.containsAll(listOf("radio", "time-zone", "wall-base")))
+        assertEquals("panelOnly lists exactly the views with no twin yet: it shrinks as twins land (#269)", panelOnly.keys, drawnOnlyThere)
+    }
+
+    /** #269: with no base mounted, the wall base page's "what a base adds" is on both too. */
+    @Test fun withoutAWallBaseToo() {
+        val (natives, drawnOnlyThere) = parity(listOf(panes.wallBase(attached = false)))
+        assertTrue(natives.toString(), "wall-base" in natives)
+        assertTrue(drawnOnlyThere.toString(), "wall-base" !in drawnOnlyThere)
+    }
+
+    /**
+     * Walks every section of the menu with [running] panes on both surfaces; the sections with a native view,
+     * and those whose native view the Manage page can only say is "On the panel".
+     */
+    private fun parity(running: List<dev.glassworks.pane.Pane>): Pair<Set<String>, Set<String>> {
+        val model = panes.model(running)
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         o.reload = model
         o.show(model())
@@ -182,8 +198,7 @@ class PanelManageParityTest {
             }
         }
         assertEquals("every change ran on the panel's main thread", changed, f.onMainCalls)
-        assertTrue("the panes with native views ran: $natives", natives.containsAll(listOf("radio", "time-zone", "wall-base")))
-        assertEquals("panelOnly lists exactly the views with no twin yet: it shrinks as twins land (#269)", panelOnly.keys, drawnOnlyThere)
+        return natives to drawnOnlyThere
     }
 
     /**

@@ -94,6 +94,26 @@ class PanelManageMockups {
         }
     }
 
+    /** #269: the wall base page's twins on the Manage page: a switch base's relays and buttons, and no base. */
+    @Test
+    fun wallBase() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val out = File(Mockup.dir!!, "269").apply { mkdirs() }
+        for ((name, attached) in listOf("wall-base" to true, "wall-base-none" to false)) {
+            val model = panes.model(listOf(panes.wallBase(attached)))
+            val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+            o.reload = model
+            o.show(model())
+            o.previewSection("wall-base")
+            Mockup.idle()
+            Mockup.save("269/$name-panel", o)
+            val f = ManageFixture()
+            f.statusFn = { model().let { m -> f.status.copy(panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }, sections = m.sections) } }
+            val b = f.Browser().also { it.signInWithHa() }
+            File(out, "$name-manage.html").writeBytes(b.get("/wall-base").body)
+        }
+    }
+
     /**
      * #261: a pane page's "In Home Assistant" on a panel Home Assistant never added, added but not connected
      * now, and connected: Music's list and Voice's own, scrolled to the list.

@@ -19,6 +19,9 @@ below as the release notes.
 - **The Bluetooth proxy page on the Manage page.** The browser shows what the panel's page shows: whether
   it's listening, the advertisements a minute and the scanner, and its entities. When Bluetooth or
   location is off, **Turn on Bluetooth** or **Turn on location** works from the browser too.
+- **Switch the wall base's relays from the Manage page.** The browser's wall base page has a switch
+  for each relay and each button's last press, as the panel's page has. Without a base, it says what
+  one adds.
 - **Add a pane's Home Assistant blueprints from its settings page.** Notifications and Camera have a
   *Blueprints for Home Assistant* card: the doorbell, a question with buttons on the panels, lights on
   when someone is at the panel, and a snapshot to your phone when nobody is home. **Add to Home
