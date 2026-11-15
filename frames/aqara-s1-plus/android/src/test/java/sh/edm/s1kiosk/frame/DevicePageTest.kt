@@ -139,6 +139,23 @@ class DevicePageTest {
         assertEquals("Robolectric's SDK 34, without the install permission", "Allow “Install unknown apps” for the app in Android's settings", info["Updates without a tap"])
     }
 
+    @Test
+    @Config(sdk = [29])
+    fun aDeviceOwnerUpdatesWithoutATapOnAndroid10() {
+        // CodeRabbit on #303: a device owner installs silently on any Android the app runs on.
+        shadowOf(app.getSystemService(android.app.admin.DevicePolicyManager::class.java)).setDeviceOwner(android.content.ComponentName(app.packageName, "x.Admin"))
+        val info = GenericAndroid(app).deviceSection(app).items.filterIsInstance<SettingsItem.Info>().associate { it.title() to it.detail() }
+        assertEquals("Available: the app is the device owner", info["Updates without a tap"])
+        assertTrue(info["Device owner"]!!.startsWith("Yes"))
+    }
+
+    @Test
+    @Config(sdk = [29])
+    fun withoutDeviceOwnerAndroid10HasNoUpdatesWithoutATap() {
+        val info = GenericAndroid(app).deviceSection(app).items.filterIsInstance<SettingsItem.Info>().associate { it.title() to it.detail() }
+        assertEquals("Not on this Android: it needs Android 12 or newer, or the app as device owner", info["Updates without a tap"])
+    }
+
     @Test fun theListIsDebloatShs() {
         val sh = RepoFiles.file("frames/aqara-s1-plus/tools/debloat/debloat.sh").readText()
         val safe = Regex("""(?m)^\s+(com\.[a-z0-9_.]+)\s+#""").findAll(sh).map { it.groupValues[1] }.toList()

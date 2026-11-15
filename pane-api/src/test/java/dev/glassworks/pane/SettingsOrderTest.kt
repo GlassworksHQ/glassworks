@@ -26,4 +26,20 @@ class SettingsOrderTest {
         val out = settingsOrder(mapOf(SettingsPlace.DEVICE to device), listOf(section("radio", SettingsItem.Note { "" })))
         assertSame(device, out.single { it.id == "device" })
     }
+
+    @Test fun aLinkToASectionWithNoItemsIsLeftOut() {
+        val device = section("device", SettingsItem.Info({ "Model" }, { "x" }), SettingsItem.Link("Network", "", section = "network"))
+        val out = settingsOrder(mapOf(SettingsPlace.DEVICE to device, SettingsPlace.NETWORK to SettingsSection("network", "Network", emptyList())), emptyList())
+        assertEquals(listOf("device"), out.map { it.id })
+        assertEquals(1, out.single().items.size)
+    }
+
+    @Test fun aLinkToASectionThatPruningEmptiesIsLeftOutToo() {
+        // CodeRabbit on #303: "screen" holds only a link to a missing "radio", so it goes, and the Device page's link to it.
+        val screen = section("screen", SettingsItem.Link("Radio", "", section = "radio"))
+        val device = section("device", SettingsItem.Info({ "Model" }, { "x" }), SettingsItem.Group("More", listOf(SettingsItem.Link("Screen", "", section = "screen"))))
+        val out = settingsOrder(mapOf(SettingsPlace.SCREEN to screen, SettingsPlace.DEVICE to device), emptyList())
+        assertEquals(listOf("device"), out.map { it.id })
+        assertEquals("the group that held only that link goes too", listOf("Model"), out.single().items.map { (it as SettingsItem.Info).title() })
+    }
 }

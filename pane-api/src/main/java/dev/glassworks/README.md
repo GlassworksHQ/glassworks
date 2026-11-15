@@ -405,6 +405,9 @@ a few words, why the pane can't run now (the radio without its root helper): the
   them, or leaves them out on purpose). The core then ends the page with "In Home Assistant" for the
   other entities, or adds nothing when none is left, so no entity is listed twice. A page that leaves
   `covers` null gets nothing added.
+- Entities another page shows (the wall base's Aqara cloud is on the S1's Device page) go in the
+  definition's `shownElsewhere`: they are left out of the pane's own "In Home Assistant", with the pane on
+  or off.
 - While a pane's `switch` is off, its page is the switch's `offNote` (what being off means, in a
   sentence) and its entities, each `Unavailable`. Its own sections wait until it is on.
 - Without a running device, the page says so (`NOT_RUNNING`).

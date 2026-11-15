@@ -80,7 +80,7 @@ fun paneSections(
         own.isNotEmpty() -> {
             // The pane's entities no page covers, once, at the end of the first page that takes part.
             val covered = own.mapNotNull { it.covers }.flatten().toSet()
-            val rest = inHomeAssistant(pane) { it.objectId !in covered }
+            val rest = inHomeAssistant(pane) { it.objectId !in covered && it.objectId !in d.shownElsewhere }
             val first = own.indexOfFirst { it.covers != null }
             val card = blueprints(d.id)
             own.mapIndexed { i, s ->
@@ -93,7 +93,7 @@ fun paneSections(
         }
         choice != null -> listOf(SettingsSection(
             d.id, choice.title,
-            listOfNotNull(off?.let { s -> SettingsItem.Note { s.offNote } }, if (off == null) blueprints(d.id) else null, inHomeAssistant(pane, on = off == null))
+            listOfNotNull(off?.let { s -> SettingsItem.Note { s.offNote } }, if (off == null) blueprints(d.id) else null, inHomeAssistant(pane, on = off == null) { it.objectId !in d.shownElsewhere })
                 .ifEmpty { listOf(SettingsItem.Note { NOT_RUNNING }) },
             master = master, source = pane,
         ))
@@ -143,23 +143,30 @@ enum class SettingsPlace { DASHBOARD, SCREEN, DEVICE, NETWORK, PANES, LOG, SECUR
  */
 fun settingsOrder(core: Map<SettingsPlace, SettingsSection>, panes: List<SettingsSection>): List<SettingsSection> {
     val sections = SettingsPlace.entries.flatMap { p -> if (p == SettingsPlace.PANES) panes else listOfNotNull(core[p]) }
-    // A link to a section that isn't here (its pane can't run on this frame) would open nothing: left out.
-    val ids = sections.map { it.id }.toSet()
+    // A link to a section that isn't shown (its pane can't run on this frame, or it has no items) would
+    // open nothing: left out. Leaving one out can empty its section, and links to that go too, until
+    // nothing changes; each round only drops sections, so it ends.
+    var ids = sections.filter { it.items.isNotEmpty() }.map { it.id }.toSet()
+    while (true) {
+        val kept = sections.filter { it.id in ids }.map { pruned(it, ids) }.filter { it.items.isNotEmpty() }
+        val next = kept.map { it.id }.toSet()
+        if (next == ids) return kept
+        ids = next
+    }
+}
+
+/** [s] without links to sections outside [ids], nor the groups that leaves empty; [s] itself when it has none. */
+private fun pruned(s: SettingsSection, ids: Set<String>): SettingsSection {
+    fun dead(i: SettingsItem) = i is SettingsItem.Link && i.section != null && i.section !in ids
+    fun any(items: List<SettingsItem>): Boolean = items.any { dead(it) || (it is SettingsItem.Group && any(it.items)) }
     fun live(items: List<SettingsItem>): List<SettingsItem> = items.mapNotNull { i ->
         when {
-            i is SettingsItem.Link && i.section != null && i.section !in ids -> null
-            i is SettingsItem.Group -> SettingsItem.Group(i.title, live(i.items))
+            dead(i) -> null
+            i is SettingsItem.Group -> live(i.items).takeIf { it.isNotEmpty() }?.let { SettingsItem.Group(i.title, it) }
             else -> i
         }
     }
-    fun dead(items: List<SettingsItem>): Boolean = items.any { i ->
-        (i is SettingsItem.Link && i.section != null && i.section !in ids) || (i is SettingsItem.Group && dead(i.items))
-    }
-    return sections.map { s ->
-        if (!dead(s.items)) s
-        else SettingsSection(s.id, s.title, live(s.items), s.heading, s.master, s.status, s.unavailable, s.source, s.covers)
-    }
-        .filter { it.items.isNotEmpty() }
+    return if (!any(s.items)) s else SettingsSection(s.id, s.title, live(s.items), s.heading, s.master, s.status, s.unavailable, s.source, s.covers)
 }
 
 /**

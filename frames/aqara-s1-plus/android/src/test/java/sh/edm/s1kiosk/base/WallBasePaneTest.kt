@@ -73,6 +73,21 @@ class WallBasePaneTest {
         assertTrue("still in Home Assistant", pane.entities().map { it.objectId }.containsAll(WallBaseDefinition.CLOUD_ENTITIES))
     }
 
+    @Test fun theCloudStaysOffTheWallBasePageWhileThePaneIsOff() {
+        // CodeRabbit on #303: the off page listed every entity, the cloud's too.
+        val def = WallBaseDefinition(PanePrefs(app).paneFile("wall-base"))
+        val sw = def.switch!!
+        sw.on = false
+        try {
+            val names = dev.glassworks.pane.paneSections(listOf(def)) { pane }.single().items
+                .filterIsInstance<dev.glassworks.pane.SettingsItem.States>().flatMap { it.rows() }.map { it.name }
+            assertTrue("the base's own still listed: $names", "Base" in names)
+            assertTrue(names.toString(), "Block Aqara cloud" !in names && "Aqara cloud daemon" !in names)
+        } finally {
+            sw.on = sw.default
+        }
+    }
+
     @Test fun aNewLayoutAsksTheShellToRebuildWithItsEntities() {
         pane.baseListener.onLayout(twoChannels)
 

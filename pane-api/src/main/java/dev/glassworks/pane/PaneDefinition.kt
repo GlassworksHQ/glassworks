@@ -49,6 +49,12 @@ interface PaneDefinition {
      */
     fun settings(running: Pane?): List<SettingsSection> = settings()
 
+    /**
+     * Object ids of the pane's entities another settings page shows (the S1's Device page has the wall
+     * base's Aqara cloud): left out of this pane's "In Home Assistant", whether the pane is on or off.
+     */
+    val shownElsewhere: Set<String> get() = emptySet()
+
     /** Intent extras (`adb shell am start … --ez sendspin_flac false`) that change this pane's settings. Its [switch] has its own. */
     val extras: List<IntentExtra> get() = emptyList()
 }
