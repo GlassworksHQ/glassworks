@@ -1643,7 +1643,7 @@ files and never edited by hand:
 |---|---|
 | `report.md` | The report, as report.md is for any run (the site links to it on GitHub) |
 | `report.json` | The full report (`glassworks.perf/4`) |
-| `clarity.json` | The summary (`glassworks.perf-summary/2`), which the site grades with `grade.ts`; its `report` is report.md's GitHub URL |
+| `clarity.json` | The summary (`glassworks.perf-summary/3`), which the site grades with `grade.ts`; its `report` is report.md's GitHub URL |
 
 ```sh
 python3 tools/perf/report.py <run-dir> --keep-apk --out frames/<id>/clarity --app-version <label>
@@ -1755,12 +1755,17 @@ Frame statistics are defined once, in `tools/perf/page/stats.js` and `tools/perf
 
 ## Example: Aqara S1 Plus
 
-**Clarity v1: D** (s1rtc9, eb9c7af, 3 of 3 runs, protocol 1, rubric 1, the S1 Kiosk build before
-its first release (`pre-v1`), camera video over the LAN (`lan-udp`), 2026-11-14; not provisional):
-"a good wall panel for light dashboards. Held back by typical dashboards: the view takes 4.9 s to
-open." The published report is [frames/aqara-s1-plus/clarity/report.md](../frames/aqara-s1-plus/clarity/report.md),
-and its summary [clarity.json](../frames/aqara-s1-plus/clarity/clarity.json). The results below
-are pre-release (see [Versions](#versions)) and not comparable with it.
+**Clarity v2: D** (s1rtc10, 2de8ac20, 3 of 3 runs, protocol 2, rubric 2, the S1 Kiosk build before
+its first release (`pre-v1`), camera video over the LAN (`lan-udp`), measured 2026-11-15 UTC; not
+provisional): "a good wall panel for light dashboards. Held back by typical dashboards: the main
+thread is blocked for 2.9 s after the view is drawn." Typical opens in 1.2 s (drawn, good) and is
+usable at 5.1 s; the 2.9 s of blocking between them (poor, over 600 ms) is what stops it at fluid.
+Light blocks for 233 ms (needs improvement, which fluid accepts). A restart takes 14.3 s, which
+would cap it at C. The published report is
+[frames/aqara-s1-plus/clarity/report.md](../frames/aqara-s1-plus/clarity/report.md), and its
+summary [clarity.json](../frames/aqara-s1-plus/clarity/clarity.json). The S1's Clarity v1 run
+(s1rtc9, also a D) was held when rubric 2 was decided, and never published. The results below
+are earlier versions' (see [Versions](#versions)) and not comparable with it.
 
 **Protocol 5: D** (s1cam3, cbc2be6, 3 of 3 runs, rubric v6, S1 Kiosk 0.4.3, `thread_router`,
 2026-11-13; not provisional): protocol 4's views with live camera streams. Typical's 720p stream
