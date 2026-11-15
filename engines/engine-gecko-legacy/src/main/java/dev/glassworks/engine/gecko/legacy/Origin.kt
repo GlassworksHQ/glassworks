@@ -14,7 +14,9 @@ import java.util.Locale
  * An authority with a backslash, whitespace or a control character doesn't parse: a browser reads `\` as `/` and
  * drops tabs and newlines, so such a URL can go to another host than this reading says. A port is digits only.
  * A non-ASCII host is written in punycode (`ält.example.org` → `xn--lt-uia.example.org`), as Gecko writes it in the
- * URLs it reports: the app may load a Unicode URL, and Home Assistant's requests then arrive in punycode.
+ * URLs it reports: the app may load a Unicode URL, and Home Assistant's requests then arrive in punycode. A host
+ * with an IDNA deviation character (ß, ς, ZWNJ, ZWJ) doesn't parse: Android 6-7's IDN (IDNA 2003) maps `faß` to
+ * `fass`, Gecko (UTS 46, non-transitional) to `xn--fa-hia`, so the two would name different hosts.
  *
  * Plain string work, no java.net.URI: Home Assistant's URLs carry characters URI refuses, and a refused URL
  * must not open the lockdown either way. The same rules are in assets/lockdown/policy.js.
@@ -24,6 +26,7 @@ internal object Origin {
     private val asHttp = mapOf("ws" to "http", "wss" to "https")
     private val form = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*)://([^/?#]*)")
     private val badAuthority = Regex("[\\\\\\s\\x00-\\x1f\\x7f]")
+    private val deviation = Regex("[\\u00df\\u03c2\\u200c\\u200d]")
 
     fun of(url: String?): String? {
         val u = url?.trim() ?: return null
@@ -49,6 +52,7 @@ internal object Origin {
             port.all { it in '0'..'9' } -> port.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
             else -> return null
         }
+        if (deviation.containsMatchIn(host)) return null
         val ascii = if (host.all { it.code < 0x80 }) host else runCatching { IDN.toASCII(host, IDN.ALLOW_UNASSIGNED) }.getOrNull() ?: return null
         val h = ascii.lowercase(Locale.ROOT).trimEnd('.')
         return if (p == default.getValue(scheme)) "$scheme://$h" else "$scheme://$h:$p"

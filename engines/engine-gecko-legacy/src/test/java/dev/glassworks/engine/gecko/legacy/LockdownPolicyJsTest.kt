@@ -27,6 +27,15 @@ class LockdownPolicyJsTest {
         runCatching { ProcessBuilder(n, "--version").redirectErrorStream(true).start().waitFor(10, TimeUnit.SECONDS) }.getOrDefault(false)
     }
 
+    /**
+     * Origin.kt's reading of every URL in `lockdown/origin-cases.json`: policy.test.mjs checks policy.js reads each
+     * the same, so the origin the app sends the extension is the one the extension compares requests with.
+     */
+    private fun kotlinOrigins(): org.json.JSONObject {
+        val cases = org.json.JSONArray(File(module, "src/test/resources/lockdown/origin-cases.json").readText())
+        return org.json.JSONObject().also { o -> for (i in 0 until cases.length()) cases.getString(i).let { o.put(it, Origin.of(it) ?: org.json.JSONObject.NULL) } }
+    }
+
     @Test
     fun subresourcesLoadOnlyFromHomeAssistant() {
         val node = node()
@@ -36,7 +45,10 @@ class LockdownPolicyJsTest {
         }
         val p = ProcessBuilder(node, "--test", File(module, harness).path)
             .redirectErrorStream(true)
-            .apply { environment()["POLICY_JS"] = File(module, policyJs).path }
+            .apply {
+                environment()["POLICY_JS"] = File(module, policyJs).path
+                environment()["KOTLIN_ORIGINS"] = kotlinOrigins().toString()
+            }
             .start()
         val out = StringBuilder()
         val reader = Thread { p.inputStream.bufferedReader().forEachLine { out.appendLine(it) } }.apply { isDaemon = true; start() }

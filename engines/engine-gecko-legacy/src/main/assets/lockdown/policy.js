@@ -47,6 +47,8 @@ var LockdownPolicy = (function () {
       p = Number(port);
       if (p < 1 || p > 65535) return null;
     }
+    // IDNA deviation characters: Android's IDN and Gecko map them to different hosts (Origin.kt). Refused in both.
+    if (/[\u00df\u03c2\u200c\u200d]/.test(host)) return null;
     if (/[^\x00-\x7f]/.test(host)) {
       // Punycode, as Origin.kt and Gecko write it. Without a URL parser to do it, refuse (fails closed).
       if (typeof URL !== "function") return null;
