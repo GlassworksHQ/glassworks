@@ -328,7 +328,7 @@ jobs:
         if: steps.changed.outputs.run == 'true'
         run: |
           wake_words=$(tools/release/android-layout.sh file . src/main/java/dev/glassworks/voice/WakeWords.kt)
-          commit=$(sed -n 's/.*const val MODELS_COMMIT = "\([0-9a-f]\{40\}\)".*/\1/p' "$wake_words")
+          commit=$(sed -n 's/.*const val MODELS_COMMIT\(: String\)\{0,1\} = "\([0-9a-f]\{40\}\)".*/\2/p' "$wake_words")
           [ -n "$commit" ] || { echo "::error::no MODELS_COMMIT in WakeWords.kt"; exit 1; }
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
