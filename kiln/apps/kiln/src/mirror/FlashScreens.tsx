@@ -80,26 +80,19 @@ function FileStep({ n, title, check, select, want, children }: {
       <div className="grow">
         <span className="small">{n} · {title}</span>
         {children}
-        {check?.state === 'checking' && (
-          <div style={{ display: 'grid', gap: 6 }} role="status">
-            <span className="small">Checking {check.name} · {Math.floor(check.progress * 100)}%</span>
-            <div className="bar" role="progressbar" aria-label={`Checking ${check.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(check.progress * 100)}><i style={{ width: `${Math.max(2, check.progress * 100)}%` }} /></div>
-          </div>
-        )}
-        {check?.state === 'ok' && <span className="status ok">✓ {check.name} checks out ({fmtSize(check.size)}, SHA-256 as published).</span>}
-        {check?.state === 'bad' && <span className="status err" role="alert">{check.error}</span>}
+        <CheckLine check={check} />
       </div>
       <input ref={input} type="file" accept=".img,.sparse" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) select(f); e.target.value = ''; }} />
-      <button type="button" className="btn ghost" disabled={check?.state === 'checking'} onClick={pick}>Select the downloaded {want.name}</button>
+      <button type="button" className="btn ghost" disabled={check?.state === 'checking' || check?.state === 'downloading'} onClick={pick}>Select the downloaded {want.name}</button>
     </div>
   );
 }
 
-function Download({ want }: { want: { name: string; url: string; size: number } }) {
+function Download({ n, want }: { n: number; want: { name: string; url: string; size: number } }) {
   return (
     <div className="well">
       <div className="grow">
-        <span className="small">1 · Download the system image</span>
+        <span className="small">{n} · Download {want.name}</span>
         <span><code>{want.name}</code>, about {Math.round(want.size / 1e6)} MB, from the Glass Panes release on GitHub. Your browser saves it to Downloads.</span>
       </div>
       <a className="btn ghost" href={want.url} download={want.name} rel="noopener">Download {want.name}</a>
@@ -107,16 +100,47 @@ function Download({ want }: { want: { name: string; url: string; size: number } 
   );
 }
 
+/** Progress, the result, or the error of a file being downloaded or checked. */
+function CheckLine({ check }: { check?: FileCheck }) {
+  if (!check) return null;
+  if (check.state === 'downloading' || check.state === 'checking') {
+    const what = check.state === 'downloading' ? `Downloading and checking ${check.name}` : `Checking ${check.name}`;
+    return (
+      <div style={{ display: 'grid', gap: 6 }} role="status">
+        <span className="small">{what} · {Math.floor(check.progress * 100)}%</span>
+        <div className="bar" role="progressbar" aria-label={what} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(check.progress * 100)}><i style={{ width: `${Math.max(2, check.progress * 100)}%` }} /></div>
+      </div>
+    );
+  }
+  if (check.state === 'ok') return <span className="status ok">✓ {check.name} checks out ({fmtSize(check.size)}, SHA-256 as published).</span>;
+  return <span className="status err" role="alert">{check.error}</span>;
+}
+
 export function FlashImage({ f, s, m, ms }: P) {
   const blocked = f.blocked();
+  const want = GLASS_PANES.system;
+  const busy = s.image?.state === 'downloading' || s.image?.state === 'checking';
+  const ready = s.image?.state === 'ok';
   return (
     <section className="card" aria-labelledby="h">
       <div className="row"><span className="pill soon">Test only</span></div>
       <h2 id="h">Install Glassworks on the Mirror.</h2>
-      <p className="lede">Kiln adds S1 Kiosk to the Mirror&apos;s community Android image in this browser, then writes it over USB. Nothing is uploaded.</p>
-      <Download want={GLASS_PANES.system} />
+      <p className="lede">Kiln adds S1 Kiosk to the Mirror&apos;s community Android image in this browser, then writes it over USB.</p>
+      <div className="well">
+        <div className="grow">
+          <span className="small">1 · The system image</span>
+          <span><code>{want.name}</code>, about {Math.round(want.size / 1e6)} MB, from the Glass Panes release. Kiln downloads it into this browser and checks it as it arrives.</span>
+          <CheckLine check={s.image} />
+        </div>
+      </div>
       <GlassPanesCredit />
-      <FileStep n={2} title="Select the downloaded image" check={s.image} select={(file) => void f.selectImage(file)} want={GLASS_PANES.system} />
+      {s.proxyFailed && !ready && (
+        <>
+          <p className="status err" role="alert">Kiln couldn&apos;t download it directly: {s.proxyFailed}. Download it yourself, then select it.</p>
+          <Download n={2} want={want} />
+          <FileStep n={3} title="Select the downloaded image" check={s.image?.state === 'downloading' ? undefined : s.image} select={(file) => void f.selectImage(file)} want={want} />
+        </>
+      )}
       <div className="fields">
         <label className="field"><span>S1 Kiosk APK (test build)</span>
           <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
@@ -133,12 +157,14 @@ export function FlashImage({ f, s, m, ms }: P) {
         </label>
       </div>
       {ms.apk && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
-      {blocked && s.image?.state === 'ok' && <p className="status err" role="alert">{blocked}</p>}
+      {blocked && ready && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
         <span className="links">
           <button type="button" className="link" onClick={() => f.wayBack(true)}>Way back: the Glass Panes image</button>
         </span>
-        <button type="button" className="btn ember" disabled={!!blocked} onClick={() => f.toFastboot()}>Continue</button>
+        {ready || s.proxyFailed
+          ? <button type="button" className="btn ember" disabled={!!blocked} onClick={() => f.toFastboot()}>Continue</button>
+          : <button type="button" className="btn ember" disabled={busy} onClick={() => void f.downloadImage()}>Download the system image</button>}
       </div>
     </section>
   );
@@ -151,7 +177,7 @@ export function FlashBack({ f, s }: P) {
       <div className="row"><span className="pill soon">Test only</span></div>
       <h2 id="h">Put the Glass Panes image back.</h2>
       <p className="lede">The way back from Glassworks: the community image as its release has it, with a fresh start. It doesn&apos;t bring lululemon&apos;s software back.</p>
-      <Download want={GLASS_PANES.system} />
+      <Download n={1} want={GLASS_PANES.system} />
       <FileStep n={2} title="Select the downloaded system.img" check={s.image} select={(file) => void f.selectImage(file)} want={GLASS_PANES.system} />
       <FileStep n={3} title="Download and select userdata.sparse" check={s.userdataFile} select={(file) => void f.selectUserdata(file)} want={GLASS_PANES_USERDATA}>
         <a className="link" href={GLASS_PANES_USERDATA.url} download={GLASS_PANES_USERDATA.name}>Download {GLASS_PANES_USERDATA.name}</a>

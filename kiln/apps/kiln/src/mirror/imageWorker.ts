@@ -2,10 +2,10 @@
 // and writes over a gigabyte without holding it in memory. Everything stays in this browser's private
 // storage (folder `kiln-mirror`) and is deleted once flashed or when the page discards it.
 import { syncHandleStore, type SyncHandle } from '@glassworks/ext4';
-import { WrongImage, buildImages, loadSystem, type Loaded } from '@glassworks/lululemon-mirror-installer';
+import { GLASS_PANES, ProxyError, WrongImage, buildImages, loadSystem, resumableBody, type Loaded } from '@glassworks/lululemon-mirror-installer';
 
 interface Handle extends SyncHandle { truncate(n: number): void; flush(): void; close(): void }
-type In = { id: number; op: 'load'; file: Blob } | { id: number; op: 'build'; apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number } | { id: number; op: 'discard' };
+type In = { id: number; op: 'load'; file: Blob } | { id: number; op: 'fetch'; url: string } | { id: number; op: 'build'; apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number } | { id: number; op: 'discard' };
 
 const DIR = 'kiln-mirror';
 let loaded: Loaded | undefined;
@@ -29,9 +29,10 @@ const post = (m: object) => (self as unknown as Worker).postMessage(m);
 self.onmessage = async (e: MessageEvent<In>) => {
   const m = e.data;
   try {
-    if (m.op === 'load') {
+    if (m.op === 'load' || m.op === 'fetch') {
       const raw = await fresh('system.raw');
-      loaded = await loadSystem(m.file, syncHandleStore(raw), (x) => post({ id: m.id, progress: x }));
+      const source = m.op === 'load' ? m.file : resumableBody(m.url, GLASS_PANES.system.size);
+      loaded = await loadSystem(source, syncHandleStore(raw), (x) => post({ id: m.id, progress: x }));
       post({ id: m.id, done: true });
     } else if (m.op === 'build') {
       if (!loaded) throw new Error('select the system image first');
@@ -50,6 +51,6 @@ self.onmessage = async (e: MessageEvent<In>) => {
       post({ id: m.id, done: true });
     }
   } catch (err) {
-    post({ id: m.id, error: (err as Error).message, wrong: err instanceof WrongImage });
+    post({ id: m.id, error: (err as Error).message, wrong: err instanceof WrongImage, proxy: err instanceof ProxyError });
   }
 };

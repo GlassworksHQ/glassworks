@@ -50,7 +50,7 @@ describe('the switch', () => {
     render(<MirrorWizard />);
     await screen.findByText('Install Glassworks on the Mirror.');
     expect(screen.getByText('Test only')).toBeTruthy();
-    expect(embers()).toEqual(['Continue']);
+    expect(embers()).toEqual(['Download the system image']);
   });
 
   it('with &mode=app, the app alone over adb, its APK from this computer, labelled test only', async () => {

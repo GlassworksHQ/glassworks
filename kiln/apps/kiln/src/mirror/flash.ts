@@ -4,7 +4,7 @@
 // this browser's own key. Test only, behind ?apk=local, like the rest of the Mirror's page.
 import type { PanelShell } from '@glassworks/adb';
 import {
-  GLASS_PANES, GLASS_PANES_USERDATA, WrongImage, checkDownload, checkFastboot, firstBoot, flashImages,
+  GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, WrongImage, checkDownload, checkFastboot, firstBoot, flashImages,
   type FastbootLike, type FastbootReport, type FirstBoot, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -12,6 +12,8 @@ import {
 export interface ImageMaker {
   /** Reads and checks the person's system.img (size, then SHA-256 as it reads). Throws WrongImage. */
   load(file: Blob, onProgress: (x: number) => void): Promise<void>;
+  /** The same from Kiln's release proxy, resuming with Range. Throws ProxyError when the proxy can't serve it. */
+  fetch(url: string, onProgress: (x: number) => void): Promise<void>;
   build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
   /** Deletes what it kept (the image, the built copies). */
@@ -20,6 +22,8 @@ export interface ImageMaker {
 
 export interface FlashDeps {
   images: ImageMaker;
+  /** system.img on Kiln's release proxy (IMAGE_PROXY); none: the person downloads and selects it. */
+  imageUrl?: string;
   /** The browser's device list for the Mirror's fastboot, inside the click. */
   requestFastboot(): Promise<FastbootLike>;
   /** The browser's device list for the Mirror's adb after the first boot, inside the click. */
@@ -36,13 +40,15 @@ export interface FlashDeps {
 export type FlashScreen = 'image' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'back' | 'error';
 export type WorkStep = PrepareStep | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot';
 
-export interface FileCheck { name: string; size: number; state: 'checking' | 'ok' | 'bad'; progress: number; error?: string }
+export interface FileCheck { name: string; size: number; state: 'downloading' | 'checking' | 'ok' | 'bad'; progress: number; error?: string }
 
 export interface FlashState {
   screen: FlashScreen;
   /** the way back: put the plain Glass Panes images back */
   back: boolean;
   image?: FileCheck;
+  /** Why the one-button download didn't work: the screen then offers download-and-select. */
+  proxyFailed?: string;
   userdataFile?: FileCheck;
   haUrl: string;
   wifi: { ssid: string; password: string };
@@ -78,6 +84,32 @@ export class FlashSession {
   wayBack(back: boolean) {
     this.files = {};
     this.set({ back, screen: back ? 'back' : 'image', image: undefined, userdataFile: undefined, fastboot: undefined, understood: false, error: undefined });
+  }
+
+  /**
+   * One button: system.img from Kiln's release proxy straight into the worker, checked as it
+   * arrives. When the proxy can't serve it, the screen falls back to download-and-select.
+   */
+  async downloadImage(): Promise<void> {
+    const want = GLASS_PANES.system;
+    if (!this.d.imageUrl) { this.set({ proxyFailed: 'Kiln has no download proxy here' }); return; }
+    const pick = ++this.picks;
+    this.files.system = undefined;
+    const at = (state: FileCheck['state'], progress: number, error?: string) =>
+      this.set({ image: { name: want.name, size: want.size, state, progress, ...(error ? { error } : {}) } });
+    this.set({ proxyFailed: undefined });
+    at('downloading', 0);
+    try {
+      await this.d.images.fetch(this.d.imageUrl, (x) => { if (pick === this.picks) at('downloading', x); });
+      if (pick !== this.picks) return;
+      at('ok', 1);
+      this.log('', `${want.name} downloaded through the proxy and checked`);
+    } catch (e) {
+      if (pick !== this.picks) return;
+      const why = e instanceof ProxyError || e instanceof WrongImage ? (e as Error).message : `the download stopped (${(e as Error).message})`;
+      this.log('', `proxy download failed: ${why}`);
+      this.set({ image: undefined, proxyFailed: why });
+    }
   }
 
   /** The person's system.img: checked (and, for the install, read into the worker) right away. Only the latest pick counts. */

@@ -5,6 +5,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { ACT, PKG, Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
+import { ProxyError } from './download';
 import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
 import type { Check } from './recipe';
 
@@ -62,11 +63,12 @@ export type PrepareStep = 'check' | 'patch' | 'system' | 'userdata';
 export interface Loaded { disk: Disk; sha256: string }
 
 /**
- * Reads the person's `system.img` into `store`, hashing every byte on the way, and refuses it unless
- * it is the Glass Panes one: the size first (instant), then the SHA-256 (as it is read). `store`
- * should read unwritten bytes as zeros (a new OPFS file).
+ * Reads `system.img` into `store`, hashing every byte on the way, and refuses it unless it is the
+ * Glass Panes one: the size first (instant), then the SHA-256 (as it is read). `file` is the person's
+ * file, or the proxy's resumable stream (resumableBody), whose failures come through as ProxyError.
+ * `store` should read unwritten bytes as zeros (a new OPFS file).
  */
-export async function loadSystem(file: Blob, store: Store, onProgress: (x: number) => void = () => {},
+export async function loadSystem(file: { size: number; stream(): ReadableStream<Uint8Array> }, store: Store, onProgress: (x: number) => void = () => {},
   want: { name: string; size: number; sha256: string } = GLASS_PANES.system): Promise<Loaded> {
   const again = `Download ${want.name} again from the Glass Panes release, then select the new file.`;
   if (file.size !== want.size) throw new WrongImage(`This file is ${file.size.toLocaleString('en')} bytes; the Glass Panes ${want.name} is ${want.size.toLocaleString('en')}. It's another file, or the download stopped early. ${again}`);
@@ -76,6 +78,7 @@ export async function loadSystem(file: Blob, store: Store, onProgress: (x: numbe
     ({ disk: loaded } = await readSparse(file.stream(), (h) => new Disk(store, h.blockSize, h.blocks, { zeroed: true }),
       { onBytes: (b) => sha.update(b), onProgress: (n) => onProgress(n / file.size) }));
   } catch (e) {
+    if (e instanceof ProxyError) throw e;
     throw new WrongImage(`This file isn't a readable ${want.name} (${(e as Error).message}). ${again}`);
   }
   const sha256 = hex(sha.digest());

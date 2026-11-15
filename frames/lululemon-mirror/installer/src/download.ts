@@ -1,0 +1,83 @@
+// The system image straight from our release proxy (a Cloudflare Worker: allowlisted files only,
+// CORS for Kiln, Range, nothing stored; maintainer, 2026-11-15) into the image loader, as one stream.
+// A dropped connection resumes with Range where it stopped, so nothing is read twice. When the proxy
+// can't serve the file (a network error that keeps coming back, a 5xx, a wrong size), Kiln falls
+// back to the person downloading it from GitHub and selecting it.
+
+/** Where Kiln's release proxy answers, and the image's id there. The tests point it at a fake. */
+export const IMAGE_PROXY = {
+  base: 'https://dl.glassworks.dev',
+  systemImg: 'glass-panes/mirror-android-1/system.img',
+} as const;
+
+/** The proxy couldn't give us the file: fall back to download-and-select. */
+export class ProxyError extends Error {}
+/** An answer that retrying won't change (a refusal, a wrong size): fall back at once. */
+class Refused extends ProxyError {}
+
+export interface ResumeOptions {
+  fetch?: typeof fetch;
+  /** Reconnects after a dropped connection before giving up; default 5. */
+  retries?: number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** The file at `url`, `size` bytes, as a stream that resumes with Range. Shaped like a Blob for loadSystem. */
+export function resumableBody(url: string, size: number, o: ResumeOptions = {}): { size: number; stream(): ReadableStream<Uint8Array> } {
+  const f = o.fetch ?? fetch.bind(globalThis);
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const retries = o.retries ?? 5;
+  return {
+    size,
+    stream() {
+      let got = 0, tries = 0;
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      const open = async () => {
+        let r: Response;
+        try {
+          r = await f(url, { headers: got ? { Range: `bytes=${got}-` } : {}, cache: 'no-store' });
+        } catch (e) {
+          throw new ProxyError(`the download proxy can't be reached (${(e as Error).message})`);
+        }
+        if (r.status >= 500) throw new Refused(`the download proxy answered ${r.status}${await reason(r)}`);
+        if (got === 0) {
+          if (r.status !== 200) throw new Refused(`the download proxy answered ${r.status}${await reason(r)}`);
+          const len = Number(r.headers.get('content-length') ?? NaN);
+          if (Number.isFinite(len) && len !== size) throw new Refused(`the download proxy offers ${len} bytes, not the image's ${size}`);
+        } else {
+          const m = /^bytes (\d+)-\d+\/(\d+)$/.exec(r.headers.get('content-range') ?? '');
+          if (r.status !== 206 || !m || Number(m[1]) !== got || Number(m[2]) !== size) throw new Refused(`the download proxy can't resume at byte ${got} (${r.status})`);
+        }
+        if (!r.body) throw new Refused('the download proxy sent no body');
+        reader = r.body.getReader();
+      };
+      return new ReadableStream<Uint8Array>({
+        async pull(c) {
+          for (;;) {
+            try {
+              if (!reader) await open();
+              const { done, value } = await reader!.read();
+              if (done) {
+                if (got === size) { c.close(); return; }
+                throw new ProxyError(`the connection closed at byte ${got} of ${size}`);
+              }
+              got += value.length;
+              if (got > size) throw new Refused(`the download proxy sent more than the image's ${size} bytes`);
+              c.enqueue(value);
+              return;
+            } catch (e) {
+              reader = undefined;
+              if (e instanceof Refused || ++tries > retries) { c.error(e instanceof ProxyError ? e : new ProxyError((e as Error).message)); return; }
+              await sleep(1000 * tries);
+            }
+          }
+        },
+        cancel() { void reader?.cancel(); },
+      });
+    },
+  };
+}
+
+async function reason(r: Response): Promise<string> {
+  try { const t = (await r.text()).trim().split('\n')[0]?.slice(0, 200); return t ? `: ${t}` : ''; } catch { return ''; }
+}

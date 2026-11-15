@@ -10,3 +10,4 @@ export {
 
 /** The outside work each step stands on (kiln-core StepCredits; ids in frame.json `credits`): the Mirror's Android is Glass Panes. */
 export const credits = { image: ['glass-panes-image'] };
+export { IMAGE_PROXY, ProxyError, resumableBody, type ResumeOptions } from './download';

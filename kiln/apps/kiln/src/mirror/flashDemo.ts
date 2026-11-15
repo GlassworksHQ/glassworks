@@ -2,12 +2,12 @@
 // simulated Mirror, so each screen can be seen and captured without one. The images aren't built (a
 // stand-in reports progress); the fastboot and first-boot answers are the recipe's fakes.
 import { fakeApk } from '@glassworks/app-adb/fakes';
-import { SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
-export const FLASH_DEMOS = ['flash-image', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-done', 'flash-error', 'flash-back', 'flash-run'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
@@ -18,6 +18,11 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
       if (name === 'flash-checking') { onProgress(0.42); return new Promise(() => {}); }
       for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
       if (file.size === 1234) throw new WrongImage('This file is 1,234 bytes; the Glass Panes system.img is 850,905,808. It\'s another file, or the download stopped early. Download system.img again from the Glass Panes release, then select the new file.');
+    },
+    async fetch(_, onProgress) {
+      if (name === 'flash-downloading') { onProgress(0.42); return new Promise(() => {}); }
+      if (['flash-proxy-failed', 'flash-checking', 'flash-wrong'].includes(name)) { await tick(200); throw new ProxyError('the download proxy answered 502: GitHub answered 503'); }
+      for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
     },
     async build(_, onProgress) {
       for (const step of ['patch', 'system', 'userdata'] as const) {
@@ -42,6 +47,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); } }, true);
   const flash = new FlashSession({
     images,
+    imageUrl: 'https://dl.glassworks.dev/glass-panes/mirror-android-1/system.img',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x60000000 : SYSTEM_BYTES),
     requestAdb: async () => new FirstBootMirror(),
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
@@ -51,12 +57,15 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   const image = Object.assign(new Blob([new Uint8Array(name === 'flash-wrong' ? 1234 : 16)]), { name: 'system.img' });
   if (name === 'flash-image' || name === 'flash-run') return { flash, mirror };
   if (name === 'flash-back') { flash.wayBack(true); return { flash, mirror }; }
+  if (name === 'flash-downloading') { void flash.downloadImage(); return { flash, mirror }; }
+  await flash.downloadImage(); // through the proxy; these three fall back to download-and-select
+  if (name === 'flash-proxy-failed') return { flash, mirror };
   if (name === 'flash-checking') { void flash.selectImage(image); return { flash, mirror }; }
   await mirror.pickApk('kiosk-legacy-debug.apk', fakeApk('sh.edm.s1kiosk'));
   flash.setHaUrl('http://homeassistant.local:8123');
   flash.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' });
-  await flash.selectImage(image);
-  if (name === 'flash-wrong' || name === 'flash-ready') return { flash, mirror };
+  if (name === 'flash-wrong') { await flash.selectImage(image); return { flash, mirror }; }
+  if (name === 'flash-ready') return { flash, mirror };
   flash.toFastboot();
   if (name === 'flash-fastboot') return { flash, mirror };
   await flash.connectFastboot();
