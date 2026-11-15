@@ -206,6 +206,12 @@ Test builds sign with a key made for each run ([generic-test-build.yml](../../.g
 
 "Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).
 
+## Tests
+
+The app's unit tests are `GenericAppTest` (`:generic-android`). The core it builds on runs on emulators at
+API 26, 29 and 34 in CI: `CoreConformanceTest` boots the core with a fake frame
+([core-emulators.yml](../../.github/workflows/core-emulators.yml)).
+
 ## Research notes
 
 None yet. A note about this device goes in `research/` ([how](../../docs/research/README.md#the-research-notes)).
