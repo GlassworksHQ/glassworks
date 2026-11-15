@@ -19,24 +19,8 @@ val s1VersionCode: Int? = s1Version?.let { v ->
 val s1TestBuild: String = ((findProperty("s1TestBuild") as String?) ?: System.getenv("S1_TEST_BUILD")).orEmpty().trim()
     .also { if (!Regex("^[0-9a-f]{0,40}$").matches(it)) throw GradleException("S1_TEST_BUILD '$it' must be a commit hash") }
 
-// The ABI this APK is built for: -Ps1Abi=arm64-v8a or S1_ABI. Unset: the S1's. One APK per ABI, because
-// each per-ABI GeckoView AAR carries its own classes.jar and omni.ja, so two cannot share a classpath
-// (docs/releasing.md "ABIs"). Every ABI's APK has the same versionCode. Each frame declares the ABIs its
-// device runs (`abis` in frames/<id>/design/frame.json), and the release builds them all (#98).
-val frameAbis: Map<String, List<String>> = rootProject.layout.projectDirectory.dir("frames").asFile.listFiles().orEmpty()
-    .map { File(it, "design/frame.json") }.filter { it.isFile }.sortedBy { it.parentFile.parentFile.name }
-    .associate { f ->
-        val abis = ((groovy.json.JsonSlurper().parse(f) as? Map<*, *>)?.get("abis") as? List<*>)
-            ?.takeIf { it.isNotEmpty() && it.all { a -> a is String } }
-            ?: throw GradleException("$f: abis must be a non-empty list of ABI names, e.g. [\"armeabi-v7a\"]")
-        f.parentFile.parentFile.name to abis.map { it as String }
-    }
-val releaseAbis = frameAbis.values.flatten().distinct()
-    .ifEmpty { throw GradleException("no frame declares abis (frames/*/design/frame.json)") }
-val s1Abi: String = ((findProperty("s1Abi") as String?) ?: System.getenv("S1_ABI"))
-    ?.trim()?.takeIf { it.isNotEmpty() }
-    ?: frameAbis["aqara-s1-plus"]?.first() ?: throw GradleException("frames/aqara-s1-plus/design/frame.json is missing")
-if (s1Abi !in releaseAbis) throw GradleException("s1Abi '$s1Abi' must be one of ${releaseAbis.joinToString()}")
+// The ABI this APK is built for (-Ps1Abi or S1_ABI; the root build.gradle.kts picks it for every module).
+val s1Abi: String by rootProject.extra
 
 // Release signing comes only from the environment (CI secrets or a local shell; docs/releasing.md).
 // Nothing set: the release APK is unsigned (never signed with the debug key). Partly set, or
@@ -113,12 +97,6 @@ android {
 }
 
 dependencies {
-    implementation("org.mozilla.geckoview:geckoview-$s1Abi:159.0.20261102144711") {
-        // Proprietary Google Play services (play-services-fido/-base/-basement/-tasks), used only for
-        // WebAuthn/passkeys. The panel has no Play services, so they could never run; excluding them
-        // keeps the APK free software (as Firefox's F-Droid builds do). HA's login doesn't use WebAuthn.
-        exclude(group = "com.google.android.gms")
-    }
     // Voice assistant: wake word inference, microWakeWord and the legacy openWakeWord (ships every ABI;
     // abiFilters keeps the one built, minSdk 19).
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
@@ -126,6 +104,7 @@ dependencies {
     // Sendspin's encryption also uses.
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
+    implementation(project(":engine-gecko"))
     implementation(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy")) // the Bluetooth proxy pane's engine (#121)

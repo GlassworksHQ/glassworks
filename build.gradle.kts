@@ -9,6 +9,26 @@ plugins {
     id("org.jetbrains.kotlin.jvm") version "2.4.20" apply false
 }
 
+// The ABI this APK is built for: -Ps1Abi=arm64-v8a or S1_ABI. Unset: the S1's. One APK per ABI, because
+// each per-ABI GeckoView AAR carries its own classes.jar and omni.ja, so two cannot share a classpath
+// (docs/releasing.md "ABIs"). Every ABI's APK has the same versionCode. Each frame declares the ABIs its
+// device runs (`abis` in frames/<id>/design/frame.json), and the release builds them all (#98).
+val frameAbis: Map<String, List<String>> = layout.projectDirectory.dir("frames").asFile.listFiles().orEmpty()
+    .map { File(it, "design/frame.json") }.filter { it.isFile }.sortedBy { it.parentFile.parentFile.name }
+    .associate { f ->
+        val abis = ((groovy.json.JsonSlurper().parse(f) as? Map<*, *>)?.get("abis") as? List<*>)
+            ?.takeIf { it.isNotEmpty() && it.all { a -> a is String } }
+            ?: throw GradleException("$f: abis must be a non-empty list of ABI names, e.g. [\"armeabi-v7a\"]")
+        f.parentFile.parentFile.name to abis.map { it as String }
+    }
+val releaseAbis = frameAbis.values.flatten().distinct()
+    .ifEmpty { throw GradleException("no frame declares abis (frames/*/design/frame.json)") }
+val s1Abi: String = ((findProperty("s1Abi") as String?) ?: System.getenv("S1_ABI"))
+    ?.trim()?.takeIf { it.isNotEmpty() }
+    ?: frameAbis["aqara-s1-plus"]?.first() ?: throw GradleException("frames/aqara-s1-plus/design/frame.json is missing")
+if (s1Abi !in releaseAbis) throw GradleException("s1Abi '$s1Abi' must be one of ${releaseAbis.joinToString()}")
+extra["s1Abi"] = s1Abi
+
 // The test settings of every Glassworks module (not the libraries in libs/, which test on their own):
 // -Ps1MockupDir writes the *Mockups PNGs (a module without mockups then runs none, not fails), and
 // -Ps1RegenGolden=true rewrites the pin tests' goldens. The repo files the tests read are inputs (#21).
