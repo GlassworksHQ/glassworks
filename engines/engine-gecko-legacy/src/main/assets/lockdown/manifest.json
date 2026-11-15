@@ -1,0 +1,23 @@
+{
+  "manifest_version": 2,
+  "name": "Glassworks lockdown",
+  "version": "1.0",
+  "description": "The legacy engine's lockdown: a page loads only from the panel's Home Assistant, and says what it blocked.",
+  "browser_specific_settings": {
+    "gecko": { "id": "lockdown@glassworks.dev" }
+  },
+  "permissions": [
+    "nativeMessaging", "geckoViewAddons", "webRequest", "webRequestBlocking",
+    "http://*/*", "https://*/*", "ws://*/*", "wss://*/*"
+  ],
+  "background": { "scripts": ["policy.js", "background.js"] },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["note.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": ["blocked.html", "blocked.js", "note.css"]
+}

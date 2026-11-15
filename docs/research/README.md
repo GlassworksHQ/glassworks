@@ -228,6 +228,7 @@ This page is the index of every note. Notes about one device live with its frame
 | [onvif-rtsp.md](onvif-rtsp.md) | What HA's ONVIF integration and UniFi Protect need from a camera, the libraries weighed, the maintainer's tested RTSP and ONVIF server that Glassworks ports, and HA's pull loop on a refused sign-in, with a lab to rerun it (#117) |
 | [kiln-gpl-code.md](kiln-gpl-code.md) | Which code in Kiln's MIT page comes from GPL projects: sunxi-tools in `kiln/packages/fel`, Magisk in `kiln/packages/bootpatch`, checked word by word and against the live site, with the options (open, a maintainer decision) |
 | [pane-blueprints.md](pane-blueprints.md) | How a pane's blueprints reach Home Assistant without the panel writing to it: HA's admin-only blueprint API, the import and list links, the name an import gets, and HA's own check of the four blueprints, with a script to rerun it |
+| [legacy-engine.md](legacy-engine.md) | The frozen GeckoView 144 on Android 6–7 (API 23–25): what runs, the API diff against 159, APK size per ABI, and the lockdown to the panel's Home Assistant, verified on emulators (#198) |
 
 ### Aqara S1 Plus ([`frames/aqara-s1-plus/`](../../frames/aqara-s1-plus/README.md#research-notes))
 

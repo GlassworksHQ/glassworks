@@ -565,7 +565,8 @@ and calls `load`, `reload`, `goBack`, `restart` and `post`. The page reports to 
 | `onConnect(port)`, `onPortMessage(port, message)` | A page script opened a native port, or sent a JSON object on one. `PagePort` has the page's `url` and `topLevel`. |
 
 `engine.isContentProcess(name)` says whether one of the app's processes is a web content process.
-The diagnostics pane counts them. For GeckoView these are the `:sandboxed_tab…` processes.
+The diagnostics pane counts them. For GeckoView these are the `:sandboxed_tab…` processes (`:tab<n>` on
+Android 6 and 7).
 
 It is a kiosk engine. It allows every page permission without a prompt and grants the microphone and
 the camera. It reads `EngineSettings` (secure-context hosts, zoom, remote debugging) once, at the
@@ -577,6 +578,24 @@ GeckoView allows one runtime per process, so the app makes the one engine (the S
 hands it to the `GlassworksRuntime` it runs, which holds it.
 `EngineConfinementTest` fails `./gradlew test` if code outside `dev.glassworks.engine.gecko` names
 `org.mozilla.gecko`.
+
+### The legacy engine
+
+Android 6 and 7 (API 23–25) can't run current GeckoView, so they get a frozen one: GeckoView 144, in
+`engines/engine-gecko-legacy` (#198). It compiles engine-gecko's `GeckoEngine.kt` unchanged, so the
+`Engine` API, the extension and every `PageHost` call are the same. Its `GeckoVariant` adds a
+`PageGuard`, and the current engine has none. A frozen engine gets no security fixes, so the guard
+holds the page to one origin: the one the app loads with `page.load(url)`.
+
+| What the page tries | Legacy engine |
+|---|---|
+| A page, iframe, image, fetch or WebSocket from the dashboard's origin | Loads |
+| The same from another origin (map tiles, web cards, cross-origin iframes) | Refused, with a note at the bottom of the page |
+| A new window (`window.open`, `target=_blank`) or a download | Refused, with a note |
+| Anything, before the lockdown extension is up | Waits; if the extension can't start, nothing loads |
+
+A pane that needs another origin in the page doesn't work on the legacy engine. The research and the
+emulator runs are in [legacy-engine.md](../../../../../../docs/research/legacy-engine.md).
 
 ## Threads
 
