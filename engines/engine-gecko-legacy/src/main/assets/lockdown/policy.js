@@ -47,6 +47,11 @@ var LockdownPolicy = (function () {
       p = Number(port);
       if (p < 1 || p > 65535) return null;
     }
+    if (/[^\x00-\x7f]/.test(host)) {
+      // Punycode, as Origin.kt and Gecko write it. Without a URL parser to do it, refuse (fails closed).
+      if (typeof URL !== "function") return null;
+      try { host = new URL(`http://${host}/`).hostname; } catch (e) { return null; }
+    }
     host = host.toLowerCase().replace(/\.+$/, "");
     return p === DEFAULT_PORT[scheme] ? `${scheme}://${host}` : `${scheme}://${host}:${p}`;
   }

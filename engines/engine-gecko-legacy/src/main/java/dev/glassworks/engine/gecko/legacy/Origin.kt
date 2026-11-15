@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.gecko.legacy
 
+import java.net.IDN
 import java.util.Locale
 
 /**
@@ -12,6 +13,8 @@ import java.util.Locale
  * anything without a network origin (`about:`, `data:`, `moz-extension:`, `javascript:`) or that doesn't parse.
  * An authority with a backslash, whitespace or a control character doesn't parse: a browser reads `\` as `/` and
  * drops tabs and newlines, so such a URL can go to another host than this reading says. A port is digits only.
+ * A non-ASCII host is written in punycode (`ält.example.org` → `xn--lt-uia.example.org`), as Gecko writes it in the
+ * URLs it reports: the app may load a Unicode URL, and Home Assistant's requests then arrive in punycode.
  *
  * Plain string work, no java.net.URI: Home Assistant's URLs carry characters URI refuses, and a refused URL
  * must not open the lockdown either way. The same rules are in assets/lockdown/policy.js.
@@ -46,7 +49,8 @@ internal object Origin {
             port.all { it in '0'..'9' } -> port.toIntOrNull()?.takeIf { it in 1..65535 } ?: return null
             else -> return null
         }
-        val h = host.lowercase(Locale.ROOT).trimEnd('.')
+        val ascii = if (host.all { it.code < 0x80 }) host else runCatching { IDN.toASCII(host, IDN.ALLOW_UNASSIGNED) }.getOrNull() ?: return null
+        val h = ascii.lowercase(Locale.ROOT).trimEnd('.')
         return if (p == default.getValue(scheme)) "$scheme://$h" else "$scheme://$h:$p"
     }
 
