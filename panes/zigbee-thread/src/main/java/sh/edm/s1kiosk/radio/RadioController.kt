@@ -244,17 +244,18 @@ class RadioController(
             ?.let { ThreadRouterState.parse(it.detail) }
         var s = if (helper) helperStatusText(raw, allowed) else status
         if (s.length > 250) s = s.take(249) + "…" // ESPHome text sensors are capped at 255 bytes
-        handOff?.let { h ->
+        handOff.get()?.let { h ->
             val taken = filesDir == null || !File(filesDir, RadioHelper.DATASET_FILE).exists()
             val late = clock() - h.at > HANDOFF_MS
-            handOff = when {
+            // Only the record looked at: a dataset handed over meanwhile (any thread) stays pending.
+            handOff.compareAndSet(h, when {
                 // Until the helper takes the file, any status is still the old network's: it's the new baseline.
                 !taken -> h.copy(status = s, lost = late)
                 // Taken after all: wait for its answer as for any take.
                 h.lost -> h.copy(at = clock(), lost = false)
                 s != h.status || late -> null
                 else -> h
-            }
+            })
         }
         val h = helperText().let { if (it.length > 250) it.take(249) + "…" else it }
         val fw = firmware.statusText().let { if (it.length > 250) it.take(249) + "…" else it }
@@ -297,7 +298,7 @@ class RadioController(
         NOT_TAKEN,
     }
 
-    fun threadHandOff(): ThreadHandOff = handOff.let {
+    fun threadHandOff(): ThreadHandOff = handOff.get().let {
         when {
             it == null -> ThreadHandOff.ANSWERED
             it.lost -> ThreadHandOff.NOT_TAKEN
@@ -306,7 +307,7 @@ class RadioController(
     }
 
     private data class HandOff(val status: String, val at: Long, val lost: Boolean = false)
-    @Volatile private var handOff: HandOff? = null
+    private val handOff = java.util.concurrent.atomic.AtomicReference<HandOff?>()
 
     /** Helper installed and its contract version, as of the last [refresh] (for the UI thread: no getprop). */
     fun helperShown(): HelperFacts = helperFactsShown
@@ -445,7 +446,7 @@ class RadioController(
             tmp.setReadable(false, false); tmp.setReadable(true, true)
             tmp.setWritable(false, false); tmp.setWritable(true, true)
             if (!tmp.renameTo(f)) throw java.io.IOException("rename failed")
-            handOff = HandOff(shown, clock())
+            handOff.set(HandOff(shown, clock()))
             log("Thread dataset handed to the helper (${d.length / 2} bytes)")
             refreshSoon()
             null
