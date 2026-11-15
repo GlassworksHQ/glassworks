@@ -375,12 +375,12 @@ class RadioDefinition(
     /**
      * The radio's chip and line (#243), from the same health the radio's card shows (RadioFollowUp.health):
      * Problem when it failed (also a Zigbee router whose router host failed under an `ok` helper), else
-     * Running, with its role and status under it. Off is the switch's ([paneState]). Null until the radio's
-     * first report.
+     * Running, with its role and status under it ([RadioFollowUp.paneLine]). Off is the switch's ([paneState]).
+     * Null until the radio's first report.
      */
     private fun settingsStatus(): PaneState? {
         val f = readout.facts() ?: return null
-        val detail = listOf(f.mode.label, f.status).filter { it.isNotEmpty() }.joinToString(" · ")
+        val detail = RadioFollowUp.paneLine(f)
         return when (RadioFollowUp.health(f)) {
             RadioFollowUp.Health.OFF -> null
             RadioFollowUp.Health.ERROR -> PaneState(PaneState.Kind.PROBLEM, detail)
