@@ -6,6 +6,7 @@ import dev.glassworks.frame.Capability
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.CantRun
 import dev.glassworks.pane.PaneState
+import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -48,7 +49,7 @@ class GenericFrameTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
     private val devices = ArrayList<PanelDevice>()
-    private val repo = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "frames").isDirectory }
+    private val repo = RepoFiles.root
 
     private fun features(vararg on: String) {
         val pm = shadowOf(app.packageManager)
@@ -185,7 +186,7 @@ class GenericFrameTest {
         assertEquals(words(s1.getJSONArray("provides")), AqaraS1Plus().provides.map { it.id }.toSet())
         assertFalse("generic has no fixed list: it depends on the device", JSONObject(File(repo, "frames/generic-android/design/frame.json").readText()).has("provides"))
 
-        val paneJson = File(repo, "app/kiosk/src/main/java").walkTopDown().filter { it.name == "pane.json" }
+        val paneJson = RepoFiles.sources(atLeast = 8) { it.name == "pane.json" }
             .map { JSONObject(it.readText()) }.associate { it.getString("id") to words(it.getJSONArray("requires")) }
         val definitions = GlassworksRuntime(AqaraS1Plus()).paneDefinitions(app)
         for (d in definitions) assertEquals(d.id, paneJson.getValue(d.id), d.requires.map { it.id }.toSet())
