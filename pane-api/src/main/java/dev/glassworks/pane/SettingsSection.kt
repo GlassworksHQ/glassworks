@@ -141,11 +141,14 @@ enum class HaLink {
     CONNECTED;
 
     companion object {
-        /** From whether Home Assistant listens to the panel's states now, and whether it ever [added] it. */
+        /**
+         * From whether Home Assistant ever [added] the panel, and whether a client listens to its states now.
+         * Any client can subscribe without a key, so a listener alone doesn't make a panel added.
+         */
         fun of(connected: Boolean, added: Boolean): HaLink = when {
+            !added -> NOT_ADDED
             connected -> CONNECTED
-            added -> NOT_CONNECTED
-            else -> NOT_ADDED
+            else -> NOT_CONNECTED
         }
     }
 }
@@ -163,16 +166,22 @@ fun SettingsItem.States.shown(): StatesShown = when (link()) {
     HaLink.NOT_ADDED -> StatesShown(HA_NOT_ADDED, emptyList(), dimmed = false)
 }
 
-/** [sections] with each "In Home Assistant" list following [link], which is read again with the rows. */
+/** [sections] with each "In Home Assistant" list, in a group too, following [link], which is read again with the rows. */
 fun withHaLink(sections: List<SettingsSection>, link: () -> HaLink): List<SettingsSection> = sections.map { s ->
-    if (s.items.none(::inHa)) s
-    else SettingsSection(
-        s.id, s.title, s.items.map { i -> if (inHa(i)) SettingsItem.States((i as SettingsItem.States).title, link, i.rows) else i },
-        s.heading, s.master, s.status, s.unavailable, s.source, s.covers,
-    )
+    if (!hasHa(s.items)) s
+    else SettingsSection(s.id, s.title, linked(s.items, link), s.heading, s.master, s.status, s.unavailable, s.source, s.covers)
 }
 
-private fun inHa(i: SettingsItem) = i is SettingsItem.States && i.title == IN_HOME_ASSISTANT
+private fun linked(items: List<SettingsItem>, link: () -> HaLink): List<SettingsItem> = items.map { i ->
+    when {
+        i is SettingsItem.States && i.title == IN_HOME_ASSISTANT -> SettingsItem.States(i.title, link, i.rows)
+        i is SettingsItem.Group && hasHa(i.items) -> SettingsItem.Group(i.title, linked(i.items, link))
+        else -> i
+    }
+}
+
+private fun hasHa(items: List<SettingsItem>): Boolean =
+    items.any { (it is SettingsItem.States && it.title == IN_HOME_ASSISTANT) || (it is SettingsItem.Group && hasHa(it.items)) }
 /** A pane's page while the panel's Home Assistant device isn't running, so its entities can't be read. */
 const val NOT_RUNNING = "The panel's Home Assistant device isn't running yet. Its state shows here once it is."
 /** Home Assistant's words for an entity with no state now, and for one whose device can't give it. */

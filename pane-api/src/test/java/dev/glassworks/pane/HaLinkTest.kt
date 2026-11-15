@@ -23,8 +23,17 @@ class HaLinkTest {
         assertEquals(HaLink.NOT_ADDED, HaLink.of(connected = false, added = false))
         assertEquals(HaLink.NOT_CONNECTED, HaLink.of(connected = false, added = true))
         assertEquals(HaLink.CONNECTED, HaLink.of(connected = true, added = true))
-        // A connection proves it was added, even before the flag is saved.
-        assertEquals(HaLink.CONNECTED, HaLink.of(connected = true, added = false))
+        // Any client can subscribe to the states without a key: that alone doesn't make the panel added.
+        assertEquals(HaLink.NOT_ADDED, HaLink.of(connected = true, added = false))
+    }
+
+    @Test
+    fun aListInAGroupFollowsTheLinkToo() {
+        link = HaLink.NOT_ADDED
+        val s = withHaLink(listOf(page(SettingsItem.Group("Details", listOf(SettingsItem.Note { "x" }, SettingsItem.States(IN_HOME_ASSISTANT) { rows }))))) { link }.single()
+        val group = s.items.single() as SettingsItem.Group
+        assertEquals("Details", group.title)
+        assertEquals(HA_NOT_ADDED, group.items.filterIsInstance<SettingsItem.States>().single().shown().note)
     }
 
     @Test
