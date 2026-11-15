@@ -133,7 +133,7 @@ is the per-part difference of the two reports.
 ## Run it locally
 
 ```sh
-./gradlew :kiosk:assembleRelease -Ps1Abi=armeabi-v7a && cp app/kiosk/build/outputs/apk/release/kiosk-release-unsigned.apk /tmp/v7.apk
+./gradlew :kiosk:assembleRelease -Ps1Abi=armeabi-v7a && cp frames/aqara-s1-plus/android/build/outputs/apk/release/kiosk-release-unsigned.apk /tmp/v7.apk
 python3 tools/size/apksize.py report --frame aqara-s1-plus --apk armeabi-v7a=/tmp/v7.apk --json /tmp/size.json --md /tmp/size.md
 python3 -m unittest discover -s tools/size/test
 ```

@@ -43,7 +43,7 @@
 
 When a panel is slow, hot or drops off Wi-Fi, this pane shows why in Home Assistant, without adb.
 It is a core pane: every frame gets it. The entity list, bands and sources are in
-[docs/esphome.md](../../../../../../../../docs/esphome.md#diagnostics).
+[docs/esphome.md](../../../../../../../../../docs/esphome.md#diagnostics).
 
 | File | What it is |
 |---|---|

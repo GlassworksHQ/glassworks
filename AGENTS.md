@@ -5,7 +5,7 @@ open Home Assistant wall panel. It is also the reference device ("frame") for **
 device-neutral open panel core that is being pulled out of this repo step by step.
 
 This file applies to the whole repo. Each area has its own file with the details:
-[`app/AGENTS.md`](app/AGENTS.md) (the kiosk app), [`kiln/AGENTS.md`](kiln/AGENTS.md) (the browser
+[`app/AGENTS.md`](frames/aqara-s1-plus/android/AGENTS.md) (the kiosk app), [`kiln/AGENTS.md`](kiln/AGENTS.md) (the browser
 installer), [`tools/AGENTS.md`](tools/AGENTS.md) (FEL, U-Boot, root side, radio, install scripts).
 Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/research/bringup.md).
 
@@ -45,7 +45,7 @@ you open a PR.
 
 Glassworks is an opinionated, simple Home Assistant panel controller. **Read
 [`docs/principles.md`](docs/principles.md) before you propose or build a feature**, and check new
-panes against [What makes a pane](app/kiosk/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
+panes against [What makes a pane](frames/aqara-s1-plus/android/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
 In short: HA is the brain, ESPHome is the wire, the dashboard is the UI, and nothing gets installed
 in HA. If a request goes against it, say so and point at the page instead of building around it.
 
@@ -104,7 +104,7 @@ in HA. If a request goes against it, say so and point at the page instead of bui
   behaviour, entities or install steps change. Keep `python3 tools/check-doc-links.py` passing.
 - Labels: `frame: …`, `pane: …`, `area: …` ([CONTRIBUTING.md](CONTRIBUTING.md#labels)).
 - To try a branch on a panel without wiping app data, push it to `test-build/<name>` (admins only)
-  and `adb install -r` the artifact. Details in [`app/AGENTS.md`](app/AGENTS.md#trying-a-branch-on-the-panel).
+  and `adb install -r` the artifact. Details in [`app/AGENTS.md`](frames/aqara-s1-plus/android/AGENTS.md#trying-a-branch-on-the-panel).
 
 ## Document the break-in work
 
@@ -147,9 +147,9 @@ header from the example in the table, then change the name, the tagline and the 
 |---|---|---|
 | The repository's front page (the root `README.md`) | `banner-glassworks`, centred title and tagline, then the status and roadmap badges | [README.md](README.md) |
 | A library: something another project could use on its own (`app/libs/*`, `packages/*`, or such a package in `kiln/packages/`) | `banner-library-<name>`, centred title and tagline, then the MIT, status and roadmap badges | [improv](libs/improv/README.md) |
-| The Glassworks core or a pane | `banner-core` or `banner-pane`, title and tagline, then the part badge, licence, status and roadmap badges | [core](app/kiosk/src/main/java/dev/glassworks/README.md) |
+| The Glassworks core or a pane | `banner-core` or `banner-pane`, title and tagline, then the part badge, licence, status and roadmap badges | [core](frames/aqara-s1-plus/android/src/main/java/dev/glassworks/README.md) |
 | Kiln | `banner-kiln`, title and tagline, then the Kiln, MIT, status and roadmap badges | [Kiln](kiln/apps/kiln/README.md) |
-| An app or product built on the core | Title and tagline, then Built on Glassworks, MIT, status and roadmap badges. No banner | [S1 Kiosk](app/README.md) |
+| An app or product built on the core | Title and tagline, then Built on Glassworks, MIT, status and roadmap badges. No banner | [S1 Kiosk](frames/aqara-s1-plus/android/README.md) |
 | A frame (`frames/<id>/README.md`) | `banner-frame-<id>`, centred title and tagline, then Built on Glassworks, the Kiln badge if Kiln installs it, the status, roadmap and Clarity badges | [aqara-s1-plus](frames/aqara-s1-plus/README.md) |
 | Kiln's internals and design work | The Kiln badge alone | [docs/design/kiln](docs/design/kiln/README.md) |
 | A Glassworks spec in `docs/` that every frame follows (e.g. the perf grade) | The core badge alone, under the title | [principles.md](docs/principles.md) (its part badges) |

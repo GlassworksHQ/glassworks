@@ -51,7 +51,7 @@ web player and for the HA Voice PE.
 | `--ez sendspin_flac false` | Offer only PCM (no FLAC). Switching it back on also retries FLAC after a fallback | on (FLAC first, PCM fallback) |
 
 `--e…` extras go to `adb shell am start -n sh.edm.s1kiosk/.MainActivity`, as in
-[app/README.md](../app/README.md). Changing the server address or unpaired access reconnects
+[app/README.md](../frames/aqara-s1-plus/android/README.md). Changing the server address or unpaired access reconnects
 (`client/goodbye` `restart`) so the new `client/hello` carries the new value (also for `sendspin_flac`). Volume, mute and
 the output delay are the Sendspin player's own (stored in `sendspin.xml`). They don't affect the
 voice/TTS volume of `media_player.<device>_speaker`, and vice versa. Android's media volume

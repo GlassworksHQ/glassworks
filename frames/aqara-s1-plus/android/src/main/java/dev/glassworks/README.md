@@ -42,7 +42,7 @@
 ---
 
 Glassworks is the device-neutral core being pulled out of
-[S1 Unleashed](../../../../../../../README.md) one step at a time. A **frame** describes a device.
+[S1 Unleashed](../../../../../../../../README.md) one step at a time. A **frame** describes a device.
 A **pane** is a feature: the Music Assistant player, voice, timers, the radio. This package
 (`dev.glassworks.pane`) is the contract between the two.
 
@@ -65,16 +65,16 @@ change until Glassworks v1.
 | `SettingsSection` | A section of the settings: typed items (`SettingsItem`) that the panel's menu and the Manage page both draw and change (#242). `settingsOrder` places them; `SettingsChange` checks and applies a change for both. |
 | `ScreenPolicy` | (`dev.glassworks.screen`) Wake on approach, idle off, the night window and its timeout, the brightness curve and the screen mode. It reads the frame's `PresenceSource` and `LightSource` and the app's `ScreenSettings`. One per process, on `GlassworksRuntime.screen`. |
 | `Platform` | (`dev.glassworks.platform`) What the running Android can do, as named queries (`hasNotificationChannels`, `hasWindowInsetsController`, …) and small shims. The only place that reads `Build.VERSION.SDK_INT`. |
-| `NotificationsPane` | (`dev.glassworks.notifications`) Notifications from Home Assistant: the `notify` action, Do not disturb, the rules for each priority, and a tapped button as the bus event `esphome.notification_action`. A core pane, off by default. The panel's overlay draws what its `NotificationsHub` holds. How to use it: [docs/notifications.md](../../../../../../../docs/notifications.md). |
-| `DiagnosticsPane` | (`dev.glassworks.diagnostics`) The panel's health as diagnostic entities: CPU, temperature, RAM, storage, Wi-Fi, uptime, the last restart reason. A core pane, so every frame has it. The entities are in [docs/esphome.md](../../../../../../../docs/esphome.md#diagnostics). |
-| `BluetoothProxyPane` | (`dev.glassworks.bluetoothproxy`) The panel as an ESPHome Bluetooth proxy (#121). The work is in the [bluetooth-proxy library](../../../../../../../libs/bluetooth-proxy/README.md); the pane gives it the device's server and adds two diagnostic entities. Its page is the frame's to draw ([`BluetoothProxyModel`](bluetoothproxy/ProxyPhase.kt)); the S1's is `BluetoothProxyPage`. See [its README](bluetoothproxy/README.md). |
+| `NotificationsPane` | (`dev.glassworks.notifications`) Notifications from Home Assistant: the `notify` action, Do not disturb, the rules for each priority, and a tapped button as the bus event `esphome.notification_action`. A core pane, off by default. The panel's overlay draws what its `NotificationsHub` holds. How to use it: [docs/notifications.md](../../../../../../../../docs/notifications.md). |
+| `DiagnosticsPane` | (`dev.glassworks.diagnostics`) The panel's health as diagnostic entities: CPU, temperature, RAM, storage, Wi-Fi, uptime, the last restart reason. A core pane, so every frame has it. The entities are in [docs/esphome.md](../../../../../../../../docs/esphome.md#diagnostics). |
+| `BluetoothProxyPane` | (`dev.glassworks.bluetoothproxy`) The panel as an ESPHome Bluetooth proxy (#121). The work is in the [bluetooth-proxy library](../../../../../../../../libs/bluetooth-proxy/README.md); the pane gives it the device's server and adds two diagnostic entities. Its page is the frame's to draw ([`BluetoothProxyModel`](bluetoothproxy/ProxyPhase.kt)); the S1's is `BluetoothProxyPage`. See [its README](bluetoothproxy/README.md). |
 | `Engine` | (`dev.glassworks.engine`) The web engine that shows the dashboard: open a page, load, reload, go back, restart after a crash, and talk to the page's scripts. `GeckoEngine` (`dev.glassworks.engine.gecko`) is the only code that uses GeckoView. One per process, on `GlassworksRuntime.engine`. |
 
 ## What makes a pane
 
 Glassworks is native to Home Assistant: a panel joins HA as an ESPHome device and needs nothing
 else. Panes keep it that way. The reasons are in
-[Glassworks Principles](../../../../../../../docs/principles.md). Before you write a pane, check
+[Glassworks Principles](../../../../../../../../docs/principles.md). Before you write a pane, check
 it against these four rules.
 
 ### 1. It adds something only the panel can do
@@ -169,7 +169,7 @@ How to apply it in code:
 
 HA uses `disabledByDefault` only when it first registers the entity. Changing it later doesn't
 change a panel HA already has; changing the category does
-([esphome.md](../../../../../../../docs/esphome.md#a-panel-that-ha-already-has)). Decide it when you
+([esphome.md](../../../../../../../../docs/esphome.md#a-panel-that-ha-already-has)). Decide it when you
 add the entity.
 
 **A pane's own on/off switch (#67)** is a `SwitchEntity` with `EntityCategory.CONFIG` and
@@ -178,7 +178,7 @@ in the list while the pane is off, so turning the pane back on doesn't need HA t
 entities again.
 
 Every S1 entity, with its category, default and reason:
-[esphome.md](../../../../../../../docs/esphome.md#categories-and-defaults).
+[esphome.md](../../../../../../../../docs/esphome.md#categories-and-defaults).
 
 ### Example: the camera pane
 
@@ -228,7 +228,7 @@ optionally `docs`. The icon is 24 × 24, stroked with `currentColor` at 1.6 with
 has no fills or colours; a new icon is UI, so the maintainer approves it.
 [`PaneCatalogTest`](../../../../test/java/dev/glassworks/pane/PaneCatalogTest.kt) fails if a pane
 has no files or a file has no pane. Then run `npm run panes -w @glassworks/frame-card`
-([frames/README.md](../../../../../../../frames/README.md#the-panes-a-frame-runs)).
+([frames/README.md](../../../../../../../README.md#the-panes-a-frame-runs)).
 
 The core raises `HomeAssistantSubscribed(address, authenticated)` each time Home Assistant subscribes
 to the states. `authenticated` is true when the connection uses the key Home Assistant provisioned.
@@ -255,7 +255,7 @@ fires it on HA's bus instead ([the exception above](#2-it-works-through-esphome-
 so build the list once per state, not on every `entities()` call. A pane does not hold the API
 server for this. The core owns it, including its restarts.
 
-Entities come from [esphome-api](../../../../../../../libs/esphome-api/README.md). Home Assistant
+Entities come from [esphome-api](../../../../../../../../libs/esphome-api/README.md). Home Assistant
 keys them by object id, so an object id is permanent: renaming one makes a new entity in every
 home that already has the panel.
 
@@ -427,7 +427,7 @@ its own. Timers have none either: they come only from voice.
 
 ## The Manage page
 
-The panel serves `http://<panel>:8099/` ([docs/manage.md](../../../../../../../docs/manage.md), #33),
+The panel serves `http://<panel>:8099/` ([docs/manage.md](../../../../../../../../docs/manage.md), #33),
 on the same port as the QR-code sign-in pages. The core has the whole page; a frame gives it one
 `ManageHost`.
 
@@ -535,7 +535,7 @@ sets the flag again at the end of its own shutdown.
 ## Licence
 
 The files in `dev.glassworks` are licensed under the
-[Mozilla Public License 2.0](../../../../../../../LICENSES/MPL-2.0.txt). The rest of S1 Unleashed
+[Mozilla Public License 2.0](../../../../../../../../LICENSES/MPL-2.0.txt). The rest of S1 Unleashed
 stays MIT.
 
 The MPL works file by file. You can ship Glassworks inside a closed product, and your own frames

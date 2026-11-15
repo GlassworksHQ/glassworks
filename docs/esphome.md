@@ -121,7 +121,7 @@ Where a new entity's id comes from depends on Home Assistant's version:
 ### Categories and defaults
 
 Each entity has a category and a default, following the rule in
-[the pane rules](../app/kiosk/src/main/java/dev/glassworks/README.md#entities). An entity is enabled
+[the pane rules](../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/README.md#entities). An entity is enabled
 when HA first adds it only if people reach for it day to day. When HA adds a panel, 15 entities
 are on (22 with a two-channel switch base). The rest are created turned off. To turn one on, open
 **Settings → Devices & services → ESPHome → Aqara S1 Plus**, select *+N entities not shown*,
