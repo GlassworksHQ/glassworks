@@ -10,6 +10,7 @@ import java.net.Socket
 import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -250,9 +251,16 @@ public class ApiServer(
         internal const val CAMERA_STREAM_MS = 5_000L
         /**
          * Messages other than states that may wait for one client before it is dropped. Room for the
-         * voice pre-roll (2 s of 16 kHz audio, 64 KiB) and several seconds of audio after it.
+         * voice pre-roll (2 s of 16 kHz audio, 64 KiB) and several seconds of audio after it. The batch
+         * the writer is sending doesn't count, so a client that stops reading can hold about twice this.
          */
         internal const val MAX_QUEUED_BYTES = 512 * 1024
+        /**
+         * How long a DisconnectRequest may wait to be written before the connection closes anyway. The
+         * keepalive can't bound it: a retired connection ignores what its client sends, but still counts
+         * it as traffic.
+         */
+        internal const val DISCONNECT_WRITE_MS = 10_000L
     }
 
     /** The device's voice assistant, or null for none (voice messages are then ignored). */
@@ -334,6 +342,7 @@ public class ApiServer(
     @Volatile private var actionThread: java.util.concurrent.ExecutorService? = null
     /** [CAMERA_STREAM_MS]; shorter in tests. Set before [start]. */
     @Volatile internal var cameraStreamMs = CAMERA_STREAM_MS
+    @Volatile internal var disconnectWriteMs = DISCONNECT_WRITE_MS
     @Volatile private var voiceConn: Connection? = null
     private val bluetoothLock = Any()
     @Volatile private var bluetoothConn: Connection? = null
@@ -352,8 +361,9 @@ public class ApiServer(
 
     /**
      * Replaces the entity set and asks every connected client to disconnect (`DisconnectRequest`,
-     * socket closed after the ack or 2 s). Home Assistant reconnects and lists the entities again,
-     * which is how it picks up added ones, like after an ESPHome firmware update.
+     * socket closed after the ack, or 2 s after the request is written). Returns without waiting for
+     * either. Home Assistant reconnects and lists the entities again, which is how it picks up added
+     * ones, like after an ESPHome firmware update.
      */
     public fun setEntities(newEntities: List<ApiEntity>) {
         val list = newEntities.toList()
@@ -624,6 +634,11 @@ public class ApiServer(
         @Volatile var authenticated = false
         /** Set when the key changed: only the disconnect handshake is processed from now on. */
         @Volatile private var retired = false
+        /**
+         * A DisconnectRequest is on its way ([askToDisconnect]). Never cleared: every path that sets it
+         * ends in [close], and clearing it would bring back a request and a thread per call.
+         */
+        private val disconnecting = AtomicBoolean()
         private val remote = socket.remoteSocketAddress?.toString() ?: "?"
         /** Handshake done and the writer running: messages can be sent, and the keepalive applies. */
         @Volatile var ready = false
@@ -695,6 +710,9 @@ public class ApiServer(
         }
 
         private fun writeLoop() {
+            // Closes however the writer ends, an Error or a failing log sink included: left open, the
+            // connection would hold every caller waiting for a write (the camera, the Disconnect and
+            // set-key answers) until the keepalive dropped it.
             try {
                 while (true) {
                     transport.write(outbox.take() ?: return)
@@ -702,26 +720,30 @@ public class ApiServer(
                 }
             } catch (e: IOException) {
                 if (isOpen) EspHomeLog.w("[$id] write failed: ${e.message}")
-                close()
-            } catch (e: Exception) {
-                EspHomeLog.w("[$id] writer error", e)
+            } catch (t: Throwable) {
+                EspHomeLog.w("[$id] writer error", t)
+            } finally {
                 close()
             }
         }
 
         /**
-         * Queues [frames] for the writer; with [wait], returns once they are written (only on this
-         * connection's own threads). False if the connection is closed, or was full and is now closed.
+         * Queues [frames] for the writer; with [wait], returns once they are written or [timeoutMs] has
+         * passed (only on this connection's own threads). False if the connection is closed, or was full
+         * or too slow and is now closed.
          */
-        fun send(frames: List<Frame>, wait: Boolean = false): Boolean {
+        fun send(frames: List<Frame>, wait: Boolean = false, timeoutMs: Long = Long.MAX_VALUE): Boolean {
             if (!isOpen || !ready) return false
-            if (if (wait) outbox.offerAndWait(frames) else outbox.offer(frames)) {
+            if (if (wait) outbox.offerAndWait(frames, timeoutMs) else outbox.offer(frames)) {
                 onQueued?.let { queued -> frames.forEach { queued(it.type) } }
                 return true
             }
             if (isOpen) {
-                EspHomeLog.w("[$id] $remote is not reading: ${MAX_QUEUED_BYTES / 1024} KiB waiting to be sent; closing")
-                close()
+                try {
+                    EspHomeLog.w("[$id] $remote is not reading: messages waited too long or filled the queue (${MAX_QUEUED_BYTES / 1024} KiB); closing")
+                } finally {
+                    close()
+                }
             }
             return false
         }
@@ -744,14 +766,43 @@ public class ApiServer(
         fun requestDisconnect() {
             subscribedStates = false
             subscribedHaServices = false
-            if (!reply(Msg.DISCONNECT_REQUEST)) { close(); return }
-            Thread({
-                try { Thread.sleep(2_000) } catch (_: InterruptedException) {}
-                close()
-            }, "esphome-disc-$id").apply { isDaemon = true; start() }
+            askToDisconnect(2_000)
         }
 
-        /** Asks the client to disconnect and closes after the ack or 500 ms; ignores everything else. */
+        /**
+         * Sends a DisconnectRequest and closes [graceMs] after it is written, or on the client's answer.
+         * The wait for the write runs on a thread of its own, so the caller doesn't wait for a slow client.
+         * If the request isn't written within [disconnectWriteMs], the connection closes without it.
+         * Only the first call does anything: a later one (more entity changes, a key change) would only
+         * add a thread and a request, and the first one already closes the connection.
+         */
+        private fun askToDisconnect(graceMs: Long) {
+            if (!disconnecting.compareAndSet(false, true)) return
+            val thread = Thread({
+                try {
+                    if (send(listOf(Frame(Msg.DISCONNECT_REQUEST, ByteArray(0))), wait = true, timeoutMs = disconnectWriteMs)) {
+                        Thread.sleep(graceMs)
+                    }
+                } catch (_: InterruptedException) {
+                } finally {
+                    close()
+                }
+            }, "esphome-disc-$id").apply { isDaemon = true }
+            try {
+                thread.start()
+            } catch (t: Throwable) {
+                // No thread (out of memory, thread limit): close now, or the flag stays set with nothing
+                // left to close the connection.
+                close()
+                throw t
+            }
+        }
+
+        /**
+         * Asks the client to disconnect and closes after the ack or 500 ms; ignores everything else. If
+         * the entities changed just before, their DisconnectRequest stands, and the connection closes
+         * when that one ends (2 s after it is written).
+         */
         fun retire() {
             if (retired) return
             retired = true
@@ -762,11 +813,7 @@ public class ApiServer(
                 voice?.onSubscribe(false)
             }
             unsubscribeBluetooth(this)
-            if (!reply(Msg.DISCONNECT_REQUEST)) { close(); return }
-            Thread({
-                try { Thread.sleep(500) } catch (_: InterruptedException) {}
-                close()
-            }, "esphome-retire-$id").apply { isDaemon = true; start() }
+            askToDisconnect(500)
         }
 
         fun close() {

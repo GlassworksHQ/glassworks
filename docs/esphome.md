@@ -684,7 +684,10 @@ with the Python TFLite runtime that the patched model gives bit-identical output
   key 1, command 2 = `UpdateCommand` NONE 0 / INSTALL 1 / CHECK 2). From aioesphomeapi 46.25.0's
   `api_pb2` descriptors.
 - **Entity set changes**: `ApiServer.setEntities` swaps the list and asks every client to
-  disconnect (`DisconnectRequest`, closed after the ack or 2 s).
+  disconnect (`DisconnectRequest`). The connection closes on the client's answer, or 2 s after the
+  request is written. A client that doesn't take the request within 10 s is closed without it.
+  `setEntities` doesn't wait for any of this, and further calls while a request is on its way don't
+  send another.
 - **Home Assistant's time zone** (#212): once an authenticated client subscribes to states, the
   panel sends `GetTimeRequest` (36). Home Assistant answers with `GetTimeResponse` (37), and its
   `timezone` (field 2) is a POSIX `TZ` rule, not an IANA id: aioesphomeapi 46.25.0 sent

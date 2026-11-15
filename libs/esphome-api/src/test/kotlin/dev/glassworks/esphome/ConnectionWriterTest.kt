@@ -71,6 +71,15 @@ class ConnectionWriterTest {
     private fun awaitBlocked(sock: StoppableSocket) =
         assertTrue("the stuck client's socket never blocked a write\n${serverThreads()}", sock.blocked.await(10, TimeUnit.SECONDS))
 
+    /** The socket closes before the connection leaves the list, so a closed socket alone isn't enough. */
+    private fun awaitNoConnections(s: ApiServer) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (s.connectionCount > 0) {
+            assertTrue("still connected\n${serverThreads()}", System.nanoTime() < deadline)
+            Thread.sleep(10)
+        }
+    }
+
     /** Waits until no thread named [name] runs: each one waits on a lock or has ended. */
     private fun awaitIdle(name: String) {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
@@ -245,9 +254,102 @@ class ConnectionWriterTest {
         }
     }
 
-    /** Writes go through until [stop]; after it they block until [resume]. */
+    /**
+     * The server asks a client to disconnect when a key changes (500 ms to answer) or the entities do
+     * (2 s). That time starts once the request is written, so a client that is slow to read still gets
+     * it before the socket closes (#223).
+     */
+    @Test
+    fun aKeyChangeClosesOnlyAfterItsDisconnectRequestIsWritten() =
+        disconnectWaitsForItsRequest(graceMs = 500, keys = NoiseKeys(MemoryKeyStore())) { replaceKey(ByteArray(32) { 1 }) }
+
+    @Test
+    fun anEntityChangeClosesOnlyAfterItsDisconnectRequestIsWritten() =
+        disconnectWaitsForItsRequest(graceMs = 2_000) { setEntities(listOf(sensor)) }
+
+    private fun disconnectWaitsForItsRequest(graceMs: Long, keys: NoiseKeys? = null, change: ApiServer.() -> Unit) {
+        val s = server(keys = keys)
+        val (c, sock) = stuckClient(s)
+        c.use {
+            s.change()
+            awaitBlocked(sock)
+            Thread.sleep(graceMs + 500)
+            assertEquals("closed while the DisconnectRequest was still waiting", 1, s.connectionCount)
+            sock.resume()
+            c.await(Msg.DISCONNECT_REQUEST)
+            assertTrue("closed once the client had time to answer", c.closedByServer())
+        }
+    }
+
+    /** A client that never takes the request is still dropped, even if it keeps sending (#223). */
+    @Test
+    fun aDisconnectRequestNobodyReadsStillClosesTheConnection() {
+        val s = server(keys = NoiseKeys(MemoryKeyStore())).apply { disconnectWriteMs = 1_000 }
+        val (c, sock) = stuckClient(s)
+        c.use {
+            s.replaceKey(ByteArray(32) { 1 })
+            awaitBlocked(sock)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (s.connectionCount > 0 && System.nanoTime() < deadline) {
+                try { c.send(Msg.PING_REQUEST) } catch (_: java.io.IOException) { break }
+                Thread.sleep(100)
+            }
+            awaitNoConnections(s)
+        }
+    }
+
+    /** Many entity changes while a client doesn't read: one waiting thread and one request, not one per change. */
+    @Test
+    fun repeatedEntityChangesSendOneDisconnectRequest() {
+        val s = server()
+        val (c, sock) = stuckClient(s)
+        c.use {
+            fun discThreads() = Thread.getAllStackTraces().keys.count { it.isAlive && it.name.startsWith("esphome-disc-") }
+            val before = discThreads()
+            repeat(200) { s.setEntities(listOf(sensor)) }
+            awaitBlocked(sock)
+            assertTrue("disconnect threads: ${discThreads()}, ${before + 1} at most", discThreads() <= before + 1)
+            sock.resume()
+            var requests = 0
+            while (true) {
+                val f = try { c.read() } catch (_: Exception) { null } ?: break
+                if (f.type == Msg.DISCONNECT_REQUEST) requests++
+            }
+            assertEquals("DisconnectRequests", 1, requests)
+        }
+    }
+
+    /** An Error on the writer closes the connection, so a caller waiting for a write isn't left hanging (#223). */
+    @Test
+    fun anErrorOnTheWriterClosesTheConnection() = writerFailureClosesTheConnection()
+
+    /** The same with a log sink that fails too: the close can't depend on the log line before it. */
+    @Test
+    fun anErrorOnTheWriterClosesTheConnectionWhenTheLogFails() {
+        val sink = EspHomeLog.sink
+        EspHomeLog.sink = EspHomeLog.Sink { level, tag, msg, t ->
+            if (level == EspHomeLog.Level.WARN) throw IllegalStateException("test: the log sink fails")
+            sink.log(level, tag, msg, t)
+        }
+        try { writerFailureClosesTheConnection() } finally { EspHomeLog.sink = sink }
+    }
+
+    private fun writerFailureClosesTheConnection() {
+        val s = server()
+        PlainClient(s.localPort).use { c ->
+            c.roundTrip()
+            sockets.last().fail = object : Error("test: the writer fails") {}
+            // The reader waits for this answer to be written before it closes.
+            c.send(Msg.DISCONNECT_REQUEST)
+            assertTrue("the connection stayed open\n${serverThreads()}", c.closedByServer())
+            awaitNoConnections(s)
+        }
+    }
+
+    /** Writes go through until [stop]; after it they block until [resume]. Once [fail] is set, writes throw it. */
     private class StoppableSocket : Socket() {
         @Volatile private var stopped = false
+        @Volatile var fail: Throwable? = null
         private val resumed = CountDownLatch(1)
         val blocked = CountDownLatch(1)
 
@@ -257,6 +359,7 @@ class ConnectionWriterTest {
         private val out by lazy {
             object : FilterOutputStream(super.getOutputStream()) {
                 override fun write(b: ByteArray, off: Int, len: Int) {
+                    fail?.let { throw it }
                     if (stopped) { blocked.countDown(); resumed.await() }
                     out.write(b, off, len)
                 }

@@ -47,9 +47,10 @@ ESPHome device. Package `dev.glassworks.esphome`, MIT licensed.
 
 - **Server:** TCP on port 6053. Each connection has a reader thread, and a writer thread with its
   own queue, so a client that stops reading holds up only itself. Its states wait as the newest
-  value per entity. Once 512 KiB of its other messages wait, the server drops it. It handles Hello,
-  DeviceInfo, DeviceCapabilities, ListEntities, SubscribeStates, commands, Ping and Disconnect, and
-  ignores unknown messages, as ESPHome does. Keepalive follows ESPHome's `api_connection.cpp`.
+  value per entity. Once 512 KiB of its other messages wait in the queue, the server drops it. The
+  batch the writer is sending doesn't count, so a stuck client can hold about twice that. It handles
+  Hello, DeviceInfo, DeviceCapabilities, ListEntities, SubscribeStates, commands, Ping and Disconnect,
+  and ignores unknown messages, as ESPHome does. Keepalive follows ESPHome's `api_connection.cpp`.
 - **Encryption:** Noise `NNpsk0_25519_ChaChaPoly_SHA256`, and Home Assistant can provision the key
   for you. With no key, the device accepts plaintext and zero-PSK clients and lets HA set a key
   (`NoiseEncryptionSetKeyRequest`). Once a key is active, it accepts only Noise with that key and
