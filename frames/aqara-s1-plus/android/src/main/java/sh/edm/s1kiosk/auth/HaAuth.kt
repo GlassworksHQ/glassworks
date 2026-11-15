@@ -3,10 +3,10 @@ package sh.edm.s1kiosk.auth
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import dev.glassworks.manage.ManagePage
 import sh.edm.s1kiosk.KioskPrefs
 import dev.glassworks.web.HttpServer
 import sh.edm.s1kiosk.glassworks
-import sh.edm.s1kiosk.manage.S1Manage
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -33,7 +33,7 @@ object HaAuth {
     private val cache = AccessTokenCache()
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
     private var server: HttpServer? = null
-    private var manage: S1Manage? = null
+    private var manage: ManagePage? = null
 
     /**
      * "Join Home Assistant's Thread network" (ThreadJoin): the panel's own token first, else a one-off
@@ -71,14 +71,14 @@ object HaAuth {
 
     /**
      * Starts the panel's web server on [OAuth.SIGNIN_PORT] (retries if the port is busy): the QR-code
-     * sign-in pages ([SignInServer]) and, behind them, the Manage page ([S1Manage], #33).
+     * sign-in pages ([SignInServer]) and, behind them, the app's Manage page ([sh.edm.s1kiosk.Glassworks.managePage], #33).
      */
     @Synchronized
     fun startServer(context: Context) {
         init(context)
         if (server != null) return
         val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, thread = threadJoin)
-        val m = manage ?: S1Manage(context, context.glassworks, signIn, tokens, prefs).also { manage = it; it.startLog() }
+        val m = manage ?: context.glassworks.managePage(context, signIn, tokens, prefs).also { manage = it; it.startLog() }
         val s = m.http(OAuth.SIGNIN_PORT)
         try {
             s.start()

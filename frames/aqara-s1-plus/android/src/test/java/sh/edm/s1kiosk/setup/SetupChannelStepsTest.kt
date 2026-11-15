@@ -24,6 +24,7 @@ import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.radio.RadioController
 import sh.edm.s1kiosk.radio.TestInit
 import java.io.File
+import sh.edm.s1kiosk.radio.runningRadio
 
 /**
  * Setup without the screen: every pane step the S1 has (its real definitions, with a radio controller
@@ -69,7 +70,7 @@ class SetupChannelStepsTest {
     @Before fun s1() {
         runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val panePrefs = PanePrefs(app)
-        runtime.radio = RadioController(
+        runtime.runningRadio(app).controller = RadioController(
             TestInit(), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,
         ).also { it.start() }
         steps = runtime.paneDefinitions(app).flatMap { it.setupSteps }

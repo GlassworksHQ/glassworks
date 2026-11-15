@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.radio
 
 import android.content.Context
+import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp
@@ -31,3 +32,7 @@ fun radioDefinition(context: Context, readout: RadioReadout): RadioDefinition {
     val panePrefs = PanePrefs(context)
     return RadioDefinition(panePrefs.radio, { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) }, readout)
 }
+
+/** Where the app's radio definition reads the running radio pane's controller (RadioDefinition.running). */
+internal fun Glassworks.runningRadio(context: Context): RunningRadio =
+    paneDefinitions(context).filterIsInstance<RadioDefinition>().single().running!!

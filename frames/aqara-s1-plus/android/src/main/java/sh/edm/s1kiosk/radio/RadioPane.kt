@@ -10,7 +10,6 @@ import dev.glassworks.esphome.EntityCategory
 import dev.glassworks.esphome.SelectEntity
 import dev.glassworks.esphome.TextEntity
 import dev.glassworks.esphome.TextSensorEntity
-import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.ThreadFetch
 import sh.edm.s1kiosk.auth.ThreadJoin
@@ -18,11 +17,11 @@ import sh.edm.s1kiosk.auth.ThreadJoin
 /**
  * The S1's Zigbee/Thread radio as a pane (frames/aqara-s1-plus/docs/radio.md): the [RadioController], its Home Assistant
  * entities, and the Thread join from Home Assistant. While it runs, the setup screen, the setup
- * channel and the settings menu reach the controller through [GlassworksRuntime.radio].
+ * channel and the settings menu reach the controller through [running] ([RadioDefinition.pane]).
  */
 class RadioPane(
     private val ctx: PaneContext,
-    private val runtime: GlassworksRuntime,
+    private val running: RunningRadio,
     /** The panel's LAN address, for the ZHA serial path in the status text. */
     panelIp: () -> String?,
     internal val radio: RadioController = newController(ctx, panelIp),
@@ -99,7 +98,7 @@ class RadioPane(
     private val deliverToRadio: (ThreadFetch.Ok) -> String? = { r -> radio.joinThreadNetwork(r.tlv) }
 
     override fun start() {
-        runtime.radio = radio
+        running.controller = radio
         HaAuth.threadJoin.deliver = deliverToRadio
         HaAuth.threadJoin.addListener(threadJoinListener)
         radio.start()
@@ -109,7 +108,7 @@ class RadioPane(
         HaAuth.threadJoin.removeListener(threadJoinListener)
         // Both are process-wide: clear them only while they are still this pane's.
         if (HaAuth.threadJoin.deliver === deliverToRadio) HaAuth.threadJoin.deliver = null
-        if (runtime.radio === radio) runtime.radio = null
+        if (running.controller === radio) running.controller = null
         radio.stop()
     }
 

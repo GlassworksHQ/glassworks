@@ -17,9 +17,9 @@ import java.util.concurrent.atomic.AtomicReference
  * step is on: the mode, technology first ([RadioTechPicker], no Off), applied with Continue through the
  * same request as the installer's `radio.set_mode`; then the mode's follow-up card, the one Settings →
  * Radio shows, with what to do in Home Assistant. A Thread router can join Home Assistant's Thread
- * network from that card here: setup signed in before Panes. Main thread.
+ * network from that card here: setup signed in before Panes. Main thread. Public for tests.
  */
-internal class RadioSetupScreen(
+class RadioSetupScreen(
     private val context: Context,
     private val host: SetupHost,
     private val def: RadioDefinition,
@@ -33,7 +33,7 @@ internal class RadioSetupScreen(
 
     private val picker = RadioTechPicker(context).apply { onPick = { host.redraw() } }
     /** The follow-up card. In a preview every request is inert: nothing reaches the radio or Home Assistant. */
-    internal val section = RadioSectionView(context).apply {
+    val section = RadioSectionView(context).apply {
         onRun = { r, done -> if (host.preview) done(PREVIEW_INERT) else def.run(r, "setup screen", done) { host.redraw() } }
         onDataset = { hex -> if (host.preview) PREVIEW_INERT else def.setDataset(hex) }
         // No onAsk: setup has no dialog layer, so the controls that ask first (the Zigbee stack, Leave)

@@ -1,8 +1,7 @@
 package sh.edm.s1kiosk.radio
 
+import android.content.Context
 import dev.glassworks.platform.AppBuild
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
@@ -22,7 +21,6 @@ import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
-import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.ThreadFetch
 import java.net.InetAddress
@@ -44,7 +42,7 @@ class RadioPaneTest {
     @get:Rule val tmp = TemporaryFolder()
 
     private val app = RuntimeEnvironment.getApplication()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+    private val running = RunningRadio()
     private val props = HelperProps()
     private val allow = MemoryAllowStore()
     private var stored: String? = "thread_router"
@@ -52,7 +50,7 @@ class RadioPaneTest {
 
     private val pane by lazy {
         val ctx = PaneContext(
-            app, PanePrefs(app)::paneFile,
+            app, { app.getSharedPreferences("radio-test", Context.MODE_PRIVATE) },
             DeviceIdentity(
                 name = "test", friendlyName = "Test", macAddress = "02:00:00:00:00:01", esphomeVersion = "x",
                 compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
@@ -64,7 +62,7 @@ class RadioPaneTest {
             props, load = { stored }, store = { stored = it }, inline = true, log = {},
             filesDir = tmp.root, allow = allow,
         )
-        RadioPane(ctx, runtime, panelIp = { null }, radio = controller)
+        RadioPane(ctx, running, panelIp = { null }, radio = controller)
     }
 
     private fun entity(objectId: String): ApiEntity = pane.entities().first { it.objectId == objectId }
@@ -102,7 +100,7 @@ class RadioPaneTest {
 
     @Test fun whileItRunsTheAppReachesTheControllerAndThreadJoinDeliversToIt() {
         pane.start()
-        assertSame(pane.radio, runtime.radio)
+        assertSame(pane.radio, running.controller)
         assertNotNull(HaAuth.threadJoin.deliver)
 
         val before = published
@@ -111,7 +109,7 @@ class RadioPaneTest {
         assertEquals("a Thread join change is published", before + 2, published)
 
         pane.stop()
-        assertNull(runtime.radio)
+        assertNull(running.controller)
         assertNull(HaAuth.threadJoin.deliver)
     }
 

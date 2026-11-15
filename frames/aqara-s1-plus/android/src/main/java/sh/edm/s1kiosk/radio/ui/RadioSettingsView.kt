@@ -7,13 +7,13 @@ import sh.edm.s1kiosk.radio.RadioDefinition
 /**
  * The settings menu's live radio views: the roles (design C, [RadioTechPicker]), then the panel (radio/ui/RadioSectionView),
  * made once per menu and kept across openings, so the dataset field keeps its focus and text. Their
- * confirmations open [dialog], centred over the whole menu. Main thread.
+ * confirmations open [dialog], centred over the whole menu. Main thread. Public for the mock-ups.
  */
-internal class RadioSettingsView(private val host: SettingsItem.NativeHost, private val def: RadioDefinition) : SettingsItem.NativeView {
+class RadioSettingsView(private val host: SettingsItem.NativeHost, private val def: RadioDefinition) : SettingsItem.NativeView {
 
     private val dialog = RadioDialog(host.context).also { host.addLayer(it) }
 
-    internal val section = RadioSectionView(host.context).apply {
+    val section = RadioSectionView(host.context).apply {
         onRun = { r, done -> def.run(r, "settings menu", done, ::refresh) }
         // Same path as HA's `Thread dataset` text entity; never logged.
         onDataset = def::setDataset
@@ -40,5 +40,5 @@ internal class RadioSettingsView(private val host: SettingsItem.NativeHost, priv
     override fun back(): Boolean = dialog.isOpen.also { if (it) dialog.dismiss() }
 
     /** For the mock-ups. */
-    internal val previewDialog: RadioDialog get() = dialog
+    val previewDialog: RadioDialog get() = dialog
 }

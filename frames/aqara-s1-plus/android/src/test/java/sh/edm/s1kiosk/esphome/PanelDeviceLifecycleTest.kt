@@ -10,6 +10,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.radio.runningRadio
 
 /** start() queues the startup on esphome-main, so it can still run after the service has stopped the device. */
 @RunWith(RobolectricTestRunner::class)
@@ -24,6 +25,6 @@ class PanelDeviceLifecycleTest {
         device.startInternal()
 
         assertTrue("no panes were built", device.paneList().isEmpty())
-        assertTrue("the radio pane never published its controller", runtime.radio == null)
+        assertTrue("the radio pane never published its controller", runtime.runningRadio(RuntimeEnvironment.getApplication()).controller == null)
     }
 }

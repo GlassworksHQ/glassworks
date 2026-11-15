@@ -58,6 +58,9 @@ interface Frame {
      */
     val bootRest: BootRest? get() = null
 
+    /** The frame's way to install app updates without Android's confirmation; null to use PackageInstaller. */
+    val rootUpdates: RootUpdates? get() = null
+
     fun systemSettingsIntents(): List<Intent>
 
     /** Where to choose a Wi-Fi network, best first (the setup screen's "Choose network"). */

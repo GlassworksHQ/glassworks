@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import dev.glassworks.improv.AdbSocketServer
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.InstallerGlue
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaAuth
@@ -20,14 +20,14 @@ object SetupChannelServer {
 
     private var server: AdbSocketServer? = null
 
-    fun start(context: Context, runtime: GlassworksRuntime) {
+    fun start(context: Context, runtime: Glassworks) {
         if (server != null) return
         val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime))
         server = AdbSocketServer(SetupChannel.SOCKET, TAG) { input, output -> channel().serve(input, output) }.also { it.start() }
     }
 
-    /** Makes a channel per connection, over the panes' steps as setup takes them (GlassworksRuntime.setupSteps). */
-    internal fun channels(context: Context, runtime: GlassworksRuntime, backend: SetupChannel.Backend): () -> SetupChannel {
+    /** Makes a channel per connection, over the panes' steps as setup takes them (Glassworks.setupSteps). Public for tests. */
+    fun channels(context: Context, runtime: Glassworks, backend: SetupChannel.Backend): () -> SetupChannel {
         val steps = runtime.setupSteps(context)
         return { SetupChannel(backend, steps) { Log.i(TAG, it) } }
     }
@@ -37,7 +37,7 @@ object SetupChannelServer {
         server = null
     }
 
-    private class AndroidBackend(private val ctx: Context, private val runtime: GlassworksRuntime) : SetupChannel.Backend {
+    private class AndroidBackend(private val ctx: Context, private val runtime: Glassworks) : SetupChannel.Backend {
         private val prefs = KioskPrefs(ctx)
 
         init { HaAuth.init(ctx) }

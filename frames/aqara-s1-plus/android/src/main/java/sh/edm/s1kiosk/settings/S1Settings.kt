@@ -10,7 +10,7 @@ import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.settingsOrder
-import sh.edm.s1kiosk.GlassworksRuntime
+import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.Licences
 
@@ -25,7 +25,7 @@ import sh.edm.s1kiosk.Licences
 object S1Settings {
 
     fun model(
-        runtime: GlassworksRuntime, prefs: KioskPrefs, panes: List<PaneDefinition>,
+        runtime: Glassworks, prefs: KioskPrefs, panes: List<PaneDefinition>,
         /** The frame has its own settings app ([dev.glassworks.frame.Frame.systemSettings]): resolved by the caller, it costs a lookup. */
         deviceSettings: Boolean,
         fullScreen: () -> Unit,
@@ -54,7 +54,7 @@ object S1Settings {
     }
 
     /** Whether [context]'s frame has its own settings app, for [model]. */
-    fun hasDeviceSettings(runtime: GlassworksRuntime, context: Context): Boolean = runtime.frame.systemSettings(context) != null
+    fun hasDeviceSettings(runtime: Glassworks, context: Context): Boolean = runtime.frame.systemSettings(context) != null
 
     private const val TAG = "S1Kiosk.Settings"
 }

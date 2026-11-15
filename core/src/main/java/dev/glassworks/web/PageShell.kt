@@ -16,6 +16,12 @@ import dev.glassworks.brand.Tokens
  */
 object PageShell {
 
+    /**
+     * The product's name, on the panel's own pages (the QR pages, Manage). Home Assistant gets the
+     * device's own names instead ([dev.glassworks.frame.DeviceName], #260).
+     */
+    const val PRODUCT_NAME = "Glassworks Panel"
+
     /** The stack tells the state, as on the panel: outlined to start, lit when done, rose and dashed for a problem. */
     enum class Look { START, DONE, PROBLEM }
 
