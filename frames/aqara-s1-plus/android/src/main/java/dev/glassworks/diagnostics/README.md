@@ -21,7 +21,7 @@
       <img alt="Glassworks pane" src="https://www.glassworks.dev/brand/badge-pane-on-light.svg" height="30">
     </picture>
   </a>
-  <a href="../README.md#licence">
+  <a href="../../../../../../../../../pane-api/src/main/java/dev/glassworks/README.md#licence">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-license-on-dark.svg">
       <img alt="License: MPL-2.0" src="https://www.glassworks.dev/brand/badge-license-on-light.svg" height="30">

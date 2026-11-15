@@ -117,7 +117,7 @@ can have (the S1's wall base).
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-pane-on-dark.svg"><img alt="Glassworks Pane" src="https://www.glassworks.dev/brand/badge-pane-on-light.svg" height="30"></picture></a>
 
 A feature the panel can have or leave out. The rules are in
-[What makes a pane](../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/README.md#what-makes-a-pane). In short:
+[What makes a pane](../pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane). In short:
 
 1. **It adds something only the panel can do.** If a HA dashboard can do it, it's a dashboard.
 2. **It works through ESPHome alone.** State as entities, the settings worth changing from HA as

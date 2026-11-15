@@ -45,7 +45,7 @@ you open a PR.
 
 Glassworks is an opinionated, simple Home Assistant panel controller. **Read
 [`docs/principles.md`](docs/principles.md) before you propose or build a feature**, and check new
-panes against [What makes a pane](frames/aqara-s1-plus/android/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
+panes against [What makes a pane](pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
 In short: HA is the brain, ESPHome is the wire, the dashboard is the UI, and nothing gets installed
 in HA. If a request goes against it, say so and point at the page instead of building around it.
 
@@ -147,7 +147,7 @@ header from the example in the table, then change the name, the tagline and the 
 |---|---|---|
 | The repository's front page (the root `README.md`) | `banner-glassworks`, centred title and tagline, then the status and roadmap badges | [README.md](README.md) |
 | A library: something another project could use on its own (`app/libs/*`, `packages/*`, or such a package in `kiln/packages/`) | `banner-library-<name>`, centred title and tagline, then the MIT, status and roadmap badges | [improv](libs/improv/README.md) |
-| The Glassworks core or a pane | `banner-core` or `banner-pane`, title and tagline, then the part badge, licence, status and roadmap badges | [core](frames/aqara-s1-plus/android/src/main/java/dev/glassworks/README.md) |
+| The Glassworks core or a pane | `banner-core` or `banner-pane`, title and tagline, then the part badge, licence, status and roadmap badges | [core](pane-api/src/main/java/dev/glassworks/README.md) |
 | Kiln | `banner-kiln`, title and tagline, then the Kiln, MIT, status and roadmap badges | [Kiln](kiln/apps/kiln/README.md) |
 | An app or product built on the core | Title and tagline, then Built on Glassworks, MIT, status and roadmap badges. No banner | [S1 Kiosk](frames/aqara-s1-plus/android/README.md) |
 | A frame (`frames/<id>/README.md`) | `banner-frame-<id>`, centred title and tagline, then Built on Glassworks, the Kiln badge if Kiln installs it, the status, roadmap and Clarity badges | [aqara-s1-plus](frames/aqara-s1-plus/README.md) |
