@@ -253,7 +253,8 @@ class RadioController(
                 !taken -> h.copy(status = s, lost = late)
                 // Taken after all: wait for its answer as for any take.
                 h.lost -> h.copy(at = clock(), lost = false)
-                s != h.status || late -> null
+                // No status seen before the take (this thread was busy): only the deadline tells.
+                (h.status != null && s != h.status) || late -> null
                 else -> h
             })
         }
@@ -290,8 +291,9 @@ class RadioController(
         /** None, or the helper answered: the status is about the dataset handed over. */
         ANSWERED,
         /**
-         * The helper hasn't taken the file, or no status since then differs from the last one before it
-         * took it (for at most [HANDOFF_MS]). The helper takes the file before it writes a new status.
+         * The helper hasn't taken the file, or no status since then differs from the last one [refresh]
+         * saw before it took it (for at most [HANDOFF_MS], also when [refresh] saw none). The helper takes
+         * the file before it writes a new status.
          */
         PENDING,
         /** The file is still there after [HANDOFF_MS]: the helper isn't taking it (stopped, or another mode). */
@@ -306,7 +308,8 @@ class RadioController(
         }
     }
 
-    private data class HandOff(val status: String, val at: Long, val lost: Boolean = false)
+    /** [status]: the last status [refresh] read while the file was still there; null before the first. */
+    private data class HandOff(val status: String?, val at: Long, val lost: Boolean = false)
     private val handOff = java.util.concurrent.atomic.AtomicReference<HandOff?>()
 
     /** Helper installed and its contract version, as of the last [refresh] (for the UI thread: no getprop). */
@@ -446,7 +449,7 @@ class RadioController(
             tmp.setReadable(false, false); tmp.setReadable(true, true)
             tmp.setWritable(false, false); tmp.setWritable(true, true)
             if (!tmp.renameTo(f)) throw java.io.IOException("rename failed")
-            handOff.set(HandOff(shown, clock()))
+            handOff.set(HandOff(null, clock())) // [shown] may be older than the helper's status now
             log("Thread dataset handed to the helper (${d.length / 2} bytes)")
             refreshSoon()
             null

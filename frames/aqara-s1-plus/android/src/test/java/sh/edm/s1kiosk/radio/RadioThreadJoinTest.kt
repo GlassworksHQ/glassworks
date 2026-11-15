@@ -30,6 +30,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.PrintStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * `radio.thread_join` (#166): the installer starts the join from Home Assistant, the same join as the
@@ -280,6 +282,32 @@ class RadioThreadJoinTest {
         assertEquals("taken late: the old network's status is still not the answer", "joining", joinState().getString("phase"))
         helperTakes("ok thread_router: joined as child, network \"$NETWORK\"")
         assertEquals("a late take still ends joined", "joined", joinState().getString("phase"))
+    }
+
+    @Test
+    fun aStatusTheRadioThreadNeverSawBeforeTheTakeIsNotTheAnswer() {
+        threadRouter("detached: looking for network \"older-net\"")
+        val c = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
+        fun settle() { val done = CountDownLatch(1); c.afterPending { done.countDown() }; assertTrue(done.await(5, TimeUnit.SECONDS)) }
+        try {
+            c.start()
+            c.refreshSoon()
+            settle()
+            val busy = CountDownLatch(1)
+            c.afterPending { busy.await(5, TimeUnit.SECONDS) }
+            init.props[RadioHelper.PROP_STATUS] = "ok thread_router: joined as router, network \"older-net\""
+            assertNull(c.setThreadDataset(TLV))
+            File(tmp.root, RadioHelper.DATASET_FILE).delete()
+            busy.countDown()
+            settle()
+            assertEquals("the old network's status, first seen after the take", RadioController.ThreadHandOff.PENDING, c.threadHandOff())
+            now += RadioController.HANDOFF_MS + 1
+            c.refreshSoon()
+            settle()
+            assertEquals(RadioController.ThreadHandOff.ANSWERED, c.threadHandOff())
+        } finally {
+            c.stop()
+        }
     }
 
     @Test
