@@ -422,7 +422,8 @@ SENDSPIN_PYTHON=/tmp/sendspin-venv/bin/python ./gradlew :pane-sendspin:testDebug
     the received stream decodes with PyAV to the server's 440 Hz tone (sample count, peak,
     frequency). The pair test uses the PCM-only hello (the fallback);
   - fails if the server logs any non-compliance.
-- `EspHomeApiTest` (needs `ESPHOME_PYTHON`): the real aioesphomeapi 46.25.0 client reads
+- `EspHomeApiTest` (needs `ESPHOME_PYTHON`; it lives in the S1 app module, so run it with
+  `./gradlew :kiosk:testDebugUnitTest --tests '*EspHomeApiTest*'`): the real aioesphomeapi 46.25.0 client reads
   `DeviceCapabilities.sendspin` and gets the token over Noise (`OK`) but not over plaintext
   (`ENCRYPTION_REQUIRED`).
 
