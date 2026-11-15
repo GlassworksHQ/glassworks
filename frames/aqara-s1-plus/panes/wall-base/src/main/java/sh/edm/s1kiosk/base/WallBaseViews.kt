@@ -19,7 +19,7 @@ internal class RelaysView(context: Context, private val pane: WallBasePane, priv
 
     override val view: View = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        addView(g.label("Relays and buttons"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = g.px(12f); bottomMargin = g.px(10f) })
+        addView(g.label(WallBasePage.RELAYS), LinearLayout.LayoutParams(-1, -2).apply { topMargin = g.px(12f); bottomMargin = g.px(10f) })
         channels.chunked(3).forEachIndexed { r, row ->
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -40,11 +40,11 @@ internal class RelaysView(context: Context, private val pane: WallBasePane, priv
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
-            addView(g.text(16.5f, Glass.TX).apply { text = "Relay $ch" }, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(g.text(16.5f, Glass.TX).apply { text = WallBasePage.relayTitle(ch) }, LinearLayout.LayoutParams(0, -2, 1f))
             addView(toggle)
         })
         addView(View(context).apply { setBackgroundColor(Glass.BD) }, LinearLayout.LayoutParams(-1, g.px(1f).coerceAtLeast(1)).apply { topMargin = g.px(12f); bottomMargin = g.px(10f) })
-        addView(g.text(13.5f, Glass.FA).apply { text = "Button $ch" })
+        addView(g.text(13.5f, Glass.FA).apply { text = WallBasePage.buttonTitle(ch) })
         addView(g.text(15f, Glass.MU).apply { setSingleLine() }.also { presses[ch] = it }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = g.px(3f) })
     }
 

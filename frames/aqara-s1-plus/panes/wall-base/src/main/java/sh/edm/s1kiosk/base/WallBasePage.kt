@@ -65,6 +65,27 @@ object WallBasePage {
         return "$word · $whenText"
     }
 
+    const val RELAYS = "Relays and buttons"
+
+    fun relayTitle(ch: Int) = "Relay $ch"
+    fun buttonTitle(ch: Int) = "Button $ch"
+
+    /**
+     * The relays' cards as typed items (#269), for the Manage page: a switch per relay, which applies as the
+     * panel's toggle does ([set]) and then shows what the base reports ([relay]), and each button's last
+     * press ([press]).
+     */
+    fun relays(channels: List<Int>, relay: (Int) -> Boolean?, press: (Int) -> Pair<String, Long>?, set: (Int, Boolean) -> Unit): List<SettingsItem> =
+        listOf(SettingsItem.Group(RELAYS, channels.flatMap { ch ->
+            listOf(
+                SettingsItem.Switch(relayTitle(ch), "", { relay(ch) == true }) { on, done -> set(ch, on); done(null) },
+                SettingsItem.Info({ buttonTitle(ch) }, { press(press(ch), System.currentTimeMillis()) }),
+            )
+        }))
+
+    /** "Mount the panel on a wall base" as a typed item (#269). */
+    fun noBase(): List<SettingsItem> = listOf(SettingsItem.Info({ NO_BASE_TITLE }, { NO_BASE_TEXT }))
+
     private fun channels(n: Int) = if (n == 1) "1 channel" else "$n channels"
 
     const val NO_BASE_TITLE = "Mount the panel on a wall base"
