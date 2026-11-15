@@ -121,6 +121,30 @@ class BluetoothProxyMockups {
 
     private fun named(vararg titles: String) = titles.map { t -> allCards.single { it.first == t } }
 
+    /**
+     * #269: the page on the Manage page (HTML, to render at desktop and phone width), from the page's typed
+     * twin ([ProxyPage.twin]) with the phases above. "before" is a native view with no twin, as on main.
+     */
+    @Test
+    fun manage() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val out = java.io.File(Mockup.dir!!, "269").apply { mkdirs() }
+        fun html(name: String, twin: (() -> List<dev.glassworks.pane.SettingsItem>)?) {
+            val sec = dev.glassworks.pane.SettingsSection("bluetooth-proxy", "Bluetooth proxy", listOf(
+                dev.glassworks.pane.SettingsItem.Native("bluetooth-proxy", "Devices and Allow", twin = twin ?: { emptyList() }) { error("panel only") }),
+                master = dev.glassworks.pane.SettingsItem.Switch("Bluetooth proxy", "For BLE sensors", { true }) { _, d -> d(null) })
+            val f = dev.glassworks.manage.ManageFixture()
+            f.statusFn = { f.status.copy(panes = listOf(dev.glassworks.manage.paneRow(sec.id, sec)), sections = listOf(sec)) }
+            val b = f.Browser().also { it.signInWithHa() }
+            out.resolve("$name-manage.html").writeBytes(b.get("/bluetooth-proxy").body)
+        }
+        html("bt-before", null)
+        for ((name, m) in listOf(
+            "bt-listening" to Shown(ProxyPhase.LISTENING, listening), "bt-waiting" to Shown(ProxyPhase.WAITING, waiting),
+            "bt-bluetooth-off" to Shown(ProxyPhase.BLUETOOTH_OFF, waiting), "bt-retrying" to Shown(ProxyPhase.RETRYING, retrying),
+        )) html(name) { dev.glassworks.bluetoothproxy.ProxyPage.twin(m) }
+    }
+
     @Test
     fun mockups() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
