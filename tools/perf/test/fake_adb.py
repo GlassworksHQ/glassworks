@@ -269,7 +269,7 @@ def shape_of(obj):
     return f"{t}/{obj['stage']}" if staged else t
 
 
-def page_log(obj, split=True, record=True):
+def page_log(obj, split=True, record=True, at=None):
     SEQ[0] += 1
     text = json.dumps(obj, separators=(",", ":"))
     if record:
@@ -286,7 +286,7 @@ def page_log(obj, split=True, record=True):
             and obj.get("n") == 0:
         lines = []
     for l in lines:
-        line(PAGE_TAG, l)
+        line(PAGE_TAG, l, at=at)
 
 
 def line(tag, msg, pid=4242, at=None):
@@ -340,12 +340,12 @@ def refdash(nonce, url):
     foreign = foreign if (foreign == "end") == (tier == "heavy") else None
     dpr = float(os.environ.get("FAKE_DPR", "1.5"))
 
-    def gw(obj):
+    def gw(obj, at=None):
         # FAKE_STAGE_DELAY (protocol 8): a slow view that keeps going: this long before each line
         # after it is usable, so the whole view outlasts the usable deadline but no stage stops.
         if obj.get("t") not in ("refdash", "drawn") and os.environ.get("FAKE_STAGE_DELAY") and tier == os.environ.get("FAKE_STAGE_VIEW", tier):
             C.sleep(float(os.environ["FAKE_STAGE_DELAY"]))
-        page_log(dict(obj, nonce=nonce, run=1), split=not os.environ.get("FAKE_NO_SPLIT"))
+        page_log(dict(obj, nonce=nonce, run=1), split=not os.environ.get("FAKE_NO_SPLIT"), at=at)
 
     # FAKE_SLOW_VIEW: the view takes this long to be usable (the runner keeps the screen awake).
     C.sleep(float(os.environ.get("FAKE_SLOW_VIEW", "0")))
@@ -398,10 +398,12 @@ def refdash(nonce, url):
     if os.environ.get("FAKE_HANG_LIVE") == tier:
         return                 # as smoke 7's heavy (#202): live, then too slow to say anything more
     C.sleep(0.3)
-    gw({"t": "measure", "stage": "updates", "n": 1, "moving": 12, "offscreen": 0, "targets": 10, "update_every_ms": 200,
-        "animations": 0, "animations_expected": 0})
+    # The runner's window opens at the measure line's stamp, so the line carries the time the frames
+    # start from: stamped when printed, a fake 100 ms late on a busy machine had no frame in the window.
     m0, t0 = now(), C.now() * 1000 - origin
     paint(m0, m0 + 0.5)      # each change on screen within a frame or two
+    gw({"t": "measure", "stage": "updates", "n": 1, "moving": 12, "offscreen": 0, "targets": 10, "update_every_ms": 200,
+        "animations": 0, "animations_expected": 0}, at=m0)
     C.sleep(0.5)
     # As long as the real page's (smoke7's were cut at 1023 bytes; this one is about 1.8 KB, so it is
     # split): a change every 10 ms over the 500 ms window, and 31 rAF times.
