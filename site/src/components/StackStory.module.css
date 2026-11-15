@@ -32,6 +32,39 @@
   background: radial-gradient(70% 60% at 75% 45%, color-mix(in srgb, var(--sky) 7%, transparent), transparent 70%);
 }
 
+.newPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: start;
+  padding: 5px 14px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  font-size: 13.5px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.newPill b {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.newPill:hover {
+  border-color: color-mix(in srgb, var(--sky) 45%, var(--edge));
+}
+
+.newTag {
+  font: 600 10.5px/1 var(--f-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  color: var(--night);
+}
+
 .status {
   display: inline-flex;
   flex-wrap: wrap;

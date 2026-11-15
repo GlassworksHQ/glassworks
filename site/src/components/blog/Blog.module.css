@@ -1,0 +1,270 @@
+.cover {
+  position: relative;
+  overflow: hidden;
+  background: var(--night);
+  aspect-ratio: 1200 / 630;
+  border-radius: 16px;
+}
+
+.cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.draft {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font: 600 11px/1.4 var(--f-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px dashed color-mix(in srgb, var(--fg) 40%, transparent);
+  background: var(--bg-2);
+}
+
+.meta {
+  display: flex;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+
+.meta a {
+  color: var(--muted);
+  text-decoration: none;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.meta a:hover {
+  color: var(--fg);
+}
+
+.meta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.by {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.by svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* the index */
+.head {
+  display: grid;
+  gap: 12px;
+  margin: 18px 4px 26px;
+}
+
+.h1 {
+  font-size: clamp(36px, 4.6vw, 54px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.feed {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.feed:hover {
+  color: var(--fg);
+}
+
+.feed svg {
+  width: 15px;
+  height: 15px;
+  color: var(--amber);
+}
+
+.feature {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  overflow: hidden;
+  text-decoration: none;
+  padding: 0;
+}
+
+.feature .cover {
+  border-radius: 0;
+  height: 100%;
+}
+
+.featureText {
+  display: grid;
+  gap: 12px;
+  align-content: center;
+  padding: 32px 36px;
+}
+
+.featureText h2 {
+  font-size: 30px;
+  line-height: 1.12;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+}
+
+.featureText p {
+  color: var(--muted);
+}
+
+.feature:hover h2 {
+  color: var(--ink-sky);
+}
+
+.empty {
+  padding: 18px 0;
+  color: var(--muted);
+}
+
+/* a post */
+.post {
+  max-width: 860px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.inner {
+  padding: 34px 52px 44px;
+  display: grid;
+  gap: 18px;
+}
+
+.banner {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border: 1px dashed color-mix(in srgb, var(--fg) 30%, transparent);
+  border-radius: 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.title {
+  font-size: clamp(34px, 4.6vw, 48px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.06;
+}
+
+.summary {
+  font-size: 18px;
+  color: var(--muted);
+}
+
+.foot {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 30px;
+  padding-top: 22px;
+  border-top: 1px solid var(--edge);
+}
+
+.pager {
+  display: grid;
+  gap: 2px;
+  padding: 14px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--glass);
+  text-decoration: none;
+  flex: 1;
+  min-width: 200px;
+}
+
+.pager small {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.pager b {
+  font-weight: 500;
+}
+
+.right {
+  text-align: right;
+}
+
+/* the home page's card */
+.homeCard {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 26px;
+  align-items: center;
+  padding: 18px;
+  text-decoration: none;
+}
+
+.homeCard h2 {
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 8px 0;
+}
+
+.homeCard p {
+  color: var(--muted);
+  font-size: 15px;
+  max-width: 60ch;
+}
+
+.read {
+  display: inline-flex;
+  margin-top: 14px;
+  font: 500 14.5px/1 var(--f-sans);
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+}
+
+.homeCard:hover .read {
+  background: var(--hover);
+}
+
+@media (max-width: 900px) {
+  .feature,
+  .homeCard {
+    grid-template-columns: 1fr;
+  }
+
+  .featureText {
+    padding: 18px 18px 22px;
+  }
+
+  .featureText h2 {
+    font-size: 24px;
+  }
+
+  .homeCard {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .inner {
+    padding: 22px 18px 28px;
+  }
+}

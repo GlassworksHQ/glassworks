@@ -94,6 +94,16 @@ a.group:hover {
   font-size: inherit;
 }
 
+.ni small.new {
+  font: 600 10px/1 var(--f-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  color: var(--night);
+}
+
 .ember {
   color: color-mix(in srgb, var(--ember-b) 75%, var(--fg));
 }
