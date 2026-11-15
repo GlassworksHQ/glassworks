@@ -48,10 +48,11 @@ CI's `site` job runs lint, typecheck and build when `site/`, `packages/`, `frame
    `vercel.json` keeps Vercel's Git builds off.
 5. **Plain CSS with the tokens in `src/app/globals.css`**, CSS modules per page and component, no UI
    kit. A new web-only layout needs a mockup the maintainer approves first.
-6. **Every page uses `pageMetadata`** from `src/lib/seo.ts` for its title, description, canonical
+6. **Every page in the sitemap uses `pageMetadata`** from `src/lib/seo.ts` for its title, description, canonical
    and link preview, and is listed by a source in `src/lib/routes.ts` (the sitemap). Docs and blog
    pages add their source there and pass `type: "article"`. `check:seo` fails the build otherwise.
-   Titles and descriptions are short and plain: what the page is, no filler.
+   Titles and descriptions are short and plain: what the page is, no filler. The 404
+   (`app/not-found.tsx`) has no address of its own, so it sets a plain title and no canonical.
 7. **ESLint runs on TypeScript 6's API.** typescript-eslint can't use the root's TypeScript 7, so
    `site/package.json` has `typescript@6`, nested in `site/node_modules`, and `eslint.config.mjs`
    points typescript-eslint at it. Don't use the `@typescript/typescript6` alias: its dependency

@@ -139,7 +139,10 @@ try {
   for (const p of ["/no-such-page", "/frames/no-such-frame", "/panes/no-such-pane"]) {
     const res = await get(p);
     const html = await res.text();
-    if (res.status === 200 && !/<meta name="robots" content="noindex"/.test(html)) fail(p, "200 without noindex");
+    // the robots meta is a comma-separated list: "noindex", "noindex, follow" …
+    const robotsMeta = html.match(/<meta name="robots" content="([^"]*)"/)?.[1] ?? "";
+    const noindex = robotsMeta.split(",").some((d) => d.trim().toLowerCase() === "noindex");
+    if (res.status === 200 && !noindex) fail(p, "200 without noindex");
     if (res.status !== 200 && res.status !== 404) fail(p, `answers ${res.status}`);
   }
 
