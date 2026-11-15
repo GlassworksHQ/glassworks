@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +41,8 @@ import sh.edm.s1kiosk.esphome.MdnsAdvertiser
 import sh.edm.s1kiosk.esphome.PanelDevice
 import sh.edm.s1kiosk.manage.AppManage
 import sh.edm.s1kiosk.settings.S1Settings
+import sh.edm.s1kiosk.update.ReleaseLine
+import sh.edm.s1kiosk.update.UpdateManager
 import sh.edm.s1kiosk.voice.AssistDefinition
 
 /**
@@ -137,6 +140,21 @@ class GenericAppTest {
         val direct = start("sh.edm.s1kiosk.MainActivity")
         assertFalse("kept", sh.edm.s1kiosk.MainActivity.screenExtras(direct, parts::trustsExtras))
         assertEquals("http://192.0.2.66/", direct.getStringExtra("url"))
+    }
+
+    /** #23: it updates from its own releases (generic-android-v…), never S1 Kiosk's, and says so to GitHub. */
+    @Test fun itUpdatesFromItsOwnReleases() {
+        val runtime = runtime()
+        assertSame(ReleaseLine.GENERIC_ANDROID, runtime.releases)
+        val updates = UpdateManager(app, runtime) {}
+        try {
+            assertEquals("Glassworks", updates.model.title)
+            val open = UpdateManager::class.java.getDeclaredMethod("open", String::class.java).apply { isAccessible = true }
+            val c = open.invoke(updates, "https://192.0.2.10/") as java.net.HttpURLConnection
+            assertEquals("glassworks-generic-android/1.0.0 (+https://github.com/GlassworksHQ/glassworks)", c.getRequestProperty("User-Agent"))
+        } finally {
+            updates.stop()
+        }
     }
 
     @Test fun theFrameReadsAndroidsStandardSensors() {

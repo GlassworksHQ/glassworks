@@ -202,7 +202,7 @@ class UpdateManager(
                 HttpURLConnection.HTTP_OK -> {
                     val body = readCapped(c.inputStream, MAX_JSON_BYTES).toString(Charsets.UTF_8)
                     val offer = try {
-                        val pick = Releases.newest(Releases.parseList(body), Platform.supportedAbis)
+                        val pick = Releases.newest(Releases.parseList(body), Platform.supportedAbis, runtime.releases)
                         pick.problem?.let { problem("newest release not usable: $it") }
                         pick.offer
                     } catch (e: ReleaseFormatException) {
@@ -447,7 +447,7 @@ class UpdateManager(
         c.connectTimeout = 15_000
         c.readTimeout = 30_000
         c.instanceFollowRedirects = true // https -> https only (HttpURLConnection never switches protocol)
-        c.setRequestProperty("User-Agent", "s1-kiosk/${runtime.build.versionName} (+https://github.com/${Releases.REPO})")
+        c.setRequestProperty("User-Agent", "${runtime.releases.id}/${runtime.build.versionName} (+https://github.com/${Releases.REPO})")
         return c
     }
 

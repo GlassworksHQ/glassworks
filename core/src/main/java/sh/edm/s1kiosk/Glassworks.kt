@@ -32,6 +32,9 @@ interface Glassworks {
     /** The APK's build: its version, for everything that reports or compares it. */
     val build: AppBuild
 
+    /** Where this app's updates come from: its own releases' tags and APK names (#23). */
+    val releases: sh.edm.s1kiosk.update.ReleaseLine get() = sh.edm.s1kiosk.update.ReleaseLine.S1_KIOSK
+
     /** The frame's presence sensor, plus the camera pane's readings on a device without one (#117). */
     val presence: PresenceRelay
 

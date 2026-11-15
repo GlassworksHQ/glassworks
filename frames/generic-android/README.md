@@ -93,13 +93,27 @@ branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APK
 ## Updates
 
 App updates come from Home Assistant's update entity, as on the S1
-([docs/esphome.md](../../docs/esphome.md#app-updates)). There is no root update service here, so the
-app installs the new APK through Android's PackageInstaller. Two routes install it without anyone
-touching the screen:
+([docs/esphome.md](../../docs/esphome.md#app-updates)). Each app takes only its own releases from the
+repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
+
+| App | Release tag | APK, per ABI, with its `.sha256` |
+|---|---|---|
+| Glassworks for generic Android | `generic-android-v1.2.3` | `glassworks-generic-android-arm64-v8a-1.2.3.apk`, `glassworks-generic-android-armeabi-v7a-1.2.3.apk` |
+| S1 Kiosk | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
+
+So neither app ever offers itself the other's APK. The release workflow doesn't build the generic app
+yet, and there has been no release of it. Its first release needs its key ([Signing](#signing)) and
+`release.yml` steps for the names above.
+
+The commands below use the generic app's id, `dev.glassworks.generic_android`. For S1 Kiosk on a
+tablet, use `sh.edm.s1kiosk`.
+
+There is no root update service here, so the app installs the new APK through Android's
+PackageInstaller. Two routes install it without anyone touching the screen:
 
 | Route | Android | What you set up once |
 |---|---|---|
-| Silent self-update | 12 or newer | Allow "Install unknown apps" for S1 Kiosk |
+| Silent self-update | 12 or newer | Allow "Install unknown apps" for the app |
 | Device owner | 8.0 or newer | `dpm set-device-owner` over adb, on a device with no accounts |
 
 Without either, Android asks for a tap on the screen before it installs. The *Update status* sensor
@@ -110,8 +124,8 @@ the screen".
 
 The app asks Android to install its own update with no user action (#277). Android allows it when:
 
-1. "Install unknown apps" is allowed for S1 Kiosk: *Settings → Apps → S1 Kiosk → Install unknown
-   apps*, or `adb shell appops set sh.edm.s1kiosk REQUEST_INSTALL_PACKAGES allow`.
+1. "Install unknown apps" is allowed for the app: *Settings → Apps → Glassworks → Install unknown
+   apps*, or `adb shell appops set dev.glassworks.generic_android REQUEST_INSTALL_PACKAGES allow`.
 2. The app that runs the install has this feature. An app from before it asks for a tap once, and
    the version it installs updates silently from then on.
 3. The new APK targets a recent enough API for the device's Android
@@ -142,10 +156,10 @@ Android allows it only on a device with no accounts and a single user: remove th
 first, or set it up right after a factory reset.
 
 ```sh
-adb shell dpm set-device-owner sh.edm.s1kiosk/.AdminReceiver
+adb shell dpm set-device-owner dev.glassworks.generic_android/sh.edm.s1kiosk.AdminReceiver
 adb shell dumpsys device_policy | grep -A3 "Device Owner"
 # undo (`dpm remove-active-admin` doesn't work for a release build):
-adb shell am start -n sh.edm.s1kiosk/.improv.ImprovActivity --ez release_device_owner true
+adb shell am start -n dev.glassworks.generic_android/sh.edm.s1kiosk.improv.ImprovActivity --ez release_device_owner true
 ```
 
 While it is device owner, the app can't be uninstalled until you undo it. The details are in

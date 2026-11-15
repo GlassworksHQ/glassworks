@@ -21,6 +21,7 @@ import sh.edm.s1kiosk.esphome.DeviceHost
 import sh.edm.s1kiosk.esphome.PanelDevice
 import sh.edm.s1kiosk.setup.SetupFlow
 import sh.edm.s1kiosk.setup.SetupPane
+import sh.edm.s1kiosk.update.ReleaseLine
 import sh.edm.s1kiosk.update.UpdateManager
 import sh.edm.s1kiosk.voice.OrbBakes
 
@@ -40,6 +41,8 @@ class GlassworksRuntime(
     val app: AppParts,
     /** The frame whose panes join the app's ([paneDefinitions]): [frame] in the app. Tests pass a fake one. */
     private val paneFrame: Frame = frame,
+    /** The app's releases, for its updates: S1 Kiosk's unless the app names its own (#23). */
+    override val releases: ReleaseLine = ReleaseLine.S1_KIOSK,
 ) : Glassworks {
     override val presence = PresenceRelay(frame.presence)
 
