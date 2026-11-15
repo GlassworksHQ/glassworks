@@ -18,7 +18,7 @@
  * answer, the newest cached jar is used, and with none cached the page links javadoc.io and the build
  * goes on. A checksum that doesn't match fails the build.
  *
- * Jars are cached in .api-docs/cache/ with their checksums, so a rebuild only asks Central for the
+ * Jars are cached in .api-docs/cache/<repository>/ with their checksums, so a rebuild only asks Central for the
  * metadata. Writes only public/docs/libraries/ and .api-docs/ (both git-ignored).
  * MAVEN_REPO=<url> reads another Maven repository (a local one, to try a release before Central has it).
  */
@@ -35,7 +35,8 @@ const MAVEN = (process.env.MAVEN_REPO ?? "https://repo1.maven.org/maven2").repla
 const GROUP = "dev.glassworks";
 const OUT = join(site, "public/docs/libraries");
 const STATE = join(site, ".api-docs");
-const CACHE = join(STATE, "cache");
+// one cache per repository, so a jar from MAVEN_REPO never stands in for Central's
+const CACHE = join(STATE, "cache", MAVEN.replace(/^https?:\/\//, "").replace(/[^\w.-]+/g, "_"));
 
 const read = (p) => readFileSync(p, "utf8");
 const writeAtomic = (p, data) => {
@@ -52,12 +53,12 @@ async function get(url) {
   let res;
   try {
     res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    if (res.ok) return Buffer.from(await res.arrayBuffer());
   } catch (e) {
     throw new Offline(`${url}: ${e.cause?.code ?? e.message}`);
   }
   if (res.status === 404) return undefined;
-  if (!res.ok) throw new Offline(`${url}: HTTP ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
+  throw new Offline(`${url}: HTTP ${res.status}`);
 }
 
 /** Every libs/<name>, published or not, in name order. */

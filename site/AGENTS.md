@@ -68,7 +68,9 @@ files change.
    pages add their source there; a doc or post passes `type: "article"`, and their index pages
    (`/docs`, `/blog`, the panes and libraries lists) stay `website`. `check:seo` fails the build otherwise.
    Titles and descriptions are short and plain: what the page is, no filler. The 404
-   (`app/not-found.tsx`) has no address of its own, so it sets a plain title and no canonical.
+   (`app/not-found.tsx`) has no address of its own, so it sets a plain title and no canonical. The
+   libraries' API reference indexes are static Dokka pages outside Next, so `scripts/api-docs.mjs`
+   writes their tags, and `check:seo` holds them to the same rules.
 7. **ESLint runs on TypeScript 6's API.** typescript-eslint can't use the root's TypeScript 7, so
    `site/package.json` has `typescript@6`, nested in `site/node_modules`, and `eslint.config.mjs`
    points typescript-eslint at it. Don't use the `@typescript/typescript6` alias: its dependency

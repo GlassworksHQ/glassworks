@@ -36,7 +36,7 @@ rather than at `/api/`, which reads like a server endpoint.
 | nothing (no network) | the cached jar if there is one, else a link to javadoc.io |
 | a jar whose checksum doesn't match | nothing, because the build fails |
 
-Jars are cached in `.api-docs/cache/`. `MAVEN_REPO=<url>` reads another Maven repository, e.g. a
+Jars are cached in `.api-docs/cache/`, one folder per repository. `MAVEN_REPO=<url>` reads another Maven repository, e.g. a
 release in a local repository before Central has it.
 
 Opening `npm run dev` from another machine (a tailnet name, a LAN IP)? Next.js blocks its dev scripts
