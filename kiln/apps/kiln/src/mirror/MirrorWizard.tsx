@@ -52,7 +52,7 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
   const mirror = new MirrorSession({ connect: keys.connectWith((k) => Panel.connect(k)) }, true);
   const flash = new FlashSession({
     images: workerImages(),
-    // Kiln's release proxy (NEXT_PUBLIC_KILN_PROXY at build time points it elsewhere, e.g. a local Worker)
+    // Refract, Kiln's release proxy (#347); NEXT_PUBLIC_KILN_PROXY at build time points it elsewhere, e.g. a local Worker
     imageUrl: `${process.env.NEXT_PUBLIC_KILN_PROXY ?? IMAGE_PROXY.base}/${IMAGE_PROXY.systemImg}`,
     requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
     requestAdb: keys.connectWith((k) => Panel.connect(k)),

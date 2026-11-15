@@ -161,19 +161,18 @@ describe('every flash demo screen', () => {
     expect(screen.getByText('Select the downloaded system.img')).toBeTruthy();
   });
 
-  it('credits Glass Panes and its developer at the download, and on Done', async () => {
+  it('credits Glass Panes and its developer at the download (frame.json credits), and on Done', async () => {
     const { flash, mirror } = await flashDemo('flash-image', true);
     render(<Flash flash={flash} mirror={mirror} />);
-    const credit = document.querySelector('[data-credit="glass-panes-image"]')!;
-    expect(credit.textContent).toMatch(/community work: git-nimrod builds Glass Panes, the Mirror's Android image\. Its vendor files belong to Qualcomm and Quectel.*not from Glassworks/);
+    const credit = screen.getByText((_, el) => el?.tagName === 'SPAN' && /^This image is built by git-nimrod as part of Glass Panes\.$/.test(el.textContent ?? ''));
     expect([...credit.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://github.com/git-nimrod', 'https://github.com/git-nimrod/glass-panes']);
+    expect(screen.getByText(/vendor files belong to Qualcomm and Quectel and come from the Glass Panes release, not from Glassworks/)).toBeTruthy();
     cleanup();
     const done = await flashDemo('flash-done', true);
     render(<Flash flash={done.flash} mirror={done.mirror} />);
-    const doneCredit = document.querySelector('[data-credit="glass-panes-image"]')!;
-    expect(doneCredit.textContent).toMatch(/^Built on Glass Panes, the Mirror's community Android image by git-nimrod\./);
-    expect([...doneCredit.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://github.com/git-nimrod/glass-panes', 'https://github.com/git-nimrod']);
+    expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^Built on Glass Panes by git-nimrod\.$/.test(el.textContent ?? ''))).toBeTruthy();
     expect(screen.getByText('Glassworks is on the Mirror.')).toBeTruthy();
+    expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy();
   });
 
   it('warns that lululemon\'s software can\'t be restored before anything is written', async () => {
@@ -181,6 +180,7 @@ describe('every flash demo screen', () => {
     render(<Flash flash={flash} mirror={mirror} />);
     expect(screen.getByText('This replaces lululemon’s software for good.')).toBeTruthy();
     expect(screen.getByText(/can't be\s+restored, by Kiln or anyone/)).toBeTruthy();
+    expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy(); // #146
     expect((screen.getByText('Install Glassworks') as HTMLButtonElement).disabled).toBe(true);
   });
 });

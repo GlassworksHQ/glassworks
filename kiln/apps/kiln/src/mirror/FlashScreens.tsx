@@ -2,10 +2,12 @@
 // The Mirror's install over fastboot (FlashSession): the system image in two clicks, fastboot, the
 // stock warning, building and flashing, the first start, Done, and the way back. Same design as the
 // rest of Kiln (docs/design/kiln): one idea per screen, one ember button, the log one click away.
-import { GLASS_PANES, GLASS_PANES_USERDATA } from '@glassworks/lululemon-mirror-installer';
+import { GLASS_PANES, GLASS_PANES_USERDATA, credits } from '@glassworks/lululemon-mirror-installer';
 import { fmtSize } from '@glassworks/kiln-core';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import { useRef, useState } from 'react';
+import { BuiltOn, Credit, stepCredits } from '../components/Credit';
+import { FRAMES } from '../frames/catalog';
 import type { RailMark, RailStep } from '../wizard/state';
 import type { FileCheck, FlashSession, FlashState, WorkStep } from './flash';
 import type { MirrorSession, MirrorState } from './session';
@@ -28,22 +30,18 @@ export function flashLevel(s: FlashState): number {
   return 0;
 }
 
-/**
- * Credit for the community's work, where the person meets it. A SLOT: PR 342 adds the shared `Credit`
- * and `BuiltOn` (components/Credit.tsx, from frame.json `credits`). When it lands, replace this with
- * `<Credit c={credit} built="image" />` and `<BuiltOn …/>`. The data is the same as PR 342's.
- */
-function GlassPanesCredit({ done }: { done?: boolean }) {
-  const p = GLASS_PANES.project;
+/** Glass Panes, from the Mirror's frame.json `credits` (frames/README.md#credits). */
+const glassPanes = () => stepCredits('lululemon-mirror', credits, ['image']);
+/** The Mirror's reversibility, as frame.json rates it (#146). */
+const REVERSIBLE = FRAMES.find((x) => x.id === 'lululemon-mirror')?.ratings.reversible.detail;
+
+/** At the step that hands over the image: who built it, and whose its vendor files are. */
+function ImageCredit() {
   return (
-    <p className="small" data-credit="glass-panes-image">
-      {done
-        ? <>Built on <a className="link" href={p.href} target="_blank" rel="noopener">{p.name}</a>, the Mirror&apos;s community Android image by{' '}
-            <a className="link" href={p.developerHref} target="_blank" rel="noopener">{p.developer}</a>.</>
-        : <>This image is community work: <a className="link" href={p.developerHref} target="_blank" rel="noopener">{p.developer}</a> builds{' '}
-            <a className="link" href={p.href} target="_blank" rel="noopener">{p.name}</a>, the Mirror&apos;s Android image.</>}
-      {' '}Its vendor files belong to Qualcomm and Quectel and come from the Glass Panes release, not from Glassworks.
-    </p>
+    <>
+      {glassPanes().map((c) => <Credit key={c.id} c={c} built="image" />)}
+      <p className="small">Its vendor files belong to Qualcomm and Quectel and come from the Glass Panes release, not from Glassworks.</p>
+    </>
   );
 }
 
@@ -133,7 +131,7 @@ export function FlashImage({ f, s, m, ms }: P) {
           <CheckLine check={s.image} />
         </div>
       </div>
-      <GlassPanesCredit />
+      <ImageCredit />
       {s.proxyFailed && !ready && (
         <>
           <p className="status err" role="alert">Kiln couldn&apos;t download it directly: {s.proxyFailed}. Download it yourself, then select it.</p>
@@ -182,7 +180,7 @@ export function FlashBack({ f, s }: P) {
       <FileStep n={3} title="Download and select userdata.sparse" check={s.userdataFile} select={(file) => void f.selectUserdata(file)} want={GLASS_PANES_USERDATA}>
         <a className="link" href={GLASS_PANES_USERDATA.url} download={GLASS_PANES_USERDATA.name}>Download {GLASS_PANES_USERDATA.name}</a>
       </FileStep>
-      <GlassPanesCredit />
+      <ImageCredit />
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.wayBack(false)}>Back to installing Glassworks</button></span>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => f.toFastboot()}>Continue</button>
@@ -229,6 +227,7 @@ export function FlashConfirm({ f, s }: P) {
         Kiln can&apos;t back up the Mirror first: its bootloader can&apos;t read anything back. So lululemon&apos;s software can&apos;t be
         restored, by Kiln or anyone. The way back from here is the Glass Panes image. Everything on the Mirror is erased.
       </p>
+      {REVERSIBLE && !s.back && <p className="small">{REVERSIBLE}.</p>}
       <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} /> I understand lululemon&apos;s software can&apos;t be restored.</label>
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.retry()}>Back</button></span>
@@ -296,7 +295,8 @@ export function FlashDone({ s }: P) {
         </p>
       )}
       {s.back && <p className="lede">It starts like a new Glass Panes Mirror: set it up as its install guide says.</p>}
-      <GlassPanesCredit done />
+      <BuiltOn credits={glassPanes()} />
+      {REVERSIBLE && <p className="small">{REVERSIBLE}.</p>}
       <p className="small">The way back is the Glass Panes image: open this page with the Mirror in fastboot and choose Way back.</p>
       <div className="foot"><Log s={s} /></div>
     </section>

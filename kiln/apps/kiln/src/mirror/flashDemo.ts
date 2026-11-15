@@ -47,7 +47,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); } }, true);
   const flash = new FlashSession({
     images,
-    imageUrl: 'https://dl.glassworks.dev/glass-panes/mirror-android-1/system.img',
+    imageUrl: 'https://refract.glassworks.dev/glass-panes/mirror-android-1/system.img',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x60000000 : SYSTEM_BYTES),
     requestAdb: async () => new FirstBootMirror(),
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',

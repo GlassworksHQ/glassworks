@@ -298,8 +298,8 @@
       "detail": "Open it up and press a button to enter fastboot"
     },
     "reversible": {
-      "value": "no",
-      "detail": "lululemon's software is erased for good"
+      "value": "partly",
+      "detail": "Reversible to the community image, not to lululemon's software"
     },
     "modifiesAndroid": {
       "value": "yes",

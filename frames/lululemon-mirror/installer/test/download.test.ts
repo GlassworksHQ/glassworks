@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { MemoryStore, writeSparse, Disk } from '@glassworks/ext4';
 import { IMAGE_PROXY, ProxyError, loadSystem, resumableBody } from '../src';
 
-const URL = `${IMAGE_PROXY.base.replace('dl.glassworks.dev', 'proxy.test')}/${IMAGE_PROXY.systemImg}`;
+const URL = `${IMAGE_PROXY.base.replace('refract.glassworks.dev', 'proxy.test')}/${IMAGE_PROXY.systemImg}`;
 
 /** A fake proxy for `body`: `drops` cuts the first answers after that many bytes; `override` replaces an answer. */
 function proxy(body: Uint8Array, o: { drops?: number[]; override?: (n: number, range?: string) => Response | undefined } = {}) {

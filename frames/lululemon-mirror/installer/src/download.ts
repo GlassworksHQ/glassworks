@@ -1,12 +1,13 @@
-// The system image straight from our release proxy (a Cloudflare Worker: allowlisted files only,
-// CORS for Kiln, Range, nothing stored; maintainer, 2026-11-15) into the image loader, as one stream.
+// The system image straight from Refract (#347, kiln/workers/refract: our Cloudflare Worker that
+// streams allowlisted release files with CORS for Kiln and Range, and stores nothing; maintainer,
+// 2026-11-15) into the image loader, as one stream.
 // A dropped connection resumes with Range where it stopped, so nothing is read twice. When the proxy
 // can't serve the file (a network error that keeps coming back, a 5xx, a wrong size), Kiln falls
 // back to the person downloading it from GitHub and selecting it.
 
-/** Where Kiln's release proxy answers, and the image's id there. The tests point it at a fake. */
+/** Where Refract answers, and the image's id in its allowlist. The tests point it at a fake. */
 export const IMAGE_PROXY = {
-  base: 'https://dl.glassworks.dev',
+  base: 'https://refract.glassworks.dev',
   systemImg: 'glass-panes/mirror-android-1/system.img',
 } as const;
 
