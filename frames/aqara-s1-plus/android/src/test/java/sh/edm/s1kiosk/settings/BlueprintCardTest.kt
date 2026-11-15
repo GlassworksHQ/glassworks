@@ -57,6 +57,15 @@ class BlueprintCardTest {
 
     private fun shown(o: View, text: String) = runCatching { Mockup.label(o, text).isShown }.getOrDefault(false)
 
+    @Test fun theBlueprintsAreACardOfTheirOwn() {
+        // #301's layout: the pane's rows in one card, the Blueprints in another, titled.
+        val o = menu { BlueprintAccess.Admin(emptyList()) }
+        fun cardOf(v: View): View = generateSequence(v.parent as View) { it.parent as? View }.first { it.background != null }
+        val bp = cardOf(Mockup.label(o, "Doorbell on Glassworks panels"))
+        assertTrue("not the rows' card", bp !== cardOf(Mockup.label(o, "Ready")))
+        assertTrue("titled", generateSequence(Mockup.label(o, dev.glassworks.pane.BLUEPRINTS) as View) { it.parent as? View }.any { it === bp })
+    }
+
     @Test fun anAdministratorsAddOpensHomeAssistantsImportInTheDashboard() {
         val o = menu { BlueprintAccess.Admin(emptyList()) }
         assertTrue(shown(o, BLUEPRINTS.uppercase()) || shown(o, BLUEPRINTS))
