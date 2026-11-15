@@ -66,7 +66,7 @@ class CameraDefinition(
         )).copy(address = address)
         val use = pickers?.let { p -> usePickerItem(p) } ?: SettingsItem.Choice(
             "Camera use", { prefs.use.name },
-            { listOf(CameraUse.PRESENCE.name to CameraPrefs.USE_PRESENCE, CameraUse.PRESENCE_AND_SNAPSHOTS.name to CameraPrefs.USE_SNAPSHOTS) },
+            { listOf(CameraUse.PRESENCE.name to CameraPrefs.USE_PRESENCE, CameraUse.PRESENCE_AND_SNAPSHOTS.name to CameraPrefs.USE_CAMERA) },
         ) { v, done -> prefs.use = CameraUse.valueOf(v); done(null) }
         return listOf(
             SettingsSection(

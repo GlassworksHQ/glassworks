@@ -326,4 +326,21 @@ class CameraPaneTest {
         assertTrue(logs.toString(), logs.none { password in it || user in it })
         assertTrue("no entity carries it", r.pane.entities().none { e -> e.name.contains(password) || e.objectId.contains(password) })
     }
+
+    @Test fun homeAssistantSeesPresencePlusCameraWhileTheStoredValueStays() {
+        // Renamed on 2026-11-14 ("snapshots" read as leaving the stream out); panels keep their stored choice.
+        val r = Rig()
+        val select = r.pane.entities().filterIsInstance<sh.edm.esphome.SelectEntity>().single { it.objectId == "camera_use" }
+        fun choose(option: String) = select.command(ProtoMessage(ProtoWriter().fixed32(1, select.key, true).string(2, option).toByteArray()))
+        choose("Presence + camera")
+        assertEquals(CameraUse.PRESENCE_AND_SNAPSHOTS, r.prefs.use)
+        assertEquals("what Home Assistant shows", "Presence + camera", select.shownState())
+        assertEquals("stored as before, so panels keep their choice", "Presence + snapshots", file.getString(CameraPrefs.KEY_USE, null))
+        choose("Presence only")
+        assertEquals(CameraUse.PRESENCE, r.prefs.use)
+        choose("Presence + snapshots")
+        assertEquals("the old name is no option any more", CameraUse.PRESENCE, r.prefs.use)
+        file.edit().putString(CameraPrefs.KEY_USE, "Presence + snapshots").commit()
+        assertEquals("a panel's stored choice still reads", CameraUse.PRESENCE_AND_SNAPSHOTS, r.prefs.use)
+    }
 }

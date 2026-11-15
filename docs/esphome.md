@@ -411,10 +411,10 @@ Presence comes from lighting-insensitive motion on the panel; no image leaves it
 
 | Entity | object_id | Category, default | What it does |
 |---|---|---|---|
-| camera `Camera` | `camera` | none, on | A still when Home Assistant asks, in *Presence + snapshots* only, and only over an encrypted connection; an empty image otherwise |
+| camera `Camera` | `camera` | none, on | A still when Home Assistant asks, in *Presence + camera* only, and only over an encrypted connection; an empty image otherwise |
 | binary_sensor `Camera presence` (occupancy) | `camera_presence` | none, on | Someone moving in view; ends 8 s after the last movement. Lighting changes don't count |
 | switch `Camera privacy` | `camera_privacy` | none, on | Closes the camera: no presence, no stills, no stream |
-| select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + snapshots` |
+| select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + camera` (snapshots for Home Assistant, and the stream if you turn it on) |
 | switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*; turned on, it runs with the panel's own sign-in; encrypted connections only |
 | number `Camera sensitivity` | `camera_sensitivity` | config, off | 1 (least) to 10 (most), default 5 |
 | switch `Camera pane` | `camera_pane` | config, off | The pane's on/off (#67) |
@@ -424,7 +424,7 @@ the video of a session, and a client that signs in with Basic auth or WS-Securit
 the password in a form they can read. Turn it on only on a network you trust ([the limits](research/onvif-rtsp.md#result)).
 
 On the panel, *Settings → Camera* shows how the camera is doing, what it may do (Presence only or
-Presence + snapshots), Camera privacy and the stream switch, the stream's sign-in, the panel's address
+Presence + camera), Camera privacy and the stream switch, the stream's sign-in, the panel's address
 with the stream's RTSP and ONVIF URLs, and who watches now. First-boot setup has a Camera step under
 Panes that picks the use and asks Android for the camera. While images leave the panel (a still to
 Home Assistant, the stream to a viewer), Android 12 and later show their own camera indicator; on

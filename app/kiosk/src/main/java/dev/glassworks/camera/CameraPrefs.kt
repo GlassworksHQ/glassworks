@@ -21,10 +21,10 @@ class CameraPrefs(
     val enabled: Boolean get() = sp.getBoolean(KEY_ENABLED, false)
 
     var use: CameraUse
-        get() = when (sp.getString(KEY_USE, null)) { USE_SNAPSHOTS -> CameraUse.PRESENCE_AND_SNAPSHOTS; else -> CameraUse.PRESENCE }
+        get() = when (sp.getString(KEY_USE, null)) { STORED_CAMERA -> CameraUse.PRESENCE_AND_SNAPSHOTS; else -> CameraUse.PRESENCE }
         set(v) {
             // Presence only clears the stream switch, so going back to snapshots doesn't open the ports without a tap.
-            sp.edit().putString(KEY_USE, if (v == CameraUse.PRESENCE_AND_SNAPSHOTS) USE_SNAPSHOTS else USE_PRESENCE)
+            sp.edit().putString(KEY_USE, if (v == CameraUse.PRESENCE_AND_SNAPSHOTS) STORED_CAMERA else STORED_PRESENCE)
                 .apply { if (v == CameraUse.PRESENCE) putBoolean(KEY_ONVIF, false) }
                 .apply()
         }
@@ -77,8 +77,18 @@ class CameraPrefs(
         /** The keys the running pane reacts to. */
         val KEYS = setOf(KEY_USE, KEY_PRIVACY, KEY_ONVIF, KEY_SENSITIVITY, KEY_STREAM_USER, KEY_STREAM_PASSWORD)
 
-        /** The `camera_use` select's options, as Home Assistant shows them. */
+        /**
+         * What [KEY_USE] holds, as first written: panels keep their choice. Never shown: people read
+         * [USE_PRESENCE] and [USE_CAMERA] (the camera use was renamed on 2026-11-14, its stored value wasn't).
+         */
+        const val STORED_PRESENCE = "Presence only"
+        const val STORED_CAMERA = "Presence + snapshots"
+
+        /** The use's names, as the cards, setup and Home Assistant's `camera_use` select show them. */
         const val USE_PRESENCE = "Presence only"
-        const val USE_SNAPSHOTS = "Presence + snapshots"
+        const val USE_CAMERA = "Presence + camera"
+
+        /** The second card's line. */
+        const val USE_CAMERA_LINE = "Snapshots for Home Assistant, and the stream for Protect or Frigate if you turn it on."
     }
 }

@@ -75,7 +75,7 @@ class CameraPageOverlayTest {
         assertEquals("the card picked it (clicked=$clicked, enabled=${cards.alpha})", CameraUse.PRESENCE, def.prefs.use)
         o.refresh()
         Mockup.idle()
-        Mockup.label(o, CameraPage.NEEDS_SNAPSHOTS) // the switch's line follows the card
+        Mockup.label(o, CameraPage.NEEDS_CAMERA) // the switch's line follows the card
         assertEquals(false, def.prefs.onvif)
     }
 

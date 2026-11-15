@@ -215,6 +215,7 @@ class CameraMockups {
 
         shot("camera-01-presence-only", menu(Rig().someoneWalksUp()))
         shot("camera-01b-presence-only-scrolled", menu(Rig().someoneWalksUp()), scrollTo = "Camera sensitivity")
+        shot("camera-01c-stream-needs-camera", menu(Rig().someoneWalksUp()), scrollTo = "Privacy", bottom = false)
         shot("camera-02-snapshots-sending", menu(Rig { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS }.someoneWalksUp().stillLeft()))
         val streaming = Rig(watching = listOf("192.0.2.20", "192.0.2.25")) {
             it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true; it.signIn = "glassworks" to "mXk7qEwR3hTz9cVa4nPd" // made up, in the generated shape

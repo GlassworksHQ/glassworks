@@ -73,7 +73,7 @@ class CameraPageTest {
     }
 
     @Test fun theStreamSwitchSaysWhyItCantBeOn() {
-        assertEquals(CameraPage.NEEDS_SNAPSHOTS, CameraPage.streamDetail(privacy = false, use = CameraUse.PRESENCE))
+        assertEquals(CameraPage.NEEDS_CAMERA, CameraPage.streamDetail(privacy = false, use = CameraUse.PRESENCE))
         assertEquals("privacy first", CameraPage.PRIVACY_ON, CameraPage.streamDetail(privacy = true, use = CameraUse.PRESENCE_AND_SNAPSHOTS))
         assertEquals(CameraPage.PRIVACY_ON, CameraPage.streamRefusal(privacy = true, use = CameraUse.PRESENCE))
         assertEquals(null, CameraPage.streamRefusal(privacy = false, use = CameraUse.PRESENCE_AND_SNAPSHOTS))

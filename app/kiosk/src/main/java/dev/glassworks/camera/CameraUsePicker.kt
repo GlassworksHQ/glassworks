@@ -8,7 +8,7 @@ import android.content.Context
 import android.view.View
 
 /**
- * "What may the camera do?": two cards, Presence only and Presence + snapshots (#117's approved design).
+ * "What may the camera do?": two cards, Presence only and Presence + camera (#117's approved design).
  * The frame's own toolkit draws them (the S1 app's `CameraUseCards`); the camera's page and setup's
  * Camera step use the same view. Main thread.
  */

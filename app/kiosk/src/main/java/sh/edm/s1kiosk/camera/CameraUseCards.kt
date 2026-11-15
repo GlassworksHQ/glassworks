@@ -14,12 +14,13 @@ import android.graphics.Shader
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import dev.glassworks.camera.CameraPrefs
 import dev.glassworks.camera.CameraUse
 import dev.glassworks.camera.CameraUsePicker
 import sh.edm.s1kiosk.ui.Glass
 
 /**
- * "What may the camera do?" (#117): two cards, Presence only and Presence + snapshots, the lit one
+ * "What may the camera do?" (#117): two cards, Presence only and Presence + camera, the lit one
  * edged sky to violet as the radio's cards are. The same view on the camera's page and on setup's
  * Camera step. Main thread.
  */
@@ -59,8 +60,8 @@ class CameraUseCards(context: Context) : LinearLayout(context), CameraUsePicker 
     }
 
     private val cards = listOf(
-        Card(CameraUse.PRESENCE, "Presence only", "Wakes the screen when someone walks up. No image leaves the panel.", CameraGlyph.Kind.PERSON),
-        Card(CameraUse.PRESENCE_AND_SNAPSHOTS, "Presence + snapshots", "Also a camera in Home Assistant, for cards and snapshots.", CameraGlyph.Kind.CAMERA),
+        Card(CameraUse.PRESENCE, CameraPrefs.USE_PRESENCE, "Wakes the screen when someone walks up. No image leaves the panel.", CameraGlyph.Kind.PERSON),
+        Card(CameraUse.PRESENCE_AND_SNAPSHOTS, CameraPrefs.USE_CAMERA, CameraPrefs.USE_CAMERA_LINE, CameraGlyph.Kind.CAMERA),
     )
 
     init {

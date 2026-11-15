@@ -30,7 +30,7 @@ interface CameraReadout {
 data class CameraReading(
     val use: CameraUse,
     val privacy: Boolean,
-    /** The stream is on and allowed (Presence + snapshots). */
+    /** The stream is on and allowed (Presence + camera). */
     val onvif: Boolean,
     val signedIn: Boolean,
     val running: Boolean,
@@ -112,7 +112,7 @@ object CameraPage {
     /** Why the stream can't be on now, or null when it can: privacy first, then the use. */
     fun streamRefusal(privacy: Boolean, use: CameraUse): String? = when {
         privacy -> PRIVACY_ON
-        use == CameraUse.PRESENCE -> NEEDS_SNAPSHOTS
+        use == CameraUse.PRESENCE -> NEEDS_CAMERA
         else -> null
     }
 
@@ -145,7 +145,7 @@ object CameraPage {
     }
 
     const val NOT_ALLOWED_LINE = "Android hasn't allowed the camera. Allow it in setup, or in Android's app settings"
-    const val NEEDS_SNAPSHOTS = "Needs Presence + snapshots."
+    const val NEEDS_CAMERA = "Needs ${CameraPrefs.USE_CAMERA}."
     const val PRIVACY_ON = "Camera privacy is on."
     const val SIGN_IN_NOT_MADE = "Made for this panel when the stream is turned on"
     const val PRIVACY_DETAIL = "Closes the camera. Presence, snapshots and the stream stop."

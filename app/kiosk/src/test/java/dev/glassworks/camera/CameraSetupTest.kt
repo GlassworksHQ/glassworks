@@ -141,7 +141,7 @@ class CameraSetupTest {
             .filterIsInstance<SettingsItem.Switch>().single()
         var why: String? = "unset"
         stream.save(true) { why = it }
-        assertEquals(CameraPage.NEEDS_SNAPSHOTS, why)
+        assertEquals(CameraPage.NEEDS_CAMERA, why)
         assertFalse(r.def.prefs.onvif)
         r.def.prefs.use = CameraUse.PRESENCE_AND_SNAPSHOTS
         stream.save(true) { why = it }

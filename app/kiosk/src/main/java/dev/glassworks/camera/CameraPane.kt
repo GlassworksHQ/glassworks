@@ -94,9 +94,10 @@ class CameraPane(
         SwitchEntity("camera_privacy", "Camera privacy", "mdi:camera-off", get = { prefs.privacy }, set = { prefs.privacy = it }),
         SelectEntity(
             "camera_use", "Camera use", "mdi:cctv", disabledByDefault = true,
-            options = listOf(CameraPrefs.USE_PRESENCE, CameraPrefs.USE_SNAPSHOTS),
-            get = { if (prefs.use == CameraUse.PRESENCE) CameraPrefs.USE_PRESENCE else CameraPrefs.USE_SNAPSHOTS },
-            set = { prefs.use = if (it == CameraPrefs.USE_SNAPSHOTS) CameraUse.PRESENCE_AND_SNAPSHOTS else CameraUse.PRESENCE },
+            options = listOf(CameraPrefs.USE_PRESENCE, CameraPrefs.USE_CAMERA),
+            get = { if (prefs.use == CameraUse.PRESENCE) CameraPrefs.USE_PRESENCE else CameraPrefs.USE_CAMERA },
+            // Home Assistant reads these options at every connect (an update reconnects), so it never sends the old name.
+            set = { prefs.use = if (it == CameraPrefs.USE_CAMERA) CameraUse.PRESENCE_AND_SNAPSHOTS else CameraUse.PRESENCE },
         ),
         SwitchEntity(
             "onvif_stream", "ONVIF stream", "mdi:video-wireless", EntityCategory.CONFIG, disabledByDefault = true,
