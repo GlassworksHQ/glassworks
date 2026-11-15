@@ -127,9 +127,12 @@ panel uses. All refusals happen before any output.
 | ramdisk is not empty | `no ramdisk` |
 | ramdisk is gzip, xz or raw cpio (below) | `ramdisk format` |
 | no `"SEANDROIDENFORCE"` right after the last block (Samsung) | `SEANDROID` |
-| no LG "bump" magic right after the last block: `41 a9 e4 67 74 4d 1d 1b a4 29 f2 ec ea 65 52 79` | `LG` |
 | no AVB 1.0 signature right after the last block (byte `0x30`, then a byte with bit 7 set) | `AVB1` |
 | if there is an AVB footer and `"AVB0"` at its vbmeta offset, the vbmeta block ends within the image | `truncated` |
+
+**Out of scope.** Kiln patches only the S1's Allwinner boot image, which the golden tests cover. Images
+that need vendor-specific handling, such as Samsung kernels that Magisk binary-patches or LG "bump"
+images, are not supported. The rewrite doesn't need to detect them, and no vector covers them.
 
 An AVB footer whose offset doesn't point at `"AVB0"` is ignored, and the image is treated as having
 no AVB data.
@@ -238,14 +241,10 @@ the SHA-1 of all of `I`'s bytes, in lower-case hex.
 7. **Overlay.** Add each overlay file: a regular file, mode `mode & 07777`, uid and gid 0, replacing
    any entry with that name. Empty path components are dropped (`/a//b/` is `a/b`). These go in
    after the backup, so they are neither backed up nor listed.
-8. **Refuse the binary patches the CLI would make**, which Kiln doesn't do:
+8. **Refuse the DTB patches the CLI would make**, which Kiln doesn't do:
    - the DTB contains `"/system_root"` followed by a NUL: refuse, with a message that contains
      `patched by old` ("This boot image's DTB was patched by an old Magisk.");
-   - the DTB contains `"skip_initramfs"`: refuse, with `skip_initramfs`;
-   - the kernel contains any of these byte strings (hex): refuse, with `kernel matches`.
-     - `49010054011440B93FA00F71E9000054010840B93FA00F7189000054001840B91FA00F7188010054`
-     - `821B8012`
-     - `70726F63615F636F6E66696700`
+   - the DTB contains `"skip_initramfs"`: refuse, with `skip_initramfs`.
 9. **Write the ramdisk** (below), then compress it the way it came. A gzip ramdisk becomes gzip
    (best compression). An xz ramdisk becomes xz (BCJ detection on the whole archive). A raw one stays
    raw.
@@ -306,7 +305,9 @@ compression code as the CLI's `magiskboot`. These are public crates, at the vers
 
 Operations return 0 on success and leave the result in the output buffer. They return 1 on error.
 
-**BCJ detection.** Given some bytes:
+**BCJ detection.** These rules, and the thresholds in them (the 256-byte window, the 64-byte minimum,
+the 75%), are magiskboot's own choices, not part of the .xz format. Match them as written, because the
+vectors pin byte-identical output, and don't re-derive them. Given some bytes:
 
 1. If there are at least 20 bytes and they start with `7f 45 4c 46` (ELF): read e_machine at offset
    18, little-endian if byte 5 is 1, big-endian if it is 2, and if byte 5 is anything else, no filter.
@@ -341,9 +342,8 @@ above, with no Aqara bytes. A first test checks that the inputs are byte for byt
   of the output ramdisk (each entry's name, mode, uid, gid, rdev, size, data SHA-256 and ino). When a
   case fails, read the listing diff first: it names the entry that differs. Each case is then patched
   again, which must report `wasMagisk` and give the same image.
-- **24 refusals**, each with its required substring. They cover each row of the table above, both
-  ramdisk states, the three kernel byte strings, the two DTB strings, and an image too small for the
-  patched ramdisk.
+- **20 refusals**, each with its required substring. They cover each row of the table above, both
+  ramdisk states, the two DTB strings, and an image too small for the patched ramdisk.
 - **isMagiskPatched** on stock, patched, an old Magisk marker, and another root tool.
 - **The compressors**: for 13 inputs (ELF for each machine, big-endian ELF, ARM64 and RISC-V Images,
   raw A32 code, 63 bytes of it, 70% A32 words, text, random, empty), the BCJ filter picked and the

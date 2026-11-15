@@ -92,21 +92,12 @@ const REFUSALS: Refusal[] = [
   { name: 'lz4 ramdisk', error: 'ramdisk format', boot: () => bootImage(base({ ramdisk: new Uint8Array([0x04, 0x22, 0x4d, 0x18, ...pattern(100, 41)]) })) },
   { name: 'block past the end of the image', error: 'Corrupted', boot: () => { const b = bootImage(base()); new DataView(b.buffer).setUint32(8, SIZE, true); return b; } },
   { name: 'Samsung trailer', error: 'SEANDROID', boot: () => bootImage(base({ tail: enc.encode('SEANDROIDENFORCE') })) },
-  { name: 'LG trailer', error: 'LG', boot: () => bootImage(base({ tail: new Uint8Array([0x41, 0xa9, 0xe4, 0x67, 0x74, 0x4d, 0x1d, 0x1b, 0xa4, 0x29, 0xf2, 0xec, 0xea, 0x65, 0x52, 0x79]) })) },
   { name: 'AVB1 signature trailer', error: 'AVB1', boot: () => bootImage(base({ tail: new Uint8Array([0x30, 0x82, 0x01, 0x00]) })) },
   { name: 'vbmeta block past the end', error: 'truncated', boot: () => { const b = bootImage(base()); new DataView(b.buffer).setBigUint64(b.length - 64 + 28, BigInt(SIZE), false); return b; } },
   { name: 'ramdisk already rooted by another tool (sbin/su)', error: 'stock boot image', boot: () => bootImage(base({ ramdisk: withStock((e) => [...e, { name: 'sbin/su', mode: S_IFREG | 0o755, data: 'x' }]) })) },
   { name: 'old Magisk ramdisk (init.magisk.rc, no .backup/.magisk)', error: '.backup/.magisk', boot: () => bootImage(base({ ramdisk: withStock((e) => [...e, { name: 'init.magisk.rc', mode: S_IFREG | 0o750, data: 'x' }]) })) },
   { name: 'dtb with skip_initramfs', error: 'skip_initramfs', boot: () => bootImage(base({ dtb: new Uint8Array([...DTB, ...enc.encode('skip_initramfs')]) })) },
   { name: 'dtb patched for /system_root', error: 'patched by old', boot: () => bootImage(base({ dtb: new Uint8Array([...DTB, ...enc.encode('/system_root\0')]) })) },
-  ...[
-    '49010054011440B93FA00F71E9000054010840B93FA00F7189000054001840B91FA00F7188010054',
-    '821B8012',
-    '70726F63615F636F6E66696700',
-  ].map((h, i) => ({
-    name: `kernel with Samsung pattern ${i + 1}`, error: 'kernel matches',
-    boot: () => bootImage(base({ kernel: new Uint8Array([...KERNEL, ...Buffer.from(h, 'hex')]) })),
-  })),
   { name: 'patched image does not fit the partition', error: 'does not fit', boot: () => bootImage(base({ avb: false, size: undefined, tight: true })) },
 ];
 

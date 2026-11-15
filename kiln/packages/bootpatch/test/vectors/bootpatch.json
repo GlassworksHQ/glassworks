@@ -1641,11 +1641,6 @@
    "inputSha256": "6a26e2d8764a7f6475eebc2219e1aeb7204669b83beaee26c03fc2894a6c2298"
   },
   {
-   "name": "LG trailer",
-   "errorContains": "LG",
-   "inputSha256": "d8a51829aa29b483510f826b916a33fe76f69d34c626e51cf1d1e44ed78b2905"
-  },
-  {
    "name": "AVB1 signature trailer",
    "errorContains": "AVB1",
    "inputSha256": "027fcac1401fc354ec61ab604af9aad5999116df1fda321c702ea45a92f3df3a"
@@ -1674,21 +1669,6 @@
    "name": "dtb patched for /system_root",
    "errorContains": "patched by old",
    "inputSha256": "b7e6a3633a216d3ec64c7576c88393e77f351e00f7ea9817ac55756102d5f141"
-  },
-  {
-   "name": "kernel with Samsung pattern 1",
-   "errorContains": "kernel matches",
-   "inputSha256": "f9b2b920f09ecf0accf8e477f630dd7882d8f942f4e65772a7d9f2cbc7e18a5b"
-  },
-  {
-   "name": "kernel with Samsung pattern 2",
-   "errorContains": "kernel matches",
-   "inputSha256": "2740db982a2fd32a707dd211c0344d306b909e19c8dd714ec1fc78c59a517852"
-  },
-  {
-   "name": "kernel with Samsung pattern 3",
-   "errorContains": "kernel matches",
-   "inputSha256": "4fc57faf99cd60b52bb74b051af9ab60f515179b617224cd24d3dc9afdc5bffa"
   },
   {
    "name": "patched image does not fit the partition",

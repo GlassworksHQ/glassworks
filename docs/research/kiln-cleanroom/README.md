@@ -40,7 +40,8 @@ The work is split between two people:
   - `kiln/packages/fel/src/protocol.ts`, `kiln/packages/fel/src/felDevice.ts`,
     `kiln/packages/fel/test/legacy-internals.test.ts`;
   - `kiln/packages/bootpatch/src/cpio.ts`, `src/magisk.ts`, `src/bootimg.ts`, `src/index.ts`,
-    `src/wasm/src/lib.rs`, `test/legacy-internals.test.ts`;
+    `src/wasm/src/lib.rs`, `test/legacy-internals.test.ts`, and the built `src/wasm/bootpatch.wasm`
+    (don't disassemble it; you rebuild it);
   - `frames/aqara-s1-plus/research/web-installer.md`: the old design spec, which walks through
     the upstream sources line by line;
   - `docs/research/kiln-gpl-code.md` (#348): the audit, which names upstream functions and quotes
@@ -52,7 +53,9 @@ The work is split between two people:
 
 ### Fine to open
 
-Everything else in the repo, including: these specs; both packages' tests, fakes and vectors
+Everything else in the repo, at the commit that adds these specs. Read `test/fakes.ts`, `src/apk.ts`
+and `src/thunk.ts` as they are at that commit, not their git history, because their older versions
+held or sat next to the replaced code. Fine to open, for example: these specs; both packages' tests, fakes and vectors
 (`test/fakes.ts`, `test/arm.ts`, `test/vectors*`, `test/fel.test.ts`, `test/bootpatch.test.ts`); the
 files the specs say to keep (`a133.ts`, `thunk.ts`, `transport.ts`, `uboot.ts`, `apk.ts`,
 `compress.ts`, `overlay.ts`, `vbmeta.ts`, `bootlogo.ts`, `build-wasm.sh`, `Cargo.*`); the CLI scripts
