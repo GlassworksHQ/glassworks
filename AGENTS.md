@@ -23,6 +23,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | `kiln/` | Kiln, the WebUSB installer (FEL → fastboot → boot patch → adb), served at s1.edm.sh. The page in `src/`, protocol modules in `packages/`, the Next.js app in `apps/kiln` | TypeScript, Vite, Next.js, Rust→WASM |
 | `frames/<id>/` | Everything about one frame: its README, its Kiln recipe (`installer/`), its design data (`design/frame.json`, `recovery.json`) and its research notes (`research/`) | TypeScript, JSON, Markdown |
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup | TypeScript, React |
+| `site/` | glassworks.dev, the project site: landing page, `/frames`, `/panes`, `/brand` and the brand generator. Reads `frames/`, `packages/frame-card` and Clarity's grade from this repo at build time | TypeScript, Next.js |
 | `testing/` | Test helpers every Gradle module's tests share: `RepoFiles`, which finds source files across all modules from the repo root | Kotlin |
 | `tools/fel`, `tools/install` | FEL boot, U-Boot board files and patches, the CLI installer | bash |
 | `tools/root`, `tools/radio` | Init services in the patched boot image: root helper, update and bundle services | `/system/bin/sh` (mksh), C |
@@ -34,6 +35,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 ```sh
 ./gradlew test :kiosk:assembleDebug                 # app + libs: unit tests and a debug APK
 npm install && npm run stage -w kiln && npm test     # npm workspaces, from the repo root (also: npm run typecheck, npm run build)
+npm run lint -w site && npm run build -w site        # glassworks.dev (site/), after the install above
 tools/install/test/install-tests.sh                  # install scripts, off-device
 python3 tools/check-doc-links.py                     # relative links and #anchors in docs
 tools/root/build-verify.sh && tools/radio/test/run.sh  # root side, in an armhf container (Docker)

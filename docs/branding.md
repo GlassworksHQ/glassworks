@@ -14,7 +14,7 @@ uses. It doesn't restate the rules. When this page and glassworks.dev disagree, 
 | Licence, status and roadmap badges (instead of shields.io) | [glassworks.dev/brand#info](https://www.glassworks.dev/brand#info) |
 | README banners (core, Kiln, libraries, frames) | [glassworks.dev/brand#banners](https://www.glassworks.dev/brand#banners) |
 | What you may and may not do with the names | [glassworks.dev/trademarks](https://www.glassworks.dev/trademarks) |
-| Source of the assets, and the generator | [GlassworksHQ/glassworks.dev](https://github.com/GlassworksHQ/glassworks.dev): `public/brand/`, `scripts/brand/` |
+| Source of the assets, and the generator | [`site/`](../site/README.md), the site's app in this repo: `public/brand/`, `scripts/brand/` |
 
 Every badge and banner comes as `-on-dark.svg` and `-on-light.svg`. Text is outlined, so they need
 no fonts. Each section on /brand has a README snippet you can copy. It uses `<picture>`, so the
@@ -52,11 +52,11 @@ needs shields.io or a release link.
 
 All libraries share one banner drawing, so only its name and one-line description change:
 
-1. In [glassworks.dev](https://github.com/GlassworksHQ/glassworks.dev), add the library to
-   `src/lib/libraries.json`: its `name`, which is the folder name (e.g. `esphome-api`), and a one-line
-   `description`.
-2. Run `pnpm brand` there, and open a PR with the new SVGs.
-3. Once that is deployed, put the banner snippet from
+1. Add the library to `site/src/lib/libraries.json`: its `name`, which is the folder name (e.g.
+   `esphome-api`), and a one-line `description`.
+2. Run `npm run brand -w site` and commit the new SVGs in `site/public/brand/`. Open a PR with them
+   on their own, before the README that uses them.
+3. Once that is merged and deployed, put the banner snippet from
    [/brand#banners](https://www.glassworks.dev/brand#banners) at the top of the library's README,
    with the file name swapped for `banner-library-<name>`.
 
@@ -72,12 +72,10 @@ Every frame gets its own banner, drawn from its `frames/<id>/design/frame.json`:
 `model`, the name with `brand` set light, `frames/<id>`, and `tagline` (at most 50 characters). It
 has no hue of its own: a frame is hardware, the bottom plate of the stack.
 
-1. In this repo, give the frame's `frame.json` a `brand` (the maker's part of `name`, if any) and a
-   `tagline`, and merge it.
-2. In [glassworks.dev](https://github.com/GlassworksHQ/glassworks.dev), move the `vendor/s1-unleashed`
-   submodule pin to that commit, run `pnpm brand`, and open a PR with the new SVGs. Its build fails
-   if a frame's banner isn't the one its `frame.json` gives.
-3. Once that is deployed, put the banner at the top of the frame's README, with the file name
+1. Give the frame's `frame.json` a `brand` (the maker's part of `name`, if any) and a `tagline`.
+2. Run `npm run brand -w site` and commit the new SVGs in `site/public/brand/` in the same PR. The
+   site's build fails if a frame's banner isn't the one its `frame.json` gives.
+3. Once that is merged and deployed, put the banner at the top of the frame's README, with the file name
    `banner-frame-<id>`.
 
 The frame's README also carries its Clarity badge, `https://www.glassworks.dev/frames/<id>/clarity-on-dark.svg`

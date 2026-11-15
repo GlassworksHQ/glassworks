@@ -111,33 +111,14 @@ The source is TypeScript and CSS modules, not built. Next.js compiles it like th
 
 ## How glassworks.dev takes it
 
-The site needs two things from this repo: this package and each frame's `design/frame.json`. They
-should come at the same commit, so the card never draws data it wasn't written for.
+The site lives in this repo, in [`site/`](../../site/README.md), so it takes both things it needs
+from the same commit: this package, as an npm workspace dependency (`"@glassworks/frame-card":
+"0.0.0"`), and each frame's `design/frame.json`, read from `frames/` at build time. The card never
+draws data it wasn't written for.
 
-**Recommended: a git submodule at a pinned commit.** For example, in the site's repo:
-
-```sh
-git submodule add https://github.com/GlassworksHQ/glassworks vendor/s1-unleashed
-git -C vendor/s1-unleashed checkout <commit>
-pnpm add @glassworks/frame-card@link:vendor/s1-unleashed/packages/frame-card
-```
-
-and then import the frames' data from `vendor/s1-unleashed/frames/<id>/design/frame.json`.
-
-The package ships TypeScript and CSS modules, not built JavaScript, so the site's Next config must
-compile it: `transpilePackages: ['@glassworks/frame-card']`. Untested on glassworks.dev so far.
-
-- One pin moves the code and the data together, in one reviewed commit of the site.
-- Nothing to publish. The package's imports and `react` resolve from the site's `node_modules`,
-  because the submodule sits inside the site's folder. Don't run `npm install` inside the submodule:
-  that would give the card a second React.
-- Vercel clones public submodules over HTTPS. The cost is the whole repo, about 25 MB.
-
-| Way | For | Against |
-|---|---|---|
-| Git submodule at a commit (recommended) | One pin for code and data; no publish step | Vercel and contributors fetch the whole repo; `git submodule update --init` after cloning |
-| pnpm git dependency at a commit, `github:GlassworksHQ/glassworks#<commit>&path:/packages/frame-card` | A normal dependency; only this folder lands in `node_modules` | It brings no `frame.json`, so the data needs a second way in and a second pin that can drift; Next needs `transpilePackages` for TypeScript in `node_modules` |
-| Publishing to npm | Versioned like any library | A release pipeline and a version per change, too much while frames live in this repo |
+The package ships TypeScript and CSS modules, not built JavaScript, so the site's Next config
+compiles it: `transpilePackages: ['@glassworks/frame-card']`. Until 2026-11-15 the site was its own
+repo and took this repo as a git submodule at a pinned commit.
 
 When frames move to their own repos (#35), the site points at each frame's released `frame.json`
 instead, and this package can move with the core.

@@ -31,6 +31,10 @@
 #            Python image and fails if the committed files differ. A few minutes, so it runs only
 #            when branding/boot, branding/glass-tile, branding/bootlogos.json, the S1's frame.json
 #            or this file changes
+#   site     glassworks.dev (site/): lint, typecheck and the static build. The site has no tests of
+#            its own; its build checks the frames' data, banners and Clarity grades. Only when site/,
+#            packages/, frames/, docs/, what the site reads from tools/perf, the root package files
+#            or this file changes
 name: PR checks
 
 on:
@@ -579,3 +583,51 @@ jobs:
           git status --short -- branding
           git diff --exit-code --stat -- branding
           test -z "$(git status --porcelain -- branding)"
+
+  site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        # Fails closed like the branding job's: without a base commit to compare with (none, a
+        # force-pushed or garbage-collected one) or when git diff fails, the site is checked.
+        run: |
+          paths="site packages frames docs tools/perf/grade.ts tools/perf/page/rubric.json package.json package-lock.json .github/workflows/pr.yml"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No base commit to compare with ($BASE); checking the site."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
+            echo "git diff failed; checking the site."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$changed" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing the site is built from changed; skipping it."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - if: steps.changed.outputs.run == 'true'
+        run: npm ci
+      - name: Lint
+        if: steps.changed.outputs.run == 'true'
+        run: npm run lint -w site
+      - name: Typecheck
+        if: steps.changed.outputs.run == 'true'
+        run: npm run typecheck -w site
+      - name: Builds as Vercel builds it
+        if: steps.changed.outputs.run == 'true'
+        run: npm run build -w site
