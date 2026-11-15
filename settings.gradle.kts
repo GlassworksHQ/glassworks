@@ -19,7 +19,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "s1-kiosk"
 include(":kiosk")
-project(":kiosk").projectDir = file("app/kiosk")
+project(":kiosk").projectDir = file("frames/aqara-s1-plus/android")
 
 // Reusable libraries extracted from the app (each has its own README).
 include(":esphome-api")

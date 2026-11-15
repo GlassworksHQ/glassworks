@@ -34,7 +34,7 @@ describe('the pane list', () => {
     const search = /val SEARCH = listOf\(([^)]*)\)/.exec(kotlin)?.[1];
     expect(search?.split(',').map((s) => s.trim().replace(/"/g, ''))).toEqual(MODULE_ROOTS);
     const found = modules().map((m) => m.split(/[\\/]/).slice(-2).join('/'));
-    expect(found).toContain('app/kiosk');
+    expect(found).toContain('aqara-s1-plus/android');
   });
 
   it('fails, not passes empty, when it finds no pane file', () => {

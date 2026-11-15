@@ -1,15 +1,15 @@
 # Agent guide: the kiosk app (`app/`)
 
-The repo-wide rules are in [`../AGENTS.md`](../AGENTS.md). The feature list, every adb extra and the
+The repo-wide rules are in [`../AGENTS.md`](../../../AGENTS.md). The feature list, every adb extra and the
 logcat tags are in [`README.md`](README.md); read it before you add a new one.
 A new library in `libs/` or a new pane needs a branded README header: see
-[Branding](../AGENTS.md#branding).
+[Branding](../../../AGENTS.md#branding).
 
 ## The target
 
 - **Android 10, 32-bit `armeabi-v7a`**, 1440×720 landscape, density 1.5 (960×480 dp). The CPU is
   slow and RAM is shared with Gecko, so keep work off the main thread and don't add heavy deps.
-  An `arm64-v8a` APK is built too (`-Ps1Abi=arm64-v8a`, [`../docs/releasing.md`](../docs/releasing.md#abis)).
+  An `arm64-v8a` APK is built too (`-Ps1Abi=arm64-v8a`, [`../docs/releasing.md`](../../../docs/releasing.md#abis)).
 - **GeckoView, not WebView.** The system WebView is Chromium 74 and can't render the current HA
   frontend. Page-side changes go in the Gecko web extension (`kiosk/src/main/assets/extension/`).
 - **Never change `wm density`** on the panel to scale the UI. It breaks GeckoView's surface until a
@@ -17,11 +17,11 @@ A new library in `libs/` or a new pane needs a branded README header: see
 - The app has **no root**. It reaches the root side only through properties and init services
   (`setprop persist.s1kiosk.radio_mode …`, `setprop ctl.start s1kiosk_update`), and must keep working
   on a panel without the patched boot image. Check the `sys.s1kiosk.*` capability properties before
-  you use a service. The contracts are in [`../docs/radio.md`](../docs/radio.md#root-helper-contract-v4)
-  and [`../frames/aqara-s1-plus/research/root.md`](../frames/aqara-s1-plus/research/root.md).
+  you use a service. The contracts are in [`../docs/radio.md`](../../../docs/radio.md#root-helper-contract-v4)
+  and [`../frames/aqara-s1-plus/research/root.md`](../research/root.md).
 - Aqara's own services (`ha_master`, the system manager's DND rule) fight the kiosk. See
-  [`../frames/aqara-s1-plus/research/debloat.md`](../frames/aqara-s1-plus/research/debloat.md) and
-  [`screen-policy.md`](../frames/aqara-s1-plus/research/screen-policy.md) before you debug a screen that turns off,
+  [`../frames/aqara-s1-plus/research/debloat.md`](../research/debloat.md) and
+  [`screen-policy.md`](../research/screen-policy.md) before you debug a screen that turns off,
   Wi-Fi drops or radio conflicts.
 
 ## Build and test
@@ -35,7 +35,7 @@ A new library in `libs/` or a new pane needs a branded README header: see
   which reads every frame's `abis` with it. GitHub's runners and macOS 15+ have it; else
   `brew install jq` or `apt install jq`.
 - A test that reads the source tree (a confinement scan, the pane catalog, a golden, the font) finds
-  its files with `RepoFiles` ([`../testing/kotlin`](../testing/kotlin/dev/glassworks/testing/RepoFiles.kt)),
+  its files with `RepoFiles` ([`../testing/kotlin`](../../../testing/kotlin/dev/glassworks/testing/RepoFiles.kt)),
   never with a path like `app/kiosk/src/main` or `../../`. It searches every module from the repo root,
   so the test keeps working when code moves between modules (#21). Give each scan an `atLeast` floor:
   a scan that finds nothing must fail, not pass.
@@ -64,7 +64,7 @@ A new library in `libs/` or a new pane needs a branded README header: see
 
 ## UI changes and screenshots
 
-Every UI change needs screenshots in the PR, before and after (see [`../AGENTS.md`](../AGENTS.md#pull-requests)).
+Every UI change needs screenshots in the PR, before and after (see [`../AGENTS.md`](../../../AGENTS.md#pull-requests)).
 
 - **On the panel:** `adb shell input keyevent KEYCODE_WAKEUP`, put the screen in the state, then
   `adb exec-out screencap -p > after.png`. The intent extras help you get there:
@@ -88,4 +88,4 @@ Every UI change needs screenshots in the PR, before and after (see [`../AGENTS.m
   `arm64-v8a` one is `s1-kiosk-test-arm64-v8a-<sha>`. Creating these branches needs admin rights.
 - Test builds carry no radio bundle, so the root side stays as it was.
 - `ANDROID_SERIAL` selects the panel for adb. Don't export it before running `fastboot`; see
-  [`../tools/AGENTS.md`](../tools/AGENTS.md).
+  [`../tools/AGENTS.md`](../../../tools/AGENTS.md).

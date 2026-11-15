@@ -8,7 +8,7 @@
 #   tools/install.sh --url http://homeassistant.local:8123/my-dashboard [options]
 #
 # Options:
-#   --apk PATH          kiosk APK (default: app/kiosk/build/outputs/apk/debug/kiosk-debug.apk)
+#   --apk PATH          kiosk APK (default: frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk)
 #   --url URL           dashboard URL (default: keep the app's current/default URL)
 #   --timezone TZ       e.g. America/Los_Angeles (default: leave unchanged)
 #   --locale TAG        e.g. en-US (default: leave unchanged; applies after reboot)
@@ -29,7 +29,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 PKG=sh.edm.s1kiosk
 ACT="$PKG/.MainActivity"
-APK="$ROOT/app/kiosk/build/outputs/apk/debug/kiosk-debug.apk"
+APK="$ROOT/frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk"
 URL="" TZ_="" LOCALE="" KEYBOARD="" MODELS=1 DEBLOAT=1 DND_OFF=1 UNDO=0 DRY=0 SWITCH_OK=0
 
 while [[ $# -gt 0 ]]; do

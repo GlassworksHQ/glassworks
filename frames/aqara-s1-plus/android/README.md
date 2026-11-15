@@ -49,14 +49,14 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   by itself, and a step that is done says so with Continue. It only appears when the panel is really not
   set up (offline for 30 s, HA unknown, HA never added the panel within 2 min of startup, or HA's
   login page with no refresh token), never on a working panel. See
-  [docs/onboarding.md](../docs/onboarding.md#setup-screen-).
+  [docs/onboarding.md](../../../docs/onboarding.md#setup-screen-).
 - **Dashboard select** in HA (`select.<device>_dashboard`): Default + your Lovelace dashboards,
   listed by the HA frontend on the panel.
 - **Sign in with your phone**: if HA shows its login page, the panel covers it with a QR code for
   `http://<panel-ip>:8099/signin`. Signing in on the phone gives the panel a refresh token (HA OAuth /
   IndieAuth), and the dashboard then runs with HA's external auth (`external_auth=1`, like the
   Companion app). "Sign in on this panel instead" keeps HA's normal login page. See
-  [docs/onboarding.md](../docs/onboarding.md).
+  [docs/onboarding.md](../../../docs/onboarding.md).
 - **Microphone/camera work over plain `http://`.** The dashboard host is added to
   Gecko's `dom.securecontext.allowlist`, so `window.isSecureContext` is true and
   `navigator.mediaDevices.getUserMedia()` / AudioWorklet are available. Mic, camera and
@@ -77,28 +77,28 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   header and the sidebar. Add `?kiosk=0` to the URL to show them for one page; while you're editing a
   dashboard they're left visible.
 - **Screen policy from the panel's own sensors** (`dev.glassworks.screen.ScreenPolicy` with the S1 frame's sensors, see
-  [docs/sensors.md](../docs/sensors.md)): wake on approach (VI5300 ToF), off after idle, a night window
+  [docs/sensors.md](../../../docs/sensors.md)): wake on approach (VI5300 ToF), off after idle, a night window
   with a shorter timeout and lower brightness cap, auto-brightness from the MK6212 light sensor. Runs in
   a foreground `KioskService`, so it works while the screen is off. It replaces Aqara's DND
-  screen-off ([frames/aqara-s1-plus/research/screen-policy.md](../frames/aqara-s1-plus/research/screen-policy.md)).
+  screen-off ([frames/aqara-s1-plus/research/screen-policy.md](../research/screen-policy.md)).
 - **Home Assistant integration as an ESPHome device** (native API, voice assistant, screen and kiosk
-  controls), see below and [docs/esphome.md](../docs/esphome.md).
+  controls), see below and [docs/esphome.md](../../../docs/esphome.md).
 - **Wall base (relay base) without Aqara's daemon**: the app speaks the base's UART protocol on
   `/dev/ttyS3` itself (relays, power, energy, protection), so `ha_master` and Aqara's cloud stay stopped.
   The LocalService path through `ha_master` remains as a fallback (`base_backend`). See
-  [frames/aqara-s1-plus/research/bases.md](../frames/aqara-s1-plus/research/bases.md) and [frames/aqara-s1-plus/research/base-protocol.md](../frames/aqara-s1-plus/research/base-protocol.md).
+  [frames/aqara-s1-plus/research/bases.md](../research/bases.md) and [frames/aqara-s1-plus/research/base-protocol.md](../research/base-protocol.md).
 - **Native Music Assistant player (Sendspin)**: MA sees the panel as its own player, named as Home Assistant names the device ("Aqara S1 Plus" on the S1), and plays
   to it in sync with your other Sendspin speakers (groupable). It pairs automatically: HA hands MA the
-  panel's pairing token over the ESPHome API. See below and [docs/sendspin.md](../docs/sendspin.md).
+  panel's pairing token over the ESPHome API. See below and [docs/sendspin.md](../../../docs/sendspin.md).
 - **Notifications from Home Assistant**: `esphome.<panel>_notify` (named after the panel's node name;
   **Panes → Notifications → Action** shows it) shows a card over the dashboard (picture, up to three
   buttons, a sound), or opens a dashboard view full screen; a button press fires
-  `esphome.notification_action` in HA. Off by default. See [docs/notifications.md](../docs/notifications.md).
+  `esphome.notification_action` in HA. Off by default. See [docs/notifications.md](../../../docs/notifications.md).
 - **Wi-Fi setup over Bluetooth (Improv via BLE)**: a panel with no network (30 s after boot), or one
   told to (`--ez improv true` / the HA button "Start Wi-Fi setup (Bluetooth)"), advertises the Improv
   service for 10 minutes, so HA's `improv_ble` integration or improv-wifi.com can send it Wi-Fi
   details after someone taps **Allow** on the panel. See below and
-  [docs/onboarding.md](../docs/onboarding.md) (step 1).
+  [docs/onboarding.md](../../../docs/onboarding.md) (step 1).
 - The page sees live panel state as `window.s1kiosk` (`{presence, proximityRaw, lux, screenOn, night}`)
   plus a `s1kiosk-state` event, so dashboards can react to presence.
 
@@ -109,7 +109,7 @@ Requirements: JDK 21, Android SDK with **platform `android-37.2`** (`sdkmanager 
 ```sh
 echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties   # or set ANDROID_HOME
 ./gradlew :kiosk:assembleDebug
-# -> app/kiosk/build/outputs/apk/debug/kiosk-debug.apk
+# -> frames/aqara-s1-plus/android/build/outputs/apk/debug/kiosk-debug.apk
 ```
 
 Toolchain: Gradle 9.8.1 (wrapper), AGP 9.3.3, Kotlin 2.4.20, compileSdk 37.2, targetSdk 34, minSdk 26.
@@ -140,7 +140,7 @@ adb shell pm grant sh.edm.s1kiosk android.permission.WRITE_SECURE_SETTINGS
 adb shell service call A_device_control 7 i32 0 i32 0
 ```
 
-Then de-bloat with [`tools/debloat/debloat.sh`](../tools/debloat/debloat.sh)
+Then de-bloat with [`tools/debloat/debloat.sh`](../../../tools/debloat/debloat.sh)
 (`disable`, then `disable-launcher`).
 
 **Undo:** `debloat.sh enable`, then
@@ -214,13 +214,13 @@ above). Otherwise it falls back to a network suggestion the user must approve. S
 the current SSID also need the location permission:
 `adb shell pm grant sh.edm.s1kiosk android.permission.ACCESS_FINE_LOCATION` (already
 granted by `adb install -g`, or self-granted when device owner). Details, sources and limits:
-[docs/onboarding.md](../docs/onboarding.md). With the permission granted, the kiosk's service runs
+[docs/onboarding.md](../../../docs/onboarding.md). With the permission granted, the kiosk's service runs
 with the `location` foreground type as well as `microphone`, so the Wi-Fi scans it starts with the
-screen off are allowed (#3, see [docs/radio.md](../docs/radio.md)).
+screen off are allowed (#3, see [docs/radio.md](../../../docs/radio.md)).
 
 ## Debugging
 
-Debug builds enable Gecko remote debugging. [`tools/gecko-eval`](../tools/gecko-eval/gecko_eval.py)
+Debug builds enable Gecko remote debugging. [`tools/gecko-eval`](../../../tools/gecko-eval/gecko_eval.py)
 is a tiny Firefox Remote Debugging Protocol client that evaluates JS in the page:
 
 ```sh
@@ -229,7 +229,7 @@ python3 tools/gecko-eval/gecko_eval.py 'JSON.stringify({w: innerWidth, h: innerH
 ```
 
 Gecko's prefs are written to `files/geckoview-config.yaml` at startup and logged under the
-`S1Kiosk` tag. Sign-in and HA discovery log under `S1Auth` / `S1Discovery`, the Manage page under `S1Manage` ([docs/manage.md](../docs/manage.md); its own log keeps the `S1…` lines for 7 days in `files/manage/log/`), the Music Assistant
+`S1Kiosk` tag. Sign-in and HA discovery log under `S1Auth` / `S1Discovery`, the Manage page under `S1Manage` ([docs/manage.md](../../../docs/manage.md); its own log keeps the `S1…` lines for 7 days in `files/manage/log/`), the Music Assistant
 player under `S1Sendspin` (with a `sync:` line every 10 s while playing). The Wi-Fi scans the app
 starts while the screen is off log under `S1Kiosk.Wifi`. None of them log tokens or keys. Page
 console output goes to logcat (`Isolated Web Content` / `GeckoConsole`).
@@ -247,7 +247,7 @@ goes; not with `?kiosk=0` or `?edit=1`.
 
 > If the screen is blank/white and `innerWidth` is 0, the **display is off**. Gecko drops its
 > surface while the screen sleeps. Check `adb shell dumpsys power | grep mWakefulness`.
-> See [frames/aqara-s1-plus/research/screen-policy.md](../frames/aqara-s1-plus/research/screen-policy.md) for why the panel turns itself off.
+> See [frames/aqara-s1-plus/research/screen-policy.md](../research/screen-policy.md) for why the panel turns itself off.
 
 ## Home Assistant: ESPHome device + voice assistant
 
@@ -255,7 +255,7 @@ The app exposes the panel to Home Assistant as **one ESPHome device** over the E
 (TCP **6053**, advertised as `_esphomelib._tcp`): an Assist satellite with an **on-device wake word**
 (microWakeWord on TFLite, default "Hey Jarvis"; the openWakeWord models stay selectable for one release), a media player, the screen as a light, presence and
 illuminance sensors, and the kiosk/screen settings. It runs in `KioskService`, so it keeps listening
-while the screen is off, and talking to it wakes the screen. See [docs/esphome.md](../docs/esphome.md).
+while the screen is off, and talking to it wakes the screen. See [docs/esphome.md](../../../docs/esphome.md).
 
 ```sh
 tools/voice/fetch-models.sh            # optional: downloads the microWakeWord models on the host and adb-pushes them
@@ -265,7 +265,7 @@ tools/voice/fetch-models.sh            # optional: downloads the microWakeWord m
 
 Entity ids look like `light.s1_panel_screen`, `select.s1_panel_screen_mode`,
 `media_player.s1_panel_speaker` on a panel added before #63. One added before #260 has `glassworks_panel_*`,
-and a newer one starts with the device's name, `aqara_s1_plus_` on a new S1 ([Names](../docs/esphome.md#names)). Pick the wake word and the Assist pipeline on the device page.
+and a newer one starts with the device's name, `aqara_s1_plus_` on a new S1 ([Names](../../../docs/esphome.md#names)). Pick the wake word and the Assist pipeline on the device page.
 Encryption is automatic: a panel without a key lets HA 2026.11+ provision one when you add it
 (ESPHome dynamic encryption key). You can also set a key by hand with
 `--es api_key <base64 32 bytes> --ez api_encryption true`. Keys are never logged. Tune the mic with
@@ -287,20 +287,20 @@ correction. MA pairs with it automatically through HA (ESPHome pairing-token han
 is `media_player.s1_panel` (from the Music Assistant integration). The ESPHome switch
 **Music Assistant player (Sendspin)** turns it off. While the voice assistant listens or talks, the
 Sendspin output is muted locally and stays in sync. Verified on the panel against MA 2.10.9 (clock
-±0.43 ms, ~0.9 corrected frames/s). Details, sources and tests: [docs/sendspin.md](../docs/sendspin.md).
+±0.43 ms, ~0.9 corrected frames/s). Details, sources and tests: [docs/sendspin.md](../../../docs/sendspin.md).
 
 ## Libraries
 
 Parts of the app are standalone modules other projects can use:
 
-- [`libs/esphome-api`](../libs/esphome-api/README.md): the ESPHome native API, device side, in plain
+- [`libs/esphome-api`](../../../libs/esphome-api/README.md): the ESPHome native API, device side, in plain
   Kotlin/JVM (Noise encryption with HA key provisioning, entities, voice assistant messages).
-- [`libs/esphome-api-android`](../libs/esphome-api-android/README.md): mDNS discovery for it on Android.
-- [`libs/improv`](../libs/improv/README.md): Improv Wi-Fi for Android: a BLE GATT server, Improv Serial
+- [`libs/esphome-api-android`](../../../libs/esphome-api-android/README.md): mDNS discovery for it on Android.
+- [`libs/improv`](../../../libs/improv/README.md): Improv Wi-Fi for Android: a BLE GATT server, Improv Serial
   (including over adb, from a web page over USB), Wi-Fi joining that works on Android 10+, and the
   pure-Kotlin protocol and state machines. Its browser client is
-  [`kiln/packages/improv-serial`](../kiln/packages/improv-serial/README.md).
-- [`libs/bluetooth-proxy`](../libs/bluetooth-proxy/README.md): an ESPHome Bluetooth proxy on Android:
+  [`kiln/packages/improv-serial`](../../../kiln/packages/improv-serial/README.md).
+- [`libs/bluetooth-proxy`](../../../libs/bluetooth-proxy/README.md): an ESPHome Bluetooth proxy on Android:
   BLE scanning on Android's terms, batched into `esphome-api`. Listening only so far; the app's
   Bluetooth proxy pane runs it (#121).
 

@@ -40,7 +40,7 @@ Kotlin. Run it in any JVM or Android app and Home Assistant's ESPHome integratio
 an ESPHome device, with entities, encryption and the voice assistant. Most libraries implement the
 *client* side (talking to ESPHome devices). This one implements the device.
 
-It was extracted from [S1 Kiosk](../../app/README.md), where it runs the Aqara S1 Plus panel's
+It was extracted from [S1 Kiosk](../../frames/aqara-s1-plus/android/README.md), where it runs the Aqara S1 Plus panel's
 ESPHome device. Package `sh.edm.esphome`, MIT licensed.
 
 ## What it does

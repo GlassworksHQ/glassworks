@@ -43,7 +43,7 @@
 
 While it is on, the panel answers Home Assistant as an ESPHome Bluetooth proxy (#121). HA adds it as
 a Bluetooth scanner by itself, and hears the thermometers, plant sensors and tags near the panel
-through it. The work is the [bluetooth-proxy library](../../../../../../../../libs/bluetooth-proxy/README.md):
+through it. The work is the [bluetooth-proxy library](../../../../../../../../../libs/bluetooth-proxy/README.md):
 one long-running scan, only while HA listens, within Android's limits. This pane is the glue.
 
 | | |
@@ -61,4 +61,4 @@ tiles, then the pane's entities as Home Assistant shows them.
 
 **Not yet:** GATT connections (locks, devices that need one), the "Listen only / Listen and connect"
 choice that comes with them, and the connections tile. The entities are in
-[docs/esphome.md](../../../../../../../../docs/esphome.md#bluetooth-proxy).
+[docs/esphome.md](../../../../../../../../../docs/esphome.md#bluetooth-proxy).
