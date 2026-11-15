@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
 // As background.js gets it: a classic script that defines LockdownPolicy.
-const context = vm.createContext({});
+const context = vm.createContext({ URL }); // the background script has URL too
 vm.runInContext(`${readFileSync(process.env.POLICY_JS, "utf8")}\nthis.P = LockdownPolicy;`, context);
 const P = context.P;
 /** A verdict as a plain object of this realm, for deepEqual. */
@@ -29,6 +29,9 @@ test("origins match Origin.kt (OriginTest's cases)", () => {
     "http://192.0.2.10:8123?x": "http://192.0.2.10:8123",
     "http://192.0.2.10:8123#x": "http://192.0.2.10:8123",
     "http://192.0.2.10:8123@example.com/": "http://example.com",
+    "http://ält.example.org:8123/lovelace": "http://xn--lt-uia.example.org:8123",
+    "http://xn--lt-uia.example.org:8123/api/websocket": "http://xn--lt-uia.example.org:8123",
+    "https://ÄLT.example.org/": "https://xn--lt-uia.example.org",
   };
   for (const [url, origin] of Object.entries(cases)) assert.equal(P.origin(url), origin, url);
   for (const none of [null, undefined, "", "about:blank", "data:text/html,x", "moz-extension://abc/x", "javascript:x",
@@ -67,6 +70,11 @@ test("map tiles, web cards and other origins are blocked", () => {
     { allow: false, host: "example.com", frame: false });
   assert.equal(P.decide(req("https://192.0.2.10:8123/x", "script"), HA).allow, false, "another scheme is another origin");
   assert.equal(P.decide(req("http://192.0.2.10:8124/x", "script"), HA).allow, false, "another port is another origin");
+});
+
+test("the app's Unicode dashboard URL matches Gecko's punycode requests", () => {
+  const ha = P.origin("http://ält.example.org:8123/");
+  assert.equal(P.decide(req("http://xn--lt-uia.example.org:8123/frontend_latest/app.js", "script"), ha).allow, true);
 });
 
 test("the app's origin wins over the document's", () => {

@@ -24,6 +24,10 @@ class OriginTest {
             "http://192.0.2.10:8123?x" to "http://192.0.2.10:8123",
             "http://192.0.2.10:8123#x" to "http://192.0.2.10:8123",
             "http://192.0.2.10:8123@example.com/" to "http://example.com",
+            // Unicode hosts in punycode, as Gecko reports the requests (#346 review).
+            "http://ält.example.org:8123/lovelace" to "http://xn--lt-uia.example.org:8123",
+            "http://xn--lt-uia.example.org:8123/api/websocket" to "http://xn--lt-uia.example.org:8123",
+            "https://ÄLT.example.org/" to "https://xn--lt-uia.example.org",
         )
         for ((url, origin) in cases) assertEquals(url, origin, Origin.of(url))
         for (none in listOf(null, "", "about:blank", "data:text/html,x", "moz-extension://abc/x", "javascript:x", "file:///x",
