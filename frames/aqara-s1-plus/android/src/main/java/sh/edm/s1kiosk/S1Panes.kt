@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import android.widget.FrameLayout
 import dev.glassworks.bluetoothproxy.AndroidProxyRadio
 import dev.glassworks.bluetoothproxy.BluetoothProxyDefinition
 import dev.glassworks.camera.CameraDefinition
@@ -20,6 +21,7 @@ import dev.glassworks.diagnostics.DiagnosticsDefinition
 import dev.glassworks.diagnostics.DiagnosticsPane
 import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.manage.ManagePage
+import dev.glassworks.notifications.HaImages
 import dev.glassworks.notifications.NotificationScreen
 import dev.glassworks.notifications.NotificationSounds
 import dev.glassworks.notifications.NotificationsDefinition
@@ -27,12 +29,17 @@ import dev.glassworks.notifications.NotificationsHub
 import dev.glassworks.notifications.NotificationsPane
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import sh.edm.s1kiosk.auth.FrontendUrls
+import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.SignInServer
+import sh.edm.s1kiosk.camera.CameraDot
 import sh.edm.s1kiosk.esphome.DeviceHost
 import sh.edm.s1kiosk.manage.S1Manage
+import sh.edm.s1kiosk.notifications.NotificationOverlay
 import sh.edm.s1kiosk.radio.RadioDefinition
 import sh.edm.s1kiosk.sendspin.SendspinDefinition
 import sh.edm.s1kiosk.sendspin.SendspinPane
@@ -92,6 +99,82 @@ class S1Panes : AppParts {
         val bluetoothProxy = BluetoothProxyDefinition(panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(context), ::BluetoothProxyPage)
         return listOf(AssistDefinition(panePrefs.paneFile("assist")), SendspinDefinition(panePrefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
             frameDefinitions + camera + DiagnosticsDefinition(panePrefs.paneFile("diagnostics"))
+    }
+
+    /**
+     * The S1 app's layers over the dashboard, bottom first: the timers (12 dp), the notifications (14 dp, over
+     * the timers), the voice orb (16 dp), and the camera's privacy dot above the menus (30 dp).
+     */
+    override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> {
+        val activity = host.activity
+        val panePrefs = PanePrefs(activity)
+        val timers = TimerOverlay(activity, runtime.orbs)
+        val voice = VoiceOverlay(activity).apply {
+            onCancel = { runtime.voiceCancel?.invoke() }
+            onShowingChanged = { timers.voiceShowing(it) } // a timer set by voice flies out of the orb
+        }
+        val notes = NotificationOverlay(activity, notifications, notificationImages(activity), orbs = runtime.orbs).apply {
+            screenOn = { runtime.screen.screenOn }
+            onPage = host::openInPage
+            onDoNotDisturb = { on -> panePrefs.notifications.doNotDisturb = on }
+        }
+        val listener: (NotificationsHub.State) -> Unit = { s -> host.post { notes.update(s) } }
+        notifications.addListener(listener)
+        notifications.onOpenList = { host.post { host.hideMenu(); notes.openList() } }
+        notifications.onReveal = { host.post { host.hideMenu() } }
+        runtime.onVoiceUi = { voice.update(voiceUi, panePrefs.voice.overlay) }
+        val dot = CameraDot(activity)
+        // Images leaving the panel (#117): the dot follows, on the main thread (the device posts each change).
+        runtime.onCameraLeaving = { dot.show(runtime.cameraLeaving) }
+        dot.show(runtime.cameraLeaving)
+        return listOf(
+            object : PaneOverlay {
+                override val view = timers
+                override val layoutParams = timers.layoutParams()
+                override fun screenChanged() = timers.refresh()
+            },
+            object : PaneOverlay {
+                override val view = notes
+                override val layoutParams = FrameLayout.LayoutParams(-1, -1)
+                override fun screenChanged() = notes.update(notifications.state)
+                override fun back() = notes.back()
+                override fun destroy() {
+                    notifications.removeListener(listener)
+                    notifications.onOpenList = null
+                    notifications.onReveal = null
+                }
+            },
+            object : PaneOverlay {
+                override val view = voice
+                override val layoutParams = FrameLayout.LayoutParams(-1, -1)
+                override fun destroy() { runtime.onVoiceUi = null }
+            },
+            object : PaneOverlay {
+                override val view = dot
+                override val layoutParams = dot.layoutParams()
+                override val aboveMenus = true
+                override fun destroy() { runtime.onCameraLeaving = null }
+            },
+        )
+    }
+
+    /**
+     * Pictures from the panel's own HA, with the dashboard's sign-in. Only when that sign-in belongs to
+     * the same HA, so the token never goes to another host.
+     */
+    private fun notificationImages(context: Context): HaImages {
+        val prefs = KioskPrefs(context)
+        return HaImages(
+            haBase = { prefs.haBase },
+            token = token@{
+                if (!HaAuth.signedIn || !FrontendUrls.sameOrigin(HaAuth.signedInBase, prefs.haBase)) return@token null
+                val done = CountDownLatch(1)
+                var token: String? = null
+                HaAuth.accessToken(force = false) { a -> token = (a as? HaAuth.Access.Ok)?.accessToken; done.countDown() }
+                done.await(10, TimeUnit.SECONDS)
+                token
+            },
+        )
     }
 
     override val mainActivity = MainActivity::class.java

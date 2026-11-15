@@ -11,8 +11,8 @@ import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.esphome.DeviceHost
 
 /**
- * What an app adds to the [GlassworksRuntime] it runs: its panes, where their settings live, its activity
- * and its Manage page. Each app has its own (the S1's: [S1Panes]), so each runs the panes its frames can.
+ * What an app adds to the [GlassworksRuntime] it runs: its panes and their layers over the dashboard, where
+ * their settings live, its activity and its Manage page. Each app has its own (the S1's: [S1Panes]), so each runs the panes its frames can.
  */
 interface AppParts {
     /**
@@ -23,6 +23,9 @@ interface AppParts {
 
     /** The app's panes for the panel's device, built from what the device gives them, in the order they start. */
     fun devicePanes(runtime: GlassworksRuntime, host: DeviceHost): List<Pane>
+
+    /** The app's layers over the dashboard in its activity, built from what the activity gives them, bottom first. */
+    fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay>
 
     /** The app's activity: the one that shows the dashboard, and that Home Assistant's commands go to. */
     val mainActivity: Class<out Activity>

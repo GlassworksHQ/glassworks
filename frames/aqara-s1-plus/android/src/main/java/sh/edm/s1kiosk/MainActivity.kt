@@ -32,7 +32,6 @@ import dev.glassworks.frame.openSystemSettings
 import sh.edm.s1kiosk.dashboard.DashboardOptions
 import sh.edm.s1kiosk.dashboard.Dashboards
 import sh.edm.s1kiosk.discovery.HaUrls
-import sh.edm.s1kiosk.notifications.NotificationOverlay
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
 import sh.edm.s1kiosk.settings.PanelBlueprints
 import sh.edm.s1kiosk.settings.S1Settings
@@ -56,16 +55,13 @@ import kotlin.system.exitProcess
 
 class MainActivity : Activity() {
 
-    /** The S1 app's runtime, for the panes' shared state the activity shows (notifications, the voice overlay). */
+    /** The app's runtime, for its parts: the panes' layers over the dashboard ([AppParts.overlays]). */
     private val runtime get() = (application as KioskApp).glassworks
     private lateinit var prefs: KioskPrefs
-    private lateinit var panePrefs: PanePrefs
     private lateinit var loadingOverlay: LoadingOverlay
     private lateinit var settingsOverlay: KioskSettingsOverlay
-    private lateinit var voiceOverlay: VoiceOverlay
-    private lateinit var cameraDot: sh.edm.s1kiosk.camera.CameraDot
-    private lateinit var timerOverlay: TimerOverlay
-    private lateinit var notificationOverlay: NotificationOverlay
+    /** The panes' layers over the dashboard, bottom first ([AppParts.overlays]). */
+    private var overlays: List<PaneOverlay> = emptyList()
     private lateinit var threadJoinOverlay: sh.edm.s1kiosk.setup.ThreadJoinOverlay
     private lateinit var setupOverlay: SetupOverlay
     private lateinit var wifiStatus: WifiSetupStatus
@@ -167,7 +163,6 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = KioskPrefs(this)
-        panePrefs = PanePrefs(this)
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
         applyIntent(intent, fromNewIntent = false)
@@ -186,16 +181,7 @@ class MainActivity : Activity() {
         val real = android.graphics.Point().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealSize(it) }
         Backdrop.prewarm(maxOf(real.x, real.y), minOf(real.x, real.y))
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
-        voiceOverlay = VoiceOverlay(this).apply {
-            onCancel = { glassworks.voiceCancel?.invoke() }
-            onShowingChanged = { timerOverlay.voiceShowing(it) } // a timer set by voice flies out of the orb
-        }
-        timerOverlay = TimerOverlay(this, glassworks.orbs)
-        notificationOverlay = NotificationOverlay(this, runtime.s1Panes.notifications, notificationImages(), orbs = glassworks.orbs).apply {
-            screenOn = { glassworks.screen.screenOn }
-            onPage = { url -> if (url != null) openInPage(url) else backToDashboard() }
-            onDoNotDisturb = { on -> panePrefs.notifications.doNotDisturb = on }
-        }
+        overlays = runtime.app.overlays(runtime, overlayHost)
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
@@ -210,7 +196,6 @@ class MainActivity : Activity() {
             onClose = { HaAuth.threadJoin.disarm(); hide() }
         }
         settingsOverlay = KioskSettingsOverlay(this).apply { onRestart = ::restartProcess }
-        cameraDot = sh.edm.s1kiosk.camera.CameraDot(this)
         // Improv-aware from the start: KioskService (which registers the provider) starts after this.
         wifiStatus = ImprovWifiStatus(this)
         root = android.widget.FrameLayout(this)
@@ -218,13 +203,11 @@ class MainActivity : Activity() {
             // startSession adds the page at index 0, under everything.
             addView(loadingOverlay, android.widget.FrameLayout.LayoutParams(-1, -1)) // under the setup screen
             addView(setupOverlay, android.widget.FrameLayout.LayoutParams(-1, -1))
-            // Z order (elevation): setup 20 dp > voice 16 dp > timers 12 dp > page.
-            addView(timerOverlay, timerOverlay.layoutParams())
-            addView(notificationOverlay, android.widget.FrameLayout.LayoutParams(-1, -1)) // 14 dp: over timers, under voice
-            addView(voiceOverlay, android.widget.FrameLayout.LayoutParams(-1, -1))
+            // Z order (elevation): setup 20 dp > the panes' layers (the S1's: voice 16 dp, notifications 14 dp, timers 12 dp) > page.
+            overlays.filterNot { it.aboveMenus }.forEach { addView(it.view, it.layoutParams) }
             addView(settingsOverlay, android.widget.FrameLayout.LayoutParams(-1, -1)) // 24 dp
             addView(threadJoinOverlay, android.widget.FrameLayout.LayoutParams(-1, -1)) // 26 dp
-            addView(cameraDot, cameraDot.layoutParams()) // 30 dp: the camera's privacy indicator is never covered
+            overlays.filter { it.aboveMenus }.forEach { addView(it.view, it.layoutParams) } // never covered (the camera's dot, 30 dp)
         })
         // The launch backdrop (res/drawable/launch_backdrop.xml) covers the cold start; once our own
         // views have drawn, a plain colour behind them costs the GPU nothing on every later frame.
@@ -252,23 +235,10 @@ class MainActivity : Activity() {
                 screenBrightness = if (b < 0f) WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE else b
             }
         }
-        runtime.s1Panes.notifications.addListener(notificationListener)
-        runtime.s1Panes.notifications.onOpenList = {
-            handler.post {
-                if (settingsOverlay.isShowing) settingsOverlay.hide()
-                notificationOverlay.openList()
-            }
-        }
-        runtime.s1Panes.notifications.onReveal = { handler.post { if (settingsOverlay.isShowing) settingsOverlay.hide() } }
         glassworks.screen.onStateChanged = {
             pushState()
-            timerOverlay.refresh()
-            notificationOverlay.update(runtime.s1Panes.notifications.state)
+            overlays.forEach { it.screenChanged() }
         }
-        glassworks.onVoiceUi = { voiceOverlay.update(runtime.s1Panes.voiceUi, panePrefs.voice.overlay) }
-        // Images leaving the panel (#117): the dot follows, on the main thread (PanelDevice posts each change).
-        glassworks.onCameraLeaving = { cameraDot.show(glassworks.cameraLeaving) }
-        cameraDot.show(glassworks.cameraLeaving)
         glassworks.commandSink = { applyIntent(it, fromNewIntent = true) }
         startSession()
         intent?.let { i -> handler.post { applySetupPreview(i) } }
@@ -308,8 +278,12 @@ class MainActivity : Activity() {
 
     // ---- notifications (#118): the overlay, a view full screen and the way back
 
-    private val notificationListener: (dev.glassworks.notifications.NotificationsHub.State) -> Unit = { s ->
-        handler.post { if (::notificationOverlay.isInitialized) notificationOverlay.update(s) }
+    /** What the panes' layers get from the activity. */
+    private val overlayHost = object : OverlayHost {
+        override val activity get() = this@MainActivity
+        override fun openInPage(url: String?) = if (url != null) this@MainActivity.openInPage(url) else backToDashboard()
+        override fun hideMenu() { if (::settingsOverlay.isInitialized && settingsOverlay.isShowing) settingsOverlay.hide() }
+        override fun post(block: () -> Unit) { handler.post(block) }
     }
 
     /** Where the page was before a notification opened a view full screen. */
@@ -333,22 +307,6 @@ class MainActivity : Activity() {
 
     /** In place, replacing the history entry: dashboard → view → dashboard leaves one entry, not three. */
     private fun navigate(url: String) = JSONObject().put("type", "navigate").put("url", url).put("replace", true)
-
-    /**
-     * Pictures from the panel's own HA, with the dashboard's sign-in. Only when that sign-in belongs to
-     * the same HA, so the token never goes to another host.
-     */
-    private fun notificationImages() = dev.glassworks.notifications.HaImages(
-        haBase = { prefs.haBase },
-        token = token@{
-            if (!HaAuth.signedIn || !FrontendUrls.sameOrigin(HaAuth.signedInBase, prefs.haBase)) return@token null
-            val done = java.util.concurrent.CountDownLatch(1)
-            var token: String? = null
-            HaAuth.accessToken(force = false) { a -> token = (a as? HaAuth.Access.Ok)?.accessToken; done.countDown() }
-            done.await(10, java.util.concurrent.TimeUnit.SECONDS)
-            token
-        },
-    )
 
     private fun externalize(url: String): String =
         if (HaAuth.signedIn && FrontendUrls.sameOrigin(url, HaAuth.signedInBase)) FrontendUrls.withFlag(url) else url
@@ -884,7 +842,7 @@ class MainActivity : Activity() {
     override fun onBackPressed() {
         // The topmost layer only: the menu's own (a picker, a dialog, then the menu), then a setup preview.
         if (::settingsOverlay.isInitialized && settingsOverlay.isShowing) { settingsOverlay.back(); return }
-        if (::notificationOverlay.isInitialized && notificationOverlay.back()) return
+        if (overlays.asReversed().any { it.back() }) return
         if (setupPreview) { closeSetupPreview(); return }
         page?.goBack()
     }
@@ -1109,9 +1067,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         HaAuth.removeListener(authListener)
-        runtime.s1Panes.notifications.removeListener(notificationListener)
-        runtime.s1Panes.notifications.onOpenList = null
-        runtime.s1Panes.notifications.onReveal = null
+        overlays.forEach { it.destroy() }
         HaAuth.threadJoin.removeListener(threadJoinListener)
         SetupSignals.removeListener(setupSignalListener)
         wifiStatus.observe(null)
@@ -1122,8 +1078,6 @@ class MainActivity : Activity() {
         glassworks.screen.onKeepScreenOn = null
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
-        glassworks.onVoiceUi = null
-        glassworks.onCameraLeaving = null
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()

@@ -52,6 +52,7 @@ class AppPartsTest {
             return listOf(Definition("first")) + frameDefinitions + Definition("needs-a-camera", setOf(Capability.CAMERA))
         }
         override fun devicePanes(runtime: GlassworksRuntime, host: DeviceHost): List<Pane> = emptyList()
+        override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> = emptyList()
         override val mainActivity = Activity::class.java
         override fun paneFile(context: Context, namespace: String) = file
         override fun managePage(context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
