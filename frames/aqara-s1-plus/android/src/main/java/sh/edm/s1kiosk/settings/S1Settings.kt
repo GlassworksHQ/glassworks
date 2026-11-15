@@ -31,6 +31,8 @@ object S1Settings {
         fullScreen: () -> Unit,
         /** The app's version as the menu and About show it ("0.4.3 · test build abc1234" on a test build). */
         version: String = runtime.build.shown,
+        /** A pane's Blueprints card by its id ([PanelBlueprints.item]), or null for none. */
+        blueprints: (String) -> SettingsItem.Blueprints? = { null },
     ): KioskSettingsOverlay.Model {
         val frame = runtime.frame
         val core = CoreSettings(
@@ -48,7 +50,7 @@ object S1Settings {
         )
         // One pane's failure leaves the others' pages.
         val sections = panes.flatMap { d ->
-            runCatching { paneSections(listOf(d), runtime::runningPane) }.onFailure { Log.w(TAG, "${d.id}'s settings failed", it) }.getOrDefault(emptyList())
+            runCatching { paneSections(listOf(d), blueprints, runtime::runningPane) }.onFailure { Log.w(TAG, "${d.id}'s settings failed", it) }.getOrDefault(emptyList())
         }
         return KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), version, sections.map { it.id }.toSet())
     }

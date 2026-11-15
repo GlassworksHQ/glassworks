@@ -60,7 +60,12 @@ class SettingsSection(
  * entities. A pane whose [PaneDefinition.switch] is off shows what that means ([PaneSwitch.offNote])
  * and its entities, unavailable. Definition order.
  */
-fun paneSections(definitions: List<PaneDefinition>, running: (String) -> Pane? = { null }): List<SettingsSection> = definitions.flatMap { d ->
+fun paneSections(
+    definitions: List<PaneDefinition>,
+    /** A pane's Blueprints card by its id, or null when it has none. Shown only while the pane is on. */
+    blueprints: (String) -> SettingsItem.Blueprints? = { null },
+    running: (String) -> Pane? = { null },
+): List<SettingsSection> = definitions.flatMap { d ->
     val choice = d.setupChoice ?: d.switch?.choice()
     val master = choice?.let { c ->
         // The card's apply can wait on the device (the radio): off the main thread.
@@ -77,21 +82,33 @@ fun paneSections(definitions: List<PaneDefinition>, running: (String) -> Pane? =
             val covered = own.mapNotNull { it.covers }.flatten().toSet()
             val rest = inHomeAssistant(pane) { it.objectId !in covered }
             val first = own.indexOfFirst { it.covers != null }
+            val card = blueprints(d.id)
             own.mapIndexed { i, s ->
+                val items = if (i == 0) withBlueprints(s.items, card) else s.items
                 SettingsSection(
-                    s.id, s.title, if (i == first && rest != null) s.items + rest else s.items, s.heading,
+                    s.id, s.title, if (i == first && rest != null) items + rest else items, s.heading,
                     if (i > 0 || s.master != null) s.master else master, s.status, s.unavailable, source = pane, covers = s.covers,
                 )
             }
         }
         choice != null -> listOf(SettingsSection(
             d.id, choice.title,
-            listOfNotNull(off?.let { s -> SettingsItem.Note { s.offNote } }, inHomeAssistant(pane, on = off == null))
+            listOfNotNull(off?.let { s -> SettingsItem.Note { s.offNote } }, if (off == null) blueprints(d.id) else null, inHomeAssistant(pane, on = off == null))
                 .ifEmpty { listOf(SettingsItem.Note { NOT_RUNNING }) },
             master = master, source = pane,
         ))
         else -> emptyList()
     }
+}
+
+/**
+ * [items] with the pane's Blueprints [card] just above its own "In Home Assistant" list, or at the end
+ * when it has none: the pane's settings, then what to add to Home Assistant, then what is in it.
+ */
+private fun withBlueprints(items: List<SettingsItem>, card: SettingsItem.Blueprints?): List<SettingsItem> {
+    if (card == null) return items
+    val at = items.indexOfFirst { (it is SettingsItem.Group && it.title == IN_HOME_ASSISTANT) || (it is SettingsItem.States && it.title == IN_HOME_ASSISTANT) }
+    return if (at < 0) items + card else items.subList(0, at) + card + items.subList(at, items.size)
 }
 
 /**
@@ -262,6 +279,14 @@ sealed interface SettingsItem {
      * quiet grey; [problem]: something is wrong that the person can fix (rose, over [ok]). Read again while open.
      */
     class Status(val text: () -> String, val ok: () -> Boolean, val problem: () -> Boolean = { false }) : SettingsItem
+
+    /**
+     * A pane's Home Assistant blueprints ([Blueprint]) under [BLUEPRINTS], each with a button that opens
+     * Home Assistant's own import dialog: the panel never writes them itself (pane rule 4). [card] says what
+     * each button does now ([blueprintCard]); surfaces read it again every couple of seconds while the page
+     * is open. [open]: the panel opens a link in its dashboard (the Manage page links in a new tab instead).
+     */
+    class Blueprints(val list: List<Blueprint>, val card: (BlueprintSurface) -> BlueprintCard, val open: (String) -> Unit) : SettingsItem
 
     /** Readings as tiles, [columns] to a row (the diagnostics' six, the wall base's strip). Read again while the page is open. */
     class Tiles(val columns: Int, val tiles: () -> List<Tile>) : SettingsItem

@@ -177,9 +177,10 @@ No doorbell pane: your doorbell is in Home Assistant already, and a dashboard do
 
 1. Make a dashboard view for the door: the doorbell's camera, an *Open the gate* button, and a *Done*
    button. The panel gives the page its microphone, so a camera card with two-way audio works.
-2. Import the blueprint
-   [`blueprints/automation/glassworks/doorbell-panels.yaml`](../blueprints/automation/glassworks/doorbell-panels.yaml)
-   (*Settings → Automations & scenes → Blueprints → Import*, with the file's GitHub address). Pick the
+2. Import the blueprint *Doorbell on Glassworks panels*
+   ([`panes/notifications/blueprints/doorbell-panels.yaml`](../panes/notifications/blueprints/doorbell-panels.yaml)):
+   on the panel, **Settings → Panes → Notifications → Blueprints for Home Assistant → Add to Home Assistant**
+   opens Home Assistant's import dialog with it filled in ([Blueprints](blueprints.md)). Pick the
    doorbell, the camera and the view, and type each panel's notify action: `esphome.` plus the
    panel's ESPHome node name with `-` as `_`, plus `_notify`, like `esphome.aqara_s1_plus_a1b2c3_notify`.
    Each panel's settings show its own (**Panes → Notifications → Action**).
@@ -189,6 +190,18 @@ No doorbell pane: your doorbell is in Home Assistant already, and a dashboard do
    blueprint's file has that script at the end, to copy.
 
 Not yet run with a real doorbell (2026-11-13).
+
+## Ask on the panels
+
+The blueprint *Ask on the panels*
+([`panes/notifications/blueprints/ask-panels.yaml`](../panes/notifications/blueprints/ask-panels.yaml))
+puts a question with up to three buttons on the panels you pick, when its trigger fires (a time, a door,
+anything Home Assistant can trigger on). Each button runs a script you choose. The first answer, on any
+panel, clears the question from the others; with no answer it closes by itself after the time you set.
+It listens for `esphome.notification_action` with the question's tag, so other notifications' buttons
+don't count. Add it from the same card as the doorbell.
+
+Not yet run on a panel (2026-11-15).
 
 ## When notifications are off
 

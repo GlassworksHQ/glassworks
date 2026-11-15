@@ -1,0 +1,33 @@
+# Sample inputs for tools/blueprints/ha-check.sh: one automation per blueprint (at least), as
+# automations.yaml has them. Made-up entities only. A new blueprint needs an entry here.
+- id: doorbell
+  alias: doorbell
+  use_blueprint:
+    path: GlassworksHQ/doorbell-panels.yaml
+    input: {doorbell: event.front_door_ding, panels: [esphome.kitchen_panel_notify], camera: camera.porch}
+- id: ask
+  alias: ask
+  use_blueprint:
+    path: GlassworksHQ/ask-panels.yaml
+    input:
+      ask_when: [{trigger: time, at: "08:00:00"}]
+      panels: [esphome.kitchen_panel_notify, esphome.hall_panel_notify]
+      message: Water the plants?
+      button_1_script: script.water
+      button_2_title: Later
+      button_2_script: script.remind
+- id: lights
+  alias: lights
+  use_blueprint:
+    path: GlassworksHQ/panel-presence-lights.yaml
+    input: {presence: binary_sensor.kitchen_panel_camera_presence, lights: {entity_id: light.kitchen}, light_sensor: sensor.kitchen_panel_illuminance}
+- id: lights_nosensor
+  alias: lights without a sensor
+  use_blueprint:
+    path: GlassworksHQ/panel-presence-lights.yaml
+    input: {presence: binary_sensor.kitchen_panel_presence, lights: {entity_id: light.kitchen}}
+- id: snapshot
+  alias: snapshot
+  use_blueprint:
+    path: GlassworksHQ/panel-motion-snapshot.yaml
+    input: {presence: binary_sensor.kitchen_panel_camera_presence, camera: camera.kitchen_panel_camera, phone: notify.mobile_app_example_phone}

@@ -1,0 +1,163 @@
+# Glassworks: ask a question on the panels, and each answer runs a script (#118). The Notifications
+# pane's blueprint: listed in its pane.json, offered on its settings page. It uses the panel's notify
+# action and the esphome.notification_action event (docs/notifications.md).
+# Not yet run on a panel (2026-11-15).
+blueprint:
+  name: Ask on the panels
+  description: >-
+    Shows a question with up to three buttons on the panels you pick. Each button runs a script you
+    choose. The first answer, on any panel, clears the question from the others. With no answer it
+    closes by itself after the time you set.
+  domain: automation
+  input:
+    ask_when:
+      name: When to ask
+      description: What starts the question, such as a time of day or a door that opens.
+      selector:
+        trigger: {}
+    panels:
+      name: The panels' notify actions
+      description: >-
+        One per panel: esphome., the panel's ESPHome node name with - as _, then _notify, like
+        esphome.aqara_s1_plus_a1b2c3_notify. Each panel's settings show its own (Panes → Notifications
+        → Action).
+      selector:
+        text:
+          multiple: true
+    title:
+      name: Title
+      default: A question
+      selector:
+        text:
+    message:
+      name: The question
+      selector:
+        text:
+          multiline: true
+    button_1_title:
+      name: First button
+      default: "Yes"
+      selector:
+        text:
+    button_1_script:
+      name: First button runs
+      selector:
+        entity:
+          filter:
+            - domain: script
+    button_2_title:
+      name: Second button (optional)
+      description: Leave it empty for no second button.
+      default: ""
+      selector:
+        text:
+    button_2_script:
+      name: Second button runs
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: script
+    button_3_title:
+      name: Third button (optional)
+      description: Leave it empty for no third button.
+      default: ""
+      selector:
+        text:
+    button_3_script:
+      name: Third button runs
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain: script
+    priority:
+      name: Priority
+      description: High shows it over everything else on the panel.
+      default: normal
+      selector:
+        select:
+          options:
+            - label: Normal
+              value: normal
+            - label: High
+              value: high
+    timeout:
+      name: Close without an answer after
+      default: 300
+      selector:
+        number:
+          min: 15
+          max: 3600
+          unit_of_measurement: s
+
+# A new question replaces the one still open.
+mode: restart
+
+triggers: !input ask_when
+
+variables:
+  panels: !input panels
+  title: !input title
+  message: !input message
+  priority: !input priority
+  timeout: !input timeout
+  titles:
+    - !input button_1_title
+    - !input button_2_title
+    - !input button_3_title
+  scripts:
+    - !input button_1_script
+    - !input button_2_script
+    - !input button_3_script
+  # One tag per automation: its buttons and its clear touch only this question.
+  tag: "ask_{{ this.entity_id | replace('automation.', '') }}"
+  # A button for each title that has a script: [{"action": "<tag>_1", "title": "Yes"}, …].
+  buttons: >-
+    {% set ns = namespace(list=[]) %}
+    {% for i in range(3) if titles[i] and scripts[i] %}
+    {% set ns.list = ns.list + [{'action': tag ~ '_' ~ (i + 1), 'title': titles[i]}] %}
+    {% endfor %}
+    {{ ns.list }}
+
+actions:
+  - repeat:
+      for_each: "{{ panels }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          continue_on_error: true
+          data:
+            title: "{{ title }}"
+            message: "{{ message }}"
+            data: "{{ {'tag': tag, 'priority': priority, 'timeout': timeout | int, 'actions': buttons} | to_json }}"
+  # The panel fires this when a button is pressed, with the button's action and the question's tag.
+  - wait_for_trigger:
+      - trigger: event
+        event_type: esphome.notification_action
+        event_data:
+          tag: "{{ tag }}"
+    timeout:
+      seconds: "{{ timeout | int }}"
+    continue_on_timeout: false
+  - variables:
+      answer: "{{ wait.trigger.event.data.action }}"
+  # The first answer wins: the question goes from every panel.
+  - repeat:
+      for_each: "{{ panels }}"
+      sequence:
+        - action: "{{ repeat.item }}"
+          continue_on_error: true
+          data:
+            message: clear_notification
+            title: ""
+            data: "{{ {'tag': tag} | to_json }}"
+  - repeat:
+      for_each: [1, 2, 3]
+      sequence:
+        - if:
+            - condition: template
+              value_template: "{{ answer == tag ~ '_' ~ repeat.item and (scripts[repeat.item - 1] | string) != '' }}"
+          then:
+            - action: script.turn_on
+              target:
+                entity_id: "{{ scripts[repeat.item - 1] }}"

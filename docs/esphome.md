@@ -435,6 +435,11 @@ Home Assistant, the stream to a viewer), Android 12 and later show their own cam
 older Android the panel shows a small green dot in the top-right corner, over no content. The page's
 *Images out* tile says the same.
 
+The Camera page also offers two [blueprints](blueprints.md): *Lights on at the panel* (lights on when
+`camera_presence` sees someone, off again once nobody has been there for a while, optionally only while
+it's dark) and *Snapshot when away* (the panel's picture to your phone when it sees movement and nobody
+is home; it needs *Presence + camera*). Neither has run on a panel yet (2026-11-15).
+
 **The stream's sign-in is made for each panel.** The first time the stream is turned on without one,
 the panel makes its own: the username `glassworks` and a random 20-character password (letters and
 digits without the ones that read alike, from `SecureRandom`). It is never a default shared between

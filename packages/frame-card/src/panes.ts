@@ -17,6 +17,8 @@ export interface PaneInfo {
   frame?: string;
   /** its doc page, a path in the repo */
   docs?: string;
+  /** its Home Assistant blueprints: each file relative to the pane's Gradle module (`panes/<id>/`), and a one-line summary */
+  blueprints?: { file: string; summary: string }[];
   /** icon.svg: 24 × 24, stroke currentColor at 1.6, no fills or colours */
   icon: string;
   /** the folder its files are in */

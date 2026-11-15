@@ -121,7 +121,7 @@ class PaneCatalogTest {
     @Test
     fun eachFileHasTheCatalogFields() {
         val stages = setOf("planned", "development", "alpha", "beta", "stable")
-        val known = setOf("id", "name", "does", "requires", "status", "frame", "docs")
+        val known = setOf("id", "name", "does", "requires", "status", "frame", "docs", "blueprints") // blueprints: BlueprintCatalogTest
         for (e in entries) {
             val where = rel(e.json)
             val d = e.data

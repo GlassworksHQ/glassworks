@@ -47,6 +47,7 @@ import sh.edm.s1kiosk.auth.ThreadJoin
 import sh.edm.s1kiosk.auth.TokenResult
 import sh.edm.s1kiosk.auth.WsHaSocket
 import sh.edm.s1kiosk.esphome.PanelDevice
+import sh.edm.s1kiosk.settings.PanelBlueprints
 import sh.edm.s1kiosk.settings.S1Settings
 import sh.edm.s1kiosk.setup.SetupState
 import sh.edm.s1kiosk.update.UpdateManager
@@ -71,6 +72,9 @@ class S1Manage(
     private val tail = LogcatTail(log, ::logSource, onError = { Log.w(TAG, it) })
 
     private val host = Host()
+
+    /** The panes' Blueprints cards; the Manage page links them in a new tab. */
+    private val blueprints = PanelBlueprints.forPanel(app, runtime.build, prefs)
 
     val server = ManageServer(
         host = host,
@@ -108,7 +112,9 @@ class S1Manage(
         override fun status(): PanelStatus {
             val defs = runtime.paneDefinitions(app)
             // The panel menu's own model (#242): the same sections, items and saves.
-            val model = S1Settings.model(runtime, prefs, defs, S1Settings.hasDeviceSettings(runtime, app), fullScreen = ::fullScreen, version = version)
+            val model = S1Settings.model(runtime, prefs, defs, S1Settings.hasDeviceSettings(runtime, app), fullScreen = ::fullScreen, version = version,
+                // Links in a new tab here: nothing opens on the panel.
+                blueprints = { id -> blueprints.item(id) {} })
             val panes = model.sections.filter { it.id in model.panes }
             return PanelStatus(
                 name = name,
@@ -189,6 +195,9 @@ class S1Manage(
             is SettingsItem.Status -> listOf(v(i.text))
             is SettingsItem.States -> listOf("${i.title}:") + runCatching { i.rows() }.getOrDefault(emptyList()).map { "  ${it.name}: ${it.value}" }
             is SettingsItem.Tiles -> runCatching { i.tiles() }.getOrDefault(emptyList()).map { "${it.name}: ${it.value} ${it.unit}".trim() }
+            // What each button does now, without its links (they carry the Home Assistant address).
+            is SettingsItem.Blueprints -> listOf("${dev.glassworks.pane.BLUEPRINTS}:") + runCatching { i.card(dev.glassworks.pane.BlueprintSurface.PANEL) }.getOrNull()
+                ?.let { c -> listOfNotNull(c.note?.let { "  $it" }) + c.rows.map { (bp, a) -> "  ${bp.name}: ${a::class.simpleName}" } }.orEmpty()
             is SettingsItem.Link, is SettingsItem.Native -> emptyList()
         }
     }

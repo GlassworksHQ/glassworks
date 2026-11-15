@@ -124,6 +124,8 @@ dependencies {
     testImplementation("org.json:json:20250517")
     // Mock-up screenshots of the real settings/setup views (RadioMockups, only with -Ps1MockupDir=<dir>).
     testImplementation("org.robolectric:robolectric:4.17")
+    // The panes' blueprints parsed as YAML (BlueprintCatalogTest): the version GeckoView already puts in the APK.
+    testImplementation("org.yaml:snakeyaml:2.2")
 }
 
 // Open source licences screen (hidden settings → "Open source licences"): the repo's

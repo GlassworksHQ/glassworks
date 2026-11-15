@@ -1,4 +1,5 @@
 # Glassworks: ring the panels when the doorbell rings (#118). See docs/notifications.md#the-doorbell.
+# The Notifications pane's blueprint: listed in its pane.json, offered on its settings page.
 # Not yet run with a real doorbell (2026-11-13).
 blueprint:
   name: Doorbell on Glassworks panels

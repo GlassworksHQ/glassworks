@@ -6,5 +6,15 @@
     "camera"
   ],
   "status": "alpha",
-  "docs": "docs/esphome.md#camera-entities"
+  "docs": "docs/esphome.md#camera-entities",
+  "blueprints": [
+    {
+      "file": "blueprints/panel-presence-lights.yaml",
+      "summary": "Someone moves in front of the panel: lights on, and off again after a while."
+    },
+    {
+      "file": "blueprints/panel-motion-snapshot.yaml",
+      "summary": "Movement at the panel while nobody is home sends its picture to your phone."
+    }
+  ]
 }

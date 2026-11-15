@@ -57,6 +57,7 @@ object SettingsChange {
         is SettingsItem.States -> i.title
         is SettingsItem.Info -> runCatching { i.title() }.getOrDefault("")
         is SettingsItem.Native -> i.key
+        is SettingsItem.Blueprints -> BLUEPRINTS
         is SettingsItem.Note, is SettingsItem.Status, is SettingsItem.Tiles -> ""
     }
 

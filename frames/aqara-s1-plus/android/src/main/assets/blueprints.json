@@ -1,0 +1,6 @@
+[
+  {"pane": "camera", "path": "panes/camera/blueprints/panel-presence-lights.yaml", "name": "Lights on at the panel", "summary": "Someone moves in front of the panel: lights on, and off again after a while."},
+  {"pane": "camera", "path": "panes/camera/blueprints/panel-motion-snapshot.yaml", "name": "Snapshot when away", "summary": "Movement at the panel while nobody is home sends its picture to your phone."},
+  {"pane": "notifications", "path": "panes/notifications/blueprints/doorbell-panels.yaml", "name": "Doorbell on Glassworks panels", "summary": "When the doorbell rings, the panels ring and show the door's view and camera."},
+  {"pane": "notifications", "path": "panes/notifications/blueprints/ask-panels.yaml", "name": "Ask on the panels", "summary": "A question with buttons on the panels. Each button runs a script you pick."}
+]
