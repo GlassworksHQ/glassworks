@@ -13,7 +13,6 @@ import android.widget.FrameLayout
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
-import dev.glassworks.secrets.SecretStore
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import sh.edm.s1kiosk.AppParts
@@ -22,20 +21,21 @@ import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.MainActivity
 import sh.edm.s1kiosk.OverlayHost
 import sh.edm.s1kiosk.PaneOverlay
-import sh.edm.s1kiosk.SecretFiles
+import sh.edm.s1kiosk.PaneFiles
 import sh.edm.s1kiosk.TimerOverlay
 import sh.edm.s1kiosk.VoiceOverlay
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.esphome.DeviceHost
+import sh.edm.s1kiosk.manage.AppManage
 import sh.edm.s1kiosk.sendspin.SendspinDefinition
 import sh.edm.s1kiosk.sendspin.SendspinPane
 import sh.edm.s1kiosk.timers.TimersPane
 import sh.edm.s1kiosk.voice.AssistDefinition
 import sh.edm.s1kiosk.voice.AssistPane
 import sh.edm.s1kiosk.voice.SpeakerMedia
-import sh.edm.s1kiosk.voice.VoiceEngine
-import sh.edm.s1kiosk.voice.VoiceEvent
+import dev.glassworks.voice.VoiceEngine
+import dev.glassworks.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceLevels
 import sh.edm.s1kiosk.voice.VoicePrefs
 import sh.edm.s1kiosk.voice.VoiceUi
@@ -88,17 +88,14 @@ class GenericParts : AppParts {
         voiceUi = VoiceUi(runtime.voiceState)
     }
 
-    /**
-     * Every pane's settings in `kiosk.xml`, with the core's, as S1 Kiosk keeps them. That file holds sealed
-     * secrets, so it opens through [SecretFiles] (KeystoreSecretsTest checks every opener).
-     */
+    /** Each pane's settings where S1 Kiosk keeps them ([PaneFiles]): `kiosk.xml`, opened through SecretFiles. */
     override fun paneFile(context: Context, namespace: String): SharedPreferences {
         require(namespace in PANES) { "No settings file for pane '$namespace'" }
-        return SecretFiles.open(context, "kiosk", SecretStore.keystore())
+        return PaneFiles.open(context, namespace)
     }
 
     override fun managePage(context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
-        GenericManage(context, runtime, signIn, tokens, prefs)
+        AppManage(context, runtime, signIn, tokens, prefs)
 
     /** A voice event (main thread): the overlay, the voice state and the screen follow it. */
     private fun onVoiceEvent(runtime: GlassworksRuntime, e: VoiceEvent) {

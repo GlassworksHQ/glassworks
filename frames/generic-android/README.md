@@ -82,7 +82,7 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet. To try a
 branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
-([test-build.yml](../../.github/workflows/test-build.yml)).
+([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
 
 ## Updates
 
