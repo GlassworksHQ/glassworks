@@ -103,7 +103,9 @@ wait_cool() {
 }
 
 "$ADB" get-state >/dev/null || { echo "no device" >&2; exit 1; }
-sh_dev pm path "$PACKAGE" | grep -q package: || { echo "$PACKAGE is not installed" >&2; exit 1; }
+# Checks of a command's output match a pattern, not `| grep -q`: grep exits at its match, and under
+# pipefail the writer's SIGPIPE (141) then fails the check (2026-11-15: a restore that worked, exit 3).
+[[ $(sh_dev pm path "$PACKAGE") == *package:* ]] || { echo "$PACKAGE is not installed" >&2; exit 1; }
 # GW_PERF_TIME_SCALE (clock.py) is for the off-device tests: refused on a real device here, before
 # anything else on it is touched. Without it, this asks the device nothing.
 python3 "$HERE/clock.py" --check || exit 2
@@ -160,7 +162,7 @@ point_back() {
     fi
     # -W: wait until the kiosk has the intent. am exits 0 even when it fails, so read its answer.
     out=$(sh_dev am start -W -n "$PACKAGE/.MainActivity" --es url "'$RESTORE'" 2>&1) || out="$out (adb failed)"
-    if printf '%s\n' "$out" | grep -q '^Status: ok'; then
+    if [[ $'\n'$out == *$'\nStatus: ok'* ]]; then
       SWITCHED=0
       # Let the kiosk save the setting and load the dashboard before anything else restarts it.
       sleep "$SWITCH_SETTLE"
