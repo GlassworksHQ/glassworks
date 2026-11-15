@@ -121,6 +121,7 @@ export async function readSparse(source: AsyncIterable<Uint8Array> | ReadableStr
       case Chunk.Fill: {
         if (total !== CHUNK_HDR + 4) throw new Error(`sparse chunk ${c} has the wrong size`);
         const pat = await rd.take(4);
+        if (pat.length < 4) throw new Error(`the sparse image ends inside chunk ${c} (cut short?)`);
         const v = new DataView(pat.buffer, pat.byteOffset, 4).getUint32(0, true);
         if (v === 0) await disk.zeroFill(block, count);
         else {
@@ -137,9 +138,11 @@ export async function readSparse(source: AsyncIterable<Uint8Array> | ReadableStr
       case Chunk.DontCare:
         if (total !== CHUNK_HDR) throw new Error(`sparse chunk ${c} has the wrong size`);
         break;
-      case Chunk.Crc32:
-        await rd.take(total - CHUNK_HDR);
+      case Chunk.Crc32: {
+        if (total !== CHUNK_HDR + 4) throw new Error(`sparse chunk ${c} has the wrong size`);
+        if ((await rd.take(4)).length < 4) throw new Error(`the sparse image ends inside chunk ${c} (cut short?)`);
         break;
+      }
       default:
         throw new Error(`sparse chunk ${c} has an unknown type 0x${type.toString(16)}`);
     }

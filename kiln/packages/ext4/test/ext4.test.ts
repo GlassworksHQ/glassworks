@@ -85,6 +85,19 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
     expect(Buffer.from(debugfsCat(img, '/big'))).toEqual(Buffer.from(big));
   }, 180_000);
 
+  it('declares ext_attr when it adds the first xattr to an image without it', async () => {
+    const img = join(dir, 'noxattr.img');
+    mke2fs(img, 64, [...MAKE_EXT4FS.slice(0, 1), `${MAKE_EXT4FS[1]},^ext_attr`]);
+    expect(debugfs(img, 'stats')).not.toMatch(/Filesystem features:.*ext_attr/);
+    const disk = await load(img);
+    const fs = await Ext4.open(disk);
+    await fs.writeFile('/l', new Uint8Array(10), SYSTEM);
+    await fs.flush();
+    await dump(disk, img);
+    expect(clean(fsck(img))).toBe(true);
+    expect(debugfs(img, 'stats')).toMatch(/Filesystem features:.*ext_attr/);
+  }, 180_000);
+
   it('the check catches a wrong group descriptor checksum (e2fsck -n exits 0 for it)', async () => {
     const img = join(dir, 'csum.img');
     mke2fs(img, 64, MAKE_EXT4FS);
@@ -196,6 +209,42 @@ describe('ext4 without e2fsprogs', () => {
     await expect(again.stat('/a')).rejects.toThrow(/doesn't exist/);
   });
 
+  it('reads an unwritten extent as zeros, whatever its blocks hold', async () => {
+    const disk = new Disk(new MemoryStore(), 4096, 40000);
+    const fs = await mkfs(disk, { time: T, journalBlocks: 0 });
+    await fs.writeFile('/u', new Uint8Array(8192).fill(0xab), SYSTEM);
+    const n = await fs.inode(await fs.resolve('/u'));
+    const dv = new DataView(n.raw.buffer, n.raw.byteOffset);
+    dv.setUint16(40 + 12 + 4, dv.getUint16(40 + 12 + 4, true) + 32768, true); // mark the extent unwritten
+    await fs.putInode(n);
+    expect((await fs.readFile('/u')).every((x) => x === 0)).toBe(true);
+  });
+
+  it('refuses a write that doesn\'t fit before allocating anything, and a replace keeps the old file then', async () => {
+    const disk = new Disk(new MemoryStore(), 4096, 40000);
+    const fs = await mkfs(disk, { time: T, journalBlocks: 0 });
+    await fs.writeFile('/keep', new Uint8Array(4096).fill(1), SYSTEM);
+    const free = { b: fs.freeBlocks, i: fs.freeInodes };
+    await expect(fs.writeFile('/big', new Uint8Array((free.b + 1) * 4096), SYSTEM)).rejects.toThrow(/no room for \/big.*Nothing was changed/);
+    await expect(fs.replaceFile('/keep', new Uint8Array((free.b + 10) * 4096))).rejects.toThrow(/no room for \/keep/);
+    expect({ b: fs.freeBlocks, i: fs.freeInodes }).toEqual(free);
+    expect((await fs.readFile('/keep'))[0]).toBe(1);
+  });
+
+  it('refuses to remove a tree holding a block-mapped file, before unlinking anything', async () => {
+    const disk = new Disk(new MemoryStore(), 4096, 40000);
+    const fs = await mkfs(disk, { time: T, journalBlocks: 0 });
+    await fs.mkdirs('/d/e', DIR);
+    await fs.writeFile('/d/e/old', new Uint8Array(100), SYSTEM);
+    const n = await fs.inode(await fs.resolve('/d/e/old'));
+    n.flags &= ~0x80000; // as if written by a tool without extents: i_block is a block map now
+    await fs.putInode(n);
+    const free = fs.freeBlocks;
+    await expect(fs.remove('/d', { recursive: true })).rejects.toThrow(/block maps/);
+    expect((await fs.readdir('/d')).map((e) => e.name)).toContain('e');
+    expect(fs.freeBlocks).toBe(free);
+  });
+
   it('refuses features it doesn\'t handle', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 40000);
     await mkfs(disk, { time: T, journalBlocks: 0 });
@@ -208,5 +257,8 @@ describe('ext4 without e2fsprogs', () => {
     v.setUint32(1024 + 96, v.getUint32(1024 + 96, true) | 0x4, true); // needs_recovery
     await disk.write(0, b0);
     await expect(Ext4.open(disk)).rejects.toThrow(/needs recovery/);
+    v.setUint32(1024 + 96, (v.getUint32(1024 + 96, true) & ~0x4) & ~0x40, true); // no extents
+    await disk.write(0, b0);
+    await expect(Ext4.open(disk)).rejects.toThrow(/no extents or no filetype/);
   });
 });

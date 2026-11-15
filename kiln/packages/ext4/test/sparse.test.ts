@@ -68,6 +68,18 @@ describe('sparse images', () => {
     expect([disk.care.get(0), disk.care.get(1), disk.care.get(2)]).toEqual([1, 1, 0]);
   });
 
+  it('refuses a FILL cut short and a CRC32 chunk of the wrong size', async () => {
+    const hdr = (type: number, blocks: number, total: number) => {
+      const b = Buffer.alloc(12); b.writeUInt16LE(type, 0); b.writeUInt32LE(blocks, 4); b.writeUInt32LE(total, 8); return b;
+    };
+    const file = Buffer.alloc(28);
+    file.writeUInt32LE(0xed26ff3a, 0); file.writeUInt16LE(1, 4); file.writeUInt16LE(28, 8); file.writeUInt16LE(12, 10);
+    file.writeUInt32LE(BS, 12); file.writeUInt32LE(2, 16); file.writeUInt32LE(2, 20);
+    const open = (h: { blockSize: number; blocks: number }) => new Disk(new MemoryStore(), h.blockSize, h.blocks);
+    await expect(readSparse(ragged(Buffer.concat([file, hdr(0xcac2, 2, 16), Buffer.alloc(2)])), open)).rejects.toThrow(/ends inside chunk 0/);
+    await expect(readSparse(ragged(Buffer.concat([file, hdr(0xcac4, 0, 1 << 30)])), open)).rejects.toThrow(/chunk 0 has the wrong size/);
+  });
+
   it('refuses a file cut short, and a file that isn\'t sparse', async () => {
     const bytes = await toBytes(await sample());
     const open = (h: { blockSize: number; blocks: number }) => new Disk(new MemoryStore(), h.blockSize, h.blocks);

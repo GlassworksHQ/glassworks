@@ -23,7 +23,8 @@ export interface Stat { ino: number; mode: number; uid: number; gid: number; siz
 export interface DirEntry { name: string; ino: number; type: number }
 export interface Xattr { index: number; name: string; value: Uint8Array }
 
-type Run = { logical: number; start: number; count: number };
+/** `unwritten`: allocated but never written (reads as zeros); freed like any other. */
+type Run = { logical: number; start: number; count: number; unwritten?: boolean };
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -111,6 +112,8 @@ export class Ext4 {
     const bad = (incompat & ~SUPPORTED_INCOMPAT & ~Incompat.Recover) | (ro & ~SUPPORTED_RO);
     if (bad) throw new Error(`this ext4 uses features this package doesn't handle (incompat 0x${(incompat & ~SUPPORTED_INCOMPAT).toString(16)}, ro_compat 0x${(ro & ~SUPPORTED_RO).toString(16)})`);
     if (incompat & Incompat.Recover) throw new Error('this ext4\'s journal needs recovery (it wasn\'t unmounted cleanly)');
+    // what the writers produce: extent inodes and directory entries with a file type
+    if ((incompat & (Incompat.Extents | Incompat.FileType)) !== (Incompat.Extents | Incompat.FileType)) throw new Error('this ext4 has no extents or no filetype: this package writes both, and doesn\'t handle the older formats');
     const blocks = dv.getUint32(4, true);
     if (blocks > disk.blocks) throw new Error(`the filesystem (${blocks} blocks) is bigger than the image (${disk.blocks})`);
     const first = dv.getUint32(20, true), bpg = dv.getUint32(32, true);
@@ -355,8 +358,9 @@ export class Ext4 {
         const o = 12 + e * 12;
         if (depth === 0) {
           let len = dv.getUint16(o + 4, true);
-          if (len > EXTENT_MAX_LEN) len -= EXTENT_MAX_LEN; // unwritten: still allocated
-          runs.push({ logical: dv.getUint32(o, true), start: dv.getUint16(o + 6, true) * 0x100000000 + dv.getUint32(o + 8, true), count: len });
+          const unwritten = len > EXTENT_MAX_LEN;
+          if (unwritten) len -= EXTENT_MAX_LEN; // still allocated, but reads as zeros
+          runs.push({ logical: dv.getUint32(o, true), start: dv.getUint16(o + 6, true) * 0x100000000 + dv.getUint32(o + 8, true), count: len, ...(unwritten ? { unwritten } : {}) });
         } else {
           const leaf = dv.getUint32(o + 4, true) + dv.getUint16(o + 8, true) * 0x100000000;
           tree.push(leaf);
@@ -409,7 +413,7 @@ export class Ext4 {
     const { runs } = await this.extents(n);
     for (const r of runs) {
       const at = r.logical * this.blockSize;
-      if (at >= out.length) continue;
+      if (at >= out.length || r.unwritten) continue; // an unwritten extent reads as zeros, whatever its blocks hold
       for (let o = 0; o < r.count; o += 256) {
         const c = Math.min(256, r.count - o);
         const data = await this.disk.read(r.start + o, c);
@@ -539,6 +543,11 @@ export class Ext4 {
     return v ? dec.decode(v).replace(/\0+$/, '') : undefined;
   }
 
+  /** An image that gets xattrs says so (COMPAT_EXT_ATTR). */
+  private declareXattrs() {
+    if (!(this.compat & Compat.ExtAttr)) this.sbv.setUint32(92, this.compat | Compat.ExtAttr, true);
+  }
+
   /** @internal Rewrites the inode's in-inode xattrs as `list`. Throws if they don't fit (no xattr blocks are written). */
   writeIbodyXattrs(n: Inode, list: Xattr[]) {
     const r = this.ibodyRegion(n);
@@ -546,6 +555,7 @@ export class Ext4 {
     const area = n.raw.subarray(r.start, r.end);
     area.fill(0);
     if (!list.length) return;
+    this.declareXattrs();
     const dv = new DataView(area.buffer, area.byteOffset, area.byteLength);
     dv.setUint32(0, XATTR_MAGIC, true);
     let eo = 4, vend = area.length;
@@ -569,6 +579,7 @@ export class Ext4 {
    * and block hashes e2fsck checks. Adds the block to i_file_acl and i_blocks.
    */
   async writeXattrBlock(n: Inode, list: Xattr[]): Promise<void> {
+    this.declareXattrs();
     const sorted = [...list].sort((a, b) => a.index - b.index || a.name.length - b.name.length || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     const b = new Uint8Array(this.blockSize);
     const dv = new DataView(b.buffer);
@@ -691,6 +702,7 @@ export class Ext4 {
   async mkdir(path: string, attrs: Attrs): Promise<number> {
     const { dir, name } = await this.parentOf(path);
     if (await this.lookup(dir, name) !== undefined) throw new Error(`${path} exists already`);
+    this.needs(2, 1, path);
     const n = await this.newInode(dir, attrs, S_IFDIR);
     const [r] = await this.allocBlocks(1, this.groups[Math.floor((n.ino - 1) / this.inodesPerGroup)]!.inodeTable);
     const data = new Uint8Array(this.blockSize);
@@ -721,6 +733,7 @@ export class Ext4 {
   async writeFile(path: string, data: Uint8Array, attrs: Attrs): Promise<number> {
     const { dir, name } = await this.parentOf(path);
     if (await this.lookup(dir, name) !== undefined) throw new Error(`${path} exists already`);
+    this.needs(this.blocksFor(data.length), 1, path);
     const n = await this.newInode(dir, attrs, S_IFREG);
     const count = Math.ceil(data.length / this.blockSize);
     let tree = 0;
@@ -749,6 +762,9 @@ export class Ext4 {
   /** Replaces a file's contents, keeping its owner, mode and every xattr (the label, security.capability, …). */
   async replaceFile(path: string, data: Uint8Array, time?: number): Promise<void> {
     const old = await this.inode(await this.resolve(path));
+    const { runs, tree } = await this.extents(old); // also refuses a block-mapped file before anything changes
+    const freed = runs.reduce((a, r) => a + r.count, 0) + tree.length + (old.fileAcl ? 1 : 0);
+    this.needs(this.blocksFor(data.length) - freed, 0, path); // the old file stays unless the new one fits
     const xattrs = await this.xattrs(old);
     const label = xattrs.find(isLabel);
     const attrs: Attrs = { mode: old.mode & 0o7777, uid: old.uid, gid: old.gid, label: label ? dec.decode(label.value).replace(/\0+$/, '') : undefined, time, xattrs: xattrs.filter((x) => !isLabel(x)) };
@@ -756,12 +772,39 @@ export class Ext4 {
     await this.writeFile(path, data, attrs);
   }
 
+  /**
+   * Blocks a new file of `bytes` takes at most: its data, an extent leaf, an xattr block, and a new
+   * block for the directory entry.
+   */
+  private blocksFor(bytes: number): number {
+    return Math.ceil(bytes / this.blockSize) + 3;
+  }
+
+  /** Refuses, before anything is allocated, an operation the free blocks or inodes can't hold. */
+  private needs(blocks: number, inodes: number, path: string) {
+    if (blocks > this.freeBlocks) throw new Error(`no room for ${path}: it needs up to ${blocks} blocks, ${this.freeBlocks} are free. Nothing was changed.`);
+    if (inodes > this.freeInodes) throw new Error(`no room for ${path}: no free inodes. Nothing was changed.`);
+  }
+
+  /** Throws, before anything changes, for a tree this package can't free (block-mapped files). */
+  private async checkRemovable(path: string, n: Inode): Promise<void> {
+    await this.extents(n);
+    if (!n.isDir) return;
+    for (const k of await this.readdir(path)) {
+      if (k.name === '.' || k.name === '..') continue;
+      await this.checkRemovable(`${path.replace(/\/$/, '')}/${k.name}`, await this.inode(k.ino));
+    }
+  }
+
   /** Removes a file, symlink or (with `recursive`, or when empty) directory. */
-  async remove(path: string, o: { recursive?: boolean; time?: number } = {}): Promise<void> {
+  async remove(path: string, o: { recursive?: boolean; time?: number; checked?: boolean } = {}): Promise<void> {
     const { dir, name } = await this.parentOf(path);
     const ino = await this.lookup(dir, name);
     if (ino === undefined) throw new Error(`${path} doesn't exist`);
     const n = await this.inode(ino);
+    if (n.isDir && !o.recursive && (await this.readdir(path)).some((e) => e.name !== '.' && e.name !== '..')) throw new Error(`${path} isn't empty`);
+    if (!o.checked) await this.checkRemovable(path, n); // the whole tree, before the first unlink
+    o = { ...o, checked: true };
     if (n.isDir) {
       const kids = (await this.readdir(path)).filter((e) => e.name !== '.' && e.name !== '..');
       if (kids.length && !o.recursive) throw new Error(`${path} isn't empty`);

@@ -1,7 +1,7 @@
 // e2fsprogs as the judge: e2fsck says whether an image is consistent, debugfs reads it back. The
 // tests that need them skip without them, except in CI (GW_EXT4_TOOLS=require), where they must run.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, openSync, closeSync, writeSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, openSync, closeSync, writeSync, readFileSync, rmSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Disk, MemoryStore } from '../src';
@@ -67,7 +67,7 @@ export function debugfsCat(file: string, path: string): Uint8Array {
 
 export function mke2fs(file: string, sizeMiB: number, args: string[], populate?: string): void {
   const fd = openSync(file, 'w'); closeSync(fd);
-  execFileSync('truncate', ['-s', `${sizeMiB}M`, file]);
+  truncateSync(file, sizeMiB * 1024 * 1024);
   execFileSync(tools.mke2fs!, ['-q', '-F', '-t', 'ext4', '-b', '4096', '-I', '256', ...args, ...(populate ? ['-d', populate] : []), file], {
     env: { ...process.env, E2FSPROGS_FAKE_TIME: '1700000000', MKE2FS_DEVICE_SECTSIZE: '512' }, stdio: 'pipe',
   });
