@@ -10,9 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import dev.glassworks.manage.HaGateway
 import dev.glassworks.manage.HaSignIn
-import dev.glassworks.manage.HaUser
 import dev.glassworks.manage.LogEntry
 import dev.glassworks.manage.LogcatTail
 import dev.glassworks.manage.ManageHost
@@ -33,19 +31,15 @@ import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
 import dev.glassworks.web.PageShell
-import org.json.JSONObject
 import sh.edm.s1kiosk.AdminReceiver
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.MainActivity
 import sh.edm.s1kiosk.auth.HaAuth
-import sh.edm.s1kiosk.auth.HaSocket
-import sh.edm.s1kiosk.auth.HaThreadClient
+import sh.edm.s1kiosk.auth.HaGatewayClient
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.SignInServer
-import sh.edm.s1kiosk.auth.StoredAuth
 import sh.edm.s1kiosk.auth.ThreadJoin
-import sh.edm.s1kiosk.auth.TokenResult
 import sh.edm.s1kiosk.auth.WsHaSocket
 import sh.edm.s1kiosk.esphome.PanelDevice
 import sh.edm.s1kiosk.settings.CoreSettings
@@ -84,7 +78,7 @@ class S1Manage(
         setUp = ::setUp,
         sessions = SessionStore(File(dir, "sessions.json")),
         code = runtime.panelCode,
-        signIn = HaSignIn(Gateway(tokens) { url -> WsHaSocket.connect(url) }, warn = { Log.w(TAG, it) }),
+        signIn = HaSignIn(HaGatewayClient(tokens) { url -> WsHaSocket.connect(url) }, warn = { Log.w(TAG, it) }),
         log = log,
         qrPaths = setOf("/signin", SignInServer.CONTINUE, "/callback", ThreadJoin.PATH, SignInServer.THREAD_CONTINUE, ThreadJoin.CALLBACK),
         qr = { req -> qr(signIn, req) },
@@ -315,43 +309,6 @@ class S1Manage(
     private fun qr(signIn: SignInServer, req: HttpRequest): HttpResponse {
         val r = signIn.handle(SignInServer.Request(req.method, req.path, req.query, req.headers))
         return HttpResponse(r.status, r.headers, r.body)
-    }
-
-    /** HA for the Manage page's sign-in: the token endpoint, `auth/current_user` over the websocket, revoke. */
-    internal class Gateway(private val tokens: HaTokenClient, private val connect: (String) -> HaSocket) : HaGateway {
-        override fun exchangeCode(haBase: String, clientId: String, code: String, codeVerifier: String): HaGateway.Tokens =
-            when (val r = tokens.exchangeCode(haBase, clientId, code, codeVerifier)) {
-                is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, r.refreshToken)
-                is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0)
-            }
-
-        override fun currentUser(haBase: String, accessToken: String): HaUser? {
-            val url = HaThreadClient.websocketUrl(haBase) ?: return null
-            // Any failure to connect is an unknown user: the lookup's own thread must not die of it.
-            val ws = try { connect(url) } catch (e: Exception) { return null }
-            try {
-                if (next(ws)?.optString("type") != "auth_required") return null
-                ws.send(JSONObject().put("type", "auth").put("access_token", accessToken).toString())
-                if (next(ws)?.optString("type") != "auth_ok") return null
-                ws.send(JSONObject().put("id", 1).put("type", "auth/current_user").toString())
-                while (true) {
-                    val m = next(ws) ?: return null
-                    if (m.optString("type") != "result" || m.optInt("id", -1) != 1) continue
-                    if (!m.optBoolean("success", false)) return null
-                    val u = m.optJSONObject("result") ?: return null
-                    return HaUser(u.optString("name").ifEmpty { "Home Assistant user" }, u.optBoolean("is_admin", false))
-                }
-            } catch (_: Exception) {
-                return null
-            } finally {
-                runCatching { ws.close() }
-            }
-        }
-
-        override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean =
-            tokens.revoke(StoredAuth(haBase, clientId, refreshToken))
-
-        private fun next(ws: HaSocket): JSONObject? = ws.receive()?.let(::JSONObject)
     }
 
     companion object {

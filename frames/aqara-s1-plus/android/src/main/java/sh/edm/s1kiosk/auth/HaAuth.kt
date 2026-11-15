@@ -7,7 +7,6 @@ import dev.glassworks.manage.ManagePage
 import sh.edm.s1kiosk.KioskPrefs
 import dev.glassworks.web.HttpServer
 import sh.edm.s1kiosk.glassworks
-import sh.edm.s1kiosk.manage.S1Manage
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -78,7 +77,7 @@ object HaAuth {
         accessToken(force = false) { a ->
             val token = (a as? Access.Ok)?.accessToken ?: return@accessToken done(null)
             Thread({
-                done(S1Manage.Gateway(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.name)
+                done(HaGatewayClient(tokens) { url -> WsHaSocket.connect(url) }.currentUser(base, token)?.name)
             }, "ha-account").apply { isDaemon = true }.start()
         }
     }
