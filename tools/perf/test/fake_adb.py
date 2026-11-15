@@ -53,6 +53,19 @@ def now():
     return C.mono()
 
 
+WALL_MINUS_MONO = []
+
+
+def wall_minus_mono():
+    """C.now() - now(), constant in a process: a wall-clock read between two monotonic ones, read
+    again while a pause between them makes the pair too far apart."""
+    while not WALL_MINUS_MONO:
+        m1, w, m2 = now(), C.now(), now()
+        if m2 - m1 < 0.005:
+            WALL_MINUS_MONO.append(w - (m1 + m2) / 2)
+    return WALL_MINUS_MONO[0]
+
+
 def shell(cmd):
     if os.environ.get("FAKE_SCREEN_SLEEP_S") and ("KEYCODE_WAKEUP" in cmd or "--es screen on" in cmd
                                                    or cmd.startswith(("input swipe", "input tap"))):
@@ -274,7 +287,7 @@ def page_log(obj, split=True, record=True, at=None):
         # This line ties the page's clock to logcat's (perflib.page_to_mono_ms), so it is stamped when
         # its Date.now() was read: stamped when printed, a fake 100 ms late on a busy machine moved
         # every change of the updates step out of its window.
-        at = now() - (C.now() - obj["epoch_ms"] / 1000)
+        at = obj["epoch_ms"] / 1000 - wall_minus_mono()
     SEQ[0] += 1
     text = json.dumps(obj, separators=(",", ":"))
     if record:
