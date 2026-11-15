@@ -104,6 +104,7 @@ interface Glassworks {
 
     /** Who the dashboard is signed in as in Home Assistant, for the settings' "Dashboard sign-in" row. */
     val dashboardAccount: sh.edm.s1kiosk.auth.DashboardAccount
+
     /** The app's Manage page behind the sign-in pages ([signIn]), for the panel's web server. */
     fun managePage(context: Context, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage
 }

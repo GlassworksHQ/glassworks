@@ -432,6 +432,18 @@ class SettingsOverlayTest {
     }
 
     @Test
+    fun withoutItsSourceTheMenuOpensOnItsFirstPageNotTheOverview() {
+        // CodeRabbit on #299: the Manage page stopped between two openings (HaAuth.stopServer).
+        val o = withOverview()
+        o.hide(); Mockup.idle()
+        o.overview = null
+        o.show(MenuFixture.model(o.context, radioDefinition(o.context, FixedReadout(null, running = true))))
+        Mockup.idle()
+        assertFalse(shown(o, "Wi-Fi"))
+        assertTrue("the first section's page", shown(o, "Full screen"))
+    }
+
+    @Test
     fun theOverviewsButtonsRunTheManagePagesActions() {
         val f = dev.glassworks.manage.ManageFixture()
         val o = withOverview(f)
