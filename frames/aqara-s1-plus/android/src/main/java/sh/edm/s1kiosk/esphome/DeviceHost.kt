@@ -44,9 +44,12 @@ interface DeviceHost {
     /** Runs [block] when the device stops, after its panes have stopped. */
     fun onStop(block: () -> Unit)
 
-    /** Cancels the current voice run ([PanelDevice.cancelVoice]); esphome-main. Null while no pane can. */
+    /** Cancels the current voice run ([PanelDevice.cancelVoice]); esphome-main. Null while no pane can. The device clears it at stop. */
     var cancelVoice: (() -> Unit)?
 
-    /** Hears each change of whether [voicePlayer] plays. */
+    /**
+     * Hears each change of whether [voicePlayer] plays. The app sets it when it builds its panes: the voice
+     * overlay's speaking pulse follows it, so without it the overlay loses the pulse. The device clears it at stop.
+     */
     var onVoicePlaying: ((Boolean) -> Unit)?
 }

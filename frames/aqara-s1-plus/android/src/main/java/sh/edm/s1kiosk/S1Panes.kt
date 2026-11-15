@@ -95,7 +95,7 @@ internal object S1Panes {
             listOfNotNull(cameraPane(runtime, host, main)) +
             DiagnosticsPane(paneContext, runtime.frame.cpuThermalZone, runtime.engine::isContentProcess, exec)
         // Timers ride with Assist (their pane.json requires the same): without it they go too.
-        if ("assist" in host.cantRun) panes = panes.filter { it !is TimersPane }
+        if (assistPane.id in host.cantRun) panes = panes.filter { it !is TimersPane }
         else host.cancelVoice = assistPane::cancel
         return panes
     }

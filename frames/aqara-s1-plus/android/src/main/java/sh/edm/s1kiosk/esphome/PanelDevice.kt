@@ -166,7 +166,7 @@ class PanelDevice(
         // A newer device may have published its own already.
         if (runtime.panes === gone) runtime.panes = emptyList()
         synchronized(stopHooks) { stopHooks.toList().also { stopHooks.clear() } }.forEach { it() }
-        host.cancelVoice = null
+        host?.let { it.cancelVoice = null; it.onVoicePlaying = null }
         exec.shutdownNow()
         mdns.stop()
         synchronized(lifecycle) { server.also { server = null } }?.stop()
@@ -212,7 +212,7 @@ class PanelDevice(
         applyVolume()
         mediaPlayer.onStateChanged = { exec.execute { server?.publishStates() } }
         voicePlayer.onStateChanged = {
-            host.onVoicePlaying?.invoke(voicePlayer.isPlaying)
+            host?.onVoicePlaying?.invoke(voicePlayer.isPlaying)
             exec.execute { server?.publishStates() }
         }
 
@@ -251,7 +251,7 @@ class PanelDevice(
         )
         // A pane the frame lacks the hardware for (CantRun) isn't built: no entities, nothing started.
         val cantRun = runtime.paneDefinitions(ctx).filterIsInstance<CantRun>().map { it.id }.toSet()
-        host = Host(paneContext, cantRun)
+        val host = Host(paneContext, cantRun).also { host = it }
         panes = buildPanes(host).filter { it.id !in cantRun }
         runtime.panes = panes
         // Every pane's on/off, also while the pane is off.
@@ -433,17 +433,16 @@ class PanelDevice(
 
     /** The user cancelled the current voice run (tap on the overlay). */
     fun cancelVoice() {
-        exec.execute { host.cancelVoice?.invoke() }
+        exec.execute { host?.cancelVoice?.invoke() }
     }
 
     /** Hooks the app's panes left for [stop] ([DeviceHost.onStop]). */
     private val stopHooks = ArrayList<() -> Unit>()
 
-    /** What the app's panes get from this device; made with the pane context in [initEntities]. */
-    @Volatile private var host: Host = Host(null, emptySet())
+    /** What the app's panes get from this device; null until [initEntities] makes it with the pane context. */
+    @Volatile private var host: Host? = null
 
-    private inner class Host(private val context: PaneContext?, override val cantRun: Set<String>) : DeviceHost {
-        override val paneContext get() = context ?: error("The device has no pane context before it builds its panes")
+    private inner class Host(override val paneContext: PaneContext, override val cantRun: Set<String>) : DeviceHost {
         override val exec get() = this@PanelDevice.exec
         override val voicePlayer get() = this@PanelDevice.voicePlayer
         override val mediaPlayer get() = this@PanelDevice.mediaPlayer
