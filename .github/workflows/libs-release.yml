@@ -1,0 +1,198 @@
+# Publishes one library to Maven Central from its tag (docs/releasing.md "Libraries", #153):
+#   git tag libs/esphome-api/v0.1.0 && git push origin libs/esphome-api/v0.1.0
+# The tag names the library (libs/<name>) and its version, which must equal `version` in
+# libs/<name>/gradle.properties and have a section in libs/<name>/CHANGELOG.md. The job runs that
+# library's tests, checks its files (tools/release/check-lib-artifact.sh), signs and uploads it to the
+# Central Portal as dev.glassworks:<name>, and makes a GitHub release with the changelog section.
+#
+# MANUAL_PUBLISH (below) is on while the first releases go out: the upload stops at a validated
+# deployment, someone publishes it in the Portal (https://central.sonatype.com/publishing/deployments),
+# and the GitHub release stays a draft until then. A Central release can never be deleted.
+#
+# Secrets of the `maven-central` environment, which deploys only from libs/*/v* tags:
+# MAVEN_CENTRAL_USERNAME, MAVEN_CENTRAL_PASSWORD (a Portal user token), SIGNING_IN_MEMORY_KEY (ASCII-armoured
+# private key), SIGNING_IN_MEMORY_KEY_PASSWORD, SIGNING_IN_MEMORY_KEY_ID (last 8 hex of the fingerprint).
+# release.yml takes only v* and aqara-s1-plus-v* tags, so these never start an app release. Every action
+# is pinned by commit SHA (the tag in the comment is what it was at the time).
+name: Library release
+
+on:
+  push:
+    tags: ['libs/*/v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: libs-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MANUAL_PUBLISH: 'true'
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: maven-central
+    permissions:
+      contents: write   # the GitHub release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Library and version from the tag
+        id: tag
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^libs/([a-z0-9-]+)/v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
+            echo "::error::tag $GITHUB_REF_NAME is not libs/<name>/vMAJOR.MINOR.PATCH"; exit 1
+          fi
+          name=${BASH_REMATCH[1]} version=${BASH_REMATCH[2]}
+          grep -q 'id("com.vanniktech.maven.publish")' "libs/$name/build.gradle.kts" 2>/dev/null ||
+            { echo "::error::libs/$name is not a published library (no com.vanniktech.maven.publish in its build file)"; exit 1; }
+          have=$(sed -n 's/^version=//p' "libs/$name/gradle.properties")
+          [ "$have" = "$version" ] ||
+            { echo "::error::the tag says $version, libs/$name/gradle.properties says version=$have"; exit 1; }
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Only commits on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor HEAD origin/main ||
+            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main: refusing to publish it"; exit 1; }
+
+      - name: Release notes from the library's CHANGELOG.md
+        env:
+          NAME: ${{ steps.tag.outputs.name }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          {
+            printf 'Maven Central: `dev.glassworks:%s:%s`\n\n' "$NAME" "$VERSION"
+            tools/release/changelog-section.sh "$VERSION" "libs/$NAME/CHANGELOG.md"
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Secrets are there
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          SIGNING_IN_MEMORY_KEY: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          SIGNING_IN_MEMORY_KEY_PASSWORD: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+          SIGNING_IN_MEMORY_KEY_ID: ${{ secrets.SIGNING_IN_MEMORY_KEY_ID }}
+        run: |
+          for s in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD SIGNING_IN_MEMORY_KEY SIGNING_IN_MEMORY_KEY_PASSWORD SIGNING_IN_MEMORY_KEY_ID; do
+            [ -n "${!s}" ] || { echo "::error::the maven-central environment has no $s"; exit 1; }
+          done
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      - name: Tests
+        env:
+          NAME: ${{ steps.tag.outputs.name }}
+        run: ./gradlew --no-daemon ":$NAME:test"
+
+      - name: Check the files (unsigned, in mavenLocal)
+        env:
+          NAME: ${{ steps.tag.outputs.name }}
+        run: |
+          ./gradlew --no-daemon ":$NAME:publishToMavenLocal"
+          tools/release/check-lib-artifact.sh "$NAME"
+
+      # A dev.glassworks dependency must already be on Central, at the version this POM names: release
+      # esphome-api before esphome-api-android.
+      - name: Its dev.glassworks dependencies are on Maven Central
+        env:
+          NAME: ${{ steps.tag.outputs.name }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          pom="$HOME/.m2/repository/dev/glassworks/$NAME/$VERSION/$NAME-$VERSION.pom"
+          python3 - "$pom" <<'PY'
+          import sys, urllib.error, urllib.request, xml.etree.ElementTree as ET
+          ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
+          missing = []
+          for d in ET.parse(sys.argv[1]).getroot().iterfind('m:dependencies/m:dependency', ns):
+              g, a, v = (d.findtext(f'm:{k}', namespaces=ns) for k in ('groupId', 'artifactId', 'version'))
+              if g != 'dev.glassworks':
+                  continue
+              url = f'https://repo1.maven.org/maven2/dev/glassworks/{a}/{v}/{a}-{v}.pom'
+              try:
+                  urllib.request.urlopen(urllib.request.Request(url, method='HEAD'))
+                  print(f'{g}:{a}:{v} is on Maven Central')
+              except urllib.error.HTTPError:
+                  missing.append(f'{g}:{a}:{v}')
+          if missing:
+              sys.exit(f'::error::not on Maven Central yet: {", ".join(missing)}. Release it first.')
+          PY
+
+      # Signs (the key is set, so the root build.gradle.kts signs) and uploads. With MANUAL_PUBLISH off, the
+      # plugin also publishes the deployment and waits for the Portal's validation.
+      - name: Sign and upload to Maven Central
+        id: upload
+        env:
+          NAME: ${{ steps.tag.outputs.name }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_IN_MEMORY_KEY_ID }}
+        run: |
+          set -o pipefail   # a step without `shell:` runs bash -e only; keep Gradle's failure through tee
+          if [ "$MANUAL_PUBLISH" = true ]; then task=publishToMavenCentral; else task=publishAndReleaseToMavenCentral; fi
+          ./gradlew --no-daemon ":$NAME:$task" | tee "$RUNNER_TEMP/upload.log"
+          id=$(sed -n 's/.*Uploaded bundle to Central Portal as .*, deployment id: \([0-9a-f-]*\).*/\1/p' "$RUNNER_TEMP/upload.log")
+          [ -n "$id" ] || { echo "::error::no deployment id in the upload's output"; exit 1; }
+          echo "deployment=$id" >> "$GITHUB_OUTPUT"
+
+      # The plugin (0.37.0) validates only deployments it publishes itself. A manual one is checked here, so
+      # no draft release is made for a deployment the Portal rejects.
+      - name: Wait for the Portal's validation
+        if: env.MANUAL_PUBLISH == 'true'
+        env:
+          DEPLOYMENT: ${{ steps.upload.outputs.deployment }}
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, sys, time, urllib.request
+          token = base64.b64encode(f"{os.environ['MAVEN_CENTRAL_USERNAME']}:{os.environ['MAVEN_CENTRAL_PASSWORD']}".encode()).decode()
+          url = f"https://central.sonatype.com/api/v1/publisher/status?id={os.environ['DEPLOYMENT']}"
+          for _ in range(120):  # 30 minutes
+              req = urllib.request.Request(url, method='POST', headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
+              status = json.load(urllib.request.urlopen(req))
+              state = status.get('deploymentState')
+              print('deployment state:', state, flush=True)
+              if state in ('VALIDATED', 'PUBLISHING', 'PUBLISHED'):  # the last two: Publish pressed between polls
+                  sys.exit(0)
+              if state == 'FAILED':
+                  sys.exit('::error::the Portal refused the deployment: ' + json.dumps(status.get('errors'), indent=2))
+              if state not in ('PENDING', 'VALIDATING'):
+                  sys.exit(f'::error::unexpected deployment state {state}')
+              time.sleep(15)
+          sys.exit('::error::the Portal did not validate the deployment within 30 minutes')
+          PY
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.tag.outputs.name }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          draft=()
+          if [ "$MANUAL_PUBLISH" = true ]; then
+            draft=(--draft)
+            echo "::notice::Publish the validated deployment at https://central.sonatype.com/publishing/deployments, then publish this draft release."
+          fi
+          # --latest=false: apps up to 0.4.3 read releases/latest, which must stay the S1 app's release.
+          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false "${draft[@]}" \
+            --title "$NAME $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
