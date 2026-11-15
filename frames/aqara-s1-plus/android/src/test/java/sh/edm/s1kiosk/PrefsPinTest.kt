@@ -68,7 +68,7 @@ class PrefsPinTest {
     }
 
     /** The prefs classes the app builds from a context. */
-    private fun roots(ctx: Context): List<Any> = listOf(KioskPrefs(ctx), PrefsSsStore(ctx))
+    private fun roots(ctx: Context): List<Any> = listOf(KioskPrefs(ctx), PanePrefs(ctx), PrefsSsStore(ctx))
 
     /** [roots] and every prefs or store object reachable from them through getters. */
     private fun prefsObjects(ctx: Context): List<Any> {
@@ -106,17 +106,18 @@ class PrefsPinTest {
 
     private fun exerciseComposite(ctx: Context) {
         val kiosk = KioskPrefs(ctx)
+        val panes = PanePrefs(ctx)
         kiosk.setHaUrl("http://192.0.2.10:8123", "manual")
         kiosk.auth = StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "pin-token")
         kiosk.auth
         kiosk.auth = null
         kiosk.noiseKeyStore.save(ByteArray(32))
         kiosk.noiseKeyStore.save(null)
-        KioskPrefs.PANE_FILES.keys.forEach(kiosk::paneFile)
+        PanePrefs.PANE_FILES.keys.forEach(panes::paneFile)
         kiosk.remoteDebugging(BuildConfig.DEBUG) // the default the runtime passes (GlassworksRuntime.build)
-        kiosk.camera.use = dev.glassworks.camera.CameraUse.PRESENCE_AND_SNAPSHOTS
-        kiosk.camera.signIn = "pin-user" to "pin-pass"
-        kiosk.camera.signIn = null
+        panes.camera.use = dev.glassworks.camera.CameraUse.PRESENCE_AND_SNAPSHOTS
+        panes.camera.signIn = "pin-user" to "pin-pass"
+        panes.camera.signIn = null
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> }
         kiosk.registerListener(listener)
         kiosk.unregisterListener(listener)
@@ -236,7 +237,7 @@ class PrefsPinTest {
 
         /** Methods with arguments that [exerciseComposite] calls by hand, by class suffix and name. */
         val COMPOSITE = setOf(
-            "KioskPrefs.setHaUrl", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "KioskPrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
+            "KioskPrefs.setHaUrl", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
             ".save", "PrefsSsStore.putRecord", "PrefsSsStore.touchRecord", "PrefsSsStore.removeRecord",
             "CameraPrefs.setUse", "CameraPrefs.setSignIn",
         )

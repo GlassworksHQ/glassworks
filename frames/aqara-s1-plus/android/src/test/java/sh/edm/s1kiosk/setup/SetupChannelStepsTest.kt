@@ -19,6 +19,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.radio.RadioController
 import sh.edm.s1kiosk.radio.TestInit
@@ -67,9 +68,9 @@ class SetupChannelStepsTest {
 
     @Before fun s1() {
         runtime = GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
-        val prefs = KioskPrefs(app)
+        val panePrefs = PanePrefs(app)
         runtime.radio = RadioController(
-            TestInit(), load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,
+            TestInit(), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,
         ).also { it.start() }
         steps = runtime.paneDefinitions(app).flatMap { it.setupSteps }
     }

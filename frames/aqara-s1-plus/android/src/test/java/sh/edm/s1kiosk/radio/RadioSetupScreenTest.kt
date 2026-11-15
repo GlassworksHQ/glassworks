@@ -17,6 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp.Action
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp.Request
@@ -37,10 +38,11 @@ class RadioSetupScreenTest {
 
     private val app get() = RuntimeEnvironment.getApplication()
     private val prefs get() = KioskPrefs(app)
+    private val panePrefs get() = PanePrefs(app)
     private val init = TestInit()
 
     private fun definition(): RadioDefinition {
-        val c = RadioController(init, load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
+        val c = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
         return radioDefinition(app, TestReadout(c, prefs))
     }
 
@@ -66,7 +68,7 @@ class RadioSetupScreenTest {
     @Test
     fun changeTheModeKeepsTheStepUntilItsCardIsClosed() {
         val d = definition()
-        prefs.radio.mode = RadioMode.ZIGBEE_TCP.id // applied: the controller stores it before the helper answers
+        panePrefs.radio.mode = RadioMode.ZIGBEE_TCP.id // applied: the controller stores it before the helper answers
         d.followUpOpen = true
         var next = 0
         val screen = RadioSetupScreen(Mockup.activity(), host(false) { next++ }, d)
@@ -86,7 +88,7 @@ class RadioSetupScreenTest {
     fun aPreviewsChangeTheModeLeavesTheLiveStepAlone() {
         // Verifier 6d0f2cd7: a preview's tap closed the live follow-up, and setup went to Done.
         val d = definition()
-        prefs.radio.mode = RadioMode.ZIGBEE_TCP.id
+        panePrefs.radio.mode = RadioMode.ZIGBEE_TCP.id
         d.followUpOpen = true // the live setup shows the card
         val screen = RadioSetupScreen(Mockup.activity(), host(true), d)
         val card = Card()
@@ -100,13 +102,13 @@ class RadioSetupScreenTest {
     @Test
     fun aPreviewDoesntPollTheHelper() {
         // Verifier 6d0f2cd7 / 72dfae7d: the follow-up's 2 s tick asked the controller to refresh, also in a preview.
-        val c = RadioController(init, load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
+        val c = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
         var asked = 0
         val readout = object : RadioReadout by TestReadout(c, prefs) {
             override fun controller(): RadioController? { asked++; return c }
         }
         val d = radioDefinition(app, readout)
-        prefs.radio.mode = RadioMode.ZIGBEE_TCP.id
+        panePrefs.radio.mode = RadioMode.ZIGBEE_TCP.id
         val preview = RadioSetupScreen(Mockup.activity(), host(true), d)
         val card = Card()
         preview.bind(card, entered = true)
@@ -129,7 +131,7 @@ class RadioSetupScreenTest {
         val card = Card()
         screen.bind(card, entered = true)
         card.primary!!() // Continue on the mode: the request runs on its thread
-        prefs.radio.mode = RadioMode.ZIGBEE_TCP.id // stored before the helper's answer
+        panePrefs.radio.mode = RadioMode.ZIGBEE_TCP.id // stored before the helper's answer
         assertFalse(d.step.done()) // before: the 2 s tick read this as done and showed Done
     }
 

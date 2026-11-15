@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.FixedReadout
 import sh.edm.s1kiosk.radio.radioDefinition
 import sh.edm.s1kiosk.settings.KioskSettingsOverlay
@@ -31,7 +31,7 @@ import sh.edm.s1kiosk.ui.Mockup
 @Config(sdk = [34], application = Application::class, qualifiers = "w960dp-h480dp-land-hdpi")
 class CameraPageOverlayTest {
     private val app get() = RuntimeEnvironment.getApplication()
-    private val file get() = KioskPrefs(app).paneFile("camera")
+    private val file get() = PanePrefs(app).paneFile("camera")
 
     @After fun tearDown() { file.edit().clear().commit() }
 

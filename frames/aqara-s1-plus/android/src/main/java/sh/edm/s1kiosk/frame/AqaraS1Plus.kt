@@ -14,7 +14,7 @@ import dev.glassworks.frame.Hardware
 import dev.glassworks.frame.NamedBy
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PaneDefinition
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.WallBaseDefinition
 import sh.edm.s1kiosk.base.WallBasePane
 import sh.edm.s1kiosk.base.WallBasePrefs
@@ -51,7 +51,7 @@ class AqaraS1Plus : Frame {
 
     /** The wall base's on/off and adb extras, and the time zone's on/off. */
     override fun paneDefinitions(context: Context): List<PaneDefinition> {
-        val prefs = KioskPrefs(context)
+        val prefs = PanePrefs(context)
         return listOf(WallBaseDefinition(prefs.paneFile("wall-base")), TimeZoneDefinition(prefs.paneFile("time-zone")))
     }
 

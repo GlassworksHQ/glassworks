@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertEquals
@@ -14,7 +15,6 @@ import org.robolectric.annotation.Config
 import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.base.WallBasePane
 import java.io.File
@@ -50,7 +50,7 @@ class PanelEntitiesPinTest {
     /** Voice off keeps the same entities: Home Assistant would drop the voice ones otherwise. */
     @Test fun voiceOffKeepsTheSameEntities() {
         if (System.getProperty("s1.regenGolden") == "true") return
-        KioskPrefs(RuntimeEnvironment.getApplication()).paneFile("assist").edit().putBoolean("voice_enabled", false).commit()
+        PanePrefs(RuntimeEnvironment.getApplication()).paneFile("assist").edit().putBoolean("voice_enabled", false).commit()
         assertEquals(javaClass.getResourceAsStream("/$GOLDEN")?.bufferedReader()?.readText(), describe(realEntityList()))
     }
 
@@ -70,7 +70,7 @@ class PanelEntitiesPinTest {
 
     private fun realEntityList(backend: BaseBackend = BaseBackend.LOCALSERVICE): List<ApiEntity> {
         val app = RuntimeEnvironment.getApplication()
-        KioskPrefs(app).wallBase.backend = backend.pref
+        PanePrefs(app).wallBase.backend = backend.pref
         val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), onVoiceEvent = {})
         try {
             val identity = DeviceIdentity(

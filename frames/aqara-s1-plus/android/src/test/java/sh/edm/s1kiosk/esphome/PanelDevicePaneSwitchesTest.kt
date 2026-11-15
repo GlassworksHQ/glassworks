@@ -17,7 +17,7 @@ import dev.glassworks.esphome.Msg
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
 import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.io.ByteArrayOutputStream
@@ -43,12 +43,12 @@ class PanelDevicePaneSwitchesTest {
     private fun switch(id: String) = runtime.paneDefinitions(app).single { it.id == id }.switch!!
 
     @Before fun setUp() {
-        val prefs = KioskPrefs(app)
+        val panePrefs = PanePrefs(app)
         // No real voice engine or Sendspin player at start; the wall base on the backend that only schedules a task.
         switch("assist").on = false
         switch("sendspin").on = false
-        prefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
-        prefs.voice.wakeWord = "" // voice turned on here downloads no wake word model
+        panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        panePrefs.voice.wakeWord = "" // voice turned on here downloads no wake word model
         device = PanelDevice(app, runtime, onVoiceEvent = {}, onApiHello = { _, _ -> }, exec = exec, mdns = mdns,
             apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress())
         device.start()

@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.setup.ImprovFacts
 import sh.edm.s1kiosk.setup.SetupFlow
 import sh.edm.s1kiosk.setup.SetupOverlay
@@ -36,7 +36,7 @@ import sh.edm.s1kiosk.ui.Mockup
 @Config(sdk = [34], application = Application::class, qualifiers = "w960dp-h480dp-land-hdpi")
 class CameraSetupLeakTest {
     private val app get() = RuntimeEnvironment.getApplication()
-    private val file get() = KioskPrefs(app).paneFile("camera")
+    private val file get() = PanePrefs(app).paneFile("camera")
 
     @After fun tearDown() { file.edit().clear().commit() }
 

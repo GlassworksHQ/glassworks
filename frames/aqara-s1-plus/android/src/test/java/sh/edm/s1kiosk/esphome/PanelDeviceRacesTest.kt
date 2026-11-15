@@ -24,6 +24,7 @@ import org.robolectric.shadows.ShadowPowerManager
 import dev.glassworks.esphome.EspHomeLog
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.dashboard.Dashboards
@@ -77,9 +78,10 @@ class PanelDeviceRacesTest {
         // Panes that start real engines are off, and the wall base takes the backend that only
         // schedules a task on esphome-main (no UART, no Aqara cloud daemon).
         val prefs = KioskPrefs(app)
-        prefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
-        prefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
-        prefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        val panePrefs = PanePrefs(app)
+        panePrefs.paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
+        panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
+        panePrefs.wallBase.backend = BaseBackend.LOCALSERVICE.pref
         ShadowPowerManager.clearWakeLocks()
         screenListeners = listenerCount(runtime.screen)
         authListeners = listenerCount(HaAuth)

@@ -12,6 +12,7 @@ import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.TextSensorEntity
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.base.BaseRes
 import sh.edm.s1kiosk.base.WallBase
@@ -51,7 +52,7 @@ class PaneFixtures(private val app: Application) {
     fun shutdown() = held.forEach { it.shutdownNow() }
 
     private val ctx = PaneContext(
-        app, KioskPrefs(app)::paneFile,
+        app, PanePrefs(app)::paneFile,
         DeviceIdentity("aqara-s1-plus-000001", "Aqara S1 Plus", "02:00:00:00:00:01", "2026.10.2", "x", "Aqara", "Panel Hub S1 Plus", 0),
         publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
         build = AppBuild("1.0.0", 10000, debug = false),
@@ -88,7 +89,7 @@ class PaneFixtures(private val app: Application) {
 
     /** A three-channel switch base, as the tracker hears it, with relay 1 on and button 1 just pressed; or none. */
     fun wallBase(attached: Boolean = true): WallBasePane {
-        KioskPrefs(app).wallBase.layout = ""
+        PanePrefs(app).wallBase.layout = ""
         val device = Executors.newSingleThreadScheduledExecutor().also { held += it }
         // No getprop or setprop on the host: Aqara's daemon reads as stopped, as on a panel with the UART base.
         val p = WallBasePane(ctx, WallBase.Config(BaseBackend.UART), device, AqaraCloud { cmd -> if (cmd.firstOrNull() == "getprop") "stopped" else "" })
@@ -110,7 +111,7 @@ class PaneFixtures(private val app: Application) {
             override fun get(name: String) = values[name].orEmpty()
             override fun set(name: String, value: String) { values[name] = value }
         }
-        val p = TimeZonePane(ctx, TimeZonePrefs(KioskPrefs(app).paneFile("time-zone")), TimeZoneKeeper(props, inline = true))
+        val p = TimeZonePane(ctx, TimeZonePrefs(PanePrefs(app).paneFile("time-zone")), TimeZoneKeeper(props, inline = true))
         p.start()
         p.onEvent(PanelEvent.HomeAssistantTimeZone(haRule))
         return p
@@ -118,7 +119,7 @@ class PaneFixtures(private val app: Application) {
 
     /** Listening for Okay Nabu, with one timer running. */
     fun voice(): AssistPane {
-        KioskPrefs(app).voice.apply { wakeWord = "okay_nabu"; micMuted = false; micGain = 1.5f; wakeSound = true; overlay = true }
+        PanePrefs(app).voice.apply { wakeWord = "okay_nabu"; micMuted = false; micGain = 1.5f; wakeSound = true; overlay = true }
         val p = AssistPane(
             ctx,
             player = object : UrlPlayer { override fun play(urls: List<String>, onDone: (Boolean) -> Unit) {}; override fun stop() {} },

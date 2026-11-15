@@ -13,6 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.ui.RadioFollowUp
 
 /** Init without a root helper unless asked: `ctl.start/stop` flip init.svc.*, `ctl.restart` is recorded, other props are stored. */
@@ -43,7 +44,7 @@ internal class TestInit(helper: Boolean = false) : SysProps {
 /** The app's readout over a controller the test owns. */
 internal class TestReadout(var controller: RadioController?, private val prefs: KioskPrefs) : RadioReadout {
     override fun controller() = controller
-    override fun mode() = controller?.mode ?: RadioMode.parse(prefs.radio.mode)
+    override fun mode() = controller?.mode ?: RadioMode.parse(PanePrefs(org.robolectric.RuntimeEnvironment.getApplication()).radio.mode)
     override fun facts(): RadioFollowUp.Facts? = null
     override fun haBase() = prefs.haBase
     override fun panelIp() = "192.0.2.10"
@@ -57,9 +58,10 @@ class RadioDefinitionTest {
 
     private val app get() = RuntimeEnvironment.getApplication()
     private val prefs get() = KioskPrefs(app)
+    private val panePrefs get() = PanePrefs(app)
 
     private fun controller(init: SysProps = TestInit()) = RadioController(
-        init, load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,
+        init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,
     )
 
     private fun definition(c: RadioController? = null) = radioDefinition(app, TestReadout(c, prefs))
@@ -84,7 +86,7 @@ class RadioDefinitionTest {
     @Test
     fun theFollowUpHoldsTheStepUntilContinue() {
         val d = definition()
-        prefs.radio.mode = RadioMode.THREAD.id // the mode is applied...
+        panePrefs.radio.mode = RadioMode.THREAD.id // the mode is applied...
         d.followUpOpen = true // ...and setup shows what to do next
         assertFalse(d.step.done())
         d.followUpOpen = false
@@ -106,7 +108,7 @@ class RadioDefinitionTest {
         val stuck = object : SysProps by TestInit() {
             override fun set(name: String, value: String) {} // ctl.stop does nothing: the services keep running
         }
-        prefs.radio.mode = RadioMode.OFF.id
+        panePrefs.radio.mode = RadioMode.OFF.id
         val c = controller(stuck).also { it.start() }
         assertTrue(c.statusText(), c.statusText().startsWith("error"))
         val d = definition(c)
@@ -117,12 +119,12 @@ class RadioDefinitionTest {
     @Test
     fun settingsSwitchAsksBeforeOffAndOnShowsTheRoles() {
         // #63 round 2: the radio's on/off at the top right of its page.
-        prefs.radio.mode = RadioMode.ZIGBEE_TCP.id
+        panePrefs.radio.mode = RadioMode.ZIGBEE_TCP.id
         val d = definition()
         val master = d.settings().single().master!!
         assertTrue(master.value())
         assertEquals("Turn the radio off?", master.confirm(false)!!.title)
-        prefs.radio.mode = RadioMode.OFF.id
+        panePrefs.radio.mode = RadioMode.OFF.id
         assertNull(master.confirm(false)) // already off: nothing to ask
         assertFalse(master.value())
         var answer: String? = "unanswered"
@@ -142,8 +144,8 @@ class RadioDefinitionTest {
         val props = object : SysProps by base {
             override fun get(name: String): String { if (hold.get()) gate.await(5, java.util.concurrent.TimeUnit.SECONDS); return base.get(name) }
         }
-        prefs.radio.mode = RadioMode.OFF.id
-        val c = RadioController(props, load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = false, log = {}, filesDir = tmp.root)
+        panePrefs.radio.mode = RadioMode.OFF.id
+        val c = RadioController(props, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = false, log = {}, filesDir = tmp.root)
         val d = radioDefinition(app, TestReadout(c, prefs))
         hold.set(true) // the radio thread stalls on its next property read
         c.request(RadioMode.ZIGBEE_TCP.label, "test") // the role, queued
@@ -165,7 +167,7 @@ class RadioDefinitionTest {
         val base = TestInit(helper = false)
         var reads = 0
         val props = object : SysProps by base { override fun get(name: String): String { reads++; return base.get(name) } }
-        val c = RadioController(props, load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
+        val c = RadioController(props, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
         val d = radioDefinition(app, TestReadout(c, prefs))
         val section = d.settings().single()
         reads = 0
@@ -211,7 +213,7 @@ class RadioDefinitionTest {
     @Test
     fun aRequestThatNeverQueuedIsntPending() {
         // Verifier bd94c950: after stop() the radio thread refuses work; the count must not leak.
-        val c = RadioController(TestInit(), load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = false, log = {}, filesDir = tmp.root)
+        val c = RadioController(TestInit(), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = false, log = {}, filesDir = tmp.root)
         c.stop()
         runCatching { c.request(RadioMode.OFF.label, "test") }
         assertFalse(c.requestPending)
@@ -233,7 +235,7 @@ class RadioDefinitionTest {
     @Test
     fun aModeChosenInHomeAssistantAnswersIt() {
         val d = definition()
-        prefs.radio.mode = RadioMode.THREAD.id
+        panePrefs.radio.mode = RadioMode.THREAD.id
         assertTrue(d.step.done())
         assertTrue(d.setupChoice.on())
     }
@@ -290,8 +292,8 @@ class RadioDefinitionTest {
         val props = object : SysProps by base {
             override fun get(name: String): String { if (hold.get()) gate.await(5, java.util.concurrent.TimeUnit.SECONDS); return base.get(name) }
         }
-        prefs.radio.mode = RadioMode.OFF.id
-        val c = RadioController(props, load = { prefs.radio.mode }, store = { prefs.radio.mode = it }, inline = false, log = {}, filesDir = tmp.root)
+        panePrefs.radio.mode = RadioMode.OFF.id
+        val c = RadioController(props, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = false, log = {}, filesDir = tmp.root)
         val d = radioDefinition(app, TestReadout(c, prefs))
         hold.set(true)
         c.request(RadioMode.ZIGBEE_TCP.label, "test")

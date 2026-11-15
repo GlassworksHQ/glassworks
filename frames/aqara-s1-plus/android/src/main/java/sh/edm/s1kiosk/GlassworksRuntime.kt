@@ -97,25 +97,26 @@ class GlassworksRuntime(
         definitions ?: run {
             val app = context.applicationContext
             val prefs = KioskPrefs(app)
+            val panePrefs = PanePrefs(app)
             val radio = RadioDefinition(
-                prefs.radio,
+                panePrefs.radio,
                 setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
-                readout = RadioDefinition.AppReadout(this, prefs.radio) { prefs.haBase },
+                readout = RadioDefinition.AppReadout(this, panePrefs.radio) { prefs.haBase },
             )
             val notify = NotificationsDefinition(
-                prefs.paneFile("notifications"), notifications,
+                panePrefs.paneFile("notifications"), notifications,
                 nodeName = { device?.nodeName },
                 now = android.os.SystemClock::elapsedRealtime,
             )
             // It requires a camera: without one in the frame's hardware it is CantRun (below), as every pane that lacks its own.
             val camera = CameraDefinition(
-                prefs.paneFile("camera"),
+                panePrefs.paneFile("camera"),
                 granted = { app.checkSelfPermission(android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
                 pickers = { c -> sh.edm.s1kiosk.camera.CameraUseCards(c) },
             )
-            val bluetoothProxy = BluetoothProxyDefinition(prefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(app), ::BluetoothProxyPage)
-            (listOf(AssistDefinition(prefs.paneFile("assist")), SendspinDefinition(prefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
-                paneFrame.paneDefinitions(app) + camera + DiagnosticsDefinition(prefs.paneFile("diagnostics")))
+            val bluetoothProxy = BluetoothProxyDefinition(panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(app), ::BluetoothProxyPage)
+            (listOf(AssistDefinition(panePrefs.paneFile("assist")), SendspinDefinition(panePrefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
+                paneFrame.paneDefinitions(app) + camera + DiagnosticsDefinition(panePrefs.paneFile("diagnostics")))
                 .map { CantRun.unless(it, frame.provides) }
         }.also { definitions = it }
     }

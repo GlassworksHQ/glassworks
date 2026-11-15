@@ -17,7 +17,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.SysProps
 import sh.edm.s1kiosk.ui.Mockup
 import java.util.TimeZone
@@ -42,11 +42,11 @@ class TimeZoneViewTest {
             override fun set(name: String, value: String) { p[name] = value }
         }
         val ctx = PaneContext(
-            app, KioskPrefs(app)::paneFile, DeviceIdentity("t", "T", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
+            app, PanePrefs(app)::paneFile, DeviceIdentity("t", "T", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
             build = AppBuild("1.0.0", 10000, debug = false),
         )
-        val pane = TimeZonePane(ctx, TimeZonePrefs(KioskPrefs(app).paneFile("time-zone")), TimeZoneKeeper(props, inline = true))
+        val pane = TimeZonePane(ctx, TimeZonePrefs(PanePrefs(app).paneFile("time-zone")), TimeZoneKeeper(props, inline = true))
         pane.start()
         pane.onEvent(PanelEvent.HomeAssistantTimeZone("CET-1CEST,M3.5.0,M10.5.0/3"))
         val host = object : SettingsItem.NativeHost {

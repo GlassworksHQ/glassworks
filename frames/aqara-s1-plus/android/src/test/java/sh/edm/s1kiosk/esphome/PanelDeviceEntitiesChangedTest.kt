@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.platform.AppBuild
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertEquals
@@ -11,7 +12,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.base.BaseKind
 import sh.edm.s1kiosk.base.BaseLayout
@@ -24,8 +24,8 @@ class PanelDeviceEntitiesChangedTest {
 
     @Test fun aNewBaseLayoutAddsItsEntitiesAndKeepsTheRest() {
         val app = RuntimeEnvironment.getApplication()
-        KioskPrefs(app).wallBase.layout = ""
-        KioskPrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        PanePrefs(app).wallBase.layout = ""
+        PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
         val device = PanelDevice(app, GlassworksRuntime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), onVoiceEvent = {})
         try {
             device.initEntities(

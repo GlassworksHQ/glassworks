@@ -45,7 +45,7 @@ class PaneExtrasTest {
                 .putExtra("sendspin_flac", false).putExtra("base_backend", "uart").putExtra("base_transport", "tcp:127.0.0.1:9999"),
         )
         assertFalse("applied live: no restart", restart)
-        val p = KioskPrefs(app)
+        val p = PanePrefs(app)
         assertEquals("an old model name is migrated", "alexa", p.voice.wakeWord)
         assertEquals("alexa's cutoff", 0.7f, p.voice.wakeCutoff)
         assertEquals(2f, p.voice.micGain)
@@ -64,7 +64,7 @@ class PaneExtrasTest {
             Intent().putExtra("camera_use", "snapshots").putExtra("camera_privacy", false).putExtra("onvif_stream", true)
                 .putExtra("camera_stream_sign_in", "viewer:pass"),
         )
-        val c = KioskPrefs(app).camera
+        val c = PanePrefs(app).camera
         assertEquals(dev.glassworks.camera.CameraUse.PRESENCE, c.use)
         assertFalse(c.onvif)
         assertEquals(null, c.signIn)
@@ -72,7 +72,7 @@ class PaneExtrasTest {
 
     @Test
     fun everyPaneTurnsOffAndOnWithoutARestart() {
-        val p = KioskPrefs(app)
+        val p = PanePrefs(app)
         val flags = { listOf(p.voice.enabled, p.sendspin.enabled, p.notifications.enabled, p.bluetoothProxy.enabled, p.wallBase.enabled, p.timeZone.enabled, p.diagnostics.enabled) }
         val all = listOf("voice_enabled", "sendspin_enabled", "notifications_enabled", "bluetooth_proxy_enabled", "wall_base_enabled", "time_zone_enabled", "diagnostics_enabled")
         assertFalse("applied live", extras.applyFrom(Intent().apply { all.forEach { putExtra(it, false) } }))
@@ -83,7 +83,7 @@ class PaneExtrasTest {
 
     @Test
     fun absentExtrasChangeNothingAndAWrongTypeGetsTheDefault() {
-        val p = KioskPrefs(app)
+        val p = PanePrefs(app)
         p.voice.threshold = 0.9f
         assertFalse(extras.applyFrom(Intent().putExtra("unrelated", true)))
         assertEquals(0.9f, p.voice.threshold)

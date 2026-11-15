@@ -11,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
-import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.sendspin.SendspinSession.Phase
 import sh.edm.s1kiosk.sendspin.SendspinSession.Status
 
@@ -23,7 +23,7 @@ class MusicPageTest {
         // CodeRabbit on #235: the slider wrote to Music Assistant's socket on the main thread.
         val app = RuntimeEnvironment.getApplication()
         val ctx = PaneContext(
-            app, KioskPrefs(app)::paneFile,
+            app, PanePrefs(app)::paneFile,
             DeviceIdentity("test", "Test", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
             build = AppBuild("1.0.0", 10000, debug = false),
@@ -31,7 +31,7 @@ class MusicPageTest {
         val pane = SendspinPane(ctx, haBase = { null })
         pane.player.setVolume(40)
         val queued = ArrayList<Runnable>()
-        val page = SendspinDefinition(KioskPrefs(app).paneFile("sendspin")) { queued += it }.settings(pane).single()
+        val page = SendspinDefinition(PanePrefs(app).paneFile("sendspin")) { queued += it }.settings(pane).single()
         val volume = page.items.filterIsInstance<SettingsItem.Slider>().single()
         var answered: String? = "not yet"
         volume.save(25f) { answered = it }
@@ -46,7 +46,7 @@ class MusicPageTest {
         // CodeRabbit on #235: a thread per change could let an earlier volume land last.
         val app = RuntimeEnvironment.getApplication()
         val ctx = PaneContext(
-            app, KioskPrefs(app)::paneFile,
+            app, PanePrefs(app)::paneFile,
             DeviceIdentity("test", "Test", "02:00:00:00:00:01", "x", "x", "x", "x", 0),
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
             build = AppBuild("1.0.0", 10000, debug = false),

@@ -9,6 +9,7 @@ import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.settingsOrder
 import dev.glassworks.diagnostics.DiagnosticsDefinition
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.WallBaseDefinition
 import sh.edm.s1kiosk.frame.TimeZoneDefinition
 import sh.edm.s1kiosk.radio.RadioDefinition
@@ -28,10 +29,10 @@ object MenuFixture {
 
     /** The S1's panes after the radio, as the app has them (#67): the wall base, the time zone and diagnostics, each with only its on/off. */
     fun switchOnly(context: Context): List<PaneDefinition> {
-        val prefs = KioskPrefs(context)
+        val panePrefs = PanePrefs(context)
         return listOf(
-            WallBaseDefinition(prefs.paneFile("wall-base")), TimeZoneDefinition(prefs.paneFile("time-zone")),
-            DiagnosticsDefinition(prefs.paneFile("diagnostics")),
+            WallBaseDefinition(panePrefs.paneFile("wall-base")), TimeZoneDefinition(panePrefs.paneFile("time-zone")),
+            DiagnosticsDefinition(panePrefs.paneFile("diagnostics")),
         )
     }
 

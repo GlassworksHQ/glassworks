@@ -58,7 +58,7 @@ import sh.edm.s1kiosk.voice.VoicePrefs
 @Config(sdk = [34], application = Application::class)
 class PanePrefsTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val kiosk = KioskPrefs(app)
+    private val panePrefs = PanePrefs(app)
     private val device = Executors.newSingleThreadScheduledExecutor()
     private val built = ArrayList<Pane>()
 
@@ -75,11 +75,11 @@ class PanePrefsTest {
     }
 
     @Test fun everyNamespaceHasAPrefsClassAndAFile() {
-        assertEquals(KioskPrefs.PANE_FILES.keys, owners.keys)
+        assertEquals(PanePrefs.PANE_FILES.keys, owners.keys)
     }
 
     @Test fun anUnknownNamespaceIsRefused() {
-        assertThrows(IllegalArgumentException::class.java) { kiosk.paneFile("music") }
+        assertThrows(IllegalArgumentException::class.java) { panePrefs.paneFile("music") }
     }
 
     @Test fun noKeyHasTwoOwners() {
@@ -90,7 +90,7 @@ class PanePrefsTest {
     }
 
     @Test fun eachPaneUsesOnlyItsOwnNamespaceAndKeys() {
-        kiosk.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
+        panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, false).commit()
         for (pane in panes()) {
             val ns = pane.id
             val asked = HashMap(asked)
@@ -112,7 +112,7 @@ class PanePrefsTest {
 
     private val ctx = PaneContext(
         app,
-        prefs = { ns -> recording(kiosk.paneFile(ns), asked.getOrPut(ns) { sortedSetOf() }) },
+        prefs = { ns -> recording(panePrefs.paneFile(ns), asked.getOrPut(ns) { sortedSetOf() }) },
         DeviceIdentity(
             name = "test", friendlyName = "Test", macAddress = "02:00:00:00:00:01", esphomeVersion = "x",
             compilationTime = "x", manufacturer = "x", model = "x", voiceFeatures = 0,
@@ -175,7 +175,7 @@ class PanePrefsTest {
     /** The keys [make]'s class reads or writes when every getter and setter runs. */
     private fun ownedKeys(ns: String, make: (SharedPreferences) -> Any): Set<String> {
         val keys = sortedSetOf<String>()
-        val obj = make(recording(kiosk.paneFile(ns), keys))
+        val obj = make(recording(panePrefs.paneFile(ns), keys))
         for (m in obj.javaClass.methods) {
             if (m.declaringClass == Any::class.java) continue
             when {

@@ -10,6 +10,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.RuntimeEnvironment
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.FixedReadout
 import sh.edm.s1kiosk.radio.HelperFacts
 import sh.edm.s1kiosk.radio.RadioMode
@@ -46,7 +47,7 @@ class SettingsMockups {
             MenuFixture.cardOnly("voice", "Voice", "Assist and timers"),
             MenuFixture.cardOnly("sendspin", "Music", "A Sendspin speaker"),
             dev.glassworks.notifications.NotificationsDefinition(
-                KioskPrefs(app).paneFile("notifications"), dev.glassworks.notifications.NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L },
+                PanePrefs(app).paneFile("notifications"), dev.glassworks.notifications.NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L },
             ),
             radio,
         ) + MenuFixture.switchOnly(app) + extra
