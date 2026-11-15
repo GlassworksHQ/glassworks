@@ -104,6 +104,26 @@ builds from the repo root, the npm workspace root: `npm ci`, then `npm run build
 project works the same way (`kiln/apps/kiln/vercel.json`).
 
 Vercel does not build on pushes (`git.deploymentEnabled: false` in `vercel.json`), so branches and
-PRs get no preview. The maintainer deploys production. Until 2026-11-15 the site was its own repo,
-GlassworksHQ/glassworks.dev, and a workflow there called a Vercel deploy hook on a push to `main`;
-that workflow did not move here.
+PRs get no preview. Until 2026-11-15 the site was its own repo, GlassworksHQ/glassworks.dev, and a
+workflow there called a Vercel deploy hook on a push to `main`; that workflow did not move here.
+
+### Deploying (the maintainer)
+
+Build on your machine from a full clone, then upload the build. A full clone, because the docs' "Updated"
+dates come from git history: a build without it (a shallow clone, or a plain `vercel deploy`, which
+uploads files without `.git`) shows no dates. `vercel build` runs `vercel.json`'s install and build,
+Pagefind included, as Vercel would.
+
+```sh
+git clone https://github.com/GlassworksHQ/glassworks.git glassworks-deploy   # no --depth
+cd glassworks-deploy
+git checkout origin/main                  # or the commit to deploy
+npx vercel link                           # once per clone: pick the site's project (Root Directory: site)
+npx vercel pull --yes --environment=production
+npx vercel build --prod
+npx vercel deploy --prebuilt --prod
+```
+
+A preview: `npx vercel pull --yes --environment=preview`, then
+`npx vercel build` and `npx vercel deploy --prebuilt`, without `--prod`. Run every command from the
+clone's root, where `vercel link` put `.vercel/`.

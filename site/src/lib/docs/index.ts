@@ -22,7 +22,8 @@ const GH = links.s1;
 
 /*
  * The last commit date of a file. A build without the full history (a shallow clone, or a CLI
- * deploy that uploads files without .git) would give wrong dates, so it gives none.
+ * deploy that uploads files without .git) would give wrong dates, so it gives none. Production is
+ * built from a full clone (site/README.md → Deploying).
  */
 const history = (() => {
   try {

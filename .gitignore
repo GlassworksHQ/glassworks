@@ -29,3 +29,6 @@ local.properties
 .idea/
 *.iml
 captures/
+
+# Vercel CLI link (site deploys run from the repo root; site/README.md → Deploying)
+.vercel
