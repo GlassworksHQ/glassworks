@@ -16,16 +16,13 @@ import android.widget.TextView
 import dev.glassworks.bluetoothproxy.BluetoothProxyModel
 import dev.glassworks.bluetoothproxy.ProxyPhase
 import dev.glassworks.bluetoothproxy.ProxyPhase.BLUETOOTH_OFF
-import dev.glassworks.bluetoothproxy.ProxyPhase.LISTENING
 import dev.glassworks.bluetoothproxy.ProxyPhase.LOCATION_OFF
 import dev.glassworks.bluetoothproxy.ProxyPhase.NO_BLE
-import dev.glassworks.bluetoothproxy.ProxyPhase.NEEDS_KEY
-import dev.glassworks.bluetoothproxy.ProxyPhase.NO_PERMISSION
 import dev.glassworks.bluetoothproxy.ProxyPhase.OFF
 import dev.glassworks.bluetoothproxy.ProxyPhase.RETRYING
-import dev.glassworks.bluetoothproxy.ProxyPhase.WAITING
+import dev.glassworks.bluetoothproxy.ProxyPage
+import dev.glassworks.pane.IN_HOME_ASSISTANT
 import dev.glassworks.pane.SettingsItem
-import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
 import sh.edm.s1kiosk.ui.Glass
 import sh.edm.s1kiosk.ui.Glass.Companion.BD
 import sh.edm.s1kiosk.ui.Glass.Companion.FA
@@ -62,8 +59,8 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
         addView(LinearLayout(c).apply { addView(cardButton) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(16f) })
     }
 
-    private val ads = Tile("Advertisements", "a minute")
-    private val scanner = Tile("Scanner", "")
+    private val ads = Tile(ProxyPage.ADS, ProxyPage.ADS_UNIT)
+    private val scanner = Tile(ProxyPage.SCANNER, "")
     private val spark = Spark(c)
     private val tiles = LinearLayout(c).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -73,14 +70,14 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
     }
 
     private val note = g.text(15f, MU).apply { setLineSpacing(0f, 1.25f) }
-    private val adsRow = HaRow("Bluetooth advertisements")
-    private val statusRow = HaRow("Bluetooth proxy status")
+    private val adsRow = HaRow(ProxyPage.ADS_ENTITY)
+    private val statusRow = HaRow(ProxyPage.STATUS_ENTITY)
     private val inHa = LinearLayout(c).apply {
         orientation = LinearLayout.VERTICAL
-        addView(g.label("In Home Assistant"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(22f); bottomMargin = px(6f) })
+        addView(g.label(IN_HOME_ASSISTANT), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(22f); bottomMargin = px(6f) })
         addView(adsRow.view)
         addView(statusRow.view)
-        addView(g.text(13.5f, FA).apply { text = FOOTNOTE; setLineSpacing(0f, 1.2f) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
+        addView(g.text(13.5f, FA).apply { text = ProxyPage.FOOTNOTE; setLineSpacing(0f, 1.2f) }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
     }
 
     override val view: View = LinearLayout(c).apply {
@@ -97,61 +94,32 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
     override fun refresh() {
         val phase = proxy.phase()
         val s = proxy.status()
-        line.text = line(phase, s)
+        line.text = ProxyPage.line(phase, s)
         line.setTextColor(if (phase == RETRYING) ROSE else MU)
         line.visibility = if (phase == OFF || phase == NO_BLE) View.GONE else View.VISIBLE
         showCard(phase)
-        tiles.visibility = if (phase in TILES) View.VISIBLE else View.GONE
-        note.visibility = if (phase == OFF || phase == NO_BLE) View.VISIBLE else View.GONE
-        note.text = if (phase == NO_BLE) NO_BLE_NOTE else OFF_NOTE
-        inHa.visibility = if (phase == NO_BLE) View.GONE else View.VISIBLE
+        tiles.visibility = if (ProxyPage.tiles(phase)) View.VISIBLE else View.GONE
+        val n = ProxyPage.note(phase)
+        note.visibility = if (n != null) View.VISIBLE else View.GONE
+        note.text = n.orEmpty()
+        inHa.visibility = if (ProxyPage.inHomeAssistant(phase)) View.VISIBLE else View.GONE
 
-        val perMinute = s?.advertisementsPerMinute ?: 0
-        ads.set(perMinute.toString(), if (s != null && s.devicesPerMinute > 0) "From ${s.devicesPerMinute} devices" else "None just now")
+        ProxyPage.ads(s).let { (v, l) -> ads.set(v, l) }
         spark.values = s?.lastHour.orEmpty()
-        scanner.set(
-            if (s?.scanning == true) "On" else "Off",
-            when (phase) {
-                LISTENING -> "Listening all the time"
-                WAITING, NEEDS_KEY -> "Not needed yet"
-                RETRYING -> retry(s)
-                else -> "Off"
-            },
-        )
-        adsRow.value(if (phase == OFF) null else "$perMinute a minute")
-        statusRow.value(phase.entityText)
+        ProxyPage.scanner(phase, s).let { (v, l) -> scanner.set(v, l) }
+        val (adsState, statusState) = ProxyPage.entities(phase, s).map { it.second }
+        adsRow.value(adsState.takeIf { it != ProxyPage.UNAVAILABLE })
+        statusRow.value(statusState.takeIf { it != ProxyPage.UNAVAILABLE })
     }
-
-    private fun line(phase: ProxyPhase, s: ProxyStatus?) = when (phase) {
-        LISTENING -> "Listening for Home Assistant" + (s?.devicesPerMinute?.takeIf { it > 0 }?.let { " · $it devices nearby" } ?: "")
-        WAITING -> "Waiting for Home Assistant. The radio stays quiet until it listens."
-        NEEDS_KEY -> NEEDS_KEY_LINE
-        BLUETOOTH_OFF -> "Bluetooth is off"
-        LOCATION_OFF -> "Location is off"
-        NO_PERMISSION -> "A permission is missing"
-        RETRYING -> "Android stopped the scan. ${retry(s)}."
-        OFF, NO_BLE -> ""
-    }
-
-    private fun retry(s: ProxyStatus?) = s?.retryInMs?.let { "Trying again in ${(it + 999) / 1000} s" } ?: "Trying again shortly"
 
     private fun showCard(phase: ProxyPhase) {
-        val (title, text, action) = when (phase) {
-            BLUETOOTH_OFF -> Triple("Turn Bluetooth on to listen", "The proxy uses the panel's own Bluetooth. Turning it on doesn't pair anything.", "Turn on Bluetooth")
-            LOCATION_OFF -> Triple(
-                "Turn location on to listen",
-                "Android hands Bluetooth results to apps only while location is on. The panel doesn't use or share its location.",
-                "Turn on location",
-            )
-            NO_PERMISSION -> Triple("The app can't scan", "It needs the location permission to hear Bluetooth devices. The installer grants it.", null)
-            else -> { card.visibility = View.GONE; refused = null; return }
-        }
+        val c = ProxyPage.card(phase) ?: run { card.visibility = View.GONE; refused = null; return }
         if (refused != phase) refused = null
         card.visibility = View.VISIBLE
-        cardTitle.text = title
-        cardText.text = if (refused == phase) REFUSED else text
-        cardButton.visibility = if (action != null) View.VISIBLE else View.GONE
-        cardButton.text = action ?: ""
+        cardTitle.text = c.title
+        cardText.text = if (refused == phase) ProxyPage.REFUSED else c.text
+        cardButton.visibility = if (c.action != null) View.VISIBLE else View.GONE
+        cardButton.text = c.action ?: ""
         cardButton.setOnClickListener {
             val done = when (phase) {
                 BLUETOOTH_OFF -> proxy.turnBluetoothOn() || open(Settings.ACTION_BLUETOOTH_SETTINGS)
@@ -247,14 +215,5 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
         }
 
         private fun alpha(c: Int) = Color.argb(200, Color.red(c), Color.green(c), Color.blue(c))
-    }
-
-    private companion object {
-        val TILES = setOf(LISTENING, WAITING, NEEDS_KEY, RETRYING)
-        const val NEEDS_KEY_LINE = "Waiting for Home Assistant: it needs this panel's encryption key. Home Assistant 2026.11 and later sets it when it adds the panel."
-        const val OFF_NOTE = "The Bluetooth proxy is off. The panel doesn't scan, and Home Assistant no longer hears devices through it."
-        const val NO_BLE_NOTE = "Home Assistant can still use other Bluetooth proxies, such as an ESP32 near the sensors."
-        const val REFUSED = "This panel doesn't let apps do that. Turn it on in the panel's own settings."
-        const val FOOTNOTE = "Home Assistant finds the proxy by itself, under Bluetooth. Addresses go only to Home Assistant; the panel doesn't keep or log them."
     }
 }

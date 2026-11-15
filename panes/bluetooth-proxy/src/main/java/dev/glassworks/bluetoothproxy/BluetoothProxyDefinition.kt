@@ -54,7 +54,9 @@ class BluetoothProxyDefinition(
     override fun settings() = listOf(
         SettingsSection(
             id, TITLE,
-            items = listOf(page?.let { p -> SettingsItem.Native(id, "Devices and Allow") { host -> p(host, this) } } ?: SettingsItem.Note { phase().entityText ?: "Off" }),
+            // The frame's own view on the panel; its typed twin everywhere else (#269).
+            items = listOf(page?.let { p -> SettingsItem.Native(id, "Devices and Allow", twin = { ProxyPage.twin(this) }) { host -> p(host, this) } }
+                ?: SettingsItem.Note { phase().entityText ?: "Off" }),
             unavailable = { if (radio.unavailable() == ScanFailure.NO_BLE) "it has no Bluetooth LE" else null },
         ),
     )

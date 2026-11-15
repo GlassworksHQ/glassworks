@@ -16,6 +16,9 @@ below as the release notes.
   what the panel's own page has: the zone, picked from a list grouped by region, whether the panel
   keeps it, and Home Assistant's time zone. When Home Assistant keeps another zone's clock, **Use it**
   sets that zone, as on the panel.
+- **The Bluetooth proxy page on the Manage page.** The browser shows what the panel's page shows: whether
+  it's listening, the advertisements a minute and the scanner, and its entities. When Bluetooth or
+  location is off, **Turn on Bluetooth** or **Turn on location** works from the browser too.
 - **Add a pane's Home Assistant blueprints from its settings page.** Notifications and Camera have a
   *Blueprints for Home Assistant* card: the doorbell, a question with buttons on the panels, lights on
   when someone is at the panel, and a snapshot to your phone when nobody is home. **Add to Home
