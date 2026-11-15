@@ -70,7 +70,8 @@ export function SearchDialog() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        void open();
+        // the same event the search buttons send, so the phone drawer closes for this too
+        window.dispatchEvent(new Event("gw:search"));
       }
     };
     const onOpen = () => void open();
@@ -150,7 +151,12 @@ export function SearchDialog() {
                 e.preventDefault();
                 setAt((a) => (e.key === "ArrowDown" ? Math.min(flat.length - 1, a + 1) : Math.max(0, a - 1)));
               }
-              if (e.key === "Enter") go(flat[at]);
+              if (e.key === "Enter") {
+                // the dialog closes and focus goes back to the button that opened it: keep this
+                // Enter from pressing that button too
+                e.preventDefault();
+                go(flat[at]);
+              }
             }}
           />
           <kbd>esc</kbd>

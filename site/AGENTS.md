@@ -52,7 +52,7 @@ files change.
    Don't draw or edit an SVG by hand. The build fails when a frame's banner isn't what its
    `frame.json` draws.
 4. **Don't deploy, and don't change Vercel settings.** Production is deployed by the maintainer, with
-   `vercel build` from a full clone and `vercel deploy --prebuilt --prod` (README → Deploying), so
+   `vercel build --prod` from a full clone and `vercel deploy --prebuilt --prod` (README → Deploying), so
    the docs' dates have the repo's history. `vercel.json` keeps Vercel's Git builds off.
 5. **Plain CSS with the tokens in `src/app/globals.css`**, CSS modules per page and component, no UI
    kit. Pages build from the Manage parts in `src/components/Manage.tsx` (cards, rows, tiles,

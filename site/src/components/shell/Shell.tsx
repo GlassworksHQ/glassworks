@@ -9,15 +9,25 @@ import s from "./Shell.module.css";
 
 /** The page frame: the sidebar beside the page, or on phones a top bar whose menu opens it. */
 export function Shell({ nav, children }: { nav: ReactNode; children: ReactNode }) {
-  // the drawer belongs to the page it was opened on: any navigation, a search result included, closes it
+  const [open, setOpen] = useState(false);
+  // a new page closes the drawer, whichever way it came (a link, a search result, Back)
   const path = usePathname();
-  const [openOn, setOpenOn] = useState<string | null>(null);
-  const open = openOn === path;
-  const setOpen = (o: boolean) => setOpenOn(o ? path : null);
+  const [shownOn, setShownOn] = useState(path);
+  if (shownOn !== path) {
+    setShownOn(path);
+    setOpen(false);
+  }
+
+  // so does opening search, which may land on this same page
+  useEffect(() => {
+    const close = () => setOpen(false);
+    window.addEventListener("gw:search", close);
+    return () => window.removeEventListener("gw:search", close);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpenOn(null);
+    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [open]);
@@ -25,7 +35,7 @@ export function Shell({ nav, children }: { nav: ReactNode; children: ReactNode }
   // the drawer is a phone thing: widening past it (Shell.module.css, 900px) closes it
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 901px)");
-    const close = () => desktop.matches && setOpenOn(null);
+    const close = () => desktop.matches && setOpen(false);
     desktop.addEventListener("change", close);
     return () => desktop.removeEventListener("change", close);
   }, []);
