@@ -9,7 +9,7 @@ import dev.glassworks.camera.CameraPrefs
 import dev.glassworks.diagnostics.DiagnosticsPrefs
 import dev.glassworks.notifications.NotificationsPrefs
 import dev.glassworks.screen.ScreenSettings
-import sh.edm.esphome.NoiseKeyStore
+import dev.glassworks.esphome.NoiseKeyStore
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.auth.StoredAuth
 import sh.edm.s1kiosk.base.WallBasePrefs

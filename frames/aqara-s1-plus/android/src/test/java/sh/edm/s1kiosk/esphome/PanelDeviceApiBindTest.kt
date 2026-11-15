@@ -11,8 +11,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.ApiServer
-import sh.edm.esphome.Msg
+import dev.glassworks.esphome.ApiServer
+import dev.glassworks.esphome.Msg
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.io.IOException

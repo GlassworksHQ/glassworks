@@ -11,7 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import sh.edm.bluetoothproxy.ProxyStatus
+import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
 import sh.edm.s1kiosk.ui.Mockup
 
 /** The page says what the proxy does, and its buttons do what they say. */

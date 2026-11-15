@@ -10,11 +10,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.ButtonEntity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.EventEntity
-import sh.edm.esphome.SensorEntity
-import sh.edm.esphome.TextSensorEntity
+import dev.glassworks.esphome.ButtonEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.EventEntity
+import dev.glassworks.esphome.SensorEntity
+import dev.glassworks.esphome.TextSensorEntity
 
 /** #212: every pane's page shows its state. None says it has no settings; an off pane says what off means. */
 @RunWith(RobolectricTestRunner::class)

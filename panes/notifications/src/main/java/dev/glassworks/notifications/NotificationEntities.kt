@@ -4,13 +4,13 @@
 
 package dev.glassworks.notifications
 
-import sh.edm.esphome.ActionArg
-import sh.edm.esphome.ActionArgType
-import sh.edm.esphome.ActionResponse
-import sh.edm.esphome.ApiAction
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.SwitchEntity
+import dev.glassworks.esphome.ActionArg
+import dev.glassworks.esphome.ActionArgType
+import dev.glassworks.esphome.ActionResponse
+import dev.glassworks.esphome.ApiAction
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.SwitchEntity
 
 /**
  * The notifications pane's Home Assistant entities (#118), made once by [NotificationsPane].

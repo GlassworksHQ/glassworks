@@ -7,9 +7,9 @@ package dev.glassworks.notifications
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.EspHomeLog
-import sh.edm.esphome.HomeAssistantEvent
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.EspHomeLog
+import dev.glassworks.esphome.HomeAssistantEvent
 import java.util.concurrent.Future
 
 /** What the pane asks of the screen. The app runs these on the main thread ([dev.glassworks.screen.ScreenPolicy.hold]). */

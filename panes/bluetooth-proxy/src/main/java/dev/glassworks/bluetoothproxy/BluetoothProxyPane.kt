@@ -6,14 +6,14 @@ package dev.glassworks.bluetoothproxy
 
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
-import sh.edm.bluetoothproxy.BluetoothProxyEngine
-import sh.edm.bluetoothproxy.ProxyStatus
-import sh.edm.bluetoothproxy.ScanFailure
-import sh.edm.bluetoothproxy.ScanPower
-import sh.edm.esphome.ApiServer
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.SensorEntity
-import sh.edm.esphome.TextSensorEntity
+import dev.glassworks.esphome.bluetoothproxy.BluetoothProxyEngine
+import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
+import dev.glassworks.esphome.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.ScanPower
+import dev.glassworks.esphome.ApiServer
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.SensorEntity
+import dev.glassworks.esphome.TextSensorEntity
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit

@@ -147,15 +147,15 @@ class WifiLinkTest {
                 if (name == android.content.Context.CONNECTIVITY_SERVICE) throw SecurityException("no access") else super.getSystemService(name)
         }
         val logged = ArrayList<String>()
-        val original = sh.edm.esphome.EspHomeLog.sink
-        sh.edm.esphome.EspHomeLog.sink = sh.edm.esphome.EspHomeLog.Sink { _, _, msg, t -> logged += "$msg ${t?.javaClass?.simpleName}" }
+        val original = dev.glassworks.esphome.EspHomeLog.sink
+        dev.glassworks.esphome.EspHomeLog.sink = dev.glassworks.esphome.EspHomeLog.Sink { _, _, msg, t -> logged += "$msg ${t?.javaClass?.simpleName}" }
         try {
             val sample = dev.glassworks.diagnostics.AndroidProbe(broken, null, { false }).sample()
             assertNull(sample.wifiRssi)
             assertNull(sample.wifiLinkSpeed)
             assertTrue(logged.toString(), logged.any { it.startsWith("diagnostics: can't read the Wi-Fi link") && it.endsWith("SecurityException") })
         } finally {
-            sh.edm.esphome.EspHomeLog.sink = original
+            dev.glassworks.esphome.EspHomeLog.sink = original
         }
     }
 

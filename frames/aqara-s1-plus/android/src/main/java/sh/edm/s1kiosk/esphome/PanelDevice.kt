@@ -43,9 +43,9 @@ import java.security.SecureRandom
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
-import sh.edm.esphome.*
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.android.EspHomeMdns
+import dev.glassworks.esphome.*
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.android.EspHomeMdns
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.MainActivity

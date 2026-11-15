@@ -37,7 +37,7 @@
 
 Android helpers for [esphome-api](../esphome-api/README.md). For now that's `EspHomeMdns`, which
 advertises the device over mDNS with Android's `NsdManager`, so Home Assistant discovers it on its
-own. Package `sh.edm.esphome.android`, MIT licensed. Depending on this module also brings in
+own. Package `dev.glassworks.esphome.android`, MIT licensed. Depending on this module also brings in
 `esphome-api`.
 
 ```kotlin

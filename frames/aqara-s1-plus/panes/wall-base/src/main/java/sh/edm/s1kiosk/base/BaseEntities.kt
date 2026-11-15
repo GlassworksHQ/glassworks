@@ -1,11 +1,11 @@
 package sh.edm.s1kiosk.base
 
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.EventEntity
-import sh.edm.esphome.SensorEntity
-import sh.edm.esphome.SwitchEntity
-import sh.edm.esphome.TextSensorEntity
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.EventEntity
+import dev.glassworks.esphome.SensorEntity
+import dev.glassworks.esphome.SwitchEntity
+import dev.glassworks.esphome.TextSensorEntity
 
 /**
  * The ESPHome entities for a wall base layout. Names are fixed ("Base relay 1", ...) on purpose:

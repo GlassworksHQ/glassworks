@@ -12,8 +12,8 @@ import dev.glassworks.bluetoothproxy.ProxyPhase.WAITING
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
-import sh.edm.bluetoothproxy.ProxyStatus
-import sh.edm.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
+import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 
 class ProxyPhaseTest {
     private fun status(subscribed: Boolean = true, failure: ScanFailure? = null) = ProxyStatus(subscribed, scanning = failure == null, failure = failure, advertisementsPerMinute = 0)

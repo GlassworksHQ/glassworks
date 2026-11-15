@@ -9,9 +9,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.Msg
-import sh.edm.esphome.ProtoMessage
-import sh.edm.esphome.WakeWordInfo
+import dev.glassworks.esphome.Msg
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.WakeWordInfo
 import sh.edm.s1kiosk.esphome.UrlPlayer
 import sh.edm.s1kiosk.esphome.VoiceAssistantController
 import sh.edm.s1kiosk.esphome.WakeWordCatalog

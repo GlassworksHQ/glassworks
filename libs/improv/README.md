@@ -42,7 +42,7 @@ page. It also joins the network, which is the hard part on Android 10 and later.
 implementations of the device side exist.
 
 It was extracted from [S1 Kiosk](../../frames/aqara-s1-plus/android/README.md), where it puts the Aqara S1 Plus panel on Wi-Fi.
-Package `sh.edm.improv`, MIT licensed.
+Package `dev.glassworks.improv`, MIT licensed.
 
 ## What's in it
 

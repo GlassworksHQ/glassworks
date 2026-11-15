@@ -9,7 +9,7 @@ import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
 import dev.glassworks.screen.ScreenPolicy
-import sh.edm.esphome.EspHomeLog
+import dev.glassworks.esphome.EspHomeLog
 import sh.edm.s1kiosk.TimerBoard
 import java.util.concurrent.Future
 

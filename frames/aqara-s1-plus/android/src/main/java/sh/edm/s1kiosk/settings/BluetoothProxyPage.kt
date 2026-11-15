@@ -25,7 +25,7 @@ import dev.glassworks.bluetoothproxy.ProxyPhase.OFF
 import dev.glassworks.bluetoothproxy.ProxyPhase.RETRYING
 import dev.glassworks.bluetoothproxy.ProxyPhase.WAITING
 import dev.glassworks.pane.SettingsItem
-import sh.edm.bluetoothproxy.ProxyStatus
+import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
 import sh.edm.s1kiosk.ui.Glass
 import sh.edm.s1kiosk.ui.Glass.Companion.BD
 import sh.edm.s1kiosk.ui.Glass.Companion.FA

@@ -17,10 +17,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import sh.edm.bluetoothproxy.BleScanner
-import sh.edm.bluetoothproxy.ProxyStatus
-import sh.edm.bluetoothproxy.ScanFailure
-import sh.edm.bluetoothproxy.ScanPower
+import dev.glassworks.esphome.bluetoothproxy.BleScanner
+import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
+import dev.glassworks.esphome.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.ScanPower
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.radio.FixedReadout
 import sh.edm.s1kiosk.radio.radioDefinition

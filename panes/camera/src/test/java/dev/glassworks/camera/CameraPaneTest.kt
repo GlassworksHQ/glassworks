@@ -20,12 +20,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.BinarySensorEntity
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.ProtoMessage
-import sh.edm.esphome.ProtoWriter
-import sh.edm.esphome.SwitchEntity
+import dev.glassworks.esphome.BinarySensorEntity
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
+import dev.glassworks.esphome.SwitchEntity
 import java.util.concurrent.Executors
 
 @RunWith(RobolectricTestRunner::class)
@@ -333,7 +333,7 @@ class CameraPaneTest {
     @Test fun homeAssistantSeesPresencePlusCameraWhileTheStoredValueStays() {
         // Renamed on 2026-11-14 ("snapshots" read as leaving the stream out); panels keep their stored choice.
         val r = Rig()
-        val select = r.pane.entities().filterIsInstance<sh.edm.esphome.SelectEntity>().single { it.objectId == "camera_use" }
+        val select = r.pane.entities().filterIsInstance<dev.glassworks.esphome.SelectEntity>().single { it.objectId == "camera_use" }
         fun choose(option: String) = select.command(ProtoMessage(ProtoWriter().fixed32(1, select.key, true).string(2, option).toByteArray()))
         choose("Presence + camera")
         assertEquals(CameraUse.PRESENCE_AND_SNAPSHOTS, r.prefs.use)

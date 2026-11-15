@@ -2,7 +2,7 @@ package sh.edm.s1kiosk.sendspin
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import sh.edm.esphome.SendspinApi
+import dev.glassworks.esphome.SendspinApi
 
 class PairingStatusTest {
 

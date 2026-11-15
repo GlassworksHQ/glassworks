@@ -152,7 +152,7 @@ Built by [@aguilaair](https://github.com/aguilaair). It stands on the work of
 [microWakeWord](https://github.com/kahrendt/microWakeWord), [openWakeWord](https://github.com/dscripka/openWakeWord) and
 [Tango / ya-webadb](https://github.com/yume-chan/ya-webadb).
 
-The code in this repository is **MIT** ([LICENSE](LICENSE)), except the Glassworks core in `dev.glassworks`, which is **MPL-2.0** ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)). Third-party parts keep their licences. The main
+The code in this repository is **MIT** ([LICENSE](LICENSE)), except the Glassworks core in `dev.glassworks`, which is **MPL-2.0** ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)). The libraries in `libs/` stay MIT: `dev.glassworks.esphome` with its subpackages, and `dev.glassworks.improv`. Third-party parts keep their licences. The main
 ones are below. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists everything that ships, with versions
 and sources. On the panel, *Open source licences* in the hidden settings (tap the top-left corner five
 times) shows the same list with each licence's full text.

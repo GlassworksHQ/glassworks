@@ -8,8 +8,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.ButtonEntity
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.ButtonEntity
 
 class EntityRegistryTest {
 

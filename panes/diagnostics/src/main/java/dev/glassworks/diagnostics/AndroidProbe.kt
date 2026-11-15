@@ -14,7 +14,7 @@ import android.system.Os
 import android.system.OsConstants
 import dev.glassworks.platform.Platform
 import dev.glassworks.platform.WifiLink
-import sh.edm.esphome.EspHomeLog
+import dev.glassworks.esphome.EspHomeLog
 import java.io.File
 
 /** Where the pane gets its readings. */

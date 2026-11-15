@@ -1,7 +1,7 @@
 package sh.edm.s1kiosk.sendspin
 
-import sh.edm.esphome.NoiseCipher
-import sh.edm.esphome.NoiseMacException
+import dev.glassworks.esphome.NoiseCipher
+import dev.glassworks.esphome.NoiseMacException
 import org.bouncycastle.math.ec.rfc7748.X25519
 import java.security.MessageDigest
 import java.security.SecureRandom

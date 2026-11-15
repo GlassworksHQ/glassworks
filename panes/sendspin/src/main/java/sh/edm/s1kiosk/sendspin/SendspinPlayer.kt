@@ -1,7 +1,7 @@
 package sh.edm.s1kiosk.sendspin
 
 import dev.glassworks.platform.AppBuild
-import sh.edm.esphome.DeviceIdentity
+import dev.glassworks.esphome.DeviceIdentity
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat

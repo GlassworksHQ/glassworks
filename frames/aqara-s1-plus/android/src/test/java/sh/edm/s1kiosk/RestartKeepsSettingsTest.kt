@@ -16,9 +16,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.ProtoMessage
-import sh.edm.esphome.ProtoWriter
-import sh.edm.esphome.SwitchEntity
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
+import dev.glassworks.esphome.SwitchEntity
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit

@@ -17,10 +17,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.esphome.ApiEntity
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.ProtoMessage
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.ProtoMessage
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor

@@ -16,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import sh.edm.esphome.DeviceIdentity
+import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.radio.SysProps
 import sh.edm.s1kiosk.ui.Mockup

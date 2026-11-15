@@ -1,6 +1,6 @@
 package sh.edm.s1kiosk.update
 
-import sh.edm.esphome.UpdateStateData
+import dev.glassworks.esphome.UpdateStateData
 
 /**
  * The update entity's state machine (pure: no Android, no I/O; [UpdateManager] drives it).

@@ -42,7 +42,7 @@ Assistant's `esphome` and `bluetooth` integrations then take the device as a Blu
 with no setup in HA.
 
 It has no Pane API and no S1 classes (#152). The Glassworks `bluetooth-proxy` pane wraps it with
-settings and entities. Package `sh.edm.bluetoothproxy`, MIT licensed, minSdk 23.
+settings and entities. Package `dev.glassworks.esphome.bluetoothproxy`, MIT licensed, minSdk 23.
 
 **Passive only, so far.** It forwards advertisements, which covers most sensors (thermometers,
 plant sensors, presence tags). GATT connections (locks, devices that need one) come later.

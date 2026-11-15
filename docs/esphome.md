@@ -14,7 +14,7 @@ One integration, discovered automatically, no Wyoming or MQTT. It replaces the e
 satellite (remove that Wyoming entry from HA when you switch).
 
 Code: the protocol core is the reusable pure-JVM library [`libs/esphome-api`](../libs/esphome-api/README.md)
-(package `sh.edm.esphome`), with mDNS from [`libs/esphome-api-android`](../libs/esphome-api-android/README.md);
+(package `dev.glassworks.esphome`), with mDNS from [`libs/esphome-api-android`](../libs/esphome-api-android/README.md);
 the panel's entities and glue are `PanelDevice` in
 `frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/esphome/` and `VoiceAssistantController` in
 `panes/assist`, with the wall base and the Aqara cloud switch in `frames/aqara-s1-plus/panes/wall-base`

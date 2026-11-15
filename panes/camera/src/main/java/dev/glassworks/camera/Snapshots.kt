@@ -4,9 +4,9 @@
 
 package dev.glassworks.camera
 
-import sh.edm.esphome.CameraEntity
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.NumberEntity
+import dev.glassworks.esphome.CameraEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.NumberEntity
 
 /** What the camera may do (#117). The pane's select in Home Assistant and its two cards on the panel. */
 enum class CameraUse {

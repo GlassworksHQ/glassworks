@@ -6,9 +6,9 @@ package dev.glassworks.bluetoothproxy
 
 import android.content.Context
 import android.provider.Settings
-import sh.edm.bluetoothproxy.AndroidBleScanner
-import sh.edm.bluetoothproxy.BleScanner
-import sh.edm.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.AndroidBleScanner
+import dev.glassworks.esphome.bluetoothproxy.BleScanner
+import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 
 /** The device's Bluetooth as the pane uses it: [AndroidProxyRadio] on a panel, a fake in tests. */
 interface ProxyRadio {

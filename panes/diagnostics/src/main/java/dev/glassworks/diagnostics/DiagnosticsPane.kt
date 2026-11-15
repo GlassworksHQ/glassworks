@@ -7,10 +7,10 @@ package dev.glassworks.diagnostics
 import android.os.SystemClock
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
-import sh.edm.esphome.EntityCategory
-import sh.edm.esphome.EspHomeLog
-import sh.edm.esphome.SensorEntity
-import sh.edm.esphome.TextSensorEntity
+import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.esphome.EspHomeLog
+import dev.glassworks.esphome.SensorEntity
+import dev.glassworks.esphome.TextSensorEntity
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "sh.edm.improv"
+    namespace = "dev.glassworks.improv"
     compileSdk {
         version = release(37) { minorApiLevel = 2 }
     }

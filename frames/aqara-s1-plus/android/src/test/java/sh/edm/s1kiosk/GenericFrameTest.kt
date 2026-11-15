@@ -22,7 +22,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowLog
-import sh.edm.esphome.DeviceIdentity
+import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.HttpPoster
 import sh.edm.s1kiosk.auth.SignInServer

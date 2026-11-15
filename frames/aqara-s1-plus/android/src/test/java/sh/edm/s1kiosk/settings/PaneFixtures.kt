@@ -8,8 +8,8 @@ import dev.glassworks.diagnostics.Sample
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.platform.AppBuild
-import sh.edm.esphome.DeviceIdentity
-import sh.edm.esphome.TextSensorEntity
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.TextSensorEntity
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.base.BaseBackend
