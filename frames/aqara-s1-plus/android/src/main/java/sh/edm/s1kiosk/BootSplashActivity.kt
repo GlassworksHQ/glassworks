@@ -55,7 +55,9 @@ class BootSplashActivity : Activity() {
         val real = Point().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealSize(it) }
         Backdrop.prewarm(maxOf(real.x, real.y), minOf(real.x, real.y))
         // The S1's boot frame, carried on (the user is still locked: no runtime, so the frame directly).
-        setContentView(LoadingOverlay(this, AqaraS1Plus.BOOT_REST).apply { show(LoadingOverlay.State.Connecting("Starting up", "", host = false)) })
+        // Elsewhere there is no boot frame: the live stack, as MainActivity's first frame has it.
+        val bootRest = AqaraS1Plus.BOOT_REST.takeIf { Platform.hardware == AqaraS1Plus.HARDWARE }
+        setContentView(LoadingOverlay(this, bootRest).apply { show(LoadingOverlay.State.Connecting("Starting up", "", host = false)) })
         hideSystemUi()
         receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) { advance() }
