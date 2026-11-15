@@ -165,7 +165,10 @@ class PanelDevice(
         panes = emptyList()
         // A newer device may have published its own already.
         if (runtime.panes === gone) runtime.panes = emptyList()
-        synchronized(stopHooks) { stopHooks.toList().also { stopHooks.clear() } }.forEach { it() }
+        // Each hook on its own: one that throws must not skip the others or the cleanup below.
+        synchronized(stopHooks) { stopHooks.toList().also { stopHooks.clear() } }.forEach { hook ->
+            try { hook() } catch (e: Exception) { EspHomeLog.w("A pane's stop hook failed: $e") }
+        }
         host?.let { it.cancelVoice = null; it.onVoicePlaying = null }
         exec.shutdownNow()
         mdns.stop()
