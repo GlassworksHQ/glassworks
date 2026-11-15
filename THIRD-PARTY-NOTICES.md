@@ -21,6 +21,7 @@ missing from section 1.
 3. [Web installer downloads](#3-web-installer-downloads)
 4. [The web installer page itself](#4-the-web-installer-page-itself)
    - [Kiln, the Next.js installer (not live yet)](#kiln-the-nextjs-installer-not-live-yet)
+   - [glassworks.dev, the project site](#glassworksdev-the-project-site)
 5. [Not distributed by this project](#5-not-distributed-by-this-project)
 6. [Corresponding source for GPL, LGPL and MPL parts](#6-corresponding-source-for-gpl-lgpl-and-mpl-parts)
 
@@ -372,7 +373,7 @@ file, its `package.json` licence and author are given. What it adds:
   The Inter Project Authors (https://github.com/rsms/inter)"; "Copyright 2020 The JetBrains Mono Project
   Authors (https://github.com/JetBrains/JetBrainsMono)". Fetched from Google Fonts at build time.
 - The Glassworks tokens, mark, and Kiln's favicon and app icon (`kiln/packages/brand`) are Glassworks' own, from
-  https://github.com/GlassworksHQ/glassworks.dev.
+  the site's brand source in [`site/`](site) (until 2026-11-15 its own repo, GlassworksHQ/glassworks.dev).
 - **The device renders** (`frames/<id>/design/render.webp`, on the frame cards): screenshots of the
   **Home Assistant frontend** 20261028.5 (Apache-2.0, Copyright Home Assistant contributors,
   https://github.com/home-assistant/frontend) drawing a made-up dashboard, made by
@@ -403,6 +404,21 @@ Not shipped, by the build's traces:
 Which server a deployment runs is checked on the deployed function's files before Kiln goes live (PR
 #104). If sharp, `@img/*`, `detect-libc`, `semver` or `@emnapi/runtime` are there, they need entries
 here, and `semver` (ISC) needs `LICENSES/ISC.txt`.
+
+### glassworks.dev, the project site
+
+[`site/`](site) is the static site at https://www.glassworks.dev (MIT, this project's). Checked
+against the lockfile on 2026-11-15. What it ships, beyond this project's own code and the frame
+renders above:
+
+- **Next.js** 16.4.6, **React** and **React DOM** 19.3.0, **scheduler** 0.28.0, **styled-jsx** 5.1.6
+  and **@swc/helpers** 0.5.23: the same packages and licences as Kiln's, above.
+- **Inter** and **JetBrains Mono**: OFL-1.1, the same lines as Kiln's, above. The pages get the font
+  files from `next/font`. The badges, banners and icons in `site/public/brand/` hold their text as
+  outlines of these fonts' glyphs, drawn at build time from **@fontsource/inter** and
+  **@fontsource/jetbrains-mono** 5.3.0 (OFL-1.1) with **opentype.js** 2.0.0 (MIT, "Copyright (c) 2020
+  Frederik De Bleser", https://github.com/opentypejs/opentype.js). opentype.js only runs at build
+  time and isn't shipped.
 
 ---
 
