@@ -70,5 +70,6 @@ export const frameById = (id: string) => frames.find((f) => f.id === id);
  */
 export function installLink(f: FrameDesign): { href: string; kiln: boolean } | undefined {
   if (f.kiln) return { href: new URL(f.kiln, KILN).href, kiln: true };
-  return f.install.href ? { href: f.install.href, kiln: false } : undefined;
+  // the parsed URL, so a value like "https:host" can never resolve against this site
+  return f.install.href ? { href: new URL(f.install.href).href, kiln: false } : undefined;
 }

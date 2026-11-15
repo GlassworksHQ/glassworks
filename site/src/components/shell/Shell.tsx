@@ -16,6 +16,14 @@ export function Shell({ nav, children }: { nav: ReactNode; children: ReactNode }
     return () => window.removeEventListener("keydown", close);
   }, [open]);
 
+  // the drawer is a phone thing: widening past it (Shell.module.css, 900px) closes it
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 901px)");
+    const close = () => desktop.matches && setOpen(false);
+    desktop.addEventListener("change", close);
+    return () => desktop.removeEventListener("change", close);
+  }, []);
+
   return (
     <>
       <header className={s.top}>
