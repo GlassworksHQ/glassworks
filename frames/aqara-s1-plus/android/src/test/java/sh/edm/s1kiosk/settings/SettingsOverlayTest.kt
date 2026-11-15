@@ -597,6 +597,28 @@ class SettingsOverlayTest {
         assertFalse(shown(o, "No base connected"))
     }
 
+    /**
+     * #269, CodeRabbit on #331: an action reloaded with the same title but another zone shows the new line and
+     * runs the new zone, not the one the row was drawn with.
+     */
+    @Test
+    fun anActionRunsTheModelsCurrentAction() {
+        var zone = "Europe/London"
+        val used = ArrayList<String>()
+        fun model() = KioskSettingsOverlay.Model(listOf(SettingsSection("test", "Test", listOf(
+            zone.let { z -> SettingsItem.Action("Home Assistant's time zone", { "like $z" }, "Use it") { done -> used += z; done(null) } },
+        ))), "0.4.3", setOf("test"))
+        val o = open(model = { model() }).apply { reload = ::model }
+        assertTrue(shown(o, "like Europe/London"))
+        zone = "Europe/Dublin"
+        o.refresh()
+        Mockup.idle()
+        assertTrue("the new line", shown(o, "like Europe/Dublin"))
+        Mockup.label(o, "Use it").performClick()
+        settle()
+        assertEquals(listOf("Europe/Dublin"), used)
+    }
+
     @Test
     fun aSliderFollowsAValueChangedElsewhere() {
         // CodeRabbit on #235: Home Assistant set the volume, the open page kept the old one.
