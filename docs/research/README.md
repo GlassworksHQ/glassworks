@@ -226,6 +226,7 @@ This page is the index of every note. Notes about one device live with its frame
 | [ha-esphome-actions-events.md](ha-esphome-actions-events.md) | What a notification can carry over ESPHome each way: why `notify` takes one JSON `data` argument, and why a tapped button goes to HA as a bus event, not an event entity (#118) |
 | [camera-presence.md](camera-presence.md) | Which detector wakes the screen from a camera: ML Kit and a person model weighed, then the maintainer's lighting-insensitive motion detector chosen (#117) |
 | [onvif-rtsp.md](onvif-rtsp.md) | What HA's ONVIF integration and UniFi Protect need from a camera, the libraries weighed, the maintainer's tested RTSP and ONVIF server that Glassworks ports, and HA's pull loop on a refused sign-in, with a lab to rerun it (#117) |
+| [kiln-gpl-code.md](kiln-gpl-code.md) | Which code in Kiln's MIT page comes from GPL projects: sunxi-tools in `kiln/packages/fel`, Magisk in `kiln/packages/bootpatch`, checked word by word and against the live site, with the options (open, a maintainer decision) |
 | [pane-blueprints.md](pane-blueprints.md) | How a pane's blueprints reach Home Assistant without the panel writing to it: HA's admin-only blueprint API, the import and list links, the name an import gets, and HA's own check of the four blueprints, with a script to rerun it |
 
 ### Aqara S1 Plus ([`frames/aqara-s1-plus/`](../../frames/aqara-s1-plus/README.md#research-notes))
