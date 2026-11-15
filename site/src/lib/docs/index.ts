@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { cacheLife } from "next/cache";
 import { imageSize } from "image-size";
-import { cutSection, render, type Image, type Link, type Rendered, type Toc } from "./render";
+import { anchorsOf, cutSection, render, type Image, type Link, type Rendered, type Toc } from "./render";
 import { REPO, SECTIONS, SOURCES, siteUrl, type Section, type Source } from "./sources";
 import { links } from "../links";
 
@@ -71,6 +71,7 @@ async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
   for (const s of SOURCES) ids.set(s.url, (await render(read(s), idle)).ids);
 
   const errors: string[] = [];
+  const anchors: Record<string, Set<string>> = {};
   const docs: Doc[] = [];
   for (const s of SOURCES) {
     const dir = path.posix.dirname(s.file);
@@ -96,6 +97,11 @@ async function build(): Promise<{ docs: Doc[]; assets: string[] }> {
       if (url && ids.has(url)) {
         errors.push(`${s.file}: ${href}: ${target} has no #${hash}`);
         return { href: url, kind: "site" };
+      }
+      // a Markdown file the site doesn't publish: its #anchor is checked as GitHub would see it
+      if (hash && BUILDING && target.endsWith(".md") && inRepo(target)) {
+        const own = (anchors[target] ??= anchorsOf(fs.readFileSync(path.join(/* turbopackIgnore: true */ REPO, target), "utf8")));
+        if (!own.has(decodeURIComponent(hash))) errors.push(`${s.file}: ${href}: ${target} has no #${hash}`);
       }
       if (target === "." || inRepo(target) || !BUILDING) {
         const kind = target === "." || isDir(target) ? "tree" : "blob";

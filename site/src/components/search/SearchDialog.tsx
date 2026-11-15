@@ -105,6 +105,11 @@ export function SearchDialog() {
     };
   }, [q, index, attempt]);
 
+  // the picked result stays in view as the arrows move it
+  useEffect(() => {
+    document.getElementById(`search-hit-${at}`)?.scrollIntoView({ block: "nearest" });
+  }, [at, results]);
+
   const current = results.q === q && !("failed" in results) ? results.groups : [];
   const failed = results.q === q && "failed" in results;
   const flat = current.flatMap((g) => g.hits);
@@ -179,6 +184,8 @@ export function SearchDialog() {
                       className={`${s.hit} ${i === at ? s.on : ""}`}
                       onMouseEnter={() => setAt(i)}
                       onClick={(e) => {
+                        // a modified click (new tab, new window) is the browser's
+                        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                         e.preventDefault();
                         go(h);
                       }}

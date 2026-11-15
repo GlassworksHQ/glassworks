@@ -88,6 +88,11 @@
   border-bottom: 1px solid var(--edge);
 }
 
+/* the input drops its own outline; the row shows focus instead */
+.input:has(input:focus-visible) {
+  box-shadow: inset 0 -2px 0 var(--sky);
+}
+
 .input svg {
   width: 18px;
   height: 18px;

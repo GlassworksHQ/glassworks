@@ -429,7 +429,7 @@ renders above:
   **remark-parse** 11.0.0, **remark-gfm** 4.0.1, **remark-rehype** 11.1.2, **rehype-raw** 7.0.0,
   **rehype-sanitize** 6.0.0, **rehype-slug** 6.0.0, **rehype-stringify** 10.0.1,
   **unist-util-visit** 5.2.0, **hast-util-to-string** 3.0.1 and **hast-util-to-html** 9.0.6 (all
-  MIT, "Copyright (c) Titus Wormer", https://github.com/unifiedjs), **github-slugger** 2.0.0 (ISC,
+  MIT, "Copyright (c) Titus Wormer", https://github.com/unifiedjs), **github-slugger** 2.0.0 (ISC, `LICENSES/ISC.txt`,
   "Copyright (c) 2015, Dan Flettre"), **@shikijs/rehype** 4.6.0 and **Shiki** (MIT, "Copyright (c)
   2021 Pine Wu" and "Copyright (c) 2023 Anthony Fu", https://github.com/shikijs/shiki), with its
   GitHub Light and GitHub Dark themes from **@shikijs/themes** (MIT), and **image-size**

@@ -207,6 +207,17 @@ function transform(r: Resolver, out: { toc: Toc[]; ids: Set<string> }) {
   };
 }
 
+/** The anchors GitHub gives a Markdown file: heading slugs and ids written in its HTML. */
+export function anchorsOf(src: string): Set<string> {
+  const proc = unified().use(remarkParse).use(remarkGfm).use(remarkRehype, { allowDangerousHtml: true }).use(rehypeRaw).use(rehypeSlug);
+  const tree = proc.runSync(proc.parse(src)) as Root;
+  const ids = new Set<string>();
+  visit(tree, "element", (n: Element) => {
+    for (const k of ["id", "name"] as const) if (n.properties[k]) ids.add(String(n.properties[k]));
+  });
+  return ids;
+}
+
 /** Publish one H2 section of a file as its own page, its heading the title. */
 export function cutSection(src: string, heading: string): string {
   const start = src.search(new RegExp(`^## ${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "m"));
