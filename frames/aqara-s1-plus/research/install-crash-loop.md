@@ -1,6 +1,6 @@
 # Install crash loop: why the kiosk can crash-loop for minutes after an install (#248)
 
-**Status (2026-11-14): cause found and reproduced; fix in review, its armed run pending.** The loop
+**Status (2026-11-14): cause found and reproduced; fix built and its armed panel run passed (#254).** The loop
 is a bug in Android 10's ActivityManager, not dex2oat. One of the counters in its process list (the
 LRU list) drops by one with every kiosk force-stop. At -1, every new process fails to attach and is
 started again at once. It stops only when `system_server` crashes on the same bug and the framework
