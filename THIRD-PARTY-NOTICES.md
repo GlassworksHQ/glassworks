@@ -349,7 +349,8 @@ The page's JavaScript and WebAssembly ([`kiln/`](kiln)):
   [`kiln/packages/bootpatch`](kiln/packages/bootpatch) is translated or copied from it. `cpio.ts`
   translates `native/src/boot/cpio.rs` (`patch`, `backup`, `restore`) and `patch.rs`. `magisk.ts`
   translates `scripts/boot_patch.sh`. `wasm/src/lib.rs` copies `is_raw_arm32` and `detect_bcj_filter`
-  from `format.rs`. The package is still labelled MIT. Its licensing is under review:
+  from `format.rs`. The package is labelled MIT. It is being rewritten so it holds no
+  GPL code, tracked in [#355](https://github.com/GlassworksHQ/glassworks/issues/355). Details:
   [docs/research/kiln-gpl-code.md](docs/research/kiln-gpl-code.md).
 - **sunxi-tools** (https://github.com/linux-sunxi/sunxi-tools, compared at commit
   `34dfa20f8284273085666436e4cac09af19646c8`): [`kiln/packages/fel`](kiln/packages/fel) holds code
@@ -360,7 +361,8 @@ The page's JavaScript and WebAssembly ([`kiln/`](kiln)):
     SPL loader (`splWritePlan`, `checkEgon`), translated from `fel.c`: GPL-2.0-or-later, Copyright
     Henrik Nordstrom, Siarhei Siamashka, Bernhard Nortmann and the sunxi-tools contributors.
 
-  The package is still labelled MIT. Its licensing is under review:
+  The package is labelled MIT. It is being rewritten so it holds no
+  GPL code, tracked in [#355](https://github.com/GlassworksHQ/glassworks/issues/355). Details:
   [docs/research/kiln-gpl-code.md](docs/research/kiln-gpl-code.md).
 
 ### Kiln, the Next.js installer (not live yet)

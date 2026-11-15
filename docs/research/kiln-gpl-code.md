@@ -1,10 +1,17 @@
 # Kiln licence audit: which code in the MIT installer comes from GPL projects
 
-**Status (2026-11-15): open, a maintainer decision.** Kiln's page holds code taken from two GPL
+**Status (2026-11-15): decided, being rewritten (#355).** Kiln's page holds code taken from two GPL
 projects. In `kiln/packages/fel`, four small ARM routines are copied from sunxi-tools
 (GPL-2.0-or-later) and the SPL loader is translated from it. In `kiln/packages/bootpatch`, parts are
 translated or copied from Magisk v31.1 (GPL-3.0-only). Both packages say `"license": "MIT"`, and
-both run on kiln.glassworks.dev and s1.edm.sh today. Nothing has been relicensed or rewritten yet.
+both run on kiln.glassworks.dev and s1.edm.sh today.
+
+**Decision (maintainer, 2026-11-15):** a clean-room rewrite of the GPL-derived parts of both
+packages, the wasm included, so Kiln and both packages stay MIT and hard rule 4 holds. One person
+writes behaviour-only specs with black-box test vectors (`docs/research/kiln-cleanroom/`), and an
+implementer who has not read the GPL sources writes the new code. Tracked in #355. This is
+[option (b)](#fel-package) for FEL and [option 2](#bootpatch-bigger-and-its-own-decision) for
+bootpatch below.
 
 Compared against: sunxi-tools `34dfa20f8284273085666436e4cac09af19646c8` (2026-11-05,
 https://github.com/linux-sunxi/sunxi-tools) and Magisk tag `v31.1` =
@@ -32,17 +39,21 @@ licensed upstream, and whether it reaches browsers.
      `rmr-thunk.S` and `readl_writel.S` have no header.
    - Magisk is GPL-3.0-only (our notices already say so for the APK we download).
 
-2. **Word-for-word comparison of the FEL package** (2026-11-15, verified). A Python script
-   compares each ARM word array in `kiln/packages/fel/src/protocol.ts` with the matching upstream
-   array (script under [How to reproduce](#how-to-reproduce)):
+2. **Word-for-word comparison of the FEL package** (2026-11-15, verified). `arrays.py` (under
+   [How to reproduce](#how-to-reproduce)) takes each ARM word array in
+   `kiln/packages/fel/src/protocol.ts` and the matching upstream array, in order, and compares them
+   as lists, so it checks order and repeated words:
    ```
-   FEL_TO_SPL_THUNK: 69 words, identical to thunks/fel-to-spl-thunk.h
-   readlCode:        10 words, identical to fel_lib.c aw_fel_readl_n
-   rmrCode:          12 words, identical to fel.c aw_rmr_request
-   STACKINFO_CODE:    9 words, identical to fel.c aw_get_stackinfo (the "works everywhere" branch)
-   SCTLR_CODE:        3 words, = fel.c aw_read_arm_cp_reg with (15, 0, 1, 0, 0) -> 0xee110f10
-   protocol.ts: 91 of 91 32-bit hex constants occur in sunxi-tools
+   $ python3 -I arrays.py kiln/packages/fel/src/protocol.ts ~/src/sunxi-tools
+   FEL_TO_SPL_THUNK: ours 69, upstream 69, same words in same order: True   (thunks/fel-to-spl-thunk.h)
+   readlCode: ours 10, upstream 10, same words in same order: True          (fel_lib.c aw_fel_readl_n)
+   rmrCode: ours 12, upstream 12, same words in same order: True            (fel.c aw_rmr_request)
+   STACKINFO_CODE: ours 9, upstream 9, same words in same order: True       (fel.c aw_get_stackinfo, "works everywhere" branch)
    ```
+   `SCTLR_CODE` (3 words) was checked by hand. Upstream builds its first word from the coprocessor
+   fields: `aw_read_arm_cp_reg(15, 0, 1, 0, 0)` gives `0xee110f10`, and the other two words are
+   literal and the same. Step 3's `overlap.py` only compares sets of distinct hex words over whole
+   files (91 of 91 in `protocol.ts`), not order.
 
 3. **Line and string overlap, all of `kiln/packages/fel` and `bootpatch`** (2026-11-15, verified).
    Same script: code lines (whitespace-normalised, 24 chars or more) identical to upstream, and
@@ -183,10 +194,9 @@ code inside an MIT package.
 
 ## Recommendation
 
-- **FEL: (b).** The GPL part is about 40 lines. The package is the FEL library every future Allwinner
-  frame will use, so it should stay MIT. Until the rewrite, the notices state the facts (this PR).
-- **bootpatch: option 1 now.** Fix the wrong "No Magisk code" lines, mark the package GPL-3.0-only,
-  and treat the served page as GPL-3.0. Option 2 or 3 can come later if Kiln has to be MIT as a whole.
+What this note first recommended was (b) for FEL, and for bootpatch, marking the package GPL-3.0-only.
+The maintainer chose a clean-room rewrite of both instead, to keep everything MIT (see the status at the
+top, #355). Until the rewrite lands, the notices state the facts.
 
 ## How to reproduce
 
@@ -215,13 +225,28 @@ python3 -I overlap.py kiln/packages/bootpatch/src/wasm/src/lib.rs magisk/native/
 python3 -I overlap.py kiln/packages/bootpatch/src/cpio.ts magisk/native/src/boot magisk/scripts
 ```
 
-For the word arrays, compare `FEL_TO_SPL_THUNK` with the 69 words at the start of each line of
-`thunks/fel-to-spl-thunk.h`, and `readlCode`/`rmrCode`/`STACKINFO_CODE` with the `arm_code[]` arrays in
-`aw_fel_readl_n`, `aw_rmr_request` and `aw_get_stackinfo`.
+For the word arrays, in order:
+
+```python
+# arrays.py <protocol.ts> <sunxi-tools dir>: each ARM word array, in order, against its upstream array
+import re, sys, pathlib
+ts = pathlib.Path(sys.argv[1]).read_text(); st = pathlib.Path(sys.argv[2])
+W = lambda t: [w.lower() for w in re.findall(r'0x[0-9a-fA-F]{8}', t)]
+cut = lambda t, a, b: t[t.index(a):t.index(b, t.index(a))]
+up = lambda f, a: cut((st / f).read_text(), a, '};')
+thunk_h = [l.split(',')[0].strip() for l in (st / 'thunks/fel-to-spl-thunk.h').read_text().splitlines()
+           if re.match(r'\s*0x[0-9a-f]{8}', l)]
+pairs = {
+    'FEL_TO_SPL_THUNK': (W(cut(ts, 'FEL_TO_SPL_THUNK', '];')), thunk_h),
+    'readlCode': (W(cut(ts, 'function readlCode', ']);')), W(up('fel_lib.c', 'static void aw_fel_readl_n'))),
+    'rmrCode': (W(cut(ts, 'function rmrCode', ']);')), W(up('fel.c', 'void aw_rmr_request'))),
+    'STACKINFO_CODE': (W(cut(ts, 'STACKINFO_CODE =', ']);')), W(up('fel.c', '/* Works everywhere */'))),
+}
+for n, (a, b) in pairs.items(): print(f'{n}: ours {len(a)}, upstream {len(b)}, same words in same order: {a == b}')
+```
 
 ## Open questions
 
 - Which sunxi-tools contributors wrote the three GPL routines (needs a full clone for `git blame`).
-- Whether the maintainer wants Kiln's page to stay MIT as a whole. That decides bootpatch's option.
 - `kiln/packages/bootpatch/src/wasm/THIRD_PARTY.txt` still says "No Magisk (GPLv3) code is
-  included". This PR leaves it alone (scope). It should change together with the bootpatch decision.
+  included". It is fixed by the rewrite in #355, which removes the copied functions.
