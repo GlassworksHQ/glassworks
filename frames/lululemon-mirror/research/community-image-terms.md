@@ -5,12 +5,13 @@ licence for its vendor binaries, and a browser can't fetch it from GitHub withou
 between.
 
 - **Now (maintainer, 2026-11-15, later):** Kiln downloads `system.img` through
-  Refract (`kiln/workers/refract`, #347), our own Cloudflare Worker at
+  [Refract](../../../kiln/workers/refract/README.md) (#347), our own Cloudflare Worker at
   `refract.glassworks.dev`, with one button. The maintainer chose this knowing that our Worker then
   transmits the image, vendor binaries included. Refract only streams: it stores nothing (no cache,
   no storage, Cloudflare's cache bypassed), serves only an allowlist of exact release files, and
   credits Glass Panes on every answer. Kiln still checks the SHA-256 and modifies the image in the
-  person's browser.
+  person's browser. Refract went live on 2026-11-15 (verified that day: the full image came through
+  with the published SHA-256, marked `no-store` and not cached by Cloudflare).
 - **Fallback:** when Refract is down or refuses (502), the person downloads `system.img` from the
   Glass Panes release themselves and picks the file in Kiln. This was the first decision (earlier on
   2026-11-15), when nothing was to pass through our servers.

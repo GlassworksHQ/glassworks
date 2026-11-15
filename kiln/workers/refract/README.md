@@ -84,7 +84,9 @@ HEAD, the index and preflights aren't counted. Kiln makes one full GET, then res
 `Range: bytes=<got>-` if the connection drops, so a normal install uses one full download.
 
 The limits are for abuse, not accounting. A resume from byte 1 carries nearly the whole file, so
-`RESUMES` is kept low. Cloudflare counts per location and may let a few extra through. Two panels
+`RESUMES` is kept low. Cloudflare counts per location and lets extra requests through while its
+counts catch up. In production the limit is loose: on 2026-11-15 the first 429 came after about 20
+full GETs in about 2 minutes, not after 3. Treat it as an abuse brake only. Two panels
 behind one address (a carrier-grade NAT, a shared office) share the limits, so **Kiln must honour
 `Retry-After`**: on a 429, wait that many seconds and try again rather than fail the install.
 
@@ -184,7 +186,9 @@ have not been tried yet.
 About $0. Workers don't bill bandwidth, and a stream passed straight through uses about a
 millisecond of CPU per request. The free plan allows 100,000 requests a day and 10 ms of CPU per
 request. A Mirror install makes a handful of requests (a HEAD, then the file, maybe a few resumed
-ranges). Not yet measured on Cloudflare: the first deploy should check a full 850 MB download.
+ranges). Measured 2026-11-15 after the first deploy: the full 850,905,808-byte image came through
+in about 15 s with the right SHA-256, `Cache-Control: no-store` and no `cf-cache-status`, and a
+`Range` resume answered 206. The rate limiters work on the Free plan.
 
 ## Licence decision
 
