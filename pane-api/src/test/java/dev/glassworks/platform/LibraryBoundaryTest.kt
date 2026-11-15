@@ -51,5 +51,6 @@ class LibraryBoundaryTest {
         val libraries = RepoFiles.libraries.map { it.canonicalFile }.toSet()
         assertTrue("settings.gradle.kts includes each library", libraries.all { it in modules.values })
         assertTrue(modules[":sendspin"] in libraries)
+        assertTrue(modules[":voice"] in libraries)
     }
 }

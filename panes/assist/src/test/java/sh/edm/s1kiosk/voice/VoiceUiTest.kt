@@ -6,36 +6,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import sh.edm.s1kiosk.ui.Soft
-import kotlin.math.PI
-import kotlin.math.pow
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 class VoiceUiTest {
 
     private val ease: (Float) -> Float = Soft::easeInOutCubic
 
     // ---------------------------------------------------------------- §5 audio level
-
-    private fun rmsAt(db: Double) = 32768.0 * 10.0.pow(db / 20)
-
-    @Test
-    fun levelMapsMinus55To0AndMinus15To1() {
-        assertEquals(0f, AudioLevel.fromRms(0.0), 0f)
-        assertEquals(0f, AudioLevel.fromRms(rmsAt(-70.0)), 0f)
-        assertEquals(0f, AudioLevel.fromRms(rmsAt(-55.0)), 1e-4f)
-        assertEquals(0.5f, AudioLevel.fromRms(rmsAt(-35.0)), 1e-4f)
-        assertEquals(1f, AudioLevel.fromRms(rmsAt(-15.0)), 1e-4f)
-        assertEquals(1f, AudioLevel.fromRms(32768.0), 0f)
-    }
-
-    @Test
-    fun rmsOfASine() {
-        val amp = 10_000.0
-        val frame = ShortArray(1280) { (amp * sin(2 * PI * 440 * it / 16_000.0)).toInt().toShort() }
-        assertEquals(amp / sqrt(2.0), AudioLevel.rms(frame), amp * 0.01)
-        assertEquals(0.0, AudioLevel.rms(ShortArray(0)), 0.0)
-    }
 
     @Test
     fun smootherAttacksFastAndReleasesSlowly() {

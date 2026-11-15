@@ -1,11 +1,6 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
-import dev.glassworks.voice.ModelFetcher
-import dev.glassworks.voice.VoiceConfig
-import dev.glassworks.voice.WakeWord
-import dev.glassworks.voice.WakeWords
 import android.app.Application
-import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -84,7 +79,9 @@ class WakeWordsTest {
 
     @Test
     fun theHostScriptPinsTheSameCommitAndHashes() {
-        val script = RepoFiles.file("tools/voice/fetch-models.sh").readText()
+        // The repo's host script, found from the module folder Gradle runs the test in.
+        val script = generateSequence(File("").absoluteFile) { it.parentFile }.map { File(it, "tools/voice/fetch-models.sh") }
+            .firstOrNull { it.isFile }?.readText() ?: throw AssertionError("no tools/voice/fetch-models.sh above ${File("").absolutePath}")
         assertTrue("MWW_COMMIT", script.contains("MWW_COMMIT=\"${WakeWords.MODELS_COMMIT}\""))
         for (m in WakeWords.MICRO) assertTrue(m.id, script.contains("\"${m.id}.tflite ${m.sha256}\""))
     }

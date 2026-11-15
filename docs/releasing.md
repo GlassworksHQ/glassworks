@@ -357,8 +357,8 @@ pairing key, options). See [install.md](../frames/aqara-s1-plus/docs/install.md#
 ## Libraries
 
 The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): `esphome-api` (a jar),
-`esphome-api-android`, `improv` and `sendspin` (AARs). `sendspin` (#152) is set up but has no release
-yet. Each has its own semver version, in `version=` in
+`esphome-api-android`, `improv`, `sendspin` and `voice` (AARs). `sendspin` and `voice` (#152) are set up
+but have no release yet. Each has its own semver version, in `version=` in
 `libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
 release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
 developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. The
@@ -427,7 +427,7 @@ check skips any other tag (`Releases.tagVersion`). So a library tag never makes 
    GitHub's web page instead, **untick "Set as the latest release"**: panels on 0.4.3 read
    `releases/latest`, which must stay the S1 app's release.
 
-Release `esphome-api` before `esphome-api-android` and `sendspin`: the workflow refuses a library whose
+Release `esphome-api` before `esphome-api-android`, `sendspin` and `voice`: the workflow refuses a library whose
 `dev.glassworks` dependency isn't on Maven Central yet. Once a few releases have gone out cleanly,
 set `MANUAL_PUBLISH: 'false'`. The workflow then publishes the deployment itself and makes the
 GitHub release public.
@@ -454,7 +454,7 @@ Every PR that touches `libs/`, the Gradle build or these scripts runs a dry run 
 
 ```sh
 ./gradlew publishToMavenLocal                        # no key: unsigned
-tools/release/check-lib-artifact.sh esphome-api      # and esphome-api-android, improv, sendspin
+tools/release/check-lib-artifact.sh esphome-api      # and esphome-api-android, improv, sendspin, voice
 tools/release/lib-consumer-check.sh                  # fresh apps build against them (below)
 ```
 

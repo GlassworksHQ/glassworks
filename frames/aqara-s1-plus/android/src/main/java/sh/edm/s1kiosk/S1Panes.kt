@@ -49,7 +49,7 @@ import sh.edm.s1kiosk.timers.TimersPane
 import sh.edm.s1kiosk.voice.AssistDefinition
 import sh.edm.s1kiosk.voice.AssistPane
 import sh.edm.s1kiosk.voice.SpeakerMedia
-import sh.edm.s1kiosk.voice.VoiceEngine
+import dev.glassworks.voice.VoiceEngine
 import dev.glassworks.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceLevels
 import sh.edm.s1kiosk.voice.VoiceUi

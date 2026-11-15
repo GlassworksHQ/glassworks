@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Tries `VOICE_RECOGNITION` first (tuned for ASR, no AGC on most devices), then `MIC`.
  * Re-opens the recorder after errors.
  */
-class Microphone(
+internal class Microphone(
     gain: Float,
     private val frameSamples: Int = OwwFeatures.FRAME,
     private val onError: (String) -> Unit,

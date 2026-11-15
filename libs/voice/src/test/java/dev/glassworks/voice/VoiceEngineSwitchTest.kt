@@ -1,8 +1,5 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.voice
 
-import dev.glassworks.voice.ModelsMissingException
-import dev.glassworks.voice.VoiceConfig
-import dev.glassworks.voice.WakeDetector
 import android.app.Application
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -15,9 +12,6 @@ import org.robolectric.annotation.Config
 import dev.glassworks.esphome.Msg
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.WakeWordInfo
-import sh.edm.s1kiosk.esphome.UrlPlayer
-import sh.edm.s1kiosk.esphome.VoiceAssistantController
-import sh.edm.s1kiosk.esphome.WakeWordCatalog
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
@@ -106,6 +100,22 @@ class VoiceEngineSwitchTest {
         nabuGate.countDown()
         eventually("Okay Nabu loaded") { phraseHeard() == "Okay Nabu" }
         eventually("the old model is closed") { jarvis.closed }
+    }
+
+    /** The overlay's orb reads [VoiceInput.onMicLevel]: each frame streamed to Home Assistant, then 0 when the run ends. */
+    @Test
+    fun eachStreamedFrameReportsItsLevelAndTheEndReportsZero() {
+        val e = engine()
+        eventually("Hey Jarvis loaded") { phraseHeard() == "Hey Jarvis" } // the run is starting: frames stream
+        val levels = CopyOnWriteArrayList<Float>()
+        e.onMicLevel = { levels += it }
+        val frame = ShortArray(1280) { (3277 * kotlin.math.sin(2 * Math.PI * 440 * it / 16_000.0)).toInt().toShort() }
+        e.onMicFrame(frame)
+        assertEquals(listOf(MicLevel.fromRms(MicLevel.rms(frame))), levels.toList())
+        assertTrue("about -23 dBFS reads about 0.8", levels.single() in 0.75f..0.85f)
+        e.controller!!.cancel()
+        e.onMicFrame(ShortArray(1280))
+        assertEquals(0f, levels.last())
     }
 
     @Test

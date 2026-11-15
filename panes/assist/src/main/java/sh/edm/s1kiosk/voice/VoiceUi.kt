@@ -2,9 +2,7 @@ package sh.edm.s1kiosk.voice
 
 import dev.glassworks.voice.VoiceEvent
 import kotlin.math.exp
-import kotlin.math.log10
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
  * What the voice overlay shows, kept by the app (main thread). [state] is the same string as
@@ -40,7 +38,7 @@ data class VoiceUi(
 
 /** Live audio levels for the voice overlay: written by audio threads, read by its frame loop. */
 object VoiceLevels {
-    /** Mic level 0..1 of the latest frame streamed to Home Assistant ([AudioLevel.fromRms]); 0 when not streaming. */
+    /** Mic level 0..1 of the latest frame streamed to Home Assistant (`VoiceInput.onMicLevel`); 0 when not streaming. */
     @Volatile var mic: Float = 0f
 
     /** The voice player (TTS response, announcement) is audibly playing. */
@@ -49,21 +47,6 @@ object VoiceLevels {
 
 /** Audio level → motion (SPEC §5). Pure. */
 object AudioLevel {
-    /** RMS of s16 samples, on the 0..32768 scale. */
-    fun rms(frame: ShortArray): Double {
-        if (frame.isEmpty()) return 0.0
-        var acc = 0.0
-        for (v in frame) acc += v.toDouble() * v
-        return sqrt(acc / frame.size)
-    }
-
-    /** `db = 20·log10(rms/32768)`, then −55 dBFS → 0 and −15 dBFS → 1, clamped. */
-    fun fromRms(rms: Double): Float {
-        if (rms <= 0.0) return 0f
-        val db = 20 * log10(rms / 32768.0)
-        return ((db + 55) / 40).toFloat().coerceIn(0f, 1f)
-    }
-
     /** Synthetic speech-like level for URL playback, where samples aren't available (t in ms). */
     fun ttsPulse(tMs: Double): Float = (0.35 + 0.25 * sin(tMs * 0.027 + 2 * sin(tMs * 0.0041))).toFloat()
 

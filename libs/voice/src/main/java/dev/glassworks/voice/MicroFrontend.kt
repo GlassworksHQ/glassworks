@@ -21,7 +21,7 @@ package dev.glassworks.voice
  * Tables are computed with [StrictMath], so the panel and the JVM tests get the same ones. Not
  * thread-safe.
  */
-class MicroFrontend {
+internal class MicroFrontend {
     companion object {
         const val STEP = 160
         const val CHANNELS = 40

@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.VoiceInput
 import dev.glassworks.voice.VoiceConfig
 import dev.glassworks.voice.VoiceEvent
 import dev.glassworks.voice.WakeWords
@@ -29,7 +30,7 @@ import dev.glassworks.esphome.TimerEventType
 import dev.glassworks.esphome.WakeWordInfo
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.esphome.UrlPlayer
-import sh.edm.s1kiosk.esphome.VoiceAssistantController
+import dev.glassworks.voice.VoiceAssistantController
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -484,6 +485,16 @@ class AssistPaneTest {
         return o.toByteArray()
     }
 
+    /** The overlay's orb reads VoiceLevels.mic, which the engine now reports through onMicLevel (#152). */
+    @Test
+    fun theMicrophoneLevelReachesTheOverlay() {
+        started()
+        input.onMicLevel!!.invoke(0.4f)
+        assertEquals(0.4f, VoiceLevels.mic)
+        input.onMicLevel!!.invoke(0f)
+        assertEquals(0f, VoiceLevels.mic)
+    }
+
     @Test
     fun turnedOffAndOnAgainItTakesTheServerAndClearsTheTimers() {
         val p = started()
@@ -594,6 +605,7 @@ class AssistPaneTest {
         override var controller: VoiceAssistantController? = null
         override var threshold = 0.5f
         override var onError: ((String) -> Unit)? = null
+        override var onMicLevel: ((Float) -> Unit)? = null
         val starts = ArrayList<Boolean>()
         var stops = 0
         val muted = ArrayList<Boolean>()

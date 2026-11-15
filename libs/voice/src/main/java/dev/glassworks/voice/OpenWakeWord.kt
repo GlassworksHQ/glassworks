@@ -24,7 +24,7 @@ import kotlin.random.Random
  * @param embed   one `76 x 32` mel window -> 96-dim embedding.
  * @param noise   the 4 s of start-up noise (tests inject a fixed one); random by default.
  */
-class OwwFeatures(
+internal class OwwFeatures(
     private val melspec: (FloatArray) -> Array<FloatArray>,
     private val embed: (Array<FloatArray>) -> FloatArray,
     noise: FloatArray? = null,
@@ -102,7 +102,7 @@ class OwwFeatures(
  * openWakeWord `Model.predict` for a single binary wake model fed 1280-sample frames:
  * scores are forced to 0 for the first 5 predictions while the buffers fill.
  */
-class OwwDetector(
+internal class OwwDetector(
     private val features: OwwFeatures,
     private val wakeInputFrames: Int,
     private val wake: (Array<FloatArray>) -> Float,

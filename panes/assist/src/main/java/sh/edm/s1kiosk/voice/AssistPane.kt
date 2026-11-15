@@ -16,26 +16,12 @@ import dev.glassworks.esphome.EntityCategory
 import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.esphome.NumberEntity
 import dev.glassworks.esphome.SwitchEntity
+import dev.glassworks.voice.VoiceAssistantController
+import dev.glassworks.voice.VoiceInput
 import sh.edm.s1kiosk.esphome.UrlPlayer
-import sh.edm.s1kiosk.esphome.VoiceAssistantController
-import sh.edm.s1kiosk.esphome.WakeWordCatalog
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
-
-/** The microphone and wake word side of the assistant. [VoiceEngine] is the real one. */
-interface VoiceInput : WakeWordCatalog {
-    var controller: VoiceAssistantController?
-    var threshold: Float
-
-    /** Local failures (models missing, microphone). Background thread. */
-    var onError: ((String) -> Unit)?
-
-    fun start(muted: Boolean)
-    fun stop()
-    fun setMuted(m: Boolean)
-    fun setGain(g: Float)
-}
 
 /** The panel's speaker as the assistant sees it: music it pauses while it listens and talks. */
 interface SpeakerMedia {
@@ -187,9 +173,13 @@ class AssistPane(
         val cfg = VoiceConfig(threshold = prefs.threshold, micGain = prefs.micGain)
         val engine = createInput(cfg, prefs.wakeWord) { id -> prefs.wakeWord = id }
         engine.onError = { msg -> dispatch(VoiceEvent.Error(msg, local = true)) }
+        engine.onMicLevel = { VoiceLevels.mic = it }
         val c = VoiceAssistantController(
             send = { type, payload -> server?.sendVoice(type, payload) ?: false },
-            player = player,
+            player = object : dev.glassworks.voice.UrlPlayer {
+                override fun play(urls: List<String>, onDone: (Boolean) -> Unit) = player.play(urls, onDone)
+                override fun stop() = player.stop()
+            },
             wakeWords = engine,
             emit = ::dispatch,
             resolveUrl = resolveUrl,

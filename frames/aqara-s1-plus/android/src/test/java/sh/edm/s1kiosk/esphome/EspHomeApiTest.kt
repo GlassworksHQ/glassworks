@@ -1,5 +1,8 @@
 package sh.edm.s1kiosk.esphome
 
+import dev.glassworks.voice.VoiceAssistantController
+import dev.glassworks.voice.UrlPlayer
+import dev.glassworks.voice.WakeWordCatalog
 import dev.glassworks.esphome.*
 import dev.glassworks.voice.VoiceEvent
 import org.json.JSONObject

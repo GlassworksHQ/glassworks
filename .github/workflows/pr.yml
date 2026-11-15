@@ -175,7 +175,7 @@ jobs:
         run: sdkmanager --install "platforms;android-37.2"
       - name: Lint (NewApi at minSdk 23)
         working-directory: ${{ env.GRADLE_ROOT }}
-        run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug
+        run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug :voice:lintDebug
       - name: Build the androidTest APKs
         working-directory: ${{ env.GRADLE_ROOT }}
         run: ./gradlew --no-daemon :esphome-api-android:assembleDebugAndroidTest :improv:assembleDebugAndroidTest

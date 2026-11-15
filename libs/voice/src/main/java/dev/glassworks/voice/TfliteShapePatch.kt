@@ -5,8 +5,8 @@ import java.nio.ByteOrder
 
 /**
  * Rewrites the stored shape of a TFLite model's input tensor, in place, in the model's
- * FlatBuffer (`tensorflow/lite/schema/schema.fbs`: Model.subgraphs[0] -> SubGraph.inputs[i] ->
- * SubGraph.tensors[...] -> Tensor.shape).
+ * FlatBuffer (`tensorflow/lite/schema/schema.fbs`: `Model.subgraphs[0]` -> `SubGraph.inputs[i]` ->
+ * `SubGraph.tensors[...]` -> `Tensor.shape`).
  *
  * Why: openWakeWord's `melspectrogram.tflite` has a dynamic input (`shape_signature [-1, -1]`)
  * stored as shape `[1, 1]`. The TFLite Java `Interpreter` constructor always calls
@@ -15,7 +15,7 @@ import java.nio.ByteOrder
  * first `allocate_tensors()`, so upstream never hits this.) Patching the stored shape to a
  * valid size, e.g. `[1, 1760]`, fixes construction; `resizeInput` still works afterwards.
  */
-object TfliteShapePatch {
+internal object TfliteShapePatch {
 
     /**
      * Patches [model] (little-endian, positioned anywhere; absolute reads) so input [inputIndex]
@@ -61,7 +61,7 @@ object TfliteShapePatch {
     /** Follows the uoffset stored at [pos] to a vector; returns the position of its length. */
     private fun vector(b: ByteBuffer, pos: Int): Int = pos + b.getInt(pos)
 
-    /** Element [i] of a vector of tables. */
+    /** Element `i` of a vector of tables. */
     private fun table(b: ByteBuffer, vector: Int, i: Int): Int {
         val len = b.getInt(vector)
         require(i in 0 until len) { "index $i out of $len" }

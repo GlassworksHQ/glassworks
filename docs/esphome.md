@@ -16,8 +16,8 @@ satellite (remove that Wyoming entry from HA when you switch).
 Code: the protocol core is the reusable pure-JVM library [`libs/esphome-api`](../libs/esphome-api/README.md)
 (package `dev.glassworks.esphome`), with mDNS from [`libs/esphome-api-android`](../libs/esphome-api-android/README.md);
 the panel's entities and glue are `PanelDevice` in
-`frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/esphome/` and `VoiceAssistantController` in
-`panes/assist`, with the wall base and the Aqara cloud switch in `frames/aqara-s1-plus/panes/wall-base`
+`frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/esphome/` and the voice assistant in the
+[`voice`](../libs/voice/README.md) library (`VoiceAssistantController`, `VoiceEngine`), wrapped by `panes/assist`, with the wall base and the Aqara cloud switch in `frames/aqara-s1-plus/panes/wall-base`
 (`WallBasePane.kt`) and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
 keeps working while the screen is off. Logs: `adb logcat -s S1ESPHome S1Voice`.
 

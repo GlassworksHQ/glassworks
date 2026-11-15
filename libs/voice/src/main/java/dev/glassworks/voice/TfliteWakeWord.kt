@@ -9,14 +9,14 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
 /** Thrown when model files are missing or unreadable. */
-class ModelsMissingException(message: String) : Exception(message)
+internal class ModelsMissingException(message: String) : Exception(message)
 
 /**
  * openWakeWord with TFLite: melspectrogram.tflite -> embedding_model.tflite -> wake model. The legacy
  * engine, kept for one release behind [WakeWord.Legacy] (#175). Takes 1280-sample (80 ms) frames.
  * Not thread-safe: use from the microphone thread only.
  */
-class TfliteWakeWord private constructor(
+internal class TfliteWakeWord private constructor(
     /** Model id, e.g. `hey_jarvis_v0.1` (file name without `.tflite`). */
     val name: String,
     private val melModel: Interpreter,

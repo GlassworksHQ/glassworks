@@ -10,3 +10,5 @@ internal object VoiceLog {
     fun w(msg: String, t: Throwable? = null) =
         if (onAndroid) { android.util.Log.w(TAG, msg, t); Unit } else println("W/$TAG: $msg ${t ?: ""}")
 }
+
+internal fun nowMs(): Long = System.nanoTime() / 1_000_000L
