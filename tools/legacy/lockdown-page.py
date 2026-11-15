@@ -32,10 +32,12 @@ RED = base64.b64decode(
 PAGE = """<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lockdown check</title>
-<!-- Speculative connections: with the legacy prefs, none of these may reach the other origin. -->
-<link rel="preconnect" href="{other}">
-<link rel="dns-prefetch" href="//other.invalid">
-<link rel="prefetch" href="{other}/hit/prefetch">
+<!-- Speculative connections: with the legacy prefs, none of these may reach the other origin. They name it as
+     "localhost", not 127.0.0.1: Gecko never connects speculatively to a local IP literal (nsHttpConnectionMgr), so
+     an IP here would pass even without the prefs. localhost reaches the same server through adb reverse. -->
+<link rel="preconnect" href="{other_name}">
+<link rel="dns-prefetch" href="//{other_name_host}">
+<link rel="prefetch" href="{other_name}/hit/prefetch">
 <style>
  body {{ font: 14px/1.35 system-ui, sans-serif; margin: 12px; background: #fff; color: #111; }}
  h1 {{ font-size: 16px; margin: 0 0 6px; }}
@@ -65,7 +67,7 @@ PAGE = """<!doctype html>
  <div class="box"><b>POST form, auto-submitted</b> (refused)<br><iframe src="/t/post?target=_self" title="post"></iframe></div>
  <div class="box"><b>POST form to the top</b> (refused; this page stays)<br><iframe src="/t/post?target=_top" title="post top"></iframe></div>
  <div class="box"><b>Link to the top from a frame</b> (refused; this page stays)<br><iframe src="/t/link-top" title="link top"></iframe></div>
- <div class="box"><b>Preconnect, DNS prefetch, prefetch</b> (in this page's head)<br>nothing on the other origin's log</div>
+ <div class="box"><b>Preconnect, DNS prefetch, prefetch</b> to {other_name} (in this page's head)<br>nothing on the other origin's log</div>
 </div>
 <h2>Tap each, then come back with Back if the page changed</h2>
 <div class="row">
@@ -167,7 +169,9 @@ def handler(home, other, is_home):
             html = "text/html; charset=utf-8"
             if path in ("/", "/index.html") and is_home:
                 other_ws = other.replace("http://", "ws://")
-                page = PAGE.format(home=home, other=other, other_ws=other_ws, other_port=other.rsplit(":", 1)[1])
+                other_name = other.replace("127.0.0.1", "localhost")
+                page = PAGE.format(home=home, other=other, other_ws=other_ws, other_port=other.rsplit(":", 1)[1],
+                                   other_name=other_name, other_name_host=other_name.split("://", 1)[1])
                 self.send(200, html, page.encode())
             elif is_home and path == "/t/meta":
                 top = query.get("top") == "1"
