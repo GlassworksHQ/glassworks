@@ -159,6 +159,30 @@ describe('the test install', () => {
     expect(s.state.screen).toBe('done');
   });
 
+  it('a slow read of the Mirror that ends after a whole install doesn\'t replace its Done, even when it fails', async () => {
+    for (const fails of [false, true]) {
+      const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith('sh.edm.s1kiosk/')) });
+      const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+      await s.connect();
+      await s.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+      let release!: () => void;
+      const gate = new Promise<void>((r) => { release = r; });
+      const run = m.run.bind(m);
+      let held = false;
+      m.run = async (cmd: string) => {
+        if (!held && cmd === 'getprop ro.build.version.sdk') { held = true; await gate; if (fails) throw new Error('USB transfer failed'); }
+        return run(cmd);
+      };
+      const reread = s.again();
+      await s.install();
+      expect(s.state.screen).toBe('done');
+      release();
+      await reread;
+      expect(s.state).toMatchObject({ screen: 'done', result: { flow: 'install' } });
+      expect(s.state.connectError).toBeUndefined();
+    }
+  });
+
   it('a refused install ends on the error screen with the reason', async () => {
     const s = await mirrorDemo('error', true);
     expect(s.state).toMatchObject({ screen: 'error' });

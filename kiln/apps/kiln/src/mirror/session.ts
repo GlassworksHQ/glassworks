@@ -108,13 +108,19 @@ export class MirrorSession {
   }
 
   private checking?: Promise<void>;
+  /** Install and undo count up: a read of the Mirror that started before one is stale once it ends. */
+  private ops = 0;
 
-  /** One read of the Mirror at a time: repeated clicks share it, and it never lands on a running install. */
+  /**
+   * One read of the Mirror at a time: repeated clicks share it. Its report lands only if no install
+   * or undo started since, so a slow read never replaces a running or finished one.
+   */
   private check(): Promise<void> {
+    const op = this.ops;
     this.checking ??= (async () => {
       try {
         const report = await checkMirror(this.panel!);
-        if (this.state.screen !== 'working') this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
+        if (op === this.ops) this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
       } finally {
         this.checking = undefined;
       }
@@ -151,6 +157,7 @@ export class MirrorSession {
 
   private async work(flow: 'install' | 'undo', run: (onPhase: (p: MirrorPhase) => void) => Promise<Result>): Promise<void> {
     if (!this.panel || this.state.screen === 'working') return;
+    this.ops++;
     this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined });
     try {
       const result = await run((p) => this.set({ phases: [...this.state.phases, p] }));
@@ -163,7 +170,9 @@ export class MirrorSession {
 
   /** From Done or an error: read the Mirror again, or connect again if it went away. */
   async again(): Promise<void> {
+    const op = this.ops;
     try { await this.check(); } catch (e) {
+      if (op !== this.ops) return; // an install or undo started meanwhile: it owns the screen now
       this.panel = undefined;
       this.set({ screen: 'pick', report: undefined, flow: undefined, result: undefined, error: undefined, phases: [],
         connectError: `The Mirror went away: ${(e as Error).message}. Connect again.` });
