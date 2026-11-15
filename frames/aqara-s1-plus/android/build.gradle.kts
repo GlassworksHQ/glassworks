@@ -113,11 +113,10 @@ dependencies {
     implementation(project(":pane-timers"))
     implementation(project(":pane-sendspin"))
     implementation(project(":aqara-s1-plus-wall-base"))
+    implementation(project(":pane-zigbee-thread"))
     implementation(project(":esphome-api-android")) // brings :esphome-api
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy")) // the Bluetooth proxy pane's engine (#121)
-    // XZ decoder (pure Java, 0BSD) for Silicon Labs' zigbeed .deb (radio/SisdkZigbeed.kt).
-    implementation("org.tukaani:xz:1.10")
 
     // JVM unit tests for the ESPHome API (against aioesphomeapi) and the wake word engines.
     testImplementation("junit:junit:4.13.2")

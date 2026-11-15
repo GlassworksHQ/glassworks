@@ -125,7 +125,7 @@ camera's stream. It never uses it to control HA, or to watch entities in place o
 
 When a read needs an administrator and the panel's user isn't one, ask an admin to sign in once,
 use the token for that read and revoke it straight away, as
-[`ThreadJoin.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/auth/ThreadJoin.kt) does. The panel keeps no admin
+[`ThreadJoin.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/auth/ThreadJoin.kt) does. The panel keeps no admin
 credentials.
 
 A *person* signed in on the Manage page is different: they act with their own HA rights, like the
@@ -248,7 +248,7 @@ buttons open Home Assistant's own import dialog; the panel never writes to Home 
 The core raises `HomeAssistantSubscribed(address, authenticated)` each time Home Assistant subscribes
 to the states. `authenticated` is true when the connection uses the key Home Assistant provisioned.
 Only then is the address proven to be Home Assistant's, so a pane that trusts the address checks it.
-The radio ([`RadioPane.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/radio/RadioPane.kt)) does: it lets only that
+The radio ([`RadioPane.kt`](../../../../../../panes/zigbee-thread/src/main/java/sh/edm/s1kiosk/radio/RadioPane.kt)) does: it lets only that
 address reach its TCP services.
 
 On an authenticated connection the core also asks Home Assistant for the time, and raises
@@ -318,7 +318,7 @@ is its part of the setup channel's state, under the step's id; `ops` are the req
 it, on the wire as `<step id>.<op>`. That way the installer can finish every step without the
 screen, and the setup screen is one more client. `SetupChannelStepsTest` fails if a step has no
 requests that finish it. The radio's step is
-[`RadioDefinition`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/radio/RadioDefinition.kt). Its `radio.set_mode` accepts
+[`RadioDefinition`](../../../../../../panes/zigbee-thread/src/main/java/sh/edm/s1kiosk/radio/RadioDefinition.kt). Its `radio.set_mode` accepts
 only the ids the step offers (`RadioStep.OPTIONS`, the state's `radio.options`). Any other mode is
 refused, so a mode only appears to the installer once the step offers it. Asking for the mode in
 effect, running or on its way, answers the step and leaves the radio alone, and the state's
