@@ -92,8 +92,9 @@ licensed upstream, and whether it reaches browsers.
      like a re-implementation than a translation.
    - `wasm/src/lib.rs`: `is_raw_arm32` and `detect_bcj_filter` are copied from `format.rs:223-268`. Only
      Magisk's comments were removed. `lib.rs` is compiled into `bootpatch.wasm`.
-     `bootpatch/src/wasm/THIRD_PARTY.txt` and `THIRD-PARTY-NOTICES.md` §4 both say "No Magisk code
-     is included". That is wrong.
+     `bootpatch/src/wasm/THIRD_PARTY.txt` says "No Magisk (GPLv3) code is included", and so did
+     `THIRD-PARTY-NOTICES.md` §4 before this PR. That is wrong. This PR corrects the notices, and the
+     rewrite in #355 fixes `THIRD_PARTY.txt`.
 
 5. **History and headers** (2026-11-15, read). `git log --follow` shows both packages came from
    `d4f034e7` (2026-11-09, "web: browser (WebUSB) installer", as `web/src/fel`, `web/src/bootpatch`).
@@ -224,11 +225,21 @@ All read-only. Clone the two upstreams at the commits above. For Magisk, a spars
 
 `tools/licence-audit/overlap.py` (read-only; its header explains the three counts):
 
+Every row of step 3, from the repo root at `73fe7d1a`, with sunxi-tools in `~/src/sunxi-tools` and
+the sparse Magisk clone in `magisk/`:
+
 ```sh
-python3 -I tools/licence-audit/overlap.py kiln/packages/fel/src/protocol.ts ~/src/sunxi-tools
+for f in kiln/packages/fel/src/{a133,felDevice,index,protocol,transport,uboot}.ts kiln/packages/fel/test/fakes.ts; do
+  python3 -I tools/licence-audit/overlap.py "$f" ~/src/sunxi-tools
+done
 python3 -I tools/licence-audit/overlap.py kiln/packages/bootpatch/src/wasm/src/lib.rs magisk/native/src/boot
-python3 -I tools/licence-audit/overlap.py kiln/packages/bootpatch/src/cpio.ts magisk/native/src/boot magisk/scripts
+for f in kiln/packages/bootpatch/src/{cpio,bootimg,magisk,index,compress,overlay,vbmeta}.ts; do
+  python3 -I tools/licence-audit/overlap.py "$f" magisk/native/src/boot magisk/scripts
+done
 ```
+
+The output is the table in step 3. Later commits moved some of this code (#359), so run it on
+`73fe7d1a` to get the same numbers.
 
 For the word arrays, in order. This one stays here rather than in `tools/`, because it names
 sunxi-tools functions and `tools/` is open to the clean-room implementer (#355):

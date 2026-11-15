@@ -19,24 +19,33 @@ import pathlib
 import re
 import sys
 
+SUFFIXES = {'.c', '.h', '.S', '.rs', '.cpp', '.hpp', '.sh'}
+# A whole 32-bit literal: not part of a longer hex number.
+HEX32 = re.compile(r'(?<![0-9a-fx])0x[0-9a-f]{8}(?![0-9a-f])')
+
 
 def main() -> None:
     if len(sys.argv) < 3:
         sys.exit(__doc__)
-    ours = pathlib.Path(sys.argv[1]).read_text()
+    ours = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
     paths = []
     for a in sys.argv[2:]:
         p = pathlib.Path(a)
+        if not p.exists():
+            sys.exit(f'overlap.py: {a} does not exist')
         paths += [p] if p.is_file() else [q for q in p.rglob('*') if q.is_file()]
-    up = ''.join(p.read_text(errors='ignore') for p in paths if p.suffix in {'.c', '.h', '.S', '.rs', '.cpp', '.hpp', '.sh'})
+    sources = [p for p in paths if p.suffix in SUFFIXES]
+    if not sources:
+        sys.exit(f'overlap.py: no {" ".join(sorted(SUFFIXES))} files under {" ".join(sys.argv[2:])}')
+    up = ''.join(p.read_text(encoding='utf-8', errors='replace') for p in sources)
 
     norm = lambda s: re.sub(r'\s+', ' ', s).strip()
     up_lines = {norm(line) for line in up.splitlines()}
     lines = [norm(line) for line in ours.splitlines()
              if len(norm(line)) >= 24 and not norm(line).startswith(('//', '*', '/*', '#'))]
     same = [line for line in lines if line in up_lines]
-    hexw = set(re.findall(r'0x[0-9a-f]{8}', ours.lower()))
-    uphex = set(re.findall(r'0x[0-9a-f]{8}', up.lower()))
+    hexw = set(HEX32.findall(ours.lower()))
+    uphex = set(HEX32.findall(up.lower()))
     strs = sorted(set(re.findall(r"""['"`]([^'"`\n${}]{12,})['"`]""", ours)))
     shared = [s for s in strs if s in up]
 
