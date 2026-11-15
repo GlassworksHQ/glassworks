@@ -21,8 +21,11 @@ internal interface PageGuard {
     /** The app loads [url] itself ([dev.glassworks.engine.Page.load]): its origin is the one pages may use. */
     fun appLoads(url: String)
 
-    /** Runs [load] once the guard is in force: at once if it is, else when it is (never, if it can't be). */
-    fun whenReady(load: () -> Unit)
+    /**
+     * Runs [load] once the guard is in force: at once if it is, else when it is (never, if it can't be). If it
+     * can't be, or is slow to, [stuck] says why in words for the screen.
+     */
+    fun whenReady(load: () -> Unit, stuck: (String) -> Unit)
 
     /** Whether [url] may load as [kind]. The guard notes a refusal on the page and in the log. */
     fun allows(kind: Load, url: String): Boolean

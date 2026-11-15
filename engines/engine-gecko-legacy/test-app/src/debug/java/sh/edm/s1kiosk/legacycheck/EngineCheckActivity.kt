@@ -80,7 +80,8 @@ class EngineCheckActivity : Activity() {
     override fun onBackPressed() { page?.goBack() }
 
     private val host = object : PageHost {
-        override fun onPageStart(url: String) { loads++; lastUrl = url; show("loading") }
+        // Not the URL: GeckoView reports a start for a load the lockdown then refuses. onLocationChange is where the page is.
+        override fun onPageStart(url: String) { loads++; show("loading") }
         override fun onPageStop(success: Boolean) = show(if (success) "loaded" else "load failed")
         override fun onFirstPaint() = show("painted")
         override fun onLocationChange(url: String?) { lastUrl = url.orEmpty(); show("at") }

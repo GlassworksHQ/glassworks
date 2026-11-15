@@ -4,6 +4,8 @@
 
 package dev.glassworks.engine.gecko.legacy
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import dev.glassworks.engine.gecko.PageGuard
 import org.json.JSONObject
@@ -23,14 +25,25 @@ internal class Lockdown(private val logTag: String) : PageGuard {
     /** Opens when the extension's background script connects, which it does after its webRequest listener is up. */
     private val ready = ReadyGate()
 
-    /**
-     * One content process, none started ahead, and no process per site (cross-origin frames are refused anyway):
-     * the Mirror has about 930 MB of RAM. The extensions process stays, as GeckoView runs it.
-     */
     override val prefs: Map<String, Any> = linkedMapOf(
+        // One content process, none started ahead, and no process per site (cross-origin frames are refused anyway):
+        // the Mirror has about 930 MB of RAM. The extensions process stays, as GeckoView runs it.
         "dom.ipc.processCount" to 1,
         "dom.ipc.processPrelaunch.enabled" to false,
         "fission.autostart" to false,
+        // WebRTC talks to any address over UDP, where neither the delegates nor webRequest can see it. Off:
+        // RTCPeerConnection is gone, and HA's frontend falls back to HLS for cameras.
+        "media.peerconnection.enabled" to false,
+        "media.peerconnection.ice.default_address_only" to true,
+        "media.peerconnection.ice.no_host" to true,
+        // Connections Gecko opens on its own, ahead of a request (DNS prefetch, the predictor, speculative
+        // connects for <link rel=preconnect> and hovered links): none, so a page can't reach out without a request.
+        "network.dns.disablePrefetch" to true,
+        "network.dns.disablePrefetchFromHTTPS" to true,
+        "network.predictor.enabled" to false,
+        "network.predictor.enable-prefetch" to false,
+        "network.prefetch-next" to false,
+        "network.http.speculative-parallel-limit" to 0,
     )
 
     override fun attach(runtime: GeckoRuntime) {
@@ -45,11 +58,26 @@ internal class Lockdown(private val logTag: String) : PageGuard {
                     if (ready.open()) Log.i(logTag, "Lockdown on: pages load only the dashboard's origin")
                 }
             }, NATIVE_APP)
-        }, { e -> Log.e(logTag, "Lockdown extension failed: nothing will load (the lockdown fails closed)", e) })
+        }, { e ->
+            Log.e(logTag, "Lockdown extension failed: nothing will load (the lockdown fails closed)", e)
+            ready.fail(FAILED)
+        })
     }
 
-    /** The app's loads wait for the extension: a page that loads first would fetch from anywhere (seen on API 25). */
-    override fun whenReady(load: () -> Unit) = ready.run(load)
+    private var timer: Handler? = null
+
+    /**
+     * The app's loads wait for the extension: a page that loads first would fetch from anywhere (seen on API 25).
+     * If it isn't up in [READY_TIMEOUT_MS], the screen says so; the load still runs if it comes up later.
+     */
+    override fun whenReady(load: () -> Unit, stuck: (String) -> Unit) {
+        ready.whenOpen(stuck, load)
+        if (timer == null) {
+            timer = Handler(Looper.getMainLooper()).also {
+                it.postDelayed({ if (ready.fail(SLOW)) Log.e(logTag, "Lockdown: not up after $READY_TIMEOUT_MS ms; nothing loads") }, READY_TIMEOUT_MS)
+            }
+        }
+    }
 
     override fun appLoads(url: String) {
         if (policy.appLoads(url)) {
@@ -61,7 +89,7 @@ internal class Lockdown(private val logTag: String) : PageGuard {
     override fun allows(kind: PageGuard.Load, url: String): Boolean {
         if (policy.allows(kind, url)) return true
         val host = Origin.host(url)
-        Log.w(logTag, "Lockdown: refused ${kind.name.lowercase()} from $host")
+        Log.w(logTag, "Lockdown: refused ${kind.name.lowercase()} from ${host.ifEmpty { "a URL without a network origin" }}")
         send(JSONObject().put("type", "blocked").put("kind", kind.name.lowercase()).put("host", host))
         return false
     }
@@ -77,5 +105,11 @@ internal class Lockdown(private val logTag: String) : PageGuard {
         const val ID = "lockdown@glassworks.dev"
         /** The native app the extension's background script connects to (manifest.json, background.js). */
         const val NATIVE_APP = "glassworks_lockdown"
+        const val READY_TIMEOUT_MS = 20_000L
+
+        private const val WHY = "This panel's browser engine is frozen, so it only loads your Home Assistant, and only " +
+            "with its lockdown on."
+        const val FAILED = "Home Assistant can't load: the lockdown didn't start.\n\n$WHY\n\nRestart the app. If this stays, report it."
+        const val SLOW = "Home Assistant can't load yet: the lockdown hasn't started.\n\n$WHY\n\nWaiting for it…"
     }
 }

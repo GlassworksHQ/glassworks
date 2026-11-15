@@ -17,21 +17,35 @@ class ReadyGateTest {
     @Test fun `loads wait until the lockdown is in force, then run in order`() {
         val gate = ReadyGate()
         val ran = mutableListOf<String>()
-        gate.run { ran += "first" }
-        gate.run { ran += "second" }
+        gate.whenOpen { ran += "first" }
+        gate.whenOpen { ran += "second" }
         assertEquals(emptyList<String>(), ran)
         assertTrue(gate.open())
         assertEquals(listOf("first", "second"), ran)
-        gate.run { ran += "later" }
+        gate.whenOpen { ran += "later" }
         assertEquals(listOf("first", "second", "later"), ran)
         assertFalse("opens once", gate.open())
         assertEquals(3, ran.size)
     }
 
+    @Test fun `a failure reaches every waiting load, and later ones, until it opens`() {
+        val gate = ReadyGate()
+        val heard = mutableListOf<String>()
+        var ran = 0
+        gate.whenOpen({ heard += "first: $it" }) { ran++ }
+        assertTrue(gate.fail("lockdown off"))
+        gate.whenOpen({ heard += "second: $it" }) { ran++ }
+        assertEquals(listOf("first: lockdown off", "second: lockdown off"), heard)
+        assertEquals(0, ran)
+        assertTrue("it can still open", gate.open())
+        assertEquals(2, ran)
+        assertFalse("an open gate doesn't fail", gate.fail("late"))
+    }
+
     @Test fun `it never opens by itself`() {
         val gate = ReadyGate()
         var ran = false
-        gate.run { ran = true }
+        gate.whenOpen { ran = true }
         assertFalse(ran)
     }
 }

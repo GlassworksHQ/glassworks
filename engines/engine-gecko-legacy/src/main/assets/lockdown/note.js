@@ -16,9 +16,11 @@
 
   function headline(kind, host) {
     if (kind === "download") return "Downloads are off on this panel.";
-    if (kind === "page" || kind === "window") return `${host} isn't your Home Assistant, so it didn't open.`;
+    if (kind === "page" || kind === "window" || kind === "main_frame") {
+      return host ? `${host} isn't your Home Assistant, so it didn't open.` : "That isn't your Home Assistant, so it didn't open.";
+    }
     if (hosts.length > 1) return `Blocked content from ${hosts.slice(-3).join(", ")}.`;
-    return `Blocked content from ${host}.`;
+    return host ? `Blocked content from ${host}.` : "Blocked content.";
   }
 
   function show(kind, host) {

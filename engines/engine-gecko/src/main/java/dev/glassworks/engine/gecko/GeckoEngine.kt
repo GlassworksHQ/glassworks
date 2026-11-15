@@ -6,9 +6,14 @@ package dev.glassworks.engine.gecko
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.Gravity
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.widget.FrameLayout
+import android.widget.TextView
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.Page
@@ -175,7 +180,29 @@ class GeckoEngine(
         override fun load(url: String) {
             val g = guard ?: return run { session?.loadUri(url) }
             g.appLoads(url)
-            g.whenReady { session?.loadUri(url) }
+            g.whenReady({ showStuck(null); session?.loadUri(url) }, ::showStuck)
+        }
+
+        /** The guard's words for why nothing loads, over the page (GeckoView is a FrameLayout); null takes them away. */
+        private var stuck: TextView? = null
+
+        private fun showStuck(message: String?) {
+            if (message == null) {
+                stuck?.let { view.removeView(it) }
+                stuck = null
+                return
+            }
+            val t = stuck ?: TextView(activity).apply {
+                setTextColor(Color.WHITE)
+                setBackgroundColor(Color.BLACK)
+                gravity = Gravity.CENTER
+                textSize = 20f
+                setPadding(48, 48, 48, 48)
+            }.also {
+                view.addView(it, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                stuck = it
+            }
+            t.text = message
         }
         override fun reload() { session?.reload() }
         override fun goBack() { if (canGoBack) session?.goBack() }

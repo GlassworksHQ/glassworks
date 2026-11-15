@@ -10,6 +10,10 @@ var LockdownPolicy = (function () {
   const DEFAULT_PORT = { http: 80, https: 443 };
   const AS_HTTP = { ws: "http", wss: "https" };
   const FORM = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\/([^/?#]*)/;
+  // A browser reads "\\" as "/" and drops tabs and newlines: such an authority may name another host. Not parsed.
+  const BAD_AUTHORITY = /[\\\s\x00-\x1f\x7f]/;
+  // Schemes with no network origin that a page may use: they fetch nothing from anywhere.
+  const LOCAL = /^(data|moz-extension|about):/i;
 
   /** scheme://host[:port], lower case, default port dropped, ws(s) as http(s), blob: by its inner URL; else null. */
   function origin(url) {
@@ -21,13 +25,16 @@ var LockdownPolicy = (function () {
     const raw = m[1].toLowerCase();
     const scheme = AS_HTTP[raw] || raw;
     if (!(scheme in DEFAULT_PORT)) return null;
+    if (BAD_AUTHORITY.test(m[2])) return null;
     const authority = m[2].slice(m[2].lastIndexOf("@") + 1);
     let host, port;
     if (authority.startsWith("[")) {
       const end = authority.indexOf("]");
       if (end < 0) return null;
+      const rest = authority.slice(end + 1);
+      if (rest !== "" && !rest.startsWith(":")) return null;
       host = authority.slice(0, end + 1);
-      port = authority.slice(end + 1).replace(/^:/, "");
+      port = rest.slice(1);
     } else {
       const colon = authority.indexOf(":");
       host = colon < 0 ? authority : authority.slice(0, colon);
@@ -51,18 +58,26 @@ var LockdownPolicy = (function () {
     return origin(details.documentUrl) || origin(details.originUrl);
   }
 
+  const hostOf = (o) => (o === null ? "" : o.slice(o.indexOf("://") + 3));
+
   /**
    * The verdict on one webRequest: { allow: true } or { allow: false, host, frame }. [haOrigin] is the app's
-   * (null until it says): without it, the top-level document's origin stands in, which the app's navigation
-   * delegate has already held to Home Assistant. A top-level load is the app's to decide, so it passes here.
+   * (null until it says). A top-level load (a link, a redirect, a form, a meta refresh) must be Home Assistant's
+   * once the app has said which that is; before that, the app's navigation delegate holds it alone. Anything else
+   * must be Home Assistant's too: without [haOrigin], the top-level document's origin stands in. A network URL that
+   * doesn't parse is refused (fails closed); only data:, moz-extension: and about: pass without an origin.
    */
   function decide(details, haOrigin) {
-    if (details.type === "main_frame") return { allow: true };
     const target = origin(details.url);
-    if (target === null) return { allow: true }; // not a network load: data:, blob: of nothing, moz-extension:
+    const frame = details.type === "sub_frame";
+    if (target === null) return LOCAL.test(String(details.url).trim()) ? { allow: true } : { allow: false, host: "", frame };
+    if (details.type === "main_frame") {
+      if (haOrigin === null || haOrigin === undefined || target === haOrigin) return { allow: true };
+      return { allow: false, host: hostOf(target), frame: false };
+    }
     const allowed = haOrigin || topOrigin(details);
     if (allowed !== null && target === allowed) return { allow: true };
-    return { allow: false, host: target.slice(target.indexOf("://") + 3), frame: details.type === "sub_frame" };
+    return { allow: false, host: hostOf(target), frame };
   }
 
   return { origin, topOrigin, decide };

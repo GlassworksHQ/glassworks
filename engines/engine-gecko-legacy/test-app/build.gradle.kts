@@ -13,7 +13,8 @@ plugins {
 }
 
 val s1App = rootProject.layout.projectDirectory.dir("frames/aqara-s1-plus/android")
-val legacyAbi: String by rootProject.extra
+@Suppress("UNCHECKED_CAST")
+val legacyAbi: String = (rootProject.extensions.extraProperties.get("legacyAbi") as Lazy<*>).value as String
 val testBuild: String = (System.getenv("S1_TEST_BUILD")).orEmpty().trim()
     .also { if (!Regex("^[0-9a-f]{0,40}$").matches(it)) throw GradleException("S1_TEST_BUILD '$it' must be a commit hash") }
 
