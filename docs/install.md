@@ -1,4 +1,4 @@
-# Installing S1 Unleashed
+# Install Glassworks on the Aqara S1 Plus
 
 There are two ways to install, and they do the same thing. **Kiln**, the web installer, runs in
 your browser and needs nothing else. The **command line** runs the same steps as shell scripts,
@@ -41,7 +41,7 @@ for scripting or if you'd rather not use WebUSB. Both back up the panel first an
 | OS | What to do |
 |---|---|
 | **macOS** | Nothing. If you use `adb`, run `adb kill-server` first, because only one program can hold the panel. |
-| **Windows** | Once: with the panel in FEL mode, open [Zadig](https://zadig.akeo.ie/), choose *Options → List all devices*, pick `USB Device (1f3a:efe8)`, select **WinUSB** and click *Replace driver*. The installer's own USB mode installs its driver by itself. |
+| **Windows** | Once: with the panel in FEL mode, open [Zadig](https://zadig.akeo.ie/), choose *Options → List all devices*, pick `USB Device (1f3a:efe8)`, select **WinUSB** and click *Replace driver*. Kiln's own USB mode installs its driver by itself. |
 | **Linux** | Once: save the rule below as `/etc/udev/rules.d/50-s1.rules` and run `sudo udevadm control --reload`. Stop `adb` if it is running (`adb kill-server`). |
 
 ```
@@ -68,8 +68,8 @@ soon as it has power, within about two seconds. The screen stays black. That's e
 Open **[Kiln](https://kiln.glassworks.dev/aqara-s1-plus)** in Chrome or Edge. Nothing is uploaded
 anywhere: the page talks to the panel over USB and keeps its backup in the browser.
 
-The rail on the left shows where you are: **Panel → Connect → Install → Set up → Done**. Each step
-has its own address, so you can bookmark or reload one:
+The rail on the left shows where you are: **Panel → Connect → Install → Set up → Done**. Each
+step has its own address, so you can bookmark or reload one:
 
 | Address (after `kiln.glassworks.dev`) | What it does |
 |---|---|
@@ -82,14 +82,16 @@ has its own address, so you can bookmark or reload one:
 | `/aqara-s1-plus/undo` | **Undo an install**: put the original software back |
 
 The old installer's addresses still work at the end of Kiln's: `#/resume`, `#/wifi`,
-`#/home-assistant`, `#/radio`, `#/undo` and `#/install` go to the matching step. While Kiln is working, a step's address shows
-that step. Going to another one doesn't stop it, and the picker offers **Back to it**.
+`#/home-assistant`, `#/radio`, `#/undo` and `#/install` go to the matching step. While Kiln is
+working, a step's address shows that step. Going to another one doesn't stop it, and the picker
+offers **Back to it**.
 
 ### 1 · Panel
 
 <img src="img/kiln/picker.webp" alt="Pick your panel: frame cards for the Aqara S1 Plus (Beta, selected), lululemon Studio Mirror (planned), Generic Android (planned) and Your panel. Under them, the links Undo an install and Finish setting up, and Continue." width="100%">
 
-*Pick **Aqara S1 Plus**, then **Continue**. The two links at the bottom are for a panel that is already installed.*
+*Pick **Aqara S1 Plus**, then **Continue**. The two links at the bottom are for a panel that is
+already installed.*
 
 ### 2 · Connect
 
@@ -186,15 +188,16 @@ done. Then click **Continue**.
 
 <img src="img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field, a Sign in button. Link: Skip, do it on the panel. Button: Continue." width="100%">
 
-*Home Assistant also finds the panel by itself. Click **Add** on the discovered panel in Settings → Devices & services.*
+*Home Assistant also finds the panel by itself. Click **Add** on the discovered panel in
+Settings → Devices & services.*
 
 **Radio.** Choose what the Zigbee/Thread radio does, then **Finish**. It starts as *Off*. You can
 change it any time in Home Assistant.
 
 <table>
 <tr>
-<td width="50%"><img src="img/kiln/radio.webp" alt="What should the radio do? Off (selected), Zigbee coordinator, Thread border router, Zigbee router (repeater, experimental), Thread router (repeater, experimental). Now: Off, radio idle. Link: Skip, leave it as it is. Button: Finish."></td>
-<td width="50%"><img src="img/kiln/radio-next.webp" alt="Use the radio in Home Assistant, after choosing Zigbee coordinator: first add the panel to Home Assistant; add the radio (radio type EZSP, serial path socket://192.0.2.50:6638 with a Copy link); pair your Zigbee devices; using Zigbee2MQTT instead (experimental). Each step has an Open in Home Assistant link."></td>
+<td width="50%"><img src="img/kiln/radio.webp" alt="What should the radio do? Off (selected), Zigbee coordinator, Thread border router, Zigbee router (repeater, experimental), Thread router (repeater, experimental). Now: Off: radio idle. Link: Skip, leave it as it is. Button: Finish."></td>
+<td width="50%"><img src="img/kiln/radio-next.webp" alt="Use the radio in Home Assistant, after choosing Zigbee coordinator: first add the panel to Home Assistant; add the radio (radio type EZSP, serial path socket://192.0.2.50:6638 with a Copy link); pair your Zigbee devices; using Zigbee2MQTT instead (experimental). The first three steps have an Open in Home Assistant link; the Zigbee2MQTT step has Copy links for its values."></td>
 </tr>
 <tr>
 <td><em>The choice.</em></td>
@@ -206,7 +209,7 @@ change it any time in Home Assistant.
 |---|---|
 | Off | Default. The radio stays idle. |
 | Zigbee coordinator | Home Assistant runs a Zigbee network on the panel's radio, over the network: ZHA, or Zigbee2MQTT (**experimental**). |
-| Thread border router | **Experimental.** Runs its own Thread network for Home Assistant's OpenThread Border Router integration. |
+| Thread border router | Runs its own Thread network for Home Assistant's OpenThread Border Router integration. Must be on Home Assistant's network. |
 | Zigbee router (repeater), Thread router (repeater) | **Experimental.** Joins the network you already have and extends it. |
 
 More on each mode: [radio-guide.md](radio-guide.md).
@@ -262,15 +265,16 @@ Open **Undo an install** from Kiln's first screen, or **Undo** on the Done scree
 
 <img src="img/kiln/undo.webp" alt="Put it back. Two choices: As it came from Aqara (selected): the original software, then a factory reset on the panel, everything is removed. Keep its settings: Aqara's apps come back first, over USB with the panel running; Wi-Fi and the rest stay. A row: The backup in this browser, with Download this backup. Link: Use a backup file. Button: Continue. From a terminal instead: tools/install/fel-install.sh --undo ~/s1-backup." width="100%">
 
-*Choose how far back, and which backup. Kiln uses the backup in this browser, or **Use a backup file** for the `.zip`.*
+*Choose how far back, and which backup. Kiln uses the backup in this browser, or **Use a backup
+file** for the `.zip`.*
 
 1. **Choose how far back.**
    - **As it came from Aqara**: the original software, then a factory reset on the panel.
      Everything is removed.
    - **Keep its settings**: first, with the panel running and plugged in, **Give back Aqara's
      apps** brings back Aqara's apps, launcher, keyboard, Do Not Disturb and radio services over
-     USB, and takes S1 Kiosk off (pick `QUAD-CORE R818 EVB2` in the list). Wi-Fi and the rest stay. Then the original
-     software goes back too.
+     USB, and takes S1 Kiosk off (pick `QUAD-CORE R818 EVB2` in the list). Wi-Fi and the rest
+     stay. Then the original software goes back too.
 2. **Check the backup.** Kiln checks it before anything changes on the panel. It refuses a backup
    that can't undo the install, and then changes nothing: see [which backup](#which-backup) below.
 3. **Connect.** Click **Continue**, put the panel in FEL mode, and pick `USB Device (1f3a:efe8)`,
@@ -380,7 +384,7 @@ tools/install/fel-install.sh ~/s1-backup
 # 2. Install and configure S1 Kiosk over adb
 tools/install.sh --url http://homeassistant.local:8123 \
     --timezone America/Los_Angeles --locale en-US \
-    --keyboard rkr.simplekeyboard.inputmethod_148.apk     # optional, from F-Droid
+    --keyboard rkr.simplekeyboard.inputmethod_149.apk     # optional, from F-Droid
 ```
 
 - `fel-install.sh` waits for FEL (hold the button, plug in), then backs up to `~/s1-backup` with
@@ -414,7 +418,7 @@ plan without changing anything.
 | | adb has root | adb has no root (a normal install) |
 |---|---|---|
 | App settings, sign-in, pairing key | Kept: copied out before the removal, then copied back to the new install | **Reset**: sign in again, and set the panel's options again (dashboard, screen and voice settings, for example). Home Assistant may ask to add the panel again, and Music Assistant shows it as a new player |
-| Wi-Fi | Read from Android's Wi-Fi store into the installer's memory, then sent to the new app over USB | Kiln: the Wi-Fi step asks for the password. CLI: asks in the terminal (Enter skips) |
+| Wi-Fi | Read from Android's Wi-Fi store into Kiln's or the CLI's memory, then sent to the new app over USB | Kiln: the Wi-Fi step asks for the password. CLI: asks in the terminal (Enter skips) |
 
 - **Root** here means that adb's shell can run `su`. That is only the case with a development boot
   image (`DEV_SU_HOURS`) or a Magisk policy for the adb shell, see
