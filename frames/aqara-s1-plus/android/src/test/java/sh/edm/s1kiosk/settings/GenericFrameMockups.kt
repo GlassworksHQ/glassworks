@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.settings
 
 import android.app.Application
 import android.content.pm.PackageManager
+import dev.glassworks.manage.ManageFixture
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.frame.friendlyName
@@ -21,15 +22,21 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.auth.HaTokenClient
+import sh.edm.s1kiosk.auth.HttpPoster
+import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import sh.edm.s1kiosk.manage.S1Manage
 import sh.edm.s1kiosk.setup.SetupFlow
 import sh.edm.s1kiosk.setup.SetupOverlay
 import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.ui.Mockup
+import java.io.File
 
 /**
- * Mock-ups of what differs on the generic Android frame (#23): the menu's device-settings link, the radio
- * that can't run, and setup's Panes and Home Assistant steps, from the real runtime's pane definitions.
+ * Mock-ups of what differs on the generic Android frame (#23): the menu's device-settings link, the rail's
+ * panes (no radio: a pane the frame can't run is hidden), setup's Panes and Home Assistant steps, and the
+ * Manage page's Overview, from the real runtime's pane definitions.
  * The S1's same screens come with them (`-s1`), to show they stay as they were. A made-up Pixel Tablet
  * with a microphone, a speaker, Bluetooth LE and a camera. Skipped unless asked:
  *   ./gradlew :kiosk:testDebugUnitTest --tests '*GenericFrameMockups*' -Ps1MockupDir=<dir>
@@ -65,6 +72,18 @@ class GenericFrameMockups {
         return o
     }
 
+    /** The Manage page on [frame]'s real status, signed in with Home Assistant. */
+    private fun manage(frame: Frame): ManageFixture.Browser {
+        val tokens = HaTokenClient(object : HttpPoster {
+            override fun postForm(url: String, body: String) = 0 to ""
+            override fun get(url: String, maxBytes: Int) = 0 to ""
+        })
+        val runtime = GlassworksRuntime(frame, build = AppBuild("1.0.0", 10000, debug = false))
+        val m = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app))
+        val f = ManageFixture().apply { statusFn = { m.status() } }
+        return f.Browser().also { it.signInWithHa() }
+    }
+
     /** The device-settings link is the Screen page's last row. */
     private fun scrollDown(v: android.view.View) {
         if (v is android.widget.ScrollView) v.fullScroll(android.view.View.FOCUS_DOWN)
@@ -88,9 +107,12 @@ class GenericFrameMockups {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
         for ((suffix, frame) in listOf("generic" to GenericAndroid(app), "s1" to AqaraS1Plus())) {
             Mockup.save("frame-01-screen-$suffix", menu(frame, "screen").also { o -> scrollDown(o); Mockup.idle() })
-            Mockup.save("frame-02-radio-$suffix", menu(frame, "radio"))
+            // The rail's Panes, open: only the panes this frame can run (#23, maintainer 2026-11-15).
+            Mockup.save("frame-02-panes-$suffix", menu(frame, "diagnostics"))
             Mockup.save("frame-03-setup-panes-$suffix", setup(frame, SetupFlow.PANES))
             Mockup.save("frame-04-setup-ha-$suffix", setup(frame, SetupFlow.HA))
+            File(Mockup.dir!!, "manage").mkdirs()
+            File(Mockup.dir!!, "manage/frame-05-overview-$suffix.html").writeBytes(manage(frame).get("/").body)
         }
     }
 }

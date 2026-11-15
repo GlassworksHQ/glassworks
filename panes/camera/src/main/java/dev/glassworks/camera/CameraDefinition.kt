@@ -17,7 +17,7 @@ import java.util.Date
 
 /**
  * The camera pane ([CameraPane]) for the whole process. It [requires] a camera: on a frame without one
- * (the S1) the app wraps it in [dev.glassworks.pane.CantRun], one page that says why, with no on/off,
+ * (the S1) the app wraps it in [dev.glassworks.pane.CantRun]: not shown, with no page, on/off,
  * setup card or entity, as every pane that lacks its hardware (#23); the device shell builds the pane
  * only where it isn't. Its settings have no MainActivity
  * extras: any app can send those, and on a tablet another app could turn privacy off or open the
@@ -51,7 +51,7 @@ class CameraDefinition(
     /**
      * The camera's page: how it is doing, what it may do, the readings, privacy, and the stream with its
      * sign-in and addresses. The core adds the pane's entities as Home Assistant shows them
-     * ([SettingsSection.covers] is empty: the page shows none). Without a camera the app shows CantRun's.
+     * ([SettingsSection.covers] is empty: the page shows none). Without a camera there is no page (CantRun).
      */
     override fun settings(): List<SettingsSection> = settings(null)
 

@@ -34,7 +34,7 @@ class SettingsSection(
      * rail and on the Manage page (#243).
      */
     val status: () -> PaneState? = { null },
-    /** Why the pane can't run here, or null: the nav greys it and the page says why. */
+    /** Why the pane can't run now (the radio without its root helper), or null: the nav greys it and the page says why. */
     val unavailable: () -> String? = { null },
     /**
      * What its items read, when that can be replaced while the menu is open: a pane's running [Pane],

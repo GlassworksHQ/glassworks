@@ -128,6 +128,5 @@ class SettingsChangeTest {
         assertEquals(listOf("on", "Who may connect/IP addresses"), SettingsChange.changeable(s).map { it.first })
         assertTrue(SettingsChange.find(s, "Who may connect/IP addresses") === allow)
         assertNull(SettingsChange.find(s, "IP addresses"))
-        assertTrue(SettingsChange.needsHomeAssistant("on"))
     }
 }

@@ -44,12 +44,6 @@ object SettingsChange {
         else -> false
     }
 
-    /**
-     * A pane's on/off needs a Home Assistant sign-in on the Manage page: in Home Assistant it is an
-     * `authOnly` switch ([PaneSwitch.entity]), which only a connection with the panel's key may change.
-     */
-    fun needsHomeAssistant(key: String): Boolean = key == MASTER
-
     fun titleOf(i: SettingsItem): String = when (i) {
         is SettingsItem.Text -> i.title
         is SettingsItem.Switch -> i.title

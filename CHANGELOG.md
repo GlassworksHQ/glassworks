@@ -15,15 +15,16 @@ below as the release notes.
   asks once. The S1 is unchanged: it updates through its root service as before.
 - **Change the panel's settings from the Manage page.** Every setting in the panel's own menu is on
   the Manage page too, in the same order and words, and you can change it there: switches, sliders,
-  addresses, times and choices, and each pane's on/off (that one needs a Home Assistant sign-in). The
+  addresses, times and choices, and each pane's on/off, with either sign-in. The
   panel checks each value as its own controls would. The open settings menu on the panel follows a
   change made in the browser. A few parts only the panel can draw yet (the radio's roles, the time
   zone picker, the wall base's relays, the Bluetooth proxy's devices) say "On the panel".
 - **On a device that isn't an Aqara S1, the app runs as that device.** On a tablet, for example, it
   names itself after the device in Home Assistant ("Pixel Tablet", `pixel-tablet-a1b2c3`) with its
   own maker and model. It runs the panes the device's hardware allows: Voice and Music with a
-  microphone and a speaker, the Bluetooth proxy with Bluetooth LE, and Diagnostics. The radio shows
-  "Can't run", and the S1's own Wall base and Time zone aren't there. On the S1, only the names in
+  microphone and a speaker, the Bluetooth proxy with Bluetooth LE, and Diagnostics. A pane the
+  device has no hardware for isn't shown at all: no radio on a tablet, and the S1's own Wall base and
+  Time zone aren't there. On the S1, only the names in
   Music Assistant and Improv change (below).
 - **Every pane's settings page shows what it is doing.** No page says "no settings of its own" any
   more. Diagnostics shows CPU, temperature, RAM, Wi-Fi, storage and uptime, with the last hour as a
@@ -126,7 +127,7 @@ below as the release notes.
   panel's address and the stream's URLs, and a Camera step in setup that asks Android for the
   camera. Whenever images leave the panel, Android 12 and later show their own camera indicator, and
   older Android a small green dot in the top-right corner. On the S1, which has no camera, the
-  panel's settings say the pane can't run, and Home Assistant gets nothing new.
+  pane isn't shown, and Home Assistant gets nothing new.
 - **The panel can be a Bluetooth proxy for Home Assistant.** Turn on *Bluetooth proxy* in the
   panel's settings or on setup's Panes step, and Home Assistant finds it by itself and hears the
   Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a

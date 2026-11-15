@@ -134,7 +134,7 @@ A feature the panel can have or leave out. The rules are in
 Also:
 
 - **Off by default** unless the frame says otherwise. It declares what it `requires`, and frames
-  without that hardware show it greyed out.
+  without that hardware don't show it at all (maintainer, 2026-11-15).
 - **One pane, one feature.** A pane owns its own entities and settings keys, and talks to other
   panes only through `PanelEvent` and services in `PaneContext`.
 

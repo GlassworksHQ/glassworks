@@ -16,7 +16,7 @@ changes them the same way.
 
 | Page | What it has |
 |---|---|
-| Overview | Running or not, the app's version ("· test build <commit>" on a test build) and how long the app has run; Home Assistant, Wi-Fi (connected or not from Android's connectivity service; the network's name and signal where Android gives them to the app), the web engine, memory; every pane with its state (running, off, or can't run and why). Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
+| Overview | Running or not, the app's version ("· test build <commit>" on a test build) and how long the app has run; Home Assistant, Wi-Fi (connected or not from Android's connectivity service; the network's name and signal where Android gives them to the app), the web engine, memory; every pane the panel can run, with its state (running, off, or can't run now and why). A pane the device has no hardware for isn't listed, here or on the panel. Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
 | Dashboard, Screen, each pane | Every setting the panel's own menu has, in the same order and words, and you can change each one here. A pane's page has its on/off at the top right and shows what it's doing; a pane that's off says what that means. The radio's page links to the Thread join |
 | Log | The last 7 days, kept across reboots. Filter by warnings or errors, search, and **Download diagnostics** |
 | Security | The browsers signed in, each with **Sign out** |
@@ -46,8 +46,10 @@ integration or Frigate. Show needs a Home Assistant sign-in, and the Log records
 password. You can change the user name and password, or **Clear** them. Leave the password empty to
 keep it.
 
-**Turning a pane on or off needs a Home Assistant sign-in.** In Home Assistant these switches only
-answer the panel's key, so a browser signed in with the panel's code sees them but can't change them.
+**Either sign-in can turn panes on and off**, as on the panel. A switch the panel asks about first,
+such as turning the radio off, asks the same question here, and nothing changes until you answer it.
+In Home Assistant these switches only answer the panel's key; the code on the panel stands for being
+at the panel.
 
 ## Signing in
 
