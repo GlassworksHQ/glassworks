@@ -193,7 +193,7 @@ class RadioThreadJoinTest {
 
     @Test
     fun theQrCodeRunsOut() {
-        val s = RadioDefinition.threadJoinJson(RadioMode.THREAD_ROUTER, ThreadJoin.State.NeedsAdmin(until = 10, why = "x"), null, null, { IP }, now = 10)!!
+        val s = RadioDefinition.threadJoinJson(RadioMode.THREAD_ROUTER, ThreadJoin.State.NeedsAdmin(until = 10, why = "x"), RadioController.ThreadHandOff.ANSWERED, null, null, { IP }, now = 10)!!
         assertEquals("failed", s.getString("phase"))
         assertEquals("nobody signed in as an administrator in time; start again", s.getString("reason"))
         assertFalse(s.has("adminUrl"))
@@ -258,6 +258,28 @@ class RadioThreadJoinTest {
         now += RadioController.HANDOFF_MS + 1
         radio.refresh()
         assertEquals("unchanged for a minute after the helper took it: it's this join's", "failed", joinState().getString("phase"))
+    }
+
+    @Test
+    fun aHandOffTheHelperNeverTakesEndsTheJoin() {
+        threadRouter("joined as router, network \"older-net\"")
+        radio.refresh()
+        startJoin()
+        runQueued()
+        now += RadioController.HANDOFF_MS
+        radio.refresh()
+        assertEquals("a minute isn't up yet", JSONObject("""{"phase":"joining"}""").toString(), joinState().toString())
+        now += 1
+        radio.refresh()
+        assertEquals(
+            "the old network's role isn't taken as the answer",
+            JSONObject().put("phase", "failed").put("reason", RadioDefinition.HANDOFF_NOT_TAKEN).toString(), joinState().toString(),
+        )
+        File(tmp.root, RadioHelper.DATASET_FILE).delete()
+        radio.refresh()
+        assertEquals("taken late: the old network's status is still not the answer", "joining", joinState().getString("phase"))
+        helperTakes("ok thread_router: joined as child, network \"$NETWORK\"")
+        assertEquals("a late take still ends joined", "joined", joinState().getString("phase"))
     }
 
     @Test

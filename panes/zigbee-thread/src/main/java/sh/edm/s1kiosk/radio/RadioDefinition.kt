@@ -216,8 +216,8 @@ class RadioDefinition(
             allowed = r?.allowedNow(),
             answered = step.done(),
             threadJoin = threadJoinJson(
-                readout.mode(), threadJoin().state, r?.threadRouterState()?.takeUnless { r.threadHandOffPending() },
-                r?.statusText()?.takeUnless { r.threadHandOffPending() }, readout::panelIp,
+                readout.mode(), threadJoin().state, r?.threadHandOff() ?: RadioController.ThreadHandOff.ANSWERED,
+                r?.threadRouterState(), r?.statusText(), readout::panelIp,
             ),
         )
     }
@@ -464,6 +464,7 @@ class RadioDefinition(
         const val NO_HELPER = "it needs the root helper, which the installer puts on the panel"
         private const val CHANNEL_NOT_RUNNING = "The radio controller isn't running yet; try again in a moment."
         const val JOIN_NOT_ROUTER = "The radio isn't a Thread router: set the mode to thread_router first."
+        const val HANDOFF_NOT_TAKEN = "the radio's root helper didn't take the Thread network's settings within a minute (see the Radio helper sensor)"
         const val JOIN_NOT_SIGNED_IN = "The panel isn't signed in to Home Assistant: sign in first, then join."
         /** Wait for RadioController to take the request, then for it to report how it went (client waits 30 s). */
         private const val RADIO_ACCEPT_MS = 15_000L
@@ -522,13 +523,16 @@ class RadioDefinition(
          *    `reason` says why.
          *  - `joining`: the dataset is fetched and handed to the radio; the radio hasn't attached yet.
          *    The radio's error after the hand-off ([status], RadioController.statusText) is `failed`.
-         *    [router] and [status] are null until the helper answered the hand-off
-         *    (RadioController.threadHandOffPending): until then they describe the network before it.
+         *    [router] and [status] count only once the helper answered the hand-off ([handOff]): until
+         *    then they describe the network before it. A hand-off the helper never takes is `failed`.
          *  - `joined`: the radio is on the network; `role` is `child`, `router` or `leader`.
          *  - `failed`: `reason` says why, in plain words.
          */
-        fun threadJoinJson(mode: RadioMode, join: ThreadJoin.State, router: ThreadRouterState?, status: String?, panelIp: () -> String?, now: Long = System.currentTimeMillis()): JSONObject? {
+        fun threadJoinJson(mode: RadioMode, join: ThreadJoin.State, handOff: RadioController.ThreadHandOff,
+            router: ThreadRouterState?, status: String?, panelIp: () -> String?, now: Long = System.currentTimeMillis()): JSONObject? {
             if (mode != RadioMode.THREAD_ROUTER) return null
+            val answered = handOff == RadioController.ThreadHandOff.ANSWERED
+            val router = router.takeIf { answered }
             val o = JSONObject()
             fun phase(p: String, reason: String? = null) { o.put("phase", p); reason?.let { o.put("reason", it) } }
             when (join) {
@@ -538,8 +542,9 @@ class RadioDefinition(
                     if (now < join.until) { phase("needs_admin", join.why); panelIp()?.let { o.put("adminUrl", ThreadJoin.url(it)) } }
                     else phase("failed", "nobody signed in as an administrator in time; start again")
                 is ThreadJoin.State.Joined -> when {
+                    handOff == RadioController.ThreadHandOff.NOT_TAKEN -> phase("failed", HANDOFF_NOT_TAKEN)
                     router?.joined == true -> phase("joined")
-                    status != null && RadioStep.classify(mode, true, status) == RadioStep.Result.ERROR -> phase("failed", status)
+                    answered && status != null && RadioStep.classify(mode, true, status) == RadioStep.Result.ERROR -> phase("failed", status)
                     else -> phase("joining")
                 }
                 is ThreadJoin.State.Failed -> phase("failed", join.reason)
