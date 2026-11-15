@@ -1,0 +1,333 @@
+/* The docs (direction A1): the sidebar holds the tree; the article is one card, contents on the right. */
+.cross {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 0 6px 12px;
+}
+
+.cross a {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+}
+
+.cross a:hover {
+  color: var(--fg);
+}
+
+.search {
+  padding: 0 0 6px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 32px;
+  align-items: start;
+}
+
+.column {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  max-width: 900px;
+}
+
+.column > section {
+  margin-bottom: 0;
+}
+
+.article {
+  margin-bottom: 0;
+  padding: 40px 52px 44px;
+  max-width: 900px;
+  min-width: 0;
+}
+
+.head {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--edge);
+  margin: -4px 0 28px;
+}
+
+.crumbs {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--faint);
+  flex-wrap: wrap;
+}
+
+.crumbs a {
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.crumbs a:hover {
+  color: var(--fg);
+}
+
+.h1 {
+  font-size: clamp(32px, 4.4vw, 46px);
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  font-weight: 300;
+  scroll-margin-top: 90px;
+}
+
+.tagline {
+  font-size: 18px;
+  color: var(--muted);
+  max-width: 60ch;
+}
+
+.tagline b {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.meta a {
+  color: var(--muted);
+  text-decoration: none;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.meta a:hover {
+  color: var(--fg);
+}
+
+.meta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--glass);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.strip a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.strip a:hover {
+  color: var(--ink-sky);
+}
+
+.toc {
+  position: sticky;
+  top: 28px;
+  padding-top: 8px;
+  font-size: 13.5px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+}
+
+.toc ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.toc :global(.label) {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.toc a {
+  display: block;
+  text-decoration: none;
+  color: var(--muted);
+  padding: 4px 0 4px 12px;
+  border-left: 1px solid var(--edge);
+  line-height: 1.4;
+}
+
+.toc a.tocSub {
+  padding-left: 24px;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.toc a.tocOn {
+  color: var(--fg);
+  border-left-color: var(--sky);
+}
+
+.toc a:hover {
+  color: var(--fg);
+}
+
+/* phones: contents fold into "On this page" above the text */
+.tocFold {
+  display: none;
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 48px;
+  padding-top: 22px;
+  border-top: 1px solid var(--edge);
+  flex-wrap: wrap;
+}
+
+.pager {
+  display: grid;
+  gap: 2px;
+  padding: 14px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--glass);
+  text-decoration: none;
+  min-width: 220px;
+  flex: 1;
+}
+
+.pager small {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.pager b {
+  font-weight: 500;
+}
+
+.next {
+  text-align: right;
+}
+
+/* the landing */
+.landingHead {
+  display: grid;
+  gap: 12px;
+  margin: 18px 4px 26px;
+}
+
+.landingH1 {
+  font-size: clamp(36px, 4.6vw, 54px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 0 4px;
+}
+
+.cardHead h2 {
+  font-size: 21px;
+  font-weight: 400;
+}
+
+.cardIcon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+
+.cardIcon img {
+  width: 30px;
+  height: 30px;
+}
+
+.cardLede {
+  color: var(--muted);
+  font-size: 14.5px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.wideRows {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 24px;
+}
+
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout > .toc {
+    display: none;
+  }
+
+  .tocFold {
+    display: block;
+    margin-bottom: 22px;
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  .tocFold summary {
+    cursor: pointer;
+    color: var(--muted);
+  }
+
+  .tocFold ol {
+    list-style: none;
+    padding: 8px 0 0;
+    margin: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .tocFold a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .article {
+    padding: 22px 18px 28px;
+  }
+
+  .cards,
+  .wideRows {
+    grid-template-columns: 1fr;
+  }
+}

@@ -10,7 +10,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Agent guide: glassworks.dev (`site/`)
 
-The Glassworks project site: the landing page, `/frames`, `/panes`, `/brand` and `/trademarks`. The
+The Glassworks project site: the landing page, `/frames`, `/panes`, `/docs`, `/changelog`, `/brand`
+and `/trademarks`. The
 repo-wide rules in the root [AGENTS.md](../AGENTS.md) apply here too; these are the site's own.
 
 ## Commands
@@ -24,6 +25,7 @@ npm run lint -w site
 npm run typecheck -w site
 npm run build -w site        # every route is static; this is what Vercel runs
 npm run check:seo -w site    # after a build: every page has a title, description, canonical and preview
+npm run check:trace -w site  # after a build: each docs route's bundle has every published file
 npm run brand -w site        # regenerate public/brand/ after a frame.json or libraries.json change
 ```
 
@@ -42,14 +44,17 @@ files change.
    `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric, the latest
    release from `../CHANGELOG.md`. Blueprints are read from GitHub at the latest release tag when the
    site is built (`src/lib/blueprints.ts`), so the build needs github.com; `BLUEPRINTS_REF=<tag or
-   commit>` builds from another ref. A data change
+   commit>` builds from another ref. The docs are the repo's own Markdown: `src/lib/docs/sources.ts`
+   maps each file to its URL and nav group, and the site never keeps a copy. A doc's text changes in
+   the Markdown, on GitHub; a new doc gets a line in `sources.ts`. A data change
    and the page that shows it go in one PR. The site's own words for that data are in
    `src/lib/frameText.ts`.
 3. **Brand files are generated.** `public/brand/` comes from `scripts/brand/` (`npm run brand`).
    Don't draw or edit an SVG by hand. The build fails when a frame's banner isn't what its
    `frame.json` draws.
-4. **Don't deploy, and don't change Vercel settings.** Production is deployed by the maintainer.
-   `vercel.json` keeps Vercel's Git builds off.
+4. **Don't deploy, and don't change Vercel settings.** Production is deployed by the maintainer, with
+   `vercel build --prod` from a full clone and `vercel deploy --prebuilt --prod` (README → Deploying), so
+   the docs' dates have the repo's history. `vercel.json` keeps Vercel's Git builds off.
 5. **Plain CSS with the tokens in `src/app/globals.css`**, CSS modules per page and component, no UI
    kit. Pages build from the Manage parts in `src/components/Manage.tsx` (cards, rows, tiles,
    chips) inside the sidebar shell (`src/components/shell/`). The theme follows the OS; the
@@ -57,7 +62,8 @@ files change.
    (see `globals.css`). A new web-only layout needs a mockup the maintainer approves first.
 6. **Every page in the sitemap uses `pageMetadata`** from `src/lib/seo.ts` for its title, description, canonical
    and link preview, and is listed by a source in `src/lib/routes.ts` (the sitemap). Docs and blog
-   pages add their source there and pass `type: "article"`. `check:seo` fails the build otherwise.
+   pages add their source there; a doc or post passes `type: "article"`, and their index pages
+   (`/docs`, `/blog`, the panes and libraries lists) stay `website`. `check:seo` fails the build otherwise.
    Titles and descriptions are short and plain: what the page is, no filler. The 404
    (`app/not-found.tsx`) has no address of its own, so it sets a plain title and no canonical.
 7. **ESLint runs on TypeScript 6's API.** typescript-eslint can't use the root's TypeScript 7, so
@@ -65,3 +71,7 @@ files change.
    points typescript-eslint at it. Don't use the `@typescript/typescript6` alias: its dependency
    hoists to the root and takes every workspace's `tsc`. A bare `tsc` inside `site/` is 6; the
    `typecheck` script runs the root's TypeScript 7 by path. Don't add a script that calls bare `tsc`.
+8. **The docs build fails on a link it can't resolve**: a relative link to a missing file, or an
+   `#anchor` its target doesn't have. Links follow GitHub's rules (its heading slugs), so a link that
+   works on GitHub works here, and `tools/check-doc-links.py` checks the same Markdown. Search is
+   Pagefind, built over the static HTML by `npm run build`; it only works on a built site.

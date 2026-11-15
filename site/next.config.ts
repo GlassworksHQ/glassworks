@@ -12,11 +12,28 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repo,
   // The frame card ships TypeScript and CSS modules, not built JavaScript (packages/frame-card).
   transpilePackages: ["@glassworks/frame-card"],
-  // The site reads only frames/*/design and frames/*/clarity/clarity.json from the repo; don't trace
-  // the rest into server bundles (a published report.json is a few hundred kB).
+  // The site reads frames/*/design, frames/*/clarity/clarity.json and the Markdown the docs and blog
+  // publish (src/lib/docs/sources.ts, src/lib/blog/posts.ts), with the images beside it. A function
+  // may render a doc again on revalidation, so those go into the server bundles; nothing else from the
+  // repo does (a published report.json is a few hundred kB). `npm run check:trace` checks after a build
+  // that each docs route carries every published file.
+  outputFileTracingIncludes: {
+    "*": [
+      "../{README.md,CHANGELOG.md}",
+      "../docs/**/*.{md,png,jpg,jpeg,webp,gif,svg}",
+      "../frames/README.md",
+      "../frames/*/{README.md,docs/**,research/**}",
+      "../{libs,kiln/packages,packages}/*/README.md",
+      "../kiln/apps/kiln/README.md",
+      "../{panes,pane-api}/**/README.md",
+      "../branding/glass-tile/preview.webp",
+      "./blog/**",
+    ],
+  },
   outputFileTracingExcludes: {
     "*": [
-      "../{kiln,branding,docs,tools,LICENSES,core,engines,libs,panes,pane-api,testing}/**",
+      "../{tools,LICENSES,core,engines,testing}/**",
+      "../kiln/{src,apps,packages}/**/!(README.md)",
       "../frames/*/{installer,android,panes}/**",
       "../frames/*/clarity/report.*",
     ],

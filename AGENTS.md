@@ -110,6 +110,8 @@ in HA. If a request goes against it, say so and point at the page instead of bui
     version is what Home Assistant shows on the update card.
 - **Docs.** Update the frame README's status table (`frames/<id>/README.md`) and `docs/` when
   behaviour, entities or install steps change. Keep `python3 tools/check-doc-links.py` passing.
+  The docs are also published at glassworks.dev/docs: a new doc file gets a line in
+  `site/src/lib/docs/sources.ts`, and the site's build fails on a link it can't resolve.
 - Labels: `frame: …`, `pane: …`, `area: …` ([CONTRIBUTING.md](CONTRIBUTING.md#labels)).
 - To try a branch on a panel without wiping app data, push it to `test-build/<name>` (admins only)
   and `adb install -r` the artifact. Details in [`app/AGENTS.md`](frames/aqara-s1-plus/android/AGENTS.md#trying-a-branch-on-the-panel).

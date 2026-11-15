@@ -5,11 +5,12 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { RatingLabel, RatingValue, SpecLabel, paneIcon } from "@/components/DeviceBits";
 import { Chip, FactRow, ListCard, Row, Sq, StageChip, Tile, Tiles, manage as m } from "@/components/Manage";
-import { KilnGlyph } from "@/components/Glyphs";
+import { BookGlyph, KilnGlyph } from "@/components/Glyphs";
 import { ClarityPanel } from "@/components/clarity/Clarity";
 import { ClarityChipLink } from "@/components/clarity/ClarityChipLink";
 import { CLARITY, clarityFor } from "@/lib/clarity";
 import { frameById, frames, installLink } from "@/lib/frames";
+import { getDocs } from "@/lib/docs";
 import { frameSeo, ratingKeys, ratingText, ships, type Support } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
@@ -61,6 +62,10 @@ async function Device({ params }: { params: Params }) {
   const runs = rows.filter((r) => r.support !== "no");
   const notRunning = rows.filter((r) => !ships(r.support)).map((r) => r.p.name);
   const running = rows.filter((r) => ships(r.support)).length;
+  const all = await getDocs();
+  const guides = all.filter((x) => x.frame === d.id && x.section === "frames" && x.url !== `/docs/frames/${d.id}`);
+  const notes = all.filter((x) => x.frame === d.id && x.section === "notes");
+  const installGuide = guides.find((g) => g.url.endsWith("/install"));
 
   return (
     <article>
@@ -103,6 +108,12 @@ async function Device({ params }: { params: Params }) {
               <a href={install.href} className={m.btn}>
                 Open {new URL(install.href).host}
               </a>
+            )}
+            {installGuide && (
+              <Link href={installGuide.url} className={m.btn}>
+                <BookGlyph />
+                Install guide
+              </Link>
             )}
             {d.project && (
               <a href={d.project.href} className={m.btn}>
@@ -163,6 +174,13 @@ async function Device({ params }: { params: Params }) {
             {d.specs.map((sp) => (
               <FactRow key={sp.label} label={<SpecLabel label={sp.label} />} value={sp.value} />
             ))}
+          </ListCard>
+          <ListCard id="frame-docs" title="Docs for this frame" aside={<Link href={`/docs/frames/${d.id}`}>All docs ›</Link>}>
+            {guides.map((g) => (
+              <Row key={g.url} href={g.url} title={g.label ?? g.title} sub={g.toc.filter((t) => t.depth === 2).slice(0, 3).map((t) => t.text.replace(/\s*\(.*?\)/g, "")).join(", ")} />
+            ))}
+            {notes.length > 0 && <Row href={`/docs/notes#notes-${d.id}`} title="Engineering notes" sub={`${notes.length} notes`} />}
+            {!guides.length && !notes.length && <Row href={`/docs/frames/${d.id}`} title="About this frame" sub="What it is and how it's put together" />}
           </ListCard>
         </div>
       </div>

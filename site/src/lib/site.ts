@@ -1,7 +1,6 @@
 import { PANES, STAGE_TEXT, capabilityText, type Stage } from "@glassworks/frame-card";
 
-/** The site's own origin, for anything that leaves it: README snippets, metadata. */
-export const SITE = "https://www.glassworks.dev";
+export { SITE, links } from "./links";
 
 /**
  * A README image that follows GitHub's theme: `src` is the image's URL without -on-dark.svg /
@@ -14,12 +13,6 @@ export const readmeImage = ({ href, src, alt, size }: { href: string; src: strin
   </picture>
 </a>`;
 
-export const links = {
-  org: "https://github.com/GlassworksHQ",
-  s1: "https://github.com/GlassworksHQ/glassworks",
-  /** the project's public email (maintainer, 2026-11-13) */
-  contact: "mailto:hi@glassworks.dev",
-} as const;
 
 /** A pane's id: the app's (the repo's pane.json files). */
 export type PaneId = string;

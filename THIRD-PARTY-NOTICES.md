@@ -422,6 +422,20 @@ renders above:
   **@fontsource/jetbrains-mono** 5.3.0 (OFL-1.1) with **opentype.js** 2.0.0 (MIT, "Copyright (c) 2020
   Frederik De Bleser", https://github.com/opentypejs/opentype.js). opentype.js only runs at build
   time and isn't shipped.
+- **Pagefind** 1.6.0 (MIT, "Copyright (c) Pagefind", https://github.com/Pagefind/pagefind): the docs'
+  search. It builds the index after `next build`, and its browser script, WebAssembly and index are
+  served under `/_next/static/pagefind/`.
+- The docs are rendered from the repo's Markdown at build time with **unified** 11.0.5,
+  **remark-parse** 11.0.0, **remark-gfm** 4.0.1, **remark-rehype** 11.1.2, **rehype-raw** 7.0.0,
+  **rehype-sanitize** 6.0.0, **rehype-slug** 6.0.0, **rehype-stringify** 10.0.1,
+  **unist-util-visit** 5.2.0, **hast-util-to-string** 3.0.1 and **hast-util-to-html** 9.0.6 (all
+  MIT, "Copyright (c) Titus Wormer", https://github.com/unifiedjs), **github-slugger** 2.0.0 (ISC, `LICENSES/ISC.txt`,
+  "Copyright (c) 2015, Dan Flettre"), **@shikijs/rehype** 4.6.0 and **Shiki** (MIT, "Copyright (c)
+  2021 Pine Wu" and "Copyright (c) 2023 Anthony Fu", https://github.com/shikijs/shiki), with its
+  GitHub Light and GitHub Dark themes from **@shikijs/themes** (MIT), and **image-size**
+  2.1.0 (MIT, "Copyright © 2013-Present Aditya Yadav", https://github.com/image-size/image-size).
+  They only run at build time and aren't shipped; the pages carry the HTML they produce and
+  Shiki's colours.
 
 ---
 

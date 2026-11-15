@@ -672,12 +672,14 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         # Fails closed like the branding job's: without a base commit to compare with (none, a
         # force-pushed or garbage-collected one) or when git diff fails, the site is checked.
+        # The docs link to files anywhere in the repo and the build checks those links, so any
+        # Markdown change, or any file deleted or renamed, also runs it.
         run: |
-          paths="site packages frames docs CHANGELOG.md tools/perf/grade.ts tools/perf/page/rubric.json package.json package-lock.json .github/workflows/pr.yml"
+          paths="site packages frames docs tools/perf/grade.ts tools/perf/page/rubric.json package.json package-lock.json .github/workflows/pr.yml :(glob)**/*.md"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); checking the site."
             echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
+          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths && git diff --name-only --diff-filter=DR "$BASE" HEAD); then
             echo "git diff failed; checking the site."
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [ -n "$changed" ]; then
@@ -704,6 +706,9 @@ jobs:
       - name: Builds as Vercel builds it
         if: steps.changed.outputs.run == 'true'
         run: npm run build -w site
+      - name: Each docs route carries the Markdown and images it renders
+        if: steps.changed.outputs.run == 'true'
+        run: npm run check:trace -w site
       - name: SEO check (sitemap, titles, descriptions, canonicals, preview images)
         if: steps.changed.outputs.run == 'true'
         run: npm run check:seo -w site

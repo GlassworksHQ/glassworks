@@ -5,7 +5,7 @@ import { FrameRows } from "@/components/FrameRows";
 import { PaneRows } from "@/components/PaneRows";
 import { frames } from "@/lib/frames";
 import { release } from "@/lib/release";
-import { links, panes, stageCounts } from "@/lib/site";
+import { panes, stageCounts } from "@/lib/site";
 import { JsonLd } from "@/components/JsonLd";
 import { SITE_DESCRIPTION, organizationLd, pageMetadata, softwareLd, websiteLd } from "@/lib/seo";
 import styles from "./page.module.css";
@@ -28,7 +28,7 @@ export default function Home() {
         <Tile href="/frames" label="Frames" value={frames.length} sub={stageCounts(frames)} />
         <Tile href="/panes" label="Panes" value={panes.length} sub={stageCounts(panes)} />
         <Tile href={release.href} label="Latest release" value={release.version} sub={`${app} · ${release.date}`} />
-        <Tile href={`${links.s1}/blob/main/docs/principles.md`} label="Docs" value="Principles" sub="What it is and isn't" />
+        <Tile href="/docs/principles" label="Docs" value="Principles" sub="What it is and isn't" />
       </Tiles>
 
       <ListCard id="panes" title="Panes" aside={<Link href="/panes">All panes ›</Link>}>

@@ -3,9 +3,7 @@ import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/seo";
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { MarkDefs } from "@/components/Mark";
-import { SiteFooter } from "@/components/SiteFooter";
-import { Shell } from "@/components/shell/Shell";
-import { Sidebar } from "@/components/shell/Sidebar";
+import { SearchDialog } from "@/components/search/SearchDialog";
 import { THEME_SCRIPT } from "@/components/shell/ThemeToggle";
 import chrome from "@/components/chrome.module.css";
 import "./globals.css";
@@ -43,12 +41,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a href="#content" className={chrome.skip}>
           Skip to content
         </a>
-        <Shell nav={<Sidebar />}>
-          <main id="content" className={chrome.main}>
-            {children}
-          </main>
-          <SiteFooter />
-        </Shell>
+        {children}
+        <SearchDialog />
       </body>
     </html>
   );
