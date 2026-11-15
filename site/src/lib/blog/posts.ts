@@ -63,6 +63,9 @@ function read(dir: string): PostSource {
   };
   const date = str("date");
   if (date !== name![1]) bad(`date ${date} isn't the folder's date ${name![1]}`);
+  // a real day: 2026-13-01 or 2026-02-30 would make a feed date no reader accepts
+  const day = Date.parse(`${date}T00:00:00Z`);
+  if (Number.isNaN(day) || new Date(day).toISOString().slice(0, 10) !== date) bad(`${date} isn't a calendar date`);
   if (data.draft !== undefined && typeof data.draft !== "boolean") bad("draft should be true or false");
   const cover = fs.existsSync(path.join(/* turbopackIgnore: true */ REPO, BLOG, dir, "cover.webp")) ? `${BLOG}/${dir}/cover.webp` : undefined;
   if (cover && !data.cover_alt) bad("cover.webp needs cover_alt");

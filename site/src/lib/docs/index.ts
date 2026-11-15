@@ -22,6 +22,8 @@ export type Doc = Source &
 /** A post, rendered: everything but its Markdown, plus the HTML. */
 export type Post = Omit<PostSource, "body"> & {
   html: string;
+  /** an H1 in the Markdown is dropped for the front matter's title, which keeps its id so #links to it land */
+  titleId: string;
   toc: Toc[];
   minutes: number;
   edit: string;
@@ -161,6 +163,7 @@ async function build(): Promise<{ docs: Doc[]; posts: Post[]; assets: string[] }
       posts.push({
         ...meta,
         html: r.html,
+        titleId: r.titleId,
         toc: r.toc,
         minutes: Math.max(1, Math.round(body.split(/\s+/).length / 220)),
         edit: `${GH}/edit/main/${s.file}`,

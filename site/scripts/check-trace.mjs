@@ -32,10 +32,15 @@ const posts = readdirSync(join(site, "blog"), { withFileTypes: true })
 const markdown = [...new Set([...SOURCES.map((s) => s.file), ...posts])];
 const need = [...markdown, ...images].sort();
 
-/* every page and route handler the build made */
-const ROUTES = walk(app)
-  .filter((f) => /\/(page|route)\.js\.nft\.json$/.test(f))
-  .map((f) => relative(app, f).replace(/\.js\.nft\.json$/, ""));
+/* every page and route handler the build made, from Next's own list of them, so a route
+   without a trace file is reported rather than skipped */
+const ROUTES = Object.values(JSON.parse(readFileSync(join(site, ".next/server/app-paths-manifest.json"), "utf8")))
+  .map((f) => f.replace(/^app\//, "").replace(/\.js$/, ""))
+  .sort();
+if (!ROUTES.length) {
+  console.error("Trace check: .next/server/app-paths-manifest.json lists no routes. Run it after npm run build.");
+  process.exit(1);
+}
 
 const bad = [];
 for (const route of ROUTES) {

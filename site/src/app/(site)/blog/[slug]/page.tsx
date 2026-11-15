@@ -67,7 +67,9 @@ async function Post({ params }: { params: PageProps<"/blog/[slug]">["params"] })
         <nav className={b.meta} aria-label="Breadcrumb">
           <Link href="/blog">Blog</Link>
         </nav>
-        <h1 className={b.title}>{p.title}</h1>
+        <h1 id={p.titleId || undefined} className={b.title}>
+          {p.title}
+        </h1>
         <p className={b.summary}>{p.summary}</p>
         <p className={b.meta}>
           <span className={b.by}>

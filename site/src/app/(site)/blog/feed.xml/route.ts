@@ -3,7 +3,8 @@ import { SITE } from "@/lib/site";
 
 /*
  * /blog/feed.xml: the blog as Atom, which every feed reader supports. Published posts only; a
- * draft is never in it, whatever the build shows. Links and images in the HTML are made absolute.
+ * draft is never in it, whatever the build shows. Links and images in the HTML are made absolute,
+ * and each entry's xml:base is its post, so a #link in it points into that post.
  */
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const absolute = (html: string) => html.replace(/(\s(?:href|src))="\/(?!\/)/g, `$1="${SITE}/`);
@@ -23,7 +24,7 @@ export async function GET() {
     <updated>${stamp(p.date)}</updated>
     <author><name>${esc(p.author)}</name></author>
     <summary>${esc(p.summary)}</summary>
-    <content type="html">${esc(absolute(p.html))}</content>
+    <content type="html" xml:base="${SITE}${p.url}">${esc(absolute(p.html))}</content>
   </entry>`,
     )
     .join("\n");
