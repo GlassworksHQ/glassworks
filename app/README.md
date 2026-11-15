@@ -90,8 +90,9 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
 - **Native Music Assistant player (Sendspin)**: MA sees the panel as its own player, named as Home Assistant names the device ("Aqara S1 Plus" on the S1), and plays
   to it in sync with your other Sendspin speakers (groupable). It pairs automatically: HA hands MA the
   panel's pairing token over the ESPHome API. See below and [docs/sendspin.md](../docs/sendspin.md).
-- **Notifications from Home Assistant**: `esphome.s1_panel_notify` shows a card over the dashboard
-  (picture, up to three buttons, a sound), or opens a dashboard view full screen; a button press fires
+- **Notifications from Home Assistant**: `esphome.<panel>_notify` (named after the panel's node name;
+  **Panes → Notifications → Action** shows it) shows a card over the dashboard (picture, up to three
+  buttons, a sound), or opens a dashboard view full screen; a button press fires
   `esphome.notification_action` in HA. Off by default. See [docs/notifications.md](../docs/notifications.md).
 - **Wi-Fi setup over Bluetooth (Improv via BLE)**: a panel with no network (30 s after boot), or one
   told to (`--ez improv true` / the HA button "Start Wi-Fi setup (Bluetooth)"), advertises the Improv
