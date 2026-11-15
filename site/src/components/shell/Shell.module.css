@@ -260,3 +260,7 @@ a.group:hover {
 .sub.on {
   color: var(--fg);
 }
+
+.sub.deep {
+  padding-left: 40px;
+}

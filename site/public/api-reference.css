@@ -1,0 +1,104 @@
+/*
+ * The site's look on the libraries' API reference: Dokka's own pages, unpacked from each javadoc jar
+ * by scripts/api-docs.mjs, which links this file into every page after Dokka's styles. It sets Dokka's
+ * variables to the site's tokens (src/app/globals.css) and styles the breadcrumb back to the docs.
+ * Dokka already uses Inter and JetBrains Mono, the site's fonts.
+ */
+:root {
+  --background-color: #eceef2;
+  --color-background-page: #eceef2;
+  --color-background-nav: #0a0b0f;
+  --color-background-nav-dt: #0a0b0f;
+  --color-key-blue: #0369a1;
+  --color-key-blue-hover: #0284c7;
+  --hover-link-color: #0369a1;
+  --active-section-color: #0369a1;
+  --sidemenu-section-active-color: #0369a1;
+  --color-background-footer: #e2e5eb;
+  --color-background-footer-dt: #111319;
+}
+
+/* the platform tag is a label, not a status: sky, not green */
+.filter-section .platform-tag.jvm-like[data-active],
+.platform-tags .platform-tag.jvm-like {
+  --platform-tag-color: #38bdf8;
+}
+
+.theme-dark {
+  --background-color: #0a0b0f;
+  --color-background-page-dt: #0a0b0f;
+  --color-dark: #111319;
+  --color-key-blue: #7dd3fc;
+  --color-key-blue-hover: #bae6fd;
+  --hover-link-color: #7dd3fc;
+  --sidemenu-section-active-color: #1c2230;
+}
+
+/* the page you're on in Dokka's tree: lit like the site's sidebar, not a solid blue bar */
+.toc--part[data-active] > .toc--row {
+  --color-key-blue: rgba(16, 20, 32, 0.08);
+  --color-key-blue-hover: rgba(16, 20, 32, 0.12);
+  --color-text-dt: #0c0e13;
+}
+
+.theme-dark .toc--part[data-active] > .toc--row {
+  --color-key-blue: rgba(255, 255, 255, 0.08);
+  --color-key-blue-hover: rgba(255, 255, 255, 0.12);
+  --color-text-dt: #f4f4f5;
+}
+
+.navigation {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* the breadcrumb takes the logo's place: Docs / <library> / API */
+.library-name--link::before {
+  display: none;
+}
+
+.gw-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  font: 400 16px/24px Inter, system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+.gw-crumbs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a1a1aa;
+  text-decoration: none;
+}
+
+.gw-crumbs a:hover {
+  color: #f4f4f5;
+}
+
+.gw-crumbs a::after {
+  content: "/";
+  color: #63636b;
+}
+
+.gw-home::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  background: url("/brand/mark-on-dark.svg") center / contain no-repeat;
+}
+
+@media (max-width: 899px) {
+  .gw-crumbs {
+    margin-left: 12px;
+  }
+
+  .gw-crumbs a:not(.gw-home) {
+    display: none;
+  }
+
+  .library-name--link {
+    margin-left: 0;
+  }
+}

@@ -1,9 +1,19 @@
 import { frames } from "../frames";
 import { PANES, STAGE_TEXT } from "@glassworks/frame-card";
 import { getDocs, SECTIONS, type Doc } from "./index";
+import { apiReferenceOf } from "../apiDocs";
 
-/** The docs' sidebar: sections of links, a frame's guides nested under it. */
-export type NavItem = { label: string; href: string; aside?: string; children?: NavItem[] };
+/** The docs' sidebar: sections of links, a frame's guides nested under it, a library's API reference under it. */
+export type NavItem = {
+  label: string;
+  href: string;
+  aside?: string;
+  children?: NavItem[];
+  /** a page Next doesn't route (the static API reference, javadoc.io): a plain link */
+  plain?: boolean;
+  /** one step deeper than a child */
+  deep?: boolean;
+};
 export type NavGroup = { label: string; items: NavItem[] };
 
 const item = (d: Doc): NavItem => ({ label: d.label ?? d.title, href: d.url });
@@ -29,7 +39,21 @@ export async function docsNav(): Promise<NavGroup[]> {
     build: [
       ...docs.filter((d) => d.url === "/docs/core/pane-api").map(item),
       { label: "Panes", href: "/docs/panes", aside: String(PANES.length) },
-      { label: "Libraries", href: "/docs/libraries", aside: String(libraries.length) },
+      {
+        label: "Libraries",
+        href: "/docs/libraries",
+        aside: String(libraries.length),
+        children: libraries.flatMap((d) => {
+          const api = apiReferenceOf(d.file)?.reference;
+          const ref: NavItem[] =
+            api?.kind === "site"
+              ? [{ label: "API", href: api.href, aside: api.version, plain: true, deep: true }]
+              : api?.kind === "javadoc.io"
+                ? [{ label: "API", href: api.href, aside: "javadoc.io", plain: true, deep: true }]
+                : [];
+          return [item(d), ...ref];
+        }),
+      },
       ...docs.filter((d) => d.url.startsWith("/docs/kiln")).map(item),
     ],
     project: of("project").map(item),

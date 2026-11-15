@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# the libraries' API reference, from Maven Central at build time (scripts/api-docs.mjs)
+/.api-docs/
+/public/docs/libraries/
+/public/docs/libraries.next/

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { DocArticle } from "@/components/docs/DocArticle";
 import { NotesList } from "@/components/docs/NotesList";
 import { JsonLd } from "@/components/JsonLd";
+import { apiReferenceOf } from "@/lib/apiDocs";
 import { getDoc, getDocs } from "@/lib/docs";
 import { SOURCES } from "@/lib/docs/sources";
 import { articleLd, breadcrumbLd, pageMetadata, type SitePath } from "@/lib/seo";
@@ -48,7 +49,7 @@ async function Doc({ params }: { params: PageProps<"/docs/[...slug]">["params"] 
           ]),
         ]}
       />
-      <DocArticle doc={doc} prev={same[i - 1]} next={same[i + 1]} after={doc.url === "/docs/notes" ? <NotesList /> : undefined} />
+      <DocArticle doc={doc} prev={same[i - 1]} next={same[i + 1]} after={doc.url === "/docs/notes" ? <NotesList /> : undefined} api={apiReferenceOf(doc.file)} />
     </>
   );
 }

@@ -4,7 +4,8 @@
  *   npm run check:seo -w site
  *
  * Starts `next start` on a free port (reads .next/ only, writes nothing), then fails when:
- *   - a prerendered page is missing from /sitemap.xml, or the sitemap lists a page that isn't built;
+ *   - a prerendered page is missing from /sitemap.xml, or the sitemap lists a page that isn't built
+ *     (prerendered, or a static .html file in public/, as the libraries' API reference is);
  *   - a page in the sitemap doesn't answer 200, or lacks one <title>, a meta description, a canonical
  *     equal to its own URL, og:url, og:image or twitter:image (and each image must load as a PNG);
  *   - two pages share a title or a description;
@@ -14,7 +15,7 @@
  * Set SEO_BASE_URL to check a running site instead (e.g. http://localhost:3000).
  */
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
@@ -86,7 +87,8 @@ try {
     (r) => !/\.[a-z]+$|\/(opengraph|twitter)-image$|^\/_/.test(r) && !r.endsWith("/manifest.webmanifest") && status(r) !== 404,
   );
   for (const p of pages) if (!paths.includes(p)) fail(p, "built but not in the sitemap (src/lib/routes.ts)");
-  for (const p of paths) if (!pages.includes(p)) fail(p, "in the sitemap but not a built page");
+  const staticPage = (p) => p.endsWith(".html") && existsSync(join(site, "public", p));
+  for (const p of paths) if (!pages.includes(p) && !staticPage(p)) fail(p, "in the sitemap but not a built page");
 
   /* every page's head */
   const attr = (html, re) => html.match(re)?.[1];
