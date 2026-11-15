@@ -8,7 +8,7 @@
  * running, so a port clash can be retried; client counts are reported in order from one thread; stop()
  * copies its connection and session sets without racing a connection that ends; the panel's name in
  * place of "AndroidIPCamera"; at most 16 connections, a 30 s read timeout until a session plays, and
- * 30 s in all to sign in. */
+ * 30 s in all to sign in; [localPort] reads the bound port, as OnvifServer's does. */
 
 package dev.glassworks.camera.onvif
 
@@ -62,6 +62,9 @@ class RtspServer(
     private val random = SecureRandom()
     private val clock0 = System.nanoTime()
     private val sessionVersion = System.currentTimeMillis() / 1000
+
+    /** Actual bound TCP port (useful when constructed with port 0). */
+    val localPort: Int get() = serverSocket?.localPort ?: port
 
     // Cached parameter sets from the latest keyframe.
     @Volatile private var sps: ByteArray? = null

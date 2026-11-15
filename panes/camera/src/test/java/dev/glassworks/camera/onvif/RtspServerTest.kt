@@ -31,12 +31,15 @@ class RtspServerTest {
     private val feeding = AtomicBoolean(true)
     private var port = 0
 
-    private fun freePort() = ServerSocket(0).use { it.localPort }
+    /** Binds port 0 and reads the port back: picking a free port and binding it later races anything else that binds. */
+    private fun serve(s: RtspServer) {
+        server = s
+        s.start()
+        port = s.localPort
+    }
 
     private fun startServer(creds: Pair<String, String>? = USER) {
-        port = freePort()
-        server = RtspServer(port, { creds }, { counts += it })
-        server.start()
+        serve(RtspServer(0, { creds }, { counts += it }))
         // Simulated encoder: keyframe every 10 frames at ~30 fps
         Thread {
             var i = 0
@@ -165,9 +168,7 @@ class RtspServerTest {
     }
 
     @Test fun describeWaitsForFirstKeyframeAndReportsDemand() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it })
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }))
         feeding.set(false)
         Thread {
             // Encoder only starts once a client signals demand.
@@ -223,9 +224,9 @@ class RtspServerTest {
     }
 
     @Test fun aPortClashThrowsAndALaterStartBinds() {
-        port = freePort()
+        val squatter = ServerSocket(0)
+        port = squatter.localPort
         server = RtspServer(port, { USER }, { counts += it })
-        val squatter = ServerSocket(port)
         assertTrue(runCatching { server.start() }.isFailure)
         squatter.close()
         assertTrue(bindsWithin(port))
@@ -236,14 +237,12 @@ class RtspServerTest {
     }
 
     @Test fun clientCountsReachTheHostInOrderEvenWhenItsCallbackIsSlow() {
-        port = freePort()
         val firstIn = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
-        server = RtspServer(port, { USER }, { n ->
+        serve(RtspServer(0, { USER }, { n ->
             if (n == 1 && firstIn.count > 0) { firstIn.countDown(); release.await() } // a host that takes its time
             counts += n
-        })
-        server.start()
+        }))
         Thread { var i = 0; while (feeding.get()) { server.onAccessUnit(if (i++ % 10 == 0) idr else pFrame, i % 10 == 1); Thread.sleep(33) } }
             .apply { isDaemon = true; start() }
         Thread.sleep(150)
@@ -276,9 +275,7 @@ class RtspServerTest {
     }
 
     @Test fun connectionsOverTheCapAreClosedAtOnce() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it }, maxConnections = 2)
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }, maxConnections = 2))
         val a = Client(port); val b = Client(port)
         assertTrue(a.request("OPTIONS", "rtsp://127.0.0.1:$port/live").first.startsWith("RTSP/1.0 200"))
         assertTrue(b.request("OPTIONS", "rtsp://127.0.0.1:$port/live").first.startsWith("RTSP/1.0 200"))
@@ -288,9 +285,7 @@ class RtspServerTest {
     }
 
     @Test fun aSilentConnectionIsClosedButAPlayingOneIsNot() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it }, handshakeTimeoutMs = 300)
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }, handshakeTimeoutMs = 300))
         Thread { var i = 0; while (feeding.get()) { server.onAccessUnit(if (i++ % 10 == 0) idr else pFrame, i % 10 == 1); Thread.sleep(33) } }
             .apply { isDaemon = true; start() }
         Thread.sleep(150)
@@ -309,9 +304,7 @@ class RtspServerTest {
     }
 
     @Test fun optionsCantKeepAConnectionOpenWithoutSigningIn() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it }, handshakeTimeoutMs = 400)
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }, handshakeTimeoutMs = 400))
         val c = Client(port, auth = null)
         val url = "rtsp://127.0.0.1:$port/live"
         val closed = runCatching { repeat(20) { c.request("OPTIONS", url); Thread.sleep(100) } }.isFailure
@@ -329,25 +322,19 @@ class RtspServerTest {
     }
 
     @Test fun interleavedFramesCantKeepAConnectionOpenWithoutSigningIn() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it }, handshakeTimeoutMs = 400)
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }, handshakeTimeoutMs = 400))
         // Kept busy the whole time, so the read timeout never fires: only the deadline can close it.
         assertTrue(closedWhileSending(byteArrayOf('$'.code.toByte(), 1, 0, 4, 0x80.toByte(), 201.toByte(), 0, 1)))
     }
 
     @Test fun strayLineBreaksCantKeepAConnectionOpenWithoutSigningIn() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it }, handshakeTimeoutMs = 400)
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }, handshakeTimeoutMs = 400))
         // The reader skips these without returning: the reaper has to close it.
         assertTrue(closedWhileSending(byteArrayOf('\r'.code.toByte())))
     }
 
     @Test fun theSdpCarriesTheFrameRateWhenKnown() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it }, fps = 15)
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }, fps = 15))
         server.onAccessUnit(idr, true)
         val (_, sdp) = Client(port).request("DESCRIBE", "rtsp://127.0.0.1:$port/live", listOf("Accept: application/sdp"))
         assertTrue(sdp, sdp.contains("a=framerate:15\r\n"))
@@ -355,9 +342,7 @@ class RtspServerTest {
     }
 
     @Test fun theStreamCarriesThePanelsName() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it }, name = "Hall Panel")
-        server.start()
+        serve(RtspServer(0, { USER }, { counts += it }, name = "Hall Panel"))
         server.onAccessUnit(idr, true)
         val c = Client(port, auth = null)
         val url = "rtsp://127.0.0.1:$port/live"
@@ -371,10 +356,11 @@ class RtspServerTest {
     }
 
     @Test fun nothingListensUntilStart() {
-        port = freePort()
-        server = RtspServer(port, { USER }, { counts += it })
-        assertTrue("free: the constructor opened nothing", bindsWithin(port))
-        server.start()
+        ServerSocket(0).use { held ->
+            // The port is held, so a constructor that bound it would throw.
+            RtspServer(held.localPort, { USER }, { counts += it })
+        }
+        serve(RtspServer(0, { USER }, { counts += it }))
         assertTrue("taken while it runs", runCatching { ServerSocket(port).close() }.isFailure)
         server.stop()
         assertTrue("and stop() let it go", bindsWithin(port))
