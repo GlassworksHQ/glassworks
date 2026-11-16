@@ -324,7 +324,7 @@ for copying firmware, not a way to drive the system.
 | Trusted components | `cmnlib`, `keymaster`, `playread`, `widevine`, `sampleap`, `isdbtmm` (`*.b0x` + `.mdt`) | ~1.1 MB |
 | Boot helper | `mba.mbn` | 230 KB |
 
-52 files, about 15 MB. `/persist` has 27.5 MB total and 27.3 MB free, which is why the copy is done
+53 files, about 15 MB. `/persist` has 27.5 MB total and 27.3 MB free, which is why the copy is done
 in batches: `qti_init_shell` may write there, but the space is calibration storage, not scratch.
 
 **Reversibility, split in two.** On this unit the change is `/system` only, the published image is on
@@ -429,18 +429,18 @@ from the policy, `dmesg` and AOSP 6.0.1_r81; `flash_recovery` stays untested and
 
 Where the work stands, in order, as of 2026-11-15:
 
-- **Copy the firmware out.** `/firmware/image` is 52 files, ~15 MB, and `/persist` has 27.3 MB free,
+- **Copy the firmware out.** `/firmware/image` is 53 files, ~15 MB, and `/persist` has 27.3 MB free,
   so it goes in batches: each boot copies at most 12 MB into `/persist` as `gw-fw-*`, `adb pull`
   takes them, the next boot clears them and copies the next batch (`gw-done.txt` remembers what
-  went). Then one more hook run deletes the `gw-*` files, and `fastboot flash system` with the
+  went). Then a boot on a cleanup build deletes the `gw-*` files, and `fastboot flash system` with the
   published image removes the hook. The firmware itself stays outside the repo.
 - **Custom `.ko`:** reproduce this kernel's `vermagic`/CRCs from CAF `msm-3.10` + this `.config`;
-  a replacement `wlan` must chain-load the original (§4). This is the only way past §7's limits
-  (`sys_module` is in the domain's capability set), and the only step here that can damage the
-  panel — a wrong regulator or panel value is physical damage, and there is no working EDL loader
-  for this chip to fall back on. This is the one route this note found past §7's limits, and it is
-  **untested** — no run here rules out another. **This note stops here**: the firmware copy and #41
-  are what this pass set out to get, and the kernel route is a separate decision, not a follow-on.
+  a replacement `wlan` must chain-load the original (§4). It is the one route this note found past
+  §7's limits (`sys_module` is in the domain's capability set) — **untested**, and nothing here
+  rules out another — and the only step here that can damage the panel: a wrong regulator or panel
+  value is physical damage, and there is no working EDL loader for this chip to fall back on.
+  **This note stops here**: the firmware copy and #41 are what this pass set out to get, and the
+  kernel route is a separate decision, not a follow-on.
 - **Kiosk work, no flash at all:** the platform test-key app (§6) for Wi-Fi, rotation and lock screen.
   That is a different thread's job and needs none of the above.
 
