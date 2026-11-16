@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { Steps, dropAdmin, grantPermissions, kioskVersion, q, startApp } from '../src';
+import { Steps, apkHome, apkInfo, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
+import { fakeApk } from './fakes';
 
 class Shell implements PanelShell {
   cmds: string[] = [];
@@ -108,3 +109,20 @@ describe('the APK\'s package, read before anything is installed', () => {
     await expect(apkPackage(new TextEncoder().encode('not a real APK'))).rejects.toThrow(/isn't an APK/);
   });
 });
+
+describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16)', () => {
+  it.each([[false], [true]])('finds an activity with MAIN and HOME, and whether it is on (utf8 %s)', async (utf8) => {
+    expect(await apkHome(fakeApk('sh.edm.s1kiosk', { utf8 }))).toEqual({ on: ['sh.edm.s1kiosk.MainActivity'], off: [], unclear: [] });
+    expect(await apkHome(fakeApk('sh.edm.s1kiosk', { utf8, home: 'off' }))).toEqual({ on: [], off: ['sh.edm.s1kiosk.MainActivity'], unclear: [] });
+    expect(await apkHome(fakeApk('sh.edm.s1kiosk', { utf8, home: 'none' }))).toEqual({ on: [], off: [], unclear: [] });
+  });
+
+  it('reads the tree with the package and minSdkVersion around it unchanged', async () => {
+    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23 });
+    expect(await apkInfo(apk)).toMatchObject({ package: 'sh.edm.s1kiosk', minSdk: 23 });
+    const tree = axmlTree((await zipEntry(apk, 'AndroidManifest.xml'))!);
+    expect(tree.map((e) => e.name)).toEqual(['manifest']);
+    expect(tree[0]!.children.map((e) => e.name)).toEqual(['uses-sdk', 'application']);
+  });
+});
+

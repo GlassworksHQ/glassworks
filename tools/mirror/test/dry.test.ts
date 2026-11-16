@@ -89,6 +89,16 @@ describe('the headless install on a fake Mirror', () => {
     expect(again.lk.commands.filter((c) => c.startsWith('flash:'))).toEqual(['flash:system', 'flash:userdata']);
   }, 60_000);
 
+  it('refuses an APK with no home screen at the first step, before the image is read or the Mirror restarted', async () => {
+    const img = await dryImage(work);
+    const d = dryDevices(img.bytes, () => {});
+    const off = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'off' });
+    await expect(runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: off, adbKey: KEY, work }, d.deps)).rejects.toThrow(/can't be the Mirror's home screen/);
+    expect(d.state()).toBe('android');
+    expect(d.before.cmds).toEqual([]);
+    expect(d.lk.commands).toEqual([]);
+  });
+
   it('refuses a board that isn\'t the original Mirror, before anything else', async () => {
     const img = await dryImage(work);
     const d = dryDevices(img.bytes, () => {});

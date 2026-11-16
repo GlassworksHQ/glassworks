@@ -5,7 +5,7 @@
 // answer "Allow USB debugging?". Nothing here is downloaded from or uploaded to anyone: the person's
 // file goes in, and the patched copy stays in their browser until fastboot writes it.
 // The findings behind each step: frames/lululemon-mirror/research/image-patch.md.
-import { PKG, apkInfo, zipEntry, zipNames } from '@glassworks/app-adb';
+import { PKG, apkHome, apkInfo, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
@@ -62,6 +62,28 @@ export function setProp(text: string, key: string, value: string): string {
 }
 
 /**
+ * Refuses an APK the Mirror can't run as its only screen, before anything is written: not S1 Kiosk,
+ * above Android 6's API, no native code for its ABIs, or no home screen Android can open. The Mirror
+ * has no touchscreen: with no home screen, it starts to nothing (its first real flash, 2026-11-16).
+ */
+export async function checkMirrorApk(apk: Uint8Array): Promise<ApkInfo> {
+  const info = await apkInfo(apk);
+  if (info.package !== PKG) throw new Error(`this APK is ${info.package}, not S1 Kiosk (${PKG}). Nothing was changed.`);
+  // the Mirror runs Android 6 (API 23) on arm64 with 32-bit arm too (frame.json abis): the legacy build fits
+  const min = info.minSdk ?? 1;
+  if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): pick S1 Kiosk's legacy build. Nothing was changed.`);
+  if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: pick S1 Kiosk's legacy build. Nothing was changed.`);
+  const home = await apkHome(apk);
+  if (!home.on.length) {
+    const why = home.off.length ? `its home screen (${home.off.join(', ')}) is turned off in its manifest`
+      : home.unclear.length ? `whether its home screen (${home.unclear.join(', ')}) is on depends on a resource Kiln doesn't read`
+        : 'it has no home screen (no activity for MAIN and HOME)';
+    throw new Error(`this APK can't be the Mirror's home screen: ${why}. The Mirror has no touchscreen, so it would start to nothing: pick a build of S1 Kiosk made for Android 6. Nothing was changed.`);
+  }
+  return info;
+}
+
+/**
  * Changes the Glass Panes system image on `fs` (already checked by SHA-256). Running it twice gives
  * the same result. Throws, with nothing written, unless it is the expected image and APK.
  */
@@ -69,12 +91,7 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const prop = new TextDecoder().decode(await fs.readFile('/build.prop'));
   if (!prop.includes(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`)) throw new Error('this isn\'t the Glass Panes Mirror image Kiln knows (its build fingerprint differs). Nothing was changed.');
-  const info = await apkInfo(o.apk);
-  if (info.package !== PKG) throw new Error(`this APK is ${info.package}, not S1 Kiosk (${PKG}). Nothing was changed.`);
-  // the Mirror runs Android 6 (API 23) on arm64 with 32-bit arm too (frame.json abis): the legacy build fits
-  const min = info.minSdk ?? 1;
-  if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): pick S1 Kiosk's legacy build. Nothing was changed.`);
-  if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: pick S1 Kiosk's legacy build. Nothing was changed.`);
+  await checkMirrorApk(o.apk);
   const names = zipNames(o.apk);
   // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them: an empty lib/<abi>/ folder doesn't count
   const soIn = (a: string) => names.filter((n) => n.startsWith(`lib/${a}/`) && n.endsWith('.so') && !n.slice(`lib/${a}/`.length).includes('/'));

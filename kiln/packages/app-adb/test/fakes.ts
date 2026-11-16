@@ -2,14 +2,21 @@
 // apkPackage, the tests and Kiln's demos. Nothing in it would install.
 
 /** `shadow`: an unqualified minSdkVersion before the real one; `minSdkKind`: its value type (0x10, int, by default). */
-interface AxmlOptions { minSdk?: number; stripNames?: boolean; shadow?: number; minSdkKind?: number; minSdkRaw?: '23' }
+interface AxmlOptions {
+  minSdk?: number; stripNames?: boolean; shadow?: number; minSdkKind?: number; minSdkRaw?: '23';
+  /** its home screen: an activity with MAIN and HOME, on (the default) or android:enabled="false"; none: no activity */
+  home?: 'on' | 'off' | 'none';
+}
 
 function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
   const { minSdk, stripNames = false } = o;
   // strings: 0 manifest, 1 package, 2 pkg, 3 uses-sdk, 4 minSdkVersion (left empty, as some builds do, with
   // stripNames), 5 the android namespace, 6 a second, unqualified "minSdkVersion" (no resource id), 7 "23" (a
   // raw string for minSdkRaw, which can disagree with the typed value)
-  const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion', 'http://schemas.android.com/apk/res/android', 'minSdkVersion', '23'];
+  // 8- the home screen: <application><activity android:name android:enabled><intent-filter><action/><category/>
+  const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion', 'http://schemas.android.com/apk/res/android', 'minSdkVersion', '23',
+    'application', 'activity', 'name', '.MainActivity', 'enabled', 'intent-filter', 'action', 'android.intent.action.MAIN', 'category', 'android.intent.category.HOME'];
+  const home = o.home ?? 'on';
   const enc = new TextEncoder();
   const bodies = strs.map((s) => {
     if (utf8) { const b = enc.encode(s); return Uint8Array.of(s.length, b.length, ...b, 0); }
@@ -26,7 +33,8 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
   const mapSize = 8 + 5 * 4; // resource ids for strings 0-4: only minSdkVersion has one
   const elemSize = (attrs: number) => 16 + 20 + 20 * attrs;
   const sdkAttrs = o.shadow !== undefined ? 2 : 1;
-  const total = 8 + poolSize + mapSize + elemSize(1) + (minSdk !== undefined ? elemSize(sdkAttrs) : 0);
+  const homeSize = home === 'none' ? 0 : elemSize(0) * 2 + elemSize(home === 'off' ? 2 : 1) + elemSize(1) * 2 + 24 * 5;
+  const total = 8 + poolSize + mapSize + elemSize(1) + (minSdk !== undefined ? elemSize(sdkAttrs) + 24 : 0) + homeSize;
   const x = new Uint8Array(total);
   const v = new DataView(x.buffer);
   v.setUint16(0, 0x0003, true); v.setUint16(2, 8, true); v.setUint32(4, total, true);
@@ -54,12 +62,26 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
     });
     p += size;
   };
+  const end = (name: number) => {
+    v.setUint16(p, 0x0103, true); v.setUint16(p + 2, 16, true); v.setUint32(p + 4, 24, true);
+    v.setUint32(p + 8, 1, true); v.setUint32(p + 12, NONE, true); v.setUint32(p + 16, NONE, true); v.setUint32(p + 20, name, true);
+    p += 24;
+  };
   element(0, [{ ns: NONE, attr: 1, kind: 0x03, data: 2 }]);
   if (minSdk !== undefined) {
     element(3, [
       ...(o.shadow !== undefined ? [{ ns: NONE, attr: 6, kind: 0x10, data: o.shadow }] : []),
       { ns: 5, attr: 4, kind: o.minSdkKind ?? 0x10, data: minSdk, ...(o.minSdkRaw ? { raw: 7 } : {}) },
     ]);
+    end(3);
+  }
+  if (home !== 'none') {
+    element(8, []);
+    element(9, [{ ns: 5, attr: 10, kind: 0x03, data: 11 }, ...(home === 'off' ? [{ ns: 5, attr: 12, kind: 0x12, data: 0 }] : [])]);
+    element(13, []);
+    element(14, [{ ns: 5, attr: 10, kind: 0x03, data: 15 }]); end(14);
+    element(16, [{ ns: 5, attr: 10, kind: 0x03, data: 17 }]); end(16);
+    end(13); end(9); end(8);
   }
   return x;
 }

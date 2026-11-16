@@ -94,6 +94,7 @@ describe('install', () => {
     const p = new FakeMirror();
     await expect(installMirror(p, { apk: fakeApk('com.nimrod.mirrorkiosk'), sleep: noSleep })).rejects.toThrow(/is com\.nimrod\.mirrorkiosk, not S1 Kiosk.*Nothing was changed/);
     await expect(installMirror(p, { apk: new TextEncoder().encode('not an apk'), sleep: noSleep })).rejects.toThrow(/isn't an APK/);
+    await expect(installMirror(p, { apk: fakeApk('sh.edm.s1kiosk', { home: 'off' }), sleep: noSleep })).rejects.toThrow(/can't be the Mirror's home screen/);
     expect(p.cmds.filter((c) => WRITES.test(c))).toEqual([]);
   });
 

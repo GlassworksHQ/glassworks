@@ -13,7 +13,8 @@ Glass Panes image (`--way-back`).
 
 Each step is printed and waits for `y`. `--yes` answers every question.
 
-1. Checks over adb, read-only: the board must be `msm8916`.
+1. Checks, read-only: the APK must be S1 Kiosk for Android 6 with a home screen Android can open
+   (an enabled activity for MAIN and HOME), then over adb the board must be `msm8916`.
 2. The warning above.
 3. Load `system.img` (a local file, or `--refract`), and check its size and SHA-256.
 4. `adb reboot bootloader`.

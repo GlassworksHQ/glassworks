@@ -83,6 +83,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('com.nimrod.mirrorkiosk') })).rejects.toThrow(/not S1 Kiosk.*Nothing was changed/);
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 26 }) })).rejects.toThrow(/needs Android API 26.*pick S1 Kiosk's legacy build\. Nothing was changed/);
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { x86_64: { 'libxul.so': new Uint8Array(4) } } }) })).rejects.toThrow(/native code only for x86_64.*Nothing was changed/);
+    // no home screen Android can open: the Mirror would start to nothing (its first real flash, 2026-11-16)
+    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'off' }) })).rejects.toThrow(/can't be the Mirror's home screen: its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off in its manifest.*Nothing was changed/);
+    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'none' }) })).rejects.toThrow(/it has no home screen \(no activity for MAIN and HOME\)/);
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
     expect(hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest())).toBe(before2);
   }, 60_000);

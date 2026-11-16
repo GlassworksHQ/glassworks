@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
 import type { Store } from '@glassworks/ext4';
 import {
-  GLASS_PANES, GLASS_PANES_USERDATA, buildImages, checkDownload, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
+  GLASS_PANES, GLASS_PANES_USERDATA, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
   type FastbootLike, type FirstBoot,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -100,6 +100,9 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
   try {
     await steps(d, [
       ['Checks (read-only)', async () => {
+        // the APK first: one the Mirror can't run as its home screen stops here, before anything is read or written
+        const apk = await checkMirrorApk(o.apk);
+        d.log(`    APK: ${apk.package}, minSdk ${apk.minSdk ?? 1}, home screen on`);
         const p = await d.adb();
         if (!p) { d.log('    no adb: the Mirror is in fastboot already, or off'); return; }
         const prop = async (k: string) => (await p.run(`getprop ${k}`)).out.trim();

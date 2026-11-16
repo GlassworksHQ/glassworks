@@ -54,6 +54,26 @@ export async function zipEntry(zip: Uint8Array, name: string): Promise<Uint8Arra
   return undefined;
 }
 
+/** A string pool chunk (RES_STRING_POOL_TYPE) at `at`: its strings, UTF-8 or UTF-16. */
+function stringPool(xml: Uint8Array, dv: DataView, at: number, hsize: number): string[] {
+  const n = dv.getUint32(at + 8, true), utf8 = !!(dv.getUint32(at + 16, true) & 0x100), base = at + dv.getUint32(at + 20, true);
+  const strings: string[] = [];
+  for (let i = 0; i < n; i++) {
+    let p = base + dv.getUint32(at + hsize + i * 4, true);
+    if (utf8) {
+      p += xml[p]! & 0x80 ? 2 : 1;               // length in UTF-16 units
+      let len = xml[p]!; p++;
+      if (len & 0x80) { len = ((len & 0x7f) << 8) | xml[p]!; p++; }
+      strings.push(td8.decode(xml.subarray(p, p + len)));
+    } else {
+      let len = dv.getUint16(p, true); p += 2;
+      if (len & 0x8000) { len = ((len & 0x7fff) << 16) | dv.getUint16(p, true); p += 2; }
+      strings.push(td16.decode(xml.subarray(p, p + len * 2)));
+    }
+  }
+  return strings;
+}
+
 /** Android's resource ids for the manifest attributes read here (android.R.attr). */
 const ATTR_IDS: Record<string, number> = { minSdkVersion: 0x0101020c };
 /** Attributes that only count without a namespace. */
@@ -74,21 +94,7 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
     const type = dv.getUint16(at, true), hsize = dv.getUint16(at + 2, true), size = dv.getUint32(at + 4, true);
     if (size < 8) break;
     if (type === 0x0001) {
-      const n = dv.getUint32(at + 8, true), utf8 = !!(dv.getUint32(at + 16, true) & 0x100), base = at + dv.getUint32(at + 20, true);
-      strings = [];
-      for (let i = 0; i < n; i++) {
-        let p = base + dv.getUint32(at + hsize + i * 4, true);
-        if (utf8) {
-          p += xml[p]! & 0x80 ? 2 : 1;               // length in UTF-16 units
-          let len = xml[p]!; p++;
-          if (len & 0x80) { len = ((len & 0x7f) << 8) | xml[p]!; p++; }
-          strings.push(td8.decode(xml.subarray(p, p + len)));
-        } else {
-          let len = dv.getUint16(p, true); p += 2;
-          if (len & 0x8000) { len = ((len & 0x7fff) << 16) | dv.getUint16(p, true); p += 2; }
-          strings.push(td16.decode(xml.subarray(p, p + len * 2)));
-        }
-      }
+      strings = stringPool(xml, dv, at, hsize);
     } else if (type === 0x0180) {
       resIds = [];
       for (let o = at + hsize; o < at + size; o += 4) resIds.push(dv.getUint32(o, true));
@@ -143,4 +149,75 @@ export async function apkInfo(apk: Uint8Array): Promise<ApkInfo> {
 /** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */
 export async function apkPackage(apk: Uint8Array): Promise<string> {
   return (await apkInfo(apk)).package;
+}
+
+/** A value in binary XML: a string, an integer, a boolean, or another type (a reference, …) as it is. */
+export type AxmlValue = string | number | boolean | { type: number; data: number };
+/** One element: its attributes (android:… for namespaced ones, by resource id where the build kept it) and children. */
+export interface AxmlElement { name: string; attrs: Record<string, AxmlValue>; children: AxmlElement[] }
+
+/** Framework attributes read by resource id (android.R.attr), as Android reads them. */
+const ATTR_BY_ID: Record<number, string> = { 0x01010003: 'name', 0x0101000e: 'enabled', 0x01010202: 'targetActivity' };
+
+/** Binary XML as a tree. An element left open at the end (no end event) still counts. */
+export function axmlTree(xml: Uint8Array): AxmlElement[] {
+  const dv = new DataView(xml.buffer, xml.byteOffset, xml.byteLength);
+  if (dv.getUint16(0, true) !== 0x0003) throw new Error('AndroidManifest.xml isn\'t binary XML');
+  let strings: string[] = [];
+  let resIds: number[] = [];
+  const roots: AxmlElement[] = [];
+  const open: AxmlElement[] = [];
+  for (let at = dv.getUint16(2, true); at + 8 <= xml.length;) {
+    const type = dv.getUint16(at, true), hsize = dv.getUint16(at + 2, true), size = dv.getUint32(at + 4, true);
+    if (size < 8) break;
+    if (type === 0x0001) strings = stringPool(xml, dv, at, hsize);
+    else if (type === 0x0180) { resIds = []; for (let o = at + hsize; o < at + size; o += 4) resIds.push(dv.getUint32(o, true)); }
+    else if (type === 0x0102) {
+      const ext = at + hsize;
+      const el: AxmlElement = { name: strings[dv.getUint32(ext + 4, true)] ?? '', attrs: {}, children: [] };
+      const aStart = dv.getUint16(ext + 8, true), aSize = dv.getUint16(ext + 10, true), aCount = dv.getUint16(ext + 12, true);
+      for (let i = 0; i < aCount; i++) {
+        const a = ext + aStart + i * aSize;
+        const ns = dv.getUint32(a, true), nameIdx = dv.getUint32(a + 4, true);
+        const id = resIds[nameIdx];
+        const bare = (id !== undefined ? ATTR_BY_ID[id] : undefined) ?? strings[nameIdx] ?? '';
+        const key = ns === 0xffffffff ? bare : `android:${bare}`;
+        const kind = xml[a + 15]!, data = dv.getUint32(a + 16, true);
+        el.attrs[key] = kind === 0x03 ? strings[data] ?? '' : kind === 0x10 || kind === 0x11 ? data | 0 : kind === 0x12 ? data !== 0 : { type: kind, data };
+      }
+      (open.at(-1)?.children ?? roots).push(el);
+      open.push(el);
+    } else if (type === 0x0103) open.pop();
+    at += size;
+  }
+  return roots;
+}
+
+/**
+ * The APK's home screens: activities (and aliases) with an intent filter for MAIN and HOME. `on`
+ * Android can open; `off` the manifest turns off (android:enabled="false" on it or its application);
+ * `unclear` turned on or off by a resource Kiln doesn't resolve.
+ */
+export async function apkHome(apk: Uint8Array): Promise<{ on: string[]; off: string[]; unclear: string[] }> {
+  const manifest = await zipEntry(apk, 'AndroidManifest.xml');
+  if (!manifest) throw new Error('this file isn\'t an APK (no AndroidManifest.xml)');
+  const out = { on: [] as string[], off: [] as string[], unclear: [] as string[] };
+  const pkg = axmlAttribute(manifest, 'manifest', 'package');
+  const full = (n: string) => (n.startsWith('.') && typeof pkg === 'string' ? pkg + n : n);
+  for (const m of axmlTree(manifest).filter((e) => e.name === 'manifest')) {
+    for (const app of m.children.filter((e) => e.name === 'application')) {
+      for (const act of app.children.filter((e) => e.name === 'activity' || e.name === 'activity-alias')) {
+        const home = act.children.some((f) => f.name === 'intent-filter'
+          && f.children.some((c) => c.name === 'action' && c.attrs['android:name'] === 'android.intent.action.MAIN')
+          && f.children.some((c) => c.name === 'category' && c.attrs['android:name'] === 'android.intent.category.HOME'));
+        if (!home) continue;
+        const name = full(String(act.attrs['android:name'] ?? '?'));
+        const states = [app.attrs['android:enabled'], act.attrs['android:enabled']];
+        if (states.some((v) => v === false)) out.off.push(name);
+        else if (states.every((v) => v === undefined || v === true)) out.on.push(name);
+        else out.unclear.push(name);
+      }
+    }
+  }
+  return out;
 }
