@@ -253,7 +253,7 @@ So on a panel HA already has:
 | button `Open device settings` | `open_settings` | opens the panel's hidden settings dialog on its screen |
 | button `Restart app` | `restart_app` | restarts the kiosk process |
 | button `Start Wi-Fi setup (Bluetooth)` | `improv_ble` | starts Improv over Bluetooth on demand ([onboarding.md](onboarding.md)) |
-| button `Allow setup over the network` | `lan_setup` | opens pairing for setup over the LAN for 30 minutes. Pairing is open until HA adds the panel, then closed until this button (or the installer over USB) opens it again |
+| button `Allow setup over the network` | `lan_setup` | opens pairing for setup over the LAN for 30 minutes. Pairing is open until HA adds the panel, then closed until this button, the panel's settings (Home Assistant & dashboard → Allow setup over the network, also on the Manage page) or Kiln over USB opens it again ([guide](manage.md#set-up-over-the-network)) |
 | switch `Hide HA header` | `hide_ha_header` | header + sidebar, applied live |
 | media_player `Speaker` | `speaker` | play/pause/stop, volume, mute, play media, announce; formats: mp3 (default + announcement) |
 | switch `Music Assistant player (Sendspin)` | `sendspin` | the native Sendspin player ([sendspin.md](sendspin.md)), default on; off sends `client/goodbye` `user_request`; encrypted connection only ([Panes on and off](#panes-on-and-off)) |
