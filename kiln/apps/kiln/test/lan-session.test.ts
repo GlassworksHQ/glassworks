@@ -25,8 +25,10 @@ function fakePanel({ open = true, online = undefined as boolean | undefined } = 
     closedChannels: 0,
     /** wifi.join refuses with this, as a panel on a network does. */
     joinRefused: undefined as string | undefined,
-    /** The connection drops as wifi.join is sent, before the reply: the panel closed its hotspot first. */
+    /** wifi.join is written, but no reply ever comes: the panel closed its hotspot as it joined. */
     joinDrops: false,
+    /** The connection is gone when wifi.join is written: nothing reaches the panel. */
+    joinUnsent: false,
     /** What wifi.join carried. */
     joined: undefined as { ssid: string; password: string } | undefined,
     sleep: async () => {},
@@ -67,7 +69,8 @@ function fakePanel({ open = true, online = undefined as boolean | undefined } = 
             if (m.op !== 'state' && !(pairedAtOpen && panel.paired)) r = { id: m.id, ok: false, error: NOT_PAIRED };
             else if (m.op === 'wifi.scan') r = { id: m.id, ok: true, state: st, networks: [{ ssid: 'Example-Home', rssi: -48, secure: true }] };
             else if (m.op === 'wifi.join') {
-              if (panel.joinDrops) { panel.joined = { ssid: m.ssid, password: m.password }; throw new Error('the connection dropped'); }
+              if (panel.joinUnsent) throw new Error('the connection dropped');
+              if (panel.joinDrops) { panel.joined = { ssid: m.ssid, password: m.password }; continue; }
               if (panel.joinRefused) r = { id: m.id, ok: false, error: panel.joinRefused };
               else { panel.joined = { ssid: m.ssid, password: m.password }; r = { id: m.id, ok: true, state: st }; }
             } else {
@@ -120,19 +123,48 @@ describe('the panel\'s setup page', () => {
   });
 
   it('a join whose reply never comes (the hotspot closed first) still counts as sent, not as a lost panel', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const panel = fakePanel({ online: false });
+      panel.paired = true;
+      panel.joinDrops = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      const join = lan.click('join', () => lan.joinWifi('Example-Home', 'correct horse'));
+      await vi.advanceTimersByTimeAsync(9000); // the channel's answer timeout
+      await join;
+      expect(panel.joined?.ssid).toBe('Example-Home');
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'join' } } });
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a join that never left this page is an error to try again from, not "joining"', async () => {
     const panel = fakePanel({ online: false });
     panel.paired = true;
-    panel.joinDrops = true;
+    panel.joinUnsent = true;
     const lan = new LanSession(panel);
     await lan.start();
     await lan.click('join', () => lan.joinWifi('Example-Home', 'correct horse'));
-    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'join' } } });
+    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'err', error: expect.stringMatching(/lost the panel/) } } });
+  });
+
+  it('a join refused because the pairing ran out pairs again, and comes back to Wi-Fi', async () => {
+    const panel = fakePanel({ online: false });
+    panel.paired = true;
+    const lan = new LanSession(panel);
+    await lan.start();
+    panel.paired = false;
+    await lan.click('join', () => lan.joinWifi('Example-Home', 'correct horse'));
+    expect(lan.state.view).toEqual({ at: 'pair', open: true, shown: false, note: RAN_OUT });
+    await lan.showCode();
+    await lan.enterCode(CODE);
+    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi' } });
   });
 
   it('the panel\'s refusal shows on the Wi-Fi step', async () => {
     const panel = fakePanel({ online: false });
     panel.paired = true;
-    panel.joinRefused = 'A Wi-Fi password has 8 to 63 characters, or none for an open network.';
+    panel.joinRefused = 'A Wi-Fi password has at most 63 characters.';
     const lan = new LanSession(panel);
     await lan.start();
     await lan.click('join', () => lan.joinWifi('Example-Home', 'short'));

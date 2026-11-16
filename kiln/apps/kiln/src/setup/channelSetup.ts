@@ -1,7 +1,7 @@
 // The setup steps that run over the app's setup channel: Home Assistant (the address, sign-in on the
 // panel's own page) and the radio role. The same code whether the channel comes over USB (Kiln's wizard,
 // through adb) or the LAN (the panel's own page, #34): only `open` differs.
-import { NOT_PAIRED, Refused, validHaUrl, type SetupChannel, type SetupState, type WifiNetwork } from '@glassworks/setup-channel';
+import { NOT_PAIRED, NotSent, Refused, validHaUrl, type SetupChannel, type SetupState, type WifiNetwork } from '@glassworks/setup-channel';
 import type { Setup } from '../wizard/state';
 import { radioPlan, type PanelApp } from './radioPlan';
 
@@ -187,7 +187,9 @@ export class ChannelSetup {
       await this.channel!.joinWifi(ssid, psk);
     } catch (e) {
       if (e instanceof Refused) { this.d.show({ ...s, joining: { ssid, step: 'err', error: e.message } }); return; }
-      // no answer: the panel may have closed its hotspot as it joined
+      // Never written: the panel has nothing, so this is an error to try again from, not a join under way.
+      if (e instanceof NotSent) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'This page lost the panel before it could send the network. Try again.' } }); return; }
+      // Written, but no answer: the panel may have closed its hotspot as it joined
     }
     this.close();
     this.d.show({ ...s, joining: { ssid, step: 'join' }, joinNote: joinNote(ssid) });
