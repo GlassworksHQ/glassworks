@@ -14,13 +14,21 @@ import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.platform.Platform
+import dev.glassworks.screen.LightSource
+import dev.glassworks.screen.PresenceSource
 import java.util.concurrent.ScheduledExecutorService
 
 /**
  * Any Android device that has no frame of its own (frames/generic-android): a tablet, an old phone.
- * It goes by its own maker and model, has what its features say, and has no panes of its own.
+ * It goes by its own maker and model, has what its features say, and has no panes of its own. Its sensors
+ * are the app's choice: the generic app (frames/generic-android/android) reads Android's standard proximity
+ * and light sensors (dev.glassworks.screen.ProximityPresence, AmbientLight); the S1 app on a tablet reads none.
  */
-class GenericAndroid(private val context: Context) : Frame {
+class GenericAndroid(
+    private val context: Context,
+    override val presence: PresenceSource? = null,
+    override val light: LightSource? = null,
+) : Frame {
     override val board = "generic-android"
 
     override val namedBy = NamedBy.MODEL
@@ -28,10 +36,6 @@ class GenericAndroid(private val context: Context) : Frame {
     override val hardware = Hardware(Platform.manufacturer, Platform.model, Platform.hardware)
 
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
-
-    override val presence = null
-
-    override val light = null
 
     override fun systemSettingsIntents() = listOf(Intent(Settings.ACTION_SETTINGS))
 

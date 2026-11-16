@@ -1,0 +1,105 @@
+# Test build of Glassworks for generic Android (#23, frames/generic-android/android), on the same branches as
+# S1 Kiosk's test build (test-build.yml):
+#
+#   git push origin HEAD:test-build/<name>
+#   gh run download <run-id> -n glassworks-generic-test-<sha>
+#   adb install glassworks-generic-test-0.1.0-arm64-v8a-<sha>.apk         (a fresh install: its own app id)
+#   adb install -r glassworks-generic-test-0.1.1-arm64-v8a-<sha>.apk      (updates it in place, data kept)
+#
+# What it is:
+#   - The release variant, applicationId dev.glassworks.generic_android. It never installs over S1 Kiosk.
+#   - Signed with a key made for this run only: the app has no release key yet (frames/generic-android/README.md,
+#     "Signing"). Two APKs of one run update each other; an APK of another run doesn't, so
+#     uninstall first (that wipes the app's settings).
+#   - 0.1.0 for each ABI the frame runs, and 0.1.1 for arm64-v8a, so an update in place can be tried.
+#   - No secrets, no environment. Kept for 3 days; the repo is public.
+name: Generic test build
+
+on:
+  push:
+    branches: ['test-build/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: generic-test-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      - name: A signing key for this run only
+        run: |
+          umask 077
+          pass="$(openssl rand -hex 16)"
+          echo "::add-mask::$pass"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/generic-test.jks" -storepass "$pass" -keypass "$pass" \
+            -alias test -keyalg RSA -keysize 2048 -validity 7 -dname "CN=Glassworks generic test build" -noprompt
+          {
+            echo "GENERIC_KEYSTORE_FILE=$RUNNER_TEMP/generic-test.jks"
+            echo "GENERIC_KEYSTORE_PASSWORD=$pass"
+            echo "GENERIC_KEY_ALIAS=test"
+            echo "GENERIC_KEY_PASSWORD=$pass"
+          } >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Build, one APK per ABI and version
+        env:
+          GENERIC_REQUIRE_RELEASE_SIGNING: 'true'
+        run: |
+          mkdir -p generic-dist
+          frame_abis="$(jq -r '.abis[]' frames/generic-android/design/frame.json)"
+          builds="$(for a in $frame_abis; do echo "0.1.0 $a"; done; echo "0.1.1 arm64-v8a")"
+          while read -r version a; do
+            ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a" -PgenericVersion="$version" -Ps1TestBuild="$SHORT_SHA"
+            cp frames/generic-android/android/build/outputs/apk/release/generic-android-release.apk \
+              "generic-dist/glassworks-generic-test-$version-$a-$SHORT_SHA.apk"
+          done <<< "$builds"
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/generic-test.jks"
+
+      - name: Verify and checksum
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          aapt2="$(dirname "$apksigner")/aapt2"
+          echo "### Generic test build" >> "$GITHUB_STEP_SUMMARY"
+          cd generic-dist
+          for apk in *.apk; do
+            "$apksigner" verify "$apk"
+            badging="$("$aapt2" dump badging "$apk")"
+            grep -q "^package: name='dev.glassworks.generic_android'" <<< "$badging" || { echo "::error::$apk is not dev.glassworks.generic_android"; exit 1; }
+            grep -q "^minSdkVersion:'26'" <<< "$badging" || { echo "::error::$apk: minSdk is not 26"; exit 1; }
+            sha256sum "$apk" | tee "$apk.sha256"
+            echo "- \`$apk\` ($(stat -c %s "$apk") bytes)" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "gh run download $GITHUB_RUN_ID -R $GITHUB_REPOSITORY -n glassworks-generic-test-$SHORT_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: glassworks-generic-test-${{ env.SHORT_SHA }}
+          path: generic-dist/
+          retention-days: 3
+          if-no-files-found: error

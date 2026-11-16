@@ -22,7 +22,7 @@ object Licences {
     fun documents(texts: List<String>): List<Doc> =
         listOf(
             Doc("Notices: what ships, versions, sources", "$DIR/$NOTICES"),
-            Doc("S1 Unleashed licence (MIT)", "$DIR/$LICENSE"),
+            Doc("Glassworks licence (MIT)", "$DIR/$LICENSE"),
         ) + texts.filter { it.endsWith(".txt") }.sorted().map { Doc(it.removeSuffix(".txt"), "$DIR/texts/$it") }
 
     fun show(activity: Activity) {

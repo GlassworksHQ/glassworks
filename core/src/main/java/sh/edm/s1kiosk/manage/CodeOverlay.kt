@@ -44,8 +44,8 @@ class CodeOverlay(private val context: Context, private val onClose: () -> Unit)
     }
 
     companion object {
-        /** The Manage page's log tag, which this overlay belongs to: mirrors S1Manage.TAG, which stays with the S1 app. */
-        private const val TAG = "S1Manage"
+        /** The Manage page's log tag, which this overlay belongs to. */
+        private const val TAG = AppManage.TAG
 
         /** The overlay's view, also for the mock-ups. */
         fun build(context: Context, shown: PanelCode.Shown, onClose: () -> Unit): View {
