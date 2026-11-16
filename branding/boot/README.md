@@ -15,8 +15,10 @@ Glassworks stack from #63; the S1's output and what was measured on the S1 are i
 
 ## Adding a frame
 
-Give the frame a `display` in its `frames/<id>/design/frame.json`, in pixels, as Android's boot
-animation sees the screen:
+Give the frame a `display` in its `frames/<id>/design/frame.json`, in pixels, upright, as people
+see the screen. If the panel stands turned and Android's boot animation plays in the panel's own
+framebuffer (the Mirror: 1080x1920 upright, a 1920x1080 panel), add `"boot": { "rotate": 90 }` (or
+270) rather than giving the panel's size:
 
 ```json
 "display": { "width": 1280, "height": 800 }
@@ -58,6 +60,7 @@ The defaults play on any Android from 6.0 on (read from source, not tried on a d
 | `androidApi` | unknown | From 25 (Android 7.1) each frame is trimmed to the pixels that aren't background (`trim.txt`): a smaller zip and a cheaper decode per frame. Older players don't read `trim.txt`, so without it every frame is full screen |
 | `splash` | none | `allwinner-boot-resource`: the Allwinner bootloader's `BOOTLOGO.BMP`, the landscape picture rotated 90° clockwise, 24-bit, swapped into the stock file's place. Needs a height that is a multiple of 4 |
 | `zipBudget` | no limit | The build fails when the zip is bigger, e.g. when it rides in a boot image |
+| `rotate` | none | `90` or `270`: the boot animation plays in the panel's own framebuffer, not in the turned screen Android's UI uses. `display` stays the screen as people see it; each frame is drawn upright, then turned this many degrees counter-clockwise, and `desc.txt` gets the panel's size. The preview and `splash-landscape.png` stay upright. The Mirror needs it (below) |
 
 ## Layout
 
@@ -93,10 +96,10 @@ each new frame's first boot.
 
 ## Frames
 
-| Frame | Screen | Android | Splash | Zip | Measured |
-|---|---|---|---|---|---|
-| `aqara-s1-plus` | 1440x720 | 10 (API 29) | Allwinner | 8.69 MB, trimmed (9 MB budget) | On the panel, 2026-11-12 ([glass-tile](../glass-tile/README.md#what-the-panel-allows)) |
-| `lululemon-mirror` | 1080x1920 | 6.0.1 (API 23) | None | 9.64 MB, full frames ([lululemon-mirror](../lululemon-mirror/README.md), committed 2026-11-15) | Not yet on a unit. The panel was read on 2026-11-15: 1920x1080, natural landscape, turned portrait. Kiln's image sets `ro.sf.hwrotation=270`, so the player sees 1080x1920 (untested) |
+| Frame | Screen (upright) | Panel (`desc.txt`) | Android | Splash | Zip | Measured |
+|---|---|---|---|---|---|---|
+| `aqara-s1-plus` | 1440x720 | 1440x720 | 10 (API 29) | Allwinner | 8.69 MB, trimmed (9 MB budget) | On the panel, 2026-11-12 ([glass-tile](../glass-tile/README.md#what-the-panel-allows)) |
+| `lululemon-mirror` | 1080x1920 | 1920x1080, frames turned 90° (`rotate`) | 6.0.1 (API 23) | None | 11.44 MB, full frames ([lululemon-mirror](../lululemon-mirror/README.md), rebuilt 2026-11-16) | The panel is 1920x1080, natural landscape, turned portrait. `ro.sf.hwrotation=270` turns Android's UI but not the boot animation: the earlier 1080x1920 version rendered sideways on the unit (2026-11-16). The turned frames need a photo on the unit |
 
 ## What the build checks
 

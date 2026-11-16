@@ -3,8 +3,9 @@
 **Status (2026-11-16): flashed on a real Mirror once, end to end, with image 1.** Image 2 (below) is
 checked offline only: its run on the unit, and its fully dark sleep, are still to do. Kiln patches the Glass Panes
 `system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
-root's first real flash (below) booted it, took the computer's adb key, and turned the screen with
-`ro.sf.hwrotation`. The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
+root's first real flash (below) booted it and took the computer's adb key. `ro.sf.hwrotation` turns
+Android's UI but **not the boot animation**, which rendered sideways (now turned frame by frame,
+untested on the unit). The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
 Mirror still waits on an app that runs on API 23.
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
@@ -68,7 +69,7 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 | `/priv-app/S1Kiosk/S1Kiosk.apk`, `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and S1 Kiosk's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK is in `/system/priv-app/S1Kiosk`; its privileged permissions are untested (the test build doesn't run its main activity) |
 | Its native libraries in `/priv-app/S1Kiosk/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
 | `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
-| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns SurfaceFlinger's whole output, the boot animation included, and makes the panel's natural orientation portrait. 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Verified** (2026-11-16, the first real flash): the boot animation runs portrait and upright. The image's SurfaceFlinger is CAF's (DragonBoard LA.BR.1.2.7), which reads `ro.sf.hwrotation` |
+| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns Android's UI (SurfaceFlinger's display transform) and makes the panel's natural orientation portrait. It doesn't turn the boot animation, which draws straight to the panel, so its frames are turned themselves (`boot.rotate`). 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Corrected 2026-11-16:** it does **not** turn the boot animation. On the first real flash the portrait 1080x1920 animation rendered sideways (the maintainer's photo). An earlier version of this note said "verified upright": that came from the property, not from looking. The boot animation's frames are now turned themselves (`branding/lululemon-mirror`, `boot.rotate`), untested on the unit. Whether it turns Android's UI upright also still needs a look at the screen (the image's SurfaceFlinger is CAF's, DragonBoard LA.BR.1.2.7, which reads it) |
 | Nothing removed | The community kiosk isn't in `system` | Verified (read 1) |
 
 The patcher refuses, with nothing written, an image whose fingerprint isn't the one above, and an
@@ -142,7 +143,7 @@ unit); the way back is ready.
 | Fastboot checks | `partition-size:system` is **1,288,491,008** bytes: 314,573 blocks, 19 more than the image. The exact-size check refused it, so the check now takes a partition at least the image's size (#357) |
 | Flash `system` | Sent in 5 pieces (split to `max-download-size`), then `userdata` in 1. The first try stopped with "Cancelled" at about 20 %: the Node `usb` package gives every transfer a 1 s timeout. The harness now gives each transfer 120 s (#370). Kiln's page runs on Chrome's WebUSB, which has no such timeout |
 | Restart | Android started the patched image. adb came up with no prompt: the computer's `adbkey.pub` in the new `userdata`'s `adb_keys` worked |
-| Rotation | The boot animation ran **portrait and upright** with `ro.sf.hwrotation=270`. S1 Kiosk is in `/system/priv-app/S1Kiosk` |
+| Rotation | **Corrected:** the first report said the boot animation ran portrait and upright with `ro.sf.hwrotation=270`. The maintainer's photo showed it **sideways**: the property doesn't turn the boot animation. S1 Kiosk is in `/system/priv-app/S1Kiosk` |
 | HOME | **Didn't resolve to S1 Kiosk.** The legacy test APK (#346) ships `MainActivity`, `BootReceiver` and `KioskService` disabled, because the S1 app calls API 24+ and crashes on API 23; only `EngineCheckActivity` runs. The harness reported "NOT FIXED: HOME". This build can't be the Mirror's launcher: that needs the app on API 23 (the rest of #198, or the generic app on the legacy engine, #23) |
 
 What it changed in the install:
@@ -169,8 +170,8 @@ Off-device only:
 
 ## Open questions
 
-- ~~Does `ro.sf.hwrotation=270` turn the boot animation upright?~~ Yes (2026-11-16). S1 Kiosk's own
-  screen waits on a build that runs on Android 6.
+- Does `ro.sf.hwrotation=270` turn the boot animation? **No** (2026-11-16, seen on the unit: sideways).
+  The frames are turned in the zip now; that needs a photo. Android's UI with it needs a look too.
 - ~~Does the Mirror's LK take sparse FILL chunks?~~ Yes (2026-11-16): the run used FILL (no
   `--no-fill`), and both `system` (5 pieces) and `userdata` (1) flashed. "Try again without FILL"
   (`--no-fill` in the harness) stays as the fallback for an LK that refuses them.
