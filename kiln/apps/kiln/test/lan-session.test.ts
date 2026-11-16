@@ -164,7 +164,7 @@ describe('the panel\'s setup page', () => {
   it('the panel\'s refusal shows on the Wi-Fi step', async () => {
     const panel = fakePanel({ online: false });
     panel.paired = true;
-    panel.joinRefused = 'A Wi-Fi password has at most 63 characters.';
+    panel.joinRefused = 'A Wi-Fi password has at most 63 characters, or is a 64-digit hex key.';
     const lan = new LanSession(panel);
     await lan.start();
     await lan.click('join', () => lan.joinWifi('Example-Home', 'short'));

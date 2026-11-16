@@ -178,6 +178,7 @@ class SetupChannelTest {
         assertEquals("a WPA3 or WEP key may be short: the provisioner checks it", "", err("Example-WiFi", "seven77"))
         assertTrue(err("Example-WiFi", "x".repeat(64)).isNotEmpty())
         assertTrue(err("Example-WiFi", "0123456789abcdef".repeat(4) + "0").isNotEmpty())
+        assertTrue("63 characters, but 64 bytes in UTF-8", err("Example-WiFi", "é" + "x".repeat(62)).isNotEmpty())
         assertEquals("", err("Example-WiFi", ""))
         assertEquals("", err("Example-WiFi", "0123456789abcdef".repeat(4)))
         assertEquals(listOf("join Example-WiFi", "join Example-WiFi", "join Example-WiFi"), f.calls)
