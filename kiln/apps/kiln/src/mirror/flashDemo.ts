@@ -8,7 +8,7 @@ import { FlashSession, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
 export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-error', 'flash-back', 'flash-run'] as const;
+  'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-back', 'flash-run'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
 export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash: FlashSession; mirror: MirrorSession }> {
@@ -50,7 +50,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
     images,
     imageUrl: 'https://refract.glassworks.dev/glass-panes/mirror-android-1/system.img',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x40000000 : SYSTEM_BYTES),
-    requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; return m; },
+    requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m; },
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
     sleep: (ms) => tick(ms / 20),

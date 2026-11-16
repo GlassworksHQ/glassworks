@@ -283,7 +283,8 @@ export function FlashAdb({ f, s }: P) {
 
 export function FlashDone({ f, s }: P) {
   const fb = s.firstBoot;
-  const stranded = !s.back && fb && fb.home.result !== 'set';
+  const noHome = !s.back && fb?.home.result === 'none';
+  const stranded = !s.back && fb && fb.home.result !== 'set' && !noHome;
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
@@ -300,9 +301,20 @@ export function FlashDone({ f, s }: P) {
           <button type="button" className="btn ghost" disabled={s.fixing} onClick={() => void f.fixHome()}>{s.fixing ? 'Hiding it…' : 'Hide the other launcher again'}</button>
         </div>
       )}
+      {noHome && (
+        <div className="well" role="alert">
+          <div className="grow">
+            <span className="status err">This S1 Kiosk build has no home screen.</span>
+            <span className="small">
+              So Kiln hid nothing: {fb.home.left.length ? <code>{fb.home.left.join(', ')}</code> : 'the image’s launcher'} stays the Mirror&apos;s home screen, and the Mirror still starts to it.
+              {' '}Add a build of S1 Kiosk made for Android 6, over adb.
+            </span>
+          </div>
+        </div>
+      )}
       {!s.back && fb && (
         <p className="lede">
-          S1 Kiosk {fb.app.name ?? fb.app.code} {stranded ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
+          S1 Kiosk {fb.app.name ?? fb.app.code} {stranded || noHome ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
           {fb.wifi === false && ' It didn’t confirm the Wi-Fi: set it in S1 Kiosk’s settings.'}
           {fb.rotation !== '270' && ' The screen’s rotation isn’t set (ro.sf.hwrotation): check it is upright.'}
         </p>

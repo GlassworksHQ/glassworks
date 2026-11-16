@@ -12,7 +12,10 @@ import type { Check } from './recipe';
 /** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
 export const MIRROR_FASTBOOT: USBDeviceFilter = { vendorId: 0x18d1, productId: 0xd00d };
 
-/** The partition the Glass Panes `system.img` is made for: 314,554 blocks of 4 KiB. */
+/**
+ * The Glass Panes `system.img`'s size: 314,554 blocks of 4 KiB. The partition must be at least this:
+ * the real Mirror's is 314,573 blocks (1,288,491,008 bytes, read 2026-11-16).
+ */
 export const SYSTEM_BYTES = 1_288_413_184;
 /** The Glass Panes `userdata.sparse` fills this; a unit with another size still gets a fresh one its size. */
 export const USERDATA_BYTES = 5_583_458_304;
@@ -114,10 +117,12 @@ export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'
 
 /**
  * `home`: what Android opened for HOME after the other launchers were hidden: `set` (S1 Kiosk),
- * `chooser` (its list of home apps: the Mirror has no touchscreen to answer it), or `other`.
+ * `chooser` (its list of home apps: the Mirror has no touchscreen to answer it), or `other`. `none`:
+ * S1 Kiosk has no home screen of its own (a build whose launcher activity is off), so nothing was
+ * hidden: the image's launcher stays the home screen.
  */
 export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean; rotation?: string }
-export interface HomeCheck { result: 'set' | 'chooser' | 'other'; focused?: string; left: string[] }
+export interface HomeCheck { result: 'set' | 'chooser' | 'other' | 'none'; focused?: string; left: string[] }
 
 /** The activity in front, from `dumpsys activity activities` (Android 6's mFocusedActivity). */
 export async function focusedActivity(p: PanelShell): Promise<string | undefined> {
@@ -131,6 +136,16 @@ export async function focusedActivity(p: PanelShell): Promise<string | undefined
 export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<{ hidden: string[]; home: HomeCheck }> {
   const r = new Steps(p, onStep);
   const installed = async (pkg: string) => (await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`);
+  // S1 Kiosk must answer HOME itself before the image's launchers go: hidden with nothing in their
+  // place, a Mirror with no touchscreen would have no home screen at all. A bare package as am's last
+  // argument sets the intent's package (Android 6 Am.makeIntent).
+  const own = await r.try(`am start -a android.intent.action.MAIN -c android.intent.category.HOME ${PKG}`);
+  if (/unable to resolve/i.test(own)) {
+    const left: string[] = [];
+    for (const pkg of OTHER_HOMES) if (await installed(pkg)) left.push(pkg);
+    r.detail(`${PKG} has no home screen: nothing hidden, ${left.join(', ') || 'the image\'s launcher'} stays`);
+    return { hidden: [], home: { result: 'none', left } };
+  }
   const hidden: string[] = [];
   for (const pkg of OTHER_HOMES) {
     if (!(await installed(pkg))) continue;

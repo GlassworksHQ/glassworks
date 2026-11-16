@@ -156,6 +156,8 @@ export class FirstBootMirror implements PanelShell {
   hidden = new Set<string>();
   /** `pm hide` answers false (Launcher3 survives): HOME shows Android's chooser */
   hideFails = false;
+  /** S1 Kiosk's launcher activity is off (the legacy test build, 2026-11-16): HOME doesn't resolve in it */
+  noHome = false;
   constructor(private readonly fp: string = FINGERPRINT, private readonly app = true) {}
   async run(cmd: string) {
     this.cmds.push(cmd);
@@ -166,6 +168,11 @@ export class FirstBootMirror implements PanelShell {
     if (cmd === 'dumpsys package sh.edm.s1kiosk') return ok(this.app ? '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n' : '');
     if (cmd === 'pm list packages com.android.launcher3') return ok(this.hidden.has('com.android.launcher3') ? '' : 'package:com.android.launcher3\n');
     if (cmd.startsWith('pm list packages')) return ok('');
+    if (cmd === 'am start -a android.intent.action.MAIN -c android.intent.category.HOME sh.edm.s1kiosk') {
+      return ok(this.noHome
+        ? 'Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] pkg=sh.edm.s1kiosk }\nError: Activity not started, unable to resolve Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] flg=0x10000000 pkg=sh.edm.s1kiosk }\n'
+        : 'Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] pkg=sh.edm.s1kiosk }\n');
+    }
     const m = /^pm hide (\S+)$/.exec(cmd);
     if (m) {
       if (this.hideFails) return ok(`Package ${m[1]} new hidden state: false\n`);

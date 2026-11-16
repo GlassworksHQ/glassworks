@@ -156,6 +156,24 @@ describe('first boot', () => {
     expect((await makeOnlyHome(p, () => {}, async () => {})).home.result).toBe('set');
   });
 
+  it('hides nothing when S1 Kiosk has no home screen of its own, so the Mirror keeps one (2026-11-16)', async () => {
+    const p = new FirstBootMirror();
+    p.noHome = true;
+    const r = await firstBoot(p, { sleep: async () => {} });
+    expect(r.hidden).toEqual([]);
+    expect(r.home).toEqual({ result: 'none', left: ['com.android.launcher3'] });
+    expect(p.cmds.some((c) => c.startsWith('pm hide'))).toBe(false);
+    expect(p.hidden.size).toBe(0);
+  });
+
+  it('asks whether S1 Kiosk answers HOME before it hides any launcher', async () => {
+    const p = new FirstBootMirror();
+    await makeOnlyHome(p, () => {}, async () => {});
+    const ask = p.cmds.indexOf('am start -a android.intent.action.MAIN -c android.intent.category.HOME sh.edm.s1kiosk');
+    expect(ask).toBeGreaterThanOrEqual(0);
+    expect(ask).toBeLessThan(p.cmds.indexOf('pm hide com.android.launcher3'));
+  });
+
   it('stops if the Mirror didn\'t start the image Kiln wrote, or S1 Kiosk is missing', async () => {
     await expect(firstBoot(new FirstBootMirror('Android/other/x:6.0.1/X/1:user/release-keys'), {})).rejects.toThrow(/not the image Kiln wrote/);
     await expect(firstBoot(new FirstBootMirror(GLASS_PANES.fingerprint, false), {})).rejects.toThrow(/isn't on the Mirror/);

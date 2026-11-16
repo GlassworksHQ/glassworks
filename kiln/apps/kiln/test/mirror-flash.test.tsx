@@ -146,6 +146,17 @@ describe('installing Glassworks over fastboot', () => {
     expect(screen.getByText(/no touchscreen, so after a restart it would wait on that list/)).toBeTruthy();
   });
 
+  it('Done says when the S1 Kiosk build has no home screen, and offers no hiding: the launcher stays (2026-11-16)', async () => {
+    const { flash, mirror } = await flashDemo('flash-done-no-home', true);
+    expect(flash.state.firstBoot?.home).toEqual({ result: 'none', left: ['com.android.launcher3'] });
+    expect(flash.state.firstBoot?.hidden).toEqual([]);
+    render(<Flash flash={flash} mirror={mirror} />);
+    expect(screen.getByText('This S1 Kiosk build has no home screen.')).toBeTruthy();
+    expect(screen.getByText(/stays the Mirror's home screen, and the Mirror still starts to it/)).toBeTruthy();
+    expect(screen.queryByText('Hide the other launcher again')).toBeNull();
+    expect(screen.queryByText('S1 Kiosk isn\'t the only home screen yet.')).toBeNull();
+  });
+
   it('asks for the fastboot device inside the click, before anything is awaited', () => {
     const { f, requestFastboot } = setup();
     void f.connectFastboot();
