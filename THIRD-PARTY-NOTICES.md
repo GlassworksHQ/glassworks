@@ -511,8 +511,8 @@ renders above:
 - **node-usb and tsx** (host only, #40). `tools/mirror/flash-node.ts`, the Mirror install run from a
   computer, reaches fastboot through `usb` 3.2.1 (MIT, Copyright Rob Moran, https://github.com/node-usb/node-usb,
   with its prebuilt `@node-usb/usb-<platform>` binary, MIT) and runs under `tsx` 4.23.15 (MIT, Copyright
-  Hiroki Osame, https://github.com/privatenumber/tsx). npm installs them on that computer from the
-  lockfile. Neither ships in the app, the installer page or the repo.
+  Hiroki Osame, https://github.com/privatenumber/tsx). npm installs `usb` on that computer from the
+  lockfile, and npx fetches the pinned `tsx` there. Neither ships in the app, the installer page or the repo.
 - **Aqara/Lumi firmware.** None is included. The installer's partition backup stays with the owner. On
   the panel, the radio helper uses Aqara's own `cpcd` and stock radio firmware where they already are.
 

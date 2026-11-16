@@ -1,15 +1,15 @@
 // The root's headless run (flash-node.ts) end to end on a fake Mirror: the real Fastboot class on
 // FakeLk, the installer's adb fakes, and what lands on the fake partitions judged by e2fsck. The CLI's
-// own --dry-run is the same code; the last test runs it as a process.
-import { execFileSync } from 'node:child_process';
+// own --dry-run is the same code; the last tests run it from its arguments.
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { clean, debugfs, debugfsCat, fsck, haveTools } from '@glassworks/ext4/testing';
 import { FakeMirror } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb } from '../src/adb';
+import { UsageError, cli } from '../src/cli';
 import { DRY_USERDATA, dryDevices, dryImage } from '../src/dry';
 import { runInstall, runWayBack } from '../src/run';
 
@@ -142,12 +142,21 @@ describe('the host\'s adb', () => {
 });
 
 describe('flash-node.ts --dry-run', () => {
-  it('runs the whole install as a process on the fake Mirror', () => {
-    const cli = resolve(__dirname, '../flash-node.ts');
-    const out = execFileSync(process.execPath, ['--import', 'tsx', cli, '--dry-run', '--yes', '--no-boot-animation', '--work', work], { encoding: 'utf8', timeout: 120_000 });
-    expect(out).toMatch(/^DRY RUN/);
-    expect(out).toMatch(/LK got flash:system, flash:userdata, then reboot/);
-    expect(out).toMatch(/Done: S1 Kiosk 0\.5\.0-legacy, home set/);
+  it('runs the whole install from its arguments on the fake Mirror', async () => {
+    const out: string[] = [];
+    expect(await cli(['--dry-run', '--yes', '--no-boot-animation', '--work', work], (l) => out.push(l))).toBe(0);
+    const text = out.join('\n');
+    expect(text).toMatch(/^DRY RUN/);
+    expect(text).toMatch(/LK got flash:system, flash:userdata, then reboot/);
+    expect(text).toMatch(/Done: S1 Kiosk 0\.5\.0-legacy, home set/);
     expect(readFileSync(join(work, 'after.png')).subarray(1, 4).toString()).toBe('PNG');
-  }, 120_000);
+  }, 60_000);
+
+  it('the way back too, and refuses a real run without its files', async () => {
+    const out: string[] = [];
+    expect(await cli(['--dry-run', '--yes', '--way-back', '--work', work], (l) => out.push(l))).toBe(0);
+    expect(out.join('\n')).toMatch(/Done: the plain Glass Panes image is on the Mirror/);
+    await expect(cli(['--way-back', '--work', work], () => {})).rejects.toBeInstanceOf(UsageError);
+    await expect(cli(['--image', 'x.img', '--work', work], () => {})).rejects.toThrow(/--apk/);
+  }, 60_000);
 });

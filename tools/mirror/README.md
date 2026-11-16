@@ -28,14 +28,15 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 
 ## Use
 
-From the repo root, after `npm install`:
+From the repo root, after `npm install`. tsx isn't in the repo's lockfile (vite 8 lists it as an
+optional peer, and that breaks `npm ci`'s lockfile check), so npx fetches the pinned version:
 
 ```sh
-npx tsx tools/mirror/flash-node.ts --dry-run          # every step on a fake Mirror, no device touched
-npx tsx tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk s1-kiosk-legacy.apk \
+npx -y tsx@4.23.15 tools/mirror/flash-node.ts --dry-run          # every step on a fake Mirror, no device touched
+npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk s1-kiosk-legacy.apk \
   --ha-url http://homeassistant.local:8123
-npx tsx tools/mirror/flash-node.ts --way-back --image system.img --userdata userdata.sparse
-npx tsx tools/mirror/flash-node.ts --help
+npx -y tsx@4.23.15 tools/mirror/flash-node.ts --way-back --image system.img --userdata userdata.sparse
+npx -y tsx@4.23.15 tools/mirror/flash-node.ts --help
 ```
 
 The adb serial is read from `/tmp/mirror-serial` (`--serial-file`) and is shown as `<serial>` in
