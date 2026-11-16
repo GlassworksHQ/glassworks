@@ -96,7 +96,7 @@ each new frame's first boot.
 | Frame | Screen | Android | Splash | Zip | Measured |
 |---|---|---|---|---|---|
 | `aqara-s1-plus` | 1440x720 | 10 (API 29) | Allwinner | 8.69 MB, trimmed (9 MB budget) | On the panel, 2026-11-12 ([glass-tile](../glass-tile/README.md#what-the-panel-allows)) |
-| `lululemon-mirror` | 1080x1920 | 6.0.1 (API 23) | None | 9.61 MB, full frames (built 2026-11-12, not committed) | Not yet. The screen size is from the spec sheet (a 40-inch 1080p portrait screen), not read from a device |
+| `lululemon-mirror` | 1080x1920 | 6.0.1 (API 23) | None | 9.64 MB, full frames ([lululemon-mirror](../lululemon-mirror/README.md), committed 2026-11-15) | Not yet on a unit. The panel was read on 2026-11-15: 1920x1080, natural landscape, turned portrait. Kiln's image sets `ro.sf.hwrotation=270`, so the player sees 1080x1920 (untested) |
 
 ## What the build checks
 

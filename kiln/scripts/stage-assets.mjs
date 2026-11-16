@@ -55,6 +55,7 @@ const assets = [
   { name: 'branding-rc', file: repo('frames/aqara-s1-plus/tools/root/s1kiosk_branding.rc'), license: 'MIT', source: SRC },
   { name: 'bootanimation', file: repo('branding/glass-tile/bootanimation.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/glass-tile` },
   { name: 'bootlogo', file: repo('branding/glass-tile/bootlogo.bmp'), license: 'MIT', source: `${SRC}/tree/main/branding/glass-tile` },
+  { name: 'mirror-bootanimation', file: repo('branding/lululemon-mirror/bootanimation.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/lululemon-mirror` },
   { name: 'kiosk-apk', file: KIOSK, license: 'MIT', source: `${SRC}/tree/main/app` },
   ...(KEYBOARD || process.argv.includes('--remote') ? [{ name: 'keyboard-apk', file: KEYBOARD ?? '', license: 'Apache-2.0', source: 'https://github.com/rkkr/simple-keyboard' }] : []),
 ];

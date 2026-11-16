@@ -679,7 +679,7 @@ jobs:
         # Fails closed: without a base commit to compare with (none, a force-pushed or garbage-
         # collected one) or when git diff fails, it rebuilds.
         run: |
-          paths="branding/boot branding/glass-tile branding/bootlogos.json frames/aqara-s1-plus/design/frame.json .github/workflows/pr.yml"
+          paths="branding/boot branding/glass-tile branding/lululemon-mirror branding/bootlogos.json frames/aqara-s1-plus/design/frame.json frames/lululemon-mirror/design/frame.json .github/workflows/pr.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); rebuilding."
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -689,20 +689,21 @@ jobs:
           elif [ -n "$changed" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Nothing the S1's boot branding is built from changed; skipping the rebuild."
+            echo "Nothing the boot branding is built from changed; skipping the rebuild."
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
       # The versions are the ones in branding/boot/README.md; the outputs are byte-identical on
       # macOS arm64 and in this image (checked 2026-11-13).
-      - name: Rebuild the S1's boot branding
+      - name: Rebuild the S1's and the Mirror's boot branding
         if: steps.changed.outputs.run == 'true'
         run: |
           docker run --rm -v "$PWD":/w -w /w \
             python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 sh -euc '
               apt-get -qq update && apt-get -qq install -y --no-install-recommends curl ca-certificates >/dev/null
               pip -q install --root-user-action=ignore pillow==13.0.0 numpy==2.4.6 uharfbuzz==0.57.0 pyoxipng==9.1.1
-              python branding/boot/generate.py --frame aqara-s1-plus --out branding/glass-tile'
+              python branding/boot/generate.py --frame aqara-s1-plus --out branding/glass-tile
+              python branding/boot/generate.py --frame lululemon-mirror --out branding/lululemon-mirror'
 
       - name: The committed files are what the generator writes
         if: steps.changed.outputs.run == 'true'
