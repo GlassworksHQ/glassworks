@@ -6,7 +6,7 @@ import { createReadStream, closeSync, existsSync, mkdirSync, openSync, readFileS
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { HOME_ACTIVITY, app, fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
+import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from '@glassworks/app-adb/fakes';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
@@ -42,6 +42,14 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
     const at = new TextDecoder('latin1').decode(apk).indexOf('AndroidManifest.xml') + 'AndroidManifest.xml'.length;
     new DataView(apk.buffer, apk.byteOffset).setUint32(at + 16, 0x00ffffff, true); // its string pool claims 16M strings
     await expect(checkMirrorApk(apk)).rejects.toThrow(/^this APK's AndroidManifest\.xml can't be read\. Nothing was changed\.$/);
+  });
+  it('says a manifest that isn\'t binary XML isn\'t, with nothing changed (#385 delta verifier)', async () => {
+    const apk = zip([['AndroidManifest.xml', new TextEncoder().encode('<xml')]]);
+    await expect(checkMirrorApk(apk)).rejects.toThrow(/^this APK's AndroidManifest\.xml isn't binary XML\. Nothing was changed\.$/);
+  });
+  it('names an activity whose android:name is a resource plainly, not [object Object] (#385 delta verifier)', async () => {
+    const home = app({ ...HOME_ACTIVITY(), attrs: { name: { ref: 0x7f0a0001 } } }, { enabled: false });
+    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23, home }))).rejects.toThrow(/its home screen \(an activity named by a resource\) is turned off/);
   });
 });
 

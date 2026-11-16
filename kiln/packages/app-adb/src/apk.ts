@@ -60,7 +60,7 @@ export async function zipEntry(zip: Uint8Array, name: string): Promise<Uint8Arra
  * a tree read from what is left.
  */
 function* xmlChunks(xml: Uint8Array, dv: DataView): Generator<{ at: number; type: number; hsize: number; size: number }> {
-  if (xml.length < 8 || dv.getUint16(0, true) !== 0x0003) throw new Error('AndroidManifest.xml isn\'t binary XML');
+  if (xml.length < 8 || dv.getUint16(0, true) !== 0x0003) throw new ManifestError('isn\'t binary XML');
   const end = dv.getUint32(4, true), first = dv.getUint16(2, true);
   if (end > xml.length || first < 8 || first > end) throw new ManifestError();
   for (let at = first; at < end;) {
@@ -207,7 +207,7 @@ export function axmlTree(xml: Uint8Array): AxmlElement[] {
 
 /** A manifest Kiln can't parse (cut short, or not what its chunks say): reported plainly, never as a RangeError. */
 export class ManifestError extends Error {
-  constructor() { super('this APK\'s AndroidManifest.xml can\'t be read'); }
+  constructor(why = 'can\'t be read') { super(`this APK's AndroidManifest.xml ${why}`); }
 }
 
 /** Runs a manifest read; a parse that runs off the data is a ManifestError. */
@@ -243,7 +243,8 @@ export async function apkHome(apk: Uint8Array): Promise<{ on: string[]; off: str
       for (const act of app.children.filter((e) => e.name === 'activity' || e.name === 'activity-alias')) {
         const home = act.children.some((f) => f.name === 'intent-filter' && has(f, 'action', MAIN) && has(f, 'category', HOME) && has(f, 'category', DEFAULT) && !wantsData(f));
         if (!home) continue;
-        const name = full(String(act.attrs['android:name'] ?? '?'));
+        const n = act.attrs['android:name'];
+        const name = typeof n === 'string' ? full(n) : 'an activity named by a resource';
         const states = [app.attrs['android:enabled'], act.attrs['android:enabled']];
         if (states.some((v) => v === false)) out.off.push(name);
         else if (states.every((v) => v === undefined || v === true)) out.on.push(name);
