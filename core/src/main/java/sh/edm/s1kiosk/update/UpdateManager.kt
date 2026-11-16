@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.platform.Platform
 import dev.glassworks.platform.PlatformApi
+import dev.glassworks.update.InstallRights
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -65,7 +66,7 @@ class UpdateManager(
             cleanup()
             root?.lastFailure()?.let { model.onInfo("Last update failed: $it") }
             model.installNote = when {
-                root == null -> if (Platform.canInstallWithoutUserAction) NO_TAP_NOTE else CONFIRM_NOTE
+                root == null -> if (installsWithoutTap()) NO_TAP_NOTE else CONFIRM_NOTE
                 root.present() -> ""
                 else -> NO_HELPER_NOTE
             }
@@ -119,7 +120,8 @@ class UpdateManager(
             }
             override fun onLost(network: Network) { validated.remove(network) }
         }
-        if (runCatching { ctx.getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(cb) }.isSuccess) {
+        // An internet request below Android 7, which has no default-network callback (#198).
+        if (runCatching { Platform.registerDefaultNetworkCallback(ctx.getSystemService(ConnectivityManager::class.java), cb) }.isSuccess) {
             netCallback = cb
         }
     }
@@ -301,7 +303,7 @@ class UpdateManager(
         val c = get(o.apk.url)
         try {
             checkOk(c)
-            val len = c.contentLengthLong
+            val len = c.contentLength.toLong() // an Int is enough under MAX_APK_BYTES; contentLengthLong is API 24 (#198)
             if (len > Releases.MAX_APK_BYTES) { fail(a, "download too large ($len bytes)"); return null }
             if (o.apk.size > 0 && len > 0 && len != o.apk.size) { fail(a, "size $len differs from the release's ${o.apk.size}"); return null }
             val total = if (len > 0) len else o.apk.size
@@ -385,7 +387,7 @@ class UpdateManager(
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or Platform.mutablePendingIntentFlag
                 val pending = PendingIntent.getBroadcast(ctx, id, Intent(ctx, UpdateInstallReceiver::class.java), flags)
                 model.onInstalling(a, SystemClock.elapsedRealtime(), when {
-                    Platform.canInstallWithoutUserAction -> "Installing ${a.offer.version} without a tap"
+                    installsWithoutTap() -> "Installing ${a.offer.version} without a tap"
                     root == null -> "Installing ${a.offer.version}: confirm on the screen"
                     else -> "Installing ${a.offer.version}: confirm on the panel's screen (no root update service in this boot image)"
                 })
@@ -399,6 +401,13 @@ class UpdateManager(
             throw e
         }
     }
+
+    /**
+     * Whether a PackageInstaller session can install with nobody at the screen: on Android 12+ the session asks
+     * for no user action ([sessionParams]); a privileged app (`INSTALL_PACKAGES`, the Mirror's) never needs one.
+     * Either way Android may still ask, and [UpdateInstallReceiver] then shows the confirmation.
+     */
+    private fun installsWithoutTap(): Boolean = Platform.canInstallWithoutUserAction || InstallRights.installsPackages(ctx)
 
     /** From [UpdateInstallReceiver]: Android asks for a tap before it installs (STATUS_PENDING_USER_ACTION). */
     internal fun onWaitingForTap() = exec.execute {

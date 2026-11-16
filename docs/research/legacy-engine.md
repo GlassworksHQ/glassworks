@@ -305,7 +305,8 @@ and in the baseline; remove a line only when lint stops reporting the call (the 
 sources are checked: `:engine-gecko-legacy` compiles the shared `GeckoEngine.kt` from `build/generated`.
 
 The run of 2026-11-16 on main at 62775aef with the first fixes (#198 Phase A): 109 calls, 52 of them desugared, so 57
-to look at (main alone read 118 and 53, so 65):
+to look at (main alone read 118 and 53, so 65). Phase C then fixed `UpdateManager`'s two (below), so 107 and 55;
+the tables keep the run as it was:
 
 | Module | Calls above API 23 | Of them desugared |
 |---|---|---|
@@ -345,13 +346,13 @@ are already guarded. Read at each call site (2026-11-16), they split like this (
 | `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size`, `.remove` (24) | Fixed: the sets are typed `MutableSet` |
 | `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | Fixed: `Platform.hasProcessStartTime`; below it `/proc/self/stat`'s start time |
 | core: `MainActivity` | `Process.getStartElapsedRealtime` (24) | **Open**; waits for #364/#332, which own the file |
-| core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | **Open**; waits for #365, which owns the file |
+| core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | Fixed (Phase C): `Platform.registerDefaultNetworkCallback`; `contentLength`, an `Int`, is enough under the APK size limit |
 | `pane-zigbee-thread`, `aqara-s1-plus-wall-base` | `Process.waitFor(timeout)`, autofill (26) | Open, but S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered on a legacy device |
 | The libraries, `pane-assist`, `-bluetooth-proxy`, `-notifications`, `-timers`, `-sendspin`, `engine-gecko-legacy` | None (`pane-sendspin`'s five are desugared) | Ready as far as API levels go; untested on a device |
 
 Each fix has a test on Robolectric's Android 6 framework (`Api23FallbacksTest`, `PlatformApi23Test`,
 `AndroidProbeApi23Test`), where the old call throws `NoSuchMethodError` or `NoSuchFieldError`. Left for the app's
-own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#365).
+own start on API 23: `MainActivity`'s calls (Phase B, after #332).
 
 <details><summary>The full list (109 calls)</summary>
 
@@ -473,6 +474,24 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 another origin, so the legacy engine needs no new capability: a pane is offered on a legacy device by the same
 hardware checks as anywhere. What keeps a pane from running there is the app's API 24+ calls above, not the engine.
 
+## Updates on the legacy build (#198 Phase C)
+
+The legacy build gets its own release line, `ReleaseLine.GENERIC_ANDROID_LEGACY` (core, `update/Releases.kt`):
+tags `generic-android-legacy-v1.2.3`, APKs `glassworks-generic-android-legacy-<abi>-1.2.3.apk`. The current
+generic app's line never reads those tags, and the legacy line never reads its tags (`ReleasesTest`). So a legacy
+app is never offered a build that needs Android 8, and a current app is never offered the frozen engine.
+
+`UpdateManager` installs through a `PackageInstaller` session on every Android it runs on. How it ends:
+
+| The app | Android 6–7 | What happens (read from `UpdateManager`, tested where marked) |
+|---|---|---|
+| A privileged system app (`INSTALL_PACKAGES` granted: the Mirror, flashed into `/system/priv-app` by Kiln) | Commits with no prompt | Says "without a tap" (`InstallRights`, `InstallRightsTest`). On the Mirror, #398's probe app updated itself this way and kept its permissions (results in #395, `frames/lululemon-mirror/research/privileged-app.md`) |
+| The device owner | Commits with no prompt | As before (#277) |
+| An app someone installed | Android asks (`STATUS_PENDING_USER_ACTION`) | `UpdateInstallReceiver` shows the confirmation, as on Android 8–11 |
+
+An update keeps only the privileged permissions the `/system` copy requested. So the legacy build declares
+`INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` from its first build (Phase D); a later build can't add one.
+
 ## How to reproduce
 
 Off-device: `./gradlew :engine-gecko-legacy:testDebugUnitTest` (the policy in Kotlin and in `policy.js`, the gate).
@@ -505,4 +524,4 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
 - `MainActivity`'s `url` intent extra still restarts only when the secure-context hosts change. A same-host change
   of port or scheme over that extra reloads instead, and the legacy engine then refuses the new dashboard (with the
   note) until the app restarts. The fix is one line (`engineStart()` in place of `secureHosts()`), after #364.
-- The app itself on API 23–25: the API 24+ calls behind `registerDefaultNetworkCallback`.
+- The app itself on API 23–25: `MainActivity`'s API 24+ calls (Phase B).
