@@ -62,6 +62,14 @@ interface Frame {
     /** The frame's way to install app updates without Android's confirmation; null to use PackageInstaller. */
     val rootUpdates: RootUpdates? get() = null
 
+    /**
+     * Whether something on the device with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) traffic to the
+     * app's portal (udp 8053 and tcp 8098, on the hotspot's own addresses), so a phone that joins opens the setup page
+     * by itself (#197). The S1's radio helper does. False: the app runs no portal, and the phone opens the address the
+     * screen shows.
+     */
+    val hotspotPortal: Boolean get() = false
+
     /** A short name for the panel on its own pages (the S1's "S1 Plus"); null to use its friendly name. */
     val shortName: String? get() = null
 

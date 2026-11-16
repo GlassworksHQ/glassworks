@@ -65,6 +65,9 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
     override val rootUpdates: RootUpdates = RootUpdateInstaller()
 
+    /** The radio helper sends the setup hotspot's DNS and port 80 to the app's portal while it runs (#197). */
+    override val hotspotPortal = true
+
     /** Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3). One per service run. */
     override fun serviceWork(context: Context, onForegroundOnly: () -> Unit): ServiceWork =
         ScreenOffWifiScanner(context, onForegroundOnly = onForegroundOnly)
