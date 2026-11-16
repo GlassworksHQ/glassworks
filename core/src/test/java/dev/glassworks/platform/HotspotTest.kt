@@ -71,8 +71,9 @@ class HotspotTest {
     }
 
     @Test
-    fun `the key never reaches a log`() {
-        assertTrue("secretkey1" !in HotspotNetwork("Glassworks-AB12", "secretkey1").toString())
+    fun `neither the name nor the key reaches a log`() {
+        val s = HotspotNetwork("Glassworks-AB12", "secretkey1").toString()
+        assertTrue(s, "secretkey1" !in s && "AB12" !in s)
     }
 
     @Test

@@ -46,7 +46,7 @@ data class HotspotNetwork(val ssid: String, val passphrase: String) {
      */
     fun qrText(): String = "WIFI:T:WPA;S:${escape(ssid)};P:${escape(passphrase)};;"
 
-    override fun toString() = "HotspotNetwork($ssid)" // never the key in a log
+    override fun toString() = "HotspotNetwork" // neither the name nor the key in a log
 
     private fun escape(s: String) = s.replace(Regex("""([\\;,:"])"""), """\\$1""")
 }

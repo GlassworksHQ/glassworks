@@ -120,7 +120,7 @@ class SetupHotspot(
             when (e) {
                 is Hotspot.Event.Started -> {
                     mine.network = e.network
-                    log("setup hotspot on: ${e.network}")
+                    log("setup hotspot on")
                     onChange()
                 }
                 is Hotspot.Event.Failed -> {
