@@ -41,7 +41,7 @@ class LanSetupTest {
 
     private val backend = object : SetupChannel.Backend {
         override fun state() = ChannelState(ip = "192.0.2.10", ha = ChannelState.Ha(null, "", false, null))
-        override fun setHa(url: String): SetupChannel.HaChange { changes += "ha $url"; return SetupChannel.HaChange() }
+        override fun setHa(url: String): SetupChannel.Change { changes += "ha $url"; return SetupChannel.Change() }
         override fun armPairing(): String? { changes += "arm"; return null }
     }
 

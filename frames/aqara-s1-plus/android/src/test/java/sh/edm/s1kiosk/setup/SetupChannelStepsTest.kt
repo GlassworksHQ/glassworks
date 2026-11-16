@@ -62,9 +62,9 @@ class SetupChannelStepsTest {
                 signinUrl = ChannelState.signinUrl(IP, prefs.haBase),
             ),
         )
-        override fun setHa(url: String): SetupChannel.HaChange {
+        override fun setHa(url: String): SetupChannel.Change {
             prefs.urlSetting = url
-            return SetupChannel.HaChange()
+            return SetupChannel.Change()
         }
     }
 

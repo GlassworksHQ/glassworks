@@ -49,13 +49,19 @@ too, in **Allow setup over the network**.
 
 1. **Pair.** Press **Show the code on the panel**. The panel shows a 6-digit code ("Set up this panel from
    a computer"). Type it on the page and press **Pair**. Only someone who can see the panel can pair.
-2. **Home Assistant.** The address the panel found, or type one, and sign in on the panel's sign-in page.
-3. **Radio.** What the Zigbee and Thread radio does, then what to do in Home Assistant for it.
-4. **Done.** The page ends the pairing. Reload it and it asks for a code again (once Home Assistant has the
+2. **Wi-Fi**, only on a panel that is on no network: the page reached it on the panel's own setup Wi-Fi
+   (#197). Pick a network the panel sees and type its password. The panel closes its setup Wi-Fi and
+   joins; its own screen shows how it goes, since the page loses the panel there. A panel already on a
+   network skips this step, and refuses Wi-Fi details from the page.
+3. **Home Assistant.** The address the panel found, or type one, and sign in on the panel's sign-in page.
+4. **Radio.** What the Zigbee and Thread radio does, then what to do in Home Assistant for it.
+5. **Done.** The page ends the pairing. Reload it and it asks for a code again (once Home Assistant has the
    panel, allow setup over the network first, below).
 
 The page is plain HTTP on your local network. While you pair, others on the same network can see the code
 you type and the session cookie. The session only works from the address that paired, which limits replay.
+A Wi-Fi password crosses the page only on the panel's own setup Wi-Fi, which is WPA2 with a key shown on the
+panel's screen; the panel refuses one while it is on a network, so it never crosses your network as plain HTTP.
 
 | | |
 |---|---|

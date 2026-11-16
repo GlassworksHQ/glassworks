@@ -1,14 +1,114 @@
-// The setup steps that run over the app's setup channel, on the Kiln design: Home Assistant, the radio
-// role and what to do next in Home Assistant. Kiln's wizard shows them over USB, the panel's own page over
-// the LAN (#34); `steps` is the wizard's Session or the page's controller.
+// The setup steps on the Kiln design: Wi-Fi, Home Assistant, the radio role and what to do next in Home
+// Assistant. Kiln's wizard shows them over USB, the panel's own page over the LAN or the panel's setup
+// hotspot (#34, issue 197); `steps` is the wizard's Session or the page's controller.
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
-import { useState } from 'react';
-import type { RadioStep, Setup } from '../wizard/state';
-import type { SetupSteps } from './channelSetup';
+import { useEffect, useState } from 'react';
+import type { Network, RadioStep, Setup } from '../wizard/state';
+import type { SetupSteps, WifiSteps } from './channelSetup';
 
 /** A step's props: a button's work is running (`busy`), what runs it, and the step's state. */
 export type StepProps<K extends Setup['phase']> = { busy: boolean; steps: SetupSteps; setup: Extract<Setup, { phase: K }> };
+
+function Signal({ rssi }: { rssi: number }) {
+  const level = rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;
+  return <span className="sig" aria-label={`signal ${level} of 4`}>{[1, 2, 3, 4].map((i) => <i key={i} style={{ height: i * 3 + 2, opacity: i <= level ? 1 : 0.25 }} />)}</span>;
+}
+const Lock = () => <svg className="lock" viewBox="0 0 24 24" aria-label="needs a password"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>;
+
+/**
+ * Wi-Fi: which network, the password, connect. The list is what the panel can see. Kiln's wizard sends it
+ * over USB (Improv Serial); the panel's own page over its setup channel, reached on the panel's setup hotspot
+ * (issue 197), where the join ends this page's connection, so the panel's screen gives the outcome.
+ */
+export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; setup: Extract<Setup, { phase: 'wifi' }> }) {
+  const nets: Network[] = setup.networks ?? [];
+  const [pick, setPick] = useState('');
+  const [other, setOther] = useState('');
+  const [psk, setPsk] = useState('');
+  // a pick that a rescan no longer lists goes too: Connect must not send a network the panel can't see,
+  // nor the dropped network's password to the one that replaces it
+  useEffect(() => {
+    const nets = setup.networks;
+    if (!nets) return;
+    if (!pick || (pick !== '\u0000other' && !nets.some((n) => n.ssid === pick))) {
+      setPick(nets[0]?.ssid ?? '\u0000other');
+      setPsk('');
+    }
+  }, [setup.networks, pick]);
+  const isOther = pick === '\u0000other';
+  const chosen = nets.find((n) => n.ssid === pick);
+  const secure = isOther || !!chosen?.secure;
+  const j = setup.joining;
+
+  if (j) {
+    const order = ['sent', 'join', 'ok'] as const;
+    const at = j.step === 'err' ? 1 : order.indexOf(j.step);
+    return (
+      <section className="card" aria-labelledby="h">
+        <h2 id="h">{j.step === 'ok' ? `On ${j.ssid}.` : j.step === 'err' ? `Couldn't join ${j.ssid}.` : `Joining ${j.ssid}…`}</h2>
+        <ol className="join" aria-live="polite">
+          {[setup.over === 'lan' ? 'Sent to the panel' : 'Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
+            <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
+          ))}
+        </ol>
+        {j.error && <p className="status err" role="alert">{j.error}</p>}
+        {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
+        <div className="foot">
+          {j.step === 'err' ? <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Skip, do it on the panel</button> : <span />}
+          {j.step === 'ok' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Continue</button>}
+          {j.step === 'err' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('wifi', () => steps.wifi())}>Try again</button>}
+        </div>
+      </section>
+    );
+  }
+  if (setup.on && !setup.changing) {
+    const { ssid, ip } = setup.on;
+    return (
+      <section className="card" aria-labelledby="h">
+        <h2 id="h">{ssid ? `Connected to ${ssid}.` : 'Connected to Wi-Fi.'}</h2>
+        <p className="lede">The panel is on this network already, at {ip}. Keep it, or use another network.</p>
+        <div className="foot">
+          <button type="button" className="link" disabled={busy} onClick={() => void steps.click('wifi-scan', () => steps.scanWifi())}>Use another network</button>
+          <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Continue</button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="card" aria-labelledby="h">
+      <h2 id="h">Which Wi-Fi?</h2>
+      {setup.hint && <p className="lede">{setup.hint}</p>}
+      {setup.networks === undefined && !setup.unreachable ? (
+        <><p className="status" role="status">{setup.status}</p><div className="bar wait"><i /></div></>
+      ) : setup.unreachable ? (
+        <p className="status err" role="alert">{setup.status} Try again, or set up Wi-Fi on the panel: it shows Wi-Fi first.</p>
+      ) : (
+        <>
+          <RadioGroup.Root className="list" value={pick} onValueChange={setPick} aria-label="Networks">
+            {nets.map((n) => (
+              <RadioGroup.Item key={n.ssid} value={n.ssid} className="opt" title={`${n.rssi} dBm`}>
+                <span className="rd" /><span className="t">{n.ssid}</span>{n.secure && <Lock />}<Signal rssi={n.rssi} />
+              </RadioGroup.Item>
+            ))}
+            <RadioGroup.Item value={'\u0000other'} className="opt"><span className="rd" /><span className="t">Other…</span></RadioGroup.Item>
+          </RadioGroup.Root>
+          <p className="small">{setup.status}</p>
+          {isOther && <label className="field"><span>Network name</span><input className="input" value={other} onChange={(e) => setOther(e.target.value)} autoComplete="off" /></label>}
+          {secure && <label className="field"><span>Password</span><input className="input" type="password" value={psk} onChange={(e) => setPsk(e.target.value)} autoComplete="off" /></label>}
+        </>
+      )}
+      <div className="foot">
+        <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>
+          {setup.on ? `Keep ${setup.on.ssid ?? 'its Wi-Fi'}` : 'Skip, do it on the panel'}
+        </button>
+        {setup.unreachable
+          ? <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('wifi', () => steps.wifi())}>Try again</button>
+          : <button type="button" className="btn ember" disabled={!setup.networks || busy} onClick={() => void steps.click('join', () => steps.joinWifi(isOther ? other : pick, secure ? psk : ''))}>Connect</button>}
+      </div>
+    </section>
+  );
+}
 
 /** 6 · Home Assistant: the address it found, and sign-in on the panel's own page (no token in this browser). */
 export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
