@@ -1,13 +1,15 @@
 // The Mirror's images, made in the person's browser (#40, option A). `system` is the Glass Panes
 // community image the person downloaded themselves. Kiln checks its SHA-256 and adds the legacy build of
-// Glassworks as a privileged system app, the Glassworks boot animation, and the screen's rotation. `userdata` is new
-// and empty but for Kiln's own adb key for this browser, because the Mirror has no touchscreen to
-// answer "Allow USB debugging?". Nothing here is downloaded from or uploaded to anyone: the person's
+// Glassworks as a privileged system app, the Glassworks boot animation, and the screen's rotation. The
+// Mirror has no touchscreen to answer "Allow USB debugging?", and the image lets one key in without
+// asking (services.ts): Kiln makes that this browser's key instead of the published Glass Panes one.
+// `userdata` is new and empty. Nothing here is downloaded from or uploaded to anyone: the person's
 // file goes in, and the patched copy stays in their browser until fastboot writes it.
 // The findings behind each step: frames/lululemon-mirror/research/image-patch.md.
 import { ManifestError, apkHome, apkInfo, apkPermissions, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
 import { APP_DIRS, GLASSWORKS, PRIVILEGED, type MirrorApp } from './app';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
+import { SERVICES_JAR, trustAdbKey } from './services';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
 export const GLASS_PANES = {
@@ -42,6 +44,11 @@ const MIRROR_API = 23;
 const LIB_DIRS: [string, string][] = [['arm64-v8a', 'arm64'], ['armeabi-v7a', 'arm']];
 
 export interface SystemPatch {
+  /**
+   * The adb key the Mirror lets in without asking, as an adb_keys line (e.g. Kiln's AdbKey.publicKey).
+   * With several lines, the first. services.jar trusts it in place of the Glass Panes project key.
+   */
+  adbKey: string;
   /** The app's APK: Glassworks' legacy build, or the probe with `app: MIRROR_PROBE`. */
   apk: Uint8Array;
   /** Which app the APK must be (package, folder); default Glassworks (frame.json `app`). */
@@ -149,6 +156,8 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     if (!data) throw new Error(`this APK lists ${n} but Kiln can't read it. Nothing was changed.`);
     payloads.push([dest, data]);
   }
+  if (!(await fs.exists(SERVICES_JAR))) throw new Error(`this image has no /system${SERVICES_JAR}. Nothing was changed.`);
+  const services = await trustAdbKey(await fs.readFile(SERVICES_JAR), o.adbKey.split('\n')[0]!);
 
   // one app of ours per image: any earlier one (Glassworks or the probe) goes first
   for (const dir of APP_DIRS) if (await fs.exists(dir)) { await fs.remove(dir, { recursive: true, time }); log(`replaced ${dir}`); }
@@ -184,13 +193,16 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   if (o.settingsOverlay) { next = setProp(next, 'ro.lockscreen.disable.default', 'true'); set.push('ro.lockscreen.disable.default=true'); }
   if (o.hwrotation !== undefined) { next = setProp(next, 'ro.sf.hwrotation', String(o.hwrotation)); set.push(`ro.sf.hwrotation=${o.hwrotation}`); }
   if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ${set.join(', ')}`); }
+  if (services) { await fs.replaceFile(SERVICES_JAR, services, time); log(`${SERVICES_JAR}: lets in this adb key without asking, not the Glass Panes project key`); }
   await fs.flush();
 }
 
 /**
- * A new, empty userdata that lets this browser's adb key in: /data/misc/adb/adb_keys, owned and
- * labelled as Android 6's init and file_contexts make them. Init creates everything else on first
- * boot. `adbKey`: the line adb_keys takes, e.g. Kiln's AdbKey.publicKey.
+ * A new, empty userdata with /data/misc/adb/adb_keys, owned and labelled as Android 6's init and
+ * file_contexts make them. Init creates everything else on first boot. `adbKey`: the line adb_keys
+ * takes, e.g. Kiln's AdbKey.publicKey. adbd on the Glass Panes image ignores this file (verified
+ * 2026-11-16): the key gets in through services.jar (patchSystem). The file is kept because Android
+ * writes keys there itself and a stock adbd would read it.
  */
 export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: number; uuid?: Uint8Array;
   /** the person's network, saved for Android's Wi-Fi; `template` is the image's /etc/wifi/wpa_supplicant.conf */

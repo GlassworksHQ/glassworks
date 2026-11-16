@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Fastboot } from '@glassworks/fastboot';
 import { GLASSWORKS, IMAGE_PROXY, MIRROR_FASTBOOT, MIRROR_PROBE, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
-import { fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
+import { fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb, readSerial } from './adb';
 import { DRY_USERDATA, dryDevices, dryImage } from './dry';
 import { runInstall, runWayBack, type RunDeps } from './run';
@@ -22,8 +22,10 @@ install (WRITES system and userdata):
   --apk <file>             the legacy build of Glassworks for generic Android
                            (dev.glassworks.generic_android.legacy: minSdk 23, arm64-v8a or armeabi-v7a)
   --probe                  the APK is the Mirror probe (tools/mirror/probe-app, sh.edm.s1kiosk) instead
-  --adb-key <file>         a public key for the new userdata's adb_keys; repeat for more
-                           (default: ~/.android/adbkey.pub, the host's)
+  --adb-key <file>         the adb public key the Mirror lets in without asking (services.jar),
+                           default ~/.android/adbkey.pub. adb's server must hold its private half:
+                           for another key, see "A throwaway key" in tools/mirror/README.md. Repeat
+                           for more lines in adb_keys (which this image's adbd ignores)
   --ha-url <url>           Home Assistant's address for the app
   --wifi-ssid <name> --wifi-pass-file <file>   Wi-Fi for the image (the password from a file)
   --boot-animation <zip>   default: branding/lululemon-mirror/bootanimation.zip; --no-boot-animation
@@ -97,33 +99,45 @@ async function nodeFastboot(log: (l: string) => void): Promise<FastbootLike> {
 async function realDevices(a: Args, log: (l: string) => void, confirm: RunDeps['confirm']): Promise<RunDeps> {
   const serial = readSerial(a['serial-file']);
   const adb = hostAdb(serial);
-  const state = async () => String(await adb.adb(['get-state'], { timeoutMs: 10_000 }).catch(() => '')).trim();
+  // `adb devices`, not get-state: get-state fails without saying "unauthorized"
+  const state = async () => String(await adb.adb(['devices'], { timeoutMs: 10_000 }).catch(() => ''))
+    .split('\n').map((l) => l.trim().split(/\s+/)).find(([s]) => s === serial)?.[1] ?? '';
   return {
     log, confirm, sleep,
     adb: async () => ((await state()) === 'device' ? adb : undefined),
     rebootToBootloader: async () => { await adb.adb(['reboot', 'bootloader']); },
     fastboot: () => nodeFastboot(log),
     async waitForAdb() {
+      let s = '';
       for (let i = 0; i < 180; i++) {
-        const s = await state();
+        s = await state();
         if (s === 'device') return adb;
         if (i % 15 === 0) log(`    waiting for adb (${s || 'not seen yet'})…`);
         await sleep(2000);
       }
-      throw new Error('the Mirror didn\'t come up on adb in 6 minutes. If `adb devices` shows it as unauthorized, the adb key wasn\'t the one written to userdata; if it shows another serial, put that in the serial file and rerun from --way-back or the first boot');
+      // unauthorized is normal for a while after each start: the framework lets the key in once it runs
+      throw new Error(s === 'unauthorized'
+        ? 'the Mirror stayed unauthorized for 6 minutes: adb\'s server isn\'t answering with the key the image lets in (the first --adb-key). Restart the server with that key (tools/mirror/README.md, "A throwaway key"), then run `adb devices` again: no reflash needed'
+        : 'the Mirror didn\'t come up on adb in 6 minutes. If `adb devices` shows another serial, put that in the serial file and rerun from --way-back or the first boot');
     },
     async screenshot(file) { writeFileSync(file, await adb.adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer' })); },
   };
 }
 
-function adbKeys(a: Args): string {
-  const files = a['adb-key'] ?? [join(homedir(), '.android/adbkey.pub')];
-  return files.map((f) => {
+function adbKeys(a: Args, log: (l: string) => void): string {
+  const home = join(homedir(), '.android/adbkey.pub');
+  const files = a['adb-key'] ?? [home];
+  const lines = files.map((f) => {
     if (!existsSync(f)) fail(`no adb public key at ${f}`);
     const line = readFileSync(f, 'utf8').trim();
     if (!/^[A-Za-z0-9+/=]{100,}( .*)?$/.test(line)) fail(`${f} isn't an adb public key`);
     return line;
-  }).join('\n');
+  });
+  // the first key is the one the Mirror lets in: adb's server must answer with it
+  const first = resolve(files[0]!);
+  if (!existsSync(first.replace(/\.pub$/, ''))) log(`    note: no private key next to ${first}; adb's server needs it to get in after the flash`);
+  if (first !== resolve(home)) log(`    note: the Mirror will let in ${first}, not this HOME's key. adb's server must run with it: see "A throwaway key" in tools/mirror/README.md`);
+  return lines.join('\n');
 }
 
 /**
@@ -164,12 +178,12 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
     if (dry) {
       const img = await dryImage(work, apk.length + (bootAnimation?.length ?? 0));
       const d = dryDevices(img.bytes, log, { app });
-      r = await runInstall({ ...common, image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, adbKey: 'QAAAAdryrun= dry@run', screenshot: join(work, 'after.png') }, d.deps);
+      r = await runInstall({ ...common, image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, adbKey: fakeAdbKey(1, 'dry@run'), screenshot: join(work, 'after.png') }, d.deps);
       log(`\nDry run: LK got ${d.lk.commands.filter((c) => c.startsWith('flash:')).join(', ')}, then reboot; adb ran ${d.after.cmds.length} commands on the first boot.`);
     } else {
       if (!a.image && !a.refract) fail('--image <system.img> or --refract is needed');
       const image = a.image ? { path: a.image } : { url: `${IMAGE_PROXY.base}/${IMAGE_PROXY.systemImg}` };
-      r = await runInstall({ ...common, image, adbKey: adbKeys(a), screenshot: a.screenshot ?? resolve('mirror-after.png') }, await realDevices(a, log, await confirmer(!!a.yes)));
+      r = await runInstall({ ...common, image, adbKey: adbKeys(a, log), screenshot: a.screenshot ?? resolve('mirror-after.png') }, await realDevices(a, log, await confirmer(!!a.yes)));
     }
     const fb = r.firstBoot;
     log(`\nDone: ${app.name} ${fb?.app.name ?? fb?.app.code}, home ${fb?.home.result}${fb?.wifi === undefined ? '' : `, Wi-Fi ${fb.wifi ? 'joined' : 'not confirmed'}`}, rotation ${fb?.rotation ?? 'unset'}${r.screenshot ? `, screenshot ${r.screenshot}` : ''}.`);

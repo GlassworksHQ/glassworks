@@ -7,13 +7,13 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { clean, debugfs, debugfsCat, fsck, haveTools } from '@glassworks/ext4/testing';
-import { FakeMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FakeMirror, fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb } from '../src/adb';
 import { UsageError, cli } from '../src/cli';
 import { DRY_USERDATA, dryDevices, dryImage } from '../src/dry';
 import { runInstall, runWayBack } from '../src/run';
 
-const KEY = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= root@host';
+const KEY = fakeAdbKey(9, 'root@host');
 const APK = fakeMirrorApk({ libs: { 'arm64-v8a': { 'libgecko.so': new Uint8Array(5000).fill(7) } } });
 
 let work: string;

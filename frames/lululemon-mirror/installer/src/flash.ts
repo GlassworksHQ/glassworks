@@ -1,6 +1,6 @@
 // The Mirror in fastboot (its locked LK, reached with the button inside its back): what Kiln reads
 // before writing, the images it builds for it, the writes, and the first boot over adb with Kiln's
-// own key. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
+// own key, which the patched services.jar lets in without asking. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
 // lululemon's software: the screens say so before anything is written (#40).
 import type { PanelShell } from '@glassworks/adb';
 import { Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
@@ -97,8 +97,8 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
 
 /**
  * The two images Kiln flashes, written as sparse images to the sinks: the loaded system image with
- * the app (Glassworks) and the rest (patchSystem), and a fresh userdata the partition's size with this browser's
- * adb key (buildUserdata).
+ * the app (Glassworks), services.jar trusting `adbKey`'s first line, and the rest (patchSystem), and a
+ * fresh userdata the partition's size with `adbKey` in adb_keys (buildUserdata).
  */
 /** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
 export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean;
@@ -176,7 +176,7 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
 }
 
 /**
- * The Mirror's first start on Glassworks, over adb with Kiln's own key: checks it is the patched
+ * The Mirror's first start on Glassworks, over adb with Kiln's own key (the one services.jar trusts): checks it is the patched
  * image, grants what adb can, hides the other launchers, starts the app (Glassworks) with Home Assistant's
  * address, and gives it the Wi-Fi.
  */
