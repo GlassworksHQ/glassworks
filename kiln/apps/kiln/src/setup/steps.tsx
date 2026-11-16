@@ -57,10 +57,28 @@ export function Radio({ busy, steps, setup }: StepProps<'radio'>) {
   );
 }
 
+/**
+ * Copies [value]. The Clipboard API needs a secure context, which the panel's own page (plain HTTP on the
+ * LAN) isn't, so it falls back to copying a hidden selection there.
+ */
+async function copy(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard) { await navigator.clipboard.writeText(value); return true; }
+  } catch { /* refused: try the selection */ }
+  const t = document.createElement('textarea');
+  t.value = value;
+  t.setAttribute('readonly', '');
+  t.style.position = 'fixed';
+  t.style.opacity = '0';
+  document.body.appendChild(t);
+  t.select();
+  try { return document.execCommand('copy'); } catch { return false; } finally { t.remove(); }
+}
+
 function Copy({ value }: { value: string }) {
   const [t, setT] = useState('Copy');
   return <button type="button" className="link" onClick={async () => {
-    try { await navigator.clipboard.writeText(value); setT('Copied'); } catch { setT('Select it'); }
+    setT((await copy(value)) ? 'Copied' : 'Select it');
     setTimeout(() => setT('Copy'), 1600);
   }}>{t}</button>;
 }

@@ -152,6 +152,21 @@ describe('the setup steps over the LAN', () => {
     expect(finished).toEqual(['finish']);
   });
 
+  it('Copy works on the panel\'s plain-HTTP page, where there is no Clipboard API', async () => {
+    const copied: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    document.execCommand = ((cmd: string) => {
+      copied.push(`${cmd}:${document.querySelector('textarea')?.value ?? ''}`);
+      return true;
+    }) as typeof document.execCommand;
+    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} };
+    const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [{ title: 'Add the radio', body: '', kv: [['Serial path', 'socket://192.0.2.10:6638', true]] as [string, string, boolean][] }] };
+    render(<RadioNext busy={false} steps={steps} setup={{ phase: 'radio-next', plan }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await screen.findByRole('button', { name: 'Copied' });
+    expect(copied).toEqual(['copy:socket://192.0.2.10:6638']);
+  });
+
   it('the step screens need only SetupSteps, not the wizard\'s session', () => {
     const calls: string[] = [];
     const steps: SetupSteps = {
