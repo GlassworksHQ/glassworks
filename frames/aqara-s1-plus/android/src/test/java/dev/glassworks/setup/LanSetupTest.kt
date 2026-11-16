@@ -278,6 +278,8 @@ class LanSetupTest {
                     inp.skipBytes(len)
                     if (b0 != 0x81) return b0 == 0x88
                 }
+            } catch (_: java.net.SocketTimeoutException) {
+                return false
             } catch (_: java.io.IOException) {
                 return true
             }
