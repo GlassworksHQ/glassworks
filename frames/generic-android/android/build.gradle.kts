@@ -81,8 +81,11 @@ android {
 
     testOptions { unitTests.isIncludeAndroidResources = true }
 
-    // RepoFiles, the tests' way to find files across every module from the repo root (#21).
+    // RepoFiles, the tests' way to find files across every module from the repo root (#21), and the GeckoView
+    // shadows and harness that run the real MainActivity (testing/gecko, shared with S1 Kiosk's tests).
     sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/kotlin"))
+    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/gecko"))
+    sourceSets.getByName("test").java.srcDir(rootProject.file("testing/gecko"))
 }
 
 dependencies {
