@@ -94,9 +94,6 @@ object ProxyPage {
         Triple(CONNECT, "Listen and connect", "Also locks and devices Home Assistant has to connect to. Up to $SLOTS at once."),
     )
 
-    /** The mode not picked: id, name, line. */
-    fun other(connect: Boolean) = MODES.first { it.first == if (connect) LISTEN else CONNECT }
-
     /** The note while it's off or can't run, or null. */
     fun note(phase: ProxyPhase): String? = when (phase) {
         NO_BLE -> NO_BLE_NOTE
@@ -148,14 +145,13 @@ object ProxyPage {
             MODE,
             value = { if (model.connect) CONNECT else LISTEN },
             options = { MODES.map { (id, name, _) -> id to name } },
-            line = { id -> MODES.first { it.first == id }.third },
         ) { id, done ->
             model.connect = id == CONNECT
             done(null)
         }
-        // The panel draws both modes with their lines; the Choice's row shows the picked one's. This row says
-        // what the other one does, so a browser explains both too.
-        if (mode(phase)) items += SettingsItem.Info({ other(model.connect).second }, { other(model.connect).third })
+        // The panel draws both modes with their lines; the Choice's row names the picked one. These rows say
+        // what each does, so a browser explains both too.
+        if (mode(phase)) for ((_, name, line) in MODES) items += SettingsItem.Info({ name }, { line })
         note(phase)?.let { n -> items += SettingsItem.Note { n } }
         if (inHomeAssistant(phase)) {
             items += SettingsItem.States(IN_HOME_ASSISTANT) { entities(model.phase(), model.status()).map { (k, v) -> SettingsItem.StateRow(k, v) } }
