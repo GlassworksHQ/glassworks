@@ -38,6 +38,7 @@ OPEN_MS = G.METRICS["load_ms"]["poor_above"]       # fluid accepts good and need
 CAM_FIRST_MS = _CAM["fluid"]["first_frame_max_ms"]
 CAM_SHOWN_PCT = _CAM["fluid"]["shown_min_pct"]
 CAM_STALL_MS = _CAM["fluid"]["stall_total_max_ms"]
+DIALOG_MS = {lv["level"]: lv for lv in G.RULES["dialog_levels"]}["fluid"]["settled_max_ms"]   # Clarity v3 (#211)
 
 # A camera page starves (the player asks for video late) when a stream's segments arrive this far
 # apart, against 1 s segments (camera.py SEGMENT_S), while each fetch is quicker than FAST_FETCH_MS.
@@ -138,6 +139,16 @@ def _limit(task, t):
     if task == "camera":
         # Only a number that fails its bar: a passing one would read as a strength.
         return _camera_limit(t)
+    if task == "dialog":
+        # The graded runs' level is the median of each run's: when most runs had a dialog that never
+        # opened fully, that is the limit, else the median time the slowest one took.
+        runs = [r for r in t.get("dialog_runs") or [] if not r.get("timed_out")]
+        if not runs:
+            return None
+        if sum(1 for r in runs if r.get("failed")) * 2 > len(runs):
+            return 10.0, "doesn't open a more-info dialog fully"
+        v = _med(t.get("dialog_settled_ms"))
+        return (v / DIALOG_MS, f"takes {_time(v)} to open a more-info dialog") if v is not None else None
     return None
 
 
@@ -179,15 +190,16 @@ def good_sentence(rep):
     if not page:
         return None
     b = _bands(rep).get(page) or {}
-    word = {"tap": "taps", "updates": "live updates", "load": "opening a view", "camera": "the cameras"}
+    word = {"tap": "taps", "updates": "live updates", "load": "opening a view", "camera": "the cameras",
+            "dialog": "more-info dialogs"}
     word["scroll"] = "scrolling"
-    quick = [word[t] for t in ("tap", "updates", "load", "camera") if b.get(t) in GOOD]
+    quick = [word[t] for t in ("tap", "updates", "load", "dialog", "camera") if b.get(t) in GOOD]
     parts = []
     if quick:
         parts.append(f"{_join(quick)} {'is' if quick == ['opening a view'] else 'are'} quick")
     if b.get("scroll") in GOOD:
         parts.append("scrolling is smooth")
-    fluid = [word[t] for t in ("scroll", "updates", "camera") if b.get(t) in FLUID]
+    fluid = [word[t] for t in ("scroll", "updates", "dialog", "camera") if b.get(t) in FLUID]
     if fluid:
         parts.append(f"{_join(fluid)} {'is' if fluid == ['scrolling'] else 'are'} fluid")
     if page == "typical-nocam":

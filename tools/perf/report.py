@@ -492,6 +492,9 @@ def scroll_frames(swipes):
 # Pre-release protocol 8 was Clarity v1's release candidate (#205: s1rtc5 ran it on 2026-11-13): the
 # same measurement as v1's protocol 1, before its lines carried `clarity`. Its lines read as v1.
 RC_PROTOCOL = 8
+# The more-info dialogs (#211) came with Clarity v3 (protocol 3): a view of an earlier version that
+# timed out didn't miss them. By the marker, not the number: pre-release protocols reuse 3 to 8.
+DIALOG_CLARITY = 3
 
 
 def page_version(page):
@@ -610,6 +613,10 @@ def tier_run(tier, entry, presents_ms):
     if why:
         out.update(updates=None, latency=None, updates_run=None, updates_error=why)
     out["camera_run"] = camera_run(entry.get("camera"), tier)
+    # Protocol 3 (#211): HA's more-info dialogs, after the swipes.
+    out["dialog_run"], why = dialog_run(entry.get("dialogs"), period)
+    if why:
+        out["dialog_error"] = why
     inp = entry.get("input") or {}
     out.update(inp_ms=None if voids_taps or not inp.get("taps") else inp.get("inp_ms"), input_method=inp.get("method"),
                fcp_ms=page.get("fcp_ms"), nodes=page.get("nodes"), cards=page.get("cards"))
@@ -625,6 +632,35 @@ def tier_run(tier, entry, presents_ms):
     return out
 
 
+def dialog_run(lines, period=None):
+    """One view's more-info dialogs in one run (protocol 3, #211): (record, why). The record: how many
+    dialogs ran and how many failed (never opened, or never settled), the slowest to settle (None when
+    one failed: the graders read a failure as below fluid), the open animations' frames pooled (the
+    premium level's 60 fps bar), and as detail the slowest response, close and longest frame, the
+    refreshes missed, the mode HA showed and each dialog. (None, None) when the page logged none (a page
+    before protocol 3); (None, why) when some of its lines were lost: not measured."""
+    ds = sorted((d for d in lines or [] if d.get("t") == "dialog"), key=lambda d: d.get("n") or 0)
+    if not ds:
+        return None, None
+    of = max(d.get("of") or 0 for d in ds)
+    if len({d.get("n") for d in ds}) < of:
+        return None, f"only {len({d.get('n') for d in ds})} of {of} dialog lines arrived"
+    failed = [d for d in ds if d.get("settled_ms") is None]
+    period = period or 1000 / 60
+    pooled = [x for d in ds for x in d.get("anim_intervals") or []]
+    frames = P.frame_stats(pooled, period) if pooled else {"n": 0}
+    top = lambda k: max((d[k] for d in ds if d.get(k) is not None), default=None)  # noqa: E731
+    return {"n": len(ds), "failed": len(failed), "settled_ms": None if failed else top("settled_ms"),
+            "frames": frame_facts(frames), "open_ms": top("open_ms"), "close_ms": top("close_ms"),
+            "longest_frame_ms": top("longest_frame_ms"), "dropped": sum(d.get("dropped") or 0 for d in ds),
+            "modes": sorted({d["mode"] for d in ds if d.get("mode")}),
+            "reduced_motion": any(d.get("reduced_motion") for d in ds),
+            "errors": [f"{d.get('kind')}: {d['error']}" for d in failed if d.get("error")],
+            "dialogs": [{k: d.get(k) for k in ("entity", "kind", "open_ms", "shown_ms", "graph_ms", "settled_ms", "close_ms",
+                                               "dropped", "longest_frame_ms", "show_duration_ms", "error", "close_error")}
+                        for d in ds]}, None
+
+
 def timed_out(tier, out, deadline_s):
     """A view that didn't finish within the runner's deadline (#202): what it measured stands, and each
     task it didn't measure in this run is measured as failed, not missing: it didn't finish. Tap takes
@@ -634,7 +670,7 @@ def timed_out(tier, out, deadline_s):
     which the graders read as below fluid."""
     out = {k: v for k, v in out.items() if k != "error"}
     for k in ("inp_ms", "input_method", "fcp_ms", "nodes", "cards", "load_ms", "updates", "latency", "arrivals",
-              "camera_run", "updates_run", "scroll", "blocking_ms"):
+              "camera_run", "updates_run", "scroll", "blocking_ms", "dialog_run"):
         out.setdefault(k, None)                  # a view that timed out before it was usable reported none
     ms = round(deadline_s * 1000)
     out["timed_out_s"] = deadline_s
@@ -656,6 +692,13 @@ def timed_out(tier, out, deadline_s):
     if not out.get("updates_run"):
         out.update(updates_run={"timed_out": True}, updates_error=None)
         out["timed_out_tasks"].append("updates")
+    known_older = out.get("clarity") is not None and out["clarity"] < DIALOG_CLARITY or \
+        out.get("clarity") is None and out.get("protocol") is not None
+    if not out.get("dialog_run") and not known_older:
+        # Protocol 3: the view never got to its dialogs (they come last). A view that said nothing
+        # (never usable) is taken to be this version's, as its other tasks are.
+        out.update(dialog_run={"timed_out": True}, dialog_error=None)
+        out["timed_out_tasks"].append("dialog")
     if tier in G.CAMERA_PAGES and not out.get("camera_run"):
         out["camera_run"] = {"timed_out": True, "first_frame_ms": None, "shown_pct": None, "max_gap_ms": None,
                              "stall_total_ms": None, "streams": 0, "detail": []}
@@ -740,7 +783,9 @@ def by_position(rs):
             "scroll_fps": sc.get("fps"), "scroll_p95_ms": sc.get("p95_ms"), "scroll_level": G.scroll_level(sc) if sc else None,
             "latency_p95_ms": (x.get("latency") or {}).get("p95_ms"),
             "updates_level": G.update_level(x.get("updates_run")),
-            "inp_ms": x.get("inp_ms"), "load_ms": x.get("load_ms")})
+            "inp_ms": x.get("inp_ms"), "load_ms": x.get("load_ms"),
+            **({"dialog_settled_ms": (x.get("dialog_run") or {}).get("settled_ms"),
+                "dialog_level": G.dialog_level(x.get("dialog_run"))} if x.get("dialog_run") else {})})
     return out
 
 
@@ -808,6 +853,16 @@ def reference_summary(all_runs):
             "timed_out_runs": sum(1 for x in rs if x.get("timed_out_s")),
             "timed_out_tasks": sorted({k for x in rs for k in x.get("timed_out_tasks") or []}),
             "camera_fallback": camera_fallback_summary(runs, t),
+            # Protocol 3 (#211): HA's more-info dialogs, each run's slowest to settle, its level, then
+            # the median level; the response, the close and the frames are detail.
+            "dialog_runs": [x["dialog_run"] for x in rs if x.get("dialog_run")],
+            "dialog_levels": [G.dialog_level(x["dialog_run"]) for x in rs if x.get("dialog_run")],
+            "dialog_level": G.median_level(G.dialog_level(x["dialog_run"]) for x in rs if x.get("dialog_run")),
+            "dialog_settled_ms": P.spread([(x.get("dialog_run") or {}).get("settled_ms") for x in rs]),
+            "dialog_open_ms": P.spread([(x.get("dialog_run") or {}).get("open_ms") for x in rs]),
+            "dialog_close_ms": P.spread([(x.get("dialog_run") or {}).get("close_ms") for x in rs]),
+            "dialog_errors": [x["dialog_error"] for x in rs if x.get("dialog_error")]
+                             + [e for x in rs for e in (x.get("dialog_run") or {}).get("errors") or []],
             "updates_levels": [G.update_level(x["updates_run"]) for x in rs if x.get("updates_run")],
             "updates_level": G.median_level(G.update_level(x["updates_run"]) for x in rs if x.get("updates_run")),
             "swipes_during_updates": [x.get("swipes_during_updates") for x in rs if x.get("scroll")],
@@ -865,7 +920,7 @@ def grade_inputs(graded):
     med = lambda x: x and x["median"]  # noqa: E731
     tiers = {t: {"inp_ms": med(s["inp_ms"]), "load_ms": med(s["load_ms"]), "blocking_ms": med(s.get("blocking_ms")),
                  "scroll_level": s["scroll_level"], "updates_level": s["updates_level"],
-                 "camera_level": s.get("camera_level")}
+                 "camera_level": s.get("camera_level"), "dialog_level": s.get("dialog_level")}
              for t, s in (ref.get("tiers") or {}).items()}
     return tiers, med(ref.get("start_ms"))
 
@@ -926,6 +981,13 @@ def task_phrase(task, s_):
         if med("blocking_ms") is None:
             return "the blocking after the view is drawn wasn't measured"
         return f"the main thread is blocked for {med('blocking_ms') / 1000:.1f} s after the view is drawn"
+    if task == "dialog":
+        runs = [r for r in (s_ or {}).get("dialog_runs") or [] if not r.get("timed_out")]
+        if not runs:
+            return "the more-info dialog wasn't measured"
+        if any(r.get("failed") for r in runs):
+            return f"a more-info dialog didn't open fully in {sum(1 for r in runs if r.get('failed'))} of {len(runs)} run(s)"
+        return f"a more-info dialog takes {statistics.median(r['settled_ms'] for r in runs) / 1000:.1f} s to open"
     if task != "load":
         raise ValueError(f"no words for task {task!r}")
     if med("load_ms") is not None:
@@ -1366,6 +1428,8 @@ def coverage_reasons(ref, attempted):
                "blocking": s_ and (s_.get("blocking_ms") or {}).get("n", 0) or 0}
         if t in G.CAMERA_PAGES:
             got["camera"] = s_ and len(s_.get("camera_runs") or []) or 0
+        if s_ and "dialog_runs" in s_:
+            got["dialog"] = len(s_["dialog_runs"])
         short = [f"{task} {n} of {attempted}" for task, n in got.items() if 0 < n < attempted]
         if short:
             out.append(f"{t}: measured in fewer runs than attempted ({', '.join(short)})")
@@ -1397,6 +1461,12 @@ def coverage_reasons(ref, attempted):
         during = [d for d in (s_ or {}).get("swipes_during_updates") or [] if d is not None]
         if during and not any(during):
             out.append(f"{t}: no swipe ran while the live updates did, so scroll wasn't measured during updates")
+        # Protocol 3: HA's sheet and graph don't animate under prefers-reduced-motion, so its dialogs
+        # aren't timed as a panel at its defaults is (the S1's is off).
+        k = sum(1 for d in (s_ or {}).get("dialog_runs") or [] if d.get("reduced_motion"))
+        if k:
+            out.append(f"{t}: the more-info dialogs ran with prefers-reduced-motion in {k} run(s): no open animation, "
+                       "so they aren't timed as at the panel's defaults")
         k = sum((s_ or {}).get("scroll_raf_only") or [])
         if k:
             out.append(f"{t}: scrolling rests on rAF only in {k} run(s); SurfaceFlinger's history didn't cover its swipes")
@@ -1727,6 +1797,42 @@ def camera_cell(s_, b):
             f"{b.get('camera') or 'n/a'}{note}")
 
 
+def dialog_cell(s_, b):
+    """The page's more-info dialogs in report.md (protocol 3): the slowest to settle (median of runs),
+    the level, and how many runs had one that didn't open fully."""
+    runs = s_.get("dialog_runs")
+    if runs is None:
+        return "n/a (before Clarity v3)"
+    if not runs:
+        return "not measured"
+    failed = sum(1 for r in runs if r.get("failed") or r.get("timed_out"))
+    st = s_.get("dialog_settled_ms")
+    head = f"settled in {fmt(st, ' ms')}" if st and st.get("median") is not None else "never settled"
+    return (f"{head}, {b.get('dialog') or 'n/a'}"
+            + (f", {failed} of {len(runs)} run(s) had one that didn't open fully" if failed else ""))
+
+
+def dialog_detail(ref):
+    """report.md (detail, protocol 3): per page, the dialogs' response, close and frames, how HA showed
+    them, and why any didn't open fully."""
+    out = []
+    for t, s_ in ref["tiers"].items():
+        runs = [r for r in s_.get("dialog_runs") or [] if not r.get("timed_out")]
+        if not runs:
+            continue
+        modes = sorted({m for r in runs for m in r.get("modes") or []})
+        lf = [r["longest_frame_ms"] for r in runs if r.get("longest_frame_ms") is not None]
+        out.append(f"{t}: more-info dialogs (detail): the first frame of the open {fmt(s_.get('dialog_open_ms'), ' ms')} "
+                   f"after the tile's event, closed in {fmt(s_.get('dialog_close_ms'), ' ms')}; their open animations "
+                   f"missed {sum(r.get('dropped') or 0 for r in runs)} refresh(es) in all"
+                   + (f", the longest frame of an open {max(lf):.0f} ms" if lf else "")
+                   + f"; shown as {', '.join(modes) or 'n/a'}.")
+        errs = s_.get("dialog_errors") or []
+        if errs:
+            out.append(f"{t}: more-info dialogs that didn't open fully or weren't measured: {'; '.join(sorted(set(errs)))}.")
+    return out
+
+
 def band_cell(b):
     return b or "n/a"
 
@@ -1752,13 +1858,15 @@ def markdown(rep):
                 "show within 100 ms, taps within 200 ms, the view is drawn within 4 s and its main thread blocks for at "
                 "most 600 ms after that; fluid at 30 fps (scroll p95 at "
                 "most 67 ms) and changes within 200 ms; premium when scrolling and the live changes also hold 60 fps (A+ on heavy). "
-                "Live-update pacing is detail, not graded.", "",
-                "| Page | Level | Tap (INP) | Scroll | Live updates | Open the view (drawn) | Blocking after it | Cameras | Holds it back |",
-                "|---|---|---|---|---|---|---|---|---|"]
+                "Live-update pacing is detail, not graded. Since Clarity v3, HA's more-info dialogs (a light's, a thermostat's "
+                "and a sensor's with its history graph) settle within 1 s for good and 2 s for fluid (the slowest of them, "
+                "from the tile's event), and premium asks their open animation to hold 60 fps.", "",
+                "| Page | Level | Tap (INP) | Scroll | Live updates | Open the view (drawn) | Blocking after it | Cameras | More-info dialog | Holds it back |",
+                "|---|---|---|---|---|---|---|---|---|---|"]
         for t in G.TIERS:
             s_, b = ref["tiers"].get(t), g["bands"].get(t) or {}
             if not s_:
-                out.append(f"| {t} | not measured | | | | | | | |")
+                out.append(f"| {t} | not measured | | | | | | | | |")
                 continue
             lvl = g["levels"].get(t)
             up = {None: "fluid", "fluid": "good", "good": "premium"}
@@ -1771,7 +1879,7 @@ def markdown(rep):
                 f"| {fmt(s_['latency_p95_ms'], ' ms')} to show (p95), {b['updates'] or 'n/a'}; pacing p95 {fmt(s_['updates']['p95_ms'], ' ms')} "
                 f"| {fmt(s_['load_ms'], ' ms')}, {band_cell(b['load'])} "
                 f"| {fmt(s_.get('blocking_ms'), ' ms')}, {band_cell(b.get('blocking'))} (usable at {fmt(s_.get('usable_ms'), ' ms')}) "
-                f"| {camera_cell(s_, b)} | {held} |")
+                f"| {camera_cell(s_, b)} | {dialog_cell(s_, b)} | {held} |")
         vp = g.get("viewport") or {}
         seen = sorted({str(v) for s_ in ref["tiers"].values() for v in s_["viewport"]})
         to = "a usable reference dashboard" if ref.get("restart_to") == "usable" else "engine ready"
@@ -1808,6 +1916,7 @@ def markdown(rep):
                        "graded (an HLS copy or a warm-up; detail: this computer was busy then).")
         out += transport_line(rep)
         out += camera_detail(ref)
+        out += dialog_detail(ref)
         for t, s_ in ref["tiers"].items():
             for what in ("scroll", "updates", "load"):
                 errs = s_[f"{what}_errors"]

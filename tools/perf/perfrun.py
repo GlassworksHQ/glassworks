@@ -592,11 +592,12 @@ def cmd_coldstart(dev, a):
         st["line_at"], st["last_line"] = None, None
         paused.clear()
         if slot == "warmup":
-            tier, extra = a.warmup_tier, {"taps": 0, "swipes": 0, "warmup": 1}
+            tier, extra = a.warmup_tier, {"taps": 0, "swipes": 0, "dialogs": 0, "warmup": 1}
             res["warmup"] = {"tier": tier, "nonce": nonce, "swipes": []}
         elif slot in fallback:
-            # As a graded view, taps included, so the camera window is the same; no swipes.
-            tier, extra = slot, {"taps": a.taps, "swipes": 0}
+            # As a graded view, taps included, so the camera window is the same; no swipes, no
+            # more-info dialogs (protocol 3: they come after the camera window, and aren't the copy's).
+            tier, extra = slot, {"taps": a.taps, "swipes": 0, "dialogs": 0}
             res["fallback"][slot] = {"nonce": nonce, "swipes": []}
         else:
             tier, extra = slot, {"taps": a.taps}
@@ -754,6 +755,9 @@ def cmd_coldstart(dev, a):
             entry["input"] = pl
         elif t == "camera":
             entry["camera"] = pl
+        elif t == "dialog":
+            # Protocol 3 (#211): one line per more-info dialog, after the swipes.
+            entry.setdefault("dialogs", []).append(pl)
         elif t in ("done", "error"):
             st["live"] = st["view_open"] = False
             # Stop the view's stream at the fake (protocol 8: the page asks too, but doesn't wait on a

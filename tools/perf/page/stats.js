@@ -416,9 +416,66 @@
     return rvfc ? { frames: callbacks, source: "rvfc" } : { frames: null, source: "none" };
   }
 
+  // HA's more-info dialog (protocol 3, #211), one animation frame at a time while it opens. obs:
+  // opened (HA's `opened`: the bottom sheet or dialog started to show), shown (HA's `after-show`: its
+  // show animation finished), graph (null when the dialog has no history graph; else whether it is
+  // drawn: its chart laid out with its data). prev: the state so far ({} at first). Each mark is the
+  // first frame in which it held; settled is the first frame in which it is shown and its graph, if
+  // any, drawn. Done at settled.
+  function dialogStep(obs, ts, prev) {
+    const st = Object.assign({ opened: null, shown: null, graph: null, settled: null, done: false }, prev);
+    if (obs.opened && st.opened === null) st.opened = ts;
+    if (obs.shown && st.shown === null) st.shown = ts;
+    if (obs.graph === true && st.graph === null) st.graph = ts;
+    if (st.shown !== null && (obs.graph === null || st.graph !== null)) {
+      st.settled = ts;
+      st.done = true;
+    }
+    return st;
+  }
+
+  // Refreshes a run of frame intervals missed: each interval of k refreshes (to the nearest) missed k - 1.
+  function missedRefreshes(intervalsMs, vsyncMs) {
+    const period = vsyncMs > 0 ? vsyncMs : BUDGET_MS;
+    return intervalsMs.reduce((n, x) => n + Math.max(0, Math.round(x / period) - 1), 0);
+  }
+
+  // One dialog's timing points (#211), all ms after t0, the moment the harness fired the tile's event.
+  // d: t0, frames (every animation frame's time from t0 on), the marks from dialogStep (opened, shown,
+  // graph, settled: frame times or null), and the close: c0 (closeDialog called), closed (the first
+  // frame after HA's `closed`, its hide animation finished, or null), closeFrames. The open animation
+  // runs from the frame it started in (opened) to the frame it finished in (shown); its frames are
+  // what `anim` and `dropped` read. Frames before opened are HA building the dialog: one long frame
+  // there is the open's response, not the animation's.
+  function dialogTimes(d, vsyncMs) {
+    const r1 = (x) => Math.round(x * 10) / 10;
+    // An animation frame's time is when its frame began: one already under way when the event fired
+    // can read a little before t0 (Chrome, 2026-11-16: -0.4 ms), and shows the response at once: 0.
+    const after = (t, from) => (t === null || t === undefined ? null : r1(Math.max(0, t - from)));
+    const end = d.shown !== null ? d.shown : (d.frames.length ? d.frames[d.frames.length - 1] : null);
+    const animStamps = d.opened === null ? [] : d.frames.filter((t) => t >= d.opened && t <= end);
+    const anim = intervals(animStamps);
+    const openStamps = [d.t0].concat(d.frames.filter((t) => t > d.t0 && (d.settled === null || t <= d.settled)));
+    const close = d.c0 === null || d.c0 === undefined ? null
+      : intervals([d.c0].concat((d.closeFrames || []).filter((t) => t > d.c0 && (d.closed === null || t <= d.closed))));
+    return {
+      opened: d.opened !== null,
+      open_ms: after(d.opened, d.t0),
+      shown_ms: after(d.shown, d.t0),
+      graph_ms: after(d.graph, d.t0),
+      settled_ms: after(d.settled, d.t0),
+      anim: frameStats(anim, vsyncMs),
+      anim_intervals: anim.map(r1),
+      dropped: missedRefreshes(anim, vsyncMs),
+      longest_frame_ms: openStamps.length > 1 ? r1(Math.max.apply(null, intervals(openStamps))) : null,
+      close_ms: d.c0 === null || d.c0 === undefined ? null : after(d.closed, d.c0),
+      close_longest_ms: close && close.length ? r1(Math.max.apply(null, close)) : null,
+    };
+  }
+
   const api = { BUDGET_MS, FROZEN_MS, LINE_MAX, frameStats, intervals, nearestRank, band, frameBand, measureMs, consoleLines,
                 skyToViolet, usableStep, freeStep, hlsFetches, cardRendered, videoGaps, webrtcWindow, shownFrames,
-                pacedSleep, frameBlocking };
+                pacedSleep, frameBlocking, dialogStep, missedRefreshes, dialogTimes };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.GWStats = api;
 })(this);

@@ -289,6 +289,7 @@ PAGE_TAG, PAGE_LINE_BYTES = "Isolated Web Content", 1023
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "page", "tiers.json")) as _f:
     _T = json.load(_f)
     PROTOCOL, CLARITY = _T["PROTOCOL"], _T["CLARITY"]
+    DIALOGS = _T["DIALOG"]["entities"]
 PAGE_LINE_MAX = 900     # stats.js LINE_MAX: longer lines are split, as the page does
 
 
@@ -540,6 +541,26 @@ def refdash(nonce, url):
             "raf": {"n": 30, "median_ms": 16.67, "p95_ms": 16.67, "jank_pct": 0, "frozen_pct": 0, "fps": 60},
             "raf_intervals": [16.7] * 30})
         C.sleep(0.2)
+    # Protocol 3 (#211): HA's more-info dialogs, after the swipes (the runner sends dialogs=0 to the
+    # HLS copies and a warm-up). Each opens in 10 ms, its 300 ms sheet runs at 60 fps and it settles
+    # at 320 ms; the sensor's graph at 40 ms. FAKE_DIALOG_NEVER_OPENS=<view>: none opens there (HA
+    # never shows them); FAKE_DIALOG_SLOW_GRAPH=<ms>: the sensor's history graph is drawn that late.
+    m = re.search(r"dialogs=(\d+)", url)
+    for i, d in enumerate(DIALOGS[:int(m.group(1)) if m else len(DIALOGS)]):
+        never = os.environ.get("FAKE_DIALOG_NEVER_OPENS") == tier
+        graph = float(os.environ.get("FAKE_DIALOG_SLOW_GRAPH", "40")) if d["graph"] else None
+        settled = None if never else max(320.0, graph or 0)
+        anim = [] if never else [16.7] * 18
+        gw({"t": "dialog", "stage": tier, "n": i, "of": len(DIALOGS), "entity": d["entity"], "kind": d["kind"],
+            "graph": d["graph"], "mode": None if never else "bottom-sheet", "show_duration_ms": None if never else 300,
+            "reduced_motion": False, "opened": not never, "open_ms": None if never else 10.0,
+            "shown_ms": None if never else 320.0, "graph_ms": None if never else graph, "settled_ms": settled,
+            "anim": {"n": 0} if never else {"n": 18, "median_ms": 16.7, "p95_ms": 16.67, "p95_raw_ms": 16.7, "max_ms": 16.7,
+                                             "fps": 59.88, "jank_pct": 0, "frozen_pct": 0},
+            "anim_intervals": anim, "dropped": 0, "longest_frame_ms": None if never else 16.7,
+            "close_ms": None if never else 310.0, "close_longest_ms": None if never else 16.7,
+            "error": "it never opened within 20 s" if never else None, "close_error": None})
+        C.sleep(0.1)
     save("asked.json", {})
     mark(f"page done {tier}")
     if os.environ.get("FAKE_HA_URL"):

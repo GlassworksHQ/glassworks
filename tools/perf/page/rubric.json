@@ -2,11 +2,11 @@
  "_comment": "The perf rubric: the bands' thresholds and the letter rules. The single source for tools/perf/grade.py, tools/perf/grade.ts (the site computes the letter from a summary with it) and the test page (perf.js, to stop the ladder). docs/perf.md cites each source. Change on purpose, with the docs and the tests (test/grade-cases.json).",
  "name": "Clarity",
  "_name": "The perf test's name, as in \"Clarity A\" or \"a frame's Clarity grade\" (the maintainer, 2026-11-13). The report headline, the summary and grade.ts take it from here, so a rename is one change. File paths keep tools/perf and docs/perf.md.",
- "clarity": 2,
- "_clarity": "Clarity's version: v2 from rubric 2 (2026-11-14). Clarity v1 (protocol 1, rubric 1, 2026-11-14) was the first release; a v1 report or summary is graded only by v1's rules: re-measure under these. One without `clarity` was measured with a pre-release version (protocols 1 to 8, rubrics 1 to 11, before 2026-11-14): re-measure. Pre-release protocol 8 was v1's release candidate (#205, s1rtc5), so report.py reads its lines as v1.",
- "version": 2,
- "protocol_version": 2,
- "_protocol": "The measurement protocol these rules apply to (tools/perf/page/tiers.json PROTOCOL): the pages, the swipes, the update rate, the windows and how the runner reads them. A summary from another protocol can't be graded with this file: re-measure. Protocol 2 (Clarity v2, 2026-11-14) is protocol 1 plus the blocking time: the animation frames from each view's first screen drawn to usable. Protocol 1 (Clarity v1, 2026-11-14): Home Assistant's real frontend on a fake HA; a restart, then light, typical without its camera, typical with it, and heavy, each opened in the loaded frontend; live updates, taps and swipes on each; live cameras played over WebRTC, as HA with go2rtc does (over the LAN when the panel can reach the computer, else through adb reverse, and the run records which), graded on the receiver's own counts over a fixed 30 s window, with HLS copies as detail; each task its own budget. Its history (pre-release protocols 1 to 8 and rubrics 1 to 11, #158, #174, #202, #205) is in docs/perf.md, \"Versions\".",
+ "clarity": 3,
+ "_clarity": "Clarity's version: v3 from rubric 3 (#211: opening HA's more-info dialog is a graded task). Clarity v2 (protocol 2, rubric 2, 2026-11-14) didn't measure it, and Clarity v1 (protocol 1, rubric 1, 2026-11-14) was the first release; a v1 or v2 report or summary is graded only by its own version's rules: re-measure under these. One without `clarity` was measured with a pre-release version (protocols 1 to 8, rubrics 1 to 11, before 2026-11-14): re-measure. Pre-release protocol 8 was v1's release candidate (#205, s1rtc5), so report.py reads its lines as v1.",
+ "version": 3,
+ "protocol_version": 3,
+ "_protocol": "The measurement protocol these rules apply to (tools/perf/page/tiers.json PROTOCOL): the pages, the swipes, the update rate, the windows and how the runner reads them. A summary from another protocol can't be graded with this file: re-measure. Protocol 3 (Clarity v3, #211) is protocol 2 plus HA's more-info dialog on each view: a light's, a thermostat's and a sensor's with its history graph (tiers.json DIALOG), opened as a tile's tap opens it and closed again, timed to settled (its show animation finished and its graph drawn), with the frames of its open animation. Protocol 2 (Clarity v2, 2026-11-14) is protocol 1 plus the blocking time: the animation frames from each view's first screen drawn to usable. Protocol 1 (Clarity v1, 2026-11-14): Home Assistant's real frontend on a fake HA; a restart, then light, typical without its camera, typical with it, and heavy, each opened in the loaded frontend; live updates, taps and swipes on each; live cameras played over WebRTC, as HA with go2rtc does (over the LAN when the panel can reach the computer, else through adb reverse, and the run records which), graded on the receiver's own counts over a fixed 30 s window, with HLS copies as detail; each task its own budget. Its history (pre-release protocols 1 to 8 and rubrics 1 to 11, #158, #174, #202, #205) is in docs/perf.md, \"Versions\".",
  "one_frame_ms": 16.667,
  "vsync_slack_ms": 0.5,
  "metrics": {
@@ -65,7 +65,8 @@
    "updates": "update_levels",
    "load": "load_ms",
    "camera": "camera_levels",
-   "blocking": "blocking_ms"
+   "blocking": "blocking_ms",
+   "dialog": "dialog_levels"
   },
   "scroll_levels": [
    {
@@ -129,6 +130,27 @@
     "_comment": "first frame within 4 s, at least 85% shown, stalls (gaps over 500 ms) under 1 s in all"
    }
   ],
+  "_dialog": "HA's more-info dialog (rubric 3, #211), per run: the slowest of the view's dialogs (a light's, a thermostat's, a sensor's with its history graph; tiers.json DIALOG), from the event a tile's tap fires to settled: the first animation frame in which HA's show animation has finished (after-show) and, for the sensor, its history graph is drawn (its chart laid out with its data; ECharts' own 500 ms growing of the line isn't waited for). A dialog that never opened or never settled within tiers.json DIALOG waitMs fails the run (slow). Good within 1 s: RAIL, 'beyond 1000 milliseconds (1 second), users lose focus on the task they are performing' (web.dev/articles/rail); fluid within 2 s: RAIL's goal for a later load, 'under 2 seconds' (the dialog fetches its history and builds its content, as a small load does). HA's own animations are the floor: the bottom sheet's 300 ms (the S1's 960 x 480 CSS viewport is under the adaptive dialog's 500 px height) or the centred dialog's 200 ms (headless Chrome on a Mac, 2026-11-16, at 960 x 480: every dialog settled in 314 to 394 ms). Premium adds the 60 fps bar on the open animation's frames (frames band good, rAF: the main thread's frames), as live updates' premium does on theirs. Project choices with those sources, set before any frame had a dialog result.",
+  "dialog_levels": [
+   {
+    "level": "premium",
+    "settled_max_ms": 1000,
+    "frames_band": [
+     "good"
+    ],
+    "_comment": "good, and the open animation's frames hold the 60 fps bar (frames band good): a label, like live updates'"
+   },
+   {
+    "level": "good",
+    "settled_max_ms": 1000,
+    "_comment": "the slowest dialog settled within 1 s of the tap's event (RAIL: users keep their focus within 1 s)"
+   },
+   {
+    "level": "fluid",
+    "settled_max_ms": 2000,
+    "_comment": "within 2 s (RAIL's goal for a later load)"
+   }
+  ],
   "below": "slow",
   "levels": [
    {
@@ -154,6 +176,9 @@
      "blocking": [
       "good",
       "needs-improvement"
+     ],
+     "dialog": [
+      "premium"
      ]
     }
    },
@@ -182,6 +207,10 @@
      "blocking": [
       "good",
       "needs-improvement"
+     ],
+     "dialog": [
+      "premium",
+      "good"
      ]
     }
    },
@@ -213,6 +242,11 @@
      "blocking": [
       "good",
       "needs-improvement"
+     ],
+     "dialog": [
+      "premium",
+      "good",
+      "fluid"
      ]
     }
    }

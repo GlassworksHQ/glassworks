@@ -11,7 +11,11 @@
  * location-changed), and the harness measures it, one line per event, as protocol 3's pages did:
  *
  *   refdash (open the view: navigation to usable) -> warmup -> measure (live check) -> step (live
- *   updates) -> input-ready / input (taps) -> per swipe: swipe-ready -> measure -> step -> done
+ *   updates) -> input-ready / input (taps) -> per swipe: swipe-ready -> measure -> step -> per
+ *   more-info dialog (Clarity v3, #211): dialog -> done
+ *
+ * After a restart (the start view) it opens and closes each more-info dialog once, untimed (`dialog`
+ * lines with stage "warmup"), before it waits for the first view.
  */
 (function () {
   "use strict";
@@ -759,11 +763,142 @@
     await sleep(300);
   }
 
+  // ---- HA's more-info dialog (protocol 3, #211)
+
+  // A tile's tap ends in HA's handleAction (panels/lovelace/common/handle-action.ts): for more-info,
+  // fireEvent(node, "hass-more-info", { entityId }). The harness fires the same event from the view,
+  // so the frontend can't tell it from a tile (no touch: the tap's own cost is graded as tap). HA's
+  // more-info mixin shows ha-more-info-dialog, an ha-adaptive-dialog: an ha-bottom-sheet when the
+  // viewport is at most 870 px wide or 500 px high (the S1's 960 x 480), else a centred ha-dialog.
+  // Either fires `opened` when it starts to show, `after-show` when its show animation has finished
+  // and `closed` when its hide animation has (fireEvent: bubbles, composed). Their source is the
+  // sheet or the dialog inside ha-more-info-dialog; nothing else counts.
+  const SHEETS = ["ha-bottom-sheet", "ha-dialog"];
+
+  function dialogEvents() {
+    const ev = { opened: null, shown: null, closed: null, el: null };
+    const on = (k) => (e) => {
+      const p = e.composedPath ? e.composedPath() : [];
+      if (!p[0] || !SHEETS.includes(p[0].localName)) return;
+      const mi = p.find((n) => n && n.localName === "ha-more-info-dialog");
+      if (!mi) return;
+      ev.el = mi;
+      if (ev[k] === null) ev[k] = performance.now();
+    };
+    const hs = [["opened", on("opened")], ["after-show", on("shown")], ["closed", on("closed")]];
+    for (const [k, h] of hs) addEventListener(k, h, true);
+    ev.off = () => { for (const [k, h] of hs) removeEventListener(k, h, true); };
+    return ev;
+  }
+
+  // The sensor's history graph (ha-more-info-history: state-history-charts, ha-chart-base, ECharts) is
+  // drawn in the first frame in which its chart is laid out with its data. ECharts then grows the line
+  // for 500 ms (ha-chart-base.ts animationDuration), on its own clock: that isn't waited for, or the
+  // graph's own flourish would be most of the time a fast device takes (Chrome on a Mac, 2026-11-16:
+  // the data at 35 ms, the animation finished at 880 ms, the sheet shown at 315 ms).
+  function graphDrawn(mi) {
+    try {
+      const base = mi && find(sr(mi), "ha-chart-base", 0);
+      const ch = base && base.chart;
+      if (!ch || (ch.isDisposed && ch.isDisposed()) || base.getBoundingClientRect().height <= 0) return false;
+      return ((ch.getOption() || {}).series || []).some((s) => Array.isArray(s.data) && s.data.length > 0);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Which one HA showed, and its show animation's length as the page computed it (detail).
+  function dialogMode(mi) {
+    const ad = mi && sr(mi) && sr(mi).querySelector("ha-adaptive-dialog");
+    if (!ad) return { mode: null, show_duration_ms: null };
+    const sheet = sr(ad) && sr(ad).querySelector("ha-bottom-sheet, ha-dialog");
+    const inner = sheet && sr(sheet) && sr(sheet).querySelector("wa-drawer, wa-dialog");
+    // A CSS time as the page computed it: "300ms" (the sheet), ".2s" (the dialog), "1ms" (reduced motion).
+    const m = /^([\d.]+)(ms|s)$/.exec(inner ? getComputedStyle(inner).getPropertyValue("--show-duration").trim() : "");
+    return { mode: ad.mode || null, show_duration_ms: m ? Math.round(Number(m[1]) * (m[2] === "s" ? 1000 : 1)) : null };
+  }
+
+  // One dialog: fire the tile's event, follow each frame until it settled (or waitMs), let it be read
+  // for stillMs, close it with its own close (the X button calls closeDialog) and follow the frames
+  // until HA says it closed. `stage`: the view (graded) or "warmup".
+  async function moreInfo(spec, n, of, stage) {
+    const D = C.DIALOG, ev = dialogEvents();
+    try {
+      const frames = [];
+      let st = { opened: null, shown: null, graph: null, settled: null, done: false };
+      const t0 = performance.now();
+      const e = new Event("hass-more-info", { bubbles: true, cancelable: false, composed: true });
+      e.detail = { entityId: spec.entity };
+      (currentView() || huiRoot() || document.body).dispatchEvent(e);
+      while (!st.done && performance.now() - t0 < D.waitMs) {
+        const ts = await frame();
+        frames.push(ts);
+        const graph = spec.graph ? (st.graph !== null || (ev.opened !== null && graphDrawn(ev.el))) : null;
+        st = S.dialogStep({ opened: ev.opened !== null, shown: ev.shown !== null, graph }, ts, st);
+      }
+      const mi = ev.el || find(document, "ha-more-info-dialog", 0);
+      const mode = dialogMode(mi);
+      if (st.done) await sleep(D.stillMs);              // read for a moment, as a person would
+      // Closed with its own close whatever happened, so no dialog outlives its view.
+      const closeFrames = [];
+      let c0 = null, closed = null;
+      if (mi && typeof mi.closeDialog === "function") {
+        c0 = performance.now();
+        mi.closeDialog();
+        while (ev.opened !== null && closed === null && performance.now() - c0 < D.closeWaitMs) {
+          const ts = await frame();
+          closeFrames.push(ts);
+          if (ev.closed !== null) closed = ts;
+        }
+      }
+      const times = S.dialogTimes({ t0, frames, opened: st.opened, shown: st.shown, graph: st.graph, settled: st.settled,
+                                    c0: ev.opened !== null ? c0 : null, closed, closeFrames }, V.vsync);
+      const secs = (ms) => `${Math.round(ms / 1000)} s`;
+      const error = !times.opened ? `it never opened within ${secs(D.waitMs)}`
+        : times.settled_ms !== null ? null
+        : spec.graph && times.shown_ms !== null ? `its history graph wasn't drawn within ${secs(D.waitMs)}`
+        : `it didn't finish opening within ${secs(D.waitMs)}`;
+      log(Object.assign({ t: "dialog", stage, n, of, entity: spec.entity, kind: spec.kind, graph: !!spec.graph },
+        mode, { reduced_motion: matchMedia("(prefers-reduced-motion: reduce)").matches }, times,
+        { error, close_error: times.opened && times.close_ms === null ? `it didn't close within ${secs(D.closeWaitMs)}` : null }));
+    } finally {
+      ev.off();
+    }
+    await sleep(C.DIALOG.stillMs);
+  }
+
+  // A dialog slower than waitMs can still open after its close was asked for (HA's showDialog awaits
+  // its import first): whatever is open now is closed, so none outlives its view.
+  function closeStray() {
+    const mi = find(document, "ha-more-info-dialog", 0);
+    const ad = mi && sr(mi) && sr(mi).querySelector("ha-adaptive-dialog");
+    if (ad && ad.open && typeof mi.closeDialog === "function") mi.closeDialog();
+  }
+
+  // After the swipes, at the view's top, while the live updates still run: each dialog in turn.
+  async function dialogs(list, stage) {
+    if (!list.length) return;
+    scrollTo({ top: 0, behavior: "instant" });
+    await sleep(C.DIALOG.stillMs);
+    for (let i = 0; i < list.length; i++) {
+      try {
+        await moreInfo(list[i], i, list.length, stage);
+      } catch (e) {
+        // Not an `error` line: after a restart there is no nonce, and the runner would read that as
+        // the restart's. A dialog line with no times fails its run, as one that never opened.
+        log({ t: "dialog", stage, n: i, of: list.length, entity: list[i].entity, kind: list[i].kind, opened: false,
+              settled_ms: null, error: String((e && e.stack) || e) });
+      }
+    }
+    closeStray();
+  }
+
   // ---- one reference view, as the runner asked
 
   async function openView(cmd) {
     V = { nonce: String(cmd.nonce), run: Number(cmd.run || 0), taps: Math.max(0, Number(cmd.taps || 0)),
           swipes: cmd.swipes !== undefined ? Math.max(0, Number(cmd.swipes)) : C.PHASES.swipes,
+          dialogs: cmd.dialogs !== undefined ? Math.max(0, Number(cmd.dialogs)) : C.DIALOG.entities.length,
           vsync: Number(cmd.vsync || 1000 / 60), tier: String(cmd.view) };
     unwatch();
     startTicks();
@@ -786,6 +921,7 @@
     if (V.taps) await input();
     await camerasDone;
     for (let i = 0; i < V.swipes; i++) await swipe(i);
+    await dialogs(C.DIALOG.entities.slice(0, V.dialogs), V.tier);
     // The fake stops the stream when told; the runner tells it too once the view is done.
     await within(stream(false), C.PHASES.endStreamWaitMs);
     unwatch();
@@ -798,6 +934,11 @@
     // The frontend's own load: the restart's end (or an idle sample's page).
     await reportUsable(0, true);
     log({ t: "done", stage: "restart" });
+    // Protocol 3: after a restart, each dialog once, not graded (its lines say stage "warmup"). HA
+    // builds ha-more-info-dialog on its first open in a load, and each domain's controls on their
+    // first (more-info-content.ts imports them lazily), as the start view's cards bring in every card
+    // type's code; so no view pays for that by coming first in the run's order.
+    if (landing === "start") await dialogs(C.DIALOG.entities, "warmup");
     let last = "";
     for (;;) {
       let cmd = null;
