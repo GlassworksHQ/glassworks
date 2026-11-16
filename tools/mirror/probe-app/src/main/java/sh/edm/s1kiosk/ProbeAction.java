@@ -111,12 +111,18 @@ public class ProbeAction extends Activity {
         try {
             Object binder = Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "usb");
             Object usb = Class.forName("android.hardware.usb.IUsbManager$Stub").getMethod("asInterface", IBinder.class).invoke(null, binder);
-            // only the checked key: Android appends what it's given to adb_keys as is
-            usb.getClass().getMethod("allowUsbDebugging", boolean.class, String.class).invoke(usb, true, Probe.adbKeyToken(key));
+            // The method from the public interface: usb is IUsbManager.Stub.Proxy, a private class, and
+            // Method.invoke checks access against the declaring class (IllegalAccessException otherwise).
+            // Only the checked key: Android appends what it's given to adb_keys as is.
+            Class.forName("android.hardware.usb.IUsbManager").getMethod("allowUsbDebugging", boolean.class, String.class)
+                .invoke(usb, true, Probe.adbKeyToken(key));
             Log.i(Probe.TAG, Probe.adbKeySent(fp));
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             Log.i(Probe.TAG, Probe.adbKeyFailed(fp, cause));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            // a missing class or method, or access refused: still one RESULT line, never a crash
+            Log.i(Probe.TAG, Probe.adbKeyFailed(fp, e));
         }
     }
 
