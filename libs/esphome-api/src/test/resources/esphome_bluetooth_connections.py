@@ -2,7 +2,9 @@
 pins, makes a GATT connection through the proxy as bleak-esphome does (client.py): subscribe to raw
 advertisements and to the free slots (connect.py connect_scanner), connect v3 without a cache, get the
 services, read, write, turn on notifications and write the CCCD (REMOTE_CACHING), read a descriptor,
-disconnect, then connect again with a cache and disconnect.
+disconnect, then connect again with a cache and disconnect. Then the error paths: pair, unpair and
+clear cache are answered "failed" (85, 86, 88), and a second client that holds no subscription gets
+BluetoothGATTErrorResponse (82) "Not connected" for a read.
 It connects with the device's Noise key: the proxy only answers an authenticated connection.
 Usage: esphome_bluetooth_connections.py <port> <noise psk, base64> <address>; prints RESULT {json}."""
 import asyncio
@@ -10,6 +12,7 @@ import json
 import sys
 
 from aioesphomeapi import APIClient
+from aioesphomeapi.core import BluetoothGATTAPIError
 from aioesphomeapi.model import BluetoothProxyFeature
 
 CCCD = "00002902-0000-1000-8000-00805f9b34fb"
@@ -76,6 +79,23 @@ async def main(port: int, psk: str, address: int) -> None:
     unsub = await cli.bluetooth_device_connect(address, on_state, timeout=10, feature_flags=flags, has_cache=True, address_type=0)
     await cli.bluetooth_device_disconnect(address)
     unsub()
+
+    # A wrong message id would leave each of these waiting for its timeout.
+    pair = await cli.bluetooth_device_pair(address, timeout=5)
+    unpair = await cli.bluetooth_device_unpair(address, timeout=5)
+    clear = await cli.bluetooth_device_clear_cache(address, timeout=5)
+    out["pair"] = [pair.paired, pair.error]
+    out["unpair"] = [unpair.success, unpair.error]
+    out["clear_cache"] = [clear.success, clear.error]
+
+    other = APIClient("127.0.0.1", port, None, client_info="Another client", noise_psk=psk)
+    await other.connect(login=True)
+    try:
+        await other.bluetooth_gatt_read(address, 11, timeout=5)
+        out["other_read"] = "answered"
+    except BluetoothGATTAPIError as e:
+        out["other_read"] = [e.error.error, str(e).split("description=")[-1]]
+    await other.disconnect()
     await cli.disconnect()
     print("RESULT " + json.dumps(out), flush=True)
 

@@ -52,7 +52,8 @@ class BluetoothConnectionServerTest {
     }
 
     companion object {
-        const val ADDRESS = 0xC0FFEE000001L
+        /** Made up, locally administered. */
+        const val ADDRESS = 0x02C0FFEE0001L
         const val ALL = BluetoothProxyFeature.PASSIVE_SCAN or BluetoothProxyFeature.RAW_ADVERTISEMENTS or
             BluetoothProxyFeature.ACTIVE_CONNECTIONS or BluetoothProxyFeature.REMOTE_CACHING
     }

@@ -90,6 +90,42 @@ class BluetoothConnectionEngineTest {
         assertEquals(1, engine.inUse)
     }
 
+    @Test fun aHealthyLinkOutlivesTheConnectTimeout() {
+        connected(A)
+        loop.advanceBy(60_000)
+        assertEquals("still connected, no drop at 20 s", listOf(Triple(A, true, 0)), connections())
+        assertEquals(1, engine.inUse)
+        assertFalse(radio.calls.contains("close 2c0ffee0001"))
+    }
+
+    @Test fun aFailedMtuExchangeKeepsTheDefault() {
+        request(GattRequest.Connect(A, 0, withCache = false))
+        android(A) { onConnectionState(true, 0) }
+        android(A) { onMtu(247, 133) }
+        android(A) { onServicesDiscovered(0) }
+        assertEquals(23, events<GattEvent.Connection>().single().mtu)
+    }
+
+    @Test fun aConnectWhileTheLinkIsClosingIsAnswered() {
+        connected(A)
+        request(GattRequest.Disconnect(A))
+        request(GattRequest.Connect(A, 0, withCache = false))
+        assertEquals("not connected yet; HA tries again", Triple(A, false, 0), connections().last())
+        assertEquals("no second link", 1, radio.calls.count { it == "connect 2c0ffee0001" })
+    }
+
+    @Test fun aRadioThatThrowsFreesTheSlotAndTheLoopGoesOn() {
+        val throwing = BluetoothConnectionEngine(
+            GattRadio { _, _ -> throw IllegalStateException("Bluetooth went away") }, { sent += it; true }, loop, limit = 3,
+            BluetoothConnectionEngine.Timeouts(), detach = {},
+        )
+        throwing.onRequest(GattRequest.Connect(A, 0, withCache = false)); loop.advanceBy(0)
+        assertEquals(Triple(A, false, GattEvent.CONN_FAIL_ESTABLISH), connections().single())
+        assertEquals(0, throwing.inUse)
+        throwing.onRequest(GattRequest.Read(B, 11)); loop.advanceBy(0)
+        assertEquals("the next request is still answered", GattEvent.NOT_CONNECTED, events<GattEvent.Error>().single().error)
+    }
+
     @Test fun anMtuAndroidRefusesLeavesTheDefault() {
         radio.refused += "mtu"
         request(GattRequest.Connect(A, 0, withCache = false))

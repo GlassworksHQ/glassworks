@@ -231,7 +231,16 @@ public sealed class GattEvent {
  *
  * Requests come only from the client that holds the advertisement subscription, so they follow
  * [BluetoothProxyHandler.authOnly]; answers go to that client, as in ESPHome's bluetooth_proxy.cpp.
- * The server calls this on connection threads and under a lock: don't block.
+ *
+ * The handler keeps the slot table: it refuses a connect when all its slots are in use (a
+ * [GattEvent.Connection] that says not connected), and sends a fresh [GattEvent.ConnectionsFree] after
+ * every change to its links, as ESPHome does. Home Assistant only connects through a proxy whose last
+ * table had a free slot.
+ *
+ * Threads: the server calls this on the requesting client's reader thread, under its Bluetooth lock.
+ * Hand the work to a thread of your own and return. A slow handler stalls that client, and waiting
+ * inside [onRequest] for a thread that calls [ApiServer.sendBluetoothEvent] deadlocks, since that call
+ * takes the same lock.
  */
 public interface BluetoothConnectionHandler {
     /** The slot table now, for a client that subscribes to it (`SubscribeBluetoothConnectionsFreeRequest`). */
