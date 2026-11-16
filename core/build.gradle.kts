@@ -11,6 +11,9 @@ android {
 
     defaultConfig {
         minSdk = 26
+        // The conformance test (src/androidTest) boots the core with a fake frame; CI runs it on emulators at
+        // API 26, 29 and 34 (core-emulators.yml, #23).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -38,4 +41,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
     testImplementation("org.robolectric:robolectric:4.17")
+
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }
