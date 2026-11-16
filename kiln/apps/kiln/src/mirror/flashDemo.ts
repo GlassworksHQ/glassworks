@@ -49,7 +49,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   const flash = new FlashSession({
     images,
     imageUrl: 'https://refract.glassworks.dev/glass-panes/mirror-android-1/system.img',
-    requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x60000000 : SYSTEM_BYTES),
+    requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x40000000 : SYSTEM_BYTES),
     requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; return m; },
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),

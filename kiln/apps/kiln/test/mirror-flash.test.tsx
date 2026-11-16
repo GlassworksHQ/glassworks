@@ -152,8 +152,8 @@ describe('installing Glassworks over fastboot', () => {
     expect(requestFastboot).toHaveBeenCalledTimes(1);
   });
 
-  it('a Mirror whose system partition isn\'t the image\'s size stops at fastboot, with nothing written', async () => {
-    const { f, mirror, calls } = setup({ system: 0x60000000 });
+  it('a Mirror whose system partition is smaller than the image stops at fastboot, with nothing written', async () => {
+    const { f, mirror, calls } = setup({ system: 0x40000000 });
     await f.selectImage(image());
     await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
     f.toFastboot();

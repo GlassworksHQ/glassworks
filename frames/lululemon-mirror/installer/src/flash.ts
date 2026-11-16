@@ -44,7 +44,7 @@ export async function checkFastboot(fb: FastbootLike): Promise<FastbootReport> {
   // hex, a decimal answer would look several times bigger than the real buffer.
   const maxBytes = max !== undefined && /^0x[0-9a-f]+$/i.test(max.trim()) ? Number.parseInt(max.trim(), 16) : undefined;
   const checks: Check[] = [
-    { what: 'System partition', found: mb(system), ok: system === SYSTEM_BYTES, need: `${SYSTEM_BYTES} bytes, the size the Glass Panes image is made for` },
+    { what: 'System partition', found: mb(system), ok: !!system && system >= SYSTEM_BYTES, need: `at least ${SYSTEM_BYTES} bytes, the Glass Panes image's size` },
     { what: 'Userdata partition', found: mb(userdata), ok: !!userdata && userdata >= 1024 ** 3 && userdata % 4096 === 0, need: 'at least 1 GiB, whole 4 KiB blocks' },
     { what: 'Download size', found: mb(maxBytes), ok: !!maxBytes && maxBytes >= 4096, need: 'max-download-size reported in hex (0x…), at least one 4 KiB block' },
   ];

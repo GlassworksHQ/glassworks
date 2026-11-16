@@ -44,6 +44,13 @@ describe('fastboot checks (read-only)', () => {
     expect(none.checks.map((c) => c.found)).toEqual(['not reported', 'not reported', 'not reported']);
   });
 
+  it('takes a system partition at least the image\'s size: the real Mirror\'s is 19 blocks bigger (2026-11-16)', async () => {
+    const sizes = (system: number) => ({ 'partition-size:system': `0x${system.toString(16)}`, 'partition-size:userdata': '0x14cc00000', 'max-download-size': '0x10000000' });
+    expect((await checkFastboot(lk(sizes(1_288_491_008)))).ok).toBe(true);
+    expect((await checkFastboot(lk(sizes(SYSTEM_BYTES)))).ok).toBe(true);
+    expect((await checkFastboot(lk(sizes(SYSTEM_BYTES - 4096)))).ok).toBe(false);
+  });
+
   it('refuses a bootloader that doesn\'t report max-download-size, or reports less than a block (fastboot.js would assume 512 MiB)', async () => {
     const sizes = { 'partition-size:system': `0x${SYSTEM_BYTES.toString(16)}`, 'partition-size:userdata': '0x14cc00000' };
     expect((await checkFastboot(lk(sizes))).ok).toBe(false);
