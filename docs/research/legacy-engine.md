@@ -512,7 +512,7 @@ What Phase B added for the Mirror, from the device and not from frame code (`Gen
 |---|---|---|
 | Portrait glass | `Frame.orientation`: the screen's natural orientation (rotation 0), which `ro.sf.hwrotation=270` makes portrait on the Mirror. `MainActivity` asks for it, either way up, at start. The S1's frame keeps landscape, as its manifest asks | `OrientationTest` (the S1 unchanged; a portrait screen gets portrait); `GenericAndroidDisplayTest` |
 | No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
-| Restart | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
+| Reboot | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
 
 What checks it, besides the unit tests of the shared sources:
 
