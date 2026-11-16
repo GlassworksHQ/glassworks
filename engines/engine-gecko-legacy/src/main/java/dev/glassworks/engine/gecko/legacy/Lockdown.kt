@@ -19,7 +19,11 @@ import org.mozilla.geckoview.WebExtension
  *
  * Logs name the origin only: a URL can carry a signed path or a token.
  */
-internal class Lockdown(private val logTag: String) : PageGuard {
+internal class Lockdown(
+    private val logTag: String,
+    /** Runs a task after a delay on the main thread. Tests pass their own, to fire [READY_TIMEOUT_MS] at once. */
+    private val later: (Long, () -> Unit) -> Unit = { ms, task -> Handler(Looper.getMainLooper()).postDelayed(task, ms) },
+) : PageGuard {
     private val policy = LockdownPolicy()
     private var port: WebExtension.Port? = null
     /** Opens when the extension's background script connects, which it does after its webRequest listener is up. */
@@ -44,6 +48,9 @@ internal class Lockdown(private val logTag: String) : PageGuard {
         "network.predictor.enable-prefetch" to false,
         "network.prefetch-next" to false,
         "network.http.speculative-parallel-limit" to 0,
+        // A 103 Early Hints answer could otherwise preconnect or preload around the limit above.
+        "network.early-hints.enabled" to false,
+        "network.early-hints.preconnect.enabled" to false,
     )
 
     override fun attach(runtime: GeckoRuntime) {
@@ -64,7 +71,7 @@ internal class Lockdown(private val logTag: String) : PageGuard {
         })
     }
 
-    private var timer: Handler? = null
+    private var timing = false
 
     /**
      * The app's loads wait for the extension: a page that loads first would fetch from anywhere (seen on API 25).
@@ -72,10 +79,9 @@ internal class Lockdown(private val logTag: String) : PageGuard {
      */
     override fun whenReady(load: () -> Unit, stuck: (String) -> Unit) {
         ready.whenOpen(stuck, load)
-        if (timer == null) {
-            timer = Handler(Looper.getMainLooper()).also {
-                it.postDelayed({ if (ready.fail(SLOW)) Log.e(logTag, "Lockdown: not up after $READY_TIMEOUT_MS ms; nothing loads") }, READY_TIMEOUT_MS)
-            }
+        if (!timing) {
+            timing = true
+            later(READY_TIMEOUT_MS) { if (ready.fail(SLOW)) Log.e(logTag, "Lockdown: not up after $READY_TIMEOUT_MS ms; nothing loads") }
         }
     }
 

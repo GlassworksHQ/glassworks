@@ -23,6 +23,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    // LockdownTest runs Lockdown on the JVM, where android.util.Log is a stub: it returns 0 instead of throwing.
+    testOptions { unitTests.isReturnDefaultValues = true }
 }
 
 // RepoFiles, the tests' way to find files across every module from the repo root (#21).

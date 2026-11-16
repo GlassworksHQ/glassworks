@@ -191,6 +191,24 @@ Three things to find out:
     and over the page: "Home Assistant can't load: the lockdown didn't start." No request reached either server.
     If the extension is only slow, the same screen says so after 20 s, and the page loads if it comes up later.
 
+14. **Does the preconnect row prove anything?** (2026-11-15, API 23 emulator, verified). Round 2's row pointed
+    `<link rel=preconnect>` at `127.0.0.1:18126`, and Gecko never connects speculatively to a local IP literal
+    (`nsHttpConnectionMgr::SpeculativeConnect`, bug 853423, read in a review of #346). So "0 LEAK" there proved
+    nothing. The row now names the other origin `localhost:18126`: a name, not an IP literal, which reaches the same
+    server through `adb reverse`. A positive control, with a scratch build that drops the eight early-connection
+    prefs (DNS prefetch, predictor, prefetch, `speculative-parallel-limit`, Early Hints), not committed:
+    ```
+    scratch build, no early-connection prefs:   [other] LEAK: connection from 127.0.0.1   (a connection, no request)
+    the real build, same page, same server:     no new LEAK line; the page loaded again
+    ```
+    So without the prefs the page reaches the other origin with a bare connection, and with them it doesn't. The
+    connection came with no request, so it was the preconnect: `<link rel=prefetch>` would have sent a GET, and the
+    server logged none in either build (so prefetch is off in the scratch build too, or Gecko 144 skips it here; the
+    control doesn't tell which). DNS prefetch is **untested**: it only resolves a name, which the server can't see,
+    and `localhost` resolves on the device anyway. Early Hints are off too (`network.early-hints.enabled`,
+    `network.early-hints.preconnect.enabled`): a 103 from Home Assistant could otherwise preconnect. Untested: a
+    real 103, which the check page doesn't send.
+
 ## Result
 
 | | GeckoView 144 on API 23–25 |
@@ -219,7 +237,9 @@ on the Mirror (step 11). "Nothing left" means the other origin's server logged n
 | A POST or link with `target=_top` from a frame | `onLoadRequest` → deny | Yes | Same note |
 | A top-level 302 or meta refresh to another origin | `onLoadRequest` → deny; `policy.js` also cancels a `main_frame` request off Home Assistant | Yes | Same note |
 | WebRTC (`RTCPeerConnection`) | `media.peerconnection.enabled=false`: the constructor is gone | Yes (no UDP to check over `adb reverse`; the API is absent) | — |
-| `<link rel=preconnect>`, `dns-prefetch`, `prefetch` | The prefs above | Yes, not even a connection | — |
+| `<link rel=preconnect>` to `localhost` (a name: Gecko skips IP literals) | The prefs above | Yes, not even a connection; without the prefs, a connection (step 14) | — |
+| `<link rel=prefetch>` to `localhost` | The prefs above | Yes, no request; but no request without the prefs either, so this row doesn't show the prefs are what stops it | — |
+| `<link rel=dns-prefetch>` | `network.dns.disablePrefetch` | Untested: a DNS lookup never reaches the server | — |
 | Anything, before the extension is up | `Page.load` waits; after 20 s, or if the extension fails, a message over the page | Yes | "Home Assistant can't load: the lockdown didn't start." |
 
 Untested: a `<link rel=preconnect>` added after load by script, a service worker's own fetches, and a WebRTC
