@@ -225,8 +225,24 @@ Confidence: everything in §1–§4 and §6 is **verified** on the unit (2026-11
   service definition from the `mirror-android-1` boot ramdisk first.
 - **Custom `.ko`:** can we reproduce this kernel's `vermagic`/CRCs from CAF `msm-3.10` + this
   `.config`? That decides whether any kernel-code route (incl. the old kexec idea in
-  [mirror-android.md](../../frames/lululemon-mirror/research/mirror-android.md)) is buildable.
+  [mirror-android.md](mirror-android.md)) is buildable.
 - **`qti_init_shell` root via `post_boot.sh`:** enough for userspace root at `boot_completed`;
   combined with a matching `.ko`, enough for kernel code. Both need a `system` flash and a way back.
 - **Is platform signing enough for the kiosk?** For #40's modem/vendor blobs, no (no `/firmware`).
   For kiosk control and `/persist` (Wi-Fi NV), likely yes, with no flash and no root.
+
+## Next steps
+
+The open leads, as described above (all untested, all need a `system` flash and a way back):
+
+- **Re-enable `flash_recovery`:** add `/system/bin/install-recovery.sh`, after reading the real
+  `flash_recovery` service definition from the `mirror-android-1` boot ramdisk (§5). If the
+  `install_recovery` domain can dump `boot`, that backup allows the RAM-only `fastboot boot` test.
+- **Custom `.ko`:** reproduce this kernel's `vermagic`/CRCs from CAF `msm-3.10` + this `.config`;
+  a replacement `wlan` must chain-load the original (§4).
+- **Hook `init.qcom.post_boot.sh`:** root in `qti_init_shell` at `boot_completed`; no block-device
+  or `setenforce` access (§5).
+
+**Not root, but useful:** a platform test-key app already runs as uid 1000 / `system_app` with
+`WRITE_SECURE_SETTINGS` and `/persist` reads, with no flash (§6). It does not reach `/firmware`,
+`/oem` or block devices.

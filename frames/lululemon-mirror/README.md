@@ -138,6 +138,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [home-app.md](research/home-app.md): How adb without root makes S1 Kiosk the home screen on Android 6: no `cmd`, so Android's chooser and an Always tap (read-only, 2026-11-15)
 - [image-patch.md](research/image-patch.md): What Kiln changes in the community system image and what a fresh userdata needs for Kiln's own adb key; flashed on a real Mirror once (2026-11-16): boots, takes the adb key, portrait boot animation; the test APK has no home screen (#40)
 - [community-image-terms.md](research/community-image-terms.md): May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open (#40)
+- [mirror-root.md](research/mirror-root.md): Can we root the Mirror dev unit cheaply and safely? The AOSP `su` route is a dead end; a platform test-key app gives uid system with no flash; three `system`-only leads stay open. Nothing flashed (#40)
 
 ## Files
 
