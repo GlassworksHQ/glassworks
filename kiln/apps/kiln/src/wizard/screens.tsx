@@ -13,7 +13,8 @@ import type { FrameUi } from '../frames/aqara-s1-plus';
 import { LABELS, mount } from '../recovery/player';
 import type { Session } from './session';
 import type { AppPhase } from '@glassworks/aqara-s1-plus-installer';
-import { eta, milestones, type Network, type RadioStep, type Setup, type WizardState } from './state';
+import { HomeAssistant, Radio, RadioNext } from '../setup/steps';
+import { eta, milestones, type Network, type Setup, type WizardState } from './state';
 
 type P = { s: WizardState; session: Session; frame: FrameUi };
 
@@ -367,102 +368,6 @@ function Wifi({ s, session, setup }: P & { setup: Extract<Setup, { phase: 'wifi'
   );
 }
 
-/** 6 · Home Assistant: the address it found, and sign-in on the panel's own page (no token in this browser). */
-function HomeAssistant({ s, session, setup }: P & { setup: Extract<Setup, { phase: 'ha' }> }) {
-  const suggested = setup.ha.url || setup.ha.discovered || 'http://homeassistant.local:8123';
-  // kept in the session as it is typed, so another set-up step and back doesn't lose it
-  const [typed, setTyped] = useState<string | undefined>(() => session.haAddress);
-  const url = typed ?? suggested; // follows what the panel finds until the person types
-  return (
-    <section className="card" aria-labelledby="h">
-      <h2 id="h">{setup.ha.signedIn ? 'Signed in to Home Assistant.' : 'Sign in to Home Assistant.'}</h2>
-      <p className="lede">{setup.ha.discovered ? `Found at ${new URL(setup.ha.discovered).host}.` : 'Not found by itself. Type its address.'}</p>
-      <label className="field"><span>Address</span><input className="input" value={url} onChange={(e) => { setTyped(e.target.value); session.haAddress = e.target.value; }} inputMode="url" autoComplete="off" /></label>
-      {!setup.ha.signedIn && <button type="button" className="btn ghost" style={{ justifySelf: 'start' }} disabled={!!s.busy} onClick={() => void session.click('sign-in', () => session.signIn(url.trim()))}>Sign in</button>}
-      {setup.ha.signedIn && <p className="status ok">The panel is signed in.</p>}
-      {setup.note && !setup.ha.signedIn && <p className="status" role="status">{setup.note}</p>}
-      {setup.error && <p className="status err" role="alert">{setup.error}</p>}
-      <div className="foot">
-        <button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('radio', () => session.radio())}>Skip, do it on the panel</button>
-        <button type="button" className="btn ember" disabled={setup.busy || !!s.busy} onClick={() => void session.click('save-ha', () => session.saveHa(url.trim()))}>Continue</button>
-      </div>
-    </section>
-  );
-}
-
-/** The radio pane's one choice: what the Zigbee/Thread radio does. */
-function Radio({ s, session, setup }: P & { setup: Extract<Setup, { phase: 'radio' }> }) {
-  const [mode, setMode] = useState(setup.radio.mode);
-  return (
-    <section className="card" aria-labelledby="h">
-      <h2 id="h">What should the radio do?</h2>
-      <p className="lede">The panel has a Zigbee and Thread radio. Leave it off, or let Home Assistant use it.</p>
-      <RadioGroup.Root className="list" value={mode} onValueChange={setMode} aria-label="Radio role" disabled={setup.busy}>
-        {setup.radio.options.map((o) => (
-          <RadioGroup.Item key={o.id} value={o.id} className="opt" disabled={!setup.radio.helper && o.id !== 'off'}>
-            <span className="rd" />
-            <span className="t"><span>{o.label}{o.experimental && <em className="tag">Experimental</em>}</span><small>{o.detail}</small></span>
-          </RadioGroup.Item>
-        ))}
-      </RadioGroup.Root>
-      <p className={setup.error ? 'status err' : 'status'} role="status">{setup.error ?? setup.note}</p>
-      <div className="foot">
-        <button type="button" className="link" disabled={setup.busy || !!s.busy} onClick={() => void session.click('finish', () => session.finish())}>Skip, leave it as it is</button>
-        <button type="button" className="btn ember" disabled={setup.busy || !!s.busy} onClick={() => void session.click('radio', () => session.applyRadio(mode))}>Finish</button>
-      </div>
-    </section>
-  );
-}
-
-function Copy({ value }: { value: string }) {
-  const [t, setT] = useState('Copy');
-  return <button type="button" className="link" onClick={async () => {
-    try { await navigator.clipboard.writeText(value); setT('Copied'); } catch { setT('Select it'); }
-    setTimeout(() => setT('Copy'), 1600);
-  }}>{t}</button>;
-}
-
-function PlanStep({ st }: { st: RadioStep }) {
-  return (
-    <li style={{ display: 'grid', gap: 6, border: '1px solid var(--edge)', borderRadius: 14, padding: '12px 14px' }}>
-      <b style={{ fontWeight: 500 }}>{st.title}</b>
-      <span className="small" style={{ color: 'var(--muted)' }}>{st.body}</span>
-      {st.kv && <dl className="kv">{st.kv.map(([k, v, copy]) => <span key={k} style={{ display: 'contents' }}><dt>{k}</dt><dd>{copy ? <><code>{v}</code><Copy value={v} /></> : v}</dd></span>)}</dl>}
-      {st.link && (st.primary
-        ? <a className="btn ember" style={{ justifySelf: 'start' }} href={st.link} target="_blank" rel="noopener">{st.primary}</a>
-        : <a className="link" href={st.link} target="_blank" rel="noopener">Open in Home Assistant</a>)}
-      {st.how && (
-        <div className="how">
-          <b>{st.how.title}</b>
-          <span className="small">{st.how.body}</span>
-          <a className="link" href={st.how.link} target="_blank" rel="noopener">{st.how.linkText}</a>
-        </div>
-      )}
-    </li>
-  );
-}
-
-function RadioNext({ session, setup }: P & { setup: Extract<Setup, { phase: 'radio-next' }> }) {
-  const { plan } = setup;
-  const led = plan.steps.some((st) => st.primary);
-  const [more, setMore] = useState(false);
-  const list = { listStyle: 'none', margin: 0, padding: 0 } as const;
-  return (
-    <section className="card" aria-labelledby="h">
-      <h2 id="h">{plan.title}</h2>
-      <p className="lede">{plan.lead}</p>
-      <ol className="next" style={list}>{plan.steps.map((st) => <PlanStep key={st.title} st={st} />)}</ol>
-      {plan.more && (
-        <Collapsible.Root open={more} onOpenChange={setMore} className="tech">
-          <Collapsible.Trigger className="link" style={{ justifySelf: 'start' }}>{more ? 'Less' : 'More help'}</Collapsible.Trigger>
-          <Collapsible.Content><ol className="next" style={list}>{plan.more.map((st) => <PlanStep key={st.title} st={st} />)}</ol></Collapsible.Content>
-        </Collapsible.Root>
-      )}
-      <div className="foot"><span /><button type="button" className={`btn ${led ? 'ghost' : 'ember'}`} onClick={() => session.finish()}>Finish</button></div>
-    </section>
-  );
-}
-
 function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }> }) {
   return (
     <section className="card" aria-labelledby="h">
@@ -480,9 +385,9 @@ export function SetUp(p: P) {
     case 'waiting': return <Waiting setup={setup} />;
     case 'settings': return <Settings {...p} setup={setup} />;
     case 'wifi': return <Wifi {...p} setup={setup} />;
-    case 'ha': return <HomeAssistant key="ha" {...p} setup={setup} />;
-    case 'radio': return <Radio key={setup.radio.mode} {...p} setup={setup} />;
-    case 'radio-next': return <RadioNext {...p} setup={setup} />;
+    case 'ha': return <HomeAssistant key="ha" busy={!!p.s.busy} steps={p.session} setup={setup} />;
+    case 'radio': return <Radio key={setup.radio.mode} busy={!!p.s.busy} steps={p.session} setup={setup} />;
+    case 'radio-next': return <RadioNext busy={!!p.s.busy} steps={p.session} setup={setup} />;
   }
 }
 

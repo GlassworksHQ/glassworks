@@ -16,10 +16,19 @@
 //     → {"id":5,"op":"radio.thread_join"}   (apps after 0.4.3; the radio must be in thread_router and signed in)
 //     ← {"id":5,"ok":true,"state":SetupState}            or {"id":5,"ok":false,"error":"…"}
 //       Progress follows in state.radio.threadJoin.
+//     → {"id":6,"op":"pairing.arm"}   (apps with setup over the LAN, #34)
+//     ← {"id":6,"ok":true,"state":SetupState}            or {"id":6,"ok":false,"error":"…"}
+//       Opens pairing over the LAN again for 30 minutes, once Home Assistant has adopted the panel.
 //   The app may also push {"event":"state","state":SetupState} whenever something changes
 //   (signed in, radio status, Wi-Fi), so the installer doesn't have to poll.
 //   No secrets ever cross this channel (no tokens, no keys, no passwords).
+//
+//   The same protocol runs over the LAN (#34): a WebSocket at http://<panel>:8099/setup/channel
+//   (lan.ts). There the panel answers `state` only, until the browser pairs with the code on the panel's
+//   screen (POST /setup/pair); every other request gets NOT_PAIRED.
 import type { ByteStream } from 'improv-serial';
+
+export { LAN_CHANNEL_PATH, NOT_PAIRED, openWebSocketStream, type WebSocketStream } from './lan';
 
 export const SETUP_SOCKET = 'localabstract:s1kiosk_setup';
 
@@ -119,6 +128,8 @@ export class SetupChannel {
   // TODO(#166): once a release has radio.thread_join, use it in Kiln's Thread step instead of sending the
   // person to Home Assistant: start it, then follow state.radio.threadJoin. Older apps answer "Unknown request".
   joinThread(): Promise<SetupState> { return this.request('radio.thread_join'); }
+  /** Over USB: lets a browser pair over the LAN again after Home Assistant adopted the panel (apps with #34). */
+  armPairing(): Promise<SetupState> { return this.request('pairing.arm'); }
   close(): Promise<void> { return this.io.close(); }
 }
 
