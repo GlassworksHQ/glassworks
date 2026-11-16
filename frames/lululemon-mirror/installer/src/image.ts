@@ -80,6 +80,13 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   const soIn = (a: string) => names.filter((n) => n.startsWith(`lib/${a}/`) && n.endsWith('.so') && !n.slice(`lib/${a}/`.length).includes('/'));
   const abi = LIB_DIRS.find(([a]) => soIn(a).length > 0);
   const libs = abi ? soIn(abi[0]) : [];
+  // read every library before the first write: one Kiln can't unpack must leave the image as it was
+  const payloads: [string, Uint8Array][] = [];
+  for (const n of libs) {
+    const data = await zipEntry(o.apk, n).catch((e: Error) => { throw new Error(`${e.message}. Nothing was changed.`); });
+    if (!data) throw new Error(`this APK lists ${n} but Kiln can't read it. Nothing was changed.`);
+    payloads.push([n.split('/').pop()!, data]);
+  }
 
   if (await fs.exists(APP_DIR)) { await fs.remove(APP_DIR, { recursive: true, time }); log(`replaced ${APP_DIR}`); }
   await fs.mkdir(APP_DIR, dirAttrs(time));
@@ -88,10 +95,7 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   // Android 6 doesn't unpack a bundled app's libraries from its APK: they sit next to it, by ABI
   if (abi && libs.length) {
     await fs.mkdirs(`${APP_DIR}/lib/${abi[1]}`, dirAttrs(time));
-    for (const n of libs) {
-      const data = await zipEntry(o.apk, n);
-      await fs.writeFile(`${APP_DIR}/lib/${abi[1]}/${n.split('/').pop()}`, data!, fileAttrs(time));
-    }
+    for (const [name, data] of payloads) await fs.writeFile(`${APP_DIR}/lib/${abi[1]}/${name}`, data, fileAttrs(time));
     log(`${libs.length} native librar${libs.length === 1 ? 'y' : 'ies'} for ${abi[0]} in ${APP_DIR}/lib/${abi[1]}`);
   }
 

@@ -82,6 +82,8 @@ describe('the APK\'s package, read before anything is installed', () => {
     // an unqualified minSdkVersion first isn't the one Android checks: the framework attribute is (#354 review)
     expect((await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, shadow: 23 }))).minSdk).toBe(26);
     expect((await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, shadow: 23, utf8: true }))).minSdk).toBe(26);
+    // a raw string that disagrees with the typed value: Android reads the typed one (#354 review)
+    expect((await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, minSdkRaw: '23' }))).minSdk).toBe(26);
   });
 
   it('refuses a minSdkVersion it can\'t read (a reference) rather than reading it as absent', async () => {

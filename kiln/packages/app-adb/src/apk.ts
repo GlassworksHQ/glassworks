@@ -108,9 +108,9 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
           // <manifest package> has no namespace: an android:package (or any namespaced one) isn't it
           if (NO_NAMESPACE.has(attr) && ns !== 0xffffffff) continue;
           const raw = dv.getUint32(a + 8, true), kind = xml[a + 15], data = dv.getUint32(a + 16, true);
-          if (raw !== 0xffffffff) return strings[raw];
-          if (kind === 0x03) return strings[data];                 // TYPE_STRING
+          // the typed value is what Android reads; the raw string is only a copy that could disagree with it
           if (kind === 0x10 || kind === 0x11) return data | 0;      // TYPE_INT_DEC, TYPE_INT_HEX
+          if (kind === 0x03) return strings[data] ?? (raw !== 0xffffffff ? strings[raw] : undefined); // TYPE_STRING
           throw new Error(`this APK's ${element} ${attr} is a value Kiln can't read (type 0x${(kind ?? 0).toString(16)}), so it can't check it`);
         }
         return undefined;

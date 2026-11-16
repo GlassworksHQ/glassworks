@@ -2,13 +2,14 @@
 // apkPackage, the tests and Kiln's demos. Nothing in it would install.
 
 /** `shadow`: an unqualified minSdkVersion before the real one; `minSdkKind`: its value type (0x10, int, by default). */
-interface AxmlOptions { minSdk?: number; stripNames?: boolean; shadow?: number; minSdkKind?: number }
+interface AxmlOptions { minSdk?: number; stripNames?: boolean; shadow?: number; minSdkKind?: number; minSdkRaw?: '23' }
 
 function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
   const { minSdk, stripNames = false } = o;
   // strings: 0 manifest, 1 package, 2 pkg, 3 uses-sdk, 4 minSdkVersion (left empty, as some builds do, with
-  // stripNames), 5 the android namespace, 6 a second, unqualified "minSdkVersion" (no resource id)
-  const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion', 'http://schemas.android.com/apk/res/android', 'minSdkVersion'];
+  // stripNames), 5 the android namespace, 6 a second, unqualified "minSdkVersion" (no resource id), 7 "23" (a
+  // raw string for minSdkRaw, which can disagree with the typed value)
+  const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion', 'http://schemas.android.com/apk/res/android', 'minSdkVersion', '23'];
   const enc = new TextEncoder();
   const bodies = strs.map((s) => {
     if (utf8) { const b = enc.encode(s); return Uint8Array.of(s.length, b.length, ...b, 0); }
@@ -40,15 +41,15 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
   v.setUint32(p + 8 + 4 * 4, 0x0101020c, true);
   p += mapSize;
   const NONE = 0xffffffff;
-  const element = (name: number, attrs: { ns: number; attr: number; kind: number; data: number }[]) => {
+  const element = (name: number, attrs: { ns: number; attr: number; kind: number; data: number; raw?: number }[]) => {
     const size = elemSize(attrs.length);
     v.setUint16(p, 0x0102, true); v.setUint16(p + 2, 16, true); v.setUint32(p + 4, size, true);
     v.setUint32(p + 8, 1, true); v.setUint32(p + 12, NONE, true);
     const e = p + 16;
     v.setUint32(e, NONE, true); v.setUint32(e + 4, name, true); v.setUint16(e + 8, 20, true); v.setUint16(e + 10, 20, true); v.setUint16(e + 12, attrs.length, true);
-    attrs.forEach(({ ns, attr, kind, data }, i) => {
+    attrs.forEach(({ ns, attr, kind, data, raw }, i) => {
       const a = e + 20 + i * 20;
-      v.setUint32(a, ns, true); v.setUint32(a + 4, attr, true); v.setUint32(a + 8, kind === 0x03 ? data : NONE, true);
+      v.setUint32(a, ns, true); v.setUint32(a + 4, attr, true); v.setUint32(a + 8, raw ?? (kind === 0x03 ? data : NONE), true);
       v.setUint16(a + 12, 8, true); x[a + 15] = kind; v.setUint32(a + 16, data, true);
     });
     p += size;
@@ -57,7 +58,7 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
   if (minSdk !== undefined) {
     element(3, [
       ...(o.shadow !== undefined ? [{ ns: NONE, attr: 6, kind: 0x10, data: o.shadow }] : []),
-      { ns: 5, attr: 4, kind: o.minSdkKind ?? 0x10, data: minSdk },
+      { ns: 5, attr: 4, kind: o.minSdkKind ?? 0x10, data: minSdk, ...(o.minSdkRaw ? { raw: 7 } : {}) },
     ]);
   }
   return x;

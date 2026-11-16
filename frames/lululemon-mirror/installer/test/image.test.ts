@@ -102,6 +102,26 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(log).toContain('1 native library for armeabi-v7a in /priv-app/S1Kiosk/lib/arm');
   }, 60_000);
 
+  it('refuses a library it can\'t unpack before writing anything (#354 review)', async () => {
+    const img = join(dir, 'badlib.img');
+    mke2fs(img, 64, MAKE_EXT4FS, systemTree());
+    const disk = await load(img);
+    const before = hex(new Sha256().update(await disk.read(0, disk.blocks)).digest());
+    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'armeabi-v7a': { 'libxul.so': new Uint8Array([1, 2, 3]) } } }).slice();
+    // mark the library's central directory entry as compressed with a method Kiln doesn't read (99)
+    const dv = new DataView(apk.buffer);
+    const name = new TextEncoder().encode('lib/armeabi-v7a/libxul.so');
+    let found = false;
+    for (let at = 0; at + 46 < apk.length; at++) {
+      if (dv.getUint32(at, true) !== 0x02014b50) continue;
+      const n = dv.getUint16(at + 28, true);
+      if (n === name.length && apk.subarray(at + 46, at + 46 + n).every((b, i) => b === name[i])) { dv.setUint16(at + 10, 99, true); found = true; }
+    }
+    expect(found).toBe(true);
+    await expect(patchSystem(await Ext4.open(disk), { apk, time: T })).rejects.toThrow(/method 99.*Nothing was changed/);
+    expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
+  }, 60_000);
+
   it('builds a fresh userdata that lets only this browser\'s adb key in', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
     const key = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';
