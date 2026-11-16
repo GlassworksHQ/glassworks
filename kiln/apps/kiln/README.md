@@ -141,13 +141,14 @@ or in a build made with `NEXT_PUBLIC_KILN_DEMO=1`.
 ## The panel's setup page
 
 The panel serves a small build of Kiln's setup steps at `http://<panel>:8099/setup` (#34), so a panel
-already on Wi-Fi can be set up from a laptop with no cable. The steps are the wizard's own
+already on Wi-Fi can be set up from a laptop with no cable, and one on no network from a phone on the
+panel's own setup Wi-Fi (#197): then the page starts with the Wi-Fi step. The steps are the wizard's own
 (`src/setup/`: `ChannelSetup` and `steps.tsx`); the page adds pairing with the code on the panel's
 screen (`src/lan/`). It runs the setup channel over the panel's `/setup/channel` WebSocket.
 
 ```sh
 npm run build:lan -w @glassworks/kiln-app          # writes core/src/main/assets/setup (committed)
-node kiln/apps/kiln/lan/fake-panel.mjs [--closed]  # http://localhost:8099/setup against a fake panel; the code is 482913
+node kiln/apps/kiln/lan/fake-panel.mjs [--closed] [--offline]  # http://localhost:8099/setup against a fake panel; the code is 482913
 ```
 
 CI rebuilds the page and fails when the committed files differ, so commit the build with its sources.
@@ -161,6 +162,11 @@ How it behaves:
   as a change. When the panel ends it, the page asks for a new code and carries on at the same step.
 - A pairing counts only from the address that paired. A browser whose source address changes (for
   example a `.local` name that resolves to IPv4 one moment and IPv6 the next) has to pair again.
+- Wi-Fi (`wifi.scan`, `wifi.join`) comes first only when the panel says it is on no network
+  (`state.online` false). The same card as the wizard's Wi-Fi step (`Wifi` in `steps.tsx`). The panel
+  replies, then joins, which closes its setup Wi-Fi, so the page stays on "joining" and the panel's screen
+  gives the outcome. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
+  as plain HTTP.
 - Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
   network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.
 - What is left: the panel has no write timeout on the WebSocket. A browser that stops reading while the

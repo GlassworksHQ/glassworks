@@ -13,8 +13,8 @@ import type { FrameUi } from '../frames/aqara-s1-plus';
 import { LABELS, mount } from '../recovery/player';
 import type { Session } from './session';
 import type { AppPhase } from '@glassworks/aqara-s1-plus-installer';
-import { HomeAssistant, Radio, RadioNext } from '../setup/steps';
-import { eta, milestones, type Network, type Setup, type WizardState } from './state';
+import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
+import { eta, milestones, type Setup, type WizardState } from './state';
 
 type P = { s: WizardState; session: Session; frame: FrameUi };
 
@@ -273,101 +273,6 @@ function Settings({ s, session, frame, setup }: P & { setup: Extract<Setup, { ph
   );
 }
 
-function Signal({ rssi }: { rssi: number }) {
-  const level = rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;
-  return <span className="sig" aria-label={`signal ${level} of 4`}>{[1, 2, 3, 4].map((i) => <i key={i} style={{ height: i * 3 + 2, opacity: i <= level ? 1 : 0.25 }} />)}</span>;
-}
-const Lock = () => <svg className="lock" viewBox="0 0 24 24" aria-label="needs a password"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>;
-
-/** 5 · Wi-Fi: which network, the password, connect. The list is what the panel can see. */
-function Wifi({ s, session, setup }: P & { setup: Extract<Setup, { phase: 'wifi' }> }) {
-  const nets: Network[] = setup.networks ?? [];
-  const [pick, setPick] = useState('');
-  const [other, setOther] = useState('');
-  const [psk, setPsk] = useState('');
-  // a pick that a rescan no longer lists goes too: Connect must not send a network the panel can't see,
-  // nor the dropped network's password to the one that replaces it
-  useEffect(() => {
-    const nets = setup.networks;
-    if (!nets) return;
-    if (!pick || (pick !== '\u0000other' && !nets.some((n) => n.ssid === pick))) {
-      setPick(nets[0]?.ssid ?? '\u0000other');
-      setPsk('');
-    }
-  }, [setup.networks, pick]);
-  const isOther = pick === '\u0000other';
-  const chosen = nets.find((n) => n.ssid === pick);
-  const secure = isOther || !!chosen?.secure;
-  const j = setup.joining;
-
-  if (j) {
-    const order = ['sent', 'join', 'ok'] as const;
-    const at = j.step === 'err' ? 1 : order.indexOf(j.step);
-    return (
-      <section className="card" aria-labelledby="h">
-        <h2 id="h">{j.step === 'ok' ? `On ${j.ssid}.` : j.step === 'err' ? `Couldn't join ${j.ssid}.` : `Joining ${j.ssid}…`}</h2>
-        <ol className="join" aria-live="polite">
-          {['Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
-            <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
-          ))}
-        </ol>
-        {j.error && <p className="status err" role="alert">{j.error}</p>}
-        <div className="foot">
-          {j.step === 'err' ? <button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('ha', () => session.homeAssistant())}>Skip, do it on the panel</button> : <span />}
-          {j.step === 'ok' && <button type="button" className="btn ember" disabled={!!s.busy} onClick={() => void session.click('ha', () => session.homeAssistant())}>Continue</button>}
-          {j.step === 'err' && <button type="button" className="btn ember" disabled={!!s.busy} onClick={() => void session.click('wifi', () => session.wifi())}>Try again</button>}
-        </div>
-      </section>
-    );
-  }
-  if (setup.on && !setup.changing) {
-    const { ssid, ip } = setup.on;
-    return (
-      <section className="card" aria-labelledby="h">
-        <h2 id="h">{ssid ? `Connected to ${ssid}.` : 'Connected to Wi-Fi.'}</h2>
-        <p className="lede">The panel is on this network already, at {ip}. Keep it, or use another network.</p>
-        <div className="foot">
-          <button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('wifi-scan', () => session.scanWifi())}>Use another network</button>
-          <button type="button" className="btn ember" disabled={!!s.busy} onClick={() => void session.click('ha', () => session.homeAssistant())}>Continue</button>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <section className="card" aria-labelledby="h">
-      <h2 id="h">Which Wi-Fi?</h2>
-      {setup.hint && <p className="lede">{setup.hint}</p>}
-      {setup.networks === undefined && !setup.unreachable ? (
-        <><p className="status" role="status">{setup.status}</p><div className="bar wait"><i /></div></>
-      ) : setup.unreachable ? (
-        <p className="status err" role="alert">{setup.status} Try again, or set up Wi-Fi on the panel: it shows Wi-Fi first.</p>
-      ) : (
-        <>
-          <RadioGroup.Root className="list" value={pick} onValueChange={setPick} aria-label="Networks">
-            {nets.map((n) => (
-              <RadioGroup.Item key={n.ssid} value={n.ssid} className="opt" title={`${n.rssi} dBm`}>
-                <span className="rd" /><span className="t">{n.ssid}</span>{n.secure && <Lock />}<Signal rssi={n.rssi} />
-              </RadioGroup.Item>
-            ))}
-            <RadioGroup.Item value={'\u0000other'} className="opt"><span className="rd" /><span className="t">Other…</span></RadioGroup.Item>
-          </RadioGroup.Root>
-          <p className="small">{setup.status}</p>
-          {isOther && <label className="field"><span>Network name</span><input className="input" value={other} onChange={(e) => setOther(e.target.value)} autoComplete="off" /></label>}
-          {secure && <label className="field"><span>Password</span><input className="input" type="password" value={psk} onChange={(e) => setPsk(e.target.value)} autoComplete="off" /></label>}
-        </>
-      )}
-      <div className="foot">
-        <button type="button" className="link" disabled={!!s.busy} onClick={() => void session.click('ha', () => session.homeAssistant())}>
-          {setup.on ? `Keep ${setup.on.ssid ?? 'its Wi-Fi'}` : 'Skip, do it on the panel'}
-        </button>
-        {setup.unreachable
-          ? <button type="button" className="btn ember" disabled={!!s.busy} onClick={() => void session.click('wifi', () => session.wifi())}>Try again</button>
-          : <button type="button" className="btn ember" disabled={!setup.networks || !!s.busy} onClick={() => void session.click('join', () => session.joinWifi(isOther ? other : pick, secure ? psk : ''))}>Connect</button>}
-      </div>
-    </section>
-  );
-}
-
 function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }> }) {
   return (
     <section className="card" aria-labelledby="h">
@@ -384,7 +289,7 @@ export function SetUp(p: P) {
   switch (setup.phase) {
     case 'waiting': return <Waiting setup={setup} />;
     case 'settings': return <Settings {...p} setup={setup} />;
-    case 'wifi': return <Wifi {...p} setup={setup} />;
+    case 'wifi': return <Wifi busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'ha': return <HomeAssistant key="ha" busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'radio': return <Radio key={setup.radio.mode} busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'radio-next': return <RadioNext busy={!!p.s.busy} steps={p.session} setup={setup} />;

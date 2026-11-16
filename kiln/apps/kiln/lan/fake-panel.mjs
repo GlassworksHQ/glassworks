@@ -2,11 +2,13 @@
 // app's Inter, and plays the panel's /setup/pair, /setup/done and /setup/channel with made-up state. For
 // screenshots and trying the page without a panel; it touches no device and only listens on localhost.
 //
-//   node kiln/apps/kiln/lan/fake-panel.mjs [--port 8099] [--closed]
+//   node kiln/apps/kiln/lan/fake-panel.mjs [--port 8099] [--closed] [--offline]
 //   then open http://localhost:8099/setup; the code the "panel" shows is printed here (482913).
 //
 // --closed: Home Assistant has adopted the panel, so pairing is off. Sign in on the Home Assistant step
 // opens this fake's /signin, which signs the "panel" in at once.
+// --offline: the panel is on no network, as on its setup hotspot (#197): the page starts with Wi-Fi, the scan
+// finds made-up networks, and a join drops the connection, as the hotspot closing does.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -15,6 +17,12 @@ import { fileURLToPath } from 'node:url';
 const args = process.argv.slice(2);
 const port = Number(args[args.indexOf('--port') + 1]) || 8099;
 const closed = args.includes('--closed');
+const offline = args.includes('--offline');
+const NETWORKS = [
+  { ssid: 'Example-Home', rssi: -48, secure: true },
+  { ssid: 'Example-Upstairs', rssi: -63, secure: true },
+  { ssid: 'Example-Guest', rssi: -71, secure: false },
+];
 const CODE = '482913';
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const files = {
@@ -26,6 +34,7 @@ const files = {
 
 const state = {
   ip: '192.0.2.10',
+  online: !offline,
   // the sign-in link is this fake's own /signin, which signs the "panel" in at once
   ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: `http://localhost:${port}/signin` },
   radio: {
@@ -107,6 +116,14 @@ server.on('upgrade', (req, sock) => {
         if (m.op !== 'state' && !paired) { send({ id: m.id, ok: false, error: 'Pair with the panel first: enter the code it shows.' }); continue; }
         if (m.op === 'set_ha' || m.op === 'ha.set_url') state.ha.url = m.url;
         if (m.op === 'set_radio' || m.op === 'radio.set_mode') Object.assign(state.radio, { mode: m.mode, answered: true, status: m.mode === 'off' ? 'Off' : 'Running' });
+        if (m.op === 'wifi.scan') { setTimeout(() => send({ id: m.id, ok: true, state, networks: NETWORKS }), 1200); continue; }
+        if (m.op === 'wifi.join') {
+          if (state.online) { send({ id: m.id, ok: false, error: 'The panel is on a network already. Change its Wi-Fi on the panel\'s screen.' }); continue; }
+          send({ id: m.id, ok: true, state });
+          console.log(`the "panel" joins ${m.ssid} and closes its setup Wi-Fi`);
+          setTimeout(() => sock.destroy(), 300);
+          continue;
+        }
         send({ id: m.id, ok: true, state });
       }
     }

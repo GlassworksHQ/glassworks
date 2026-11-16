@@ -38,11 +38,11 @@ class SetupChannelTest {
         var haError: String? = null
         val after = mutableListOf<String>()
         override fun state() = state
-        override fun setHa(url: String): SetupChannel.HaChange {
+        override fun setHa(url: String): SetupChannel.Change {
             calls += "set_ha $url"
-            if (haError != null) return SetupChannel.HaChange(error = haError)
+            if (haError != null) return SetupChannel.Change(error = haError)
             state = state.copy(ha = state.ha.copy(url = url))
-            return SetupChannel.HaChange(afterReply = { after += "reload $url" })
+            return SetupChannel.Change(afterReply = { after += "reload $url" })
         }
 
         val step = object : SetupStep {
@@ -71,13 +71,21 @@ class SetupChannelTest {
 
         override fun armPairing(): String? { calls += "arm"; return null }
 
+        var networks = listOf(WifiNetwork("Example-WiFi", -50, true))
+        override fun scanWifi(): List<WifiNetwork> { calls += "scan"; return networks }
+        override fun joinWifi(ssid: String, password: String): SetupChannel.Change {
+            calls += "join $ssid"
+            return SetupChannel.Change(afterReply = { after += "joined $ssid" })
+        }
+
         fun channel(mayChange: () -> Boolean = { true }) = SetupChannel(this, listOf(step), mayChange = mayChange)
     }
 
     @Test
     fun stateJsonHasTheSetupStateShape() {
         val o = JSONObject(Fake(base).channel().handle("""{"id":1,"op":"state"}""").first).getJSONObject("state")
-        assertEquals(setOf("ip", "ha", "radio"), o.keyNames())
+        assertEquals(setOf("ip", "ha", "online", "radio"), o.keyNames())
+        assertEquals(false, o.get("online"))
         assertEquals("192.168.1.50", o.getString("ip"))
         val ha = o.getJSONObject("ha")
         assertEquals(setOf("discovered", "url", "signedIn", "signinUrl"), ha.keyNames())
@@ -106,7 +114,7 @@ class SetupChannelTest {
     @Test
     fun optionalFieldsAreLeftOutWhenUnknown() {
         val bare = ChannelState(null, ChannelState.Ha(null, "", false, null)).toJson()
-        assertEquals(setOf("ha"), bare.keyNames())
+        assertEquals(setOf("ha", "online"), bare.keyNames())
         assertEquals(setOf("url", "signedIn"), bare.getJSONObject("ha").keyNames())
     }
 
@@ -123,6 +131,73 @@ class SetupChannelTest {
     fun noSecretsInTheState() {
         val s = Fake(base).channel().handle("""{"op":"state"}""").first.lowercase()
         for (w in listOf("token", "key", "password", "psk", "secret")) assertFalse(w, w in s)
+    }
+
+    private val join = """{"id":7,"op":"wifi.join","ssid":"Example-WiFi","password":"correct horse"}"""
+
+    @Test
+    fun wifiScanAnswersWithTheNetworksOnlyOncePaired() {
+        val f = Fake(base)
+        assertEquals(SetupChannel.NOT_PAIRED, JSONObject(f.channel { false }.handle("""{"id":1,"op":"wifi.scan"}""").first).getString("error"))
+        assertTrue("an unpaired browser doesn't make the panel scan", "scan" !in f.calls)
+        val r = JSONObject(f.channel().handle("""{"id":2,"op":"wifi.scan"}""").first)
+        assertTrue(r.getBoolean("ok"))
+        val n = r.getJSONArray("networks").getJSONObject(0)
+        assertEquals("Example-WiFi", n.getString("ssid"))
+        assertEquals(-50, n.getInt("rssi"))
+        assertEquals(true, n.get("secure"))
+        assertTrue(r.has("state"))
+    }
+
+    @Test
+    fun wifiJoinRunsAfterTheReplySoTheBrowserHearsItFirst() {
+        val f = Fake(base)
+        val (reply, after) = f.channel().handle(join)
+        assertTrue(JSONObject(reply).getBoolean("ok"))
+        assertEquals(emptyList<String>(), f.after)
+        after!!()
+        assertEquals(listOf("joined Example-WiFi"), f.after)
+    }
+
+    @Test
+    fun wifiJoinIsRefusedWhileThePanelIsOnANetworkOrUnpaired() {
+        val online = Fake(base.copy(online = true))
+        assertEquals(SetupChannel.ON_A_NETWORK, JSONObject(online.channel().handle(join).first).getString("error"))
+        val unpaired = Fake(base)
+        assertEquals(SetupChannel.NOT_PAIRED, JSONObject(unpaired.channel { false }.handle(join).first).getString("error"))
+        assertTrue(online.calls.none { it.startsWith("join") } && unpaired.calls.none { it.startsWith("join") })
+    }
+
+    @Test
+    fun wifiJoinChecksTheNameAndPassword() {
+        val f = Fake(base)
+        fun err(ssid: String, password: String) = JSONObject(f.channel().handle(
+            JSONObject().put("id", 1).put("op", "wifi.join").put("ssid", ssid).put("password", password).toString()).first).optString("error", "")
+        assertTrue(err("", "correct horse").isNotEmpty())
+        assertTrue(err("x".repeat(33), "correct horse").isNotEmpty())
+        assertTrue(err("Example-WiFi", "short").isNotEmpty())
+        assertTrue(err("Example-WiFi", "x".repeat(64)).isNotEmpty())
+        assertEquals("", err("Example-WiFi", ""))
+        assertEquals("", err("Example-WiFi", "0123456789abcdef".repeat(4)))
+        assertEquals(listOf("join Example-WiFi", "join Example-WiFi"), f.calls)
+    }
+
+    @Test
+    fun theWifiPasswordIsNeverLoggedNorSentBack() {
+        val logged = mutableListOf<String>()
+        val f = Fake(base)
+        val reply = SetupChannel(f, listOf(f.step), log = { logged += it }).handle(join).first
+        assertFalse("correct horse" in reply)
+        assertTrue(logged.isNotEmpty() && logged.none { "correct horse" in it || "Example-WiFi" in it })
+    }
+
+    @Test
+    fun theNetworkListHasEachNameOnceStrongestFirst() {
+        val got = WifiNetwork.list(listOf(
+            WifiNetwork("Example-A", -70, true), WifiNetwork("Example-B", -40, false),
+            WifiNetwork("Example-A", -55, true), WifiNetwork("", -30, true),
+        ))
+        assertEquals(listOf(WifiNetwork("Example-B", -40, false), WifiNetwork("Example-A", -55, true)), got)
     }
 
     @Test
@@ -392,7 +467,7 @@ class SetupChannelTest {
         assertTrue(o.has("state"))
         val old = object : SetupChannel.Backend {
             override fun state() = base
-            override fun setHa(url: String) = SetupChannel.HaChange()
+            override fun setHa(url: String) = SetupChannel.Change()
         }
         val r = JSONObject(SetupChannel(old).handle("""{"id":9,"op":"pairing.arm"}""").first)
         assertFalse(r.getBoolean("ok"))
