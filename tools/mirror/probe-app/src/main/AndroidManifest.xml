@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: MIT. Copyright (c) 2026 aguilaair.
+     The Mirror probe (#29): does a /system/priv-app app get Android 6's privileged permissions?
+     It borrows S1 Kiosk's package and MainActivity names because the Mirror pipeline accepts only those. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- signature|privileged on Android 6: granted only to a privileged system app (or a platform-signed one). -->
+    <uses-permission android:name="android.permission.INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REBOOT" />
+    <!-- signature|privileged|development: adb can also grant it with pm grant. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Glassworks probe">
+
+        <!-- The home screen: shows the facts. Anyone may start it, so it reads no extras. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- The actions (update, settings, reboot). Starting it takes WRITE_SECURE_SETTINGS, which adb's
+             shell holds and a normal app can't get, as the generic app's MainActivity does (#364). -->
+        <activity
+            android:name=".ProbeAction"
+            android:exported="true"
+            android:permission="android.permission.WRITE_SECURE_SETTINGS"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+
+        <receiver
+            android:name=".InstallResult"
+            android:exported="false" />
+    </application>
+</manifest>

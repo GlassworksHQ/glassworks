@@ -1,0 +1,4 @@
+# build.sh's default output: the two APKs and the throwaway signing key
+out/
+.gradle/
+build/
