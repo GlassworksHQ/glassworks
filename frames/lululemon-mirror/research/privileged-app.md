@@ -183,8 +183,9 @@ need, because an update signed with our key can't add one (row 3).
 
 ## Can a privileged app approve an adb key?
 
-**Status (2026-11-16): read, untested on the unit.** The Mirror has no touchscreen, so its "Allow USB
-debugging?" dialog can't be answered on the glass. If S1 Kiosk could answer it, a Manage page "Allow
+**Status (2026-11-16): read; the permission and the service verified on the unit (read-only); the
+approval itself untested.** The Mirror has no touchscreen, so its "Allow USB debugging?" dialog can't
+be answered on the glass. If S1 Kiosk could answer it, a Manage page "Allow
 a new computer over USB" would be possible.
 
 Read at `android-6.0.1_r81` (`platform/frameworks/base`):
@@ -197,6 +198,14 @@ Read at `android-6.0.1_r81` (`platform/frameworks/base`):
 | 4 | `UsbDebuggingManager.java:236`–`248` | On `MESSAGE_ADB_ALLOW`, the key's fingerprint (MD5 of the decoded key) must equal `mFingerprints`, else it logs "Fingerprints do not match" and **does nothing**. On a match with `alwaysAllow`, `writeKey` appends the key to `/data/misc/adb/adb_keys` (line 403), and adbd is told "OK" |
 | 5 | `UsbDebuggingManager.java:271`–`281` | `mFingerprints` is set only on `MESSAGE_ADB_CONFIRM`: adbd asking about a computer that just connected with an unknown key. It keeps that value until the next computer asks: a deny, an unplug or the dialog going away doesn't clear it, so a later call with that same key still writes it |
 | 6 | `IUsbManager.aidl:109`, `UsbDebuggingManager.java` `MESSAGE_ADB_CLEAR` | `clearUsbDebuggingKeys` deletes the whole `adb_keys` file. The probe never calls it: it would remove every key, the root's included, with no touchscreen to allow one again |
+
+On the unit (2026-11-16, verified, read-only: the root, over adb's shell on the Mirror):
+
+| Command | What came back | What it settles |
+|---|---|---|
+| `dumpsys package android` | `Permission [android.permission.MANAGE_USB] … prot=signature\|privileged` | Read 1 holds on this image: the probe's `/system` copy can hold `MANAGE_USB` |
+| `service list` | `usb: [android.hardware.usb.IUsbManager]` | The `usb` service the probe reaches through `ServiceManager.getService("usb")` exists, with that interface |
+| (`MANAGE_DEBUGGING`) | Not on this image | Later Android added `MANAGE_DEBUGGING` for this; on Android 6, `MANAGE_USB` is the permission `allowUsbDebugging` checks (read 3) |
 
 **What we expect.** `allowUsbDebugging` is not a way to add any key. It answers the last computer the
 Mirror asked about.

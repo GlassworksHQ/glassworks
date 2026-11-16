@@ -16,7 +16,7 @@ It has no network and no Home Assistant. It asks for four permissions:
 | `INSTALL_PACKAGES` | `signature\|privileged` | a privileged system app, or one signed with the platform key |
 | `REBOOT` | `signature\|privileged` | the same |
 | `WRITE_SECURE_SETTINGS` | `signature\|privileged\|development` | the same, or any app adb grants it to with `pm grant` |
-| `MANAGE_USB` | `signature\|privileged` (AOSP 6.0.1_r81 `core/res/AndroidManifest.xml:1164`) | the same as `INSTALL_PACKAGES` |
+| `MANAGE_USB` | `signature\|privileged` (AOSP 6.0.1_r81 `core/res/AndroidManifest.xml:1164`; the same on the Mirror, `dumpsys package android`, verified 2026-11-16) | the same as `INSTALL_PACKAGES` |
 
 ## Why it is called S1 Kiosk
 
