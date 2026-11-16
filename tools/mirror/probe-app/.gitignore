@@ -1,4 +1,4 @@
-# build.sh's default output: the two APKs and the throwaway signing key
+# build.sh's default output: the two APKs and the throwaway signing key; adbkey.py's test adb key pair
 out/
 .gradle/
 build/

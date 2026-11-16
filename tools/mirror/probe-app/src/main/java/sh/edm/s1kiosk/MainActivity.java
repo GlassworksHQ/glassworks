@@ -23,6 +23,7 @@ public class MainActivity extends Activity {
         "android.permission.INSTALL_PACKAGES",
         "android.permission.REBOOT",
         "android.permission.WRITE_SECURE_SETTINGS",
+        "android.permission.MANAGE_USB",
     };
 
     private TextView text;

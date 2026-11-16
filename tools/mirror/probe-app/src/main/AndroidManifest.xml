@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.REBOOT" />
     <!-- signature|privileged|development: adb can also grant it with pm grant. -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <!-- signature|privileged on Android 6.0.1 (core/res/AndroidManifest.xml:1164): IUsbManager.allowUsbDebugging
+         needs it. Privileged permissions come only with the copy flashed into /system: an update can't add one. -->
+    <uses-permission android:name="android.permission.MANAGE_USB" />
 
     <application
         android:allowBackup="false"

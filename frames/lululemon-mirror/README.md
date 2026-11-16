@@ -141,7 +141,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [first-boot.md](research/first-boot.md): A first boot with nothing to tap: Wi-Fi on with the network saved, no screen timeout, no lock screen, no auto-rotate; read from AOSP 6.0.1 and the image, verified on the unit 2026-11-16 (#29)
 - [community-image-terms.md](research/community-image-terms.md): May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open (#40)
 - [mirror-root.md](research/mirror-root.md): Can we root the Mirror dev unit cheaply and safely? The AOSP `su` route is a dead end; a platform test-key app gives uid system with no flash; three `system`-only leads stay open. Nothing flashed (#40)
-- [privileged-app.md](research/privileged-app.md): Does an app in `/system/priv-app` get Android 6's privileged permissions (silent updates, reboot, secure settings) and keep them after it updates? Yes, read from AOSP 6.0.1; untested on the unit, the probe app is ready (#29)
+- [privileged-app.md](research/privileged-app.md): Does an app in `/system/priv-app` get Android 6's privileged permissions (silent updates, reboot, secure settings) and keep them after it updates? Yes: read from AOSP 6.0.1 and verified on the unit with the probe app (2026-11-16). Whether it can approve a computer's adb key: read; the permission verified on the unit (read-only), the approval untested (#29)
 
 ## Files
 
