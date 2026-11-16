@@ -201,9 +201,13 @@ Three things to find out:
     scratch build, no early-connection prefs:   [other] LEAK: connection from 127.0.0.1   (a connection, no request)
     the real build, same page, same server:     no new LEAK line; the page loaded again
     ```
-    So without the prefs the page reaches the other origin with a bare connection, and with them it doesn't. Early
-    Hints are off too (`network.early-hints.enabled`, `network.early-hints.preconnect.enabled`): a 103 from Home
-    Assistant could otherwise preconnect. Untested: a real 103, which the check page doesn't send.
+    So without the prefs the page reaches the other origin with a bare connection, and with them it doesn't. The
+    connection came with no request, so it was the preconnect: `<link rel=prefetch>` would have sent a GET, and the
+    server logged none in either build (so prefetch is off in the scratch build too, or Gecko 144 skips it here; the
+    control doesn't tell which). DNS prefetch is **untested**: it only resolves a name, which the server can't see,
+    and `localhost` resolves on the device anyway. Early Hints are off too (`network.early-hints.enabled`,
+    `network.early-hints.preconnect.enabled`): a 103 from Home Assistant could otherwise preconnect. Untested: a
+    real 103, which the check page doesn't send.
 
 ## Result
 
@@ -233,7 +237,9 @@ on the Mirror (step 11). "Nothing left" means the other origin's server logged n
 | A POST or link with `target=_top` from a frame | `onLoadRequest` → deny | Yes | Same note |
 | A top-level 302 or meta refresh to another origin | `onLoadRequest` → deny; `policy.js` also cancels a `main_frame` request off Home Assistant | Yes | Same note |
 | WebRTC (`RTCPeerConnection`) | `media.peerconnection.enabled=false`: the constructor is gone | Yes (no UDP to check over `adb reverse`; the API is absent) | — |
-| `<link rel=preconnect>`, `dns-prefetch`, `prefetch` to `localhost` (a name: Gecko skips IP literals) | The prefs above | Yes, not even a connection; without the prefs, a connection (step 14) | — |
+| `<link rel=preconnect>` to `localhost` (a name: Gecko skips IP literals) | The prefs above | Yes, not even a connection; without the prefs, a connection (step 14) | — |
+| `<link rel=prefetch>` to `localhost` | The prefs above | Yes, no request; but no request without the prefs either, so this row doesn't show the prefs are what stops it | — |
+| `<link rel=dns-prefetch>` | `network.dns.disablePrefetch` | Untested: a DNS lookup never reaches the server | — |
 | Anything, before the extension is up | `Page.load` waits; after 20 s, or if the extension fails, a message over the page | Yes | "Home Assistant can't load: the lockdown didn't start." |
 
 Untested: a `<link rel=preconnect>` added after load by script, a service worker's own fetches, and a WebRTC
