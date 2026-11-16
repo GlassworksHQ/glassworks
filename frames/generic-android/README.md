@@ -214,3 +214,4 @@ None yet. A note about this device goes in `research/` ([how](../../docs/researc
 
 - [`design/frame.json`](design/frame.json): the catalog data and the 3D model
 - [`android/`](android): the app (`:generic-android`), Glassworks for generic Android
+- [`budgets.json`](budgets.json): the app's size budget, per ABI and per pane ([docs/size.md](../../docs/size.md#budgets)); its RAM budgets are still to set

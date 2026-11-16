@@ -80,6 +80,13 @@ bundle (3.49 MB, of which the bundle is 3.32 MB), so its budget is 7.00 MB. Thes
 choices, so that growth is a decision, not a drift. (The first budgets, 2026-11-13, measured a build
 without the bundle, 97.84 MB, which is not what ships; v0.4.3's released APK was 101.08 MB.)
 
+Glassworks for generic Android (#23) has its own budgets, in `frames/generic-android/budgets.json`,
+by the same rules: its 2026-11-15 release build plus about 2.5% (100.82 MB `arm64-v8a`, so 103.40 MB;
+97.88 MB `armeabi-v7a`, so 100.40 MB), and each of its three panes about twice its own size. CI's
+`size-generic` job checks them on every pull request that changes what goes into that APK. It builds this branch only, so its report has no
+change column ("this check builds no base"). Its per-pane RAM budgets wait for a measured run on a
+tablet; the file's `_todo_ram` says what to add.
+
 The release build has R8 off (`frames/aqara-s1-plus/android/build.gradle.kts`, `isMinifyEnabled = false`), so the dex is
 the unshrunk code. Turning R8 on would change these numbers and needs its own PR (GeckoView and the
 reflection in the app need keep rules).

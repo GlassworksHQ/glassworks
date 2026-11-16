@@ -39,6 +39,10 @@
 #            engine, the core, each pane and the shared libraries (tools/size/apksize.py), shows the
 #            change and fails over the frame's size budget (frames/<id>/budgets.json). The report is
 #            the job summary, and size-comment.yml posts it on the PR (docs/size.md)
+#   size-generic  the same check for Glassworks for generic Android (#23, frames/generic-android): its
+#            release APK for each ABI of its frame.json against frames/generic-android/budgets.json. This
+#            branch only, no change column, so it costs two builds (about 4 minutes); the report is the
+#            job summary. Only when something that goes into that APK, or this file, changes
 #   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
 #            Python image and fails if the committed files differ. A few minutes, so it runs only
 #            when branding/boot, branding/glass-tile, branding/bootlogos.json, the S1's frame.json
@@ -732,6 +736,85 @@ jobs:
             ${{ runner.temp }}/size/pr.json
           retention-days: 7
           if-no-files-found: ignore
+
+  size-generic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        # Fails closed like libs-publish's: without a base commit, or when git diff fails, it runs.
+        run: |
+          paths="frames/generic-android core pane-api panes libs engines testing build.gradle.kts settings.gradle.kts gradle.properties gradle
+            LICENSE LICENSES THIRD-PARTY-NOTICES.md tools/size .github/workflows/pr.yml"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No base commit to compare with ($BASE); checking the size."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
+            echo "git diff failed; checking the size."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$changed" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing in the generic app's APK changed; skipping its size check."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        if: steps.changed.outputs.run == 'true'
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        if: steps.changed.outputs.run == 'true'
+        run: sdkmanager --install "platforms;android-37.2"
+
+      - name: Release APKs, one per ABI of the frame
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/generic"
+          for a in $(jq -r '.abis[]' frames/generic-android/design/frame.json); do
+            ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a"
+            cp frames/generic-android/android/build/outputs/apk/release/generic-android-release-unsigned.apk "$RUNNER_TEMP/generic/$a.apk"
+          done
+
+      - name: Size and budget
+        if: steps.changed.outputs.run == 'true'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          args=""
+          for apk in "$RUNNER_TEMP"/generic/*.apk; do
+            a="$(basename "$apk" .apk)"
+            args="$args --apk $a=$apk --base-missing $a=not-built"
+          done
+          # No base APK is built, but the base's budgets still show a budget change (as the S1's job does).
+          base_budgets="$RUNNER_TEMP/generic/base-budgets.json"
+          if [ -n "$BASE" ] && git show "$BASE:frames/generic-android/budgets.json" > "$base_budgets" 2>/dev/null; then
+            args="$args --base-budgets $base_budgets"
+          fi
+          # shellcheck disable=SC2086 # $args is a list of options
+          python3 tools/size/apksize.py report --frame generic-android $args \
+            --json "$RUNNER_TEMP/generic/size.json" --md "$RUNNER_TEMP/generic/size.md"
+
+      - name: Job summary
+        if: always() && steps.changed.outputs.run == 'true'
+        run: |
+          [ -f "$RUNNER_TEMP/generic/size.md" ] && cat "$RUNNER_TEMP/generic/size.md" >> "$GITHUB_STEP_SUMMARY" || true
 
   branding:
     runs-on: ubuntu-24.04
