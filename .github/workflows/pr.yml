@@ -794,12 +794,19 @@ jobs:
 
       - name: Size and budget
         if: steps.changed.outputs.run == 'true'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           args=""
           for apk in "$RUNNER_TEMP"/generic/*.apk; do
             a="$(basename "$apk" .apk)"
             args="$args --apk $a=$apk --base-missing $a=not-built"
           done
+          # No base APK is built, but the base's budgets still show a budget change (as the S1's job does).
+          base_budgets="$RUNNER_TEMP/generic/base-budgets.json"
+          if [ -n "$BASE" ] && git show "$BASE:frames/generic-android/budgets.json" > "$base_budgets" 2>/dev/null; then
+            args="$args --base-budgets $base_budgets"
+          fi
           # shellcheck disable=SC2086 # $args is a list of options
           python3 tools/size/apksize.py report --frame generic-android $args \
             --json "$RUNNER_TEMP/generic/size.json" --md "$RUNNER_TEMP/generic/size.md"
