@@ -17,8 +17,8 @@ Read on the maintainer's Mirror on 2026-11-15 (read-only adb, [image-patch.md](.
 the panel is 1920x1080, natural landscape, and stands portrait. The community image turns it with
 `user_rotation=3`, which lives in `userdata`. Kiln's image sets `ro.sf.hwrotation=270` instead, so
 SurfaceFlinger, and with it the boot animation, sees a 1080x1920 portrait screen. That's why this
-animation is portrait. **Untested on the unit**: if the real run shows it sideways, the rotation is
-what to change, not this file.
+animation is portrait. **Verified on the unit** (2026-11-16, the first real flash): it runs portrait
+and upright. If a later image shows it sideways, the rotation is what to change, not this file.
 
 ## Not changeable: the boot logo
 
