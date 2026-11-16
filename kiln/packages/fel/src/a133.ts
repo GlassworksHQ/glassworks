@@ -1,5 +1,6 @@
-// Allwinner A133 constants for FEL, from sunxi-tools soc_info.c (A133 entry and
-// a133_sram_swap_buffers) and our own U-Boot build (frames/aqara-s1-plus/tools/fel/fel-boot.sh, frames/aqara-s1-plus/research/fel.md).
+// Allwinner A133 facts for FEL: addresses and ids, not code. They were first taken from sunxi-tools'
+// soc_info.c and are listed with their public sources in docs/research/kiln-cleanroom/fel-spec.md
+// ("The A133"). The U-Boot address is our own build's (frames/aqara-s1-plus/tools/fel/fel-boot.sh).
 
 export interface SwapBuffer { buf1: number; buf2: number; size: number }
 
