@@ -51,6 +51,7 @@ sendspin|733565411|SwitchEntity|Music Assistant player (Sendspin)|mdi:speaker-wi
 sendspin_status|-669526114|TextSensorEntity|Music Assistant player status|mdi:speaker-wireless||DIAGNOSTIC|authOnly=false|options=|disabledByDefault
 sign_out|1452185499|ButtonEntity|Sign out|mdi:logout||CONFIG|authOnly=false|options=|disabledByDefault
 signed_in|188034881|TextSensorEntity|Signed in|mdi:account-key||DIAGNOSTIC|authOnly=false|options=|disabledByDefault
+silent_updates|523107273|TextSensorEntity|Silent updates|mdi:auto-download||DIAGNOSTIC|authOnly=false|options=
 speaker|1749657154|MediaPlayerEntity|Speaker|mdi:speaker||NONE|authOnly=false|options=
 storage_free|-1624996127|SensorEntity|Storage free|mdi:harddisk|data_size|DIAGNOSTIC|authOnly=false|options=|disabledByDefault
 thread_dataset|-1406115782|TextEntity|Thread dataset|mdi:key-chain||CONFIG|authOnly=false|options=|disabledByDefault
