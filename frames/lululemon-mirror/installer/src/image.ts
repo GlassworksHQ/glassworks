@@ -5,7 +5,7 @@
 // answer "Allow USB debugging?". Nothing here is downloaded from or uploaded to anyone: the person's
 // file goes in, and the patched copy stays in their browser until fastboot writes it.
 // The findings behind each step: frames/lululemon-mirror/research/image-patch.md.
-import { PKG, apkHome, apkInfo, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
+import { ManifestError, PKG, apkHome, apkInfo, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
@@ -67,6 +67,15 @@ export function setProp(text: string, key: string, value: string): string {
  * has no touchscreen: with no home screen, it starts to nothing (its first real flash, 2026-11-16).
  */
 export async function checkMirrorApk(apk: Uint8Array): Promise<ApkInfo> {
+  try {
+    return await checkApk(apk);
+  } catch (e) {
+    if (e instanceof ManifestError) throw new Error(`${e.message}. Nothing was changed.`);
+    throw e;
+  }
+}
+
+async function checkApk(apk: Uint8Array): Promise<ApkInfo> {
   const info = await apkInfo(apk);
   if (info.package !== PKG) throw new Error(`this APK is ${info.package}, not S1 Kiosk (${PKG}). Nothing was changed.`);
   // the Mirror runs Android 6 (API 23) on arm64 with 32-bit arm too (frame.json abis): the legacy build fits
@@ -77,7 +86,7 @@ export async function checkMirrorApk(apk: Uint8Array): Promise<ApkInfo> {
   if (!home.on.length) {
     const why = home.off.length ? `its home screen (${home.off.join(', ')}) is turned off in its manifest`
       : home.unclear.length ? `whether its home screen (${home.unclear.join(', ')}) is on depends on a resource Kiln doesn't read`
-        : 'it has no home screen (no activity for MAIN and HOME)';
+        : 'it has no home screen (no activity with MAIN, HOME and DEFAULT in one intent filter)';
     throw new Error(`this APK can't be the Mirror's home screen: ${why}. The Mirror has no touchscreen, so it would start to nothing: pick a build of S1 Kiosk made for Android 6. Nothing was changed.`);
   }
   return info;

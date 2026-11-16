@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { Steps, apkHome, apkInfo, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
-import { fakeApk } from './fakes';
+import { ManifestError, Steps, apkHome, apkInfo, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
+import { HOME_ACTIVITY, app, fakeApk, filter, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
   cmds: string[] = [];
@@ -111,18 +111,56 @@ describe('the APK\'s package, read before anything is installed', () => {
 });
 
 describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16)', () => {
-  it.each([[false], [true]])('finds an activity with MAIN and HOME, and whether it is on (utf8 %s)', async (utf8) => {
-    expect(await apkHome(fakeApk('sh.edm.s1kiosk', { utf8 }))).toEqual({ on: ['sh.edm.s1kiosk.MainActivity'], off: [], unclear: [] });
-    expect(await apkHome(fakeApk('sh.edm.s1kiosk', { utf8, home: 'off' }))).toEqual({ on: [], off: ['sh.edm.s1kiosk.MainActivity'], unclear: [] });
-    expect(await apkHome(fakeApk('sh.edm.s1kiosk', { utf8, home: 'none' }))).toEqual({ on: [], off: [], unclear: [] });
+  const P = 'sh.edm.s1kiosk';
+  const home = async (h: FakeEl[]) => apkHome(fakeApk(P, { home: h }));
+  const act = (name: string, filters: FakeEl[], attrs: FakeEl['attrs'] = {}): FakeEl => ({ el: 'activity', attrs: { name, ...attrs }, children: filters });
+  const alias = (name: string, target: string, attrs: FakeEl['attrs'] = {}): FakeEl =>
+    ({ el: 'activity-alias', attrs: { name, targetActivity: target, ...attrs }, children: [filter(['MAIN'], ['HOME', 'DEFAULT'])] });
+
+  it.each([[false], [true]])('finds an activity with MAIN, HOME and DEFAULT, and whether it is on (utf8 %s)', async (utf8) => {
+    expect(await apkHome(fakeApk(P, { utf8 }))).toEqual({ on: [`${P}.MainActivity`], off: [], unclear: [] });
+    expect(await apkHome(fakeApk(P, { utf8, home: 'off' }))).toEqual({ on: [], off: [`${P}.MainActivity`], unclear: [] });
+    expect(await apkHome(fakeApk(P, { utf8, home: 'none' }))).toEqual({ on: [], off: [], unclear: [] });
+  });
+
+  // Android 6's am start -a MAIN -c HOME, and its chooser, resolve with MATCH_DEFAULT_ONLY: DEFAULT must be in the same filter
+  it.each([
+    ['MAIN without HOME (a launcher icon)', [filter(['MAIN'], ['LAUNCHER', 'DEFAULT'])]],
+    ['HOME without DEFAULT', [filter(['MAIN'], ['HOME'])]],
+    ['MAIN+HOME and MAIN+DEFAULT in separate filters', [filter(['MAIN'], ['HOME']), filter(['MAIN'], ['DEFAULT'])]],
+    ['HOME and DEFAULT without MAIN', [filter(['VIEW'], ['HOME', 'DEFAULT'])]],
+  ])('an enabled activity with %s is no home screen', async (_, filters) => {
+    expect(await home(app(act('.MainActivity', filters)))).toEqual({ on: [], off: [], unclear: [] });
+  });
+
+  it('enabled from a resource is unclear; an application turned off turns its activities off', async () => {
+    expect(await home(app(HOME_ACTIVITY({ enabled: { ref: 0x7f040001 } })))).toEqual({ on: [], off: [], unclear: [`${P}.MainActivity`] });
+    expect(await home(app(HOME_ACTIVITY(), { enabled: false }))).toEqual({ on: [], off: [`${P}.MainActivity`], unclear: [] });
+    expect(await home(app(HOME_ACTIVITY({ enabled: true }), { enabled: true }))).toEqual({ on: [`${P}.MainActivity`], off: [], unclear: [] });
+  });
+
+  it('an activity-alias counts by its own enabled bit, over an enabled or a disabled target', async () => {
+    const tree = (target: FakeEl['attrs'], aliasAttrs: FakeEl['attrs'] = {}): FakeEl[] =>
+      [{ el: 'application', children: [act('.MainActivity', [], target), alias('.Home', '.MainActivity', aliasAttrs)] }];
+    expect(await home(tree({}))).toEqual({ on: [`${P}.Home`], off: [], unclear: [] });
+    // decided (#385 verifier): PackageParser gives the alias its own enabled bit, and ActivityThread starts the target class by name
+    expect(await home(tree({ enabled: false }))).toEqual({ on: [`${P}.Home`], off: [], unclear: [] });
+    expect(await home(tree({}, { enabled: false }))).toEqual({ on: [], off: [`${P}.Home`], unclear: [] });
+  });
+
+  it('a manifest that runs off its own data is a ManifestError, not a RangeError', async () => {
+    const apk = fakeApk(P);
+    const at = new TextDecoder('latin1').decode(apk).indexOf('AndroidManifest.xml') + 'AndroidManifest.xml'.length; // the stored manifest
+    new DataView(apk.buffer, apk.byteOffset).setUint32(at + 8 + 8, 0x00ffffff, true); // its string pool claims 16M strings
+    await expect(apkHome(apk)).rejects.toBeInstanceOf(ManifestError);
+    await expect(apkInfo(apk)).rejects.toThrow(/^this APK's AndroidManifest\.xml can't be read$/);
   });
 
   it('reads the tree with the package and minSdkVersion around it unchanged', async () => {
-    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23 });
-    expect(await apkInfo(apk)).toMatchObject({ package: 'sh.edm.s1kiosk', minSdk: 23 });
+    const apk = fakeApk(P, { minSdk: 23 });
+    expect(await apkInfo(apk)).toMatchObject({ package: P, minSdk: 23 });
     const tree = axmlTree((await zipEntry(apk, 'AndroidManifest.xml'))!);
     expect(tree.map((e) => e.name)).toEqual(['manifest']);
     expect(tree[0]!.children.map((e) => e.name)).toEqual(['uses-sdk', 'application']);
   });
 });
-

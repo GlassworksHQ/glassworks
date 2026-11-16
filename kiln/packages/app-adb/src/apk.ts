@@ -95,6 +95,7 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
     if (size < 8) break;
     if (type === 0x0001) {
       strings = stringPool(xml, dv, at, hsize);
+      resIds = []; // the resource map belongs to the pool before it
     } else if (type === 0x0180) {
       resIds = [];
       for (let o = at + hsize; o < at + size; o += 4) resIds.push(dv.getUint32(o, true));
@@ -139,9 +140,9 @@ export interface ApkInfo {
 export async function apkInfo(apk: Uint8Array): Promise<ApkInfo> {
   const manifest = await zipEntry(apk, 'AndroidManifest.xml');
   if (!manifest) throw new Error('this file isn\'t an APK (no AndroidManifest.xml)');
-  const pkg = axmlAttribute(manifest, 'manifest', 'package');
+  const pkg = reading(() => axmlAttribute(manifest, 'manifest', 'package'));
   if (typeof pkg !== 'string' || !pkg) throw new Error('this APK\'s manifest names no package');
-  const min = axmlAttribute(manifest, 'uses-sdk', 'minSdkVersion');
+  const min = reading(() => axmlAttribute(manifest, 'uses-sdk', 'minSdkVersion'));
   const abis = [...new Set(zipNames(apk).map((n) => /^lib\/([^/]+)\/[^/]+\.so$/.exec(n)?.[1]).filter((x): x is string => !!x))];
   return { package: pkg, ...(min !== undefined ? { minSdk: typeof min === 'string' && /^\d+$/.test(min) ? Number(min) : min } : {}), abis };
 }
@@ -170,7 +171,7 @@ export function axmlTree(xml: Uint8Array): AxmlElement[] {
   for (let at = dv.getUint16(2, true); at + 8 <= xml.length;) {
     const type = dv.getUint16(at, true), hsize = dv.getUint16(at + 2, true), size = dv.getUint32(at + 4, true);
     if (size < 8) break;
-    if (type === 0x0001) strings = stringPool(xml, dv, at, hsize);
+    if (type === 0x0001) { strings = stringPool(xml, dv, at, hsize); resIds = []; } // the resource map belongs to the pool before it
     else if (type === 0x0180) { resIds = []; for (let o = at + hsize; o < at + size; o += 4) resIds.push(dv.getUint32(o, true)); }
     else if (type === 0x0102) {
       const ext = at + hsize;
@@ -193,23 +194,40 @@ export function axmlTree(xml: Uint8Array): AxmlElement[] {
   return roots;
 }
 
+/** A manifest Kiln can't parse (cut short, or not what its chunks say): reported plainly, never as a RangeError. */
+export class ManifestError extends Error {
+  constructor() { super('this APK\'s AndroidManifest.xml can\'t be read'); }
+}
+
+/** Runs a manifest read; a parse that runs off the data is a ManifestError. */
+function reading<T>(f: () => T): T {
+  try { return f(); } catch (e) { if (e instanceof RangeError) throw new ManifestError(); throw e; }
+}
+
+const MAIN = 'android.intent.action.MAIN', HOME = 'android.intent.category.HOME', DEFAULT = 'android.intent.category.DEFAULT';
+
 /**
- * The APK's home screens: activities (and aliases) with an intent filter for MAIN and HOME. `on`
- * Android can open; `off` the manifest turns off (android:enabled="false" on it or its application);
- * `unclear` turned on or off by a resource Kiln doesn't resolve.
+ * The APK's home screens: activities (and aliases) with one intent filter that has MAIN, HOME and
+ * DEFAULT. All three in the same filter, because Android 6's `am start -a MAIN -c HOME` and its
+ * chooser resolve with MATCH_DEFAULT_ONLY, which drops a filter without DEFAULT
+ * (ActivityStackSupervisor.resolveActivity, IntentResolver.buildResolveList).
+ *
+ * `on`: Android can open it. `off`: android:enabled="false" on it or on its <application>.
+ * `unclear`: turned on or off by a resource Kiln doesn't resolve (@bool/…). An activity-alias counts
+ * by its own enabled bit, as PackageParser gives it one: a disabled target class still starts through
+ * an enabled alias (ActivityThread instantiates the target by name).
  */
 export async function apkHome(apk: Uint8Array): Promise<{ on: string[]; off: string[]; unclear: string[] }> {
   const manifest = await zipEntry(apk, 'AndroidManifest.xml');
   if (!manifest) throw new Error('this file isn\'t an APK (no AndroidManifest.xml)');
   const out = { on: [] as string[], off: [] as string[], unclear: [] as string[] };
-  const pkg = axmlAttribute(manifest, 'manifest', 'package');
+  const pkg = reading(() => axmlAttribute(manifest, 'manifest', 'package'));
   const full = (n: string) => (n.startsWith('.') && typeof pkg === 'string' ? pkg + n : n);
-  for (const m of axmlTree(manifest).filter((e) => e.name === 'manifest')) {
+  const has = (f: AxmlElement, el: string, name: string) => f.children.some((c) => c.name === el && c.attrs['android:name'] === name);
+  for (const m of reading(() => axmlTree(manifest)).filter((e) => e.name === 'manifest')) {
     for (const app of m.children.filter((e) => e.name === 'application')) {
       for (const act of app.children.filter((e) => e.name === 'activity' || e.name === 'activity-alias')) {
-        const home = act.children.some((f) => f.name === 'intent-filter'
-          && f.children.some((c) => c.name === 'action' && c.attrs['android:name'] === 'android.intent.action.MAIN')
-          && f.children.some((c) => c.name === 'category' && c.attrs['android:name'] === 'android.intent.category.HOME'));
+        const home = act.children.some((f) => f.name === 'intent-filter' && has(f, 'action', MAIN) && has(f, 'category', HOME) && has(f, 'category', DEFAULT));
         if (!home) continue;
         const name = full(String(act.attrs['android:name'] ?? '?'));
         const states = [app.attrs['android:enabled'], act.attrs['android:enabled']];
