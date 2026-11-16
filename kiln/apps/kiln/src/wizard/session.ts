@@ -459,7 +459,6 @@ export class Session implements SetupSteps {
 
   /** Done, with the backup to download. */
   finish(): void {
-    this.steps.close();
     const ip = this.steps.ip ?? this.ip;
     const b = this.s.backup;
     const wifi = this.wifiSsid;
@@ -479,6 +478,21 @@ export class Session implements SetupSteps {
         },
       },
     });
+    void this.handOff(ip);
+  }
+
+  /**
+   * The hand-off to the panel's own setup page (#34): a page on https can't reach the panel's http, so Done gives
+   * its address. Only for an app that has the page, which `pairing.arm` shows: it answers, and opens pairing for 30
+   * minutes, so the page pairs even once Home Assistant has the panel.
+   */
+  private async handOff(ip: string | undefined): Promise<void> {
+    // The link is the address in the panel's reply, not the one Done had: it can change in between (DHCP).
+    const now = ip ? (await this.steps.armPairing())?.ip : undefined;
+    this.steps.close();
+    const d = this.s.done;
+    if (!now || !d || this.closed || this.s.screen !== 'done') return;
+    this.dispatch({ type: 'done', done: { ...d, setupPage: `http://${now}:8099/setup` } });
   }
 
   /** Done's download: the files from this session's run, or from this browser's store for an earlier session's. */
@@ -490,9 +504,11 @@ export class Session implements SetupSteps {
       const files = this.result?.meta.id === b.id ? this.result.files : await this.d.backups.files(b);
       (this.d.download ?? saveBlob)(`${b.id}.zip`, backupZip(b, files));
     } catch (e) {
-      // only on the Done that asked: after Undo or a new run, a late error must not bring it back
-      if (this.closed || this.s.screen !== 'done' || this.s.done !== shown || !shown?.backup) return;
-      this.dispatch({ type: 'done', done: { ...shown, backup: { ...shown.backup, error: `Couldn't read it from this browser: ${(e as Error).message}` } } });
+      // Only on the Done that asked, by its backup: after Undo or a new run, a late error must not bring it back.
+      // Done itself can be redrawn meanwhile (the hand-off adds the setup page's link), so the error goes into it as it is now.
+      const cur = this.s.done;
+      if (this.closed || this.s.screen !== 'done' || !cur?.backup || cur.backup.name !== shown?.backup?.name) return;
+      this.dispatch({ type: 'done', done: { ...cur, backup: { ...cur.backup, error: `Couldn't read it from this browser: ${(e as Error).message}` } } });
     }
   }
 

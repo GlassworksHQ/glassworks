@@ -95,6 +95,8 @@ export interface UndoState {
 export interface DoneState {
   title: string;
   body: string;
+  /** The panel's own setup page (`http://<panel>:8099/setup`, #34), when the app on it has one: Kiln hands off to it. */
+  setupPage?: string;
   backup?: { name: string; info: string; hint: string; error?: string };
 }
 

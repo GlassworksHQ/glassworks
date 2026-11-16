@@ -316,6 +316,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       dispatch({ type: 'done', done: {
         title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device.',
         backup: { name: 's1-backup-20261112-101500.zip', info: '9 partitions · 52 MiB', hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
+        setupPage: `http://${IP}:8099/setup`,
       } });
       return;
     case 'undo':

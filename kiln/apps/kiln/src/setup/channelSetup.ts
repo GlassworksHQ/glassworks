@@ -90,6 +90,16 @@ export class ChannelSetup {
     return st;
   }
 
+  /**
+   * Opens pairing over the LAN for 30 minutes (`pairing.arm`, #34) on the channel already open, and answers with the
+   * panel's state as it replied: its address now. Undefined when there is no channel, or the app doesn't have it (an
+   * older app answers "Unknown request"): then it has no setup page either.
+   */
+  async armPairing(): Promise<SetupState | undefined> {
+    if (!this.channel) return undefined;
+    return this.channel.armPairing().catch(() => undefined);
+  }
+
   /** Stops the poll and lets the channel go; the next step opens it again. */
   close(): void {
     this.gen++;
@@ -164,6 +174,7 @@ export class ChannelSetup {
       this.d.unreachable(e); // e.g. the app restarted and didn't come back: say so, not "Connecting…" forever
       return;
     }
+    this.ip = st.ip ?? this.ip; // also when setup starts here (#/radio): Done's hand-off needs it
     this.d.show({
       phase: 'radio', radio: st.radio,
       note: st.radio.helper ? `Now: ${st.radio.status}` : 'Only Off is available: this panel has no root helper for the radio.',
