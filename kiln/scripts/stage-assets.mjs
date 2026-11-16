@@ -61,8 +61,13 @@ const assets = [
 ];
 
 // --remote (the Vercel build): the binaries come from pinned URLs (assets.lock.json) instead of this
-// computer, and the kiosk APK from the latest S1 Kiosk release, streamed by api/release-asset.ts.
+// computer, and the kiosk APK from the latest S1 Kiosk release, streamed by a release route:
+// api/release-asset.ts on s1.edm.sh, or the one --release-route names (Kiln: /api/release/aqara-s1-plus).
 const REMOTE = process.argv.includes('--remote');
+const routeArg = process.argv.indexOf('--release-route');
+const RELEASE_ROUTE = routeArg > 0 ? process.argv[routeArg + 1] : '/api/release-asset';
+// A path on this site only: no missing value, no other flag, and no `//host` that would leave it.
+if (!/^\/(?!\/)[\w./-]*$/.test(RELEASE_ROUTE ?? '')) throw new Error(`--release-route needs a path on this site, like /api/release/aqara-s1-plus (got ${RELEASE_ROUTE})`);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
 async function download(url) {
@@ -97,7 +102,7 @@ for (const a of assets) {
   const pinned = lock.find((l) => l.name === a.name);
   if (REMOTE && a.name === 'kiosk-apk') {
     const k = await latestKiosk();
-    const path = `/api/release-asset?tag=${encodeURIComponent(k.tag)}&name=${encodeURIComponent(k.name)}`;
+    const path = `${RELEASE_ROUTE}?tag=${encodeURIComponent(k.tag)}&name=${encodeURIComponent(k.name)}`;
     manifest.push({ name: a.name, path, sha256: k.sha256, size: k.size, license: a.license, source: `${SRC}/releases/tag/${k.tag}` });
     console.log(`${a.name.padEnd(14)} ${String(k.size).padStart(10)}  ${k.sha256.slice(0, 16)}  ${k.tag} (streamed)`);
     continue;
