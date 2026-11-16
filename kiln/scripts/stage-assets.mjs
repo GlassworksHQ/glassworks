@@ -66,6 +66,8 @@ const assets = [
 const REMOTE = process.argv.includes('--remote');
 const routeArg = process.argv.indexOf('--release-route');
 const RELEASE_ROUTE = routeArg > 0 ? process.argv[routeArg + 1] : '/api/release-asset';
+// A path on this site only: no missing value, no other flag, and no `//host` that would leave it.
+if (!/^\/(?!\/)[\w./-]*$/.test(RELEASE_ROUTE ?? '')) throw new Error(`--release-route needs a path on this site, like /api/release/aqara-s1-plus (got ${RELEASE_ROUTE})`);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
 async function download(url) {

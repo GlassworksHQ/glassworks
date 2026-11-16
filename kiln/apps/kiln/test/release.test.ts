@@ -73,6 +73,18 @@ describe('the release route', () => {
     ['through the name', 'tag=v0.4.3&name=../../../../../evil/repo/releases/download/v0.4.3/s1-kiosk-0.4.3.apk'],
     ['as a full URL in the name', 'tag=v0.4.3&name=https://github.com/evil/repo/releases/download/v0.4.3/s1-kiosk-0.4.3.apk'],
   ])('refuses another repo %s with 400', (_, q) => refusedBefore(get('aqara-s1-plus', q), 400));
+
+  it.each([
+    'repo=evil/repo',
+    'owner=evil&repo=repo',
+    'repository=evil/repo',
+  ])('asks this repo only, whatever %s says', async (extra) => {
+    const fetch = vi.fn(apk);
+    vi.stubGlobal('fetch', fetch);
+    const r = await get('aqara-s1-plus', `${extra}&tag=v0.4.3&name=s1-kiosk-0.4.3.apk`);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('https://github.com/GlassworksHQ/glassworks/releases/download/v0.4.3/s1-kiosk-0.4.3.apk', { redirect: 'follow' });
+    expect(r.status).toBe(200);
+  });
 });
 
 describe('the S1\'s old release route', () => {
