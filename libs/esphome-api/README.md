@@ -71,10 +71,12 @@ ESPHome device. Package `dev.glassworks.esphome`, MIT licensed.
 - **Voice assistant:** the messages are wired through `VoiceAssistantHandler`: start and stop, API
   audio, events, timers, announcements and wake word configuration. The audio, wake word and UI
   stay in your app.
-- **Bluetooth proxy (passive):** the feature flags in DeviceInfo and DeviceCapabilities, the
+- **Bluetooth proxy:** the feature flags in DeviceInfo and DeviceCapabilities, the
   advertisement subscription (one client at a time; a newer one replaces it, as in ESPHome) and
-  batched raw advertisements, through `BluetoothProxyHandler` and `sendBluetoothAdvertisements`. No
-  GATT connections yet. The Android scanner is [bluetooth-proxy](../bluetooth-proxy/README.md).
+  batched raw advertisements, through `BluetoothProxyHandler` and `sendBluetoothAdvertisements`.
+  Active connections (GATT) go through `BluetoothConnectionHandler`: requests arrive as `GattRequest`,
+  and you answer with `sendBluetoothEvent(GattEvent…)`. The Android side of both is
+  [bluetooth-proxy](../bluetooth-proxy/README.md).
 - **Sendspin pairing-token hand-off:** for HA → Music Assistant, through `SendspinTokenSource`.
   Leave it unset if you don't have a Sendspin player.
 - **Noise cipher:** `NoiseCipher`, Noise's ChaChaPoly cipher state, is reusable on its own. S1
@@ -181,7 +183,7 @@ Status words:
 - **Not yet**: no decision either way.
 - **Not planned**: we won't, for the reason given.
 
-**Count for esphome-api** (against ESPHome 2026.10.2): 27 supported, 9 partial, 1 planned, 14 not yet, 15 not planned.
+**Count for esphome-api** (against ESPHome 2026.10.2): 30 supported, 9 partial, 0 planned, 17 not yet, 15 not planned.
 
 `tools/check-parity-tables.py` checks these words and the count. `ParityTableTest` checks that the
 entity types marked Supported or Partial are exactly the ones the server lists.
@@ -277,7 +279,12 @@ The messages are here; the Android scanner and its own comparison are in
 |---|---|---|---|---|
 | Advertisements | `SubscribeBluetoothLEAdvertisementsRequest`, `UnsubscribeBluetoothLEAdvertisementsRequest`, `BluetoothLERawAdvertisementsResponse` (66, 87, 93) | Supported | 0.1.0 | One subscriber at a time, as in ESPHome; `authOnly` by default |
 | Old-style advertisements | `BluetoothLEAdvertisementResponse` (67) | Not planned: replaced by raw advertisements, which HA asks for | | |
-| Active connections and GATT | `BluetoothDeviceRequest` and the GATT messages (68–86, 88), connection parameters (145, 146) | Planned | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246) |
+| Connect and disconnect | `BluetoothDeviceRequest` connect v3 and disconnect, `BluetoothDeviceConnectionResponse` (68, 69) | Supported | Unreleased | `BluetoothConnectionHandler`. Sends `ACTIVE_CONNECTIONS` and `REMOTE_CACHING`, without which aioesphomeapi won't connect. Only the advertisement subscriber may ask, and answers go to it, as in ESPHome. A v1 connect is answered "not connected" ([#246](https://github.com/GlassworksHQ/glassworks/issues/246)) |
+| GATT services, reads, writes and notifications | `BluetoothGATT*` (70–79, 82–84) | Supported | Unreleased | `GattRequest` in, `GattEvent` out. Services go out with 128-bit UUIDs, never `short_uuid` |
+| Free connection slots | `SubscribeBluetoothConnectionsFreeRequest`, `BluetoothConnectionsFreeResponse` (80, 81) | Supported | Unreleased | The handler keeps the table; the subscription follows `authOnly` |
+| Pairing | `BluetoothDeviceRequest` pair and unpair, their responses (85, 86) | Not yet | | Answered "failed" at once. On Android a PIN would raise the system's dialog over a kiosk |
+| Clearing the GATT cache | `BluetoothDeviceRequest` clear cache, `BluetoothDeviceClearCacheResponse` (88) | Not yet | | Answered "failed" at once |
+| Connection parameters | `BluetoothSetConnectionParamsRequest`, its response (145, 146) | Not yet | | |
 | Scanner state and mode | `BluetoothScannerStateResponse`, `BluetoothScannerSetModeRequest` (126, 127) | Not planned: Android apps can't switch to a passive scan | | |
 | Bluetooth MAC address | `bluetooth_mac_address` in DeviceInfo and capabilities | Not yet | | HA keys the scanner on the device MAC instead. Decided with GATT ([#246](https://github.com/GlassworksHQ/glassworks/issues/246)) |
 
@@ -318,7 +325,8 @@ checks the library's classes, and the BouncyCastle classes they reach, against A
 ./gradlew :esphome-api:test
 ```
 
-`EspHomeKeepaliveTest`, `EspHomeActionsCameraTest` and `EspHomeHaEventTest` run the real `aioesphomeapi` client when
+`EspHomeKeepaliveTest`, `EspHomeActionsCameraTest`, `EspHomeHaEventTest`, `EspHomeCapsTimeTest` and
+`EspHomeBluetoothConnectionsTest` run the real `aioesphomeapi` client when
 `ESPHOME_PYTHON` points at a Python with it installed. They are skipped otherwise. PR CI installs it from
 [`test-requirements.txt`](test-requirements.txt) (locked with hashes) and fails if one of them skipped:
 

@@ -286,9 +286,16 @@ public class ApiServer(
                 field = value
                 if (bluetoothConn == null) return
                 old?.onSubscribed(false)
-                if (value == null) bluetoothConn = null else value.onSubscribed(true)
+                if (value == null) setBluetoothConn(null) else value.onSubscribed(true)
             }
         }
+
+    /**
+     * The Bluetooth proxy's active connections (GATT), or null for a proxy that only listens. Works only
+     * next to [bluetooth]: requests come from its subscriber, and the flags it adds go out with it.
+     * Called under the same lock as [bluetooth], so it must not block either.
+     */
+    @Volatile public var bluetoothConnections: BluetoothConnectionHandler? = null
 
     /**
      * Called after a command or an action call was handled, when a state may have changed. A device
@@ -584,6 +591,18 @@ public class ApiServer(
         }
     }
 
+    /**
+     * Sends a connection [event] to the client that holds the advertisement subscription, as ESPHome
+     * does. False if none does.
+     */
+    public fun sendBluetoothEvent(event: GattEvent): Boolean {
+        val frame = event.frame()
+        synchronized(bluetoothLock) {
+            val c = bluetoothConn ?: return false
+            return c.send(listOf(frame))
+        }
+    }
+
     /** Takes [handler] out if it is still [bluetooth] (not if another one replaced it). True if it was. */
     public fun removeBluetooth(handler: BluetoothProxyHandler): Boolean = synchronized(bluetoothLock) {
         if (bluetooth !== handler) return false
@@ -601,7 +620,7 @@ public class ApiServer(
             }
             val previous = bluetoothConn
             if (previous === c || !c.isOpen) return
-            bluetoothConn = c
+            setBluetoothConn(c)
             if (previous == null) bt.onSubscribed(true)
             else EspHomeLog.w("[${c.id}] Bluetooth subscription replaces [${previous.id}]")
         }
@@ -610,9 +629,50 @@ public class ApiServer(
     private fun unsubscribeBluetooth(c: Connection) {
         synchronized(bluetoothLock) {
             if (bluetoothConn !== c) return
-            bluetoothConn = null
+            setBluetoothConn(null)
             bluetooth?.onSubscribed(false)
         }
+    }
+
+    /** Under [bluetoothLock]. A new or no subscriber closes every link (ESPHome `disconnect_all_connections_`). */
+    private fun setBluetoothConn(c: Connection?) {
+        if (bluetoothConn === c) return
+        bluetoothConn = c
+        try { bluetoothConnections?.onSubscriberChanged() } catch (t: Throwable) { EspHomeLog.w("Bluetooth onSubscriberChanged failed", t) }
+    }
+
+    /** The proxy's flags: the handler's, plus active connections when [bluetoothConnections] is set. 0 for no proxy. */
+    private fun bluetoothFlags(): Int {
+        val bt = bluetooth ?: return 0
+        val active = if (bluetoothConnections != null) BluetoothProxyFeature.ACTIVE_CONNECTIONS or BluetoothProxyFeature.REMOTE_CACHING else 0
+        return bt.featureFlags or active
+    }
+
+    /**
+     * A connection request from [c]. Only the advertisement subscriber may make one (it passed
+     * [BluetoothProxyHandler.authOnly] to get there); anyone else is told the device isn't connected.
+     */
+    private fun bluetoothRequest(c: Connection, request: GattRequest) {
+        synchronized(bluetoothLock) {
+            val handler = bluetoothConnections
+            if (handler != null && bluetooth != null && bluetoothConn === c) {
+                try { handler.onRequest(request) } catch (t: Throwable) { EspHomeLog.w("Bluetooth request failed", t) }
+                return
+            }
+        }
+        EspHomeLog.w("[${c.id}] Bluetooth connection request refused: only from the client that subscribed to advertisements")
+        c.send(listOf(refusal(request).frame()))
+    }
+
+    /** `SubscribeBluetoothConnectionsFreeRequest`: the slot table, now; later changes go to the subscriber. */
+    private fun subscribeConnectionsFree(c: Connection) {
+        val bt = bluetooth ?: return
+        val handler = bluetoothConnections ?: return
+        if (bt.authOnly && !c.authenticated) {
+            EspHomeLog.w("[${c.id}] Bluetooth connections subscription refused: only from an authenticated (encrypted, provisioned) connection")
+            return
+        }
+        c.send(listOf(handler.connectionsFree().frame()))
     }
 
     /**
@@ -887,6 +947,15 @@ public class ApiServer(
                 Msg.SUBSCRIBE_HA_SERVICES_REQUEST -> subscribedHaServices = true
                 BluetoothMsg.SUBSCRIBE_LE_ADVERTISEMENTS_REQUEST -> subscribeBluetooth(this)
                 BluetoothMsg.UNSUBSCRIBE_LE_ADVERTISEMENTS_REQUEST -> unsubscribeBluetooth(this)
+                BluetoothConnectionMsg.SUBSCRIBE_CONNECTIONS_FREE_REQUEST -> subscribeConnectionsFree(this)
+                BluetoothConnectionMsg.DEVICE_REQUEST, BluetoothConnectionMsg.GATT_GET_SERVICES_REQUEST,
+                BluetoothConnectionMsg.GATT_READ_REQUEST, BluetoothConnectionMsg.GATT_WRITE_REQUEST,
+                BluetoothConnectionMsg.GATT_READ_DESCRIPTOR_REQUEST, BluetoothConnectionMsg.GATT_WRITE_DESCRIPTOR_REQUEST,
+                BluetoothConnectionMsg.GATT_NOTIFY_REQUEST -> {
+                    val request = gattRequest(f.type, m)
+                    if (request != null) bluetoothRequest(this, request)
+                    else unsupportedDeviceRequest(m)?.let { send(listOf(it)) }
+                }
                 Msg.SUBSCRIBE_STATES_REQUEST -> {
                     subscribeStates()
                     try { onStatesSubscribed?.invoke(clientInfo, socket.inetAddress, authenticated) } catch (t: Throwable) { EspHomeLog.w("onStatesSubscribed failed", t) }
@@ -947,7 +1016,7 @@ public class ApiServer(
             val w = ProtoWriter()
             // bluetooth_proxy = 1 { feature_flags = 1 }. Clients read the flags here from API 1.15 on.
             // Its mac_address (2) waits on the GATT decision (#246); HA falls back to the device MAC.
-            bluetooth?.let { bt -> w.message(1, ProtoWriter().uint32(1, bt.featureFlags)) }
+            if (bluetooth != null) w.message(1, ProtoWriter().uint32(1, bluetoothFlags()))
             // voice_assistant = 2 { feature_flags = 1 }
             w.message(2, ProtoWriter().uint32(1, identity().voiceFeatures))
             // sendspin = 6 { feature_flags = 1, client_id = 2 } (client id empty until the client has started)
@@ -1050,7 +1119,7 @@ public class ApiServer(
                 .uint32(10, d.webserverPort)
                 .string(12, d.manufacturer, force = true)
                 .string(13, d.friendlyName, force = true)
-                .uint32(15, bluetooth?.featureFlags ?: 0)
+                .uint32(15, bluetoothFlags())
                 .uint32(17, d.voiceFeatures)
                 // api_encryption_supported (19) / api_encryption_provisionable (26), as an ESPHome
                 // build with `api: encryption:` and no YAML key (api_connection.cpp device_info).
