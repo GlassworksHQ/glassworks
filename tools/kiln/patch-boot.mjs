@@ -8,7 +8,7 @@
 //
 //   node tools/kiln/patch-boot.mjs <boot.img> <out.img> --apk <Magisk-v31.1.apk> [options]
 //
-//   --apk <file>          the official Magisk v31.1 APK (required; its two scripts are checked by hash)
+//   --apk <file>          the official Magisk v31.1 APK (required; checked against its SHA-256 in kiln/assets.lock.json)
 //   --overlay-dir <dir>   take every overlay file from one directory, by its file name (the layout of
 //                         the golden set's fixtures/overlay). Default: the repo's own files and build
 //                         outputs, as frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh uses them
@@ -54,6 +54,12 @@ const pkg = resolve(opt.package ?? join(REPO, 'kiln/packages/bootpatch'));
 const { patchBoot, s1Overlay } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
 
 const read = (p) => new Uint8Array(readFileSync(p));
+const sha256 = (d) => createHash('sha256').update(d).digest('hex');
+const fail = (msg) => { console.error(msg); process.exit(1); };
+
+const apk = read(opt.apk);
+const pinned = JSON.parse(readFileSync(join(REPO, 'kiln/assets.lock.json'), 'utf8')).assets.find((a) => a.name === 'magisk').sha256;
+if (sha256(apk) !== pinned) fail(`${opt.apk} is not the pinned Magisk APK (sha256 ${pinned})`);
 const root = join(REPO, 'frames/aqara-s1-plus/tools/root');
 const radio = join(REPO, 'frames/aqara-s1-plus/tools/radio');
 const from = opt['overlay-dir']
@@ -65,6 +71,9 @@ const from = opt['overlay-dir']
     's1kiosk_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
   }[name] ?? join(root, name));
 const adbKey = opt['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
+if (!opt['overlay-dir'] && !readFileSync(join(radio, 'out/BUILD-INFO.txt'), 'utf8').includes('/data/s1kiosk/radio/run')) {
+  fail('otbr was built with the wrong OTBR_RUNTIME_DIR (need /data/s1kiosk/radio/run)');
+}
 
 const overlay = s1Overlay({
   radioRc: from('s1kiosk_radio.rc'), radioSh: from('s1kiosk_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
@@ -77,8 +86,8 @@ const overlay = s1Overlay({
   branding: opt['no-anim'] ? undefined : { rc: from('s1kiosk_branding.rc'), bootAnimation: from('s1kiosk_bootanimation.zip') },
 });
 
-const r = await patchBoot({ boot: read(input), magiskApk: read(opt.apk), overlay, preinitDevice: opt.preinit });
+const r = await patchBoot({ boot: read(input), magiskApk: apk, overlay, preinitDevice: opt.preinit });
 writeFileSync(output, r.image);
 for (const line of r.log) console.log(line);
 console.log(`--- Magisk config:\n${r.magiskConfig}--- wasMagisk: ${r.wasMagisk}`);
-console.log(`${output}: ${r.image.length} bytes, sha256 ${createHash('sha256').update(r.image).digest('hex')}`);
+console.log(`${output}: ${r.image.length} bytes, sha256 ${sha256(r.image)}`);

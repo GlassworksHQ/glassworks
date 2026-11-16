@@ -25,7 +25,8 @@ const MAGIC = enc.encode('070701');
 const TRAILER = 'TRAILER!!!';
 const HEADER = 110;
 
-const align4 = (x: number) => (x + 3) & ~3;
+// Plain arithmetic, not `& ~3`: a crafted size must not wrap to a small offset.
+const align4 = (x: number) => Math.ceil(x / 4) * 4;
 export const isRegular = (e: CpioEntry) => (e.mode & S_IFMT) === S_IFREG;
 
 /** An entry Kiln adds: owned by root, no rdev, `perm & 07777` with the given file type. */
