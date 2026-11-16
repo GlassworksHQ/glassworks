@@ -4,10 +4,11 @@
 in `/system/xbin/su`) is a **dead end**: the signed boot image is a `user` build, SELinux is
 enforcing, and its policy has no `su` domain and no `shell → su_exec` transition. But we found a
 **verified no-flash, no-root lever**: the build is `test-keys`, so a platform-signed app runs as
-uid 1000 (`system_app`) and that alone covers much of the kiosk control and some of #40. Three
-`/system`-only root leads remain open (all untested, all need a `system` flash): a custom kernel
-module, re-enabling `flash_recovery`, and hooking `init.qcom.post_boot.sh`. No bootloader unlock,
-no modem/oem/persist/boot writes were done; the unit was left exactly as found.
+uid 1000 (`system_app`) and that alone covers much of the kiosk control and some of #40. Three root
+leads remain open, all untested: a custom kernel module and hooking `init.qcom.post_boot.sh` are
+`system`-only; re-enabling `flash_recovery` needs a `system` flash **and** a second writer to get the
+dump off the unit (§5, read-only analysis, 2026-11-15). No bootloader unlock, no
+modem/oem/persist/boot writes were done; the unit was left exactly as found.
 
 Device: lululemon Studio Mirror (MSM8916 / APQ8016E, Android 6.0.1), running the community
 **Glass Panes `mirror-android-1`** image (`userdebug`, `test-keys`), stock signed `boot`
@@ -133,11 +134,28 @@ it) as a root-ish domain:
   'flash_recovery'`). `file_contexts` already maps that path → `install_recovery_exec`, and the
   `install_recovery` domain can **read `boot_block_device`** and **read/write
   `recovery_block_device`** (`allow install_recovery boot_block_device blk_file { read ... }`). So
-  **adding** `/system/bin/install-recovery.sh` (a `system`-only change) gives a boot-domain script
-  that can dump `boot` from inside Android — which would hand us the stock boot image needed for the
-  RAM-boot (`fastboot boot`) test, with no bootloader unlock. Untested; verify the exact
-  `flash_recovery` service definition in the boot `init.rc` first (it's `0750`, unreadable as shell —
-  read it from the `mirror-android-1` boot ramdisk off-device or from AOSP 6).
+  **adding** `/system/bin/install-recovery.sh` gives a boot-domain script that can dump `boot` from
+  inside Android — which would hand us the stock boot image needed for the RAM-boot (`fastboot boot`)
+  test, with no bootloader unlock.
+  - **The service definition** (2026-11-15, read off-device): AOSP 6.0.1_r81
+    `system/core/rootdir/init.rc` has it as a plain `service flash_recovery
+    /system/bin/install-recovery.sh`, `class main`, `oneshot`, and **no `seclabel`** — the domain
+    comes from the script's own label, through `type_transition init install_recovery_exec process
+    install_recovery`. The unit's `dmesg` line names the same service and path, and the label and
+    transition are in the unit's policy, so the two agree. What is still **unconfirmed** is the
+    unit's own `init.rc`: it is `0750 root:root` (`cat`: `Permission denied`) and the policy has no
+    `shell → rootfs` access at all, so it can only be read from a boot backup or a ramdisk.
+  - **The dump's way out is the gap** (2026-11-15, read-only): `install_recovery` can create and
+    write `cache_file`, and `/cache` is mounted ext4 with 247.7 MB free (`boot` is `mmcblk0p19`,
+    32768 KiB). But **`shell` has no `cache_file` rule at all**, and `/cache` is `0770 system:cache`
+    (`ls /cache` as `shell`: `opendir failed, Permission denied`), so `adb pull` cannot read the
+    dump, whatever its mode. `install_recovery` cannot write anywhere `shell` can read either: it
+    has no `/data` rules, so not even `/data/local/tmp`. A platform app (§6) reads `cache_file` but
+    has no `sdcard`/`media_rw`/`fuse` and no `shell_data_file` access, so it cannot leave the bytes
+    as a pullable file — only on a socket (`allow system_app system_app tcp_socket { … bind listen
+    accept … }`), which means an `adb forward` client on the host. **So this route is one `system`
+    flash plus one installed app, not a `system`-only change**, and it stays untested until someone
+    is willing to make both writes.
 
 Other `/system` daemons (`vold`, `debuggerd`, `qcom-system-daemon`, …) are unreadable as `shell`
 (`Permission denied`), and their domains are narrower for our purpose. `vold` can touch block
@@ -190,17 +208,24 @@ device, so modem/vendor-firmware blobs and partition backups still need root or 
 | AOSP `su` at `/system/xbin/su` (the plan) | **Dead end** | No `su` domain, no permissive domain, no `shell→su_exec` transition (§3) |
 | Platform-signed app → uid system / `system_app` | **Works, no flash, no root** | §6: uid 1000, `WRITE_SECURE_SETTINGS`, `/persist` listable; `/firmware`/`/oem`/block devices denied |
 | Custom kernel module (`.ko`) | Open, untested, kernel code | §4: unsigned modules load, but `MODVERSIONS` needs an exact-matching build; `wlan` must be chain-loaded |
-| Re-enable `flash_recovery` (add `/system/bin/install-recovery.sh`) | Open, untested, `system`-only | §5: domain can read `boot`/`recovery` block devices → a path to a boot backup + the RAM-boot test |
+| Re-enable `flash_recovery` (add `/system/bin/install-recovery.sh`) | Open, untested: `system` flash **plus** a reader app | §5: domain reads `boot` and writes `/cache`, but `shell` cannot read `/cache`, so a second writer is needed |
 | Hook `init.qcom.post_boot.sh` → `qti_init_shell` | Open, untested, `system`-only | §5: runs as root (caps incl. `sys_module`) at `boot_completed`; no block-device/`setenforce` access |
 | `fastboot boot` of an unsigned RAM image | **Not attempted** | We have no stock boot image to send. mirror-android.md (§3) read that the LK refuses unsigned boot (`bootimage: incomplete or not signed`). A boot backup via the `flash_recovery` lead would let us test it RAM-only |
 
 Confidence: everything in §1–§4 and §6 is **verified** on the unit (2026-11-15). The §5 routes are
-**read** from the policy and `dmesg`; building and flashing them is **untested**.
+**read** from the policy, `dmesg` and, for the service definition, AOSP 6.0.1_r81; building and
+flashing them is **untested**.
 
 ## How to reproduce
 
-- §1–§4 reads: read-only adb as `shell`; §3 also pushes `magiskpolicy` to `/data/local/tmp`
-  (delete it after). Address the unit with `adb -s $(cat /tmp/mirror-serial)`.
+- §1–§4 and §5 reads: read-only adb as `shell`; §3 also pushes `magiskpolicy` to
+  `/data/local/tmp` (delete it after). Address the unit with `adb -s $(cat /tmp/mirror-serial)`.
+- §5's service definition and the pull gap: AOSP `system/core/rootdir/init.rc` at tag
+  `android-6.0.1_r81` (googlesource), compared with the unit's `dmesg | grep install-recovery`, then
+  the rules for `install_recovery`, `shell`, `system_app` and `cache_file` in the §3 dump. The
+  read-only device checks were `ls -l /system/bin/install-recovery.sh` (no such file, the disabled
+  service), `ls -la /cache`, `ls -l /dev/block/bootdevice/by-name/boot`, `ls -l /init.rc` (all three
+  `Permission denied`, which is the point of §5) and `cat /proc/partitions`.
 - Off-device analysis used `magiskpolicy --print-rules` (GPL; see below) and the SDK build-tools.
   The platform test key is public: AOSP `build` repo, tag `android-6.0.1_r81`,
   `target/product/security/platform.{pk8,x509.pem}`.
@@ -224,12 +249,16 @@ Confidence: everything in §1–§4 and §6 is **verified** on the unit (2026-11
 - The unit was left in its found state: Glass Panes `mirror-android-1` system, kiosk 0.12.0 as the
   focused HOME app (verified running), `com.android.launcher3` hidden, `user_rotation=3`,
   `accelerometer_rotation=0`.
+- §5's pull analysis (2026-11-15) was done with **reads only**: no push, no install, no flash. Every
+  adb command in it is `ls`/`cat`/`dmesg` as `shell`, and the off-device work is AOSP source plus
+  the policy dump from §3.
 
 ## Open questions
 
-- **Boot backup without unlock:** does adding `/system/bin/install-recovery.sh` re-enable
-  `flash_recovery` and let the `install_recovery` domain dump `boot`? Read the real `flash_recovery`
-  service definition from the `mirror-android-1` boot ramdisk first.
+- **Boot backup without unlock:** the `flash_recovery` definition is now known (AOSP 6.0.1_r81, and
+  the unit's `dmesg` agrees), and the domain can dump `boot` to `/cache`. Two things stay open: the
+  unit's own `init.rc`, which `shell` cannot read, and **the way out of `/cache`**, since `shell` has
+  no `cache_file` access and `system_app` has no pullable file type (§5).
 - **Custom `.ko`:** can we reproduce this kernel's `vermagic`/CRCs from CAF `msm-3.10` + this
   `.config`? That decides whether any kernel-code route (incl. the old kexec idea in
   [mirror-android.md](mirror-android.md)) is buildable.
@@ -240,11 +269,15 @@ Confidence: everything in §1–§4 and §6 is **verified** on the unit (2026-11
 
 ## Next steps
 
-The open leads, as described above (all untested, all need a `system` flash and a way back):
+The open leads, as described above. All are untested and all need a write to the unit, so a session
+that must leave it untouched can only read and analyse:
 
-- **Re-enable `flash_recovery`:** add `/system/bin/install-recovery.sh`, after reading the real
-  `flash_recovery` service definition from the `mirror-android-1` boot ramdisk (§5). If the
-  `install_recovery` domain can dump `boot`, that backup allows the RAM-only `fastboot boot` test.
+- **Boot backup takes two writes, not one.** Flash `system` with `/system/bin/install-recovery.sh`
+  (`dd` `boot` → `/cache/boot.img`), then install a platform-signed app that reads `/cache` and hands
+  the bytes to an `adb forward` socket (§5). The `system` flash alone leaves the dump in `/cache`,
+  where `shell` cannot reach it. With the backup in hand, the RAM-only `fastboot boot` test follows.
+  The way back is the hashed `mirror-android-1` `system.img` with plain `fastboot`, not the flash
+  tool's restore.
 - **Custom `.ko`:** reproduce this kernel's `vermagic`/CRCs from CAF `msm-3.10` + this `.config`;
   a replacement `wlan` must chain-load the original (§4).
 - **Hook `init.qcom.post_boot.sh`:** root in `qti_init_shell` at `boot_completed`; no block-device
