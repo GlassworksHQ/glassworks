@@ -197,8 +197,8 @@ val checkLegacyNotices = checkNotices("checkLegacyThirdPartyNotices", "legacy")
 tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkThirdPartyNotices) }
 tasks.matching { it.name == "preLegacyBuild" }.configureEach { dependsOn(checkLegacyNotices) }
 
-// The legacy engine's GeckoView is built for -PlegacyAbi (root build.gradle.kts), the APK for -Ps1Abi: they must
-// match, or the APK would carry no engine for its ABI.
+// The legacy engine's GeckoView is built for -PlegacyAbi (root build.gradle.kts), the APK for -Ps1Abi: an APK must
+// have them match, or it would carry no engine for its ABI.
 val checkLegacyAbi by tasks.registering {
     val apk = s1Abi
     val engine = providers.provider { (rootProject.extra["legacyAbi"] as Lazy<*>).value as String }
@@ -206,7 +206,8 @@ val checkLegacyAbi by tasks.registering {
         if (engine.get() != apk) throw GradleException("legacy build: -PlegacyAbi (${engine.get()}) must be the APK's -Ps1Abi ($apk)")
     }
 }
-tasks.matching { it.name == "preLegacyBuild" }.configureEach { dependsOn(checkLegacyAbi) }
+// On packaging only: lint and compiling the legacy build don't care which ABI it is for (api23-report.py lints it).
+tasks.matching { it.name == "packageLegacy" || it.name == "packageLegacyBundle" }.configureEach { dependsOn(checkLegacyAbi) }
 
 
 val checkReleaseSigning by tasks.registering {
