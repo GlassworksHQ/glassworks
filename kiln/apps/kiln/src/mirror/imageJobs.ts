@@ -9,7 +9,10 @@ import {
 
 export interface JobHandle extends SyncHandle { truncate(n: number): void; flush(): void; close(): void }
 
-export interface BuildOptions { apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean }
+export interface BuildOptions {
+  apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
+  wifi?: { ssid: string; password: string };
+}
 
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,
   want: { name: string; size: number; sha256: string } = GLASS_PANES.system) {

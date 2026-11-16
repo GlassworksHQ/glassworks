@@ -3,7 +3,7 @@
 // own --dry-run is the same code; the last tests run it from its arguments.
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { clean, debugfs, debugfsCat, fsck, haveTools } from '@glassworks/ext4/testing';
@@ -127,6 +127,26 @@ describe('an APK with no home screen (the first real flash, 2026-11-16)', () => 
     expect(d.after.cmds.some((c) => c.startsWith('pm hide'))).toBe(false);
     expect(lines.join('\n')).toMatch(/NO HOME SCREEN IN THIS APK: .*com\.android\.launcher3 stays the home screen/);
     expect(lines.some((l) => /hiding again/.test(l))).toBe(false);
+  }, 60_000);
+});
+
+describe('a first boot with nothing to tap', () => {
+  it('flashes the settings overlay and lock-screen default into system, and the saved Wi-Fi into userdata', async () => {
+    const overlay = new Uint8Array(readFileSync(resolve(__dirname, '../../../frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
+    const img = await dryImage(work, APK.length + overlay.length);
+    const d = dryDevices(img.bytes, () => {});
+    await runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, work,
+      settingsOverlay: overlay, wifi: { ssid: 'Home Net', password: 'not-a-real-password' } }, d.deps);
+    if (!haveTools) return;
+    const sys = join(work, 'fb-system.raw'), ud = join(work, 'fb-userdata.raw');
+    writeFileSync(sys, d.lk.parts.get('system')!);
+    writeFileSync(ud, d.lk.parts.get('userdata')!);
+    for (const f of [sys, ud]) { const c = fsck(f); expect(clean(c), c.out).toBe(true); }
+    expect(Buffer.from(debugfsCat(sys, '/vendor/overlay/GlassworksSettings.apk')).equals(Buffer.from(overlay))).toBe(true);
+    expect(new TextDecoder().decode(debugfsCat(sys, '/build.prop'))).toContain('\nro.lockscreen.disable.default=true\n');
+    const conf = new TextDecoder().decode(debugfsCat(ud, '/misc/wifi/wpa_supplicant.conf'));
+    expect(conf).toMatch(/^update_config=1\n[\s\S]*\nnetwork=\{\n\tssid="Home Net"\n\tpsk=[0-9a-f]{64}\n/);
+    expect(conf).not.toContain('not-a-real-password');
   }, 60_000);
 });
 

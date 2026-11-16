@@ -19,8 +19,10 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 3. Load `system.img` (a local file, or `--refract`), and check its size and SHA-256.
 4. `adb reboot bootloader`.
 5. Fastboot checks, read-only: partition sizes and `max-download-size`.
-6. Build the images: S1 Kiosk as a priv-app, the boot animation, `ro.sf.hwrotation=270`, and a
-   fresh userdata whose `adb_keys` holds this computer's `~/.android/adbkey.pub`.
+6. Build the images: S1 Kiosk as a priv-app, the boot animation, `ro.sf.hwrotation=270`, the
+   settings overlay and `ro.lockscreen.disable.default` (a first boot with nothing to tap), and a
+   fresh userdata whose `adb_keys` holds this computer's `~/.android/adbkey.pub` and, with
+   `--wifi-ssid`, the saved network.
 7. Flash system. 8. Flash userdata. 9. Reboot.
 10. Wait for adb and `sys.boot_completed`.
 11. First boot: permissions, Home Assistant's address, Wi-Fi, the other launchers hidden.

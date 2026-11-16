@@ -2,20 +2,24 @@
 // e2fsprogs. With GW_MIRROR_SYSTEM_IMG=<path to the real system.img> it also patches the real image
 // (sparse in, sparse out, then "flashed" onto junk) and checks it the same way. That file is the
 // person's download: never commit it, and nothing in CI has it.
-import { createReadStream, closeSync, existsSync, mkdirSync, openSync, readSync, writeFileSync, writeSync } from 'node:fs';
+import { createReadStream, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HOME_ACTIVITY, app, fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
-import { APP_DIR, GLASS_PANES, buildUserdata, checkMirrorApk, patchSystem, setProp } from '../src';
+import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
+import { APP_DIR, GLASS_PANES, SETTINGS_OVERLAY, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
 
 const T = 1_700_000_000;
 const MAKE_EXT4FS = ['-O', '^metadata_csum,^64bit,^flex_bg,^dir_index,^huge_file,^dir_nlink,^extra_isize,uninit_bg,resize_inode'];
 const libs = { 'arm64-v8a': { 'libxul.so': new Uint8Array(randomBytes(300_000)), 'libmozglue.so': new Uint8Array(randomBytes(20_000)) }, 'armeabi-v7a': { 'libxul.so': new Uint8Array(10) } };
 const APK = fakeApk('sh.edm.s1kiosk', { libs });
 const ANIM = new Uint8Array(randomBytes(50_000));
+/** frames/lululemon-mirror/overlay/GlassworksSettings.apk, as build.sh writes it */
+const OVERLAY = new Uint8Array(readFileSync(join(__dirname, '../../overlay/GlassworksSettings.apk')));
+const TEMPLATE = 'update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npmf=1\np2p_no_group_iface=1\n';
 
 describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => {
   const act = (filters: FakeEl[], attrs: FakeEl['attrs'] = {}): FakeEl => ({ el: 'activity', attrs: { name: '.MainActivity', ...attrs }, children: filters });
@@ -48,6 +52,35 @@ describe('setProp', () => {
   });
 });
 
+describe('a first boot with nothing to tap: the settings overlay and the saved Wi-Fi', () => {
+  it('the committed overlay is the pinned build, for SettingsProvider, with its five defaults', async () => {
+    const sha = hex(new Sha256().update(OVERLAY).digest());
+    expect(sha, 'rebuild with frames/lululemon-mirror/overlay/build.sh and update SETTINGS_OVERLAY.sha256').toBe(SETTINGS_OVERLAY.sha256);
+    const manifest = (await zipEntry(OVERLAY, 'AndroidManifest.xml'))!;
+    expect(axmlAttribute(manifest, 'manifest', 'package')).toBe('dev.glassworks.mirror.settings');
+    expect(axmlAttribute(manifest, 'overlay', 'targetPackage')).toBe('com.android.providers.settings');
+    expect(await zipEntry(OVERLAY, 'classes.dex')).toBeUndefined(); // resources only
+    expect(await zipEntry(OVERLAY, 'META-INF/TESTKEY.RSA')).toBeDefined(); // v1-signed with AOSP's public test key (Android 6 reads no v2)
+  });
+
+  it('stores the WPA passphrase as its PSK (IEEE 802.11i test vectors), never the password itself', async () => {
+    const enc = (s: string) => new TextEncoder().encode(s);
+    expect(await wpaPsk('password', enc('IEEE'))).toBe('f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e');
+    expect(await wpaPsk('ThisIsAPassword', enc('ThisIsASSID'))).toBe('0dc0d6eb90555ed6419756b9a15ec3e3209b63df707dd508d14581f8982721af');
+    const conf = await wpaSupplicantConf(TEMPLATE, { ssid: 'Home Net', password: 'not-a-real-password' });
+    expect(conf.startsWith(TEMPLATE)).toBe(true);
+    expect(conf).toMatch(/\nnetwork=\{\n\tssid="Home Net"\n\tpsk=[0-9a-f]{64}\n\tkey_mgmt=WPA-PSK\n\tpriority=1\n\}\n$/);
+    expect(conf).not.toContain('not-a-real-password');
+  });
+
+  it('writes an awkward SSID as hex, an open network without a key, and refuses a password WPA can\'t take', async () => {
+    expect(await wpaSupplicantConf(TEMPLATE, { ssid: 'Café "5G"', password: '' })).toContain('\tssid=436166c3a92022354722\n\tkey_mgmt=NONE\n');
+    expect(await wpaSupplicantConf(TEMPLATE, { ssid: 'x', password: 'b'.repeat(64) })).toContain(`\tpsk=${'b'.repeat(64)}\n`);
+    for (const password of ['short', 'x'.repeat(64), 'tab\there!!']) await expect(wpaSupplicantConf(TEMPLATE, { ssid: 'x', password })).rejects.toThrow(/8 to 63/);
+    await expect(wpaSupplicantConf(TEMPLATE, { ssid: '', password: '' })).rejects.toThrow(/1 to 32 bytes/);
+  });
+});
+
 describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
   let dir: string;
   beforeAll(() => { dir = scratch(); });
@@ -67,9 +100,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const disk = await load(img);
     const fs = await Ext4.open(disk);
     const log: string[] = [];
-    await patchSystem(fs, { apk: APK, bootAnimation: ANIM, hwrotation: 270, time: T }, (l) => log.push(l));
+    await patchSystem(fs, { apk: APK, bootAnimation: ANIM, hwrotation: 270, settingsOverlay: OVERLAY, time: T }, (l) => log.push(l));
     const after = { free: fs.freeBlocks, inodes: fs.freeInodes };
-    await patchSystem(await Ext4.open(disk), { apk: APK, bootAnimation: ANIM, hwrotation: 270, time: T }); // again: the same result
+    await patchSystem(await Ext4.open(disk), { apk: APK, bootAnimation: ANIM, hwrotation: 270, settingsOverlay: OVERLAY, time: T }); // again: the same result
     const again = await Ext4.open(disk);
     expect({ free: again.freeBlocks, inodes: again.freeInodes }).toEqual(after);
     await dump(disk, img);
@@ -82,12 +115,13 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(Buffer.from(debugfsCat(img, '/media/bootanimation.zip'))).toEqual(Buffer.from(ANIM));
     const prop = new TextDecoder().decode(debugfsCat(img, '/build.prop'));
     expect(prop.match(/ro\.sf\.hwrotation=/g)).toHaveLength(1);
-    expect(prop).toMatch(/\nro\.sf\.hwrotation=270\n$/);
-    for (const p of [APP_DIR, `${APP_DIR}/lib/arm64`]) {
+    expect(prop).toMatch(/\nro\.lockscreen\.disable\.default=true\nro\.sf\.hwrotation=270\n$/);
+    expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
+    for (const p of [APP_DIR, `${APP_DIR}/lib/arm64`, '/vendor/overlay']) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0755[\s\S]*User:\s+0\s+Group:\s+0/);
       expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:system_file:s0');
     }
-    for (const p of [`${APP_DIR}/S1Kiosk.apk`, `${APP_DIR}/lib/arm64/libmozglue.so`, '/media/bootanimation.zip']) {
+    for (const p of [`${APP_DIR}/S1Kiosk.apk`, `${APP_DIR}/lib/arm64/libmozglue.so`, '/media/bootanimation.zip', SETTINGS_OVERLAY.path]) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0644[\s\S]*User:\s+0\s+Group:\s+0/);
       expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:system_file:s0');
     }
@@ -110,6 +144,8 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     // no home screen Android can open: the Mirror would start to nothing (its first real flash, 2026-11-16)
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'off' }) })).rejects.toThrow(/can't be the Mirror's home screen: its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off in its manifest.*Nothing was changed/);
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'none' }) })).rejects.toThrow(/it has no home screen \(no activity with MAIN, HOME and DEFAULT in one intent filter\)/);
+    const tampered = OVERLAY.slice(); tampered[100]! ^= 1;
+    await expect(patchSystem(await Ext4.open(disk2), { apk: APK, settingsOverlay: tampered })).rejects.toThrow(/settings overlay isn't the one Kiln builds.*Nothing was changed/);
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
     expect(hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest())).toBe(before2);
   }, 60_000);
@@ -177,6 +213,22 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(debugfs(img, 'ls /')).toMatch(/lost\+found/);
     await expect(buildUserdata(disk, { adbKey: 'not a key; rm -rf /' })).rejects.toThrow(/adb public key/);
   }, 60_000);
+
+  it('saves the person\'s Wi-Fi where Android 6\'s Wi-Fi expects it, owned and labelled as init and file_contexts make it', async () => {
+    const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
+    const key = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';
+    await buildUserdata(disk, { adbKey: key, time: T, wifi: { ssid: 'Home Net', password: 'not-a-real-password', template: TEMPLATE } });
+    const img = join(dir, 'userdata-wifi.img');
+    await dump(disk, img);
+    const r = fsck(img);
+    expect(clean(r), r.out).toBe(true);
+    const conf = new TextDecoder().decode(debugfsCat(img, '/misc/wifi/wpa_supplicant.conf'));
+    expect(conf).toBe(await wpaSupplicantConf(TEMPLATE, { ssid: 'Home Net', password: 'not-a-real-password' }));
+    expect(conf).not.toContain('not-a-real-password');
+    expect(debugfs(img, 'stat /misc/wifi')).toMatch(/Mode:\s+0770[\s\S]*User:\s+1010\s+Group:\s+1010/);
+    expect(debugfs(img, 'stat /misc/wifi/wpa_supplicant.conf')).toMatch(/Mode:\s+0660[\s\S]*User:\s+1000\s+Group:\s+1010/);
+    for (const p of ['/misc/wifi', '/misc/wifi/wpa_supplicant.conf']) expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:wifi_data_file:s0');
+  }, 60_000);
 });
 
 const REAL = process.env.GW_MIRROR_SYSTEM_IMG;
@@ -200,7 +252,11 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       const problems = (out: string) => out.split('\n').filter((l) => /\?\s+(no|yes)\s*$/.test(l) || /Fix\?|IGNORED|checksum is/i.test(l));
       const baseline = problems(fsck(join(dir, 'original.raw')).out);
 
-      await patchSystem(await Ext4.open(disk), { apk: APK, bootAnimation: ANIM, hwrotation: 270 });
+      const real = await Ext4.open(disk);
+      // the template buildImages puts the saved network after (read 2026-11-16 from image 2)
+      expect(new TextDecoder().decode(await real.readFile('/etc/wifi/wpa_supplicant.conf'))).toBe(TEMPLATE);
+      expect((await real.readdir('/vendor')).map((e) => e.name)).not.toContain('overlay'); // ours is the only overlay
+      await patchSystem(real, { apk: APK, bootAnimation: ANIM, hwrotation: 270, settingsOverlay: OVERLAY });
       const out = openSync(join(dir, 'out.img'), 'w');
       let pos = 0;
       await writeSparse(disk, (b) => { writeSync(out, b, 0, b.length, pos); pos += b.length; });
@@ -220,7 +276,8 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       expect(problems(r.out)).toEqual(baseline); // the image's own make_ext4fs quirk, nothing new
       const img = join(dir, 'flashed.raw');
       expect(Buffer.from(debugfsCat(img, `${APP_DIR}/S1Kiosk.apk`))).toEqual(Buffer.from(APK));
-      expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.sf\.hwrotation=270\n$/);
+      expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.lockscreen\.disable\.default=true\nro\.sf\.hwrotation=270\n$/);
+      expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
       expect(debugfs(img, 'ls /app')).toContain('Provision');
     } finally { cleanup(dir); }
   }, 600_000);

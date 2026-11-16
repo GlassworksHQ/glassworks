@@ -318,6 +318,11 @@ All MIT, from this repository:
   in Inter (SIL OFL 1.1, fetched at build time). These downloads carry only images made with the font;
   the font itself ships in the S1 Kiosk APK (section 1, "Assets in the APK").
 - The S1 Kiosk APK (sections 1 and 2).
+- The Mirror's settings overlay, `frames/lululemon-mirror/overlay/GlassworksSettings.apk` (resource
+  values only, built by its `build.sh`). It is signed with AOSP's public test key
+  (`build/target/product/security/testkey`, android-6.0.1_r81, Apache-2.0, Copyright The Android Open
+  Source Project), so its signature block carries that public certificate. The private key is
+  downloaded at build time and never committed.
 
 ---
 

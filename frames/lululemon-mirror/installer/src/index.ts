@@ -2,7 +2,7 @@ export {
   PREVIOUS_HOME, checkMirror, installMirror, parseDfFreeMb, parsePreferredHome, preferredHome, undoMirror,
   type AppVersion, type Check, type HomeWait, type Installed, type MirrorOptions, type MirrorPhase, type MirrorReport, type Removed,
 } from './recipe';
-export { APP_DIR, GLASS_PANES, LABELS, buildUserdata, checkMirrorApk, patchSystem, setProp, type SystemPatch } from './image';
+export { APP_DIR, GLASS_PANES, LABELS, SETTINGS_OVERLAY, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf, type SystemPatch } from './image';
 export {
   GLASS_PANES_USERDATA, MIRROR_FASTBOOT, focusedActivity, makeOnlyHome, OTHER_HOMES, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, buildImages, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem,
   type FastbootLike, type FastbootReport, type FirstBoot, type HomeCheck, type Loaded, type PrepareStep,

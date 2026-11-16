@@ -52,10 +52,12 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
   }
   const keys = adbKeyHolder(loadOrCreateAdbKey);
   const mirror = new MirrorSession({ connect: keys.connectWith((k) => Panel.connect(k)) }, true);
-  const assets = new Assets<'mirror-bootanimation'>('/assets/');
+  const assets = new Assets<'mirror-bootanimation' | 'mirror-settings-overlay'>('/assets/');
   const flash = new FlashSession({
     // branding/lululemon-mirror/bootanimation.zip, staged with Kiln's other assets and checked by SHA-256
     bootAnimation: async () => ((await assets.has('mirror-bootanimation')) ? assets.get('mirror-bootanimation') : undefined),
+    // frames/lululemon-mirror/overlay/GlassworksSettings.apk: Wi-Fi on, no screen timeout, no lock screen, no auto-rotate
+    settingsOverlay: async () => ((await assets.has('mirror-settings-overlay')) ? assets.get('mirror-settings-overlay') : undefined),
     images: workerImages(),
     // Refract, Kiln's release proxy (PR 347); NEXT_PUBLIC_KILN_PROXY at build time points it elsewhere, e.g. a local Worker
     imageUrl: `${process.env.NEXT_PUBLIC_KILN_PROXY ?? IMAGE_PROXY.base}/${IMAGE_PROXY.systemImg}`,

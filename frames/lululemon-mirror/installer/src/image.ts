@@ -27,10 +27,12 @@ export const LABELS = {
   system: 'u:object_r:system_file:s0',
   data: 'u:object_r:system_data_file:s0',
   adbKeys: 'u:object_r:adb_keys_file:s0',
+  /** /data/misc/wifi(/.*)? (AOSP 6.0.1 file_contexts; the image's own is in its signed boot ramdisk) */
+  wifi: 'u:object_r:wifi_data_file:s0',
 } as const;
 
 /** Android's ids (system/core/include/private/android_filesystem_config.h). */
-const AID = { root: 0, system: 1000, shell: 2000, misc: 9998 } as const;
+const AID = { root: 0, system: 1000, wifi: 1010, shell: 2000, misc: 9998 } as const;
 
 /** The Mirror's Android: 6.0.1. */
 const MIRROR_API = 23;
@@ -47,9 +49,21 @@ export interface SystemPatch {
   bootAnimation?: Uint8Array;
   /** ro.sf.hwrotation: how the screen is turned. The Mirror stands portrait on a 1920×1080 panel: 270. */
   hwrotation?: 0 | 90 | 180 | 270;
+  /** GlassworksSettings.apk (frames/lululemon-mirror/overlay): SettingsProvider's defaults for a first boot with nothing to tap. */
+  settingsOverlay?: Uint8Array;
   /** Seconds since 1970 for new files; default now. */
   time?: number;
 }
+
+/**
+ * The Mirror's SettingsProvider overlay (frames/lululemon-mirror/overlay/build.sh): Wi-Fi on, no screen
+ * timeout, stay on while plugged in, no lock screen, no auto-rotate. Android 6 trusts a static overlay
+ * by where it is: /vendor/overlay, which init links to /system/vendor (AOSP 6.0.1 init.rc).
+ */
+export const SETTINGS_OVERLAY = {
+  path: '/vendor/overlay/GlassworksSettings.apk',
+  sha256: '4a8796d33b41da6a7ad44c065d57a5bfcad860794006d52b9977ff19f5f1c342',
+} as const;
 
 const dirAttrs = (time: number): Attrs => ({ mode: 0o755, uid: AID.root, gid: AID.root, label: LABELS.system, time });
 const fileAttrs = (time: number): Attrs => ({ mode: 0o644, uid: AID.root, gid: AID.root, label: LABELS.system, time });
@@ -100,6 +114,10 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const prop = new TextDecoder().decode(await fs.readFile('/build.prop'));
   if (!prop.includes(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`)) throw new Error('this isn\'t the Glass Panes Mirror image Kiln knows (its build fingerprint differs). Nothing was changed.');
+  if (o.settingsOverlay) {
+    const got = [...new Uint8Array(await crypto.subtle.digest('SHA-256', o.settingsOverlay as Uint8Array<ArrayBuffer>))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (got !== SETTINGS_OVERLAY.sha256) throw new Error(`the settings overlay isn't the one Kiln builds (SHA-256 ${got}). Nothing was changed.`);
+  }
   await checkMirrorApk(o.apk);
   const names = zipNames(o.apk);
   // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them: an empty lib/<abi>/ folder doesn't count
@@ -136,9 +154,19 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     log('/media/bootanimation.zip');
   }
 
-  let next = prop;
+  if (o.settingsOverlay) {
+    await fs.mkdirs('/vendor/overlay', dirAttrs(time));
+    if (await fs.exists(SETTINGS_OVERLAY.path)) await fs.remove(SETTINGS_OVERLAY.path, { time });
+    await fs.writeFile(SETTINGS_OVERLAY.path, o.settingsOverlay, fileAttrs(time));
+    log(SETTINGS_OVERLAY.path);
+  }
+
+  // No swipe lock screen: SettingsProvider's DatabaseHelper and LockSettingsService both read it when
+  // they make a fresh userdata's settings (AOSP 6.0.1; the image's services and SettingsProvider dex
+  // have the string, read 2026-11-16). The Mirror has no touchscreen to swipe it away.
+  let next = setProp(prop, 'ro.lockscreen.disable.default', 'true');
   if (o.hwrotation !== undefined) next = setProp(next, 'ro.sf.hwrotation', String(o.hwrotation));
-  if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ro.sf.hwrotation=${o.hwrotation}`); }
+  if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ro.lockscreen.disable.default=true${o.hwrotation !== undefined ? `, ro.sf.hwrotation=${o.hwrotation}` : ''}`); }
   await fs.flush();
 }
 
@@ -147,7 +175,9 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
  * labelled as Android 6's init and file_contexts make them. Init creates everything else on first
  * boot. `adbKey`: the line adb_keys takes, e.g. Kiln's AdbKey.publicKey.
  */
-export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: number; uuid?: Uint8Array }): Promise<Ext4> {
+export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: number; uuid?: Uint8Array;
+  /** the person's network, saved for Android's Wi-Fi; `template` is the image's /etc/wifi/wpa_supplicant.conf */
+  wifi?: { ssid: string; password: string; template: string } }): Promise<Ext4> {
   if (!/^[A-Za-z0-9+/=]+( \S+)?$/.test(o.adbKey)) throw new Error('that isn\'t an adb public key line');
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const fs = await mkfs(disk, {
@@ -159,6 +189,41 @@ export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: numb
   await fs.mkdir('/misc', { mode: 0o1771, uid: AID.system, gid: AID.misc, label: LABELS.data, time });
   await fs.mkdir('/misc/adb', { mode: 0o2750, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
   await fs.writeFile('/misc/adb/adb_keys', new TextEncoder().encode(`${o.adbKey}\n`), { mode: 0o640, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
+  if (o.wifi) {
+    // init.rc: mkdir /data/misc/wifi 0770 wifi wifi; the Wi-Fi HAL uses an existing wpa_supplicant.conf
+    // as it is (copying the template only when there is none), system:wifi 0660 (AOSP 6.0.1 wifi.c)
+    await fs.mkdir('/misc/wifi', { mode: 0o770, uid: AID.wifi, gid: AID.wifi, label: LABELS.wifi, time });
+    await fs.writeFile('/misc/wifi/wpa_supplicant.conf', new TextEncoder().encode(await wpaSupplicantConf(o.wifi.template, o.wifi)),
+      { mode: 0o660, uid: AID.system, gid: AID.wifi, label: LABELS.wifi, time });
+  }
   await fs.flush();
   return fs;
+}
+
+/**
+ * wpa_supplicant.conf for one saved network: the image's template, then the network. A WPA
+ * passphrase (8 to 63 characters) is stored as its PSK, PBKDF2-HMAC-SHA1 over the SSID, 4096 rounds,
+ * 32 bytes (IEEE 802.11i), never as the plain password; 64 hex digits are a PSK already; no password
+ * is an open network. An SSID with a quote, a backslash or a character outside printable ASCII goes
+ * as hex, as wpa_supplicant reads it.
+ */
+export async function wpaSupplicantConf(template: string, wifi: { ssid: string; password: string }): Promise<string> {
+  const ssidBytes = new TextEncoder().encode(wifi.ssid);
+  if (!ssidBytes.length || ssidBytes.length > 32) throw new Error('the Wi-Fi name must be 1 to 32 bytes');
+  const plain = /^[\x20-\x7e]+$/.test(wifi.ssid) && !/["\\]/.test(wifi.ssid);
+  const ssid = plain ? `"${wifi.ssid}"` : [...ssidBytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+  let key: string;
+  if (wifi.password === '') key = '\tkey_mgmt=NONE';
+  else if (/^[0-9a-fA-F]{64}$/.test(wifi.password)) key = `\tpsk=${wifi.password.toLowerCase()}\n\tkey_mgmt=WPA-PSK`;
+  else if (/^[\x20-\x7e]{8,63}$/.test(wifi.password)) key = `\tpsk=${await wpaPsk(wifi.password, ssidBytes)}\n\tkey_mgmt=WPA-PSK`;
+  else throw new Error('the Wi-Fi password must be 8 to 63 printable characters (or 64 hex digits), or empty for an open network');
+  const head = template.endsWith('\n') ? template : `${template}\n`;
+  return `${head}\nnetwork={\n\tssid=${ssid}\n${key}\n\tpriority=1\n}\n`;
+}
+
+/** WPA's PSK for a passphrase: PBKDF2-HMAC-SHA1(passphrase, ssid, 4096, 256 bits), as hex. */
+export async function wpaPsk(passphrase: string, ssid: Uint8Array): Promise<string> {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-1', salt: ssid as Uint8Array<ArrayBuffer>, iterations: 4096 }, k, 256);
+  return [...new Uint8Array(bits)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

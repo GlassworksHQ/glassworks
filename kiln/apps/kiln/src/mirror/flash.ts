@@ -15,7 +15,8 @@ export interface ImageMaker {
   /** The same from Kiln's release proxy, resuming with Range. Throws ProxyError when the proxy can't serve it. */
   fetch(url: string, onProgress: (x: number) => void): Promise<void>;
   /** Builds both images from the loaded one; can run again (after a failed flash) until discard(). */
-  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean },
+  build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
+    wifi?: { ssid: string; password: string } },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
   /** The way back: a downloaded Glass Panes file against its published size and SHA-256, off the page's thread. */
   check(file: Blob, which: 'system' | 'userdata', onProgress: (x: number) => void): Promise<void>;
@@ -37,6 +38,8 @@ export interface FlashDeps {
   apk(): Uint8Array | undefined;
   /** The boot animation, when Kiln has one staged. */
   bootAnimation?(): Promise<Uint8Array | undefined>;
+  /** GlassworksSettings.apk (frames/lululemon-mirror/overlay), when Kiln has it staged: a first boot with nothing to tap. */
+  settingsOverlay?(): Promise<Uint8Array | undefined>;
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -163,6 +166,11 @@ export class FlashSession {
     if (!this.d.apk()) return 'Pick S1 Kiosk\'s APK file first.';
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     if (!s.wifi.ssid !== !s.wifi.password && !s.wifi.ssid) return 'Give the Wi-Fi network\'s name too.';
+    // the password is saved as WPA's PSK in the new userdata: refused here, before the build (wpaSupplicantConf)
+    if (s.wifi.ssid && new TextEncoder().encode(s.wifi.ssid).length > 32) return 'A Wi-Fi network\'s name is at most 32 bytes.';
+    if (s.wifi.ssid && s.wifi.password && !/^[\x20-\x7e]{8,63}$/.test(s.wifi.password) && !/^[0-9a-fA-F]{64}$/.test(s.wifi.password)) {
+      return 'The Wi-Fi password must be 8 to 63 characters (letters, digits, symbols), or empty for an open network.';
+    }
     return undefined;
   }
 
@@ -200,8 +208,13 @@ export class FlashSession {
         if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
         this.log('Building the images');
         building = true;
-        images = await this.d.images.build({ apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill },
-          (step, x) => work(step, x));
+        // the Wi-Fi goes into the new userdata (saved for Android, its password only as WPA's PSK), so the
+        // Mirror joins on its first boot with nothing tapped; sending it to S1 Kiosk after the boot stays a fallback
+        const wifi = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
+        images = await this.d.images.build({
+          apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settingsOverlay: await this.d.settingsOverlay?.(),
+          adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(wifi ? { wifi } : {}),
+        }, (step, x) => work(step, x));
         building = false;
       }
       this.log(`Flashing${s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
