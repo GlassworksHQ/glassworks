@@ -110,6 +110,15 @@ class KioskService : Service() {
             schedule = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } },
             log = { Log.i(HOTSPOT_TAG, it) },
             blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
+            // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.
+            beforeStart = { start ->
+                val asked = ImprovController.scanFromInstaller { nets ->
+                    glassworks.hotspotScan = nets.map { sh.edm.s1kiosk.setup.WifiNetwork(it.ssid, it.rssi, secure = it.auth != "NO") }
+                    Log.i(HOTSPOT_TAG, "scanned before the hotspot: ${nets.size} networks")
+                    start()
+                }
+                if (!asked) start()
+            },
         )
         glassworks.setupHotspot = hs
         val cb = object : ConnectivityManager.NetworkCallback() {

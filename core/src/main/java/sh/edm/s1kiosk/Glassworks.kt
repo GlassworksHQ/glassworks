@@ -89,6 +89,12 @@ interface Glassworks {
     var setupHotspot: dev.glassworks.setup.SetupHotspot?
 
     /**
+     * The networks the panel saw just before its setup hotspot started: while it runs, the radio can't scan on most
+     * devices (S1 panel run, 2026-11-16), so the setup page lists these. Any thread.
+     */
+    var hotspotScan: List<sh.edm.s1kiosk.setup.WifiNetwork>
+
+    /**
      * Applies an intent's extras in the running activity (main thread), like onNewIntent. Used by the
      * ESPHome device so Home Assistant can drive the kiosk without starting activities from the background.
      */

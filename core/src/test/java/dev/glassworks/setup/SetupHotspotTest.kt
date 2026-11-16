@@ -39,10 +39,14 @@ class SetupHotspotTest {
     private val hotspot = FakeHotspot()
     /** The radio is off and can't be turned on (Android 10+), when set. */
     private var radioLocked = false
+    /** When set, the scan before a start is held here until the test lets it finish. */
+    private var holdScan = false
+    private var scanDone: (() -> Unit)? = null
     private val setup = SetupHotspot(
         hotspot, connected = { connected }, clock = { now },
         schedule = { d, r -> val w = (now + d) to r; wakes += w; { wakes.remove(w) } },
         blocked = { if (radioLocked) HotspotFailure.WIFI_OFF else null },
+        beforeStart = { start -> if (holdScan) scanDone = start else start() },
     )
 
     /** Moves the clock to [t], running each wake that falls due on the way. */
@@ -158,6 +162,27 @@ class SetupHotspotTest {
         assertEquals(1, hotspot.starts)
         at(16 * min)
         assertEquals(2, hotspot.starts)
+    }
+
+    @Test
+    fun `it scans before it starts, while the radio still can, and starts only once the scan is done`() {
+        holdScan = true
+        setup.start(); at(3 * min)
+        assertEquals("scanning first", 0, hotspot.starts)
+        assertEquals(View.Starting, setup.view)
+        scanDone!!()
+        assertEquals(1, hotspot.starts)
+    }
+
+    @Test
+    fun `a connection during the scan means no start at all`() {
+        holdScan = true
+        setup.start(); at(3 * min)
+        connected = true
+        setup.refresh()
+        scanDone!!()
+        assertEquals(0, hotspot.starts)
+        assertEquals(View.Off(Stop.CONNECTED, null), setup.view)
     }
 
     @Test

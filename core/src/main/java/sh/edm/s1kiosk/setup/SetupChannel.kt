@@ -116,6 +116,12 @@ class SetupChannel(
         fun scanWifi(): List<WifiNetwork> = emptyList()
 
         /**
+         * While the setup hotspot runs: the networks scanned just before it started, since the radio can't scan as an
+         * access point. Null otherwise, and then `wifi.scan` scans afresh.
+         */
+        fun hotspotNetworks(): List<WifiNetwork>? = null
+
+        /**
          * Joins [ssid] with [password] (checked already; never logged). The join runs in [Change.afterReply], after the
          * reply: joining can take the panel off the network the browser reached it on.
          */
@@ -163,7 +169,7 @@ class SetupChannel(
                 null -> reply(id, state = state())
                 else -> reply(id, error = err)
             } to null
-            WIFI_SCAN -> reply(id, state = state(), networks = WifiNetwork.list(backend.scanWifi())) to null
+            WIFI_SCAN -> reply(id, state = state(), networks = WifiNetwork.list(backend.hotspotNetworks() ?: backend.scanWifi())) to null
             WIFI_JOIN -> joinWifi(id, req)
             HA_SET_URL -> {
                 val url = req.optString("url", "").trim()

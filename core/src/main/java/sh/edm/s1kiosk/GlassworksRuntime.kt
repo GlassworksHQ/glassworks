@@ -100,6 +100,7 @@ class GlassworksRuntime(
 
     @Volatile override var discovery: HaDiscovery? = null
     @Volatile override var setupHotspot: dev.glassworks.setup.SetupHotspot? = null
+    @Volatile override var hotspotScan: List<sh.edm.s1kiosk.setup.WifiNetwork> = emptyList()
 
     @Volatile override var commandSink: ((Intent) -> Unit)? = null
 

@@ -79,6 +79,8 @@ object SetupChannelServer {
             )
         }
 
+        override fun hotspotNetworks(): List<WifiNetwork>? = runtime.hotspotScan.takeIf { runtime.setupHotspot?.isOn == true }
+
         override fun wifiRadioLocked(): Boolean = dev.glassworks.platform.WifiRadio.lockedOff(ctx)
 
         /** A fresh scan through Improv's provisioner, as Kiln's USB scan (ImprovSerialServer). */

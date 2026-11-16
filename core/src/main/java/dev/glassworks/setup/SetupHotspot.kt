@@ -39,6 +39,12 @@ class SetupHotspot(
      * sends (S1 panel run on e7d2d49d). Read on every refresh, and at least every [checkMs] while set.
      */
     private val blocked: () -> HotspotFailure? = { null },
+    /**
+     * Runs before each start, then calls its argument to start. On most devices the radio can't scan while it is the
+     * access point, so the panel scans here, while it still can, and the setup page lists those networks (S1 panel run
+     * on e7d2d49d). A stop while it runs means no start.
+     */
+    private val beforeStart: (start: () -> Unit) -> Unit = { it() },
 ) {
     /** What the setup screen shows. */
     sealed interface View {
@@ -151,30 +157,34 @@ class SetupHotspot(
         run = mine
         error = null
         log("setup hotspot starting")
-        hotspot.start { e ->
-            // An event from a start that has been stopped since belongs to nobody.
-            if (run !== mine) return@start
-            when (e) {
-                is Hotspot.Event.Started -> {
-                    mine.network = e.network
-                    isOn = true
-                    log("setup hotspot on")
-                    onChange()
-                }
-                is Hotspot.Event.Failed -> {
-                    log("setup hotspot failed: ${e.why}")
-                    run = null
-                    isOn = false
-                    error = e.why
-                    policy.failed()
-                    refresh()
-                }
-                Hotspot.Event.Stopped -> {
-                    log("setup hotspot stopped by Android")
-                    run = null
-                    isOn = false
-                    policy.androidStopped(clock())
-                    refresh()
+        beforeStart {
+            // Stopped (or replaced) while the scan ran: nothing to start.
+            if (run !== mine || closed) return@beforeStart
+            hotspot.start { e ->
+                // An event from a start that has been stopped since belongs to nobody.
+                if (run !== mine) return@start
+                when (e) {
+                    is Hotspot.Event.Started -> {
+                        mine.network = e.network
+                        isOn = true
+                        log("setup hotspot on")
+                        onChange()
+                    }
+                    is Hotspot.Event.Failed -> {
+                        log("setup hotspot failed: ${e.why}")
+                        run = null
+                        isOn = false
+                        error = e.why
+                        policy.failed()
+                        refresh()
+                    }
+                    Hotspot.Event.Stopped -> {
+                        log("setup hotspot stopped by Android")
+                        run = null
+                        isOn = false
+                        policy.androidStopped(clock())
+                        refresh()
+                    }
                 }
             }
         }

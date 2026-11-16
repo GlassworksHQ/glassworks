@@ -74,6 +74,8 @@ class SetupChannelTest {
         var networks = listOf(WifiNetwork("Example-WiFi", -50, true))
         var radioLocked = false
         override fun wifiRadioLocked() = radioLocked
+        var beforeHotspot: List<WifiNetwork>? = null
+        override fun hotspotNetworks() = beforeHotspot
         override fun scanWifi(): List<WifiNetwork> { calls += "scan"; return networks }
         override fun joinWifi(ssid: String, password: String): SetupChannel.Change {
             calls += "join $ssid"
@@ -149,6 +151,14 @@ class SetupChannelTest {
         assertEquals(-50, n.getInt("rssi"))
         assertEquals(true, n.get("secure"))
         assertTrue(r.has("state"))
+    }
+
+    @Test
+    fun whileTheHotspotRunsTheScanIsTheOneFromBeforeIt() {
+        val f = Fake(base).apply { beforeHotspot = listOf(WifiNetwork("Example-Before", -60, true)) }
+        val n = JSONObject(f.channel().handle("""{"id":1,"op":"wifi.scan"}""").first).getJSONArray("networks")
+        assertEquals("Example-Before", n.getJSONObject(0).getString("ssid"))
+        assertTrue("no fresh scan: the radio can't while it is the access point", "scan" !in f.calls)
     }
 
     @Test
