@@ -6,15 +6,17 @@ the app updates itself? If yes, Glassworks needs no root on the Mirror for silen
 and secure settings. Why we expect yes, from AOSP 6.0.1's source:
 [privileged-app.md](../../../frames/lululemon-mirror/research/privileged-app.md).
 
-**Status: built and unit-tested on a computer only. It has not run on a Mirror.**
+**Status: steps 0–5 passed on a Mirror on 2026-11-16** (the root's run, on #395): privileged, a silent
+update, a secure setting and a reboot. Step 6, `allow-adb-key`, is new and untested on the unit.
 
-It has no network and no Home Assistant. It asks for three permissions:
+It has no network and no Home Assistant. It asks for four permissions:
 
 | Permission | Android 6 protection | Granted to |
 |---|---|---|
 | `INSTALL_PACKAGES` | `signature\|privileged` | a privileged system app, or one signed with the platform key |
 | `REBOOT` | `signature\|privileged` | the same |
 | `WRITE_SECURE_SETTINGS` | `signature\|privileged\|development` | the same, or any app adb grants it to with `pm grant` |
+| `MANAGE_USB` | `signature\|privileged` (AOSP 6.0.1_r81 `core/res/AndroidManifest.xml:1164`) | the same as `INSTALL_PACKAGES` |
 
 ## Why it is called S1 Kiosk
 
@@ -40,6 +42,7 @@ FACT code-path /system/priv-app/S1Kiosk/S1Kiosk.apk
 FACT perm.INSTALL_PACKAGES granted signature|privileged
 FACT perm.REBOOT granted signature|privileged
 FACT perm.WRITE_SECURE_SETTINGS granted signature|privileged|development
+FACT perm.MANAGE_USB granted signature|privileged
 ```
 
 (That's the outcome we expect, not one we have seen.) `privileged` comes from the hidden
@@ -58,6 +61,7 @@ entry requires `WRITE_SECURE_SETTINGS` of the caller, as the generic app's `Main
 | `update --es apk <path>` | Installs the APK at `<path>` through `PackageInstaller`: a session, the write, a commit whose result comes back to `InstallResult`. It logs `STEP update committing session …` first | Android installed it with no confirmation. `FAIL needs a tap` is `STATUS_PENDING_USER_ACTION`: without `INSTALL_PACKAGES`, Android 6 asks the person first. The probe then drops the session, because the Mirror has no touchscreen |
 | `settings` | Reads `Settings.Global` `auto_time` and writes the same value back | The write went through. A `SecurityException` is a FAIL |
 | `reboot` | Logs `STEP reboot calling PowerManager.reboot(null)`, then calls it | The Mirror restarts. If the call returns, it logs `RESULT reboot FAIL` (a refusal throws: `FAIL java.lang.SecurityException …`) |
+| `allow-adb-key --es key <adb public key line>` | Calls the hidden `IUsbManager.allowUsbDebugging(true, key)` by reflection (`ServiceManager.getService("usb")`, `IUsbManager.Stub.asInterface`). It logs only the key's SHA-256 fingerprint prefix, never the key | Android took the call (it needs `MANAGE_USB`). The call is asynchronous and returns nothing: whether the key was written shows in `/data/misc/adb/adb_keys` (step 6). The probe has no action that clears keys, on purpose: `clearUsbDebuggingKeys` would delete the root's own key too |
 
 After a successful update Android stops the old version to replace it, so the `RESULT update` line
 comes from version 2.
@@ -72,7 +76,7 @@ PROBE_OUT=/some/folder tools/mirror/probe-app/build.sh   # put the APKs and the 
 It needs the Android SDK (`$ANDROID_HOME`, default `~/Library/Android/sdk`, with platform 36 and
 build-tools) and a JDK 17 or newer. It runs the unit tests (`ProbeTest`), builds version 1
 (`versionCode` 1, `versionName` "1") and version 2 from the same code, signs both with the same
-key, checks each manifest with `aapt2` (package, versions, minSdk and targetSdk 23, the three
+key, checks each manifest with `aapt2` (package, versions, minSdk and targetSdk 23, the four
 permissions, HOME, the action's permission), and prints both SHA-256s. Output: `probe-v1.apk` and
 `probe-v2.apk` in `$PROBE_OUT` (default `tools/mirror/probe-app/out/`, git-ignored).
 
@@ -103,10 +107,10 @@ left out below. `PROBE` is the output folder of `build.sh`.
    ```sh
    adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME
    adb logcat -d -s GwProbe
-   adb shell dumpsys package sh.edm.s1kiosk | grep -E 'codePath|versionCode|flags|INSTALL_PACKAGES|REBOOT|WRITE_SECURE'
+   adb shell dumpsys package sh.edm.s1kiosk | grep -E 'codePath|versionCode|flags|INSTALL_PACKAGES|REBOOT|WRITE_SECURE|MANAGE_USB'
    ```
    Expect version 1, `system yes`, `privileged yes`, `code-path /system/priv-app/S1Kiosk/S1Kiosk.apk`,
-   and all three permissions granted.
+   and all four permissions granted.
 2. **Update to version 2 with no tap.**
    ```sh
    adb push "$PROBE/probe-v2.apk" /data/local/tmp/probe-v2.apk
@@ -119,7 +123,7 @@ left out below. `PROBE` is the output folder of `build.sh`.
    instead and pass that path.
 3. **Check the status again**, with the commands of step 1. Expect version 2,
    `updated-system-app yes`, `privileged yes`, `code-path /data/app/sh.edm.s1kiosk-1/base.apk` (the
-   number may differ), and all three permissions still granted.
+   number may differ), and all four permissions still granted.
 4. **Write a secure setting.**
    ```sh
    adb shell am start -n sh.edm.s1kiosk/.ProbeAction --es action settings
@@ -135,7 +139,50 @@ left out below. `PROBE` is the output folder of `build.sh`.
    adb logcat -d -s GwProbe
    ```
    Expect the Mirror to restart, `mFocusedActivity` to be `sh.edm.s1kiosk/.MainActivity`, and the
-   status lines to show version 2, still privileged, all three granted.
+   status lines to show version 2, still privileged, all four granted.
+
+6. **Allow a new computer's adb key** (`MANAGE_USB`, `allowUsbDebugging`). First make a throwaway adb
+   key pair. It goes in the git-ignored `out/adbkey-test/` (or a folder you name), and the script
+   prints only its fingerprints:
+   ```sh
+   tools/mirror/probe-app/adbkey.py new            # writes out/adbkey-test/adbkey and adbkey.pub
+   KEY=tools/mirror/probe-app/out/adbkey-test/adbkey.pub
+   adb shell cat /data/misc/adb/adb_keys | tools/mirror/probe-app/adbkey.py fingerprints -   # before: your own key
+   adb logcat -c
+   adb shell am start -n sh.edm.s1kiosk/.ProbeAction --es action allow-adb-key --es key "'$(cat "$KEY")'"
+   sleep 3; adb logcat -d -s GwProbe UsbDebuggingManager | grep -E 'RESULT allow-adb-key|Fingerprints'
+   adb shell cat /data/misc/adb/adb_keys | wc -l
+   adb shell cat /data/misc/adb/adb_keys | tools/mirror/probe-app/adbkey.py fingerprints -   # after
+   tools/mirror/probe-app/adbkey.py fingerprint "$KEY"
+   ```
+   (The single quotes inside the double ones keep the key line, which has a space, as one argument
+   through `adb shell`.) adb's shell can read `adb_keys`: Android 6 makes it `system:shell` 0640.
+
+   **What to expect** (read from Android 6.0.1_r81, untested on the unit):
+   - `perm.MANAGE_USB granted` in step 1, and `RESULT allow-adb-key OK sent sha256:…`.
+   - **No new line in `adb_keys`**, and logcat's `UsbDebuggingManager: Fingerprints do not match. Got
+     <MD5 of the test key>, expected <null or the last computer asked about>`. Android writes a key
+     only when its fingerprint matches the computer adb is asking about at that moment
+     (`UsbDebuggingManager.java:236`–`248`). Here no computer with the test key is asking, so the call
+     approves nothing. `adbkey.py fingerprint` prints the test key's MD5 to match logcat's `Got`.
+   - **With a computer asking** (optional, needs a second computer):
+     1. On the second computer, move its own `~/.android/adbkey*` aside and copy the test pair there,
+        so its adb offers only the test key.
+     2. Plug it into the Mirror instead of yours. `adb devices` there shows `unauthorized`, and the
+        Mirror shows "Allow USB debugging?" with no way to tap it. Android now remembers that key's
+        fingerprint as the one being asked about (`UsbDebuggingManager.java:279`), until another
+        computer asks.
+     3. Unplug it, plug yours back in, and run the `allow-adb-key` line again.
+     4. Expect a new line in `adb_keys` with the test key's fingerprint, and no "do not match" line.
+     5. Plug the second computer in again: its `adb devices` should show the Mirror as `device`.
+
+     Don't stop the shared adb server on your own computer to do this: the S1 and the tablet are on it.
+
+   **Cleanup.** The probe has no action that clears keys, on purpose. Android 6's
+   `clearUsbDebuggingKeys` deletes the whole `adb_keys` file, your key with it, and the Mirror has no
+   touchscreen to allow a computer again. adb's shell can only read the file, not edit it. So a test
+   key that was written stays until the next flash, which writes a fresh `userdata` with only the keys
+   Kiln puts there. The key pair is a throwaway: delete `out/adbkey-test/` when the test is done.
 
 To put the APK back, flash again with the APK the unit had before (or the way back). That doesn't bring
 back the unit's old `userdata`: every flash writes a fresh one, and the bootloader can't read the old
@@ -154,6 +201,11 @@ one back first.
 | Step 3: privileged lost after the update | Each update would lose the permissions: Kiln would have to flash every new version into `system` |
 | Step 4: `RESULT settings OK` | Glassworks can write secure settings (screen timeout, stay awake, location) without adb's help |
 | Step 5: restarts and comes back as HOME | Glassworks can restart the Mirror from Home Assistant, and boots straight into Glassworks, the updated version included |
+| Step 6: `perm.MANAGE_USB granted`, `RESULT allow-adb-key OK`, no new key and "Fingerprints do not match" | As read: Glassworks can answer the computer the Mirror is asking about, but can't add a key no computer asked for. A Manage page "Allow a new computer over USB" works only while that computer is plugged in and asking. The page would need its key: Kiln can send it (it knows the browser's key), or the person types its fingerprint to confirm |
+| Step 6 with a computer asking: the key written, the computer connects | The Manage page can approve a computer that's plugged in and asking, with no touchscreen. This is the case that makes the feature possible |
+| Step 6: the test key written with no computer asking | Android on this image doesn't check the fingerprint (it differs from AOSP). Any app holding `MANAGE_USB` could then let any key in, so Glassworks would need to guard who can ask it |
+| Step 6: `FAIL java.lang.SecurityException … MANAGE_USB` | The privileged grant didn't cover `MANAGE_USB` (it was missing from the flashed copy, or the image differs). No Manage-page approval without root |
+| Step 6: `FAIL java.lang.ClassNotFoundException` or `NoSuchMethodException` | This image's framework names it differently: look at its `IUsbManager` before going further |
 
 ## Files
 
@@ -162,7 +214,8 @@ one back first.
 | `build.sh` | Both builds, the checks, the SHA-256s |
 | `src/main/AndroidManifest.xml` | The permissions, HOME, the adb-only action activity |
 | `src/main/java/sh/edm/s1kiosk/MainActivity.java` | The status screen and its `FACT` lines |
-| `src/main/java/sh/edm/s1kiosk/ProbeAction.java` | `update`, `settings`, `reboot` |
+| `src/main/java/sh/edm/s1kiosk/ProbeAction.java` | `update`, `settings`, `reboot`, `allow-adb-key` |
+| `adbkey.py` | A throwaway adb key pair in adb's formats (git-ignored `out/adbkey-test/`), and fingerprints of keys, never the keys |
 | `src/main/java/sh/edm/s1kiosk/InstallResult.java` | PackageInstaller's answer, as one `RESULT update` line |
-| `src/main/java/sh/edm/s1kiosk/Probe.java` | The log lines: status codes to OK/FAIL, protection levels |
+| `src/main/java/sh/edm/s1kiosk/Probe.java` | The log lines: status codes to OK/FAIL, protection levels, the adb key check and its fingerprint |
 | `src/test/java/sh/edm/s1kiosk/ProbeTest.java` | JVM tests for `Probe` |

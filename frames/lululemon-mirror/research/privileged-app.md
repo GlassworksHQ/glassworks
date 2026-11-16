@@ -1,9 +1,13 @@
 # Privileged app: does a /system/priv-app app get Android 6's privileged permissions, and keep them after it updates?
 
-**Status (2026-11-15): read, untested on the unit.** AOSP 6.0.1's package manager grants
+**Status (2026-11-16): verified on the unit.** AOSP 6.0.1's package manager grants
 `signature|privileged` permissions to any app scanned from `/system/priv-app`, whatever its signing
-key, and an update of that app keeps them while it is signed with the same key. A probe app to test
-it on the Mirror is ready: [tools/mirror/probe-app](../../../tools/mirror/probe-app/README.md).
+key, and an update of that app keeps them while it is signed with the same key. The probe app
+([tools/mirror/probe-app](../../../tools/mirror/probe-app/README.md)) showed it on the Mirror on
+2026-11-16 (the root's run, on #395): privileged, `INSTALL_PACKAGES`, `REBOOT` and
+`WRITE_SECURE_SETTINGS` granted, a silent update with all three kept, a secure setting written, and a
+reboot back into the app. Whether such an app can approve a computer's adb key is
+[below](#can-a-privileged-app-approve-an-adb-key) (read, untested on the unit).
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (Android 6.0.1,
 `MMB29M`, `userdebug`, `test-keys`). Source: AOSP tag `android-6.0.1_r81`
@@ -177,6 +181,35 @@ Home Assistant with no tap and no root, can restart the Mirror, and writes its o
 Kiln flashes into `system` must already ask for every privileged permission a later version will
 need, because an update signed with our key can't add one (row 3).
 
+## Can a privileged app approve an adb key?
+
+**Status (2026-11-16): read, untested on the unit.** The Mirror has no touchscreen, so its "Allow USB
+debugging?" dialog can't be answered on the glass. If S1 Kiosk could answer it, a Manage page "Allow
+a new computer over USB" would be possible.
+
+Read at `android-6.0.1_r81` (`platform/frameworks/base`):
+
+| # | File and line | What it says |
+|---|---|---|
+| 1 | `core/res/AndroidManifest.xml:1164` | `MANAGE_USB` is `signature\|privileged`: a privileged system app gets it, as with `INSTALL_PACKAGES` above |
+| 2 | `core/java/android/hardware/usb/IUsbManager.aidl:103` | `void allowUsbDebugging(boolean alwaysAllow, String publicKey)`. Hidden; the app reaches it through `ServiceManager.getService("usb")` and `IUsbManager.Stub.asInterface`, by reflection |
+| 3 | `services/usb/java/com/android/server/usb/UsbService.java:329` | `enforceCallingOrSelfPermission(MANAGE_USB)`, then `UsbDeviceManager.allowUsbDebugging` (`UsbDeviceManager.java:940`), which posts `MESSAGE_ADB_ALLOW` to `UsbDebuggingManager` |
+| 4 | `UsbDebuggingManager.java:236`–`248` | On `MESSAGE_ADB_ALLOW`, the key's fingerprint (MD5 of the decoded key) must equal `mFingerprints`, else it logs "Fingerprints do not match" and **does nothing**. On a match with `alwaysAllow`, `writeKey` appends the key to `/data/misc/adb/adb_keys` (line 403), and adbd is told "OK" |
+| 5 | `UsbDebuggingManager.java:271`–`281` | `mFingerprints` is set only on `MESSAGE_ADB_CONFIRM`: adbd asking about a computer that just connected with an unknown key. It keeps that value until the next computer asks |
+| 6 | `IUsbManager.aidl:109`, `UsbDebuggingManager.java` `MESSAGE_ADB_CLEAR` | `clearUsbDebuggingKeys` deletes the whole `adb_keys` file. The probe never calls it: it would remove every key, the root's included, with no touchscreen to allow one again |
+
+**What we expect.** `allowUsbDebugging` is not a way to add any key. It answers the one computer the
+Mirror is asking about (or asked about last).
+- A key no computer asked for is ignored.
+- A key that matches a computer still plugged in and asking is written, and that computer connects.
+
+The call is asynchronous and returns nothing, so the app can't tell which happened: `adb_keys` and
+logcat do.
+
+**For Glassworks.** A Manage page could approve "the computer that is plugged in and asking", if it
+knows that computer's key: Kiln can send it, since it holds the browser's key. It can't pre-approve
+keys. The probe's step 6 tests both cases: no computer asking, and with a second computer asking.
+
 ## How to reproduce
 
 Off-device: fetch the files above at `android-6.0.1_r81` from android.googlesource.com
@@ -189,6 +222,7 @@ APK back, flash again with the APK the unit had, or the way back. Neither brings
 
 ## Open questions
 
-- All of the above, on the unit: the probe's steps 1 to 5.
+- ~~All of the above, on the unit: the probe's steps 1 to 5.~~ Done, 2026-11-16: all passed.
+- The adb key approval above, on the unit: the probe's step 6.
 - Whether CAF's package manager in this image differs from AOSP's in these paths.
 - Whether the Mirror's vendor SELinux policy lets `untrusted_app` read `/data/local/tmp` (read 7).
