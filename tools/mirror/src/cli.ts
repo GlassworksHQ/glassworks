@@ -26,6 +26,9 @@ install (WRITES system and userdata):
   --wifi-ssid <name> --wifi-pass-file <file>   Wi-Fi for S1 Kiosk (the password from a file)
   --boot-animation <zip>   default: branding/lululemon-mirror/bootanimation.zip; --no-boot-animation
   --no-fill                zeros as RAW blocks, for an LK that refuses FILL chunks
+  --no-settings-overlay    the image's own first boot: leave out frames/lululemon-mirror/overlay/
+                           GlassworksSettings.apk and ro.lockscreen.disable.default (Wi-Fi on, no screen
+                           timeout, no lock screen, no auto-rotate)
   --screenshot <png>       default: ./mirror-after.png
 way back (WRITES system and userdata):
   --way-back --image <system.img> --userdata <userdata.sparse>
@@ -47,7 +50,7 @@ function parse(argv: string[]) {
       'dry-run': { type: 'boolean' }, yes: { type: 'boolean' }, 'way-back': { type: 'boolean' }, help: { type: 'boolean' },
       image: { type: 'string' }, refract: { type: 'boolean' }, apk: { type: 'string' }, 'adb-key': { type: 'string', multiple: true },
       'ha-url': { type: 'string' }, 'wifi-ssid': { type: 'string' }, 'wifi-pass-file': { type: 'string' },
-      'boot-animation': { type: 'string' }, 'no-boot-animation': { type: 'boolean' }, 'no-fill': { type: 'boolean' },
+      'boot-animation': { type: 'string' }, 'no-boot-animation': { type: 'boolean' }, 'no-settings-overlay': { type: 'boolean' }, 'no-fill': { type: 'boolean' },
       screenshot: { type: 'string' }, userdata: { type: 'string' }, 'serial-file': { type: 'string' }, work: { type: 'string' }, keep: { type: 'boolean' },
     },
   }).values;
@@ -152,7 +155,8 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
     const animPath = a['boot-animation'] ?? join(REPO, 'branding/lululemon-mirror/bootanimation.zip');
     const bootAnimation = a['no-boot-animation'] ? undefined : new Uint8Array(readFileSync(animPath));
     const wifi = a['wifi-ssid'] ? { ssid: a['wifi-ssid'], password: a['wifi-pass-file'] ? readFileSync(a['wifi-pass-file'], 'utf8').replace(/\r?\n$/, '') : fail('--wifi-ssid needs --wifi-pass-file') } : undefined;
-    const common = { apk, bootAnimation, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
+    const settingsOverlay = a['no-settings-overlay'] ? undefined : new Uint8Array(readFileSync(join(REPO, 'frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
+    const common = { apk, bootAnimation, settingsOverlay, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
     let r;
     if (dry) {
       const img = await dryImage(work, apk.length + (bootAnimation?.length ?? 0));

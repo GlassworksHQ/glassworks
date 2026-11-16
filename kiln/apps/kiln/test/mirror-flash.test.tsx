@@ -25,9 +25,10 @@ afterEach(() => cleanup());
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
-function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down' } = {}) {
+function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down'; settingsOverlay?: Uint8Array } = {}) {
   let fails = o.flashFails ?? 0;
   const calls: string[] = [];
+  const built: Parameters<ImageMaker['build']>[0][] = [];
   const images: ImageMaker = {
     async load() { calls.push('load'); },
     async fetch(url, onProgress) {
@@ -35,7 +36,7 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
       if (o.proxy === 'down') throw new ProxyError('the download proxy answered 502: GitHub answered 503');
       onProgress(0.5); onProgress(1);
     },
-    async build(b, onProgress) { if (o.buildFails) throw new Error('No space left on the device'); calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
+    async build(b, onProgress) { built.push(b); if (o.buildFails) throw new Error('No space left on the device'); calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
     check: (file, which, onProgress) => { calls.push(`check ${which}`); return checkDownload(file, which === 'system' ? GLASS_PANES.system : GLASS_PANES_USERDATA, onProgress); },
     async discard() { calls.push('discard'); },
   };
@@ -48,8 +49,9 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const adb = new FirstBootMirror();
   const requestFastboot = vi.fn(async () => fb);
-  const f = new FlashSession({ images, imageUrl: 'https://proxy.test/glass-panes/mirror-android-2/system.img', requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
-  return { f, mirror, calls, adb, requestFastboot };
+  const f = new FlashSession({ images, imageUrl: 'https://proxy.test/glass-panes/mirror-android-2/system.img', requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
+    ...(o.settingsOverlay ? { settingsOverlay: async () => o.settingsOverlay } : {}) });
+  return { f, mirror, calls, adb, requestFastboot, built };
 }
 
 const image = () => Object.assign(new Blob(['x']), { name: 'system.img' });
@@ -78,6 +80,35 @@ describe('installing Glassworks over fastboot', () => {
     await f.connectAdb();
     expect(f.state).toMatchObject({ screen: 'done', firstBoot: { hidden: ['com.android.launcher3'], rotation: '270' } });
     expect(adb.cmds).toContain(`am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://homeassistant.local:8123'`);
+  });
+
+  it('saves the Wi-Fi and the settings overlay into the images, and refuses a password WPA can\'t take before fastboot', async () => {
+    const overlay = new Uint8Array([1, 2, 3]);
+    const { f, mirror, built } = setup({ settingsOverlay: overlay });
+    await f.downloadImage();
+    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    f.setWifi({ ssid: 'Home Net', password: 'short' });
+    expect(f.blocked()).toMatch(/8 to 63 characters/);
+    f.toFastboot();
+    expect(f.state.screen).toBe('image'); // nothing reached fastboot
+    f.setWifi({ password: 'not-a-real-password' });
+    expect(f.blocked()).toBeUndefined();
+    f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
+    expect(built).toHaveLength(1);
+    expect(built[0]!.wifi).toEqual({ ssid: 'Home Net', password: 'not-a-real-password' });
+    expect(built[0]!.settingsOverlay).toBe(overlay);
+    await f.connectAdb(); // the first boot sends the network to S1 Kiosk too (the fallback)
+    // the Technical log, and the failure report saved from it: never the network's name or password (CLAUDE.md rule 2)
+    expect(f.state.log).toContain('Wi-Fi: the network you entered');
+    expect(f.state.log.join('\n')).not.toContain('Home Net');
+    expect(f.state.log.join('\n')).not.toContain('not-a-real-password');
+  });
+
+  it('the flash-wifi-short demo shows the refusal of a password WPA can\'t take', async () => {
+    const { flash, mirror } = await flashDemo('flash-wifi-short', true);
+    expect(flash.blocked()).toMatch(/8 to 63 characters/);
+    render(<Flash flash={flash} mirror={mirror} />);
+    expect(screen.getByText(/The Wi-Fi password must be 8 to 63 characters/)).toBeTruthy();
   });
 
   it('when the proxy can\'t serve the image, says why and falls back to download-and-select', async () => {

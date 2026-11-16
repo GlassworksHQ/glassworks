@@ -25,8 +25,9 @@ property, not seen. So the frames are now turned themselves: drawn upright at 10
 frame's `frame.json`). 90° counter-clockwise is the turn `user_rotation=3` makes: Android's
 ROTATION_270 means the graphics are drawn turned 270° clockwise.
 
-**Untested on the unit: needs a photo.** If it shows upside down, the glass is mounted the other way:
-set `rotate` to 270 and rebuild.
+**Verified on the unit** (2026-11-16, the root's run; the maintainer's photo): the turned animation
+runs upright on the portrait glass. If a later unit shows it upside down, its glass is mounted the
+other way: set `rotate` to 270 and rebuild.
 
 ## Not changeable: the boot logo
 

@@ -125,7 +125,7 @@ describe('the allowlist', () => {
     expect(SUMS_TEXT).toContain(`${allowlist[IMG].sha256}  system.img`);
   });
 
-  it.each(['nope', 'glass-panes/mirror-android-2/userdata.sparse', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
+  it.each(['nope', 'glass-panes/mirror-android-1/system.img', 'glass-panes/mirror-android-2/userdata.sparse', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
     'answers 404 to %s and never asks GitHub',
     async (path) => {
       const res = await get(path);

@@ -77,7 +77,8 @@ person" as the fallback.
 ## What this means for Kiln
 
 1. One button: Kiln `fetch`es
-   `https://refract.glassworks.dev/glass-panes/mirror-android-1/system.img`. Refract passes `Range`
+   `https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img` (image 2 since
+   2026-11-16; image 1's id now answers 404). Refract passes `Range`
    through, so Kiln can resume a broken download. Refract refuses (502) when GitHub's size isn't the
    pinned 850,905,808 bytes.
 2. If Refract fails, Kiln falls back: a plain link to the release asset's URL (the browser downloads

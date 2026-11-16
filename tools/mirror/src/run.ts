@@ -42,6 +42,8 @@ export interface InstallOptions {
   /** the adb_keys line(s) for the new userdata, e.g. the host's ~/.android/adbkey.pub */
   adbKey: string;
   bootAnimation?: Uint8Array;
+  /** GlassworksSettings.apk: Wi-Fi on, no screen timeout, no lock screen, no auto-rotate on the first boot */
+  settingsOverlay?: Uint8Array;
   haUrl?: string;
   wifi?: { ssid: string; password: string };
   /** where the unpacked image and the built images go (about 2.5 GB for the real one) */
@@ -135,7 +137,8 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         // patched in place: a build that fails ends the run, and the next run loads and checks the file again
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
-          await buildImages(loaded!, { apk: o.apk, bootAnimation: o.bootAnimation, hwrotation: 270, adbKey: o.adbKey, userdataBytes, fill: o.fill },
+          // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
+          await buildImages(loaded!, { apk: o.apk, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, hwrotation: 270, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); });
         } finally { sys.close(); ud.close(); }
         d.log(`    ${sysOut}, ${udOut}`);

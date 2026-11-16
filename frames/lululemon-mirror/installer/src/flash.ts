@@ -100,15 +100,20 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
  * adb key (buildUserdata).
  */
 /** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
-export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean },
+export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean;
+  /** saved in userdata's wpa_supplicant.conf, so Android joins it on the first boot with nothing tapped */
+  wifi?: { ssid: string; password: string } },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
   onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
   onProgress('patch', 0);
-  await patchSystem(await Ext4.open(loaded.disk), o);
+  const sys = await Ext4.open(loaded.disk);
+  await patchSystem(sys, o);
+  // the image's own template: the saved network goes after its lines, as the Wi-Fi HAL would copy it
+  const template = o.wifi ? new TextDecoder().decode(await sys.readFile('/etc/wifi/wpa_supplicant.conf')) : '';
   onProgress('patch', 1);
   await writeSparse(loaded.disk, sinks.system, { fill: o.fill, onProgress: (b) => onProgress('system', b / loaded.disk.blocks) });
   const ud = new Disk(new MemoryStore(), 4096, Math.floor(o.userdataBytes / 4096), { zeroed: true });
-  await buildUserdata(ud, { adbKey: o.adbKey, time: o.time });
+  await buildUserdata(ud, { adbKey: o.adbKey, time: o.time, ...(o.wifi ? { wifi: { ...o.wifi, template } } : {}) });
   await writeSparse(ud, sinks.userdata, { fill: o.fill, onProgress: (b) => onProgress('userdata', b / ud.blocks) });
 }
 
@@ -193,7 +198,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
 
   let wifi: boolean | undefined;
   if (o.wifi) {
-    r.step(`Wi-Fi ${o.wifi.ssid}`);
+    r.step('Wi-Fi: the network you entered'); // never its name: logs end up in failure reports (CLAUDE.md rule 2)
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : 'S1 Kiosk didn\'t confirm it joined: set the Wi-Fi in its settings');
   }

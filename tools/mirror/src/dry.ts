@@ -29,6 +29,8 @@ export async function dryImage(work: string, room = 0): Promise<{ path: string; 
   const a = { mode: 0o755, uid: 0, gid: 0 }, f = { mode: 0o644, uid: 0, gid: 0 };
   await fs.mkdirs('/priv-app/Launcher3', a);
   await fs.mkdirs('/media', a);
+  await fs.mkdirs('/etc/wifi', a);
+  await fs.writeFile('/etc/wifi/wpa_supplicant.conf', new TextEncoder().encode('update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npmf=1\np2p_no_group_iface=1\n'), f);
   await fs.writeFile('/build.prop', new TextEncoder().encode(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`), f);
   await fs.writeFile('/priv-app/Launcher3/Launcher3.apk', new Uint8Array(64 * 1024).fill(0x4c), f);
   await fs.flush();

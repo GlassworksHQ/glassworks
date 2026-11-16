@@ -7,7 +7,7 @@ import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
-export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-back', 'flash-run'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
@@ -67,6 +67,8 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   flash.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' });
   if (name === 'flash-wrong') { await flash.selectImage(image); return { flash, mirror }; }
   if (name === 'flash-ready') return { flash, mirror };
+  // a password WPA can't take: refused before fastboot, since the image saves it as the network's PSK
+  if (name === 'flash-wifi-short') { flash.setWifi({ password: 'short' }); return { flash, mirror }; }
   flash.toFastboot();
   if (name === 'flash-fastboot') return { flash, mirror };
   await flash.connectFastboot();
