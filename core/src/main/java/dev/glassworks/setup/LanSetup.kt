@@ -274,7 +274,7 @@ class LanSetup(
         )
 
         const val PAIRING_OFF = "Home Assistant has added this panel, so pairing over the network is off. Turn it on again with " +
-            "the panel's “Allow setup over the network” button in Home Assistant, or over USB with the installer."
+            "“Allow setup over the network”: the panel's button in Home Assistant, or in the panel's settings, or over USB with the installer."
         private const val NO_CODE = "That code has run out. Show a new one."
     }
 }

@@ -19,9 +19,10 @@ import sh.edm.s1kiosk.ui.Inter
 /**
  * The Manage page's code on the panel's screen (#33): what it's for, the six digits, and Close. Drawn
  * by the service over everything (an overlay window, which the app may draw: SYSTEM_ALERT_WINDOW), so
- * it shows whatever the activity is doing. Main thread.
+ * it shows whatever the activity is doing. Main thread. Without touch ([touch] false, `Input.NONE`) there
+ * is no Close: the code goes when it is used or runs out (#34).
  */
-class CodeOverlay(private val context: Context, private val onClose: () -> Unit) {
+class CodeOverlay(private val context: Context, private val touch: Boolean = true, private val onClose: () -> Unit) {
     private val wm = context.getSystemService(WindowManager::class.java)
     private var view: View? = null
 
@@ -33,7 +34,7 @@ class CodeOverlay(private val context: Context, private val onClose: () -> Unit)
             Log.w(TAG, "can't show the Manage code: the app may not draw over other apps")
             return
         }
-        val v = build(context, shown, onClose)
+        val v = build(context, shown, onClose, touch)
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -48,7 +49,7 @@ class CodeOverlay(private val context: Context, private val onClose: () -> Unit)
         private const val TAG = AppManage.TAG
 
         /** The overlay's view, also for the mock-ups. */
-        fun build(context: Context, shown: PanelCode.Shown, onClose: () -> Unit): View {
+        fun build(context: Context, shown: PanelCode.Shown, onClose: () -> Unit, touch: Boolean = true): View {
             val dp = context.resources.displayMetrics.density
             fun text(s: String, sp: Float, weight: Int, color: Int) = TextView(context).apply {
                 text = s
@@ -69,7 +70,7 @@ class CodeOverlay(private val context: Context, private val onClose: () -> Unit)
                 addView(text("Type it in the browser. It works once, for 5 minutes.", 15f, Inter.REGULAR, MUTED).apply {
                     setPadding(0, (22 * dp).toInt(), 0, (26 * dp).toInt())
                 }, wrap())
-                addView(text("Close", 15f, Inter.MEDIUM, FG).apply {
+                if (touch) addView(text("Close", 15f, Inter.MEDIUM, FG).apply {
                     background = GradientDrawable().apply {
                         cornerRadius = 999 * dp; setColor(0x14FFFFFF); setStroke((1 * dp).toInt(), 0x1FFFFFFF)
                     }

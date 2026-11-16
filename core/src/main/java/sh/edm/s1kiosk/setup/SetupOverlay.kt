@@ -43,6 +43,8 @@ import sh.edm.s1kiosk.ui.Glass.Companion.MU
 import sh.edm.s1kiosk.ui.Glass.Companion.ROSE
 import sh.edm.s1kiosk.ui.Glass.Companion.TX
 import sh.edm.s1kiosk.ui.Inter
+import dev.glassworks.frame.Input
+import sh.edm.s1kiosk.glassworks
 import sh.edm.s1kiosk.ui.QrCode
 import sh.edm.s1kiosk.ui.StackView
 import sh.edm.s1kiosk.ui.StackView.Look
@@ -105,6 +107,13 @@ class SetupOverlay(
     var onPanesDone: (() -> Unit)? = null
     /** A pane's step was answered on the screen ([SetupHost.next]). */
     var onStepDone: (() -> Unit)? = null
+
+    /**
+     * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step but Sign in shows where to
+     * set the panel up from a computer (the setup page over the network, #34), and no card has a button.
+     * The frame's, unless a mockup sets it.
+     */
+    var input: Input = runCatching { context.glassworks.frame.input }.getOrDefault(Input.TOUCH)
 
     /** True while visible (including the Done fade-out). */
     var isShowing = false
@@ -433,6 +442,18 @@ class SetupOverlay(
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
         val done = shown in m.done
         cardLabel.text = SetupFlow.group(shown)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
+        if (input == Input.NONE) {
+            // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in.
+            if (shown == SetupFlow.SIGNIN) {
+                bindSignin(m, done)
+                // Neither "on this panel instead" nor a done step's Continue: the next step comes by itself.
+                plainLeft.visibility = View.GONE
+                primary.visibility = View.GONE
+            } else bindFromComputer(m)
+            setContent(null)
+            hideKeyboard()
+            return
+        }
         // The URL field never goes GONE and back while shown: a view that goes GONE (even for one
         // frame) loses focus, and this runs on every discovery/Wi-Fi refresh, i.e. while the user types.
         var content: View? = null
@@ -616,6 +637,24 @@ class SetupOverlay(
         plainLeft.text = "Sign in on this panel instead"
         plainLeft.visibility = View.VISIBLE
         plainLeft.setOnClickListener { onUsePanel?.invoke() }
+    }
+
+    /** Without touch ([Input.NONE]): where to set the panel up from a computer, as a QR code and an address. */
+    private fun bindFromComputer(m: Model) {
+        val ip = m.panelIp
+        if (ip == null) {
+            cardTitle.text = "Waiting for Wi-Fi."
+            cardBody.text = "Put the panel on Wi-Fi with Kiln on a computer, over USB. Then this screen shows where to set it up."
+            return
+        }
+        val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
+        if (qrFor != url) {
+            qrImage.setImageBitmap(QrCode.bitmap(url, px(200f)))
+            qrFor = url
+        }
+        qrGlow.visibility = View.VISIBLE
+        cardTitle.text = "Scan to set it up."
+        cardBody.text = "Or open $url on a computer on this network. When it asks for a code, the code shows here."
     }
 
     private fun showStatus(text: String, color: Int) {
