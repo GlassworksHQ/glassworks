@@ -296,13 +296,22 @@ $ PATH=/system/bin:$PATH pm list packages
 /system/bin/pm[6]: app_process: not found          # exit 127, and not the word "denied"
 avc: denied { getattr } for pid=1617 comm="sh" path="/system/bin/app_process64"
   scontext=u:r:qti_init_shell:s0 tcontext=u:object_r:zygote_exec:s0 tclass=file
+$ PATH=/system/bin:$PATH am get-current-user
+/system/bin/am[8]: app_process: not found          # exit 127
+$ PATH=/system/bin:$PATH app_process /system/bin com.android.commands.pm.Pm list packages
+/system/etc/init.qcom.post_boot.sh[1523]: app_process: not found     # exit 127, straight at it
 $ svc wifi enable                                  # same, exit 127
+$ setprop debug.gw.test 1; echo $?; getprop debug.gw.test
+0
+                                                   # exit 0, and the property stays empty
 ```
 
 It cannot even `getattr` the launcher, so no package list, no Wi-Fi toggle, no broadcast, no
-`dumpsys`. `setprop` to a name the property service does not already know exits 0 and changes
-nothing. This root works with files, `/persist`, `sysfs` and `/proc` — **not with Android**. That is
-the honest description: a boot-time root for copying firmware, not a way to drive the system.
+`dumpsys`. This root works through files: `/persist`, plus the write-only rules the domain holds on
+`sysfs` and `/proc` (`allow qti_init_shell sysfs file { write setattr append open }`,
+`allow qti_init_shell proc file { write }` — `sysfs_graphics` and `sysfs_thermal` are the two it may
+also read). It cannot ask Android to do anything, which is the honest description: a boot-time root
+for copying firmware, not a way to drive the system.
 
 **What `/firmware/image` holds** (names and sizes only; the bytes stay outside the repo):
 
@@ -404,8 +413,9 @@ from the policy, `dmesg` and AOSP 6.0.1_r81; `flash_recovery` stays untested and
 ## Open questions
 
 - **Custom `.ko`:** can we reproduce this kernel's `vermagic`/CRCs from CAF `msm-3.10` + this
-  `.config`? `qti_init_shell` holds `sys_module`, so the hook can `insmod` one — that is the only
-  route past this domain's limits (no block devices, no `setenforce`) and it is kernel code.
+  `.config`? `qti_init_shell` holds `sys_module`, so the hook could `insmod` one. It is the one
+  route this note found past the domain's limits (no block devices, no `setenforce`), **untested**,
+  and nothing here rules out another.
 - **`qti_init_shell` root via `post_boot.sh`:** done (§7). It is enough to read `/firmware/image` and
   the top-level `/persist` files, and it holds `sys_module`. It is not enough for partition dumps.
 - **Is platform signing enough for the kiosk?** For #40's modem/vendor blobs, no (no `/firmware`).
@@ -424,8 +434,9 @@ Where the work stands, in order, as of 2026-11-15:
   a replacement `wlan` must chain-load the original (§4). This is the only way past §7's limits
   (`sys_module` is in the domain's capability set), and the only step here that can damage the
   panel — a wrong regulator or panel value is physical damage, and there is no working EDL loader
-  for this chip to fall back on. **This note stops here**: the firmware copy and #41 are what this
-  pass set out to get, and the kernel route is a separate decision, not a follow-on.
+  for this chip to fall back on. This is the one route this note found past §7's limits, and it is
+  **untested** — no run here rules out another. **This note stops here**: the firmware copy and #41
+  are what this pass set out to get, and the kernel route is a separate decision, not a follow-on.
 - **Kiosk work, no flash at all:** the platform test-key app (§6) for Wi-Fi, rotation and lock screen.
   That is a different thread's job and needs none of the above.
 
