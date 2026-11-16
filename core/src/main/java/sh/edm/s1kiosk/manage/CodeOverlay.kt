@@ -22,7 +22,7 @@ import sh.edm.s1kiosk.ui.Inter
  * it shows whatever the activity is doing. Main thread. Without touch ([touch] false, `Input.NONE`) there
  * is no Close: the code goes when it is used or runs out (#34).
  */
-class CodeOverlay(private val context: Context, private val touch: Boolean = true, private val onClose: () -> Unit) {
+class CodeOverlay(private val context: Context, private val touch: Boolean, private val onClose: () -> Unit) {
     private val wm = context.getSystemService(WindowManager::class.java)
     private var view: View? = null
 

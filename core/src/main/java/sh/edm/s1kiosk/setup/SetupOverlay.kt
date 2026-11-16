@@ -407,7 +407,8 @@ class SetupOverlay(
                 GroupedRail.Row(
                     id, title(id), SetupFlow.group(id),
                     mark = when { id == shown || id == m.step -> GroupedRail.Mark.CURRENT; id in m.done -> GroupedRail.Mark.DONE; else -> GroupedRail.Mark.PENDING },
-                    enabled = m.preview || id == m.step || id in m.done,
+                    // Without touch (Input.NONE) nothing on this screen takes a tap, the rail included.
+                    enabled = input == Input.TOUCH && (m.preview || id == m.step || id in m.done),
                 )
             },
             GROUPS,
