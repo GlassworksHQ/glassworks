@@ -324,24 +324,30 @@ The run of 2026-11-16 (main at 21196149): 111 calls, 46 of them desugared, so **
 | `:aqara-s1-plus-wall-base` | 3 | 0 |
 | `:pane-zigbee-thread` | 3 | 0 |
 
-Reading it, by what each needs:
+Lint can't see a `Platform` check (`Platform.hasX` is a property, not an `SDK_INT` comparison), so many of these
+are already guarded. Read at each call site (2026-11-16), the 65 split like this:
 
-| Where | Calls (level) | What it takes |
+| Where | Calls (level) | State |
 |---|---|---|
-| core: `WifiSetupStatus`, `ImprovController`, `update/UpdateManager` | `registerDefaultNetworkCallback` (24) | The first crash on API 23 (step 9). `registerNetworkCallback` with an internet request is the API 21 fallback |
-| core: `KioskService` | `NotificationChannel`, `Notification.Builder(context, channel)`, `startForegroundService` (26) | No channel and `startService` below 26 |
-| core: `SystemLocale` | `LocaleList`, `Configuration.getLocales`/`setLocales` (24) | `Configuration.locale` below 24 |
-| core: `ui/Inter` | `Font.Builder`, `FontFamily.Builder`, `Typeface.CustomFallbackBuilder` (29) | `Typeface.createFromAsset` below 29, without the variable-weight axes |
-| core: `ui/GlassSlider` | `AccessibilityAction.ACTION_SET_PROGRESS` (24) | Leave the action out below 24 |
-| core: `web/Http`, `auth/OAuth` | `HashMap.putIfAbsent` (24) | Plain Kotlin (`getOrPut`); desugaring doesn't cover it |
-| core: `MainActivity` | `Process.getStartElapsedRealtime` (24); the window insets and cutout calls (28, 30) | The insets and cutout calls are already behind `Platform.hasWindowInsetsController` and `hasDisplayCutoutMode` (read, 2026-11-16); lint can't see it. The uptime call isn't guarded. Waits for #364/#332, which own the file |
-| core: `update/UpdateManager` | `getContentLengthLong` (24), `PackageInfo.signingInfo`, `getLongVersionCode` (28), `setRequireUserAction` (31) | Waits for #365, which owns the file |
-| core: `frame/GenericAndroid` | `canRequestPackageInstalls` (26) | Below 26, "unknown sources" is a global setting |
-| pane-api: `platform/Platform` | 9 calls (26–34) | Already behind `Platform`'s own SDK checks (`PlatformApi(sdk)`), which lint can't see: nothing to do, but they stay in the baseline |
-| `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size` (24) | Two calls; four more are desugared |
-| `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | One call |
-| `pane-zigbee-thread`, `aqara-s1-plus-wall-base` | `Process.waitFor(timeout)`, autofill (26) | S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered on a legacy device |
-| The libraries, `pane-assist`, `-bluetooth-proxy`, `-notifications`, `-timers`, `-sendspin`, `engine-gecko-legacy` | None (`pane-sendspin`'s five are desugared) | Ready, as far as API levels go; untested on a device |
+| core: `KioskService` | `NotificationChannel`, `Notification.Builder(context, channel)` (26); `startForegroundService` (26) | Guarded: `Platform.hasNotificationChannels`, `hasForegroundServiceStart` |
+| core: `ui/Inter` | `Font.Builder`, `FontFamily.Builder`, `Typeface.CustomFallbackBuilder` (29) | Guarded: `Platform.hasFontBuilder`; below it the system font |
+| core: `MainActivity` | window insets and cutout (28, 30) | Guarded: `Platform.hasWindowInsetsController`, `hasDisplayCutoutMode` |
+| core: `update/UpdateManager` | `signingInfo`, `getLongVersionCode` (28); `setRequireUserAction` (31) | Guarded: `Platform.hasSigningInfo`, `hasLongVersionCode`, `canInstallWithoutUserAction` |
+| core: `frame/GenericAndroid` | `canRequestPackageInstalls` (26) | Guarded: `Platform.canInstallWithoutUserAction` |
+| pane-api: `platform/Platform` | 9 calls (26–34) | Guarded: `Platform`'s own queries |
+| core: `setup/WifiSetupStatus`, `improv/ImprovController` | `registerDefaultNetworkCallback` (24) | **Open.** The first crash on API 23 (step 9) |
+| core: `SystemLocale` | `Configuration.getLocales`/`setLocales`, `LocaleList` (24) | **Open.** Inside a `try`, but a missing method is an `Error`, which it doesn't catch |
+| core: `ui/GlassSlider` | `AccessibilityAction.ACTION_SET_PROGRESS` (24) | **Open** |
+| core: `web/Http`, `auth/OAuth` | `HashMap.putIfAbsent` (24) | **Open** (desugaring doesn't cover it) |
+| `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size` (24) | **Open** |
+| `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | **Open** |
+| core: `MainActivity` | `Process.getStartElapsedRealtime` (24) | **Open**; waits for #364/#332, which own the file |
+| core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | **Open**; waits for #365, which owns the file |
+| `pane-zigbee-thread`, `aqara-s1-plus-wall-base` | `Process.waitFor(timeout)`, autofill (26) | Open, but S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered on a legacy device |
+| The libraries, `pane-assist`, `-bluetooth-proxy`, `-notifications`, `-timers`, `-sendspin`, `engine-gecko-legacy` | None (`pane-sendspin`'s five are desugared) | Ready as far as API levels go; untested on a device |
+
+So the app's own start on API 23 needs the open calls in core, the camera and diagnostics fixed (#198 Phase A),
+then `MainActivity`'s and `UpdateManager`'s two (after #364/#365).
 
 <details><summary>The full list (111 calls)</summary>
 
