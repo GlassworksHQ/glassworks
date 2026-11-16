@@ -3,6 +3,7 @@
 // over S1 Kiosk (sh.edm.s1kiosk), and the two can sit side by side on one device.
 plugins {
     id("com.android.application")
+    id("glassworks.android")
 }
 
 // Release version: -PgenericVersion=1.2.3 or GENERIC_VERSION=1.2.3. versionCode = major*10000 + minor*100 + patch,
@@ -33,15 +34,10 @@ val haveReleaseKey = signingEnv.values.all { it != null }
 
 android {
     namespace = "dev.glassworks.generic_android"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
     defaultConfig {
         // Never sh.edm.s1kiosk: this is another app, with its own data and key.
         applicationId = "dev.glassworks.generic_android"
-        // Android 8.0. API 23 to 25 is the separate legacy build (#198).
-        minSdk = 26
+        // minSdk is glassworks.android's 26 (Android 8.0). API 23 to 25 is the separate legacy build (#198).
         // 35: Android 17 updates an app without a tap only if the new APK targets 35+ (#277).
         targetSdk = 35
         versionCode = genericVersionCode ?: 1
@@ -70,20 +66,13 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
     packaging {
         jniLibs { useLegacyPackaging = true }
     }
 
     testOptions { unitTests.isIncludeAndroidResources = true }
 
-    // RepoFiles, the tests' way to find files across every module from the repo root (#21), and the GeckoView
-    // shadows and harness that run the real MainActivity (testing/gecko, shared with S1 Kiosk's tests).
-    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/kotlin"))
+    // The GeckoView shadows and harness that run the real MainActivity (testing/gecko, shared with S1 Kiosk's tests).
     sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/gecko"))
     sourceSets.getByName("test").java.srcDir(rootProject.file("testing/gecko"))
 }

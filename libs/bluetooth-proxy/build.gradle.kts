@@ -2,21 +2,13 @@
 // No Pane API: the app's bluetooth-proxy pane wraps it (#121, #152). See README.md in this directory.
 plugins {
     id("com.android.library")
+    id("glassworks.android")
 }
 
 android {
     namespace = "dev.glassworks.esphome.bluetoothproxy"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
     defaultConfig {
         minSdk = 23
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 

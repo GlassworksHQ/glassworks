@@ -64,7 +64,7 @@ permissions:
 # pathspecs, split on spaces (no file matches a :(glob) word, so the shell leaves those as they are).
 env:
   ANDROID_CODE: >-
-    libs core pane-api engines panes testing :(glob)frames/*/android/** :(glob)frames/*/panes/**
+    libs core pane-api engines panes testing build-logic :(glob)frames/*/android/** :(glob)frames/*/panes/**
     settings.gradle.kts build.gradle.kts gradle.properties gradlew gradlew.bat gradle .github/workflows/pr.yml
 
 concurrency:
@@ -211,7 +211,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         # Fails closed like libs-publish: without a base commit, or when git diff fails, it runs.
         run: |
-          paths="core pane-api panes engines frames libs testing build.gradle.kts settings.gradle.kts gradle.properties gradle
+          paths="core pane-api panes engines frames libs testing build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle
             tools/legacy .github/workflows/pr.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); running the report."
@@ -263,7 +263,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         # Fails closed like the root job's: without a base commit, or when git diff fails, it runs.
         run: |
-          paths="libs build.gradle.kts settings.gradle.kts gradle.properties gradle LICENSE THIRD-PARTY-NOTICES.md tools/release/check-lib-artifact.sh
+          paths="libs build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle LICENSE THIRD-PARTY-NOTICES.md tools/release/check-lib-artifact.sh
             tools/release/lib-consumer-check.sh .github/workflows/pr.yml .github/workflows/libs-release.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); running the dry run."
@@ -724,7 +724,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         # Fails closed like libs-publish's: without a base commit, or when git diff fails, it runs.
         run: |
-          paths="frames/generic-android core pane-api panes libs engines testing build.gradle.kts settings.gradle.kts gradle.properties gradle
+          paths="frames/generic-android core pane-api panes libs engines testing build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle
             LICENSE LICENSES THIRD-PARTY-NOTICES.md tools/size .github/workflows/pr.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); checking the size."

@@ -1,30 +1,16 @@
 // The Glassworks core: the shell's free parts, the UI kit, setup and settings pieces, the web and Manage servers, the screen policy and the Engine API (#21). The parts that still reach the S1 app stay in it until their seams land.
 plugins {
     id("com.android.library")
+    id("glassworks.android")
 }
 
 android {
     namespace = "dev.glassworks.core"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
     defaultConfig {
-        minSdk = 26
         // The conformance test (src/androidTest) boots the core with a fake frame; CI runs it on emulators at
         // API 26, 29 and 34 (core-emulators.yml, #23).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-}
-
-// RepoFiles, the tests' way to find files across every module from the repo root (#21).
-extensions.configure<com.android.build.api.dsl.LibraryExtension> {
-    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/kotlin"))
 }
 
 dependencies {
