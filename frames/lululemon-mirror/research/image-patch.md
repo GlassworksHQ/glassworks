@@ -63,10 +63,10 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 
 | Change | Why | How sure |
 |---|---|---|
-| `/priv-app/S1Kiosk/S1Kiosk.apk`, `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and S1 Kiosk's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`); untested on the unit |
+| `/priv-app/S1Kiosk/S1Kiosk.apk`, `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and S1 Kiosk's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK is in `/system/priv-app/S1Kiosk`; its privileged permissions are untested (the test build doesn't run its main activity) |
 | Its native libraries in `/priv-app/S1Kiosk/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
 | `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
-| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns SurfaceFlinger's whole output, the boot animation included, and makes the panel's natural orientation portrait. 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Untested.** The image's SurfaceFlinger is CAF's (DragonBoard LA.BR.1.2.7), which reads `ro.sf.hwrotation`. Check it on the real run (below) |
+| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns SurfaceFlinger's whole output, the boot animation included, and makes the panel's natural orientation portrait. 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Verified** (2026-11-16, the first real flash): the boot animation runs portrait and upright. The image's SurfaceFlinger is CAF's (DragonBoard LA.BR.1.2.7), which reads `ro.sf.hwrotation` |
 | Nothing removed | The community kiosk isn't in `system` | Verified (read 1) |
 
 The patcher refuses, with nothing written, an image whose fingerprint isn't the one above, and an
@@ -131,8 +131,9 @@ What it changed in the install:
   package as `am`'s last argument sets the intent's package; read from AOSP 6 `Am.makeIntent`). If
   the answer is "unable to resolve", nothing is hidden, so a Mirror with no touchscreen keeps
   Launcher3 as its home screen, and Kiln's Done screen says the build has no home screen. Before,
-  Launcher3 was hidden either way. The question itself is **untested** on the unit: the Mirror as
-  the root left it (this APK) should answer "unable to resolve".
+  Launcher3 was hidden either way. **Verified on the unit** (2026-11-16, by the root, on the Mirror
+  with this APK): `am` answered `Error: Activity not started, unable to resolve Intent …
+  pkg=sh.edm.s1kiosk`, so the guard hides nothing there.
 
 ## How to reproduce
 
@@ -149,9 +150,9 @@ Off-device only:
 
 - ~~Does `ro.sf.hwrotation=270` turn the boot animation upright?~~ Yes (2026-11-16). S1 Kiosk's own
   screen waits on a build that runs on Android 6.
-- Does the Mirror's LK take sparse FILL chunks? `userdata` went in one download on 2026-11-16; the
-  report doesn't say whether that run used `--no-fill`. After a refused write, Kiln offers "Try
-  again without FILL", which builds the zeros as RAW blocks (about 200 MB more to send).
+- ~~Does the Mirror's LK take sparse FILL chunks?~~ Yes (2026-11-16): the run used FILL (no
+  `--no-fill`), and both `system` (5 pieces) and `userdata` (1) flashed. "Try again without FILL"
+  (`--no-fill` in the harness) stays as the fallback for an LK that refuses them.
 - The LK's exact `max-download-size` (`system` took 5 pieces), and how long the first boot takes
   while `dex2oat` optimises S1 Kiosk.
 - Whether a fresh `userdata` finishes Android's setup by itself (`com.android.provision`).
