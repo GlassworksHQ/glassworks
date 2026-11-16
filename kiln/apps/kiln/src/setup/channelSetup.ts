@@ -54,6 +54,13 @@ export interface WifiSteps {
 export const joinNote = (ssid: string) =>
   `The panel closes its setup Wi-Fi and joins ${ssid}. Its screen shows how it goes. Put this phone back on your own Wi-Fi.`;
 
+/** How long after a join the page asks whether the panel is still on its setup Wi-Fi (the join didn't happen). */
+export const JOIN_CHECK_MS = 45_000;
+
+/** The panel answered [JOIN_CHECK_MS] after a join: its setup Wi-Fi is still up, so it didn't join. */
+export const stillOnHotspot = (ssid: string) =>
+  `The panel still has its setup Wi-Fi up, so it didn't join ${ssid}. Check the network and password, and try again.`;
+
 const NOT_AN_ADDRESS = 'That doesn\'t look like a web address (http://… or https://…).';
 
 export class ChannelSetup {
@@ -62,6 +69,7 @@ export class ChannelSetup {
   ip?: string;
   private channel?: SetupChannel;
   private haTimer?: ReturnType<typeof setInterval>;
+  private joinTimer?: ReturnType<typeof setTimeout>;
   /** Counts close()s: an open that close() overtook is closed, never kept or shown. */
   private gen = 0;
 
@@ -121,6 +129,7 @@ export class ChannelSetup {
   close(): void {
     this.gen++;
     clearInterval(this.haTimer);
+    clearTimeout(this.joinTimer);
     void this.channel?.close().catch(() => {});
     this.channel = undefined;
   }
@@ -191,8 +200,26 @@ export class ChannelSetup {
       if (e instanceof NotSent) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'This page lost the panel before it could send the network. Try again.' } }); return; }
       // Written, but no answer: the panel may have closed its hotspot as it joined
     }
-    this.close();
     this.d.show({ ...s, joining: { ssid, step: 'join' }, joinNote: joinNote(ssid) });
+    // The channel stays open: if the panel still answers a while later, its setup Wi-Fi never closed and the join
+    // didn't happen, and the page says so with Try again instead of "Joining…" forever (issue 418 verifier).
+    const g = this.gen;
+    clearTimeout(this.joinTimer);
+    this.joinTimer = setTimeout(() => void this.checkJoin(ssid, g), JOIN_CHECK_MS);
+  }
+
+  /** [JOIN_CHECK_MS] after a join: no answer is the expected way (the panel left), an answer means it didn't join. */
+  private async checkJoin(ssid: string, g: number): Promise<void> {
+    const waiting = () => {
+      const cur = this.d.phase();
+      return g === this.gen && this.d.here() && cur.phase === 'wifi' && cur.joining?.step === 'join' && cur.joining.ssid === ssid ? cur : undefined;
+    };
+    if (!waiting()) return;
+    const st = await this.channel?.getState().catch(() => undefined);
+    const cur = waiting();
+    if (!cur) return;
+    if (!st || st.online) { this.close(); return; } // gone (it is joining), or on a network after all
+    this.d.show({ ...cur, joinNote: undefined, joining: { ssid, step: 'err', error: stillOnHotspot(ssid) } });
   }
 
   /** Sign in: the tab opens inside the click, and is pointed at the panel's sign-in page once the address is saved. */

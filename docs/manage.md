@@ -51,8 +51,9 @@ too, in **Allow setup over the network**.
    a computer"). Type it on the page and press **Pair**. Only someone who can see the panel can pair.
 2. **Wi-Fi**, only on a panel that is on no network: the page reached it on the panel's own setup Wi-Fi
    (#197). Pick a network the panel sees and type its password. The panel closes its setup Wi-Fi and
-   joins; its own screen shows how it goes, since the page loses the panel there. A panel already on a
-   network skips this step, and refuses Wi-Fi details from the page.
+   joins; its own screen shows how it goes, since the page loses the panel there. If the page still reaches
+   the panel 45 seconds later, its setup Wi-Fi never closed and the join didn't start: the page says so, with
+   **Try again**. A panel already on a network skips this step, and refuses Wi-Fi details from the page.
 3. **Home Assistant.** The address the panel found, or type one, and sign in on the panel's sign-in page.
 4. **Radio.** What the Zigbee and Thread radio does, then what to do in Home Assistant for it.
 5. **Done.** The page ends the pairing. Reload it and it asks for a code again (once Home Assistant has the

@@ -165,7 +165,8 @@ How it behaves:
 - Wi-Fi (`wifi.scan`, `wifi.join`) comes first only when the panel says it is on no network
   (`state.online` false). The same card as the wizard's Wi-Fi step (`Wifi` in `steps.tsx`). The panel
   replies, then joins, which closes its setup Wi-Fi, so the page stays on "joining" and the panel's screen
-  gives the outcome. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
+  gives the outcome. The page keeps its channel and asks once more 45 s later (`JOIN_CHECK_MS`): an answer
+  means the panel's setup Wi-Fi is still up and the join didn't happen, so the page says so, with Try again. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
   as plain HTTP.
 - Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
   network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.
