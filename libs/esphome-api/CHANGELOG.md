@@ -5,6 +5,18 @@ What changed in each release of `dev.glassworks:esphome-api` on Maven Central. V
 cut from `libs/esphome-api/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
+## [Unreleased]
+
+### Fixed
+- **Home Assistant finds the Bluetooth proxy's flags where API 1.15 and later put them.** With
+  `ApiServer.bluetooth` set, `DeviceCapabilitiesResponse` now carries the `bluetooth_proxy` block with
+  the feature flags. HA still reads them from DeviceInfo too, so nothing changes today; this keeps the
+  proxy working once HA reads only the capabilities. The proxy's MAC address isn't sent yet (#246).
+- **The time zone still arrives when Home Assistant sends only `parsed_timezone`.** ESPHome 2026.9
+  deprecated the `timezone` string in `GetTimeResponse`. While HA sends the string, `onTimeZone` gets it
+  as before. An answer without it now gives the same POSIX rule rebuilt from the parsed zone, with
+  numeric names (`<+01>-1<+02>-2,M3.5.0/2,M10.5.0/3`).
+
 ## [0.1.1] - 2026-11-15
 
 Additions and fixes only: a store, server or app built against 0.1.0 works unchanged.

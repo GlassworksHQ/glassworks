@@ -12,7 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** The passive Bluetooth proxy on the wire (#121): DeviceInfo flags, the subscription, raw advertisements. */
+/** The passive Bluetooth proxy on the wire (#121): DeviceInfo and DeviceCapabilities flags, the subscription, raw advertisements. */
 class BluetoothProxyServerTest {
     private val identity = DeviceIdentity(
         name = "test-panel", friendlyName = "Test Panel", macAddress = "02:00:00:00:00:01",
@@ -63,11 +63,24 @@ class BluetoothProxyServerTest {
         }
     }
 
+    /** API 1.15+ clients read the flags from DeviceCapabilities' bluetooth_proxy block (#337). */
+    @Test fun deviceCapabilitiesCarryTheFeatureFlags() {
+        start()
+        PlainClient(server.localPort).use { c ->
+            c.send(Msg.DEVICE_CAPABILITIES_REQUEST)
+            val caps = c.await(Msg.DEVICE_CAPABILITIES_RESPONSE)
+            assertEquals(0b100001, ProtoMessage(caps.bytes(1)).uint32(1))
+            assertTrue("the voice block stays", caps.has(2))
+        }
+    }
+
     @Test fun noProxyNoFlagsAndSubscriptionsAreIgnored() {
         start(withProxy = false)
         PlainClient(server.localPort).use { c ->
             c.send(Msg.DEVICE_INFO_REQUEST)
             assertFalse(c.await(Msg.DEVICE_INFO_RESPONSE).has(15))
+            c.send(Msg.DEVICE_CAPABILITIES_REQUEST)
+            assertFalse(c.await(Msg.DEVICE_CAPABILITIES_RESPONSE).has(1))
             c.subscribe()
             assertFalse(server.sendBluetoothAdvertisements(listOf(advertisement(1))))
         }

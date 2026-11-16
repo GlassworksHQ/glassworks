@@ -39,5 +39,5 @@ tasks.named("test") { dependsOn("expedite") }
 // ParityTableTest reads the README's parity table, so a README edit reruns the tests.
 tasks.named<Test>("test") { inputs.file("README.md").withPropertyName("readme").withPathSensitivity(PathSensitivity.NONE) }
 
-// EspHomeKeepaliveTest and EspHomeActionsCameraTest run the real aioesphomeapi client when ESPHOME_PYTHON is
-// set (see the tests).
+// EspHomeKeepaliveTest, EspHomeActionsCameraTest, EspHomeHaEventTest and EspHomeCapsTimeTest run the real
+// aioesphomeapi client when ESPHOME_PYTHON is set (see the tests).
