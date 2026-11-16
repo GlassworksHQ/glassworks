@@ -459,12 +459,7 @@ class ManageServer(
     // ------------------------------------------------------------------ checks and cookies
 
     /** POSTs only: the form came from this page (its Origin is the panel's own address). */
-    private fun sameOrigin(req: HttpRequest): Boolean {
-        val origin = req.headers["origin"]
-        val hostHeader = req.headers["host"] ?: return false
-        if (origin == null) return req.headers["sec-fetch-site"] == "same-origin"
-        return origin.equals("http://$hostHeader", ignoreCase = true)
-    }
+    private fun sameOrigin(req: HttpRequest): Boolean = sameOrigin(req.headers)
 
     private fun csrfOk(req: HttpRequest, s: Session): Boolean {
         val sent = req.form["csrf"] ?: return false
@@ -539,6 +534,14 @@ class ManageServer(
                 else -> h
             }
             return name in own
+        }
+
+        /** The request came from a page on this panel: its `Origin` is the panel's own address (header names lowercase). */
+        fun sameOrigin(headers: Map<String, String>): Boolean {
+            val origin = headers["origin"]
+            val hostHeader = headers["host"] ?: return false
+            if (origin == null) return headers["sec-fetch-site"] == "same-origin"
+            return origin.equals("http://$hostHeader", ignoreCase = true)
         }
 
         /** Where to go after signing in: a path on this panel, never another site. */

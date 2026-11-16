@@ -27,6 +27,7 @@ kiosk|hide_sidebar|Boolean|true
 kiosk|idle_off_sec|Int|120
 kiosk|improv_auto|Boolean|true
 kiosk|improv_proximity_auth|Boolean|false
+kiosk|lan_setup_until|Long|0
 kiosk|manual_brightness|Float|-1.0
 kiosk|max_brightness|Float|1.0
 kiosk|mic_gain|Float|1.0

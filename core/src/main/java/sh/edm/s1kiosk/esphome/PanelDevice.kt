@@ -551,6 +551,11 @@ class PanelDevice(
             "improv_ble", "Start Wi-Fi setup (Bluetooth)", "mdi:bluetooth-settings", EntityCategory.CONFIG,
             disabledByDefault = true, press = { ui { sh.edm.s1kiosk.improv.ImprovController.startOnDemand("Home Assistant button") } },
         ),
+        // Pairing over the LAN closes once Home Assistant has added the panel; this opens it for a while (#34).
+        ButtonEntity(
+            "lan_setup", "Allow setup over the network", "mdi:lan-connect", EntityCategory.CONFIG,
+            press = { prefs.armLanSetup(); EspHomeLog.i("Pairing over the network re-armed from Home Assistant") },
+        ),
         SwitchEntity(
             "hide_ha_header", "Hide HA header", "mdi:page-layout-header", EntityCategory.CONFIG,
             disabledByDefault = true, get = { prefs.hideHeader },

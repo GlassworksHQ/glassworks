@@ -69,7 +69,9 @@ class SetupChannelTest {
             override fun screen(context: android.content.Context, host: dev.glassworks.pane.SetupHost) = throw UnsupportedOperationException()
         }
 
-        fun channel() = SetupChannel(this, listOf(step))
+        override fun armPairing(): String? { calls += "arm"; return null }
+
+        fun channel(mayChange: () -> Boolean = { true }) = SetupChannel(this, listOf(step), mayChange = mayChange)
     }
 
     @Test
@@ -349,5 +351,50 @@ class SetupChannelTest {
             if (System.currentTimeMillis() > until) throw AssertionError("timed out")
             Thread.sleep(10)
         }
+    }
+
+    /** Every request a client can send, by every name it has. */
+    private val everyOp = listOf(
+        """{"id":1,"op":"ha.set_url","url":"http://192.0.2.20:8123"}""", """{"id":2,"op":"set_ha","url":"http://192.0.2.20:8123"}""",
+        """{"id":3,"op":"radio.set_mode","mode":"zigbee_tcp"}""", """{"id":4,"op":"set_radio","mode":"zigbee_tcp"}""",
+        """{"id":5,"op":"radio.set_allow","allow":"any"}""", """{"id":6,"op":"set_radio_allow","allow":"any"}""",
+        """{"id":7,"op":"pairing.arm"}""",
+    )
+
+    @Test
+    fun withoutPairingOnlyTheStateAnswers() {
+        val fake = Fake(base)
+        val ch = fake.channel { false }
+        assertTrue(JSONObject(ch.handle("""{"id":0,"op":"state"}""").first).getBoolean("ok"))
+        for (line in everyOp) {
+            val (r, after) = ch.handle(line)
+            val o = JSONObject(r)
+            assertFalse(line, o.getBoolean("ok"))
+            assertEquals(line, SetupChannel.NOT_PAIRED, o.getString("error"))
+            assertNull(after)
+        }
+        assertEquals(emptyList<String>(), fake.calls)
+    }
+
+    @Test
+    fun overUsbEveryRequestRunsAsBefore() {
+        val fake = Fake(base)
+        val ch = fake.channel()
+        for (line in everyOp) assertTrue(line, JSONObject(ch.handle(line).first).getBoolean("ok"))
+        assertEquals(listOf("set_ha http://192.0.2.20:8123", "set_ha http://192.0.2.20:8123", "set_radio zigbee_tcp", "set_radio zigbee_tcp",
+            "set_radio_allow any", "set_radio_allow any", "arm"), fake.calls)
+    }
+
+    @Test
+    fun pairingArmAnswersWithTheStateOrWhyNot() {
+        val o = JSONObject(Fake(base).channel().handle("""{"id":9,"op":"pairing.arm"}""").first)
+        assertTrue(o.getBoolean("ok"))
+        assertTrue(o.has("state"))
+        val old = object : SetupChannel.Backend {
+            override fun state() = base
+            override fun setHa(url: String) = SetupChannel.HaChange()
+        }
+        val r = JSONObject(SetupChannel(old).handle("""{"id":9,"op":"pairing.arm"}""").first)
+        assertFalse(r.getBoolean("ok"))
     }
 }
