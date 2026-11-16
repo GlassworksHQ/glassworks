@@ -52,7 +52,7 @@ run Android in the first place was theirs. Thank you.
   [`mirror-android-2`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2)
   (2026-11-16: image 1 with a fully dark panel in sleep). In
   their words: "Ready-made system.img and userdata.sparse for the Lululemon Studio mirror (board
-  MIR63A0-00-P1, revision RevP21), so you can put Android on your mirror by flashing two files."
+  MIR63A0-00-P1, revision RevP21)."
   Kiln fetches it from their GitHub release through Refract, our download proxy, which passes it
   through without storing it. The project's code is MIT;
   the image's Android and kernel source keep their own licences, and its vendor files belong to

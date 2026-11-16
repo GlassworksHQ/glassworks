@@ -1,13 +1,14 @@
 # Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
 
-**Status (2026-11-16): flashed on a real Mirror once, end to end.** Kiln patches the Glass Panes
+**Status (2026-11-16): flashed on a real Mirror once, end to end, with image 1.** Image 2 (below) is
+checked offline only: its run on the unit, and its fully dark sleep, are still to do. Kiln patches the Glass Panes
 `system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
 root's first real flash (below) booted it, took the computer's adb key, and turned the screen with
 `ro.sf.hwrotation`. The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
 Mirror still waits on an app that runs on API 23.
 
-Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1`, and since
-2026-11-16 `mirror-android-2` (below) (Android 6.0.1,
+Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
+below), and since 2026-11-16 `mirror-android-2` (below, offline only, not yet on the unit) (Android 6.0.1,
 `userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
 `@glassworks/ext4` (#353), e2fsprogs 1.47.4.
 
