@@ -34,28 +34,40 @@ expects. Sources (**read**, 2026-11-16):
 | Phone | Check | Expects | Sheet when |
 |---|---|---|---|
 | iOS | `http://captive.apple.com/hotspot-detect.html` | a page saying `Success` | any other page, for example a 302 to the setup page |
-| Android | `http://connectivitycheck.gstatic.com/generate_204` (and `clients3.google.com`, `connectivitycheck.android.com`) | HTTP 204 | a 200 with content, or a 302 |
+| Android 10 | `http://connectivitycheck.gstatic.com/generate_204`, with the fallbacks `http://www.google.com/gen_204` and `http://play.googleapis.com/generate_204` (NetworkStack `res/values/config.xml`, lines 20–24) | HTTP 204 | a 200 with content, or a 302 |
 
 Both checks need two things on the hotspot:
 
 1. **DNS:** an answer for those names, pointing at the panel's address on the hotspot.
 2. **HTTP on port 80** at that address, answering the check with a redirect to `http://<address>:8099/setup`.
 
-What the phone gets today on Android 10's local-only hotspot (**read**, `IpServer`, `TetherController`; the
-address part is **verified**):
-- DHCP from Android's own server: an address in `192.168.43.x/24`, gateway and DNS `192.168.43.1`. The S1 run saw
-  `wlan0` take `192.168.43.x`.
-- No upstream: a local-only hotspot shares no internet, so DNS gets no useful answer, and nothing listens on port
-  80. So the phone decides there's no internet and shows no sheet. That matches the S1 run: the iPhone stayed
-  joined, used mobile data for everything else, and reached the page only by its address.
+What the phone gets today on Android 10's local-only hotspot:
+- An address from Android's own DHCP, with the panel's `wlan0` as gateway: the S1 run saw `wlan0` take
+  `192.168.43.x/24` (**verified**, 2026-11-16). What DNS server the DHCP hands out, and whether anything answers
+  on it, is **untested**: open question 1 is the read-only check.
+- No upstream: a local-only hotspot shares no internet, and nothing of ours listens on port 80. The S1 run fits
+  that: the iPhone stayed joined, used mobile data for everything else, reached the page only by its address,
+  and showed no sheet (**verified**).
+
+## What we tried
+
+1. **The S1 panel run of #418 on e7d2d49d** (2026-11-16, **verified**, by the root, with the maintainer's iPhone).
+   The hotspot started and showed its QR code. The iPhone, with 5G mobile data on, scanned it, joined, and reached
+   `http://<panel>:8099/setup` by the address on the screen. No sign-in sheet came up. The network was
+   `AndroidShare_NNNN`. `wlan0` (no `wlan1` or `ap0`) took a `192.168.43.x/24` address. The commands are in the
+   #197 panel plan; the logs aren't quoted here because they carry the network's name and key.
+2. **Reading AOSP** (2026-11-16, **read**): `NetworkMonitor` and NetworkStack's `config.xml` for the checks;
+   `WifiApConfigStore` for the generated name; `WifiServiceImpl` and `WifiApConfigStore` at android16-release for
+   the Android 16 call, after the #420 verifier corrected the first reading.
+3. **Android's reference** for `startLocalOnlyHotspotWithConfiguration` (2026-11-16, **read**): public, API 36,
+   with its permissions. It says nothing about which fields an app's configuration keeps; the source above does.
 
 ## Per kind of device
 
 | Device | Captive portal | Named `Glassworks-XXXX` |
 |---|---|---|
 | **S1** (root) | **Possible**: root redirects UDP 53 and TCP 80 on `wlan0` to ports the app listens on | **Possible, untested**: a resource overlay of Android's default name, shipped with the root side |
-| **Generic Android 8–15** (no root) | **No**: an app can't listen below port 1024 or change the DHCP's DNS | **No**: the public API takes no name |
-| **Generic Android 16+** (no root) | **No**, as above | **Yes**: `startLocalOnlyHotspotWithConfiguration` (public, API 36) takes our `SoftApConfiguration` |
+| **Generic Android 8+** (no root) | **No**: an app can't listen below port 1024 or change the DHCP's DNS | **No**: no API an app may call keeps a name it gives (Android 16's public one keeps only band and channel, below) |
 | **Mirror** (Android 6.0, our image) | **Possible with the image**: the same redirect as the S1, from an init script in our image | **Already**: the hidden `setWifiApEnabled` takes our own config (`HiddenApHotspot`, #413) |
 
 ### S1: the captive portal (read, untested)
@@ -83,9 +95,8 @@ address part is **verified**):
 - Android 10 makes a new local-only network on every start: `<name>_<4 random digits>`, with a random WPA2 key
   (**read**, `WifiApConfigStore.generateLocalOnlyHotspotConfig`). `<name>` is the framework string
   `wifi_localhotspot_configure_ssid_default` ("AndroidShare"). The S1 run saw `AndroidShare_NNNN`.
-- No public or hidden call takes our own name for a local-only hotspot on Android 10. From Android 11 a system
-  API does (`NETWORK_SETTINGS` or `NETWORK_SETUP_WIZARD`, signature permissions an app doesn't get), and from
-  Android 16 a public one does (below). Neither reaches the S1's Android 10.
+- No public or hidden call takes our own name for a local-only hotspot on Android 10. Newer Android has ways for
+  system code only (below, under Generic Android). None reaches the S1's Android 10.
 - With root: a static resource overlay of that string ("Glassworks") would give `Glassworks_NNNN`. On Android 10,
   an overlay of a framework string that isn't declared overlayable must sit on a system partition. The boot
   patch's Magisk side can add it without writing `system`. That is root-side work too (rule 5), and it changes the
@@ -97,14 +108,21 @@ address part is **verified**):
 
 - **Captive portal:** not possible without root: the app can't take ports 53 and 80, nor change the DNS Android's
   DHCP gives out.
-- **The name, Android 8 to 15:** not possible. The hotspot keeps Android's (or the maker's) name.
-- **The name, Android 16+:** possible. `WifiManager.startLocalOnlyHotspotWithConfiguration(SoftApConfiguration,
-  Executor, LocalOnlyHotspotCallback)`, added in API 36, is a public method that needs `CHANGE_WIFI_STATE` and
-  `NEARBY_WIFI_DEVICES`, the permissions the hotspot already asks for
-  ([`WifiManager` reference](https://developer.android.com/reference/android/net/wifi/WifiManager#startLocalOnlyHotspotWithConfiguration(android.net.wifi.SoftApConfiguration,%20java.util.concurrent.Executor,%20android.net.wifi.WifiManager.LocalOnlyHotspotCallback)),
-  read 2026-11-16; CodeRabbit on #420). With a `SoftApConfiguration` named `Glassworks-XXXX` and our own WPA2 key,
-  the generic app on Android 16 can name it. Which fields Android honours isn't stated there (**untested**). This
-  is a small change behind a `Platform` query, and gets its own PR.
+- **The name:** not possible on any version, for an app without system priority. In detail (**read**, 2026-11-16;
+  corrected after the #420 verifier):
+  - **Android 13 to 15:** the overload of `startLocalOnlyHotspot` that takes a `SoftApConfiguration` is
+    `@SystemApi`, with `anyOf = {NETWORK_SETTINGS, NETWORK_SETUP_WIZARD, NEARBY_WIFI_DEVICES}`. The permission isn't
+    what stops an app: the hidden-API rules keep a `@SystemApi` out of an ordinary app's reach.
+  - **Android 16:** `WifiManager.startLocalOnlyHotspotWithConfiguration(SoftApConfiguration, Executor,
+    LocalOnlyHotspotCallback)` is public (API 36, `@FlaggedApi(FLAG_PUBLIC_BANDS_FOR_LOHS)`, `CHANGE_WIFI_STATE` and
+    `NEARBY_WIFI_DEVICES`;
+    [`WifiManager` reference](https://developer.android.com/reference/android/net/wifi/WifiManager#startLocalOnlyHotspotWithConfiguration(android.net.wifi.SoftApConfiguration,%20java.util.concurrent.Executor,%20android.net.wifi.WifiManager.LocalOnlyHotspotCallback))).
+    But it doesn't keep the name. `LohsSoftApTracker.startForFirstRequestLocked` sets
+    `mIsExclusive = customConfig != null && priority >= PRIORITY_SYSTEM` (`WifiServiceImpl.java`, lines 2934–2936,
+    android16-release). A request that isn't exclusive gets `WifiApConfigStore.generateLocalOnlyHotspotConfig`
+    (`WifiApConfigStore.java`, lines 502–570): only the bands and channels carry over, with a random passphrase
+    and the SSID `AndroidShare_NNNN`. For an app it is a band and channel API. CodeRabbit's first reading on #420,
+    which this note briefly followed, was wrong.
 
 In every case without the portal, the phone reaches the page through the QR code and the address, as on the S1
 today.
@@ -121,7 +139,22 @@ today.
 | | S1 | Generic | Mirror |
 |---|---|---|---|
 | Captive portal | Root redirect plus a DNS responder in the app: its own PR, needs a panel run | Not possible | With its image |
-| `Glassworks` name | Root-side resource overlay: possible, untested, its own PR | Android 16+: the public `startLocalOnlyHotspotWithConfiguration`, its own PR. Below 16: not possible | Done |
+| `Glassworks` name | Root-side resource overlay: possible, untested, its own PR | Not possible (Android 16's public call keeps only band and channel for an app) | Done |
+
+## How to reproduce
+
+Read-only on the panel, with a setup hotspot up (the #197 panel plan says how to start one from the setup screen;
+it changes no setting, and **Close it** ends it):
+
+```sh
+adb shell dumpsys wifi | grep -iE 'softap|localonly' | head      # the hotspot is up, and its band
+adb shell ls /sys/class/net                                      # which interface: wlan0 on the S1
+adb shell ip -4 addr show wlan0                                  # its 192.168.43.x/24 address
+adb shell ss -lunp 2>/dev/null | grep ':53 '                     # what (if anything) answers DNS (open question 1)
+```
+
+Then join from a phone with mobile data on, and note whether a sign-in sheet comes up. Nothing here writes to the
+panel. Don't copy the network's name or key into notes: they are on the panel's screen.
 
 ## Open questions
 
@@ -129,6 +162,7 @@ today.
    `PREROUTING` redirect win over it? (Check `ss -lunp` and `iptables -t nat -S` on the panel while the hotspot
    runs. Read-only.)
 2. Does the S1's radio scan while it is the access point? The S1 run's list was empty, but the radio was off then.
-   If it can't scan, the panel should scan once just before it starts the hotspot and serve that list.
+   #418 now scans just before it starts the hotspot and serves that list, so this matters less; the retest
+   still notes it.
 3. Does an iPhone show the sheet for a network with no internet, once the check is answered with a redirect? The
    check says it does (**read**). Untested here.
