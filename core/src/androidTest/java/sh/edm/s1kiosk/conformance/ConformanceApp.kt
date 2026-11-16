@@ -36,6 +36,7 @@ import sh.edm.s1kiosk.PaneOverlay
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.esphome.DeviceHost
+import sh.edm.s1kiosk.update.ReleaseLine
 
 /**
  * An app on the core with nothing real but Android (#23): a fake frame, a fake engine and one fake pane of
@@ -44,7 +45,8 @@ import sh.edm.s1kiosk.esphome.DeviceHost
  */
 class ConformanceApp : Application(), GlassworksApp {
     override val glassworks: GlassworksRuntime by lazy {
-        GlassworksRuntime(FakeFrame, AppBuild("1.0.0", 10000, debug = true, product = "Conformance"), NoEngine, FakeParts())
+        GlassworksRuntime(FakeFrame, AppBuild("1.0.0", 10000, debug = true, product = "Conformance"), NoEngine, FakeParts(),
+            releases = ReleaseLine("conformance", "conformance-", plainTags = false) { "conformance-${it.id}" })
     }
 }
 
