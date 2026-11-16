@@ -44,7 +44,22 @@ class PlatformTest {
         Triple("canInstallWithoutUserAction", 31) { it.canInstallWithoutUserAction },
         Triple("hasApplicationExitInfo", 30) { it.hasApplicationExitInfo },
         Triple("foregroundServiceTypesNeedTheirPermission", 34) { it.foregroundServiceTypesNeedTheirPermission },
+        Triple("hasSoftApConfiguration", 30) { it.hasSoftApConfiguration },
     )
+
+    @Test
+    fun `the setup hotspot - hidden API below Android 8, then local-only, and the permission each needs`() {
+        for (level in 21..40) {
+            assertEquals("kind at API $level", if (level >= 26) HotspotKind.LOCAL_ONLY else HotspotKind.HIDDEN_AP, PlatformApi(level).hotspotKind)
+            val permission = when {
+                level >= 33 -> android.Manifest.permission.NEARBY_WIFI_DEVICES
+                level >= 26 -> android.Manifest.permission.ACCESS_FINE_LOCATION
+                else -> null
+            }
+            assertEquals("permission at API $level", permission, PlatformApi(level).hotspotPermission)
+            assertEquals("location on at API $level", level in 26..32, PlatformApi(level).hotspotNeedsLocationOn)
+        }
+    }
 
     @Test
     fun `each query flips at its boundary and nowhere else`() {

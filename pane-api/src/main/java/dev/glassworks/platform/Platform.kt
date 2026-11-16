@@ -4,6 +4,7 @@
 
 package dev.glassworks.platform
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.app.Notification
@@ -118,6 +119,30 @@ open class PlatformApi(
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 
     /**
+     * How an ordinary app opens a Wi-Fi hotspot for setup (#197). From Android 8, the public
+     * `WifiManager.startLocalOnlyHotspot`. Below it there is none, and the hidden `setWifiApEnabled`
+     * (reflection, no hidden-API blocks before Android 9) is the way.
+     */
+    val hotspotKind: HotspotKind get() = if (apiLevel >= 26) HotspotKind.LOCAL_ONLY else HotspotKind.HIDDEN_AP
+
+    /**
+     * The runtime permission a setup hotspot needs, or null for none. From Android 13 (for apps targeting
+     * it), `NEARBY_WIFI_DEVICES`. Android 8 to 12 ask for fine location instead. The hidden API below
+     * Android 8 needs only install-time permissions.
+     */
+    val hotspotPermission: String? get() = when {
+        apiLevel >= 33 -> Manifest.permission.NEARBY_WIFI_DEVICES
+        apiLevel >= 26 -> Manifest.permission.ACCESS_FINE_LOCATION
+        else -> null
+    }
+
+    /** A local-only hotspot refuses to start while location is off (Android 8 to 12). From 13 the nearby permission replaces it. */
+    val hotspotNeedsLocationOn: Boolean get() = apiLevel in 26..32
+
+    /** A hotspot reservation describes its network as a `SoftApConfiguration` (Android 11). Below it, a `WifiConfiguration`. */
+    val hasSoftApConfiguration: Boolean get() = apiLevel >= 30
+
+    /**
      * The flag to add to a `PendingIntent` that the system must be able to fill in (the package
      * installer adds the session result). From Android 12 the mutability must be stated; below it
      * the flag does not exist and every PendingIntent is mutable.
@@ -206,6 +231,15 @@ open class PlatformApi(
     fun intentExtra(intent: Intent, name: String): Intent? =
         if (apiLevel >= 33) intent.getParcelableExtra(name, Intent::class.java)
         else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(name)
+}
+
+/** The ways an ordinary app opens a Wi-Fi hotspot ([PlatformApi.hotspotKind]). */
+enum class HotspotKind {
+    /** `WifiManager.startLocalOnlyHotspot`: Android names the network and picks its key. */
+    LOCAL_ONLY,
+
+    /** The hidden `WifiManager.setWifiApEnabled`: the app names the network, and must put back what it changed. */
+    HIDDEN_AP,
 }
 
 /** The queries for the Android this app runs on. */
