@@ -187,7 +187,7 @@ class SetupChannel(
         val password = req.optString("password", "")
         val why = when {
             ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name has 1 to 32 characters."
-            !validPassword(password) -> "A Wi-Fi password has at most 63 characters."
+            !validPassword(password) -> "A Wi-Fi password has at most 63 characters, or is a 64-digit hex key."
             backend.state().online -> ON_A_NETWORK
             else -> null
         }
@@ -269,7 +269,8 @@ class SetupChannel(
          * don't (CodeRabbit on #418).
          */
         fun validPassword(p: String): Boolean =
-            p.length <= 63 || (p.length == 64 && p.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' })
+            // WPA counts bytes: "é" is one character and two bytes (CodeRabbit on #416).
+            p.toByteArray(Charsets.UTF_8).size <= 63 || (p.length == 64 && p.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' })
         const val POLL_MS = 1_500L
         /** Longer lines are dropped (requests are tiny). */
         const val MAX_LINE = 16 * 1024
