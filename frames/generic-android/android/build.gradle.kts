@@ -100,7 +100,7 @@ android {
 androidComponents {
     beforeVariants(selector().withBuildType("legacy")) { v ->
         v.minSdk = 23
-        v.enableUnitTest = false
+        (v as com.android.build.api.variant.HasHostTestsBuilder).hostTests[com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE]?.enable = false
     }
 }
 

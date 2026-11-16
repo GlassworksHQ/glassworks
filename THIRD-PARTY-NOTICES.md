@@ -73,6 +73,24 @@ build if one is missing here.
   `LICENSES/Classpath-exception-2.0.txt`): the exception lets the app link it and keep its own licence.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
   (release 2.1.5). The current builds (minSdk 26) set it up too, but call none of it.
+- **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
+  build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
+  - `androidx.annotation:annotation-experimental:1.5.1`
+  - `androidx.annotation:annotation-jvm:1.9.1`
+  - `androidx.annotation:annotation:1.9.1`
+  - `androidx.collection:collection-jvm:1.5.0`
+  - `androidx.collection:collection:1.5.0`
+  - `androidx.concurrent:concurrent-futures:1.1.0`
+  - `androidx.core:core:1.17.0`
+  - `androidx.lifecycle:lifecycle-common-jvm:2.9.3`
+  - `androidx.lifecycle:lifecycle-common:2.9.3`
+  - `androidx.lifecycle:lifecycle-process:2.9.3`
+  - `androidx.lifecycle:lifecycle-runtime-android:2.9.3`
+  - `androidx.lifecycle:lifecycle-runtime:2.9.3`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1`
 
 ### Libraries the app uses directly
 
