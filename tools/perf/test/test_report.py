@@ -579,6 +579,11 @@ class DialogRuns(unittest.TestCase):
         self.assertEqual(R.task_phrase("dialog", {"dialog_runs": [ok, ok]}), "a more-info dialog takes 1.4 s to open")
         self.assertEqual(R.task_phrase("dialog", s_), "a more-info dialog didn't open fully in 1 of 3 run(s)")
         self.assertEqual(R.task_phrase("dialog", {}), "the more-info dialog wasn't measured")
+        # A view that timed out failed them, measured: never "wasn't measured" (#410's CodeRabbit).
+        self.assertEqual(R.task_phrase("dialog", {"dialog_runs": [{"timed_out": True}]}),
+                         "the view didn't get to its more-info dialogs in 1 of 1 run(s)")
+        self.assertEqual(R.task_phrase("dialog", {"dialog_runs": [ok, {"timed_out": True}]}),
+                         "a more-info dialog didn't open fully in 1 of 2 run(s)")
         self.assertEqual(R.dialog_cell({}, {}), "n/a (before Clarity v3)")
 
 

@@ -581,7 +581,8 @@ test("dialogTimes: the timing points after the tile's event, the open animation'
   assert.equal(d.open_ms, r1(stamps[3] - t0));          // the first frame of the open: the response
   assert.equal(d.shown_ms, r1(stamps[21] - t0));
   assert.equal(d.graph_ms, r1(stamps[5] - t0));
-  assert.equal(d.settled_ms, d.shown_ms);
+  assert.equal(d.settled_ms, stamps[21] - t0);         // graded: unrounded
+  assert.equal(r1(d.settled_ms), d.shown_ms);
   // The animation runs from the frame it started in to the frame it finished in: 18 intervals.
   assert.equal(d.anim.n, 18);
   assert.equal(d.anim_intervals.length, 18);
@@ -604,6 +605,12 @@ test("dialogTimes: a dialog that never opened, one whose graph never came, and a
   const early = S.dialogTimes({ t0: 100, frames: [99.6, 116.3], opened: 99.6, shown: 116.3, graph: null, settled: 116.3,
                                 c0: null, closed: null, closeFrames: [] }, 1000 / 60);
   assert.equal(early.open_ms, 0);
+});
+
+test("dialogTimes: the graded settled time isn't rounded under a bar (#410's CodeRabbit)", () => {
+  const d = S.dialogTimes({ t0: 0, frames: [2000.04], opened: 2000.04, shown: 2000.04, graph: null, settled: 2000.04,
+                            c0: null, closed: null, closeFrames: [] }, 1000 / 60);
+  assert.equal(d.settled_ms, 2000.04);                   // over fluid's 2000 ms; rounded it read 2000
 });
 
 test("missedRefreshes: each frame of k refreshes missed k - 1", () => {

@@ -345,12 +345,21 @@ class MoreInfoDialog(unittest.TestCase):
         self.assertIn("more-info dialogs", n["good"])                                # the best page's are good: quick
 
     def test_dialogs_that_dont_open_fully(self):
-        t = {"dialog_runs": [{"n": 3, "failed": 1, "settled_ms": None}] * 2 + [{"n": 3, "failed": 0, "settled_ms": 900.0}],
-             "dialog_settled_ms": {"median": 900.0, "n": 1}}
+        """From the failing runs only, as the grade's median of per-run levels (#410's CodeRabbit)."""
+        ok, fail = {"n": 3, "failed": 0, "settled_ms": 320.0}, {"n": 3, "failed": 1, "settled_ms": None}
+        late = lambda ms: {"n": 3, "failed": 0, "settled_ms": ms}  # noqa: E731
+        t = {"dialog_runs": [fail, fail, ok]}
         self.assertEqual(N._limit("dialog", t), (10.0, "doesn't open a more-info dialog fully"))
-        t["dialog_runs"] = t["dialog_runs"][1:] + [{"n": 3, "failed": 0, "settled_ms": 2400.0}]
-        t["dialog_settled_ms"] = {"median": 2400.0, "n": 2}
-        self.assertEqual(N._limit("dialog", t), (1.2, "takes 2.4 s to open a more-info dialog"))
+        # Two runs, one fast and one failed: the median level is slow, and the fast one isn't quoted.
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [ok, fail]}), (10.0, "doesn't open a more-info dialog fully"))
+        # 320 ms, 2.5 s and a failure: slow; the late run's time, not the 1.4 s of all settled ones.
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [ok, late(2500.0), late(2600.0), fail]}),
+                         (1.275, "takes 2.5 s to open a more-info dialog"))
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [ok, late(2400.0), late(2400.0)]}),
+                         (1.2, "takes 2.4 s to open a more-info dialog"))
+        # A view that never got to its dialogs fails them outright.
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [{"timed_out": True}]}), (10.0, "doesn't open a more-info dialog fully"))
+        self.assertIsNone(N._limit("dialog", {"dialog_runs": [ok, ok]}))
         self.assertIsNone(N._limit("dialog", {}))
 
 

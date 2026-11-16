@@ -140,15 +140,18 @@ def _limit(task, t):
         # Only a number that fails its bar: a passing one would read as a strength.
         return _camera_limit(t)
     if task == "dialog":
-        # The graded runs' level is the median of each run's: when most runs had a dialog that never
-        # opened fully, that is the limit, else the median time the slowest one took.
-        runs = [r for r in t.get("dialog_runs") or [] if not r.get("timed_out")]
-        if not runs:
+        # From the runs whose level fails (the grade takes the median of per-run levels; #410's
+        # CodeRabbit): a run with a dialog that never settled, or a view that never got to them, fails
+        # outright; one that settled late, by its time. Whichever failing runs are more is quoted (a
+        # tie says the outright failure), the time as the median of the late runs only.
+        failing = [r for r in t.get("dialog_runs") or [] if G.dialog_level(r) == G.BELOW]
+        if not failing:
             return None
-        if sum(1 for r in runs if r.get("failed")) * 2 > len(runs):
+        late = [r["settled_ms"] for r in failing if not r.get("timed_out") and not r.get("failed") and r.get("settled_ms") is not None]
+        if len(failing) - len(late) >= len(late):
             return 10.0, "doesn't open a more-info dialog fully"
-        v = _med(t.get("dialog_settled_ms"))
-        return (v / DIALOG_MS, f"takes {_time(v)} to open a more-info dialog") if v is not None else None
+        v = statistics.median(late)
+        return v / DIALOG_MS, f"takes {_time(v)} to open a more-info dialog"
     return None
 
 

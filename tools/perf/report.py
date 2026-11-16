@@ -982,11 +982,17 @@ def task_phrase(task, s_):
             return "the blocking after the view is drawn wasn't measured"
         return f"the main thread is blocked for {med('blocking_ms') / 1000:.1f} s after the view is drawn"
     if task == "dialog":
-        runs = [r for r in (s_ or {}).get("dialog_runs") or [] if not r.get("timed_out")]
+        # A view that timed out before its dialogs failed them, measured (timed_out), as a dialog that
+        # never settled did: neither is "not measured" (#410's CodeRabbit).
+        runs = (s_ or {}).get("dialog_runs") or []
         if not runs:
             return "the more-info dialog wasn't measured"
-        if any(r.get("failed") for r in runs):
-            return f"a more-info dialog didn't open fully in {sum(1 for r in runs if r.get('failed'))} of {len(runs)} run(s)"
+        late = sum(1 for r in runs if r.get("timed_out"))
+        if late == len(runs):
+            return f"the view didn't get to its more-info dialogs in {late} of {len(runs)} run(s)"
+        failed = sum(1 for r in runs if r.get("failed") or r.get("timed_out"))
+        if failed:
+            return f"a more-info dialog didn't open fully in {failed} of {len(runs)} run(s)"
         return f"a more-info dialog takes {statistics.median(r['settled_ms'] for r in runs) / 1000:.1f} s to open"
     if task != "load":
         raise ValueError(f"no words for task {task!r}")

@@ -463,7 +463,8 @@
       open_ms: after(d.opened, d.t0),
       shown_ms: after(d.shown, d.t0),
       graph_ms: after(d.graph, d.t0),
-      settled_ms: after(d.settled, d.t0),
+      // Graded: unrounded, so rounding can't carry it under a bar (2000.04 ms isn't fluid; #410's CodeRabbit).
+      settled_ms: d.settled === null || d.settled === undefined ? null : Math.max(0, d.settled - d.t0),
       anim: frameStats(anim, vsyncMs),
       anim_intervals: anim.map(r1),
       dropped: missedRefreshes(anim, vsyncMs),
