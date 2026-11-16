@@ -185,7 +185,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   const ours = o.app ?? GLASSWORKS;
   const r = new Steps(p, o.onStep);
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
-  r.step('Checking the Mirror started Glassworks');
+  r.step(`Checking the Mirror started ${ours.name}`);
   const fp = (await r.run('getprop ro.build.fingerprint')).trim();
   if (fp !== GLASS_PANES.fingerprint) throw new Error(`the Mirror runs ${fp || 'something unknown'}, not the image Kiln wrote`);
   const app = await kioskVersion(p, undefined, ours);

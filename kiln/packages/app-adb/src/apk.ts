@@ -187,7 +187,7 @@ export type AxmlValue = string | number | boolean | { type: number; data: number
 export interface AxmlElement { name: string; attrs: Record<string, AxmlValue>; children: AxmlElement[] }
 
 /** Framework attributes read by resource id (android.R.attr), as Android reads them. */
-const ATTR_BY_ID: Record<number, string> = { 0x01010003: 'name', 0x0101000e: 'enabled', 0x01010026: 'mimeType', 0x01010027: 'scheme', 0x01010202: 'targetActivity' };
+const ATTR_BY_ID: Record<number, string> = { 0x01010003: 'name', 0x0101000e: 'enabled', 0x01010026: 'mimeType', 0x01010027: 'scheme', 0x01010202: 'targetActivity', 0x01010271: 'maxSdkVersion' };
 
 /** Binary XML as a tree. An element left open at the end (no end event) still counts. */
 export function axmlTree(xml: Uint8Array): AxmlElement[] {

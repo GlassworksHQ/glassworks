@@ -103,7 +103,7 @@ describe('the test install', () => {
   it('a file that isn\'t Glassworks is named and blocks Install; the inputs stay editable on Checks', async () => {
     const s = await mirrorDemo('pick-wrong', true);
     expect(s.state.apk).toMatchObject({ package: 'com.nimrod.mirrorkiosk', error: expect.stringMatching(/not Glassworks/) });
-    // a build whose home screen is off (the first real flash, 2026-11-16): refused at the picker, before any write
+    // a build with no home screen (the first real flash, 2026-11-16, had it off): refused at the picker, before any write
     await s.pickApk('kiosk-legacy-test.apk', fakeMirrorApk({ home: 'none' }));
     expect(s.state.apk).toMatchObject({ package: GLASSWORKS.package, error: expect.stringMatching(/can't be the Mirror's home screen: it has no home screen.*pick the legacy build of Glassworks for generic Android$/) });
     expect(s.apkBytes()).toBeUndefined();
