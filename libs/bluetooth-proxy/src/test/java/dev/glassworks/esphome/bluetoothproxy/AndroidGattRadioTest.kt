@@ -50,6 +50,11 @@ class AndroidGattRadioTest {
     @Test fun addressesAsAndroidWritesThem() {
         assertEquals("02:C0:FF:EE:00:01", formatAddress(0x02C0FFEE0001L))
         assertEquals(0x02C0FFEE0001L, parseAddress(formatAddress(0x02C0FFEE0001L)))
+        val was = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("ar-EG"))
+            assertEquals("Western digits in any locale, as getRemoteDevice wants", "02:C0:FF:EE:00:01", formatAddress(0x02C0FFEE0001L))
+        } finally { java.util.Locale.setDefault(was) }
     }
 
     @Test fun handlesAreAndroidsInstanceIds() {
