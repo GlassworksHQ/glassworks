@@ -196,6 +196,62 @@ jobs:
           working-directory: ${{ env.GRADLE_ROOT }}
           script: ./gradlew --no-daemon :esphome-api-android:connectedDebugAndroidTest :improv:connectedDebugAndroidTest
 
+  # The legacy build's floor (#198): no new call above API 23 in the Glassworks modules. The report lowers minSdk to
+  # 23 for this run only (tools/legacy/api23-lint.gradle) and fails on a call tools/legacy/api23-baseline.txt doesn't
+  # list. The libraries are minSdk 23 already (libs-api23); this covers the core, the pane API, the panes and the
+  # legacy engine. docs/research/legacy-engine.md has the table.
+  api23:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Changed?
+        id: changed
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        # Fails closed like libs-publish: without a base commit, or when git diff fails, it runs.
+        run: |
+          paths="core pane-api panes engines frames libs testing build.gradle.kts settings.gradle.kts gradle.properties gradle
+            tools/legacy .github/workflows/pr.yml"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No base commit to compare with ($BASE); running the report."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
+            echo "git diff failed; running the report."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$changed" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Android code changed; skipping the API 23 report."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        if: steps.changed.outputs.run == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        if: steps.changed.outputs.run == 'true'
+        with:
+          packages: platform-tools
+      - name: Android SDK platform
+        if: steps.changed.outputs.run == 'true'
+        run: sdkmanager --install "platforms;android-37.2"
+      - name: No new call above API 23
+        if: steps.changed.outputs.run == 'true'
+        run: |
+          python3 tools/legacy/api23-report.py --check tools/legacy/api23-baseline.txt
+          {
+            echo "### Calls above API 23 (the legacy build's floor, #198)"
+            python3 tools/legacy/api23-report.py --no-gradle | sed -n '1,/^$/p'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   libs-publish:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -453,6 +509,8 @@ jobs:
         run: python3 tools/perf/test/parallel.py --set slow
       - name: APK size tool
         run: python3 -m unittest discover -s tools/size/test -v
+      - name: API 23 report tool
+        run: python3 -m unittest discover -s tools/legacy/test -v
       - name: Boot generator targets and layout
         run: python3 -m unittest discover -s branding/boot/test -v
       - name: Docs links
