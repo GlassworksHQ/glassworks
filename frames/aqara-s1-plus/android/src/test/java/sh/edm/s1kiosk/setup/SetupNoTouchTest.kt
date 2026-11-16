@@ -41,7 +41,16 @@ class SetupNoTouchTest {
         else -> emptyList()
     }
 
-    private fun taps(s: SetupOverlay) = shown(s).filter { it.second }.map { it.first }.filter { it.isNotBlank() }
+    /**
+     * Every visible view that takes a tap, by its text: a button, and also a row whose texts sit in children (the
+     * rail's rows are such rows).
+     */
+    private fun taps(v: View): List<String> = when {
+        !v.isShown -> emptyList()
+        v.hasOnClickListeners() -> listOf(shown(v).joinToString(" ") { it.first }.ifBlank { v.javaClass.simpleName })
+        v is ViewGroup -> (0 until v.childCount).flatMap { taps(v.getChildAt(it)) }
+        else -> emptyList()
+    }
 
     @Test fun everyStepPointsAtTheSetupPageAndNothingTakesATap() {
         for (step in listOf(SetupFlow.HA, SetupFlow.PANES, "radio")) {
@@ -49,7 +58,7 @@ class SetupNoTouchTest {
             val texts = shown(s).map { it.first }
             assertTrue("$step: $texts", "Scan to set it up." in texts)
             assertTrue("$step: $texts", texts.any { "http://$ip:8099/setup" in it })
-            assertEquals("$step: nothing to tap", emptyList<String>(), taps(s).filter { it !in RAIL })
+            assertEquals("$step: nothing to tap", emptyList<String>(), taps(s))
         }
     }
 
@@ -57,7 +66,7 @@ class SetupNoTouchTest {
         val s = screen(SetupFlow.WIFI, Input.NONE, wifi = offline, panelIp = null)
         val texts = shown(s).map { it.first }
         assertTrue(texts.toString(), "Waiting for Wi-Fi." in texts)
-        assertEquals(emptyList<String>(), taps(s).filter { it !in RAIL })
+        assertEquals(emptyList<String>(), taps(s))
     }
 
     @Test fun signInKeepsItsPhoneCodeWithoutTheOnPanelWay() {
@@ -70,7 +79,7 @@ class SetupNoTouchTest {
     @Test fun signInDoneHasNoContinueToTap() {
         val s = screen(SetupFlow.SIGNIN, Input.NONE, done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN))
         assertTrue(shown(s).map { it.first }.toString(), "Signed in." in shown(s).map { it.first })
-        assertEquals(emptyList<String>(), taps(s).filter { it !in RAIL })
+        assertEquals(emptyList<String>(), taps(s))
     }
 
     @Test fun aTouchFrameKeepsItsButtons() {
@@ -78,8 +87,4 @@ class SetupNoTouchTest {
         assertTrue(taps.toString(), "Skip" in taps)
     }
 
-    private companion object {
-        /** The rail's rows: they only answer in a preview, which a frame without touch never opens. */
-        val RAIL = setOf("Wi-Fi", "Add it", "Sign in", "Choose", "Radio", "Home Assistant", "Panes", "Done")
-    }
 }

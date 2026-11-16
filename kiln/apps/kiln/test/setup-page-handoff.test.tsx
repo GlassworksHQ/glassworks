@@ -52,8 +52,16 @@ describe('the hand-off to the panel\'s setup page', () => {
 
   it('an app without it (pairing.arm unknown) gets no hand-off', async () => {
     const s = demoSession('radio');
-    await toDone(s, (x) => { steps(x).channel!.armPairing = () => Promise.reject(new Refused('Unknown request \'pairing.arm\'.')); });
-    await new Promise((r) => setTimeout(r, 50));
+    let asked = 0;
+    let closed = 0;
+    await toDone(s, (x) => {
+      const c = steps(x).channel!;
+      c.armPairing = () => { asked++; return Promise.reject(new Refused('Unknown request \'pairing.arm\'.')); };
+      const close = c.close.bind(c);
+      c.close = () => { closed++; return close(); };
+    });
+    // the hand-off has run to its end: it asked, and let the channel go
+    await vi.waitFor(() => expect([asked, closed]).toEqual([1, 1]));
     expect(s.store.state.done?.title).toBe('Done.');
     expect(s.store.state.done?.setupPage).toBeUndefined();
     s.close();
@@ -101,6 +109,23 @@ describe('the hand-off to the panel\'s setup page', () => {
     await download;
     expect(s.store.state.done?.backup?.error).toMatch(/the stored backup is gone/);
     expect(s.store.state.done?.setupPage).toBe('http://192.0.2.50:8099/setup');
+    s.close();
+  });
+
+  it('a panel without an address on the network gets no hand-off, and isn\'t asked', async () => {
+    const s = demoSession('wifi-new'); // the simulated panel isn't on Wi-Fi
+    let asked = 0;
+    let closed = 0;
+    await toDone(s, (x) => {
+      const c = steps(x).channel!;
+      const arm = c.armPairing.bind(c);
+      c.armPairing = () => { asked++; return arm(); };
+      const close = c.close.bind(c);
+      c.close = () => { closed++; return close(); };
+    });
+    await vi.waitFor(() => expect(closed).toBe(1));
+    expect(asked).toBe(0);
+    expect(s.store.state.done?.setupPage).toBeUndefined();
     s.close();
   });
 
