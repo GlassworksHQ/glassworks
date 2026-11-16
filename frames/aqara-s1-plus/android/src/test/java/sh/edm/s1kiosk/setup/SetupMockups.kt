@@ -64,6 +64,7 @@ class SetupMockups {
             dev.glassworks.setup.HotspotPermission.step(dev.glassworks.platform.PlatformApi(34), { false }, askedBefore = false) { false },
         )
         val failed = card(dev.glassworks.setup.SetupHotspot.View.Off(dev.glassworks.setup.SetupHotspotPolicy.Stop.FAILED, dev.glassworks.platform.HotspotFailure.TETHERING_ON))
+        val wifiOff = card(dev.glassworks.setup.SetupHotspot.View.Off(null, dev.glassworks.platform.HotspotFailure.WIFI_OFF))
     }
 
     private fun facts(mode: RadioMode, status: String, thread: ThreadRouterState? = null) =
@@ -156,6 +157,8 @@ class SetupMockups {
         shot("setup-21-hotspot-on", model(SetupFlow.WIFI, wifi = offline, hotspot = Spot.on))
         shot("setup-22-hotspot-failed", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.failed))
         shot("setup-23-no-touch-hotspot-on", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on), input = Input.NONE)
+        shot("setup-24-hotspot-wifi-off", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.wifiOff))
+        shot("setup-25-no-touch-wifi-off", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.wifiOff), input = Input.NONE)
     }
 
     /**

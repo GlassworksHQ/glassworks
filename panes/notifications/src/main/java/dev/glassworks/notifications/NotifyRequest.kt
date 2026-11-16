@@ -26,6 +26,7 @@ import org.json.JSONObject
  * | `timeout` | Seconds until it closes by itself |
  * | `url` | A dashboard view on the panel's own Home Assistant, opened full screen |
  * | `sticky` | Tapping an action leaves it open |
+ * | `size` | `full` (the default) or `half`: how much of the screen the views take (#230; half is drawn full for now) |
  *
  * Other keys are ignored, so a script written for a phone (`channel`, `color`, `ttl`, …) still
  * works. A mistake throws [IllegalArgumentException] in plain words; the action's handler lets it
@@ -71,6 +72,7 @@ object NotifyRequest {
                 timeoutS = timeout(d),
                 url = link(d, "url", haBase),
                 sticky = d.optBoolean("sticky", false),
+                size = size(d),
             ),
         )
     }
@@ -118,6 +120,13 @@ object NotifyRequest {
             out += NotificationAction(id, clip(words, 40), link(o, "uri", haBase))
         }
         return out
+    }
+
+    private fun size(d: JSONObject): ViewSize {
+        // Android's JSONObject reads a JSON null as "null" (the test classpath's org.json doesn't), so a null is absent
+        if (!d.has("size") || d.isNull("size")) return ViewSize.FULL
+        val raw = d.optString("size", "").trim().takeIf { it.isNotEmpty() } ?: return ViewSize.FULL
+        return ViewSize.parse(raw) ?: throw IllegalArgumentException("unknown size '$raw'; use full or half")
     }
 
     private fun timeout(d: JSONObject): Int? {
