@@ -7,7 +7,9 @@ root's first real flash (below) booted it and took the computer's adb key. `ro.s
 Android's UI but **not the boot animation**, which rendered sideways. The frames are now turned
 themselves (#389), and on 2026-11-16 the turned animation ran upright on the glass (the maintainer's
 photo; [first-boot.md](first-boot.md)). The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
-Mirror still waits on an app that runs on API 23.
+Mirror still waits on an app that runs on API 23. Since 2026-11-16 Kiln installs the legacy build of
+Glassworks for generic Android instead ([The app](#the-app-the-legacy-build-of-glassworks)); it doesn't
+run on a Mirror yet.
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
 below), and since 2026-11-16 `mirror-android-2` (below, offline only, not yet on the unit) (Android 6.0.1,
@@ -67,14 +69,32 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 
 | Change | Why | How sure |
 |---|---|---|
-| `/priv-app/S1Kiosk/S1Kiosk.apk`, `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and S1 Kiosk's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK is in `/system/priv-app/S1Kiosk`; its privileged permissions are untested (the test build doesn't run its main activity) |
-| Its native libraries in `/priv-app/S1Kiosk/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
+| `/priv-app/Glassworks/Glassworks.apk` (until 2026-11-16 `/priv-app/S1Kiosk/S1Kiosk.apk`, which the probe still uses), `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and the app's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK was in `/system/priv-app/S1Kiosk`; the probe there got its privileged permissions ([privileged-app.md](privileged-app.md)) |
+| Its native libraries in `/priv-app/Glassworks/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
 | `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
 | `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns Android's UI (SurfaceFlinger's display transform) and makes the panel's natural orientation portrait. It doesn't turn the boot animation, which draws straight to the panel, so its frames are turned themselves (`boot.rotate`). 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Corrected 2026-11-16:** it does **not** turn the boot animation. On the first real flash the portrait 1080x1920 animation rendered sideways (the maintainer's photo). An earlier version of this note said "verified upright": that came from the property, not from looking. The boot animation's frames are now turned themselves (`branding/lululemon-mirror`, `boot.rotate`): upright on the glass (2026-11-16, the maintainer's photo). Android's UI with it is portrait (2026-11-16, [first-boot.md](first-boot.md)) |
 | Nothing removed | The community kiosk isn't in `system` | Verified (read 1) |
 
 The patcher refuses, with nothing written, an image whose fingerprint isn't the one above, and an
-APK that isn't `sh.edm.s1kiosk`. A second run gives the same image.
+APK that isn't the app the frame names. A second run gives the same image.
+
+### The app: the legacy build of Glassworks
+
+Since 2026-11-16 (#198) the app is the legacy build of Glassworks for generic Android, named in the
+frame's data (`design/frame.json`, `app`):
+
+| | |
+|---|---|
+| Package | `dev.glassworks.generic_android.legacy` (minSdk 23, GeckoView 144) |
+| What adb starts | `sh.edm.s1kiosk.MainActivity`. It takes `WRITE_SECURE_SETTINGS`, which adb's shell holds, so only adb's start can set the Home Assistant address through extras |
+| HOME | the alias `dev.glassworks.generic.Launcher` (MAIN, HOME and DEFAULT). Android records the alias as the preferred home, and shows MainActivity as focused, so Kiln matches HOME by package |
+| Folder | `/system/priv-app/Glassworks`. Android 6 keys a package by its manifest, not its folder, so the folder carries the product's name. The probe keeps `/priv-app/S1Kiosk`, where it was verified; Kiln removes both before it writes one, so an image has one app |
+
+Kiln refuses, before anything is written, an APK that isn't this package (S1 Kiosk's
+`sh.edm.s1kiosk` included), and one that doesn't ask for `INSTALL_PACKAGES`, `REBOOT` and
+`WRITE_SECURE_SETTINGS`: Android 6 grants a privileged permission only to what the `/system` copy
+asks for, and an update can't add one ([privileged-app.md](privileged-app.md)). The harness flashes
+the probe (`sh.edm.s1kiosk`) only with `--probe`. **Read** (the #198 manifest); untested on a Mirror.
 
 ### `userdata`: what a fresh one needs
 
@@ -94,22 +114,22 @@ for this browser, so there's no shared key (#29).
 
 What a fresh `userdata` loses: the community kiosk (good), its shared adb key (good), the Mirror's
 Wi-Fi, and the screen rotation (handled by `ro.sf.hwrotation` above). After the first boot, Kiln
-gives S1 Kiosk the Wi-Fi (over its Improv socket) and the Home Assistant URL over adb, as it does on
+gives the app the Wi-Fi (over its Improv socket) and the Home Assistant URL over adb, as it does on
 the S1.
 
-### The first boot: S1 Kiosk as the only home screen
+### The first boot: our app as the only home screen
 
 The image ships Launcher3 (`com.android.launcher3`) as a home app, and the Mirror has no touchscreen
 to answer Android's chooser. adb's shell can't disable another app on Android 6, but it holds
 `MANAGE_USERS` (read 2026-11-15, [home-app.md](home-app.md)), which `pm hide` needs. So on the first
-boot Kiln runs `pm hide com.android.launcher3` (and `com.cyanogenmod.trebuchet` if present), and S1
-Kiosk is the only home app left: Android opens it with no chooser. **Untested** on the unit. The way
+boot Kiln runs `pm hide com.android.launcher3` (and `com.cyanogenmod.trebuchet` if present), and our
+app is the only home app left: Android opens it with no chooser. **Untested** on the unit. The way
 back (the plain Glass Panes image) brings the launcher back, because it comes with a fresh userdata.
 
 Kiln then checks what HOME opened (`dumpsys activity activities`, `mFocusedActivity`). If it isn't
-S1 Kiosk (the chooser, or a launcher that survived `pm hide`), Done says so plainly. Without a
+our app (the chooser, or a launcher that survived `pm hide`), Done says so plainly. Without a
 touchscreen, the Mirror would wait on that chooser after a restart. Done offers "Hide the other
-launcher again", or a USB mouse to choose S1 Kiosk, then Always.
+launcher again", or a USB mouse to choose our app, then Always.
 
 The boot logo before Android stays lululemon's: it lives in the signed `aboot`/splash path that the
 locked bootloader checks, and option A writes only `system` and `userdata`.

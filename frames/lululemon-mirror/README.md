@@ -79,7 +79,7 @@ Kiln show ([how](../README.md#credits)).
 
 **Status: planned.** Nothing installs on it yet. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
 
-The original version runs Android 6.0.1, and S1 Kiosk needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
+The original version runs Android 6.0.1, and S1 Kiosk needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Kiln's Mirror recipe installs the legacy build of Glassworks for generic Android (`dev.glassworks.generic_android.legacy`, #198) instead, which asks for Android 6.0 (API 23); it doesn't run on a Mirror yet. Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
 
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
 
@@ -102,15 +102,15 @@ Not available yet. **Test only, today**, at `/lululemon-mirror?apk=local` in Kil
 **Over fastboot, from lululemon's software or the community image (#40):**
 
 1. Kiln downloads `system.img`, the [Glass Panes](https://github.com/git-nimrod/glass-panes) community image by [git-nimrod](https://github.com/git-nimrod), from its release through Refract, Kiln's download proxy (a Cloudflare Worker that stores nothing, #347), resuming if the connection drops, and checks its SHA-256 as it arrives. If the proxy can't serve it, you download it from the release yourself and select it.
-2. Kiln adds S1 Kiosk, the Glassworks boot animation and the screen's rotation to the image, in your browser, and makes a fresh userdata that lets only your browser's adb key in. Nothing is uploaded. What changes, and why: [image-patch.md](research/image-patch.md).
+2. Kiln adds the legacy build of Glassworks (as a privileged app in `/system/priv-app/Glassworks`), the Glassworks boot animation and the screen's rotation to the image, in your browser, and makes a fresh userdata that lets only your browser's adb key in. Nothing is uploaded. What changes, and why: [image-patch.md](research/image-patch.md).
 3. You open the Mirror's back and hold its button as it powers on: fastboot. Kiln checks the partition sizes the image is made for, and stops if they differ.
-4. Kiln writes system and userdata, restarts the Mirror, and finishes over adb: Home Assistant's address, the Wi-Fi, S1 Kiosk as the only home screen.
+4. Kiln writes system and userdata, restarts the Mirror, and finishes over adb: Home Assistant's address, the Wi-Fi, Glassworks as the only home screen.
 
 **That erases lululemon's software for good.** The Mirror's bootloader can't read anything back, so there is no backup, and no way to restore lululemon's software. Kiln says so and waits for your confirmation before it writes. The way back from Glassworks is the plain Glass Panes image, which Kiln can write too (Way back).
 
 The boot logo before Android starts stays lululemon's: it lives in the signed bootloader, which nothing here can change.
 
-**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs S1 Kiosk's legacy build from an APK file on your computer. It changes nothing else on the Mirror. Making S1 Kiosk the home screen needs a choice on the Mirror, in Android's list of home screens: S1 Kiosk, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
+**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs the legacy build of Glassworks from an APK file on your computer. It changes nothing else on the Mirror. Making Glassworks the home screen needs a choice on the Mirror, in Android's list of home screens: Glassworks, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
 
 ## Panes
 

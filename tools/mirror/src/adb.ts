@@ -52,7 +52,7 @@ export function hostAdb(serial: string, adb = adbPath()): HostAdb {
         await call(['shell', `chmod ${mode.toString(8)} ${path}`]);
       } finally { rmSync(dir, { recursive: true, force: true }); }
     },
-    /** A raw stream to a socket on the Mirror, through `adb forward` (S1 Kiosk's Improv socket for the Wi-Fi). */
+    /** A raw stream to a socket on the Mirror, through `adb forward` (our app's Improv socket for the Wi-Fi). */
     async openStream(service: string): Promise<ByteStream> {
       const port = Number(String(await call(['forward', 'tcp:0', service])).trim());
       if (!port) throw new Error(`adb forward gave no port for ${service}`);

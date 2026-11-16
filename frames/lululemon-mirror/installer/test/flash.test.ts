@@ -10,7 +10,8 @@ import { MemoryStore, writeSparse } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
-import { FirstBootMirror } from './fakes';
+import { GLASSWORKS } from '../src/app';
+import { FirstBootMirror, fakeMirrorApk } from './fakes';
 import {
   GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, makeOnlyHome, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, type FastbootLike,
 } from '../src';
@@ -91,7 +92,7 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
     const out = { system: [] as Uint8Array<ArrayBuffer>[], userdata: [] as Uint8Array<ArrayBuffer>[] };
     const steps = new Set<string>();
     const userdataBytes = 40 * 1024 * 1024;
-    await buildImages(loaded, { apk: fakeApk('sh.edm.s1kiosk'), hwrotation: 270, adbKey: KEY, userdataBytes, time: T },
+    await buildImages(loaded, { apk: fakeMirrorApk(), hwrotation: 270, adbKey: KEY, userdataBytes, time: T },
       { system: (b) => { out.system.push(b.slice()); }, userdata: (b) => { out.userdata.push(b.slice()); } }, (s) => steps.add(s));
     expect([...steps]).toEqual(['patch', 'system', 'userdata']);
 
@@ -108,7 +109,7 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
     writeFileSync(sys, fake.parts.get('system')!);
     writeFileSync(data, fake.parts.get('userdata')!);
     for (const img of [sys, data]) { const r = fsck(img); expect(clean(r), r.out).toBe(true); }
-    expect(debugfs(sys, 'ls /priv-app')).toContain('S1Kiosk');
+    expect(debugfs(sys, 'ls /priv-app')).toContain('Glassworks');
     expect(new TextDecoder().decode(debugfsCat(data, '/misc/adb/adb_keys'))).toBe(`${KEY}\n`);
   }, 120_000);
 
@@ -135,14 +136,14 @@ describe('the way back\'s downloads', () => {
 });
 
 describe('first boot', () => {
-  it('checks the image, grants, hides the other launcher, starts S1 Kiosk with Home Assistant', async () => {
+  it('checks the image, grants, hides the other launcher, starts Glassworks through its main activity with Home Assistant', async () => {
     const p = new FirstBootMirror();
     const r = await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async () => {} });
     expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: '270',
-      home: { result: 'set', focused: 'sh.edm.s1kiosk/.MainActivity', left: [] } });
+      home: { result: 'set', focused: GLASSWORKS.activity, left: [] } });
     const at = (c: string) => p.cmds.findIndex((x) => x.startsWith(c));
-    expect(at('pm grant')).toBeLessThan(at(`am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://homeassistant.local:8123'`));
-    expect(at(`am start -n sh.edm.s1kiosk/.MainActivity --es url`)).toBeLessThan(at('pm hide com.android.launcher3'));
+    expect(at('pm grant')).toBeLessThan(at(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`));
+    expect(at(`am start -n ${GLASSWORKS.activity} --es url`)).toBeLessThan(at('pm hide com.android.launcher3'));
     expect(at('pm hide com.android.launcher3')).toBeLessThan(at('dumpsys activity activities'));
     expect(p.cmds).not.toContain('pm hide com.cyanogenmod.trebuchet'); // not on this image
   });
@@ -156,7 +157,7 @@ describe('first boot', () => {
     expect((await makeOnlyHome(p, () => {}, async () => {})).home.result).toBe('set');
   });
 
-  it('hides nothing when S1 Kiosk has no home screen of its own, so the Mirror keeps one (2026-11-16)', async () => {
+  it('hides nothing when the app has no home screen of its own, so the Mirror keeps one (2026-11-16)', async () => {
     const p = new FirstBootMirror();
     p.noHome = true;
     const r = await firstBoot(p, { sleep: async () => {} });
@@ -166,15 +167,15 @@ describe('first boot', () => {
     expect(p.hidden.size).toBe(0);
   });
 
-  it('asks whether S1 Kiosk answers HOME before it hides any launcher', async () => {
+  it('asks whether the app answers HOME before it hides any launcher', async () => {
     const p = new FirstBootMirror();
     await makeOnlyHome(p, () => {}, async () => {});
-    const ask = p.cmds.indexOf('am start -a android.intent.action.MAIN -c android.intent.category.HOME sh.edm.s1kiosk');
+    const ask = p.cmds.indexOf(`am start -a android.intent.action.MAIN -c android.intent.category.HOME ${GLASSWORKS.package}`);
     expect(ask).toBeGreaterThanOrEqual(0);
     expect(ask).toBeLessThan(p.cmds.indexOf('pm hide com.android.launcher3'));
   });
 
-  it('stops if the Mirror didn\'t start the image Kiln wrote, or S1 Kiosk is missing', async () => {
+  it('stops if the Mirror didn\'t start the image Kiln wrote, or the app is missing', async () => {
     await expect(firstBoot(new FirstBootMirror('Android/other/x:6.0.1/X/1:user/release-keys'), {})).rejects.toThrow(/not the image Kiln wrote/);
     await expect(firstBoot(new FirstBootMirror(GLASS_PANES.fingerprint, false), {})).rejects.toThrow(/isn't on the Mirror/);
   });

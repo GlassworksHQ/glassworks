@@ -10,12 +10,21 @@ import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from '@glasswor
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
-import { APP_DIR, GLASS_PANES, SETTINGS_OVERLAY, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
+import { GLASS_PANES, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
+
+const PKG = GLASSWORKS.package, DIR = GLASSWORKS.dir;
+const PERMS: FakeEl[] = PRIVILEGED.map((name) => ({ el: 'uses-permission', attrs: { name } }));
+/** fakeApk with Glassworks' id and the privileged permissions it must ask for; `home` as fakeApk's */
+function mirrorApk(o: Parameters<typeof fakeApk>[1] = {}): Uint8Array {
+  const h = o.home ?? 'on';
+  const tree = Array.isArray(h) ? h : h === 'none' ? [] : app(HOME_ACTIVITY(h === 'off' ? { enabled: false } : {}));
+  return fakeApk(PKG, { ...o, home: [...PERMS, ...tree] });
+}
 
 const T = 1_700_000_000;
 const MAKE_EXT4FS = ['-O', '^metadata_csum,^64bit,^flex_bg,^dir_index,^huge_file,^dir_nlink,^extra_isize,uninit_bg,resize_inode'];
 const libs = { 'arm64-v8a': { 'libxul.so': new Uint8Array(randomBytes(300_000)), 'libmozglue.so': new Uint8Array(randomBytes(20_000)) }, 'armeabi-v7a': { 'libxul.so': new Uint8Array(10) } };
-const APK = fakeApk('sh.edm.s1kiosk', { libs });
+const APK = mirrorApk({ libs });
 const ANIM = new Uint8Array(randomBytes(50_000));
 /** frames/lululemon-mirror/overlay/GlassworksSettings.apk, as build.sh writes it */
 const OVERLAY = new Uint8Array(readFileSync(join(__dirname, '../../overlay/GlassworksSettings.apk')));
@@ -23,22 +32,33 @@ const TEMPLATE = 'update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npm
 
 describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => {
   const act = (filters: FakeEl[], attrs: FakeEl['attrs'] = {}): FakeEl => ({ el: 'activity', attrs: { name: '.MainActivity', ...attrs }, children: filters });
-  it('takes S1 Kiosk with MAIN, HOME and DEFAULT in one filter', async () => {
-    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23 }))).resolves.toMatchObject({ package: 'sh.edm.s1kiosk' });
+  it('takes Glassworks with MAIN, HOME and DEFAULT in one filter and the privileged permissions', async () => {
+    await expect(checkMirrorApk(mirrorApk({ minSdk: 23 }))).resolves.toMatchObject({ package: PKG });
   });
   it.each([
     ['HOME without DEFAULT (am start -c HOME resolves with MATCH_DEFAULT_ONLY)', app(act([filter(['MAIN'], ['HOME'])])), /no activity with MAIN, HOME and DEFAULT in one intent filter/],
     ['MAIN+HOME and MAIN+DEFAULT in separate filters', app(act([filter(['MAIN'], ['HOME']), filter(['MAIN'], ['DEFAULT'])])), /no activity with MAIN, HOME and DEFAULT/],
     ['a launcher activity, no HOME', app(act([filter(['MAIN'], ['LAUNCHER', 'DEFAULT'])])), /no activity with MAIN, HOME and DEFAULT/],
     ['MAIN, HOME and DEFAULT with a <data> scheme (the HOME intent carries no data)', app(act([{ el: 'intent-filter', children: [...filter(['MAIN'], ['HOME', 'DEFAULT']).children!, { el: 'data', attrs: { scheme: 'example' } }] }])), /no activity with MAIN, HOME and DEFAULT/],
-    ['its application turned off', app(HOME_ACTIVITY(), { enabled: false }), /its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off in its manifest/],
+    ['its application turned off', app(HOME_ACTIVITY(), { enabled: false }), /its home screen \(dev\.glassworks\.generic_android\.legacy\.MainActivity\) is turned off in its manifest/],
     ['enabled from a resource', app(HOME_ACTIVITY({ enabled: { ref: 0x7f040001 } })), /depends on a resource Kiln doesn't read/],
   ])('refuses %s, with nothing changed', async (_, home, msg) => {
-    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23, home }))).rejects.toThrow(msg);
-    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23, home }))).rejects.toThrow(/Nothing was changed\.$/);
+    await expect(checkMirrorApk(mirrorApk({ minSdk: 23, home }))).rejects.toThrow(msg);
+    await expect(checkMirrorApk(mirrorApk({ minSdk: 23, home }))).rejects.toThrow(/Nothing was changed\.$/);
+  });
+  it.each(PRIVILEGED)('refuses an APK that doesn\'t ask for %s: an update could never add it later', async (perm) => {
+    const home = [...PERMS.filter((e) => e.attrs!.name !== perm), ...app(HOME_ACTIVITY())];
+    await expect(checkMirrorApk(fakeApk(PKG, { minSdk: 23, home }))).rejects.toThrow(
+      new RegExp(`doesn't ask for ${perm.replace('android.permission.', '')}\\. Android 6 grants a privileged permission only to what the copy in /system asks for.*Nothing was changed\\.$`));
+  });
+  it('refuses S1 Kiosk\'s id by default, and takes it only as the probe (MIRROR_PROBE)', async () => {
+    const s1 = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
+    await expect(checkMirrorApk(s1)).rejects.toThrow(/this APK is sh\.edm\.s1kiosk, not Glassworks \(dev\.glassworks\.generic_android\.legacy\)/);
+    await expect(checkMirrorApk(s1, MIRROR_PROBE)).resolves.toMatchObject({ package: 'sh.edm.s1kiosk' });
+    await expect(checkMirrorApk(mirrorApk({ minSdk: 23 }), MIRROR_PROBE)).rejects.toThrow(/not the Mirror probe \(sh\.edm\.s1kiosk\)/);
   });
   it('says a manifest it can\'t parse can\'t be read, never a RangeError', async () => {
-    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23 });
+    const apk = mirrorApk({ minSdk: 23 });
     const at = new TextDecoder('latin1').decode(apk).indexOf('AndroidManifest.xml') + 'AndroidManifest.xml'.length;
     new DataView(apk.buffer, apk.byteOffset).setUint32(at + 16, 0x00ffffff, true); // its string pool claims 16M strings
     await expect(checkMirrorApk(apk)).rejects.toThrow(/^this APK's AndroidManifest\.xml can't be read\. Nothing was changed\.$/);
@@ -49,7 +69,7 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
   });
   it('names an activity whose android:name is a resource plainly, not [object Object] (#385 delta verifier)', async () => {
     const home = app({ ...HOME_ACTIVITY(), attrs: { name: { ref: 0x7f0a0001 } } }, { enabled: false });
-    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23, home }))).rejects.toThrow(/its home screen \(an activity named by a resource\) is turned off/);
+    await expect(checkMirrorApk(mirrorApk({ minSdk: 23, home }))).rejects.toThrow(/its home screen \(an activity named by a resource\) is turned off/);
   });
 });
 
@@ -102,7 +122,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     return root;
   }
 
-  it('adds S1 Kiosk as a privileged app with its libraries, the boot animation and the rotation', async () => {
+  it('adds Glassworks as a privileged app with its libraries, the boot animation and the rotation', async () => {
     const img = join(dir, 'system.img');
     mke2fs(img, 64, MAKE_EXT4FS, systemTree());
     const disk = await load(img);
@@ -117,23 +137,23 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
 
     const r = fsck(img);
     expect(clean(r), r.out).toBe(true);
-    expect(Buffer.from(debugfsCat(img, `${APP_DIR}/S1Kiosk.apk`))).toEqual(Buffer.from(APK));
-    expect(Buffer.from(debugfsCat(img, `${APP_DIR}/lib/arm64/libxul.so`))).toEqual(Buffer.from(libs['arm64-v8a']['libxul.so']));
-    expect(debugfs(img, `ls ${APP_DIR}/lib`)).not.toContain('arm '); // only the primary ABI's
+    expect(Buffer.from(debugfsCat(img, `${DIR}/Glassworks.apk`))).toEqual(Buffer.from(APK));
+    expect(Buffer.from(debugfsCat(img, `${DIR}/lib/arm64/libxul.so`))).toEqual(Buffer.from(libs['arm64-v8a']['libxul.so']));
+    expect(debugfs(img, `ls ${DIR}/lib`)).not.toContain('arm '); // only the primary ABI's
     expect(Buffer.from(debugfsCat(img, '/media/bootanimation.zip'))).toEqual(Buffer.from(ANIM));
     const prop = new TextDecoder().decode(debugfsCat(img, '/build.prop'));
     expect(prop.match(/ro\.sf\.hwrotation=/g)).toHaveLength(1);
     expect(prop).toMatch(/\nro\.lockscreen\.disable\.default=true\nro\.sf\.hwrotation=270\n$/);
     expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
-    for (const p of [APP_DIR, `${APP_DIR}/lib/arm64`, '/vendor/overlay']) {
+    for (const p of [DIR, `${DIR}/lib/arm64`, '/vendor/overlay']) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0755[\s\S]*User:\s+0\s+Group:\s+0/);
       expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:system_file:s0');
     }
-    for (const p of [`${APP_DIR}/S1Kiosk.apk`, `${APP_DIR}/lib/arm64/libmozglue.so`, '/media/bootanimation.zip', SETTINGS_OVERLAY.path]) {
+    for (const p of [`${DIR}/Glassworks.apk`, `${DIR}/lib/arm64/libmozglue.so`, '/media/bootanimation.zip', SETTINGS_OVERLAY.path]) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0644[\s\S]*User:\s+0\s+Group:\s+0/);
       expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:system_file:s0');
     }
-    expect(log).toContain('2 native libraries for arm64-v8a in /priv-app/S1Kiosk/lib/arm64');
+    expect(log).toContain('2 native libraries for arm64-v8a in /priv-app/Glassworks/lib/arm64');
   }, 60_000);
 
   it('refuses another image or another APK, with nothing written', async () => {
@@ -146,12 +166,12 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     mke2fs(img2, 32, MAKE_EXT4FS, systemTree());
     const disk2 = await load(img2);
     const before2 = hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest());
-    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('com.nimrod.mirrorkiosk') })).rejects.toThrow(/not S1 Kiosk.*Nothing was changed/);
-    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 26 }) })).rejects.toThrow(/needs Android API 26.*pick S1 Kiosk's legacy build\. Nothing was changed/);
-    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { x86_64: { 'libxul.so': new Uint8Array(4) } } }) })).rejects.toThrow(/native code only for x86_64.*Nothing was changed/);
+    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('com.nimrod.mirrorkiosk') })).rejects.toThrow(/not Glassworks.*Nothing was changed/);
+    await expect(patchSystem(await Ext4.open(disk2), { apk: mirrorApk({ minSdk: 26 }) })).rejects.toThrow(/needs Android API 26.*pick the legacy build of Glassworks for generic Android\. Nothing was changed/);
+    await expect(patchSystem(await Ext4.open(disk2), { apk: mirrorApk({ minSdk: 23, libs: { x86_64: { 'libxul.so': new Uint8Array(4) } } }) })).rejects.toThrow(/native code only for x86_64.*Nothing was changed/);
     // no home screen Android can open: the Mirror would start to nothing (its first real flash, 2026-11-16)
-    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'off' }) })).rejects.toThrow(/can't be the Mirror's home screen: its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off in its manifest.*Nothing was changed/);
-    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'none' }) })).rejects.toThrow(/it has no home screen \(no activity with MAIN, HOME and DEFAULT in one intent filter\)/);
+    await expect(patchSystem(await Ext4.open(disk2), { apk: mirrorApk({ minSdk: 23, home: 'off' }) })).rejects.toThrow(/can't be the Mirror's home screen: its home screen \(dev\.glassworks\.generic_android\.legacy\.MainActivity\) is turned off in its manifest.*Nothing was changed/);
+    await expect(patchSystem(await Ext4.open(disk2), { apk: mirrorApk({ minSdk: 23, home: 'none' }) })).rejects.toThrow(/it has no home screen \(no activity with MAIN, HOME and DEFAULT in one intent filter\)/);
     const tampered = OVERLAY.slice(); tampered[100]! ^= 1;
     await expect(patchSystem(await Ext4.open(disk2), { apk: APK, settingsOverlay: tampered })).rejects.toThrow(/settings overlay isn't the one Kiln builds.*Nothing was changed/);
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
@@ -164,16 +184,32 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const disk = await load(img);
     const v7 = new Uint8Array([7, 7, 7]);
     // a directory entry for arm64-v8a, the real library under armeabi-v7a
-    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'arm64-v8a': { '': new Uint8Array(0) }, 'armeabi-v7a': { 'libxul.so': v7 } } });
+    const apk = mirrorApk({ minSdk: 23, libs: { 'arm64-v8a': { '': new Uint8Array(0) }, 'armeabi-v7a': { 'libxul.so': v7 } } });
     const log: string[] = [];
     await patchSystem(await Ext4.open(disk), { apk, time: T }, (l) => log.push(l));
     await dump(disk, img);
     expect(fsck(img).code).toBe(0);
-    expect(Buffer.from(debugfsCat(img, `${APP_DIR}/lib/arm/libxul.so`))).toEqual(Buffer.from(v7));
-    expect(log).toContain('1 native library for armeabi-v7a in /priv-app/S1Kiosk/lib/arm');
+    expect(Buffer.from(debugfsCat(img, `${DIR}/lib/arm/libxul.so`))).toEqual(Buffer.from(v7));
+    expect(log).toContain('1 native library for armeabi-v7a in /priv-app/Glassworks/lib/arm');
     // no settings overlay: the image's own first boot, so no lock-screen default either (--no-settings-overlay)
     expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).not.toContain('ro.lockscreen');
     expect(debugfs(img, 'ls /vendor')).not.toContain('overlay');
+  }, 60_000);
+
+  it('keeps one app per image: the probe goes to /priv-app/S1Kiosk, and Glassworks over it removes that folder', async () => {
+    const img = join(dir, 'swap.img');
+    mke2fs(img, 64, MAKE_EXT4FS, systemTree());
+    const disk = await load(img);
+    const probe = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
+    await patchSystem(await Ext4.open(disk), { apk: probe, app: MIRROR_PROBE, time: T });
+    await dump(disk, img);
+    expect(debugfs(img, 'ls /priv-app')).toContain('S1Kiosk');
+    expect(debugfs(img, 'ls /priv-app')).not.toContain('Glassworks');
+    await patchSystem(await Ext4.open(disk), { apk: APK, time: T });
+    await dump(disk, img);
+    expect(fsck(img).code).toBe(0);
+    expect(debugfs(img, 'ls /priv-app')).toContain('Glassworks');
+    expect(debugfs(img, 'ls /priv-app')).not.toContain('S1Kiosk');
   }, 60_000);
 
   it('refuses a library it can\'t unpack before writing anything (#354 review)', async () => {
@@ -181,7 +217,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     mke2fs(img, 64, MAKE_EXT4FS, systemTree());
     const disk = await load(img);
     const before = hex(new Sha256().update(await disk.read(0, disk.blocks)).digest());
-    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'armeabi-v7a': { 'libxul.so': new Uint8Array([1, 2, 3]) } } }).slice();
+    const apk = mirrorApk({ minSdk: 23, libs: { 'armeabi-v7a': { 'libxul.so': new Uint8Array([1, 2, 3]) } } }).slice();
     // mark the library's central directory entry as compressed with a method Kiln doesn't read (99)
     const dv = new DataView(apk.buffer);
     const name = new TextEncoder().encode('lib/armeabi-v7a/libxul.so');
@@ -201,7 +237,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     mke2fs(img, 64, MAKE_EXT4FS, systemTree());
     const disk = await load(img);
     const before = hex(new Sha256().update(await disk.read(0, disk.blocks)).digest());
-    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'armeabi-v7a': { 'libxul.so': new Uint8Array([1]) } }, extraEntries: [['lib/armeabi-v7a/libxul.so', new Uint8Array([2])]] });
+    const apk = mirrorApk({ minSdk: 23, libs: { 'armeabi-v7a': { 'libxul.so': new Uint8Array([1]) } }, extraEntries: [['lib/armeabi-v7a/libxul.so', new Uint8Array([2])]] });
     await expect(patchSystem(await Ext4.open(disk), { apk, time: T })).rejects.toThrow(/libxul\.so more than once.*Nothing was changed/);
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
   }, 60_000);
@@ -286,7 +322,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       const r = fsck(join(dir, 'flashed.raw'));
       expect(problems(r.out)).toEqual(baseline); // the image's own make_ext4fs quirk, nothing new
       const img = join(dir, 'flashed.raw');
-      expect(Buffer.from(debugfsCat(img, `${APP_DIR}/S1Kiosk.apk`))).toEqual(Buffer.from(APK));
+      expect(Buffer.from(debugfsCat(img, `${DIR}/Glassworks.apk`))).toEqual(Buffer.from(APK));
       expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.lockscreen\.disable\.default=true\nro\.sf\.hwrotation=270\n$/);
       expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
       expect(debugfs(img, 'ls /app')).toContain('Provision');

@@ -8,7 +8,8 @@ import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
 import type { Store } from '@glassworks/ext4';
 import {
-  GLASS_PANES, GLASS_PANES_USERDATA, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
+  GLASS_PANES, GLASS_PANES_USERDATA, GLASSWORKS, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
+  type MirrorApp,
   type FastbootLike, type FirstBoot,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -39,6 +40,8 @@ export interface InstallOptions {
   /** system.img: a local file, or a URL (Refract) */
   image: { path: string } | { url: string };
   apk: Uint8Array;
+  /** which app the APK is: Glassworks' legacy build by default (frame.json `app`), MIRROR_PROBE for the probe */
+  app?: MirrorApp;
   /** the adb_keys line(s) for the new userdata, e.g. the host's ~/.android/adbkey.pub */
   adbKey: string;
   bootAnimation?: Uint8Array;
@@ -91,6 +94,7 @@ async function steps(d: RunDeps, list: [string, () => Promise<void>][]): Promise
 export interface InstallResult { firstBoot?: FirstBoot; screenshot?: string }
 
 export async function runInstall(o: InstallOptions, d: RunDeps): Promise<InstallResult> {
+  const ours = o.app ?? GLASSWORKS;
   const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const want = o.want ?? GLASS_PANES.system;
   const res: InstallResult = {};
@@ -103,7 +107,7 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
     await steps(d, [
       ['Checks (read-only)', async () => {
         // the APK first: one the Mirror can't run as its home screen stops here, before anything is read or written
-        const apk = await checkMirrorApk(o.apk);
+        const apk = await checkMirrorApk(o.apk, ours);
         d.log(`    APK: ${apk.package}, minSdk ${apk.minSdk ?? 1}, home screen on`);
         const p = await d.adb();
         if (!p) { d.log('    no adb: the Mirror is in fastboot already, or off'); return; }
@@ -133,12 +137,12 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         if (!r.ok) throw new Error('the fastboot checks failed. Nothing was written.');
         userdataBytes = o.userdataBytes ?? r.userdataBytes;
       }],
-      ['Build the images (S1 Kiosk, boot animation, rotation; a fresh userdata with the adb key)', async () => {
+      [`Build the images (${ours.name}, boot animation, rotation; a fresh userdata with the adb key)`, async () => {
         // patched in place: a build that fails ends the run, and the next run loads and checks the file again
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, hwrotation: 270, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, hwrotation: 270, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); });
         } finally { sys.close(); ud.close(); }
         d.log(`    ${sysOut}, ${udOut}`);
@@ -155,21 +159,21 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
       }],
       ['First boot: permissions, Home Assistant, Wi-Fi, the only home screen', async () => {
         const p = await d.waitForAdb();
-        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
+        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
       }],
       ['HOME check', async () => {
         let home = res.firstBoot!.home;
         if (home.result === 'none') {
           // nothing was hidden, and hiding again wouldn't help: this APK has no home screen of its own
-          d.log(`    NO HOME SCREEN IN THIS APK: S1 Kiosk doesn't answer HOME (its launcher activity is off), so nothing was hidden: ${home.left.join(', ') || 'the image\'s launcher'} stays the home screen. Install a build made for Android 6.`);
+          d.log(`    NO HOME SCREEN IN THIS APK: ${ours.name} doesn't answer HOME (its launcher activity is off), so nothing was hidden: ${home.left.join(', ') || 'the image\'s launcher'} stays the home screen. Install a build made for Android 6.`);
           return;
         }
         if (home.result !== 'set') {
           d.log(`    HOME opened ${home.focused ?? 'something else'}${home.left.length ? `; still a home app: ${home.left.join(', ')}` : ''}: hiding again`);
-          home = (await makeOnlyHome(await d.waitForAdb(), (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep)).home;
+          home = (await makeOnlyHome(await d.waitForAdb(), (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep, ours)).home;
           res.firstBoot = { ...res.firstBoot!, home };
         }
-        d.log(home.result === 'set' ? '    S1 Kiosk is the home screen' : `    NOT FIXED: HOME opens ${home.focused}. The Mirror has no touchscreen: plug in a USB mouse and choose S1 Kiosk, then Always.`);
+        d.log(home.result === 'set' ? `    ${ours.name} is the home screen` : `    NOT FIXED: HOME opens ${home.focused}. The Mirror has no touchscreen: plug in a USB mouse and choose ${ours.name}, then Always.`);
       }],
       ['Screenshot', async () => {
         if (!d.screenshot) return;

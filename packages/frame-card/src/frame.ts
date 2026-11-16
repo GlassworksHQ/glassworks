@@ -54,6 +54,12 @@ export interface FrameDesign {
   boot?: { androidApi?: number; splash?: 'allwinner-boot-resource'; zipBudget?: number; rotate?: 90 | 270 };
   /** what the device's userspace runs, preferred first; the app's release builds every frame's (#98). Optional so code that builds a FrameDesign without it still compiles */
   abis?: Abi[];
+  /**
+   * The app Kiln installs on this frame, when it isn't S1 Kiosk: its package (`id`), the activity adb
+   * starts it with (whose extras it trusts from adb), the activity its HOME filter is on (an alias),
+   * and its device admin. Class names are full, as in the app's manifest.
+   */
+  app?: { id: string; activity: string; home: string; admin?: string };
   specs: { label: string; value: string }[];
   /** the panes it rates, by pane id (panes.ts PANE_IDS, or an old alias such as `base`); a pane it doesn't rate is worked out from `provides` */
   panes: Record<string, { support: Support; note?: string }>;

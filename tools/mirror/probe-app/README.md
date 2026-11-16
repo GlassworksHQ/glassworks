@@ -97,7 +97,7 @@ left out below. `PROBE` is the output folder of `build.sh`.
 
 0. **Flash** with the probe as the APK, with the harness ([README](../README.md)):
    ```sh
-   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk "$PROBE/probe-v1.apk"
+   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk "$PROBE/probe-v1.apk" --probe
    ```
    No `--ha-url` and no Wi-Fi: the probe uses neither. The first boot's `pm grant` of
    `RECORD_AUDIO`, `CAMERA` and `CHANGE_CONFIGURATION`, `appops` and `dpm set-active-admin` fail or
