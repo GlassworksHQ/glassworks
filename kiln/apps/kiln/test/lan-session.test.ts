@@ -19,6 +19,8 @@ function fakePanel({ open = true } = {}) {
     channelDead: false,
     /** The panel refuses to end the session (a network error on /setup/done). */
     doneFails: false,
+    /** /setup/done answers this instead of ending the session. */
+    doneAnswer: undefined as { status: number; body: Record<string, unknown> } | undefined,
     closedChannels: 0,
     sleep: async () => {},
     shown: false,
@@ -29,6 +31,7 @@ function fakePanel({ open = true } = {}) {
       const reply = (status: number, body: Record<string, unknown>) => ({ status, json: async () => body });
       if (path === '/setup/done') {
         if (panel.doneFails) throw new TypeError('Failed to fetch');
+        if (panel.doneAnswer) return reply(panel.doneAnswer.status, panel.doneAnswer.body);
         panel.paired = false;
         return reply(200, { ok: true });
       }
@@ -180,4 +183,22 @@ describe('the panel\'s setup page', () => {
     expect(lan.state.busy).toBeUndefined();
     expect(lan.state.view).toEqual({ at: 'done' });
   });
+
+  for (const [what, answer] of [
+    ['200 with ok:false', { status: 200, body: { ok: false } }],
+    ['500', { status: 500, body: { ok: false, error: 'Something went wrong on the panel.' } }],
+  ] as const) {
+    it(`a ${what} from /setup/done is not Done`, async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      panel.doneAnswer = answer;
+      await lan.finish();
+      expect(lan.state.view).toMatchObject({ at: 'lost', again: 'done', error: expect.stringMatching(/didn't end this browser's pairing/) });
+      panel.doneAnswer = undefined;
+      await lan.retry();
+      expect(lan.state.view).toEqual({ at: 'done' });
+    });
+  }
 });

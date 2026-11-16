@@ -1,6 +1,7 @@
 // The setup page the panel serves at /setup (#34): a small build of Kiln's setup steps, written into
-// core's assets with fixed names. CI rebuilds it and fails when the committed files differ
-// (`npm run build:lan -w @glassworks/kiln-app`, then `git diff --exit-code core/src/main/assets/setup`).
+// core's assets with fixed names. CI rebuilds it (`npm run build:lan -w @glassworks/kiln-app`) and fails
+// when `git status --porcelain -- core/src/main/assets/setup` shows anything: a changed file, and also a new
+// file nobody committed (a chunk the build split off). Keep it that strict.
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 

@@ -91,9 +91,13 @@ class LanSetup(
                 req.method != "POST" -> HttpResponse.text(405, "Not allowed.")
                 !ManageServer.sameOrigin(req.headers) -> notOwnPage()
                 else -> {
+                    // Only from the address that paired, as every other use of the session: a cookie copied off the
+                    // LAN can't end someone else's setup or drop their channel (#386 verifier).
                     val token = req.cookies[COOKIE]
-                    if (sessions.end(token)) event("Setup over the network finished")
-                    held.get()?.takeIf { it.token == token }?.ws?.abort()
+                    if (sessions.end(token, req.remote)) {
+                        event("Setup over the network finished")
+                        held.get()?.takeIf { it.token == token }?.ws?.abort()
+                    }
                     json(200, JSONObject().put("ok", true), cookie(""))
                 }
             }
@@ -219,7 +223,13 @@ class LanSetup(
         }
 
         @Synchronized
-        fun end(token: String?): Boolean = !token.isNullOrEmpty() && byKey.remove(SessionStore.hash(token)) != null
+        /** Ends [token]'s session when [remote] is the address that paired it. */
+        fun end(token: String?, remote: String?): Boolean {
+            if (token.isNullOrEmpty() || token.length > 100) return false
+            val k = SessionStore.hash(token)
+            if (byKey[k]?.remote != remote) return false
+            return byKey.remove(k) != null
+        }
     }
 
     private fun token(bytes: Int): String =

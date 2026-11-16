@@ -158,6 +158,8 @@ How it behaves:
   panel's limits apply: 5 wrong tries kill a code, 10 in 15 minutes lock code entry.
 - A pairing lasts until Done, 30 minutes without a change, or 2 hours. Reading the state doesn't count
   as a change. When the panel ends it, the page asks for a new code and carries on at the same step.
+- A pairing counts only from the address that paired. A browser whose source address changes (for
+  example a `.local` name that resolves to IPv4 one moment and IPv6 the next) has to pair again.
 - Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
   network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.
 - What is left: the panel has no write timeout on the WebSocket. A browser that stops reading while the

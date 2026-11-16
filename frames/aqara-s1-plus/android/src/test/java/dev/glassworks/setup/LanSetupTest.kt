@@ -209,6 +209,19 @@ class LanSetupTest {
         assertTrue("and it stays good for the browser that paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
     }
 
+    @Test fun doneFromAnotherAddressEndsNothing() {
+        val session = pair()
+        ws(session).use { c ->
+            assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok"))
+            assertEquals(200, post(LanSetup.DONE, cookie = session, remote = "192.0.2.99").status)
+            assertTrue("the session is still paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+            assertTrue("and its channel still works", c.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok"))
+            assertEquals(200, post(LanSetup.DONE, cookie = session).status)
+            assertTrue("done from its own address ends it and drops the channel", c.ended())
+        }
+        assertFalse(JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+    }
+
     @Test fun otherPathsGoToTheManagePage() {
         for (p in listOf("/", "/setupx", "/setup/other.js", "/setup/../manage")) assertEquals(p, null, lan.handle(HttpRequest("GET", p, emptyMap(), mapOf("host" to host))))
     }
@@ -264,9 +277,9 @@ class LanSetupTest {
     }
 
     /** As a browser on this machine: the address the WebSocket connections come from too. */
-    private fun post(path: String, form: String = "", cookie: String? = null, origin: String? = "http://$host"): HttpResponse =
+    private fun post(path: String, form: String = "", cookie: String? = null, origin: String? = "http://$host", remote: String = LOOPBACK): HttpResponse =
         lan.handle(HttpRequest("POST", path, emptyMap(), headers(cookie, origin) + ("content-type" to "application/x-www-form-urlencoded"),
-            form.toByteArray(), remote = LOOPBACK))!!
+            form.toByteArray(), remote = remote))!!
 
     private fun get(path: String, cookie: String?, remote: String = LOOPBACK): HttpResponse =
         lan.handle(HttpRequest("GET", path, emptyMap(), headers(cookie, null), remote = remote))!!

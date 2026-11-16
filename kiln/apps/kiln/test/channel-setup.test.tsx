@@ -89,6 +89,20 @@ describe('the setup steps over the LAN', () => {
     c.steps.close();
   });
 
+  it('a Thread router kept as it is, and already answered, sends nothing to the radio', async () => {
+    const panel = lanPanel();
+    panel.paired = true;
+    const c = controller(panel);
+    await c.steps.homeAssistant();
+    await c.steps.saveHa('');
+    (c.steps as unknown as { channel: SetupChannel }).channel.state!.radio = { ...panelState.radio, mode: 'thread_router', status: 'Running', answered: true };
+    expect(c.phase()).toMatchObject({ phase: 'radio' });
+    await c.steps.applyRadio('thread_router');
+    expect(panel.asked).not.toContain('set_radio');
+    expect(c.phase()).toMatchObject({ phase: 'radio-next' });
+    c.steps.close();
+  });
+
   it('a close while the channel is still opening keeps nothing open and shows nothing', async () => {
     const panel = lanPanel();
     let phase: Setup = { phase: 'waiting', note: '' };
