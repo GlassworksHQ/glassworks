@@ -146,7 +146,7 @@ function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
     <section className="card" aria-labelledby="h">
       <div className="row"><TestOnly /></div>
       <h2 id="h">Install a test build on the Mirror.</h2>
-      <p className="lede">Kiln installs an APK file from this computer: S1 Kiosk&apos;s legacy build for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
+      <p className="lede">Kiln installs an APK file from this computer: the legacy build of Glassworks for generic Android, for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
       <Inputs s={s} session={session} />
       <BuiltOn credits={stepCredits('lululemon-mirror', credits)} />
       <p className="small">On the Mirror, USB debugging is on. Plug it into this computer, click Connect and pick it in the browser&apos;s list. Then the Mirror asks to allow USB debugging for this browser: choose <b>Allow</b>. It has no touchscreen, so use a USB mouse.</p>
@@ -175,15 +175,15 @@ function Checks({ s, session }: { s: MirrorState; session: MirrorSession }) {
         ))}
       </ol>
       <p className="small">
-        {r.app ? `S1 Kiosk ${r.app.name ?? r.app.code} is installed. ` : 'S1 Kiosk isn\'t installed. '}
+        {r.app ? `Glassworks ${r.app.name ?? r.app.code} is installed. ` : 'Glassworks isn\'t installed. '}
         Home screen: {r.home ? <code>{r.home}</code> : 'Android asks'}.
-        {r.pendingHome && <> An undo removed S1 Kiosk, but <code>{r.pendingHome.split('/')[0]}</code> isn&apos;t the home screen again yet: undo once more to finish.</>}
+        {r.pendingHome && <> An undo removed Glassworks, but <code>{r.pendingHome.split('/')[0]}</code> isn&apos;t the home screen again yet: undo once more to finish.</>}
       </p>
       {r.ok && <Inputs s={s} session={session} />}
       {r.ok && blocked && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
         <span className="links">
-          {r.app && <button type="button" className="link" onClick={() => void session.undo()}>Undo: remove S1 Kiosk</button>}
+          {r.app && <button type="button" className="link" onClick={() => void session.undo()}>Undo: remove Glassworks</button>}
           {!r.app && r.pendingHome && <button type="button" className="link" onClick={() => void session.undo()}>Undo: give the home screen back</button>}
         </span>
         <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.install()}>{r.app ? 'Update' : 'Install'}</button>
@@ -201,8 +201,8 @@ const INSTALL_ROWS: Row[] = [
   { id: 'home', text: 'Make it the home screen' },
 ];
 const UNDO_ROWS: Row[] = [
-  { id: 'admin', text: 'Take back S1 Kiosk\'s device admin' },
-  { id: 'remove', text: 'Remove S1 Kiosk' },
+  { id: 'admin', text: 'Take back Glassworks\' device admin' },
+  { id: 'remove', text: 'Remove Glassworks' },
   { id: 'home', text: 'Give the home screen back' },
 ];
 const rowOf = (p: MirrorPhase): Row['id'] => (p.step === 'apk' ? p.stage : p.step);
@@ -215,7 +215,7 @@ function Working({ s }: { s: MirrorState }) {
   const clear = now?.step === 'home' ? now.clear : undefined;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Removing S1 Kiosk.' : 'Installing S1 Kiosk.'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Removing Glassworks.' : 'Installing Glassworks.'}</h2>
       <p className="lede">Keep the Mirror plugged in.</p>
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}</li>)}
@@ -242,9 +242,9 @@ function Working({ s }: { s: MirrorState }) {
 function Done({ s, session }: { s: MirrorState; session: MirrorSession }) {
   const r = s.result!;
   const home = r.flow === 'install' ? r.installed.home : r.removed.home;
-  const title = r.flow === 'install' ? `S1 Kiosk ${r.installed.app.name ?? ''} is on the Mirror.` : r.removed.removed ? 'S1 Kiosk is off the Mirror.' : 'S1 Kiosk wasn\'t on the Mirror.';
+  const title = r.flow === 'install' ? `Glassworks ${r.installed.app.name ?? ''} is on the Mirror.` : r.removed.removed ? 'Glassworks is off the Mirror.' : 'Glassworks wasn\'t on the Mirror.';
   const body = r.flow === 'install'
-    ? home === 'set' ? 'It is the home screen, so it opens when the Mirror starts.' : 'Kiln didn\'t see it picked as the home screen. If the Mirror shows a list of apps, choose S1 Kiosk, then Always.'
+    ? home === 'set' ? 'It is the home screen, so it opens when the Mirror starts.' : 'Kiln didn\'t see it picked as the home screen. If the Mirror shows a list of apps, choose Glassworks, then Always.'
     : home === 'set' ? `The home screen is ${r.removed.previousHome ?? 'yours'} again.` : `If the Mirror shows a list of apps, choose ${r.removed.previousHome?.split('/')[0] ?? 'the one you had before'}, then Always. Undo again to check.`;
   return (
     <section className="card" aria-labelledby="h">

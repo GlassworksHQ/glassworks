@@ -1,5 +1,6 @@
 {
   "id": "generic-android",
+  "kind": "device",
   "name": "Generic Android",
   "brand": "Generic",
   "aka": "Tablets, old phones, other Android panels",

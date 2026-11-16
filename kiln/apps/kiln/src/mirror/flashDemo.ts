@@ -1,9 +1,8 @@
 // Development and preview only (/lululemon-mirror?demo=flash-…): the fastboot install against a
 // simulated Mirror, so each screen can be seen and captured without one. The images aren't built (a
 // stand-in reports progress); the fastboot and first-boot answers are the recipe's fakes.
-import { fakeApk } from '@glassworks/app-adb/fakes';
 import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
-import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
@@ -62,7 +61,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   await flash.downloadImage(); // through the proxy; these three fall back to download-and-select
   if (name === 'flash-proxy-failed') return { flash, mirror };
   if (name === 'flash-checking') { void flash.selectImage(image); return { flash, mirror }; }
-  await mirror.pickApk('kiosk-legacy-debug.apk', fakeApk('sh.edm.s1kiosk'));
+  await mirror.pickApk('generic-android-legacy.apk', fakeMirrorApk());
   flash.setHaUrl('http://homeassistant.local:8123');
   flash.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' });
   if (name === 'flash-wrong') { await flash.selectImage(image); return { flash, mirror }; }

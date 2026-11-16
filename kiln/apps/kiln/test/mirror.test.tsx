@@ -2,8 +2,9 @@
 // /lululemon-mirror: off for everyone without ?apk=local, a test install with it, and every demo
 // screen on the real recipe behind a simulated Mirror.
 import { act, cleanup, render, screen } from '@testing-library/react';
+import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { fakeApk } from '@glassworks/app-adb/fakes';
-import { FakeMirror, MIRROR_KIOSK } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FakeMirror, MIRROR_KIOSK, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -66,21 +67,21 @@ describe('the switch', () => {
 
 describe('the test install', () => {
   it('reads the Mirror, installs, and undoes back to the home app it had', async () => {
-    const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith('sh.edm.s1kiosk/')) ?? c.find((x) => x === MIRROR_KIOSK) });
+    const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) ?? c.find((x) => x === MIRROR_KIOSK) });
     const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     expect(s.state.screen).toBe('checks');
     expect(s.installBlocked()).toMatch(/APK/);
-    const apk = fakeApk('sh.edm.s1kiosk');
+    const apk = fakeMirrorApk();
     await s.pickApk('kiosk-legacy-debug.apk', apk);
-    expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', size: apk.length, package: 'sh.edm.s1kiosk' });
+    expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', size: apk.length, package: GLASSWORKS.package });
     expect(s.state.apk?.sha256).toMatch(/^[0-9a-f]{64}$/);
     s.setHaUrl('homeassistant.local:8123');
     expect(s.installBlocked()).toMatch(/http/);
     s.setHaUrl('http://homeassistant.local:8123');
     await s.install();
     expect(s.state).toMatchObject({ screen: 'done', result: { flow: 'install', installed: { home: 'set', previousHome: MIRROR_KIOSK } } });
-    expect(m.cmds).toContain(`am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://homeassistant.local:8123'`);
+    expect(m.cmds).toContain(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`);
     await s.again();
     expect(s.state.report?.app).toBeDefined();
     await s.undo();
@@ -93,24 +94,24 @@ describe('the test install', () => {
     const s = new MirrorSession({ connect: async () => new FakeMirror() }, true);
     let release!: (b: Uint8Array) => void;
     const slow = s.pickApk('big-old.apk', new Promise<Uint8Array>((r) => { release = r; }));
-    await s.pickApk('kiosk-legacy-debug.apk', fakeApk('sh.edm.s1kiosk'));
+    await s.pickApk('kiosk-legacy-debug.apk', fakeMirrorApk());
     release(fakeApk('com.example.other'));
     await slow;
-    expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', package: 'sh.edm.s1kiosk' });
+    expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', package: GLASSWORKS.package });
   });
 
-  it('a file that isn\'t S1 Kiosk is named and blocks Install; the inputs stay editable on Checks', async () => {
+  it('a file that isn\'t Glassworks is named and blocks Install; the inputs stay editable on Checks', async () => {
     const s = await mirrorDemo('pick-wrong', true);
-    expect(s.state.apk).toMatchObject({ package: 'com.nimrod.mirrorkiosk', error: /not S1 Kiosk/ });
-    // a build whose home screen is off (the first real flash, 2026-11-16): refused at the picker, before any write
-    await s.pickApk('kiosk-legacy-test.apk', fakeApk('sh.edm.s1kiosk', { home: 'off' }));
-    expect(s.state.apk).toMatchObject({ package: 'sh.edm.s1kiosk', error: /can't be the Mirror's home screen: its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off.*made for Android 6$/ });
+    expect(s.state.apk).toMatchObject({ package: 'com.nimrod.mirrorkiosk', error: expect.stringMatching(/not Glassworks/) });
+    // a build with no home screen (the first real flash, 2026-11-16, had it off): refused at the picker, before any write
+    await s.pickApk('kiosk-legacy-test.apk', fakeMirrorApk({ home: 'none' }));
+    expect(s.state.apk).toMatchObject({ package: GLASSWORKS.package, error: expect.stringMatching(/can't be the Mirror's home screen: it has no home screen.*pick the legacy build of Glassworks for generic Android$/) });
     expect(s.apkBytes()).toBeUndefined();
     await s.connect();
     expect(s.installBlocked()).toMatch(/Pick another file/);
     render(<Screens session={s} />);
     expect(document.querySelector('input[type=file]')).not.toBeNull(); // on Checks
-    await act(() => s.pickApk('kiosk-legacy-debug.apk', fakeApk('sh.edm.s1kiosk')));
+    await act(() => s.pickApk('kiosk-legacy-debug.apk', fakeMirrorApk()));
     expect(s.installBlocked()).toBeUndefined();
   });
 
@@ -142,7 +143,7 @@ describe('the test install', () => {
   it('an APK that can\'t be read says so', async () => {
     const s = new MirrorSession({ connect: async () => new FakeMirror() }, true);
     await s.pickApk('gone.apk', Promise.reject(new Error('NotFoundError')));
-    expect(s.state.apk).toMatchObject({ name: 'gone.apk', error: /couldn't be read \(NotFoundError\)/ });
+    expect(s.state.apk).toMatchObject({ name: 'gone.apk', error: expect.stringMatching(/couldn't be read \(NotFoundError\)/) });
   });
 
   it('reading the Mirror again when it went away goes back to Connect and says why', async () => {
@@ -152,14 +153,14 @@ describe('the test install', () => {
     await s.undo();
     m.run = async () => { throw new Error('USB transfer failed'); };
     await s.again();
-    expect(s.state).toMatchObject({ screen: 'pick', flow: undefined, result: undefined, connectError: /went away: USB transfer failed/ });
+    expect(s.state).toMatchObject({ screen: 'pick', flow: undefined, result: undefined, connectError: expect.stringMatching(/went away: USB transfer failed/) });
   });
 
   it('reading the Mirror again twice reads it once, and never lands on a running install', async () => {
-    const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith('sh.edm.s1kiosk/')) });
+    const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) });
     const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
-    await s.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    await s.pickApk('kiosk.apk', fakeMirrorApk());
     const reads = () => m.cmds.filter((c) => c === 'getprop ro.build.version.sdk').length;
     const before = reads();
     await Promise.all([s.again(), s.again()]);
@@ -174,10 +175,10 @@ describe('the test install', () => {
 
   it('a slow read of the Mirror that ends after a whole install doesn\'t replace its Done, even when it fails', async () => {
     for (const fails of [false, true]) {
-      const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith('sh.edm.s1kiosk/')) });
+      const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) });
       const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
       await s.connect();
-      await s.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+      await s.pickApk('kiosk.apk', fakeMirrorApk());
       let release!: () => void;
       const gate = new Promise<void>((r) => { release = r; });
       const run = m.run.bind(m);
@@ -223,7 +224,7 @@ describe('the test install', () => {
   it('a failed connection stays on the first screen and says why', async () => {
     const s = new MirrorSession({ connect: async () => { throw new Error('another program holds the panel\'s adb connection'); } }, true);
     await s.connect();
-    expect(s.state).toMatchObject({ screen: 'pick', connectError: /another program/ });
+    expect(s.state).toMatchObject({ screen: 'pick', connectError: expect.stringMatching(/another program/) });
   });
 });
 
@@ -244,6 +245,6 @@ describe('every demo screen', () => {
   it('home waits for the person\'s tap on the Mirror', async () => {
     render(<Screens session={await mirrorDemo('home', true)} />);
     await screen.findByText(/Your turn, on the Mirror/);
-    expect(screen.getByText(/then Always/).textContent).toBe('Choose S1 Kiosk, then Always.');
+    expect(screen.getByText(/then Always/).textContent).toBe('Choose Glassworks, then Always.');
   });
 });

@@ -483,7 +483,8 @@ on the way:
 to violet for "on", green/amber/rose for status only). Left: the Glassworks mark, the four steps (a
 green dot when done, sky to violet for the current one, a dashed ring for the rest) and the stack,
 whose plates set one per step (`ui/StackView.kt`). Right: a card for the current step.
-Laid out for 960×480 dp.
+Laid out for 960×480 dp. On a screen taller than wide (`onMeasure`, #415) it stacks into one column: the
+rail above the card, without the stack art, and the QR code under the card's text at full size.
 
 The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Add it, Sign
 in), **Panes** (Choose, then each pane's own steps while that pane is on), Done. A group shows its rows

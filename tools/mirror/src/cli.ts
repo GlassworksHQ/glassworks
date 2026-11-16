@@ -6,9 +6,9 @@ import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { fakeApk } from '@glassworks/app-adb/fakes';
 import { Fastboot } from '@glassworks/fastboot';
-import { IMAGE_PROXY, MIRROR_FASTBOOT, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { GLASSWORKS, IMAGE_PROXY, MIRROR_FASTBOOT, MIRROR_PROBE, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb, readSerial } from './adb';
 import { DRY_USERDATA, dryDevices, dryImage } from './dry';
 import { runInstall, runWayBack, type RunDeps } from './run';
@@ -19,11 +19,13 @@ export const HELP = `usage: flash-node.ts [--dry-run] [--yes] (install | --way-b
 install (WRITES system and userdata):
   --image <system.img>     the Glass Panes system.img (checked by size and SHA-256)
   --refract                download it through Refract instead (${IMAGE_PROXY.base})
-  --apk <file>             S1 Kiosk's legacy APK (minSdk 23, arm64-v8a or armeabi-v7a)
+  --apk <file>             the legacy build of Glassworks for generic Android
+                           (dev.glassworks.generic_android.legacy: minSdk 23, arm64-v8a or armeabi-v7a)
+  --probe                  the APK is the Mirror probe (tools/mirror/probe-app, sh.edm.s1kiosk) instead
   --adb-key <file>         a public key for the new userdata's adb_keys; repeat for more
                            (default: ~/.android/adbkey.pub, the host's)
-  --ha-url <url>           Home Assistant's address for S1 Kiosk
-  --wifi-ssid <name> --wifi-pass-file <file>   Wi-Fi for S1 Kiosk (the password from a file)
+  --ha-url <url>           Home Assistant's address for the app
+  --wifi-ssid <name> --wifi-pass-file <file>   Wi-Fi for the image (the password from a file)
   --boot-animation <zip>   default: branding/lululemon-mirror/bootanimation.zip; --no-boot-animation
   --no-fill                zeros as RAW blocks, for an LK that refuses FILL chunks
   --no-settings-overlay    the image's own first boot: leave out frames/lululemon-mirror/overlay/
@@ -48,7 +50,7 @@ function parse(argv: string[]) {
     args: argv,
     options: {
       'dry-run': { type: 'boolean' }, yes: { type: 'boolean' }, 'way-back': { type: 'boolean' }, help: { type: 'boolean' },
-      image: { type: 'string' }, refract: { type: 'boolean' }, apk: { type: 'string' }, 'adb-key': { type: 'string', multiple: true },
+      image: { type: 'string' }, refract: { type: 'boolean' }, apk: { type: 'string' }, probe: { type: 'boolean' }, 'adb-key': { type: 'string', multiple: true },
       'ha-url': { type: 'string' }, 'wifi-ssid': { type: 'string' }, 'wifi-pass-file': { type: 'string' },
       'boot-animation': { type: 'string' }, 'no-boot-animation': { type: 'boolean' }, 'no-settings-overlay': { type: 'boolean' }, 'no-fill': { type: 'boolean' },
       screenshot: { type: 'string' }, userdata: { type: 'string' }, 'serial-file': { type: 'string' }, work: { type: 'string' }, keep: { type: 'boolean' },
@@ -126,7 +128,7 @@ function adbKeys(a: Args): string {
 
 /**
  * flash-node.ts's body: runs the install, the way back or a dry run from `argv`. Returns the exit
- * code: 0 done, 1 done but HOME isn't S1 Kiosk. Throws UsageError for a wrong argument.
+ * code: 0 done, 1 done but HOME isn't our app. Throws UsageError for a wrong argument.
  */
 export async function cli(argv: string[], log: (l: string) => void = (l) => console.log(l)): Promise<number> {
   const a = parse(argv);
@@ -151,16 +153,17 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
       return 0;
     }
 
-    const apk = a.apk ? new Uint8Array(readFileSync(a.apk)) : dry ? fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'arm64-v8a': { 'libdry.so': new Uint8Array(16) } } }) : fail('--apk <S1 Kiosk legacy APK> is needed');
+    const app = a.probe ? MIRROR_PROBE : GLASSWORKS;
+    const apk = a.apk ? new Uint8Array(readFileSync(a.apk)) : dry ? fakeMirrorApk({ package: app.package, libs: { 'arm64-v8a': { 'libdry.so': new Uint8Array(16) } } }) : fail(`--apk <${a.probe ? 'the probe\'s APK' : 'Glassworks legacy APK'}> is needed`);
     const animPath = a['boot-animation'] ?? join(REPO, 'branding/lululemon-mirror/bootanimation.zip');
     const bootAnimation = a['no-boot-animation'] ? undefined : new Uint8Array(readFileSync(animPath));
     const wifi = a['wifi-ssid'] ? { ssid: a['wifi-ssid'], password: a['wifi-pass-file'] ? readFileSync(a['wifi-pass-file'], 'utf8').replace(/\r?\n$/, '') : fail('--wifi-ssid needs --wifi-pass-file') } : undefined;
     const settingsOverlay = a['no-settings-overlay'] ? undefined : new Uint8Array(readFileSync(join(REPO, 'frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
-    const common = { apk, bootAnimation, settingsOverlay, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
+    const common = { apk, app, bootAnimation, settingsOverlay, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
     let r;
     if (dry) {
       const img = await dryImage(work, apk.length + (bootAnimation?.length ?? 0));
-      const d = dryDevices(img.bytes, log);
+      const d = dryDevices(img.bytes, log, { app });
       r = await runInstall({ ...common, image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, adbKey: 'QAAAAdryrun= dry@run', screenshot: join(work, 'after.png') }, d.deps);
       log(`\nDry run: LK got ${d.lk.commands.filter((c) => c.startsWith('flash:')).join(', ')}, then reboot; adb ran ${d.after.cmds.length} commands on the first boot.`);
     } else {
@@ -169,7 +172,7 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
       r = await runInstall({ ...common, image, adbKey: adbKeys(a), screenshot: a.screenshot ?? resolve('mirror-after.png') }, await realDevices(a, log, await confirmer(!!a.yes)));
     }
     const fb = r.firstBoot;
-    log(`\nDone: S1 Kiosk ${fb?.app.name ?? fb?.app.code}, home ${fb?.home.result}${fb?.wifi === undefined ? '' : `, Wi-Fi ${fb.wifi ? 'joined' : 'not confirmed'}`}, rotation ${fb?.rotation ?? 'unset'}${r.screenshot ? `, screenshot ${r.screenshot}` : ''}.`);
+    log(`\nDone: ${app.name} ${fb?.app.name ?? fb?.app.code}, home ${fb?.home.result}${fb?.wifi === undefined ? '' : `, Wi-Fi ${fb.wifi ? 'joined' : 'not confirmed'}`}, rotation ${fb?.rotation ?? 'unset'}${r.screenshot ? `, screenshot ${r.screenshot}` : ''}.`);
     return fb?.home.result === 'set' ? 0 : 1;
   } finally {
     if (a.keep || a.work) log(`work folder kept: ${work}`);

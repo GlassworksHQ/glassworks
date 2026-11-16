@@ -60,7 +60,7 @@ import sh.edm.s1kiosk.ui.StackView.Look
  * shows so, with Continue; the rail and Continue move between steps, also in a preview. Panes only asks
  * which panes are on: one card per pane that offers one ([PaneChoice]). The Wi-Fi step shows Improv (Wi-Fi over Bluetooth) inline, Allow included, so
  * no separate ImprovOverlay window covers this screen. Laid out for 960×480 dp (1440×720 px at density
- * 1.5). Main thread only.
+ * 1.5); on a screen taller than wide (the Mirror's 1080×1920) the same card stacks into one column. Main thread only.
  */
 class SetupOverlay(
     context: Context,
@@ -150,6 +150,9 @@ class SetupOverlay(
     private val railStack = StackView(context)
     private val previewChip = g.plain("Preview · Close").apply { textSize = 14f; setOnClickListener { onClosePreview?.invoke() } }
 
+    /** Pushes the rail's stack art to its foot. */
+    private val railSpacer = View(context)
+
     private val rail = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         addView(LinearLayout(context).apply {
@@ -160,7 +163,7 @@ class SetupOverlay(
             addView(g.text(19f, TX, Inter.REGULAR).apply { text = "Glassworks" })
         })
         addView(railRows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(33f) })
-        addView(View(context), LinearLayout.LayoutParams(-1, 0, 1f))
+        addView(railSpacer, LinearLayout.LayoutParams(-1, 0, 1f))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.BOTTOM
@@ -222,18 +225,60 @@ class SetupOverlay(
         addView(stretch, stretchLp)
         addView(buttonRow, LinearLayout.LayoutParams(-1, -2))
     }
+    // Landscape's places (the S1, tablets); portrait swaps them in stack().
+    private val columnBeside = LinearLayout.LayoutParams(0, -1, 1f)
+    private val qrBeside = LinearLayout.LayoutParams(px(238f), -1)
+    private val railBeside = LinearLayout.LayoutParams(px(227f), -1).apply { marginEnd = px(26f) }
+    private val cardBeside = LinearLayout.LayoutParams(0, -1, 1f)
     private val card = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         background = g.surface(34f)
         setPadding(px(41f), px(36f), px(28f), px(30f))
-        addView(column, LinearLayout.LayoutParams(0, -1, 1f))
-        addView(qrGlow, LinearLayout.LayoutParams(px(238f), -1))
+        addView(column, columnBeside)
+        addView(qrGlow, qrBeside)
     }
     private val wizard = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         setPadding(px(49f), px(44f), px(45f), px(40f))
-        addView(rail, LinearLayout.LayoutParams(px(227f), -1).apply { marginEnd = px(26f) })
-        addView(card, LinearLayout.LayoutParams(0, -1, 1f))
+        addView(rail, railBeside)
+        addView(card, cardBeside)
+    }
+
+    /** The screen stands taller than wide (the Mirror's 1080×1920): one column. */
+    private var portrait = false
+
+    /** In [portrait], the QR code is on and sits under the card's text, filling the room left. */
+    private var qrBelow = false
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        stack(MeasureSpec.getSize(heightMeasureSpec) > MeasureSpec.getSize(widthMeasureSpec))
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /**
+     * The same card, stacked when [on] (#412): the rail over the card, and in the card the text over the QR code. The
+     * rail's stack art stays out, so the QR code keeps its full size. Landscape keeps its own layout params, untouched.
+     */
+    private fun stack(on: Boolean) {
+        val below = on && qrGlow.visibility == View.VISIBLE
+        if (on == portrait && below == qrBelow) return
+        portrait = on
+        qrBelow = below
+        wizard.orientation = if (on) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        card.orientation = wizard.orientation
+        rail.layoutParams = if (on) LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(26f) } else railBeside
+        card.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else cardBeside
+        column.layoutParams = when {
+            !on -> columnBeside
+            below -> LinearLayout.LayoutParams(-1, -2)
+            else -> LinearLayout.LayoutParams(-1, 0, 1f)
+        }
+        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else qrBeside
+        // A plain View measured to wrap takes all the room it may: the spacers go, or the rail fills the screen and
+        // the text the card.
+        railSpacer.visibility = if (on) View.GONE else View.VISIBLE
+        stretch.visibility = if (below) View.GONE else View.VISIBLE
+        railStack.visibility = if (on) View.GONE else View.VISIBLE
     }
 
     // ---- Done: the lit stack on its own

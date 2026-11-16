@@ -14,6 +14,11 @@ below as the release notes.
   send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
   is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. On Android 13 and
   newer the panel asks for Android's *Nearby devices* permission first, and says why.
+- **Every device says what kind it is, and the Pixel Tablet is listed.** On glassworks.dev and in Kiln's
+  device list, each card now says whether it is a full frame with its own code (the S1), a device frame
+  that runs the generic app with its own settings (the Mirror, generic Android), or a tested device that
+  runs the generic app as it is. The Google Pixel Tablet is the first tested device. Its support is
+  planned and not yet checked on a real unit.
 - **See who is connected to the Zigbee radio.** In the Zigbee coordinator role, the radio's settings
   page says who uses the radio now, for example "Home Assistant · 192.0.2.20 · since 14:32", or
   "Nobody". It follows a connect or disconnect within a few seconds. Home Assistant has the same text as
@@ -95,8 +100,8 @@ below as the release notes.
 ### Changed
 - **On a screen that stands portrait, the app is portrait.** On a device that isn't an Aqara S1, the app now
   follows the screen's natural orientation, either way up: landscape on most tablets as before, portrait on a
-  screen that stands portrait, like the lululemon Mirror's. The S1 stays landscape. The setup screen doesn't fit a
-  portrait screen yet: until it does, set up such a device from Kiln or the Manage page.
+  screen that stands portrait, like the lululemon Mirror's. The S1 stays landscape. On a portrait screen the
+  setup screen stacks into one column: the steps above, the card under them, its QR code under the text.
 - **Kiln's technical log words the boot patch differently.** Kiln's boot patcher was rewritten, so the
   patch step now logs a few short lines such as "boot image: page 2048, gzip ramdisk, AVB footer"
   instead of Magisk's own messages. You see them under **Technical log** and in a saved failure

@@ -123,7 +123,7 @@ export function FlashImage({ f, s, m, ms }: P) {
     <section className="card" aria-labelledby="h">
       <div className="row"><span className="pill soon">Test only</span></div>
       <h2 id="h">Install Glassworks on the Mirror.</h2>
-      <p className="lede">Kiln adds S1 Kiosk to the Mirror&apos;s community Android image in this browser, then writes it over USB.</p>
+      <p className="lede">Kiln adds Glassworks to the Mirror&apos;s community Android image in this browser, then writes it over USB.</p>
       <div className="well">
         <div className="grow">
           <span className="small">1 · The system image</span>
@@ -140,7 +140,7 @@ export function FlashImage({ f, s, m, ms }: P) {
         </>
       )}
       <div className="fields">
-        <label className="field"><span>S1 Kiosk APK (test build)</span>
+        <label className="field"><span>Glassworks APK (legacy build, test only)</span>
           <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
             onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
         </label>
@@ -238,7 +238,7 @@ export function FlashConfirm({ f, s }: P) {
 }
 
 const ROWS: { id: WorkStep; text: string; back?: boolean }[] = [
-  { id: 'patch', text: 'Add S1 Kiosk and the boot animation to the image' },
+  { id: 'patch', text: 'Add Glassworks and the boot animation to the image' },
   { id: 'system', text: 'Write the system image as fastboot sends it' },
   { id: 'userdata', text: 'Make a fresh userdata with this browser’s key' },
   { id: 'flash-system', text: 'Flash system', back: true },
@@ -292,10 +292,10 @@ export function FlashDone({ f, s }: P) {
       {stranded && (
         <div className="well" role="alert">
           <div className="grow">
-            <span className="status err">S1 Kiosk isn&apos;t the only home screen yet.</span>
+            <span className="status err">Glassworks isn&apos;t the only home screen yet.</span>
             <span className="small">
               Android opened {fb.home.result === 'chooser' ? 'its list of home screens' : <code>{fb.home.focused ?? 'something else'}</code>}{fb.home.left.length ? <>: <code>{fb.home.left.join(', ')}</code> is still a home app</> : ''}.
-              {' '}The Mirror has no touchscreen, so after a restart it would wait on that list. Hide the other launcher again, or plug in a USB mouse and choose S1 Kiosk, then Always.
+              {' '}The Mirror has no touchscreen, so after a restart it would wait on that list. Hide the other launcher again, or plug in a USB mouse and choose Glassworks, then Always.
             </span>
           </div>
           <button type="button" className="btn ghost" disabled={s.fixing} onClick={() => void f.fixHome()}>{s.fixing ? 'Hiding it…' : 'Hide the other launcher again'}</button>
@@ -304,18 +304,18 @@ export function FlashDone({ f, s }: P) {
       {noHome && (
         <div className="well" role="alert">
           <div className="grow">
-            <span className="status err">This S1 Kiosk build has no home screen.</span>
+            <span className="status err">This Glassworks build has no home screen.</span>
             <span className="small">
               So Kiln hid nothing: {fb.home.left.length ? <code>{fb.home.left.join(', ')}</code> : 'the image’s launcher'} stays the Mirror&apos;s home screen, and the Mirror still starts to it.
-              {' '}Add a build of S1 Kiosk made for Android 6, over adb.
+              {' '}Add a build of Glassworks made for Android 6, over adb.
             </span>
           </div>
         </div>
       )}
       {!s.back && fb && (
         <p className="lede">
-          S1 Kiosk {fb.app.name ?? fb.app.code} {stranded || noHome ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
-          {fb.wifi === false && ' It didn’t confirm the Wi-Fi: set it in S1 Kiosk’s settings.'}
+          Glassworks {fb.app.name ?? fb.app.code} {stranded || noHome ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
+          {fb.wifi === false && ' It didn’t confirm the Wi-Fi; the network saved in the image still applies.'}
           {fb.rotation !== '270' && ' The screen’s rotation isn’t set (ro.sf.hwrotation): check it is upright.'}
         </p>
       )}

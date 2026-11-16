@@ -171,6 +171,7 @@ class SetupMockups {
             "portrait-01-no-touch-wifi" to model(SetupFlow.WIFI, wifi = offline, panelIp = null),
             "portrait-02-no-touch-ha" to model(SetupFlow.HA),
             "portrait-03-no-touch-signin" to model(SetupFlow.SIGNIN),
+            "portrait-05-no-touch-hotspot-on" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on),
         )) {
             val a = Mockup.activity()
             val s = s1SetupOverlay(a, panes(a, null)).also { it.input = Input.NONE }

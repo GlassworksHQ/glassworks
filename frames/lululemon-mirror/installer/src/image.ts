@@ -1,11 +1,12 @@
 // The Mirror's images, made in the person's browser (#40, option A). `system` is the Glass Panes
-// community image the person downloaded themselves. Kiln checks its SHA-256 and adds S1 Kiosk as a
-// privileged system app, the Glassworks boot animation, and the screen's rotation. `userdata` is new
+// community image the person downloaded themselves. Kiln checks its SHA-256 and adds the legacy build of
+// Glassworks as a privileged system app, the Glassworks boot animation, and the screen's rotation. `userdata` is new
 // and empty but for Kiln's own adb key for this browser, because the Mirror has no touchscreen to
 // answer "Allow USB debugging?". Nothing here is downloaded from or uploaded to anyone: the person's
 // file goes in, and the patched copy stays in their browser until fastboot writes it.
 // The findings behind each step: frames/lululemon-mirror/research/image-patch.md.
-import { ManifestError, PKG, apkHome, apkInfo, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
+import { ManifestError, apkHome, apkInfo, apkPermissions, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
+import { APP_DIRS, GLASSWORKS, PRIVILEGED, type MirrorApp } from './app';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
@@ -37,14 +38,14 @@ const AID = { root: 0, system: 1000, wifi: 1010, shell: 2000, misc: 9998 } as co
 /** The Mirror's Android: 6.0.1. */
 const MIRROR_API = 23;
 
-/** S1 Kiosk in the system image: a privileged app, so Android 6 grants its privileged permissions. */
-export const APP_DIR = '/priv-app/S1Kiosk';
 /** APK ABI folder → the folder Android 6's package manager looks in for a bundled app's libraries. */
 const LIB_DIRS: [string, string][] = [['arm64-v8a', 'arm64'], ['armeabi-v7a', 'arm']];
 
 export interface SystemPatch {
-  /** S1 Kiosk's legacy APK. */
+  /** The app's APK: Glassworks' legacy build, or the probe with `app: MIRROR_PROBE`. */
   apk: Uint8Array;
+  /** Which app the APK must be (package, folder); default Glassworks (frame.json `app`). */
+  app?: MirrorApp;
   /** /system/media/bootanimation.zip; none: the image's own (it has none, so Android's text one). */
   bootAnimation?: Uint8Array;
   /** ro.sf.hwrotation: how the screen is turned. The Mirror stands portrait on a 1920×1080 panel: 270. */
@@ -80,32 +81,39 @@ export function setProp(text: string, key: string, value: string): string {
 }
 
 /**
- * Refuses an APK the Mirror can't run as its only screen, before anything is written: not S1 Kiosk,
- * above Android 6's API, no native code for its ABIs, or no home screen Android can open. The Mirror
+ * Refuses an APK the Mirror can't run as its only screen, before anything is written: not the app
+ * the frame names, missing a privileged permission, above Android 6's API, no native code for its ABIs, or no home screen Android can open. The Mirror
  * has no touchscreen: with no home screen, it starts to nothing (its first real flash, 2026-11-16).
  */
-export async function checkMirrorApk(apk: Uint8Array): Promise<ApkInfo> {
+export async function checkMirrorApk(apk: Uint8Array, app: MirrorApp = GLASSWORKS): Promise<ApkInfo> {
   try {
-    return await checkApk(apk);
+    return await checkApk(apk, app);
   } catch (e) {
     if (e instanceof ManifestError) throw new Error(`${e.message}. Nothing was changed.`);
     throw e;
   }
 }
 
-async function checkApk(apk: Uint8Array): Promise<ApkInfo> {
+async function checkApk(apk: Uint8Array, app: MirrorApp): Promise<ApkInfo> {
+  const pick = app === GLASSWORKS ? 'pick the legacy build of Glassworks for generic Android' : `pick ${app.name}'s build`;
   const info = await apkInfo(apk);
-  if (info.package !== PKG) throw new Error(`this APK is ${info.package}, not S1 Kiosk (${PKG}). Nothing was changed.`);
+  if (info.package !== app.package) throw new Error(`this APK is ${info.package}, not ${app.name} (${app.package}): ${pick}. Nothing was changed.`);
   // the Mirror runs Android 6 (API 23) on arm64 with 32-bit arm too (frame.json abis): the legacy build fits
   const min = info.minSdk ?? 1;
-  if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): pick S1 Kiosk's legacy build. Nothing was changed.`);
-  if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: pick S1 Kiosk's legacy build. Nothing was changed.`);
+  if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): ${pick}. Nothing was changed.`);
+  if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: ${pick}. Nothing was changed.`);
+  // only the copy in /system can ask for a privileged permission: an update can never add one later
+  const asks = new Set(await apkPermissions(apk, MIRROR_API));
+  const missing = PRIVILEGED.filter((p) => !asks.has(p));
+  if (missing.length) {
+    throw new Error(`this APK doesn't ask for ${missing.map((m) => m.replace('android.permission.', '')).join(', ')}. Android 6 grants a privileged permission only to what the copy in /system asks for, and an update can never add one: ${pick}. Nothing was changed.`);
+  }
   const home = await apkHome(apk);
   if (!home.on.length) {
     const why = home.off.length ? `its home screen (${home.off.join(', ')}) is turned off in its manifest`
       : home.unclear.length ? `whether its home screen (${home.unclear.join(', ')}) is on depends on a resource Kiln doesn't read`
         : 'it has no home screen (no activity with MAIN, HOME and DEFAULT in one intent filter)';
-    throw new Error(`this APK can't be the Mirror's home screen: ${why}. The Mirror has no touchscreen, so it would start to nothing: pick a build of S1 Kiosk made for Android 6. Nothing was changed.`);
+    throw new Error(`this APK can't be the Mirror's home screen: ${why}. The Mirror has no touchscreen, so it would start to nothing: ${pick}. Nothing was changed.`);
   }
   return info;
 }
@@ -122,7 +130,8 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     const got = [...new Uint8Array(await crypto.subtle.digest('SHA-256', o.settingsOverlay as Uint8Array<ArrayBuffer>))].map((b) => b.toString(16).padStart(2, '0')).join('');
     if (got !== SETTINGS_OVERLAY.sha256) throw new Error(`the settings overlay isn't the one Kiln builds (SHA-256 ${got}). Nothing was changed.`);
   }
-  await checkMirrorApk(o.apk);
+  const app = o.app ?? GLASSWORKS;
+  await checkMirrorApk(o.apk, app);
   const names = zipNames(o.apk);
   // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them: an empty lib/<abi>/ folder doesn't count
   const soIn = (a: string) => names.filter((n) => n.startsWith(`lib/${a}/`) && n.endsWith('.so') && !n.slice(`lib/${a}/`.length).includes('/'));
@@ -141,15 +150,16 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     payloads.push([dest, data]);
   }
 
-  if (await fs.exists(APP_DIR)) { await fs.remove(APP_DIR, { recursive: true, time }); log(`replaced ${APP_DIR}`); }
-  await fs.mkdir(APP_DIR, dirAttrs(time));
-  await fs.writeFile(`${APP_DIR}/S1Kiosk.apk`, o.apk, fileAttrs(time));
-  log(`${APP_DIR}/S1Kiosk.apk (${o.apk.length} bytes)`);
+  // one app of ours per image: any earlier one (Glassworks or the probe) goes first
+  for (const dir of APP_DIRS) if (await fs.exists(dir)) { await fs.remove(dir, { recursive: true, time }); log(`replaced ${dir}`); }
+  await fs.mkdir(app.dir, dirAttrs(time));
+  await fs.writeFile(`${app.dir}/${app.file}`, o.apk, fileAttrs(time));
+  log(`${app.dir}/${app.file} (${o.apk.length} bytes)`);
   // Android 6 doesn't unpack a bundled app's libraries from its APK: they sit next to it, by ABI
   if (abi && libs.length) {
-    await fs.mkdirs(`${APP_DIR}/lib/${abi[1]}`, dirAttrs(time));
-    for (const [name, data] of payloads) await fs.writeFile(`${APP_DIR}/lib/${abi[1]}/${name}`, data, fileAttrs(time));
-    log(`${libs.length} native librar${libs.length === 1 ? 'y' : 'ies'} for ${abi[0]} in ${APP_DIR}/lib/${abi[1]}`);
+    await fs.mkdirs(`${app.dir}/lib/${abi[1]}`, dirAttrs(time));
+    for (const [name, data] of payloads) await fs.writeFile(`${app.dir}/lib/${abi[1]}/${name}`, data, fileAttrs(time));
+    log(`${libs.length} native librar${libs.length === 1 ? 'y' : 'ies'} for ${abi[0]} in ${app.dir}/lib/${abi[1]}`);
   }
 
   if (o.bootAnimation) {
