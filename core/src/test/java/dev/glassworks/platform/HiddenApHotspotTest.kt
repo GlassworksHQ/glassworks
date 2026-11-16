@@ -94,6 +94,17 @@ class HiddenApHotspotTest {
     }
 
     @Test
+    fun `a device without the hidden method fails clearly, and nothing stays changed`() {
+        val d = FakeDevice(wifiOn = true).apply { refuse = NoSuchMethodException("setWifiApEnabled") }
+        hotspot(d).start { events += it }
+        idle()
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Failed(HotspotFailure.NOT_ALLOWED)), events)
+        assertTrue(d.wifiOn)
+        assertEquals("Home hotspot", d.config)
+        assertNull(d.listener)
+    }
+
+    @Test
     fun `Android ending the AP puts things back too`() {
         val d = FakeDevice(wifiOn = true)
         hotspot(d).start { events += it }

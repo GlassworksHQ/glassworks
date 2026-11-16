@@ -536,7 +536,8 @@ keeps a `dev.glassworks.platform.Hotspot` on exactly while the rule says so:
 
 The automatic start is armed only until the panel first connects: a panel that has been online since
 it started doesn't take itself off a router that reboots. Stop disarms it until Wi-Fi is configured
-again. An ordinary app can't list the saved networks since Android 10, so "none saved" waits the same 3
+again. Wi-Fi details sent while the panel is still on its old network keep it armed for 3 minutes, so
+a new network that fails brings the hotspot back. An ordinary app can't list the saved networks since Android 10, so "none saved" waits the same 3
 minutes; the setup screen can ask for the hotspot at once.
 
 `Hotspot.of` picks the way by `Platform.hotspotKind`:

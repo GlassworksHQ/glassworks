@@ -63,7 +63,19 @@ class SetupHotspotPolicyTest {
         assertEquals(Stop.CONFIGURED, p.lastStop)
         assertEquals(Decision(false, 3 * min), p.update(false, 4 * min))
         assertFalse("joined", p.update(true, 5 * min).on)
+        assertEquals("still connected 3 minutes on: the new network works", Decision(false, null), p.update(true, 8 * min))
         assertFalse(p.update(false, 30 * min).on)
+    }
+
+    @Test
+    fun `Wi-Fi details sent while still on the old network - if the new one fails, the hotspot comes back`() {
+        p.update(connected = true, now = min)
+        p.configured(now = 10 * min)
+        assertEquals("rule 2 still holds", Decision(false, 3 * min), p.update(connected = true, now = 10 * min))
+        p.update(connected = true, now = 10 * min + 5_000)
+        assertFalse("left the old network, the new one failed", p.update(false, 10 * min + 6_000).on)
+        assertFalse(p.update(false, 13 * min + 4_999).on)
+        assertTrue(p.update(false, 13 * min + 5_000).on)
     }
 
     @Test

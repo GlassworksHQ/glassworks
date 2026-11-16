@@ -58,7 +58,8 @@ class HiddenApHotspot<C>(
         }
         val ok = try {
             ap.setAp(net, true)
-        } catch (_: SecurityException) {
+        } catch (_: Exception) {
+            // A SecurityException, or a device without the hidden method (NoSuchMethodException).
             false
         }
         if (!ok) {

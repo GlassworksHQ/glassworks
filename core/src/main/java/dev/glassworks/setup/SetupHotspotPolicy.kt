@@ -31,8 +31,12 @@ class SetupHotspotPolicy(
     private val maxOnMs: Long = 15 * 60_000L,
 ) {
     sealed interface State {
-        /** Off. It starts by itself once the panel has been offline [graceMs] since [since]. */
-        data class Waiting(val since: Long) : State
+        /**
+         * Off. It starts by itself once the panel has been offline [graceMs] since [since]. Until [holdUntil], a
+         * connection doesn't disarm it, only moves [since]: right after new Wi-Fi details the panel is often still
+         * on the old network, which it leaves to join the new one.
+         */
+        data class Waiting(val since: Long, val holdUntil: Long? = null) : State
 
         /** Off, and only [ask] starts it. */
         data object Idle : State
@@ -61,9 +65,12 @@ class SetupHotspotPolicy(
     fun update(connected: Boolean, now: Long): Decision {
         val s = state
         state = when {
-            connected -> {
-                if (s is State.On) lastStop = Stop.CONNECTED
-                State.Idle
+            connected -> when {
+                s is State.Waiting && s.holdUntil != null && now < s.holdUntil -> s.copy(since = now)
+                else -> {
+                    if (s is State.On) lastStop = Stop.CONNECTED
+                    State.Idle
+                }
             }
             s is State.Waiting && now - s.since >= graceMs -> State.On(now, now + maxOnMs, asked = false, armed = true)
             s is State.On && now >= s.until -> {
@@ -93,10 +100,14 @@ class SetupHotspotPolicy(
         state = State.Idle
     }
 
-    /** Wi-Fi details arrived (the setup page, Bluetooth, USB): off, so the panel can join, and armed again. */
+    /**
+     * Wi-Fi details arrived (the setup page, Bluetooth, USB): off, so the panel can join, and armed again. A
+     * connection in the next [graceMs] (the old network, before the panel leaves it) keeps it armed: if the new
+     * network then fails, the hotspot comes back [graceMs] after the panel was last connected.
+     */
     fun configured(now: Long) {
         if (state is State.On) lastStop = Stop.CONFIGURED
-        state = State.Waiting(now)
+        state = State.Waiting(now, holdUntil = now + graceMs)
     }
 
     /** The hotspot didn't start, or Android stopped it: off, until someone asks again. */
