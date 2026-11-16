@@ -2,8 +2,8 @@ package sh.edm.s1kiosk
 
 import android.content.res.Configuration
 import android.os.LocaleList
-import dev.glassworks.platform.Platform
 import android.util.Log
+import dev.glassworks.platform.Platform
 import java.util.Locale
 
 /**

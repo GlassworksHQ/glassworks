@@ -8,12 +8,12 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.os.Bundle
-import dev.glassworks.platform.Platform
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.SeekBar
+import dev.glassworks.platform.Platform
 import kotlin.math.roundToInt
 
 /**
