@@ -134,9 +134,14 @@ describe('a first boot with nothing to tap', () => {
   it('flashes the settings overlay and lock-screen default into system, and the saved Wi-Fi into userdata', async () => {
     const overlay = new Uint8Array(readFileSync(resolve(__dirname, '../../../frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
     const img = await dryImage(work, APK.length + overlay.length);
-    const d = dryDevices(img.bytes, () => {});
+    const lines: string[] = [];
+    const d = dryDevices(img.bytes, (l) => lines.push(l));
     await runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, work,
       settingsOverlay: overlay, wifi: { ssid: 'Home Net', password: 'not-a-real-password' } }, d.deps);
+    // the harness's log, shown and kept by whoever runs it: never the network's name or password (CLAUDE.md rule 2)
+    expect(lines).toContain('    Wi-Fi: the network you entered');
+    expect(lines.join('\n')).not.toContain('Home Net');
+    expect(lines.join('\n')).not.toContain('not-a-real-password');
     if (!haveTools) return;
     const sys = join(work, 'fb-system.raw'), ud = join(work, 'fb-userdata.raw');
     writeFileSync(sys, d.lk.parts.get('system')!);

@@ -179,10 +179,12 @@ describe('first boot', () => {
     await expect(firstBoot(new FirstBootMirror(GLASS_PANES.fingerprint, false), {})).rejects.toThrow(/isn't on the Mirror/);
   });
 
-  it('without the app\'s Improv socket, says the Wi-Fi wasn\'t confirmed (and never logs the password)', async () => {
+  it('without the app\'s Improv socket, says the Wi-Fi wasn\'t confirmed, and never logs the network\'s name or password', async () => {
     const lines: string[] = [];
-    const r = await firstBoot(new FirstBootMirror(), { wifi: { ssid: 'Home Net', password: 'not-a-real-password' }, onStep: (s, d) => lines.push(s || d || ''), sleep: async () => {} });
+    const r = await firstBoot(new FirstBootMirror(), { wifi: { ssid: 'Made-up Home Net', password: 'not-a-real-password' }, onStep: (s, d) => lines.push(s || d || ''), sleep: async () => {} });
     expect(r.wifi).toBe(false);
+    expect(lines).toContain('Wi-Fi: the network you entered');
+    expect(lines.join('\n')).not.toContain('Made-up Home Net');
     expect(lines.join('\n')).not.toContain('not-a-real-password');
   });
 });

@@ -198,7 +198,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
 
   let wifi: boolean | undefined;
   if (o.wifi) {
-    r.step(`Wi-Fi ${o.wifi.ssid}`);
+    r.step('Wi-Fi: the network you entered'); // never its name: logs end up in failure reports (CLAUDE.md rule 2)
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : 'S1 Kiosk didn\'t confirm it joined: set the Wi-Fi in its settings');
   }

@@ -97,6 +97,11 @@ describe('installing Glassworks over fastboot', () => {
     expect(built).toHaveLength(1);
     expect(built[0]!.wifi).toEqual({ ssid: 'Home Net', password: 'not-a-real-password' });
     expect(built[0]!.settingsOverlay).toBe(overlay);
+    await f.connectAdb(); // the first boot sends the network to S1 Kiosk too (the fallback)
+    // the Technical log, and the failure report saved from it: never the network's name or password (CLAUDE.md rule 2)
+    expect(f.state.log).toContain('Wi-Fi: the network you entered');
+    expect(f.state.log.join('\n')).not.toContain('Home Net');
+    expect(f.state.log.join('\n')).not.toContain('not-a-real-password');
   });
 
   it('the flash-wifi-short demo shows the refusal of a password WPA can\'t take', async () => {
