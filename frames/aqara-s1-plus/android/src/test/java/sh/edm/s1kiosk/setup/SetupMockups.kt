@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.setup
 
 import android.app.Application
 import android.content.Context
+import dev.glassworks.frame.Input
 import dev.glassworks.pane.PaneChoice
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -43,9 +44,9 @@ class SetupMockups {
     private fun model(
         step: String, wifi: WifiSetupStatus.Snapshot = online, haUrl: String? = ha,
         improv: ImprovFacts = ImprovFacts(), installer: InstallerWifi? = null, preview: Boolean = false,
-        done: Set<String> = flow.takeWhile { it != step }.toSet(),
+        done: Set<String> = flow.takeWhile { it != step }.toSet(), panelIp: String? = ip,
     ) = SetupOverlay.Model(
-        step = step, done = done, wifi = wifi, haUrl = haUrl, haSource = "mdns", panelIp = ip,
+        step = step, done = done, wifi = wifi, haUrl = haUrl, haSource = "mdns", panelIp = panelIp,
         signedIn = false, improv = WifiStep.improv(improv), installer = installer, preview = preview,
     )
 
@@ -65,9 +66,12 @@ class SetupMockups {
         )
     }
 
-    private fun shot(name: String, m: SetupOverlay.Model, radio: RadioFollowUp.Facts? = null, followUp: Boolean = false, then: (SetupOverlay) -> Unit = {}) {
+    private fun shot(
+        name: String, m: SetupOverlay.Model, radio: RadioFollowUp.Facts? = null, followUp: Boolean = false,
+        input: Input = Input.TOUCH, then: (SetupOverlay) -> Unit = {},
+    ) {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a, panes(a, radio, followUp))
+        val s = s1SetupOverlay(a, panes(a, radio, followUp)).also { it.input = input }
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(m)
         then(s)
@@ -122,5 +126,11 @@ class SetupMockups {
         shot("setup-12-preview", model(SetupFlow.WIFI, preview = true))
         shot("setup-13-done", model(SetupFlow.PANES)) { it.finish(holdMs = 60_000) {} }
         shot("setup-14-done-preview", model(SetupFlow.PANES, preview = true)) { it.finish {} }
+
+        // A frame without touch (Input.NONE, #34): set up from a computer; nothing on the screen takes a tap.
+        shot("setup-15-no-touch-wifi", model(SetupFlow.WIFI, wifi = offline, panelIp = null), input = Input.NONE)
+        shot("setup-16-no-touch-ha", model(SetupFlow.HA), input = Input.NONE)
+        shot("setup-17-no-touch-signin", model(SetupFlow.SIGNIN), input = Input.NONE)
+        shot("setup-18-no-touch-radio", model("radio"), radio = coordinator, input = Input.NONE)
     }
 }

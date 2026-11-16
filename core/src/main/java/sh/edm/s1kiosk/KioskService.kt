@@ -57,7 +57,7 @@ class KioskService : Service() {
         runtime.app.serviceStarted(this, runtime)
         glassworks.voiceCancel = { device?.cancelVoice() }
         HaAuth.startServer(this)
-        codeOverlay = CodeOverlay(this) { glassworks.panelCode.dismiss() }
+        codeOverlay = CodeOverlay(this, touch = glassworks.frame.input == dev.glassworks.frame.Input.TOUCH) { glassworks.panelCode.dismiss() }
         // Without "draw over other apps" the code can't show: the Manage page says so instead of waiting for it.
         glassworks.panelCode.canDisplay = { android.provider.Settings.canDrawOverlays(this) }
         glassworks.panelCode.display = { shown ->

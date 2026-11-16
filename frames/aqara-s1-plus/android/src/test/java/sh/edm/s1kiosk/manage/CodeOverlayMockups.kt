@@ -4,6 +4,8 @@ import android.app.Application
 import dev.glassworks.manage.PanelCode
 import org.junit.Assume.assumeTrue
 import org.junit.Before
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -27,6 +29,9 @@ class CodeOverlayMockups {
         val a = Mockup.activity()
         Mockup.save("manage-code-sign-in", Mockup.show(CodeOverlay.build(a, PanelCode.Shown("482913", "signin", "Sign in to manage this panel", 0), {})))
         Mockup.save("manage-code-reboot", Mockup.show(CodeOverlay.build(a, PanelCode.Shown("482913", "reboot", "Reboot the panel", 0), {})))
+        // A frame without touch (Input.NONE): no Close; the code goes when used or run out (#34).
+        Mockup.save("setup-lan-code-no-touch", Mockup.show(CodeOverlay.build(a,
+            PanelCode.Shown("482913", dev.glassworks.setup.LanSetup.PURPOSE, dev.glassworks.setup.LanSetup.LABEL, 0), {}, touch = false)))
         // Setup over the LAN (#34): the same overlay, for pairing a laptop.
         Mockup.save("setup-lan-code", Mockup.show(CodeOverlay.build(a,
             PanelCode.Shown("482913", dev.glassworks.setup.LanSetup.PURPOSE, dev.glassworks.setup.LanSetup.LABEL, 0), {})))
@@ -41,6 +46,23 @@ class CodeOverlayMockups {
                 android.widget.FrameLayout.LayoutParams(-1, -1))
         }
         Mockup.save("manage-code-over-clock", Mockup.show(behind))
+    }
+
+    /** Without touch there's nothing to tap: no Close (#34). With touch, Close closes it. */
+    @Test
+    fun closeOnlyWhereTheScreenTakesATap() {
+        fun texts(v: android.view.View): List<String> = when (v) {
+            is android.widget.TextView -> listOf(v.text.toString())
+            is android.view.ViewGroup -> (0 until v.childCount).flatMap { texts(v.getChildAt(it)) }
+            else -> emptyList()
+        }
+        val shown = PanelCode.Shown("482913", "setup", "Set up this panel from a computer", 0)
+        var closed = 0
+        val touch = CodeOverlay.build(Mockup.activity(), shown, { closed++ })
+        assertTrue("Close" in texts(touch))
+        val none = CodeOverlay.build(Mockup.activity(), shown, { closed++ }, touch = false)
+        assertFalse("Close" in texts(none))
+        assertTrue("the code still shows", "482  913" in texts(none))
     }
 
     /** The overlay hides what's behind it completely (the night clock showed through, panel run 2026-11-13). */

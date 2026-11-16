@@ -20,7 +20,7 @@ function Pair({ lan, v, busy }: { lan: LanSession; v: Extract<LanView, { at: 'pa
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">Pairing is off.</h2>
-        <p className="lede">Home Assistant has added this panel, so it pairs with a browser only when you allow it. In Home Assistant, open the panel&apos;s device page and press <b>Allow setup over the network</b>. It stays allowed for 30 minutes.</p>
+        <p className="lede">Home Assistant has added this panel, so it pairs with a browser only when you allow it. Press <b>Allow setup over the network</b>: on the panel&apos;s device page in Home Assistant, or on the panel in its settings, under Home Assistant &amp; dashboard. It stays allowed for 30 minutes.</p>
         {v.error && <p className="small">{v.error}</p>}
         <div className="foot"><span /><button type="button" className="btn ember" disabled={busy} onClick={() => void lan.click('check', () => lan.start())}>Check again</button></div>
       </section>

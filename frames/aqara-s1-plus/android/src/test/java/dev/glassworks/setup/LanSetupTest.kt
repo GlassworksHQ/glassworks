@@ -360,8 +360,15 @@ class LanSetupTest {
             }
         }
 
+        /**
+         * Closes as a browser does, then waits for the panel to drop the connection: it frees the channel's slot
+         * before that, so the next channel can't race it (a 503 on CI for #405).
+         */
         override fun close() {
-            runCatching { s.getOutputStream().write(clientFrame(0x8, ByteArray(0))) }
+            runCatching {
+                s.getOutputStream().write(clientFrame(0x8, ByteArray(0)))
+                while (s.getInputStream().read() >= 0) Unit
+            }
             s.close()
         }
     }
