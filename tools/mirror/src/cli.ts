@@ -61,6 +61,9 @@ async function confirmer(yes: boolean) {
   return async (q: string) => /^y(es)?$/i.test((await rl.question(`    ${q} [y/N] `)).trim());
 }
 
+/** One USB transfer's limit: a piece's download, or LK writing it to eMMC before it answers. */
+const TRANSFER_TIMEOUT_MS = 120_000;
+
 /** The Mirror's LK over Node's WebUSB: waits for exactly one 18d1:d00d device. */
 async function nodeFastboot(log: (l: string) => void): Promise<FastbootLike> {
   let usb: typeof import('usb');
@@ -70,7 +73,13 @@ async function nodeFastboot(log: (l: string) => void): Promise<FastbootLike> {
     const found = (await webusb.getDevices()).filter((d) => d.vendorId === MIRROR_FASTBOOT.vendorId && d.productId === MIRROR_FASTBOOT.productId);
     if (found.length > 1) fail(`${found.length} devices answer as 18d1:d00d: unplug every other fastboot device`);
     if (found.length === 1) {
-      const fb = await Fastboot.fromDevice(found[0]!);
+      // WebUSB transfers take no timeout, and the usb package gives each one 1 s by default: too short for a
+      // 256 MiB download, or for LK writing a piece before it answers (a real run stopped with "Cancelled").
+      const dev = found[0]! as USBDevice & { transferIn(ep: number, len: number, timeout?: number): Promise<USBInTransferResult>; transferOut(ep: number, data: BufferSource, timeout?: number): Promise<USBOutTransferResult> };
+      const tin = dev.transferIn.bind(dev), tout = dev.transferOut.bind(dev);
+      dev.transferIn = (ep: number, len: number) => tin(ep, len, TRANSFER_TIMEOUT_MS);
+      dev.transferOut = (ep: number, data: BufferSource) => tout(ep, data, TRANSFER_TIMEOUT_MS);
+      const fb = await Fastboot.fromDevice(dev);
       fb.log = (l) => log(`    LK: ${l}`);
       return fb;
     }
