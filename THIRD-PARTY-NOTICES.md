@@ -356,9 +356,10 @@ The page's JavaScript and WebAssembly ([`kiln/`](kiln)):
   `34dfa20f8284273085666436e4cac09af19646c8`, `thunks/fel-to-spl-thunk.S`): 69 ARM words in
   [`kiln/packages/fel/src/thunk.ts`](kiln/packages/fel/src/thunk.ts), with its licence. MIT,
   "Copyright © 2015 Siarhei Siamashka". This file alone was always MIT, unlike the rest of sunxi-tools.
-  The rest of `kiln/packages/fel` was rewritten clean-room from
-  [docs/research/kiln-cleanroom/fel-spec.md](docs/research/kiln-cleanroom/fel-spec.md) (#355) and
-  holds no other sunxi-tools code.
+  The FEL client in `kiln/packages/fel` was rewritten clean-room from
+  [docs/research/kiln-cleanroom/fel-spec.md](docs/research/kiln-cleanroom/fel-spec.md) (#355).
+  `src/a133.ts` is kept: it holds chip facts (addresses and ids), not code. They were first taken
+  from sunxi-tools' `soc_info.c`, and the spec lists their public sources.
 
 ### Kiln, the Next.js installer (not live yet)
 
