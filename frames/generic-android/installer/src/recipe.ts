@@ -201,13 +201,16 @@ async function grant(r: Steps, app: GenericApp, apk: Uint8Array, sdk: number): P
     out.push(result(what, new RegExp(`${perm.replace(/\./g, '\\.')}: granted=true`).test(dump)));
   }
   out.push(overlay ? result('overlay', /SYSTEM_ALERT_WINDOW: allow/.test(ops)) : { what: 'overlay', result: 'not-asked' });
-  out.push(app.admin ? result('device-admin', admins.includes(app.admin.split('/')[0]!)) : { what: 'device-admin', result: 'not-asked' });
+  out.push(app.admin ? result('device-admin', admins.includes(`${app.package}/`)) : { what: 'device-admin', result: 'not-asked' });
   for (const g of out) r.detail(`${g.result.padEnd(9)} ${g.what}${g.detail ? `: ${g.detail}` : ''}`);
   return out;
 }
 
-/** The home screen Android resolves HOME to now: `cmd package resolve-activity` (Android 7+), else the "Always" pick. */
-async function currentHome(p: PanelShell, sdk: number): Promise<string | undefined> {
+/**
+ * The home screen Android resolves HOME to now: `cmd package resolve-activity` (Android 7+), else the "Always"
+ * pick. Read-only. Undefined when the lookup fails or names no component.
+ */
+export async function currentHome(p: PanelShell, sdk: number): Promise<string | undefined> {
   if (sdk >= 24) {
     const r = await p.run(`cmd package resolve-activity --brief ${HOME_INTENT}`);
     const last = r.out.trim().split(/\r?\n/).pop()?.trim() ?? '';

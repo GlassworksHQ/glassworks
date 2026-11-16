@@ -42,6 +42,8 @@ export interface FakeAndroidOptions {
   silentlyIgnore?: string[];
   refuseAppops?: boolean;
   refuseAdmin?: boolean;
+  /** the other build's device admin is active, left over from it (its package starts with this one's) */
+  otherAdmin?: boolean;
   /** `cmd package set-home-activity` fails, as on a vendor build that locks its launcher */
   refuseSetHome?: boolean;
   /** in the chooser, the person taps Glassworks and Always after this many reads; undefined: never */
@@ -69,6 +71,7 @@ export class FakeAndroid implements PanelShell {
     this.app = (o.sdk ?? 34) >= 26 ? GENERIC : LEGACY;
     this.installed = o.installed;
     if (o.installed) { this.home = this.app.home; if (this.app.admin) this.admins.add(this.app.admin); }
+    if (o.otherAdmin) this.admins.add((this.app === GENERIC ? LEGACY : GENERIC).admin!);
   }
 
   async push(path: string, data: Uint8Array, mode?: number) { this.cmds.push(`push ${path} ${data.length} ${(mode ?? 0o644).toString(8)}`); }

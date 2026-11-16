@@ -4,7 +4,7 @@ export {
   type Brand, type BrandId, type DebugSteps, type Identified, type Model, type Place, type Source,
 } from './devices';
 export {
-  Refused, handOff, installGeneric, planInstall, readDevice, undoGeneric,
+  Refused, currentHome, handOff, installGeneric, planInstall, readDevice, undoGeneric,
   type AppVersion, type DeviceFacts, type GenericInstalled, type GenericOptions, type GenericPhase, type Grant, type Handoff, type HomeResult, type Plan,
 } from './recipe';
 

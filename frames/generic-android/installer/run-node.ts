@@ -13,24 +13,26 @@
 import { readFileSync } from 'node:fs';
 import type { PanelShell } from '@glassworks/adb';
 import { hostAdb, readSerial } from '../../../tools/mirror/src/adb';
-import { installGeneric, planInstall, undoGeneric } from './src';
+import { currentHome, installGeneric, planInstall, undoGeneric } from './src';
 import { FakeAndroid, fakeGenericApk } from './test/fakes';
 
-export async function cli(argv: string[], log: (l: string) => void = (l) => console.log(l)): Promise<number> {
+/** `shell`: the device to use instead of the host's adb or --dry-run's fake (the tests). */
+export async function cli(argv: string[], log: (l: string) => void = (l) => console.log(l), shell?: PanelShell): Promise<number> {
   const flag = (f: string) => argv.includes(f);
   const value = (f: string) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined; };
   const mode = (['--plan', '--install', '--undo'] as const).find(flag);
   if (!mode) { log('usage: run-node.ts (--plan | --install | --undo) [--apk <file>] [--ha-url <url>] [--serial-file <file>] [--dry-run]'); return 2; }
   const dry = flag('--dry-run');
-  const p: PanelShell = dry ? new FakeAndroid({ ip: '192.0.2.10' }) : hostAdb(readSerial(value('--serial-file') ?? '/tmp/tablet-serial'));
+  const p: PanelShell = shell ?? (dry ? new FakeAndroid({ ip: '192.0.2.10' }) : hostAdb(readSerial(value('--serial-file') ?? '/tmp/tablet-serial')));
   const apkFile = value('--apk');
-  const apk = apkFile ? new Uint8Array(readFileSync(apkFile)) : dry ? fakeGenericApk() : undefined;
+  const apk = apkFile ? new Uint8Array(readFileSync(apkFile)) : dry ? fakeGenericApk({ app: p instanceof FakeAndroid ? p.app : undefined }) : undefined;
   const onStep = (s: string, d?: string) => log(s ? `\n## ${s}` : `   ${d}`);
   if (mode === '--undo') { log(JSON.stringify(await undoGeneric(p, { onStep }), (k, v) => (k === 'removed' ? v.map((a: { package: string }) => a.package) : v), 2)); return 0; }
   if (!apk) { log('--apk <file> is needed'); return 2; }
   if (mode === '--plan') {
     const plan = await planInstall(p, apk);
-    const home = (await p.run('cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME')).out.trim().split(/\r?\n/).pop();
+    // version-aware (no `cmd` on Android 6); a failed lookup says so, never prints its error as a component
+    const home = (await currentHome(p, plan.device.sdk)) ?? 'unknown (the lookup failed)';
     log(JSON.stringify({ device: plan.device, brand: plan.identified.brand?.name, model: plan.identified.model?.name, tested: plan.identified.tested,
       app: plan.app.package, abi: plan.abi, installed: plan.installed, home }, null, 2));
     return 0;

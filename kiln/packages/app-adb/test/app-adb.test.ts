@@ -42,8 +42,15 @@ describe('S1 Kiosk over adb', () => {
     expect(await dropAdmin(s, async () => {})).toBe(true);
     expect(s.cmds[0]).toBe('am start -n sh.edm.s1kiosk/.MainActivity --ez remove_admin true');
     expect(polls).toBe(3);
-    const stuck = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? 'sh.edm.s1kiosk' : '', code: 0 }));
+    const stuck = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? 'sh.edm.s1kiosk/.AdminReceiver' : '', code: 0 }));
     expect(await dropAdmin(stuck, async () => {})).toBe(false);
+  });
+
+  it('doesn\'t wait on another app\'s admin whose package starts with this one\'s', async () => {
+    const app = { package: 'dev.glassworks.generic_android', activity: 'dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity' };
+    const s = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? '    dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.AdminReceiver:\n' : '', code: 0 }));
+    expect(await dropAdmin(s, async () => {}, app)).toBe(true);
+    expect(s.cmds.filter((c) => c === 'dumpsys device_policy')).toHaveLength(1);
   });
 
   it('reads the installed version, or none', async () => {

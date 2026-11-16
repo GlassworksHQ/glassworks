@@ -149,6 +149,12 @@ describe('vendor builds: report what didn\'t apply, finish the rest', () => {
     expect(res.grants.find((g) => g.what === 'microphone')).toEqual({ what: 'microphone', result: 'refused', detail: 'Android says it is still off' });
   });
 
+  it('a refused admin isn\'t read as granted when the other build\'s admin is left over', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, refuseAdmin: true, otherAdmin: true });
+    expect(p.admins).toEqual(new Set([LEGACY.admin]));
+    expect(res.grants.find((g) => g.what === 'device-admin')).toEqual({ what: 'device-admin', result: 'refused', detail: 'java.lang.SecurityException: Calling identity is not authorized' });
+  });
+
   it('a refused overlay and device admin', async () => {
     const { res } = await run({ ...LEVELS.api29!, refuseAppops: true, refuseAdmin: true });
     expect(res.grants.filter((g) => g.result === 'refused').map((g) => g.what)).toEqual(['overlay', 'device-admin']);
@@ -194,6 +200,13 @@ describe('undo', () => {
     expect(p.installed).toBeUndefined();
     const at = (c: string) => p.cmds.indexOf(c);
     expect(at(`am start -n ${GENERIC.activity} --ez remove_admin true`)).toBeLessThan(at(`pm uninstall ${GENERIC.package}`));
+  });
+
+  it('doesn\'t wait on the other build\'s admin', async () => {
+    const p = new FakeAndroid({ ...LEVELS.api34!, installed: 700, otherAdmin: true });
+    expect((await undoGeneric(p, { sleep: noSleep })).removed).toEqual([GENERIC]);
+    expect(p.cmds.filter((c) => c === 'dumpsys device_policy')).toHaveLength(1);
+    expect(p.admins).toEqual(new Set([LEGACY.admin]));
   });
 
   it('with nothing installed, removes nothing', async () => {
