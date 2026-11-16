@@ -257,8 +257,10 @@ writing a persistent `system` image on a locked device, and on a stock unit that
 described below, so a note that anyone can copy-paste is the wrong place for it. What a maintainer
 needs is here: the file, its mode and label, that appending in place keeps both, how the image is
 expanded and re-sparsified, and that `e2fsck -fn` afterwards shows only the `make_ext4fs` inode-bitmap
-quirk the untouched image also has. The scripts used (the appended blocks and the sparse-image
-encoder) live with the other working files, outside the repo.
+quirk the untouched image also has. The appended blocks live with the other working files, outside
+the repo; the sparse step needs no new tool, because `writeSparse` in
+[`kiln/packages/ext4`](../../../kiln/packages/ext4/src/sparse.ts) already writes that format and is
+what Kiln uses.
 
 **First attempt, and the one rule that mattered.** Creating a directory failed:
 
@@ -327,8 +329,9 @@ in batches: `qti_init_shell` may write there, but the space is calibration stora
 
 **Reversibility, split in two.** On this unit the change is `/system` only, the published image is on
 disk with its hash, and reflashing takes about a minute — so any point in this work can be undone.
-That was **run, not assumed** at the end of this pass: the published image went back, one cleanup
-boot deleted the `gw-*` files, and the unit came up with `post_boot.sh` at its original 80502 bytes
+That was **run, not assumed** at the end of this pass, in this order: one boot on a cleanup build
+(the same append, with `rm -f /persist/gw-*` in place of the copy) deleted the `gw-*` files, then the
+published image went back, and the unit came up with `post_boot.sh` at its original 80502 bytes
 ending in `esac`, `/persist` at 220.0K used with no `gw-*` left, the kiosk focused and rotation 3.
 Deleting those files is a permission the domain has (`unlink` and `rename` are both in the rule
 above), and it is what cleared each batch between boots. On a **stock, virgin**
@@ -379,9 +382,10 @@ from the policy, `dmesg` and AOSP 6.0.1_r81; `flash_recovery` stays untested and
   sparse image (4 KiB blocks, zero runs as `DONT` chunks) and `fastboot flash system`ed. Appending
   in place is what keeps the inode, the 0644 mode and `security.selinux=u:object_r:system_file:s0`.
   The block itself, and the batching rules, are described in §7; they are not committed.
-- §7, undo: `fastboot flash system` with the published image, which removes the hook. The `gw-*`
-  files in `/persist` go with one more run of a hook that deletes them, because `shell` may read
-  `/persist` but not write it — plan that run, or leave a few small files behind.
+- §7, undo, in this order: flash a cleanup build (the same append, with `rm -f /persist/gw-*`) and
+  boot it once, so the `gw-*` files go — `shell` may read `/persist` but not write it, so the device
+  needs a hook to delete them; then `fastboot flash system` with the published image, which removes
+  the hook itself.
 - Nothing here needs undoing except §7, and §7's undo is the verified published image.
 
 ## Housekeeping / provenance
