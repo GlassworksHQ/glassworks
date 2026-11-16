@@ -304,7 +304,8 @@ and in the baseline; remove a line only when lint stops reporting the call (the 
 `SDK_INT` check lint understands). A lint detector that fails (`LintError`) fails the report too. Generated
 sources are checked: `:engine-gecko-legacy` compiles the shared `GeckoEngine.kt` from `build/generated`.
 
-The run of 2026-11-16, after the first fixes (#198 Phase A): 102 calls, 45 of them desugared:
+The run of 2026-11-16 on main at 62775aef with the first fixes (#198 Phase A): 109 calls, 52 of them desugared, so 57
+to look at (main alone read 118 and 53, so 65):
 
 | Module | Calls above API 23 | Of them desugared |
 |---|---|---|
@@ -314,7 +315,7 @@ The run of 2026-11-16, after the first fixes (#198 Phase A): 102 calls, 45 of th
 | `:sendspin` | 0 | 0 |
 | `:voice` | 0 | 0 |
 | `:glassworks-pane-api` | 10 | 0 |
-| `:glassworks-core` | 77 | 37 |
+| `:glassworks-core` | 84 | 44 |
 | `:engine-gecko-legacy` | 0 | 0 |
 | `:pane-diagnostics` | 1 | 0 |
 | `:pane-bluetooth-proxy` | 0 | 0 |
@@ -352,7 +353,7 @@ Each fix has a test on Robolectric's Android 6 framework (`Api23FallbacksTest`, 
 `AndroidProbeApi23Test`), where the old call throws `NoSuchMethodError` or `NoSuchFieldError`. Left for the app's
 own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#365).
 
-<details><summary>The full list (102 calls)</summary>
+<details><summary>The full list (109 calls)</summary>
 
 | Module | File | Line | Call | API | Desugared |
 |---|---|---|---|---|---|
@@ -371,9 +372,9 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 75 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 75 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 81 | `java.util.Collection#removeIf` | 24 | yes |
-| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 481 | `java.util.Base64#getUrlEncoder` | 26 | yes |
-| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 481 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
-| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 481 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 476 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 476 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 476 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 181 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 181 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 181 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
@@ -387,7 +388,14 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 70 | `java.util.Base64.Decoder#decode` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64#getDecoder` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64.Decoder#decode` | 26 | yes |
-| `:glassworks-core` | `dev/glassworks/web/Http.kt` | 100 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 186 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 186 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 186 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/web/Http.kt` | 121 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:glassworks-core` | `dev/glassworks/web/WebSocket.kt` | 151 | `java.util.Base64#getEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/web/WebSocket.kt` | 151 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/web/WebSocket.kt` | 163 | `java.util.Base64#getDecoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/web/WebSocket.kt` | 163 | `java.util.Base64.Decoder#decode` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 141 | `android.app.NotificationManager#createNotificationChannel` | 26 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 142 | `android.app.NotificationChannel()` | 26 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 143 | `android.app.NotificationChannel#setShowBadge` | 26 |  |

@@ -135,7 +135,9 @@ def main():
             out.write("# API 24+ calls the Glassworks modules already make (tools/legacy/api23-report.py). One line\n"
                       "# per <package path>|<API>. CI fails on a call not listed here; add one only on purpose. Lint\n"
                       "# can't see a Platform check, so a call behind one stays listed: remove a line only when lint\n"
-                      "# stops reporting the call (the call is gone, or behind an SDK_INT check lint understands).\n")
+                      "# stops reporting the call (the call is gone, or behind an SDK_INT check lint understands).\n"
+                      "# The key is per file and call, not per line, on purpose: lines move with every edit, and a listed call\n"
+                      "# that a file makes again is already known there. A new call, or a known one in a new file, fails.\n")
             out.writelines(k + "\n" for k in sorted(keys))
         print(f"api23-report: wrote {len(keys)} lines to {a.write_baseline}", file=sys.stderr)
         return

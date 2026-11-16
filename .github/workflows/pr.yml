@@ -8,6 +8,9 @@
 #   libs-api23  the libraries' lint (NewApi) and their androidTest checks on an API 23 emulator:
 #            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy and
 #            sendspin are linted only (an emulator has no Bluetooth to scan with, nor a Sendspin server)
+#   api23    the legacy build's floor (#198): lint's NewApi over the core, the pane API, the panes and the
+#            legacy engine at minSdk 23 (tools/legacy/api23-report.py), failing on a call above API 23 that
+#            tools/legacy/api23-baseline.txt doesn't list. Only when the Android code or this file changes
 #   libs-publish  a dry run of the Maven Central release (#153, docs/releasing.md "Libraries"): each
 #            library's public API checked against its api/<name>.api dump, every published library
 #            to mavenLocal, unsigned, its files checked, then fresh apps built
