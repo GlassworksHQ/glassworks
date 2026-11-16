@@ -37,6 +37,13 @@ class FramesTest(unittest.TestCase):
     def test_android_6_gets_full_frames(self):
         self.assertFalse(from_frame("lululemon-mirror").trim)
 
+    def test_the_mirror_turns_its_frames_into_the_landscape_panel(self):
+        # ro.sf.hwrotation turns Android's UI, not the boot animation (seen on the unit, 2026-11-16)
+        t = from_frame("lululemon-mirror")
+        self.assertEqual((t.screen, t.rotate, t.panel), ((1080, 1920), 90, (1920, 1080)))
+        self.assertIsNone(from_frame("aqara-s1-plus").rotate)
+        self.assertEqual(from_frame("aqara-s1-plus").panel, (1440, 720))
+
 
 class TargetTest(unittest.TestCase):
     def test_trim_needs_android_7_1(self):
@@ -48,7 +55,8 @@ class TargetTest(unittest.TestCase):
         for kw in ({"width": 0}, {"width": 1440.0}, {"height": 99999}, {"splash": "png"},
                    {"android_api": 9}, {"zip_budget": 0},
                    {"zip_budget": True}, {"android_api": True}, {"width": True}, {"name": " "},
-                   {"splash": "allwinner-boot-resource", "height": 722}):
+                   {"splash": "allwinner-boot-resource", "height": 722}, {"rotate": 180}, {"rotate": "90"},
+                   {"rotate": 90, "splash": "allwinner-boot-resource"}):
             with self.subTest(**kw), self.assertRaises(ValueError):
                 Target(**{"name": "X", "width": 1440, "height": 720, **kw})
 

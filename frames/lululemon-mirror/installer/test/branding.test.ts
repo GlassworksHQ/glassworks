@@ -1,5 +1,6 @@
 // The boot animation Kiln writes into the Mirror's system image (branding/lululemon-mirror, built by
-// branding/boot/generate.py): portrait for the Mirror's turned screen, and the generator's own output.
+// branding/boot/generate.py): portrait art turned into the Mirror's 1920x1080 landscape panel, and the
+// generator's own output.
 // CI's branding job also rebuilds it byte for byte when the generator or the frame's data changes.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -13,9 +14,16 @@ const ZIP = new Uint8Array(readFileSync(join(OUT, 'bootanimation.zip')));
 const sha = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 describe('the Mirror\'s bootanimation.zip', () => {
-  it('is portrait 1080x1920 at 30 fps, full frames (Android 6 reads no trim.txt)', async () => {
+  it('plays in the panel\'s own 1920x1080 framebuffer at 30 fps, full frames (Android 6 reads no trim.txt)', async () => {
+    // ro.sf.hwrotation turns Android's UI, not the boot animation (seen on the unit, 2026-11-16): the
+    // portrait art is turned into the landscape panel, frame by frame
     const desc = new TextDecoder().decode(await zipEntry(ZIP, 'desc.txt'));
-    expect(desc.split('\n')[0]).toBe('1080 1920 30');
+    expect(desc.split('\n')[0]).toBe('1920 1080 30');
+    for (const n of zipNames(ZIP).filter((x) => x.endsWith('.png')).slice(0, 3)) {
+      const png = (await zipEntry(ZIP, n))!;
+      const ihdr = new DataView(png.buffer, png.byteOffset + 16, 8); // IHDR: width, height
+      expect([ihdr.getUint32(0), ihdr.getUint32(4)], n).toEqual([1920, 1080]);
+    }
     expect(zipNames(ZIP).some((n) => n.endsWith('trim.txt'))).toBe(false);
     expect(zipNames(ZIP).filter((n) => n.endsWith('.png')).length).toBeGreaterThan(100);
   });
@@ -27,7 +35,8 @@ describe('the Mirror\'s boot branding outputs', () => {
   };
   it('were built for this frame', () => {
     const frame = JSON.parse(readFileSync(join(REPO, 'frames/lululemon-mirror/design/frame.json'), 'utf8'));
-    expect(manifest.target).toEqual({ name: frame.name, width: frame.display.width, height: frame.display.height, android_api: frame.boot.androidApi, splash: null, zip_budget: null });
+    expect(manifest.target).toEqual({ name: frame.name, width: frame.display.width, height: frame.display.height, android_api: frame.boot.androidApi, splash: null, zip_budget: null, rotate: 90 });
+    expect(frame.boot.rotate).toBe(90);
   });
   it('were built from the committed generator', () => {
     for (const f of ['generate.py', 'stack.py', 'formats.py', 'target.py']) {

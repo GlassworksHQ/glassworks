@@ -18,6 +18,12 @@ A target comes from a frame's design data (`frames/<id>/design/frame.json`):
                  exactly the stock file's size (the S1's BOOTLOGO.BMP).
     zipBudget    The largest bootanimation.zip the frame takes, in bytes, e.g. when it rides in the
                  boot image. Absent = no limit.
+    rotate       90 or 270: the boot animation plays in the panel's own framebuffer, not in the
+                 turned screen Android's UI uses. `display` is the screen as people see it; each frame
+                 is drawn upright at that size, then turned this many degrees counter-clockwise into
+                 the panel's framebuffer (desc.txt gets the panel's size). The Mirror needs it: its
+                 1920x1080 panel stands portrait, and ro.sf.hwrotation turns Android's UI but not the
+                 boot animation (seen on the unit, 2026-11-16).
 """
 import json
 import os
@@ -45,6 +51,7 @@ class Target:
     android_api: Optional[int] = None
     splash: Optional[str] = None
     zip_budget: Optional[int] = None
+    rotate: Optional[int] = None
 
     def __post_init__(self):
         if not self.name.strip():
@@ -61,10 +68,19 @@ class Target:
             raise ValueError(f"androidApi must be an API level of 21 or more, not {self.android_api!r}")
         if self.zip_budget is not None and (type(self.zip_budget) is not int or self.zip_budget <= 0):
             raise ValueError(f"zipBudget must be a positive number of bytes, not {self.zip_budget!r}")
+        if self.rotate is not None and self.rotate not in (90, 270):
+            raise ValueError(f"rotate must be 90 or 270 (degrees counter-clockwise), not {self.rotate!r}")
+        if self.rotate is not None and self.splash is not None:
+            raise ValueError("rotate turns the boot animation only; a bootloader splash has its own layout")
 
     @property
     def screen(self):
         return (self.width, self.height)
+
+    @property
+    def panel(self):
+        """The boot animation's size in the panel's framebuffer: the screen, turned if `rotate`."""
+        return (self.height, self.width) if self.rotate else (self.width, self.height)
 
     @property
     def trim(self):
@@ -80,11 +96,11 @@ def from_frame(frame_id, repo=REPO):
     if not disp:
         raise ValueError(f"{os.path.relpath(path, repo)} has no \"display\": {{ \"width\", \"height\" }} in pixels")
     boot = d.get("boot") or {}
-    unknown = set(boot) - {"androidApi", "splash", "zipBudget"}
+    unknown = set(boot) - {"androidApi", "splash", "zipBudget", "rotate"}
     if unknown:
         raise ValueError(f"{os.path.relpath(path, repo)}: unknown boot field(s) {', '.join(sorted(unknown))}")
     return Target(d["name"], disp.get("width"), disp.get("height"),
-                  boot.get("androidApi"), boot.get("splash"), boot.get("zipBudget"))
+                  boot.get("androidApi"), boot.get("splash"), boot.get("zipBudget"), boot.get("rotate"))
 
 
 @dataclass(frozen=True)

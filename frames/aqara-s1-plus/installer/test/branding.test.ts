@@ -59,7 +59,7 @@ describe('the S1 boot branding outputs', () => {
     const frame = JSON.parse(readFileSync(join(REPO, 'frames/aqara-s1-plus/design/frame.json'), 'utf8'));
     expect(manifest.target).toEqual({
       name: frame.name, width: frame.display.width, height: frame.display.height,
-      android_api: frame.boot.androidApi, splash: frame.boot.splash, zip_budget: frame.boot.zipBudget,
+      android_api: frame.boot.androidApi, splash: frame.boot.splash, zip_budget: frame.boot.zipBudget, rotate: frame.boot.rotate ?? null,
     });
   });
   it('were built from the committed generator', () => {

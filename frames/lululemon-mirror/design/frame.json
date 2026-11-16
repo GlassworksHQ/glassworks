@@ -233,7 +233,8 @@
     "height": 1920
   },
   "boot": {
-    "androidApi": 23
+    "androidApi": 23,
+    "rotate": 90
   },
   "abis": ["arm64-v8a", "armeabi-v7a"],
   "specs": [
