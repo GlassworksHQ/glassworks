@@ -32,9 +32,9 @@ class SetupHotspotPolicy(
 ) {
     sealed interface State {
         /**
-         * Off. It starts by itself once the panel has been offline [graceMs] since [since]. Until [holdUntil], a
-         * connection doesn't disarm it, only moves [since]: right after new Wi-Fi details the panel is often still
-         * on the old network, which it leaves to join the new one.
+         * Off. It starts by itself once the panel has been offline [graceMs] since [since], which moves to the
+         * moment a connection drops. Until [holdUntil], a connection doesn't disarm it: right after new Wi-Fi
+         * details the panel is often still on the old network, which it leaves to join the new one.
          */
         data class Waiting(val since: Long, val holdUntil: Long? = null) : State
 
@@ -63,10 +63,13 @@ class SetupHotspotPolicy(
 
     /** After any change in [connected], and when the last [Decision.wakeInMs] is up. */
     fun update(connected: Boolean, now: Long): Decision {
-        val s = state
+        val before = state
+        // Offline from now: the 3 minutes count from the drop, not from the last update that saw the link.
+        val s = if (!connected && wasConnected && before is State.Waiting) before.copy(since = now) else before
+        wasConnected = connected
         state = when {
             connected -> when {
-                s is State.Waiting && s.holdUntil != null && now < s.holdUntil -> s.copy(since = now)
+                s is State.Waiting && s.holdUntil != null && now < s.holdUntil -> s
                 else -> {
                     if (s is State.On) lastStop = Stop.CONNECTED
                     State.Idle
@@ -115,6 +118,9 @@ class SetupHotspotPolicy(
         if (state is State.On) lastStop = Stop.FAILED
         state = State.Idle
     }
+
+    /** Whether the last [update] saw a connection. */
+    private var wasConnected = false
 
     /** Time left before the hotspot stops by itself, while it's on. */
     fun leftMs(now: Long): Long? = (state as? State.On)?.let { (it.until - now).coerceAtLeast(0) }

@@ -74,8 +74,18 @@ class SetupHotspotPolicyTest {
         assertEquals("rule 2 still holds", Decision(false, 3 * min), p.update(connected = true, now = 10 * min))
         p.update(connected = true, now = 10 * min + 5_000)
         assertFalse("left the old network, the new one failed", p.update(false, 10 * min + 6_000).on)
-        assertFalse(p.update(false, 13 * min + 4_999).on)
-        assertTrue(p.update(false, 13 * min + 5_000).on)
+        assertFalse(p.update(false, 13 * min + 5_999).on)
+        assertTrue("3 minutes after the drop", p.update(false, 13 * min + 6_000).on)
+    }
+
+    @Test
+    fun `the 3 minutes count from when the old network drops, not from the last update that saw it`() {
+        p.update(connected = true, now = 0)
+        p.configured(now = 10 * min)
+        p.update(connected = true, now = 10 * min + 5_000)
+        assertEquals(Decision(false, 3 * min), p.update(connected = false, now = 12 * min + 59_000))
+        assertFalse(p.update(false, 15 * min + 58_999).on)
+        assertTrue(p.update(false, 15 * min + 59_000).on)
     }
 
     @Test
