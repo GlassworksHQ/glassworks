@@ -11,7 +11,7 @@ step engine, and the S1's part is its recipe, `@glassworks/aqara-s1-plus-install
 (`frames/aqara-s1-plus/installer`). The page (`app/`, `assets/`) stays in `src/` and imports them all
 by package name.
 
-## `fel` (`packages/fel`) — FEL over WebUSB (sunxi-fel subset; owner: main session, needs the panel)
+## `fel` (`packages/fel`) — FEL over WebUSB (written clean-room from [fel-spec.md](../../docs/research/kiln-cleanroom/fel-spec.md); needs the panel)
 ```ts
 export const FEL_FILTER: USBDeviceFilter;                  // { vendorId: 0x1f3a, productId: 0xefe8 }
 export class FelDevice {

@@ -40,6 +40,21 @@ describe('FelDevice against a simulated boot ROM', () => {
     expect(brom.splRan).toBeNull();
   });
 
+  it('reset64 resolves when USB drops as the chip resets', async () => {
+    const brom = new FakeBrom();
+    const realIn = brom.in.bind(brom);
+    brom.in = async (n) => {
+      if (brom.resetEntry !== null) throw new Error('USB read failed (disconnected)');
+      return realIn(n);
+    };
+    const fel = new FelDevice(brom);
+    const lines: string[] = [];
+    fel.log = (l) => lines.push(l);
+    await fel.reset64(A133.ubootAddr);
+    expect(brom.resetEntry).toBe(A133.ubootAddr);
+    expect(lines.join('\n')).toMatch(/disconnected/);
+  });
+
   it('refuses when the boot ROM left the MMU on', async () => {
     const brom = new FakeBrom();
     brom.sctlr |= 1;

@@ -352,19 +352,13 @@ The page's JavaScript and WebAssembly ([`kiln/`](kiln)):
   from `format.rs`. The package is labelled MIT. It is being rewritten so it holds no
   GPL code, tracked in [#355](https://github.com/GlassworksHQ/glassworks/issues/355). Details:
   [docs/research/kiln-gpl-code.md](docs/research/kiln-gpl-code.md).
-- **sunxi-tools** (https://github.com/linux-sunxi/sunxi-tools, compared at commit
-  `34dfa20f8284273085666436e4cac09af19646c8`): [`kiln/packages/fel`](kiln/packages/fel) holds code
-  from it:
-  - The fel-to-spl thunk, 69 words from `thunks/fel-to-spl-thunk.S`, in `src/thunk.ts` with its
-    licence: MIT, "Copyright © 2015 Siarhei Siamashka".
-  - The readl, RMR, stack-info and SCTLR routines, ARM words copied from `fel_lib.c` and `fel.c`, and the
-    SPL loader (`splWritePlan`, `checkEgon`), translated from `fel.c`, all in `src/protocol.ts`:
-    GPL-2.0-or-later, Copyright
-    Henrik Nordstrom, Siarhei Siamashka, Bernhard Nortmann and the sunxi-tools contributors.
-
-  The package is labelled MIT. It is being rewritten so it holds no
-  GPL code, tracked in [#355](https://github.com/GlassworksHQ/glassworks/issues/355). Details:
-  [docs/research/kiln-gpl-code.md](docs/research/kiln-gpl-code.md).
+- **The fel-to-spl thunk from sunxi-tools** (https://github.com/linux-sunxi/sunxi-tools, commit
+  `34dfa20f8284273085666436e4cac09af19646c8`, `thunks/fel-to-spl-thunk.S`): 69 ARM words in
+  [`kiln/packages/fel/src/thunk.ts`](kiln/packages/fel/src/thunk.ts), with its licence. MIT,
+  "Copyright © 2015 Siarhei Siamashka". This file alone was always MIT, unlike the rest of sunxi-tools.
+  The rest of `kiln/packages/fel` was rewritten clean-room from
+  [docs/research/kiln-cleanroom/fel-spec.md](docs/research/kiln-cleanroom/fel-spec.md) (#355) and
+  holds no other sunxi-tools code.
 
 ### Kiln, the Next.js installer (not live yet)
 
@@ -520,7 +514,6 @@ renders above:
 | U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`tools/fel/uboot/`](https://github.com/GlassworksHQ/glassworks/tree/8b2bf488fed3c7ba8343a32c67c9651066479128/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
 | Code from Magisk in `kiln/packages/bootpatch` | GPL-3.0-only | installer page | This repository, [`kiln/packages/bootpatch`](kiln/packages/bootpatch) (section 4) |
-| Code from sunxi-tools in `kiln/packages/fel` | GPL-2.0-or-later | installer page | This repository, [`kiln/packages/fel`](kiln/packages/fel) (section 4) |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
 | GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
