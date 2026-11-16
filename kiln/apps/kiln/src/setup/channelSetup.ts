@@ -44,12 +44,18 @@ export class ChannelSetup {
   ip?: string;
   private channel?: SetupChannel;
   private haTimer?: ReturnType<typeof setInterval>;
+  /** Counts close()s: an open that close() overtook is closed, never kept or shown. */
+  private gen = 0;
 
   constructor(private readonly d: ChannelSetupDeps) {}
 
   /** The open channel, opened now if it isn't; undefined when the panel has none. */
   async connect(tries = 5): Promise<SetupChannel | undefined> {
-    this.channel ??= await this.d.open(tries);
+    if (this.channel) return this.channel;
+    const g = this.gen;
+    const c = await this.d.open(tries);
+    if (g !== this.gen) { void c?.close().catch(() => {}); return undefined; }
+    this.channel ??= c;
     return this.channel;
   }
 
@@ -58,10 +64,13 @@ export class ChannelSetup {
     try {
       return await f(this.channel!);
     } catch (first) {
-      const onState = this.channel?.onState;
+      const g = this.gen;
+      const old = this.channel;
       const again = await this.d.open(15);
+      if (g !== this.gen) { void again?.close().catch(() => {}); throw first; }
       if (!again) throw first;
-      if (onState) again.onState = onState;
+      if (old?.onState) again.onState = old.onState;
+      void old?.close().catch(() => {});
       this.channel = again;
       return f(again);
     }
@@ -77,6 +86,7 @@ export class ChannelSetup {
 
   /** Stops the poll and lets the channel go; the next step opens it again. */
   close(): void {
+    this.gen++;
     clearInterval(this.haTimer);
     void this.channel?.close().catch(() => {});
     this.channel = undefined;
@@ -89,7 +99,9 @@ export class ChannelSetup {
 
   /** Home Assistant: the address (what the panel found), sign-in on the panel's own page. */
   async homeAssistant(): Promise<void> {
+    const g = this.gen;
     const c = await this.connect();
+    if (g !== this.gen) return;
     if (!c) return this.d.done(); // older app: the panel's own setup does the rest
     c.onState = (s) => {
       const cur = this.d.phase();
@@ -137,7 +149,8 @@ export class ChannelSetup {
 
   /** The radio role. */
   async radio(): Promise<void> {
-    if (!(await this.connect())) { this.d.unreachable(); return; }
+    const g = this.gen;
+    if (!(await this.connect())) { if (g === this.gen) this.d.unreachable(); return; }
     let st: SetupState;
     try {
       st = await this.request((x) => x.getState());

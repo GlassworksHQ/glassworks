@@ -86,6 +86,52 @@ describe('the setup steps over the LAN', () => {
     c.steps.close();
   });
 
+  it('a close while the channel is still opening keeps nothing open and shows nothing', async () => {
+    const panel = lanPanel();
+    let phase: Setup = { phase: 'waiting', note: '' };
+    let release!: () => void;
+    const closed: string[] = [];
+    const steps = new ChannelSetup({
+      open: async () => {
+        await new Promise<void>((r) => { release = r; });
+        const c = new SetupChannel(panel.stream);
+        await c.getState();
+        c.close = async () => { closed.push('late channel'); };
+        return c;
+      },
+      phase: () => phase, show: (st) => { phase = st; }, here: () => true,
+      done: () => { phase = { phase: 'waiting', note: 'done' }; }, unreachable: () => {}, app: async () => undefined,
+    });
+    const opening = steps.homeAssistant();
+    await new Promise((r) => setTimeout(r, 0));
+    steps.close();
+    release();
+    await opening;
+    expect(phase).toEqual({ phase: 'waiting', note: '' });
+    expect(closed).toEqual(['late channel']);
+  });
+
+  it('a reconnect closes the channel it replaces', async () => {
+    const panel = lanPanel();
+    const opened: { closed: boolean }[] = [];
+    let phase: Setup = { phase: 'waiting', note: '' };
+    const steps = new ChannelSetup({
+      open: async () => {
+        const c = new SetupChannel(panel.stream);
+        await c.getState();
+        const mark = { closed: false };
+        opened.push(mark);
+        c.close = async () => { mark.closed = true; };
+        return c;
+      },
+      phase: () => phase, show: (st) => { phase = st; }, here: () => true, done: () => {}, unreachable: () => {}, app: async () => undefined,
+    });
+    await steps.homeAssistant();
+    await steps.saveHa('http://192.0.2.20:8123');
+    expect(opened.map((o) => o.closed)).toEqual([true, false]);
+    steps.close();
+  });
+
   it('the step screens need only SetupSteps, not the wizard\'s session', () => {
     const calls: string[] = [];
     const steps: SetupSteps = {
