@@ -366,7 +366,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
 /**
  * ?demo=selftest: what #27 asks of the bundler, checked in the built page. bootpatch.wasm loads from
  * where Next put it, and every staged blob downloads and passes its SHA-256 (the APK through
- * /api/release-asset). Results go to the technical log; the page title ends in PASS or FAIL.
+ * /api/release/aqara-s1-plus). Results go to the technical log; the page title ends in PASS or FAIL.
  */
 async function selfTest(session: Session) {
   const { dispatch } = session.store;

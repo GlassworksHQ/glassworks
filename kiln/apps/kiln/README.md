@@ -63,7 +63,8 @@ install on a real panel. Until it has, s1.edm.sh keeps serving the page in
 | `/aqara-s1-plus/undo/connect`, `/undo/restore`, `/undo/done` | Undo's recovery mode, writing, and done | go to `/aqara-s1-plus/undo` |
 | `/aqara-s1-plus/resume` | An alias of `/set-up` (s1.edm.sh's `#/resume`) | as `/set-up`: connects to an installed panel; the address then becomes `/aqara-s1-plus/set-up` |
 | `/lululemon-mirror` | **Test only.** With `?apk=local`: Glassworks onto a Mirror over fastboot (#40). One button downloads the Glass Panes `system.img` through Refract, Kiln's release proxy (#347; `IMAGE_PROXY`, `NEXT_PUBLIC_KILN_PROXY` at build time; Range resume), with download-and-select as the fallback when the proxy fails. Kiln checks it as it reads it, builds the images in a worker on OPFS (`src/mirror/flash.ts`, `images.ts`), flashes them and finishes over adb with this browser's key. Its way back writes the plain Glass Panes images. With `&mode=app`: S1 Kiosk alone over adb onto a Mirror already on the community image, with undo. The APK is a file picked on this computer. Without `?apk=local`, the page says the Mirror doesn't install from Kiln yet. The picker shows the Mirror as a disabled card, not as installable (it is `planned`) | shows the test page or the "not yet" page |
-| `/api/release-asset` | Streams an S1 Kiosk release APK from GitHub Releases (no CORS there) | — |
+| `/api/release/<frame>?tag=…&name=…` | Streams a frame's release APK from this repo's GitHub Releases (no CORS there). Only allowlisted frames, tags and names pass (`RELEASES` in `src/app/api/release/[frame]/route.ts`): today `aqara-s1-plus`, `vX.Y.Z` or `aqara-s1-plus-vX.Y.Z` with `s1-kiosk-X.Y.Z.apk`. An unknown frame gets 404, any other tag or name 400, both before GitHub is asked | — |
+| `/api/release-asset` | The S1's address before #28: a 308 redirect to `/api/release/aqara-s1-plus` with the same query | — |
 
 The session is the truth and the address bar follows it (`src/wizard/routes.ts`, `useRouteSync.ts`).
 Moving forward through set-up adds a history entry, so Back (and the rail's set-up steps) go back to
@@ -117,7 +118,7 @@ From the repo root, the npm workspace root:
 
 ```sh
 npm install
-node kiln/scripts/stage-assets.mjs --remote --out apps/kiln/public/assets   # the pinned blobs, as on Vercel
+node kiln/scripts/stage-assets.mjs --remote --out apps/kiln/public/assets --release-route /api/release/aqara-s1-plus   # the pinned blobs, as on Vercel
 npm run dev -w @glassworks/kiln-app       # http://localhost:5174
 npm test -w @glassworks/kiln-app          # also part of npm test
 npm run build -w @glassworks/kiln-app     # next build
