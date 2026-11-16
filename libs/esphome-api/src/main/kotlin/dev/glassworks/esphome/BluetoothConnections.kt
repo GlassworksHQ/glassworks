@@ -39,12 +39,16 @@ internal object BluetoothConnectionMsg {
 }
 
 /**
- * A request from Home Assistant to the proxy's connections. [address] is the device's 48-bit
- * address, big-endian, as in [RawAdvertisement.address]; [Handle] requests name an ATT handle from
- * [GattEvent.Services].
+ * A request from Home Assistant to the proxy's connections.
+ *
+ * @property address The device's 48-bit address, big-endian, as in [RawAdvertisement.address].
  */
 public sealed class GattRequest(public val address: Long) {
-    /** A request about one attribute. */
+    /**
+     * A request about one attribute.
+     *
+     * @property handle Its ATT handle, from [GattEvent.Services].
+     */
     public sealed class Handle(address: Long, public val handle: Int) : GattRequest(address)
 
     /**
@@ -65,27 +69,50 @@ public sealed class GattRequest(public val address: Long) {
     /** Read a characteristic: [GattEvent.Read] or [GattEvent.Error]. */
     public class Read(address: Long, handle: Int) : Handle(address, handle)
 
-    /** Write a characteristic: [GattEvent.Written] (also without [withResponse]) or [GattEvent.Error]. */
+    /**
+     * Write a characteristic: [GattEvent.Written] (also without [withResponse]) or [GattEvent.Error].
+     *
+     * @property data The value to write.
+     * @property withResponse A write request, which the device acknowledges; else a write command.
+     */
     public class Write(address: Long, handle: Int, public val data: ByteArray, public val withResponse: Boolean) : Handle(address, handle)
 
     /** Read a descriptor: [GattEvent.Read] or [GattEvent.Error]. */
     public class ReadDescriptor(address: Long, handle: Int) : Handle(address, handle)
 
-    /** Write a descriptor: [GattEvent.Written] or [GattEvent.Error]. */
+    /**
+     * Write a descriptor: [GattEvent.Written] or [GattEvent.Error].
+     *
+     * @property data The value to write.
+     */
     public class WriteDescriptor(address: Long, handle: Int, public val data: ByteArray) : Handle(address, handle)
 
     /**
      * Turn notifications for a characteristic on or off on the proxy's side: [GattEvent.NotifySet] or
      * [GattEvent.Error]. With remote caching, Home Assistant writes the CCCD itself
      * (bleak-esphome client.py `start_notify`).
+     *
+     * @property enable On or off.
      */
     public class Notify(address: Long, handle: Int, public val enable: Boolean) : Handle(address, handle)
 }
 
-/** A GATT descriptor, with its ATT [handle]. */
+/**
+ * A GATT descriptor.
+ *
+ * @property uuid Its type.
+ * @property handle Its ATT handle.
+ */
 public class GattDescriptor(public val uuid: UUID, public val handle: Int)
 
-/** A GATT characteristic: [properties] are the Bluetooth characteristic properties bits. */
+/**
+ * A GATT characteristic.
+ *
+ * @property uuid Its type.
+ * @property handle Its value's ATT handle, as ESP-IDF's `char_handle`.
+ * @property properties The Bluetooth characteristic properties bits (read 0x02, write 0x08, notify 0x10, …).
+ * @property descriptors Its descriptors, in handle order.
+ */
 public class GattCharacteristic(
     public val uuid: UUID,
     public val handle: Int,
@@ -93,41 +120,91 @@ public class GattCharacteristic(
     public val descriptors: List<GattDescriptor>,
 )
 
-/** A GATT service, with its ATT [handle]. */
+/**
+ * A GATT service.
+ *
+ * @property uuid Its type.
+ * @property handle Its first ATT handle.
+ * @property characteristics Its characteristics, in handle order.
+ */
 public class GattService(public val uuid: UUID, public val handle: Int, public val characteristics: List<GattCharacteristic>)
 
 /** What the proxy tells Home Assistant about its connections, through [ApiServer.sendBluetoothEvent]. */
 public sealed class GattEvent {
     /**
-     * A link's state (`BluetoothDeviceConnectionResponse`): connected with its [mtu], or not connected,
-     * with [error] 0 for a disconnect that was asked for, else a code such as [CONN_TIMEOUT].
+     * A link's state (`BluetoothDeviceConnectionResponse`).
+     *
+     * @property address The device.
+     * @property connected Up, with its services known.
+     * @property mtu The ATT MTU while connected, else 0.
+     * @property error While not connected: 0 for a disconnect that was asked for, else a code such as [CONN_TIMEOUT].
      */
     public class Connection(public val address: Long, public val connected: Boolean, public val mtu: Int, public val error: Int) : GattEvent()
 
-    /** Some of a device's services (`BluetoothGATTGetServicesResponse`). */
+    /**
+     * Some of a device's services (`BluetoothGATTGetServicesResponse`).
+     *
+     * @property address The device.
+     * @property services The services in this message.
+     */
     public class Services(public val address: Long, public val services: List<GattService>) : GattEvent()
 
-    /** All services sent (`BluetoothGATTGetServicesDoneResponse`). */
+    /**
+     * All services sent (`BluetoothGATTGetServicesDoneResponse`).
+     *
+     * @property address The device.
+     */
     public class ServicesDone(public val address: Long) : GattEvent()
 
-    /** A characteristic's or a descriptor's value (`BluetoothGATTReadResponse`). */
+    /**
+     * A characteristic's or a descriptor's value (`BluetoothGATTReadResponse`).
+     *
+     * @property address The device.
+     * @property handle The attribute read.
+     * @property data Its value.
+     */
     public class Read(public val address: Long, public val handle: Int, public val data: ByteArray) : GattEvent()
 
-    /** A write is done (`BluetoothGATTWriteResponse`). */
+    /**
+     * A write is done (`BluetoothGATTWriteResponse`).
+     *
+     * @property address The device.
+     * @property handle The attribute written.
+     */
     public class Written(public val address: Long, public val handle: Int) : GattEvent()
 
-    /** A notification turned on or off (`BluetoothGATTNotifyResponse`). */
+    /**
+     * A notification turned on or off (`BluetoothGATTNotifyResponse`).
+     *
+     * @property address The device.
+     * @property handle The characteristic.
+     */
     public class NotifySet(public val address: Long, public val handle: Int) : GattEvent()
 
-    /** A notification or an indication from the device (`BluetoothGATTNotifyDataResponse`). */
+    /**
+     * A notification or an indication from the device (`BluetoothGATTNotifyDataResponse`).
+     *
+     * @property address The device.
+     * @property handle The characteristic.
+     * @property data Its new value.
+     */
     public class Notification(public val address: Long, public val handle: Int, public val data: ByteArray) : GattEvent()
 
-    /** A request failed (`BluetoothGATTErrorResponse`): an ATT error code, or [NOT_CONNECTED]. */
+    /**
+     * A request failed (`BluetoothGATTErrorResponse`).
+     *
+     * @property address The device.
+     * @property handle The attribute, or 0 for a request about none.
+     * @property error An ATT error code (1–255), or [NOT_CONNECTED].
+     */
     public class Error(public val address: Long, public val handle: Int, public val error: Int) : GattEvent()
 
     /**
-     * The slot table (`BluetoothConnectionsFreeResponse`): [free] of [limit] slots, and the addresses
-     * that hold the others.
+     * The slot table (`BluetoothConnectionsFreeResponse`).
+     *
+     * @property free Slots free now.
+     * @property limit Slots in all.
+     * @property allocated The addresses that hold the others.
      */
     public class ConnectionsFree(public val free: Int, public val limit: Int, public val allocated: List<Long>) : GattEvent()
 
