@@ -5,7 +5,6 @@
 package dev.glassworks.generic
 
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
@@ -82,13 +81,10 @@ class GenericParts : AppParts {
         )
     }
 
+    // Settings from intent extras: only a start of MainActivity itself, which takes WRITE_SECURE_SETTINGS (adb) unless
+    // it is the app's own; never through the launcher alias ([LAUNCHER]), which any app can start. AppParts'
+    // trustsExtras does exactly that (#409).
     override val mainActivity = MainActivity::class.java
-
-    /**
-     * Only a start of MainActivity itself, which takes WRITE_SECURE_SETTINGS (adb) unless it is the app's own,
-     * may change settings with its extras. The launcher alias ([LAUNCHER]), which any app can start, may not.
-     */
-    override fun trustsExtras(intent: Intent): Boolean = intent.component?.className == MainActivity::class.java.name
 
     override fun serviceStarted(context: Context, runtime: GlassworksRuntime) {
         runtime.voiceState = if (VoicePrefs(paneFile(context, "assist")).enabled) "idle" else "off"

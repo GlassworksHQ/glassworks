@@ -328,6 +328,7 @@ since Phase A make up the rest:
 | `:pane-sendspin` | 5 | 5 |
 | `:aqara-s1-plus-wall-base` | 3 | 0 |
 | `:pane-zigbee-thread` | 3 | 0 |
+| `:generic-android` (its `legacy` build, the app's own sources; added in Phase D, #408) | 0 | 0 |
 
 Lint can't see a `Platform` check (`Platform.hasX` is a property, not an `SDK_INT` comparison), so many of these
 are already guarded. Read at each call site (2026-11-16), they split like this (Phase A's fixes marked):

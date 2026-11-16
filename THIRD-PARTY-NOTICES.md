@@ -72,7 +72,7 @@ build if one is missing here.
   app calls into the APK's code. Licence: GPL-2.0-only WITH Classpath-exception-2.0 (`LICENSES/GPL-2.0.txt`,
   `LICENSES/Classpath-exception-2.0.txt`): the exception lets the app link it and keep its own licence.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
-  (release 2.1.5). The current builds (minSdk 26) set it up too, but call none of it.
+  (release 2.1.5). The current builds (minSdk 26) set it up too, but none of its classes go into their APKs.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
   build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
   - `androidx.annotation:annotation-experimental:1.5.1`

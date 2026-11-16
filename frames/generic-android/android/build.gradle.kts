@@ -6,8 +6,8 @@
 // panel's Home Assistant (engines/engine-gecko-legacy), as dev.glassworks.generic_android.legacy, for older tablets
 // and the lululemon Mirror. Same sources, manifest and key as the release build; its own id and release line.
 //   ./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
-// A build type, not a product flavor: a flavor adds BuildConfig.FLAVOR to every variant, so the current release APK
-// would change. debug and release stay exactly as they were (same tasks, same APK).
+// A build type, not a product flavor: a flavor would rename debug's and release's tasks and add BuildConfig.FLAVOR
+// to them. Their tasks stay as they were. Their APKs change only through desugaring, which is the module's (below).
 plugins {
     id("com.android.application")
     id("glassworks.android")
@@ -80,8 +80,10 @@ android {
         }
     }
 
-    // java.time, Base64 and friends below API 26, for the legacy build. The setting is the module's, so the release
-    // build has it too: at its minSdk 26 those calls are Android's own and nothing is rewritten.
+    // java.time, Base64 and friends below API 26, for the legacy build. AGP has no per-variant switch, so the release
+    // build has it too. At its minSdk 26 no desugared library code (j$.*) goes in, but D8 then adds a small dex of
+    // inert API stubs and renumbers some synthetic classes: its APK isn't byte-identical to one built without it
+    // (#408, measured 2026-11-16).
     compileOptions { isCoreLibraryDesugaringEnabled = true }
 
     packaging {
