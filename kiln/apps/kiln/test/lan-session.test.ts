@@ -160,4 +160,24 @@ describe('the panel\'s setup page', () => {
     expect(lan.state.view).toEqual({ at: 'done' });
     expect(panel.paired).toBe(false);
   });
+
+  it('Skip and Finish keep the page busy until the panel has ended the pairing', async () => {
+    const panel = fakePanel();
+    panel.paired = true;
+    const lan = new LanSession(panel);
+    await lan.start();
+    let answer!: () => void;
+    const real = panel.fetch;
+    panel.fetch = async (path, init) => {
+      if (path === '/setup/done') await new Promise<void>((r) => { answer = r; });
+      return real(path, init);
+    };
+    const skipping = lan.click('finish', () => lan.finish());
+    await vi.waitFor(() => expect(answer).toBeTypeOf('function'));
+    expect(lan.state.busy).toBe('finish');
+    answer();
+    await skipping;
+    expect(lan.state.busy).toBeUndefined();
+    expect(lan.state.view).toEqual({ at: 'done' });
+  });
 });

@@ -67,7 +67,7 @@ export class LanSession implements SetupSteps {
       phase: () => (this.state.view.at === 'setup' ? this.state.view.setup : { phase: 'waiting', note: '' }),
       show: (setup) => this.showStep(setup),
       here: () => this.state.view.at === 'setup',
-      done: () => void this.done(),
+      done: () => this.done(),
       unreachable: (e) => this.set({ view: { at: 'lost', error: e instanceof Error ? e.message : 'The panel stopped answering.' } }),
       // this page comes from the app on the panel, which has everything the Thread step can ask for
       app: async () => ({ code: THREAD_FROM_HA }),
@@ -170,7 +170,8 @@ export class LanSession implements SetupSteps {
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
   radio(): Promise<void> { return this.steps.radio(); }
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
-  finish(): void { void this.done(); }
+  /** Skip and Finish: the button stays busy until the panel has ended the pairing (or said it couldn't). */
+  finish(): Promise<void> { return this.done(); }
 
   /** Setup is over: the panel ends this browser's session, and only then does the page say Done. */
   private async done(): Promise<void> {
