@@ -75,6 +75,9 @@
 # the kiosk's own responders, so a phone that joins opens the setup page by itself (see "the setup
 # hotspot's captive portal" below). Status: sys.s1kiosk.portal.status. Runs in every mode.
 #
+# Setup hotspot name (#197): with the overlay in the radio bundle, a Magisk module puts it on /product, so Android
+# names the setup hotspot Glassworks_NNNN from the next restart. Status: sys.s1kiosk.hotspot_name.status.
+#
 # Developer override: with a root-made $DIR/dev-override file, a root-owned $DIR/s1kiosk_radio.sh runs
 # instead of everything else, and binaries in $DIR win. (Before v4 those were honoured without the
 # marker; a leftover copy would otherwise shadow every update.)
@@ -788,6 +791,58 @@ portal_start() { # one check now (it also removes an earlier run's rules), then 
   PORTAL_PID=$!
 }
 portal_stop() { alive "$PORTAL_PID" && kill "$PORTAL_PID"; PORTAL_PID=""; }
+
+# --- the setup hotspot's name (#197) ------------------------------------------------------------
+# Android 10 names its local-only hotspot "<framework string>_<1000..9999>", the string being "AndroidShare"
+# (WifiApConfigStore.generateLocalOnlyHotspotConfig), and gives apps no way to change it. A resource overlay of that
+# string makes it "Glassworks_NNNN". Android 10 applies an overlay of framework-res only when it is preinstalled
+# (framework-res declares no overlayable, and the S1's is signed with Aqara's key: docs/research/
+# setup-hotspot-portal-and-name.md), so it goes on /product through a Magisk module, which Magisk mounts at boot:
+#   $HN_MOD/module.prop
+#   $HN_MOD/$HN_PATH      the overlay, hotspot-name.apk from the signed radio bundle (tools/radio/hotspot-name/),
+#                         or with dev-override a root-made $DIR/hotspot-name.apk
+# Once per helper start: with the overlay in the running bundle, the module is put in place (or replaced when the
+# bundle's overlay differs); without it, or with persist.s1kiosk.hotspot_name=android (the undo; any app may set it,
+# which can only give Android's name back), the module is removed. Either takes effect at the next restart.
+# Nothing else is touched: no file of Android's, no setting. Status: sys.s1kiosk.hotspot_name.status =
+#   glassworks | android | "glassworks after a restart" | "android after a restart" | "error: ..."
+HN_APK=hotspot-name.apk
+HN_PKG=sh.edm.s1kiosk.overlay.hotspotname
+HN_MODS=${S1R_MODULES:-/data/adb/modules}
+HN_MOD=$HN_MODS/s1kiosk_hotspot_name
+HN_PATH=system/product/overlay/S1HotspotName/S1HotspotName.apk
+HN_PROP=persist.s1kiosk.hotspot_name
+HN_STATUS=sys.s1kiosk.hotspot_name.status
+
+hn_say() { setp $HN_STATUS "$1"; say "hotspot name: $1"; }
+hn_apply() {
+  # where binaries come from (bin): a developer's copy with dev-override, else the signed radio bundle
+  src_=""
+  if [ -n "$DEV" ] && [ -f "$DIR/$HN_APK" ]; then src_=$DIR/$HN_APK
+  elif [ -n "$RBUNDLE" ] && [ -f "$RBUNDLE/$HN_APK" ]; then src_=$RBUNDLE/$HN_APK; fi
+  if [ "$(getprop $HN_PROP)" = android ] || [ -z "$src_" ]; then
+    want_=android
+    [ -e "$HN_MOD" ] && { rm -rf "$HN_MOD"; say "hotspot name: module removed (Android's name from the next restart)"; }
+  else
+    want_=glassworks
+    if ! cmp -s "$src_" "$HN_MOD/$HN_PATH"; then
+      [ -d "$HN_MODS" ] || { hn_say "error: no Magisk modules dir"; return 0; }
+      t_=$HN_MODS/.s1kiosk_hotspot_name.new; rm -rf "$t_"
+      if mkdir -p "$t_/${HN_PATH%/*}" && cp "$src_" "$t_/$HN_PATH" &&
+         printf '%s\n' "id=s1kiosk_hotspot_name" "name=Glassworks setup hotspot name" "version=1" "versionCode=1" \
+           "author=Glassworks" "description=Names the S1's setup hotspot Glassworks_NNNN (installed by the radio helper)" \
+           > "$t_/module.prop"; then
+        chown -R root:root "$t_"; find "$t_" -type d -exec chmod 755 {} +; find "$t_" -type f -exec chmod 644 {} +
+        chcon -R u:object_r:system_file:s0 "$t_" 2>/dev/null
+        rm -rf "$HN_MOD" && mv "$t_" "$HN_MOD" && say "hotspot name: module in place (Glassworks from the next restart)"
+      else
+        rm -rf "$t_"; hn_say "error: could not write the module"; return 0
+      fi
+    fi
+  fi
+  if cmd overlay list $HN_PKG 2>/dev/null | grep -q "^\[x\] $HN_PKG\$"; then live_=glassworks; else live_=android; fi
+  if [ "$want_" = "$live_" ]; then hn_say "$want_"; else hn_say "$want_ after a restart"; fi
+}
 loops_stop() { tz_stop; portal_stop; }
 
 # --- our processes ---------------------------------------------------------------------------
@@ -1351,6 +1406,7 @@ status applying
 zstate
 fw_init
 portal_start
+hn_apply
 [ -n "$S1R_ONCE" ] && LOOPS=$S1R_ONCE   # tests: run this many loops, then exit
 
 while true; do

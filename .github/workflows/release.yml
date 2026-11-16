@@ -120,6 +120,11 @@ jobs:
               print(a['name'], len(data), h)
           PY
 
+      # The S1's setup hotspot name (#197): a one-string resource overlay, built here from the committed sources
+      # with the runner's Android SDK (a key made for this build signs it; the bundle's signature is what counts).
+      - name: Hotspot name overlay
+        run: frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh "$RUNNER_TEMP/hotspot-name"
+
       - name: Sign the radio bundle
         env:
           VERSION: ${{ needs.inputs.outputs.version }}
@@ -136,6 +141,7 @@ jobs:
             --file s1kiosk_radio.sh=frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700 \
             --file "otbr-agent=$RUNNER_TEMP/radio-in/otbr-agent:0700" \
             --file "ot-ctl=$RUNNER_TEMP/radio-in/ot-ctl:0700" \
+            --file "hotspot-name.apk=$RUNNER_TEMP/hotspot-name/hotspot-name.apk:0644" \
             --dir "sisdk=$RUNNER_TEMP/sisdk"
 
       - name: Remove the key

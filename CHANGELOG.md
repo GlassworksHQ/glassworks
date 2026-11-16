@@ -14,6 +14,8 @@ below as the release notes.
   send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
   is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. On Android 13 and
   newer the panel asks for Android's *Nearby devices* permission first, and says why.
+- **On the S1, the panel's own Wi-Fi is called Glassworks.** Its setup network is named `Glassworks_` and four
+  digits instead of Android's `AndroidShare_`. Comes with the radio bundle, from the panel's next restart.
 - **On the S1, joining the panel's own Wi-Fi opens its setup page by itself.** As with a hotel's Wi-Fi, the
   phone shows the panel's setup page as soon as it joins, with no address to type. Comes with the radio bundle.
 - **Every device says what kind it is, and the Pixel Tablet is listed.** On glassworks.dev and in Kiln's

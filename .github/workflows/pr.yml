@@ -109,6 +109,14 @@ jobs:
       - name: Release build (unsigned)
         run: ./gradlew --no-daemon :kiosk:assembleRelease
 
+      # The S1's setup hotspot name (#197): the overlay the release's signing job builds for the radio bundle.
+      - name: Hotspot name overlay builds
+        run: |
+          frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh "$RUNNER_TEMP/hotspot-name"
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
+          "$aapt2" dump resources "$RUNNER_TEMP/hotspot-name/hotspot-name.apk" | grep -A1 'string/wifi_localhotspot_configure_ssid_default' | grep -q '"Glassworks"'
+          "$aapt2" dump badging "$RUNNER_TEMP/hotspot-name/hotspot-name.apk" | grep -q "overlay: targetPackage='android' priority='1' isStatic='true'"
+
       - name: Still updates panels in place
         run: |
           tools/release/check-update-compat.sh frames/aqara-s1-plus/android/build/outputs/apk/release/kiosk-release-unsigned.apk

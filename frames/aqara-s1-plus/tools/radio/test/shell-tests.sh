@@ -5,7 +5,7 @@
 #   the helper's loader (bundle helper, fallback, quick-exit marking, dev override),
 #   the helper v4 (off, firmware flashing + rollback + request guards, GBL checks, Zigbee stack),
 #   s1kiosk_update.sh (incl. a framework restart mid-install), netwatch's ActivityManager check (#248)
-#   and the setup hotspot's portal rules (#197).
+#   and the setup hotspot's portal rules and name module (#197).
 set -uo pipefail
 R=/repo; T=/t; TB=/tb
 PASS=0; FAILS=0
@@ -944,6 +944,49 @@ w "$T/bin/ip" <<'EOF'
 case "$*" in *"rule del"*) exit 1 ;; esac; exit 0
 EOF
 rm -rf "$T/net" "$T/ipt" "$T/ip-addr4"; rm -f /data/s1kiosk/radio/radio.conf
+
+# ------------------------------------------------------------------------------ setup hotspot name
+# #197: with hotspot-name.apk in the running radio bundle, the helper puts it on /product through a Magisk module
+# (Android applies it from the next restart); without it, or with persist.s1kiosk.hotspot_name=android, it removes
+# the module. A fake `cmd overlay list` says whether Android applies the overlay now.
+echo "--- setup hotspot name (#197)"
+reset_radio; mkdir -p /data/s1kiosk/radio "$T/rb" "$T/modules"; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+echo off > "$T/props/persist.s1kiosk.radio_mode"
+w "$T/bin/cmd" <<'EOF'
+#!/bin/sh
+[ "$1 $2 $3" = "overlay list sh.edm.s1kiosk.overlay.hotspotname" ] || exit 1
+[ -f /t/overlay-on ] && echo "[x] sh.edm.s1kiosk.overlay.hotspotname"; exit 0
+EOF
+printf 'overlay-v1' > "$T/rb/hotspot-name.apk"
+MOD="$T/modules/s1kiosk_hotspot_name"; APKP="$MOD/system/product/overlay/S1HotspotName/S1HotspotName.apk"
+name() { LOOPS=1 helper S1R_NO_OVERRIDE=1 S1R_RBUNDLE="$T/rb" S1R_MODULES="$T/modules" "$@"; prop sys.s1kiosk.hotspot_name.status; }
+st=$(umask 077; name)   # as init runs services: what root writes is private unless the helper says otherwise
+check "the overlay in the bundle: a Magisk module puts it on /product" test "$(cat "$APKP")" = overlay-v1
+check "...with its module.prop" grep -qx "id=s1kiosk_hotspot_name" "$MOD/module.prop"
+check "...root-owned, readable by Android (system_server), not writable by others" \
+  test "$(stat -c %a:%u "$APKP")/$(stat -c %a "$MOD")/$(stat -c %a "${APKP%/*}")/$(stat -c %a "$MOD/module.prop")" = "644:0/755/755/644"
+check "...and Glassworks from the next restart" test "$st" = "glassworks after a restart"
+touch /t/overlay-on; t0=$(stat -c %Y "$APKP"); sleep 1.1
+st=$(name)
+check "after the restart Android applies it: glassworks" test "$st" = glassworks
+check "...and the module isn't written again" test "$(stat -c %Y "$APKP")" = "$t0"
+printf 'overlay-v2' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a new overlay in a newer bundle replaces it" test "$(cat "$APKP")" = overlay-v2 -a ! -e "$T/modules/.s1kiosk_hotspot_name.new"
+printf android > "$T/props/persist.s1kiosk.hotspot_name"; st=$(name)
+check "persist.s1kiosk.hotspot_name=android: the module goes" test ! -e "$MOD"
+check "...and Android's name from the next restart" test "$st" = "android after a restart"
+rm -f /t/overlay-on; st=$(name)
+check "...then android" test "$st" = android
+rm -f "$T/props/persist.s1kiosk.hotspot_name"; name >/dev/null; rm -f "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a bundle without the overlay removes the module" test ! -e "$MOD"
+printf 'overlay-v1' > "$T/rb/hotspot-name.apk"; name >/dev/null; test -e "$MOD" && name S1R_RBUNDLE= >/dev/null
+check "the boot image's helper (no bundle) gives Android's name back" test ! -e "$MOD"
+printf 'overlay-dev' > /data/s1kiosk/radio/hotspot-name.apk; name S1R_RBUNDLE= S1R_DEV=1 >/dev/null
+check "with dev-override, a developer's copy in the state dir" test "$(cat "$APKP")" = overlay-dev
+rm -f /data/s1kiosk/radio/hotspot-name.apk; rm -rf "$T/modules"
+st=$(name)
+check "no Magisk modules dir: an error, and nothing made" test "$st" = "error: no Magisk modules dir" -a ! -e "$T/modules"
+printf '#!/bin/sh\nexit 1\n' | w "$T/bin/cmd"; rm -rf "$T/rb" "$T/modules" /t/overlay-on; rm -f /data/s1kiosk/radio/radio.conf
 
 echo
 echo "shell tests: $PASS passed, $FAILS failed"
