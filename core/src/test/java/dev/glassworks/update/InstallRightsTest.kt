@@ -35,6 +35,6 @@ class InstallRightsTest {
 
     @Test fun anInstalledAppAsksForATapOnAndroid6() {
         assertFalse(InstallRights.installsPackages(app))
-        assertEquals("Not on this Android: it needs Android 12 or newer, or the app as device owner", GenericAndroid.updates(app))
+        assertEquals("Not on this Android: it needs Android 12 or newer, the app as device owner, or the app as a system app", GenericAndroid.updates(app))
     }
 }

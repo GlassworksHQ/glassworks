@@ -80,6 +80,8 @@ Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a se
 `dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
 updates the other. The same APK serves older tablets and the lululemon Mirror, where Kiln flashes it into
 `/system/priv-app`. Status: the code is in; the build itself (its Gradle variant) and its release come next.
+Both builds ask for `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` (system permissions, for the
+Mirror), which rules them out of Google Play as they are. #403 discusses a Play variant.
 Why one legacy app and not a Mirror app of its own: [The legacy build's id](#the-legacy-builds-id).
 
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
@@ -113,10 +115,11 @@ repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
 
 So no app ever offers itself another's APK.
 
-The check reads the repo's 30 newest releases (`Releases.LIST_URL`, `per_page=30`), all apps and libraries
-together, and takes the newest of its own among them. So if more than 30 releases of other parts come
-out after this app's newest one, the app sees no update until its next release: every app should release
-at least once in any 30 of the repo's releases. One page keeps each check (after the app starts, then every 24 hours) to one request
+The check reads the repo's 100 newest releases (`Releases.LIST_URL`, `per_page=100`, GitHub's largest page),
+all apps and libraries together, and takes the newest of its own among them. So if more than 100 releases of
+other parts come out after this app's newest one, the app sees no update until its next release: every app
+should release at least once in any 100 of the repo's releases. A full page is about 1 MB (7 kB a release on
+2026-11-16); the check reads up to 4 MB. One page keeps each check (after the app starts, then every 24 hours) to one request
 against GitHub's limit of 60 an hour without a token. The release workflow doesn't build the generic app
 yet, and there has been no release of it. Its first release needs its key ([Signing](#signing)) and
 `release.yml` steps for the names above.

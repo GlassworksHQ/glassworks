@@ -153,7 +153,7 @@ class DevicePageTest {
     @Config(sdk = [29])
     fun withoutDeviceOwnerAndroid10HasNoUpdatesWithoutATap() {
         val info = GenericAndroid(app).deviceSection(app).items.filterIsInstance<SettingsItem.Info>().associate { it.title() to it.detail() }
-        assertEquals("Not on this Android: it needs Android 12 or newer, or the app as device owner", info["Updates without a tap"])
+        assertEquals("Not on this Android: it needs Android 12 or newer, the app as device owner, or the app as a system app", info["Updates without a tap"])
     }
 
     @Test fun theListIsDebloatShs() {

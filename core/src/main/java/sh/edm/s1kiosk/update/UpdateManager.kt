@@ -486,7 +486,11 @@ class UpdateManager(
         private const val FIRST_CHECK_DELAY_S = 30L
         private const val TICK_S = 15 * 60L
         private const val NETWORK_SETTLE_S = 10L
-        private const val MAX_JSON_BYTES = 1024 * 1024
+        /**
+         * The release list's cap. A release was 7 kB on average and 10 kB at most (2026-11-16, 14 releases), so a
+         * full page of [Releases.LIST_URL]'s 100 is about 1 MB: 4 MB leaves room for longer notes and more assets.
+         */
+        internal const val MAX_JSON_BYTES = 4 * 1024 * 1024
         private const val FREE_SPACE_MARGIN = 32L * 1024 * 1024
         private const val PROGRESS_PUBLISH_MS = 1_000L
 
