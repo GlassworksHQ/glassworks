@@ -82,6 +82,12 @@ interface Glassworks {
     var discovery: HaDiscovery?
 
     /**
+     * The setup hotspot (#197), set while KioskService runs (it needs the service's foreground). The setup screen
+     * draws it and asks for it; Wi-Fi details, setup's end and the setup page's Done stop it. Main thread only.
+     */
+    var setupHotspot: dev.glassworks.setup.SetupHotspot?
+
+    /**
      * Applies an intent's extras in the running activity (main thread), like onNewIntent. Used by the
      * ESPHome device so Home Assistant can drive the kiosk without starting activities from the background.
      */

@@ -63,7 +63,9 @@ class SetupHotspotTest {
         at(3 * min)
         assertTrue(hotspot.on)
         assertEquals(View.Starting, setup.view)
+        assertFalse("not up before Android says so", setup.isOn)
         up()
+        assertTrue(setup.isOn)
         at(4 * min)
         assertEquals(View.On(net, 14 * min, asked = false), setup.view)
     }
@@ -91,6 +93,7 @@ class SetupHotspotTest {
         setup.start(); at(3 * min); up()
         setup.configured()
         assertFalse(hotspot.on)
+        assertFalse(setup.isOn)
         assertEquals(1, hotspot.stops)
         assertEquals(View.Off(Stop.CONFIGURED, null), setup.view)
     }

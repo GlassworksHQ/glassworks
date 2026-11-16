@@ -144,6 +144,7 @@ the next one. "Verified" means tested on a real panel in a real home.
 | Web installer, command-line installer, undo | ✅ Verified end to end (firmware 4.5.80) with the old S1 installer; boot patch tested on two firmware versions. Kiln has not yet done a full install on a panel |
 | Manage page in the browser (`:8099`, sign in through Home Assistant): status, log, diagnostics, signed-in browsers ([guide](../../docs/manage.md)) | 🧪 New · not yet checked on a panel; settings are read-only for now |
 | Set up over the network: the panel's own setup page (`:8099/setup`), paired with a code on its screen ([guide](../../docs/manage.md#set-up-over-the-network)) | 🧪 New · paired, the Home Assistant step, the radio kept and Done on the S1 (2026-11-16); allowing it from the settings and Kiln's link not yet |
+| Set up from a phone with no Wi-Fi: the panel's own setup Wi-Fi, a QR code on its screen ([guide](../../docs/manage.md#the-panels-own-wi-fi)) | 🧪 New · unit tests only; not yet run on a panel |
 | Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
 | Bluetooth proxy for Home Assistant, listening only ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14); the pane itself not yet |
 | App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |

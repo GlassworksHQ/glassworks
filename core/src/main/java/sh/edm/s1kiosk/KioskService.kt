@@ -9,8 +9,15 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
+import android.os.SystemClock
 import dev.glassworks.frame.ServiceWork
+import dev.glassworks.platform.Hotspot
+import dev.glassworks.platform.NetworkUp
 import dev.glassworks.platform.Platform
+import dev.glassworks.setup.SetupHotspot
 import sh.edm.s1kiosk.settings.SettingsMenu
 import android.os.IBinder
 import android.os.Handler
@@ -41,6 +48,7 @@ class KioskService : Service() {
     private var frameWork: ServiceWork? = null
     private var codeOverlay: CodeOverlay? = null
     private lateinit var foreground: KioskForeground
+    private var hotspotNetworks: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -83,10 +91,39 @@ class KioskService : Service() {
         // The web installer, over adb (docs/onboarding.md): Wi-Fi via Improv Serial, then HA + radio.
         ImprovSerialServer.start(glassworks.frame, glassworks.build)
         SetupChannelServer.start(this, glassworks)
+        startSetupHotspot()
         Log.i("S1Kiosk", "KioskService started")
     }
 
+    /**
+     * The setup hotspot (#197): the panel opens its own Wi-Fi when no saved Wi-Fi works (SetupHotspotPolicy). Here,
+     * not in the activity: Android starts a local-only hotspot only for an app in the foreground, and this foreground
+     * service counts, screen off included. Any network coming or going is a change for the rule.
+     */
+    private fun startSetupHotspot() {
+        val hs = SetupHotspot(
+            hotspot = Hotspot.of(this, main),
+            connected = { NetworkUp.now(this) },
+            clock = SystemClock::elapsedRealtime,
+            schedule = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } },
+            log = { Log.i(HOTSPOT_TAG, it) },
+        )
+        glassworks.setupHotspot = hs
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { main.post { hs.refresh() } }
+            override fun onLost(network: Network) { main.post { hs.refresh() } }
+        }
+        runCatching { getSystemService(ConnectivityManager::class.java)?.registerNetworkCallback(NetworkRequest.Builder().build(), cb) }
+            .onSuccess { hotspotNetworks = cb }
+            .onFailure { Log.w(HOTSPOT_TAG, "can't follow the networks; the 3-minute check still runs", it) }
+        hs.start()
+    }
+
     override fun onDestroy() {
+        hotspotNetworks?.let { cb -> runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } }
+        hotspotNetworks = null
+        glassworks.setupHotspot?.close() // stops it, and puts back what it changed
+        glassworks.setupHotspot = null
         glassworks.voiceCancel = null
         SetupChannelServer.stop()
         ImprovSerialServer.stop()
@@ -173,6 +210,7 @@ class KioskService : Service() {
     private fun notificationIcon(): Int = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
+        private const val HOTSPOT_TAG = "S1Kiosk.Hotspot"
         private const val CHANNEL = "kiosk"
         private const val NOTIFICATION_ID = 1
         private const val REQ_KIOSK_SETTINGS = 10  // distinct PendingIntent request codes

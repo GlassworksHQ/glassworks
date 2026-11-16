@@ -99,6 +99,7 @@ class GlassworksRuntime(
     @Volatile override var panes: List<Pane> = emptyList()
 
     @Volatile override var discovery: HaDiscovery? = null
+    override var setupHotspot: dev.glassworks.setup.SetupHotspot? = null
 
     @Volatile override var commandSink: ((Intent) -> Unit)? = null
 

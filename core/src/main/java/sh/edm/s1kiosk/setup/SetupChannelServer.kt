@@ -2,8 +2,6 @@ package sh.edm.s1kiosk.setup
 
 import android.content.Context
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.util.Log
 import dev.glassworks.improv.AdbSocketServer
 import sh.edm.s1kiosk.Glassworks
@@ -71,7 +69,7 @@ object SetupChannelServer {
             val haUrl = prefs.haBase.orEmpty()
             return ChannelState(
                 ip = ip,
-                online = online(),
+                online = dev.glassworks.platform.NetworkUp.now(ctx),
                 ha = ChannelState.Ha(
                     discovered = ChannelState.discovered(prefs.haUrl, prefs.haUrlSource),
                     url = haUrl,
@@ -80,17 +78,6 @@ object SetupChannelServer {
                 ),
             )
         }
-
-        /** A Wi-Fi or Ethernet network is up. The panel's own setup hotspot isn't one: Android lists it as no network. */
-        private fun online(): Boolean = runCatching {
-            val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return false
-            @Suppress("DEPRECATION") // allNetworks: the active network can be another one while Wi-Fi is up too
-            (listOfNotNull(cm.activeNetwork) + cm.allNetworks).any { n ->
-                cm.getNetworkCapabilities(n)?.let {
-                    it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || it.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                } == true
-            }
-        }.getOrDefault(false)
 
         /** A fresh scan through Improv's provisioner, as Kiln's USB scan (ImprovSerialServer). */
         override fun scanWifi(): List<WifiNetwork> {

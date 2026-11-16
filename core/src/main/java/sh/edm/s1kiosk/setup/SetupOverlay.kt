@@ -92,6 +92,8 @@ class SetupOverlay(
         val improv: WifiStep.ImprovLine = WifiStep.improv(ImprovFacts()),
         /** A Wi-Fi join sent from the computer (web installer), if any. */
         val installer: InstallerWifi? = null,
+        /** The setup hotspot's part of the Wi-Fi step (#197); null where the app has none, and in a preview. */
+        val hotspot: dev.glassworks.setup.HotspotStep.Card? = null,
     )
 
     var onChooseNetwork: (() -> Unit)? = null
@@ -103,6 +105,8 @@ class SetupOverlay(
     var onClosePreview: (() -> Unit)? = null
     /** An inline Improv button (Allow / Not now / Stop / Use Bluetooth / Try again). */
     var onImprovAction: ((WifiStep.Action) -> Unit)? = null
+    /** The setup hotspot's button (Set up from a phone / Allow / Close it / Try again). */
+    var onHotspotAction: ((dev.glassworks.setup.HotspotStep.Action) -> Unit)? = null
     /** Panes applied with Continue. [restart]: a card that only takes effect at start changed. */
     var onPanesDone: (() -> Unit)? = null
     /** A pane's step was answered on the screen ([SetupHost.next]). */
@@ -505,6 +509,8 @@ class SetupOverlay(
         val w = m.wifi
         val inst = m.installer
         var tile = false
+        val spot = m.hotspot?.takeIf { !w.online && !done }
+        if (spot?.qr != null) return bindHotspotOn(spot)
         when {
             w.online || done -> {
                 cardTitle.text = if (w.ethernet) "Connected over Ethernet." else "Connected to ${w.ssid ?: "Wi-Fi"}."
@@ -527,7 +533,12 @@ class SetupOverlay(
             }
         }
         if (!w.online && inst?.phase == InstallerWifi.Phase.FAILED) showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
-        else w.message?.let { showStatus(it, AMBER) }
+        else w.message?.let { showStatus(it, AMBER) } ?: spot?.status?.let { showStatus(it, tone(spot.tone)) }
+        spot?.action?.let { a ->
+            plain.text = a.label
+            plain.visibility = View.VISIBLE
+            plain.setOnClickListener { onHotspotAction?.invoke(a) }
+        }
         ghost.text = "Choose a network"
         ghost.visibility = View.VISIBLE
         ghost.setOnClickListener { onChooseNetwork?.invoke() }
@@ -540,6 +551,38 @@ class SetupOverlay(
             plainLeft.setOnClickListener { onImprovAction?.invoke(a) }
         }
         return improvTile.view
+    }
+
+    /** The setup hotspot is on: the card says how to join it, with its QR code, and Close it. */
+    private fun bindHotspotOn(spot: dev.glassworks.setup.HotspotStep.Card): View? {
+        spot.label?.let { cardLabel.text = it }
+        cardTitle.text = spot.title
+        cardBody.text = spot.body
+        showQr(spot.qr!!)
+        if (input == Input.NONE) return null
+        ghost.text = "Choose a network"
+        ghost.visibility = View.VISIBLE
+        ghost.setOnClickListener { onChooseNetwork?.invoke() }
+        spot.action?.let { a ->
+            plainLeft.text = a.label
+            plainLeft.visibility = View.VISIBLE
+            plainLeft.setOnClickListener { onHotspotAction?.invoke(a) }
+        }
+        return null
+    }
+
+    private fun showQr(text: String) {
+        if (qrFor != text) {
+            qrImage.setImageBitmap(QrCode.bitmap(text, px(200f)))
+            qrFor = text
+        }
+        qrGlow.visibility = View.VISIBLE
+    }
+
+    private fun tone(t: dev.glassworks.setup.HotspotStep.Tone) = when (t) {
+        dev.glassworks.setup.HotspotStep.Tone.MUTED -> MU
+        dev.glassworks.setup.HotspotStep.Tone.AMBER -> AMBER
+        dev.glassworks.setup.HotspotStep.Tone.ROSE -> ROSE
     }
 
     private fun bindHa(m: Model, done: Boolean): View? {
@@ -642,6 +685,8 @@ class SetupOverlay(
 
     /** Without touch ([Input.NONE]): where to set the panel up from a computer, as a QR code and an address. */
     private fun bindFromComputer(m: Model) {
+        // No Wi-Fi works and the panel opened its own: a phone joins it first (#197).
+        m.hotspot?.takeIf { it.qr != null && !m.wifi.online }?.let { bindHotspotOn(it); return }
         val ip = m.panelIp
         if (ip == null) {
             cardTitle.text = "Waiting for Wi-Fi."

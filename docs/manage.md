@@ -92,6 +92,31 @@ over that address on your network could still use it, until Done or the 30 quiet
 has no write timeout on the page's connection: a browser that stops reading holds one of the panel's web
 workers until the network gives up (minutes), or until another paired browser or Done ends it.
 
+### The panel's own Wi-Fi
+
+A panel that can't reach any Wi-Fi opens a network of its own for setup (#197), so a phone can set it up with
+no cable and no Bluetooth (an iPhone too).
+
+1. **When it opens.** The panel has had no connection for 3 minutes since it started, or you pressed **Set up
+   from a phone** on its Wi-Fi step. It never opens while the panel is on a network.
+2. **Join it.** The setup screen shows a QR code: scan it with the phone's camera to join. The network's name
+   and password are under it too, for typing. Then open the address it shows (`http://<address>:8099/setup`)
+   and pair as above.
+3. **Send your Wi-Fi.** The page starts with Wi-Fi, since the panel is on no network. Pick yours and type the
+   password. The panel closes its own Wi-Fi and joins; its screen shows how it goes. Put the phone back on
+   your own Wi-Fi.
+4. **When it closes.** Once Wi-Fi is set, after 15 minutes, or with **Close it**, and when setup is done. Then
+   the panel tries your Wi-Fi again for 3 minutes, and opens its own again if that still fails. **Close it**
+   keeps it closed until the next Wi-Fi is set.
+
+| | |
+|---|---|
+| Who can join | Anyone who sees the panel's screen: the password shows only there, and changes each time (WPA2). Pairing still needs the code the panel shows |
+| While it's open | On most devices, the S1 among them, the panel's Wi-Fi client is off: it is on no network until the hotspot closes. 2.4 GHz |
+| Android 8 and newer | Android's local-only hotspot: Android names it (`AndroidShare_…` on the S1) and picks its key. No setting changes. On Android 13 and newer the panel asks for *Nearby devices* first; on 8 to 12 it needs location on |
+| Android 6 and 7 | A hidden Android call opens it as `Glassworks-…`. The panel puts back the device's own hotspot settings and its Wi-Fi when it closes |
+| A captive portal | Not yet: the page doesn't open by itself. It comes later, on panels with root |
+
 ## Changing settings
 
 A change applies on its own, as on the panel: a switch when you click it, a slider with **Save**, a

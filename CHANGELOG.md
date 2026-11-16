@@ -8,6 +8,12 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **The panel opens its own Wi-Fi for setup when no Wi-Fi works.** With no connection 3 minutes after it
+  starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
+  its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
+  send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
+  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. On Android 13 and
+  newer the panel asks for Android's *Nearby devices* permission first, and says why.
 - **See who is connected to the Zigbee radio.** In the Zigbee coordinator role, the radio's settings
   page says who uses the radio now, for example "Home Assistant · 192.0.2.20 · since 14:32", or
   "Nobody". It follows a connect or disconnect within a few seconds. Home Assistant has the same text as

@@ -48,6 +48,10 @@ class SetupHotspot(
     private class Run(var network: HotspotNetwork? = null)
 
     private var error: HotspotFailure? = null
+
+    /** The hotspot is up now. Any thread may read it (the setup page's pairing gate does); the rest is main-thread only. */
+    @Volatile var isOn: Boolean = false
+        private set
     private var cancelWake: (() -> Unit)? = null
     private var closed = false
 
@@ -120,12 +124,14 @@ class SetupHotspot(
             when (e) {
                 is Hotspot.Event.Started -> {
                     mine.network = e.network
+                    isOn = true
                     log("setup hotspot on")
                     onChange()
                 }
                 is Hotspot.Event.Failed -> {
                     log("setup hotspot failed: ${e.why}")
                     run = null
+                    isOn = false
                     error = e.why
                     policy.failed()
                     refresh()
@@ -133,6 +139,7 @@ class SetupHotspot(
                 Hotspot.Event.Stopped -> {
                     log("setup hotspot stopped by Android")
                     run = null
+                    isOn = false
                     policy.failed()
                     refresh()
                 }
@@ -142,6 +149,7 @@ class SetupHotspot(
 
     private fun stopHotspot(why: String) {
         run = null
+        isOn = false
         hotspot.stop()
         log("setup hotspot off ($why)")
     }

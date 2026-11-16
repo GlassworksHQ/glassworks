@@ -26,6 +26,12 @@ import dev.glassworks.engine.PagePort
 import dev.glassworks.pane.applyFrom
 import dev.glassworks.pane.intentExtras
 import dev.glassworks.platform.Platform
+import dev.glassworks.platform.HotspotAddress
+import dev.glassworks.platform.HotspotFailure
+import dev.glassworks.setup.HotspotPermission
+import dev.glassworks.setup.HotspotStep
+import dev.glassworks.setup.LanSetup
+import dev.glassworks.setup.SetupHotspot
 import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
 import dev.glassworks.frame.Orientation
@@ -192,10 +198,11 @@ class MainActivity : Activity() {
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
-            onChooseNetwork = ::openWifiSettings
+            onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }
             onSkipHa = ::onSkipHaSetup
             onClosePreview = ::closeSetupPreview
             onImprovAction = ::onImprovAction
+            onHotspotAction = ::onHotspotAction
             onPanesDone = { if (!setupPreview) refreshSetup() }
             onStepDone = { refreshSetup() }
         }
@@ -386,6 +393,8 @@ class MainActivity : Activity() {
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
+            glassworks.setupHotspot?.cancel() // setup is over: its hotspot too (#197)
+            hotspotAsked = false
             setupOverlay.finish { loadDashboardIfNeeded() }
         }
         syncImprovInline()
@@ -422,7 +431,48 @@ class MainActivity : Activity() {
             panelIp = HaUrls.localIpv4(),
             signedIn = HaAuth.signedIn,
             preview = preview,
+            hotspot = if (preview) null else hotspotCard(),
         )
+
+    // ---- setup: the panel's own Wi-Fi (#197)
+
+    /** The person asked for the setup hotspot on this screen: Android's permission comes into the card now. */
+    private var hotspotAsked = false
+
+    /** Android was asked for the hotspot's permission in this run: tells "not asked yet" from "won't ask again". */
+    private var hotspotPermissionAsked = false
+
+    private fun hotspotPermission(): HotspotPermission.Step =
+        HotspotPermission.step(Platform, { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }, hotspotPermissionAsked) {
+            shouldShowRequestPermissionRationale(it)
+        }
+
+    private fun hotspotCard(): HotspotStep.Card? {
+        val h = glassworks.setupHotspot ?: return null
+        val view = h.view
+        val needsPermission = hotspotAsked ||
+            (view as? SetupHotspot.View.Off)?.error == HotspotFailure.NO_PERMISSION
+        val permission = if (needsPermission) hotspotPermission() else HotspotPermission.Step.Ready
+        val url = HotspotAddress.now()?.let { "http://$it:${sh.edm.s1kiosk.auth.OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }
+        return HotspotStep.card(view, permission, url)
+    }
+
+    private fun onHotspotAction(a: HotspotStep.Action) {
+        if (setupPreview) return // the preview never changes state
+        val h = glassworks.setupHotspot ?: return
+        when (a) {
+            HotspotStep.Action.OPEN, HotspotStep.Action.RETRY -> {
+                hotspotAsked = true
+                if (hotspotPermission() == HotspotPermission.Step.Ready) h.ask()
+            }
+            HotspotStep.Action.ALLOW -> (hotspotPermission() as? HotspotPermission.Step.Explain)?.let {
+                hotspotPermissionAsked = true
+                requestPermissions(arrayOf(it.permission), REQ_HOTSPOT)
+            }
+            HotspotStep.Action.STOP -> { hotspotAsked = false; h.cancel() }
+        }
+        refreshSetup()
+    }
 
     /** After setup: (re)load the dashboard unless it is already showing. */
     private fun loadDashboardIfNeeded() {
@@ -873,6 +923,10 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // A new grant can add a foreground type (microphone on Android 14+): KioskService takes it on start.
         if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) KioskService.start(this)
+        if (requestCode == REQ_HOTSPOT) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) glassworks.setupHotspot?.ask()
+            refreshSetup()
+        }
         if (requestCode == REQ_GECKO) {
             val cb = pendingAndroidPermission
             pendingAndroidPermission = null
@@ -1118,6 +1172,7 @@ class MainActivity : Activity() {
         private const val TAG = "S1Kiosk"
         private const val REQ_STARTUP = 1
         private const val REQ_GECKO = 2
+        private const val REQ_HOTSPOT = 3
         private const val RETRY_MS = 10_000L
         /** The connecting screen waits this long after the page loaded for the page to say it's drawn. Public for tests. */
         const val READY_FALLBACK_MS = 15_000L

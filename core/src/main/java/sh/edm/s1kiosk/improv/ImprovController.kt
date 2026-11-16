@@ -280,6 +280,7 @@ object ImprovController {
         installerWifi = InstallerWifi(ssid, InstallerWifi.Phase.CONNECTING)
         installerJoining = true
         app.glassworks.screen.wake("installer wifi")
+        app.glassworks.setupHotspot?.configured() // off first: on most devices the radio can't join while it runs (#197)
         refreshOverlay()
         wifi.connect(ssid, psk, hidden) { outcome -> main.post { onInstallerOutcome(seq, ssid, outcome); done?.invoke(outcome) } }
         return true
@@ -386,6 +387,7 @@ object ImprovController {
             failure = null
             progress = null
             installerJoining = false
+            app.glassworks.setupHotspot?.configured()
             refreshOverlay()
             wifi.connect(ssid, password) { outcome -> main.post { onWifiOutcome(outcome) } }
         }
