@@ -75,6 +75,10 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **Kiln's technical log words the boot patch differently.** Kiln's boot patcher was rewritten, so the
+  patch step now logs a few short lines such as "boot image: page 2048, gzip ramdisk, AVB footer"
+  instead of Magisk's own messages. You see them under **Technical log** and in a saved failure
+  report. The patched boot image is the same, byte for byte.
 - **The panel's secrets are encrypted on its storage.** The Home Assistant sign-in, the ESPHome API
   key, the camera password and the Sendspin pairing are sealed with a key in Android's Keystore, so a
   copy of the app's settings files holds none of them. The update keeps them all: the panel stays

@@ -1,6 +1,6 @@
 # Clean-room spec: `kiln/packages/fel`
 
-**Status (2026-11-15): spec ready; the clean-room rewrite is in review (#355), real panel run pending.** This page says what Kiln's FEL client
+**Status: panel-verified 2026-11-16: the rewrite FEL-booted U-Boot on a real S1 (fastboot answered `sunxi`).** This page says what Kiln's FEL client
 must do, in behaviour and facts. It is the input for an implementer who has not read sunxi-tools.
 Read [README.md](README.md) first: it says what you may open and what you must not.
 

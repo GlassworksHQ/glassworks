@@ -20,7 +20,9 @@
 #            Python venv) behind the Kotlin pipeline, over a synthesised clip (#184). Only when the
 #            Android code or this file changes
 #   web     the npm workspaces from the repo root (job id kept, as branch protection names it):
-#            Kiln, its packages, the frame recipes and packages/*: typecheck, tests, both builds
+#            Kiln, its packages, the frame recipes and packages/*: typecheck, tests, both builds, and
+#            that the FEL routines' words in kiln/packages/fel/src/routines.ts are what routines.S
+#            assembles to (scripts/check-routines.sh, with Ubuntu's LLVM 18)
 #   refract  Refract, Kiln's download Worker (kiln/workers/refract, its own lockfile, not a root
 #            workspace): typecheck and its tests in workerd. Only when kiln/workers or this file changes
 #   scripts  frames/aqara-s1-plus/tools/install.sh's off-device tests, the perf test's rubric, report and grade
@@ -435,6 +437,12 @@ jobs:
       - run: npm test
         env:
           GW_EXT4_TOOLS: require
+      - name: The FEL routines match their assembly source
+        run: |
+          llvm=/usr/lib/llvm-18/bin
+          [ -x "$llvm/clang" ] && [ -x "$llvm/llvm-objdump" ] || { sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends clang-18 llvm-18 > /dev/null; }
+          "$llvm/clang" --version | head -1
+          LLVM=$llvm kiln/packages/fel/scripts/check-routines.sh
       - name: The page s1.edm.sh serves builds
         run: npm run build -w kiln
       - name: Kiln (Next.js) builds
