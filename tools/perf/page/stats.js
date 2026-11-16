@@ -474,9 +474,38 @@
     };
   }
 
+  // The more-info dialogs the harness asked for that HA hasn't shown yet (#410). fired: [{entity, t0,
+  // opened}], one per tile event; asks: [{entity, at}], HA's registry asks for those entities (its
+  // more-info dialog loads the entity's entry each time it shows one, ha-more-info-dialog.ts
+  // showDialog). One counts as shown once it opened or HA asked for its entity at or after its event:
+  // HA can show it without an `opened` (a sheet already open just changes entity). Returns the
+  // entities still waiting in HA.
+  function pendingShows(fired, asks) {
+    return (fired || []).filter((f) => !f.opened && !(asks || []).some((a) => a.entity === f.entity && a.at >= f.t0))
+      .map((f) => f.entity);
+  }
+
+  // Waiting for HA's dialogs to be done with (#410), one look at a time: obs {pending (dialogs asked
+  // for that HA hasn't shown), open (a more-info dialog is open), history (HA's history entry for a
+  // dialog is still the current one: its close's history.back() hasn't landed)}, at `now`; st the
+  // state so far ({start}). Idle when nothing is pending, open or in the history: done and clean. One
+  // that is open is to be closed (`close`). Done, not clean, at limitMs.
+  function settleStep(obs, now, st, limitMs) {
+    const s = Object.assign({ start: now, done: false, clean: false, close: false }, st);
+    s.close = !!obs.open;
+    if (!obs.pending && !obs.open && !obs.history) {
+      s.done = true;
+      s.clean = true;
+    } else if (now - s.start >= limitMs) {
+      s.done = true;
+      s.clean = false;
+    }
+    return s;
+  }
+
   const api = { BUDGET_MS, FROZEN_MS, LINE_MAX, frameStats, intervals, nearestRank, band, frameBand, measureMs, consoleLines,
                 skyToViolet, usableStep, freeStep, hlsFetches, cardRendered, videoGaps, webrtcWindow, shownFrames,
-                pacedSleep, frameBlocking, dialogStep, missedRefreshes, dialogTimes };
+                pacedSleep, frameBlocking, dialogStep, missedRefreshes, dialogTimes, pendingShows, settleStep };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.GWStats = api;
 })(this);

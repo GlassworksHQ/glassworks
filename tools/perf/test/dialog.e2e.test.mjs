@@ -190,6 +190,48 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
   const sensor = light.find((d) => d.graph);
   assert.ok(sensor.graph_ms > 0, `graph ${sensor.graph_ms}`);
 
+  // #410 (s1v3a): on the S1's heavy, HA's history.back() after a dialog's close didn't land while heavy
+  // was on screen, so HA held the next dialogs' shows (make-dialog-manager.ts: a dialog's history entry
+  // current, none open) until the view was left, and they opened on the next view. Here HA's back() is
+  // held from the first close on view A until the page next navigates, as heavy held it.
+  const evaluate = async (expression) =>
+    (await cdp("Runtime.evaluate", { expression, returnByValue: true }, sessionId)).result.result.value;
+  await evaluate(`(() => { const back = History.prototype.back, held = []; window.__gwHold = true;
+    window.__gwRelease = () => { window.__gwHold = false; for (const f of held.splice(0)) f(); };
+    history.back = function () { if (window.__gwHold) held.push(() => back.call(history)); else back.call(history); };
+    return true; })()`);
+  const aNonce = "d1a10003", q = new URLSearchParams({ view: "light", nonce: aNonce, run: "1", taps: "0", swipes: "0", vsync: "16.667" });
+  assert.equal((await fetch(`${base}/clarity/open?${q}`)).status, 204);
+  await until("A's refdash", () => page.lines.find((l) => l.nonce === aNonce && l.t === "refdash"), 120000);
+  await evaluate(`(addEventListener("location-changed", () => window.__gwRelease(), { once: true }), true)`);
+  const aEnd = await until("A done", () => page.lines.find((l) => l.nonce === aNonce && (l.t === "done" || l.t === "error")), 240000);
+  assert.equal(aEnd.t, "done", aEnd.message);
+  const a = page.lines.filter((l) => l.nonce === aNonce && l.t === "dialog");
+  t.diagnostic(`held: ${JSON.stringify(a.map((d) => [d.kind, d.error]))}; settle ${JSON.stringify(aEnd.settle)}`);
+  // What HA held fails A, as heavy's did: measured, and A's result.
+  assert.deepEqual(a.map((d) => d.error), [null, "it never opened within 20 s", "it never opened within 20 s"]);
+  // HA still held them after A's own wait; at the start view they came and were closed.
+  assert.equal(aEnd.settle.via, "start");
+  assert.equal(aEnd.settle.clean, true, JSON.stringify(aEnd.settle));
+  assert.deepEqual(aEnd.settle.first.pending, ["climate.clarity_0", "sensor.clarity_10"]);
+  assert.equal(aEnd.settle.first.history, true);
+  const settleLine = page.lines.find((l) => l.nonce === aNonce && l.t === "settle");
+  assert.ok(settleLine && settleLine.clean === false, "no settle line before A left for the start view");
+  // The next view is measured clean: its own three dialogs open, none of A's lands on it, and HA was
+  // done with A's before its navigation.
+  const b = await open("typical-nocam", "d1a10004");
+  checkDialogs(t, b, "typical-nocam", "bottom-sheet");
+  const bDash = b.find((l) => l.t === "refdash");
+  assert.ok(!bDash.dialogs_before || bDash.dialogs_before.clean, JSON.stringify(bDash.dialogs_before));
+  const bDone = b.find((l) => l.t === "done");
+  assert.equal(bDone.settle.clean, true);
+  assert.equal(bDone.settle.via, undefined);                // HA done with B's at once: no start view
+  const asks = readFileSync(join(dir, "fakeha.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l))
+    .filter((e) => e.type === "config/entity_registry/get" || e.open);
+  const bOpen = asks.findIndex((e) => e.open && e.open.nonce === "d1a10004");
+  // After B's command: B's own three asks, one per dialog, in order, and nothing of A's.
+  assert.deepEqual(asks.slice(bOpen + 1).map((e) => e.msg.entity_id), TIERS.DIALOG.entities.map((e) => e.entity));
+
   // prefers-reduced-motion: HA's sheet takes 1 ms and the graph doesn't animate.
   await cdp("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   const still = checkDialogs(t, await open("typical-nocam", "d1a10002"), "typical-nocam", "bottom-sheet");

@@ -51,10 +51,16 @@
 
   const live = { watch: new Map(), changes: [], on: false, applied: 0, seen: new Set(), gen: null, liveAt: null,
                  offset: null, rtt: null, askedAt: null };
-  const Native = window.WebSocket;
+  const Native = window.WebSocket, nativeSend = Native.prototype.send;
   function Clarity(url, protocols) {
     const ws = protocols === undefined ? new Native(url) : new Native(url, protocols);
     ws.addEventListener("message", onMessage);       // registered first, so it runs before HA's
+    // What the frontend sends, read and passed on unchanged: only the registry asks that say HA showed
+    // a more-info dialog (#410, dialogAsks).
+    ws.send = function (data) {
+      onSend(data);
+      return nativeSend.apply(this, arguments);
+    };
     return ws;
   }
   Clarity.prototype = Native.prototype;
@@ -82,6 +88,22 @@
     ClarityPC.prototype = NativePC.prototype;
     if (NativePC.generateCertificate) ClarityPC.generateCertificate = NativePC.generateCertificate.bind(NativePC);
     window.RTCPeerConnection = ClarityPC;
+  }
+
+  // HA's more-info dialog loads its entity's registry entry each time it shows one (showDialog ->
+  // _loadEntityRegistryEntry: config/entity_registry/get). For the dialogs' entities, each ask is a
+  // dialog HA showed, even one it showed late, after the view that asked for it (#410).
+  const DIALOG_IDS = new Set(((C.DIALOG || {}).entities || []).map((e) => e.entity));
+  const dialogAsks = [];
+  function onSend(data) {
+    if (typeof data !== "string" || data.indexOf("config/entity_registry/get") < 0) return;
+    try {
+      const m = JSON.parse(data);
+      if (m && m.type === "config/entity_registry/get" && DIALOG_IDS.has(m.entity_id)) {
+        dialogAsks.push({ entity: m.entity_id, at: performance.now() });
+        if (dialogAsks.length > 200) dialogAsks.splice(0, dialogAsks.length - 200);
+      }
+    } catch (e) { /* not ours to read */ }
   }
 
   // The live stream's context ids carry its slot (dashboards.py, stream_context): the stream's
@@ -317,6 +339,8 @@
       fcp_ms: first && fcp ? Math.round(fcp.startTime) : null, lcp_ms: first && lcp !== null ? Math.round(lcp) : null,
       load_ms: first && navEntry.loadEventEnd ? Math.round(navEntry.loadEventEnd) : null,
       nav_ms: r1(nav), usable: u, video_caps: videoCaps(),
+      // #410 (detail): how long HA took to be done with the view before's dialogs, before the navigation.
+      dialogs_before: first ? null : V.before || null,
       origin_epoch_ms: Math.round(performance.timeOrigin), epoch_ms: Date.now(),
     });
     return u;
@@ -594,9 +618,12 @@
   // ---- opening a view: HA's own navigate()
 
   // src/common/navigate.ts performNavigation: history.pushState, then "location-changed" on the
-  // window; hui-root reads the route and swaps in the view (hui-root.ts _selectView).
+  // window; hui-root reads the route and swaps in the view (hui-root.ts _selectView). The new entry's
+  // state is HA's own, { from: the path left } (#410): nothing of the entry before rides along, as a
+  // `dialog` key would (HA's dialog manager reads one as a dialog still open, and holds every show
+  // until it goes, make-dialog-manager.ts showDialog).
   function navigate(path) {
-    history.pushState(Object.assign({}, history.state, { from: location.pathname + location.search }), "", path);
+    history.pushState({ from: location.pathname }, "", path);
     const ev = new Event("location-changed", { bubbles: true, composed: true, cancelable: false });
     ev.detail = { replace: false };
     window.dispatchEvent(ev);
@@ -820,13 +847,17 @@
 
   // One dialog: fire the tile's event, follow each frame until it settled (or waitMs), let it be read
   // for stillMs, close it with its own close (the X button calls closeDialog) and follow the frames
-  // until HA says it closed. `stage`: the view (graded) or "warmup".
-  async function moreInfo(spec, n, of, stage) {
+  // until HA says it closed. `stage`: the view (graded) or "warmup". `fired` gets the event's record
+  // (#410: HA may still show one that didn't open in time, after the wait).
+  async function moreInfo(spec, n, of, stage, fired) {
     const D = C.DIALOG, ev = dialogEvents();
+    const rec = { entity: spec.entity, t0: performance.now(), opened: false };
+    fired.push(rec);
     try {
       const frames = [];
       let st = { opened: null, shown: null, graph: null, settled: null, done: false };
       const t0 = performance.now();
+      rec.t0 = t0;
       const e = new Event("hass-more-info", { bubbles: true, cancelable: false, composed: true });
       e.detail = { entityId: spec.entity };
       (currentView() || huiRoot() || document.body).dispatchEvent(e);
@@ -836,6 +867,7 @@
         const graph = spec.graph ? (st.graph !== null || (ev.opened !== null && graphDrawn(ev.el))) : null;
         st = S.dialogStep({ opened: ev.opened !== null, shown: ev.shown !== null, graph }, ts, st);
       }
+      rec.opened = ev.opened !== null;
       const mi = ev.el || find(document, "ha-more-info-dialog", 0);
       const mode = dialogMode(mi);
       if (st.done) await sleep(D.stillMs);              // read for a moment, as a person would
@@ -867,22 +899,23 @@
     await sleep(C.DIALOG.stillMs);
   }
 
-  // A dialog slower than waitMs can still open after its close was asked for (HA's showDialog awaits
-  // its import first): whatever is open now is closed, so none outlives its view.
-  function closeStray() {
+  // The more-info dialog HA has open now, if any (its adaptive dialog open, or opening).
+  function openDialog() {
     const mi = find(document, "ha-more-info-dialog", 0);
     const ad = mi && sr(mi) && sr(mi).querySelector("ha-adaptive-dialog");
-    if (ad && ad.open && typeof mi.closeDialog === "function") mi.closeDialog();
+    return ad && ad.open && typeof mi.closeDialog === "function" ? mi : null;
   }
 
   // After the swipes, at the view's top, while the live updates still run: each dialog in turn.
+  // Returns the events fired ([{entity, t0, opened}]) for settleDialogs.
   async function dialogs(list, stage) {
-    if (!list.length) return;
+    const fired = [];
+    if (!list.length) return fired;
     scrollTo({ top: 0, behavior: "instant" });
     await sleep(C.DIALOG.stillMs);
     for (let i = 0; i < list.length; i++) {
       try {
-        await moreInfo(list[i], i, list.length, stage);
+        await moreInfo(list[i], i, list.length, stage, fired);
       } catch (e) {
         // Not an `error` line: after a restart there is no nonce, and the runner would read that as
         // the restart's. A dialog line with no times fails its run, as one that never opened.
@@ -890,10 +923,65 @@
               settled_ms: null, error: String((e && e.stack) || e) });
       }
     }
-    closeStray();
+    return fired;
+  }
+
+  // ---- HA done with the dialogs (#410), untimed, before the next view's timing starts
+  //
+  // A dialog that didn't open within waitMs can still come later: HA's dialog manager holds a show
+  // while its history entry for the dialog before is the current one (the close's history.back()
+  // hasn't landed), and retries on a timer (make-dialog-manager.ts showDialog). On the S1's heavy
+  // (s1v3a, 2026-11-16) neither landed while heavy was on screen: its thermostat's and sensor's
+  // dialogs opened 0.3 to 0.9 s and about 5 s after the next view's navigation, on that view, and the
+  // sensor's sheet stayed open over it (its scroll and its first dialog failed, and its open took 9 to
+  // 12 s). So after its dialogs, each view waits until HA has nothing pending, open or in the history
+  // for a dialog, closing any that opens; what a dialog did within its waitMs is already logged, and
+  // stays its view's result.
+
+  // Waits until HA is done with the dialogs in `fired`: each shown (or opened), none open, and no
+  // dialog's history entry current. Bounded by limitMs. Returns { ms, clean, closed, pending, open,
+  // history } (detail).
+  async function settleDialogs(fired, limitMs) {
+    const t0 = performance.now();
+    let st = { start: t0 }, closed = 0, pending = [], open = null, hist = false;
+    for (;;) {
+      pending = S.pendingShows(fired, dialogAsks);
+      open = openDialog();
+      hist = !!(history.state && history.state.dialog);
+      st = S.settleStep({ pending: pending.length, open: !!open, history: hist }, performance.now(), st, limitMs);
+      if (st.done) break;
+      if (st.close) {
+        open.closeDialog();
+        closed++;
+      }
+      await sleep(100);
+    }
+    return { ms: Math.round(performance.now() - t0), clean: st.clean, closed, pending, open: !!open, history: hist };
+  }
+
+  // The view's own wait, then, if HA still holds a dialog: leave the view for the start view
+  // (untimed: the view's tasks are over, the next one's haven't begun), where what HA held lands and
+  // is closed. The next view opens from wherever HA is then: the start view, or this view again when
+  // HA's held history.back() lands after the move and takes it back (Chrome, 2026-11-16). Either way
+  // HA is done with the dialogs. Logged on the view's `done` line.
+  async function settleView(fired) {
+    if (!fired.length) return null;
+    const D = C.DIALOG, t0 = performance.now();
+    const here = await settleDialogs(fired, D.settleMs);
+    if (here.clean) return here;
+    log(Object.assign({ t: "settle", stage: V.tier }, here));       // the runner hears from the view meanwhile
+    const start = C.VIEWS[0];
+    navigate(`/${C.DASHBOARD}/${start}`);
+    const there = await settleDialogs(fired, D.settleMs);
+    return Object.assign(there, { ms: Math.round(performance.now() - t0), via: start, first: here,
+                                  at: location.pathname.split("/")[2] || null });
   }
 
   // ---- one reference view, as the runner asked
+
+  // The dialogs the last view (or the restart's warm-up) fired: the next view starts only once HA is
+  // done with them.
+  let lastFired = [];
 
   async function openView(cmd) {
     V = { nonce: String(cmd.nonce), run: Number(cmd.run || 0), taps: Math.max(0, Number(cmd.taps || 0)),
@@ -901,6 +989,18 @@
           dialogs: cmd.dialogs !== undefined ? Math.max(0, Number(cmd.dialogs)) : C.DIALOG.entities.length,
           vsync: Number(cmd.vsync || 1000 / 60), tier: String(cmd.view) };
     unwatch();
+    // #410: never measured on what an earlier view's dialogs left. Untimed, before the navigation; a
+    // view that would start on a dialog HA still holds isn't measured (an `error` line), rather than
+    // measured on it.
+    const before = await settleDialogs(lastFired, C.DIALOG.beforeMs);
+    lastFired = [];                 // a show HA never makes fails one view, not every view after it
+    // Detail on the refdash line when HA wasn't done at once (the wait isn't in any time).
+    V.before = before.ms > 0 || before.closed ? before : null;
+    if (!before.clean) {
+      throw new Error(`HA wasn't done with the view before's more-info dialogs after ${Math.round(before.ms / 1000)} s ` +
+        `(${before.pending.length ? `${before.pending.join(", ")} not shown yet` : before.open ? "one still open" : "its history entry still current"}); ` +
+        "this view isn't measured on them");
+    }
     startTicks();
     const nav = performance.now();
     navigate(`/${C.DASHBOARD}/${V.tier}`);
@@ -921,12 +1021,15 @@
     if (V.taps) await input();
     await camerasDone;
     for (let i = 0; i < V.swipes; i++) await swipe(i);
-    await dialogs(C.DIALOG.entities.slice(0, V.dialogs), V.tier);
+    const fired = await dialogs(C.DIALOG.entities.slice(0, V.dialogs), V.tier);
+    lastFired = fired;
     // The fake stops the stream when told; the runner tells it too once the view is done.
     await within(stream(false), C.PHASES.endStreamWaitMs);
     unwatch();
     frames.ticking = false;
-    log({ t: "done", stage: V.tier });
+    // #410: HA done with this view's dialogs before the next view's timing starts (detail, untimed).
+    const settle = await settleView(fired);
+    log({ t: "done", stage: V.tier, settle });
   }
 
   async function main() {
@@ -938,7 +1041,10 @@
     // builds ha-more-info-dialog on its first open in a load, and each domain's controls on their
     // first (more-info-content.ts imports them lazily), as the start view's cards bring in every card
     // type's code; so no view pays for that by coming first in the run's order.
-    if (landing === "start") await dialogs(C.DIALOG.entities, "warmup");
+    if (landing === "start") {
+      lastFired = await dialogs(C.DIALOG.entities, "warmup");
+      await settleDialogs(lastFired, C.DIALOG.settleMs);     // the first view's check waits for the rest
+    }
     let last = "";
     for (;;) {
       let cmd = null;

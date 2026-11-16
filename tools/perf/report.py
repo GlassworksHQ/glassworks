@@ -617,6 +617,8 @@ def tier_run(tier, entry, presents_ms):
     out["dialog_run"], why = dialog_run(entry.get("dialogs"), period)
     if why:
         out["dialog_error"] = why
+    # #410 (detail, untimed): HA done with the view's dialogs after them, and how (perfrun.py `settle`).
+    out["dialog_settle"] = entry.get("settle")
     inp = entry.get("input") or {}
     out.update(inp_ms=None if voids_taps or not inp.get("taps") else inp.get("inp_ms"), input_method=inp.get("method"),
                fcp_ms=page.get("fcp_ms"), nodes=page.get("nodes"), cards=page.get("cards"))
@@ -863,6 +865,9 @@ def reference_summary(all_runs):
             "dialog_close_ms": P.spread([(x.get("dialog_run") or {}).get("close_ms") for x in rs]),
             "dialog_errors": [x["dialog_error"] for x in rs if x.get("dialog_error")]
                              + [e for x in rs for e in (x.get("dialog_run") or {}).get("errors") or []],
+            # #410 (detail): runs in which HA still held one of this view's dialogs after its own wait,
+            # so the page left it for the start view before the next view (none of it timed).
+            "dialog_settles_away": [x["dialog_settle"] for x in rs if (x.get("dialog_settle") or {}).get("via")],
             "updates_levels": [G.update_level(x["updates_run"]) for x in rs if x.get("updates_run")],
             "updates_level": G.median_level(G.update_level(x["updates_run"]) for x in rs if x.get("updates_run")),
             "swipes_during_updates": [x.get("swipes_during_updates") for x in rs if x.get("scroll")],
@@ -1839,6 +1844,13 @@ def dialog_detail(ref):
         errs = s_.get("dialog_errors") or []
         if errs:
             out.append(f"{t}: more-info dialogs that didn't open fully or weren't measured: {'; '.join(sorted(set(errs)))}.")
+        away = s_.get("dialog_settles_away") or []
+        if away:
+            held = sorted({e for x in away for e in (x.get("first") or {}).get("pending") or []})
+            out.append(f"{t}: HA still held {', '.join(held) or 'a more-info dialog'} after the view's own wait in "
+                       f"{len(away)} of {len(runs)} run(s), so the view was left for the start view, untimed, where "
+                       + ("they came and were closed" if all(x.get("clean") for x in away) else "not all of them came")
+                       + "; the next view opened from there. What the dialogs did within their wait is this view's result.")
     return out
 
 

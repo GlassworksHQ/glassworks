@@ -446,6 +446,7 @@ def refdash(nonce, url):
         # Protocol 4: navigation at `nav`; the view's first screen rendered DRAWN_AFTER_MS later, the
         # main thread free 20 ms after that.
         "nav_ms": round(nav, 1), "video_caps": {"mse_h264": True, "native_hls": "", "rvfc": True},
+        "dialogs_before": None,                    # #410: HA was done with the view before's dialogs at once
         "usable": {"rendered_tick_ms": round(nav + drawn_after, 1), "first_screen_cards": 14, "head_cards": 10,
                    "interactive_ms": round(nav + drawn_after + 20, 1), "blocking_ms": 0.0, "long_frames": 0, "longest_frame_ms": 16.7}})
     C.sleep(1.0)
@@ -546,7 +547,8 @@ def refdash(nonce, url):
     # at 320 ms; the sensor's graph at 40 ms. FAKE_DIALOG_NEVER_OPENS=<view>: none opens there (HA
     # never shows them); FAKE_DIALOG_SLOW_GRAPH=<ms>: the sensor's history graph is drawn that late.
     m = re.search(r"dialogs=(\d+)", url)
-    for i, d in enumerate(DIALOGS[:int(m.group(1)) if m else len(DIALOGS)]):
+    asked = DIALOGS[:int(m.group(1)) if m else len(DIALOGS)]
+    for i, d in enumerate(asked):
         never = os.environ.get("FAKE_DIALOG_NEVER_OPENS") == tier
         graph = float(os.environ.get("FAKE_DIALOG_SLOW_GRAPH", "40")) if d["graph"] else None
         settled = None if never else max(320.0, graph or 0)
@@ -570,7 +572,18 @@ def refdash(nonce, url):
             urllib.request.urlopen(os.environ["FAKE_HA_URL"].rstrip("/") + f"/clarity/still?nonce={nonce}", timeout=10).read()
         except OSError:
             pass
-    gw({"t": "done", "stage": tier})
+    # #410: after its dialogs, HA done with them (none pending, open or in the history) at once; none
+    # asked for, no settle. FAKE_SETTLE_VIA=<view>: HA still held two there, so the view was left for
+    # the start view, where they came and were closed.
+    settle = None
+    if asked:
+        settle = {"ms": 0, "clean": True, "closed": 0, "pending": [], "open": False, "history": False}
+    if asked and os.environ.get("FAKE_SETTLE_VIA") == tier:
+        first = {"ms": 30000, "clean": False, "closed": 0, "pending": [d["entity"] for d in asked[1:]], "open": False, "history": True}
+        gw(dict({"t": "settle", "stage": tier}, **first))
+        settle = {"ms": 31200, "clean": True, "closed": 1, "pending": [], "open": False, "history": False,
+                  "via": "start", "first": first, "at": "start"}
+    gw({"t": "done", "stage": tier, "settle": settle})
     if foreign == "end":
         C.sleep(0.3)
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")

@@ -586,6 +586,24 @@ class DialogRuns(unittest.TestCase):
                          "a more-info dialog didn't open fully in 1 of 2 run(s)")
         self.assertEqual(R.dialog_cell({}, {}), "n/a (before Clarity v3)")
 
+    def test_a_view_left_for_the_start_view_is_said_and_graded_as_measured(self):
+        """#410 (s1v3a): HA held heavy's thermostat and sensor dialogs past the view; the page left it for
+        the start view before the next view. Detail only: heavy's dialogs stay its failure."""
+        failed = R.dialog_run(dialog_lines("heavy", never="sensor"))[0]
+        away = {"ms": 31200, "clean": True, "closed": 1, "pending": [], "open": False, "history": False, "via": "start",
+                "first": {"ms": 30000, "clean": False, "closed": 0, "pending": ["climate.clarity_0", "sensor.clarity_10"],
+                          "open": False, "history": True}}
+        run = R.tier_run("heavy", dict(tier_entry("heavy", 100, dialogs=dialog_lines("heavy", never="sensor")), settle=away),
+                         load_frames())
+        self.assertEqual(run["dialog_settle"], away)
+        self.assertEqual(run["dialog_run"], failed)                     # the same record, the same failure
+        s_ = {"dialog_runs": [failed, failed], "dialog_settles_away": [away]}
+        lines = R.dialog_detail({"tiers": {"heavy": s_}})
+        self.assertIn("heavy: HA still held climate.clarity_0, sensor.clarity_10 after the view's own wait in 1 of 2 run(s), "
+                      "so the view was left for the start view, untimed, where they came and were closed", lines[-1])
+        # A view HA was done with at once says nothing more.
+        self.assertFalse(any("start view" in x for x in R.dialog_detail({"tiers": {"light": {"dialog_runs": [failed]}}})))
+
 
 class CameraStreamsAll(unittest.TestCase):
     """The camera task counts every stream the view shows: heavy with 3 of its 4 streams playing (one

@@ -758,6 +758,10 @@ def cmd_coldstart(dev, a):
         elif t == "dialog":
             # Protocol 3 (#211): one line per more-info dialog, after the swipes.
             entry.setdefault("dialogs", []).append(pl)
+        elif t == "settle":
+            # #410: HA still held one of the view's dialogs after its own wait; the page leaves the view
+            # for the start view next (detail; its done line says how that ended).
+            entry["settle_first"] = pl
         elif t in ("done", "error"):
             st["live"] = st["view_open"] = False
             # Stop the view's stream at the fake (protocol 8: the page asks too, but doesn't wait on a
@@ -767,6 +771,8 @@ def cmd_coldstart(dev, a):
                 entry["error"] = pl.get("message")
             else:
                 entry["done"] = True
+                if pl.get("settle") is not None:
+                    entry["settle"] = pl["settle"]     # #410: HA done with its dialogs (detail, untimed)
             # Anything of this page's that didn't arrive whole is lost: a line cut into parts that
             # never all came, and a swipe answered with no scroll step back.
             entry["lost_lines"] = page_lines.close(pl.get("nonce"))

@@ -116,7 +116,7 @@
   "updatesWindowMs": 4000
  },
  "GLANCE_ENTITIES": 5,
- "_DIALOG": "Protocol 3 (#211): HA's more-info dialog, opened on each view after the swipes, while the live updates still run, as a tile's tap opens it (handle-action.ts: the hass-more-info event), then closed with the dialog's own close (its X button's closeDialog). One dialog per kind: a light (its controls), a thermostat (climate, its controls) and a sensor with a history graph. None of them is changed by the live stream or the taps, so every view opens the same dialogs. waitMs: the most a dialog may take from the event to settled (shown, and its graph drawn) or to closed; stillMs: the wait after each close, and before the first open (the view at its top). Project choices.",
+ "_DIALOG": "Protocol 3 (#211): HA's more-info dialog, opened on each view after the swipes, while the live updates still run, as a tile's tap opens it (handle-action.ts: the hass-more-info event), then closed with the dialog's own close (its X button's closeDialog). One dialog per kind: a light (its controls), a thermostat (climate, its controls) and a sensor with a history graph. None of them is changed by the live stream or the taps, so every view opens the same dialogs. waitMs: the most a dialog may take from the event to settled (shown, and its graph drawn) or to closed; stillMs: the wait after each close, and before the first open (the view at its top). settleMs (#410): after its dialogs, the most a view waits, untimed, for HA to be done with them (none still to show, none open, no dialog's history entry current), closing any that opens late; if HA still holds one, the view is left for the start view, where it lands, and waits there as long again, so no dialog of one view opens on the next. beforeMs: the same wait before a view's navigation; a view HA isn't done for by then isn't measured (an error). Neither is in any time. Project choices.",
  "DIALOG": {
   "entities": [
    {"entity": "light.clarity_2", "kind": "light", "graph": false},
@@ -125,6 +125,8 @@
   ],
   "waitMs": 20000,
   "closeWaitMs": 10000,
-  "stillMs": 1000
+  "stillMs": 1000,
+  "settleMs": 30000,
+  "beforeMs": 10000
  }
 }

@@ -1150,6 +1150,26 @@ class MoreInfoDialogs(unittest.TestCase):
         self.assertNotIn("typical.dialog", rep["grade"]["missing"])
         self.assertIn("light: it never opened within 20 s", tiers["typical"]["dialog_errors"])
 
+    def test_a_view_left_for_the_start_view_keeps_its_results_and_says_so(self):
+        """#410 (s1v3a): HA held two of heavy's dialogs past its own wait; the page left heavy for the
+        start view (untimed) so they didn't land on the next view. The runner keeps how (detail), the
+        report says it, and nothing graded changes."""
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SETTLE_VIA="heavy")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        heavy = c["tiers"]["heavy"]
+        self.assertEqual((heavy["settle"]["via"], heavy["settle"]["clean"]), ("start", True))
+        self.assertEqual(heavy["settle_first"]["pending"], ["climate.clarity_0", "sensor.clarity_10"])
+        self.assertEqual(c["tiers"]["light"]["settle"], {"ms": 0, "clean": True, "closed": 0, "pending": [],
+                                                         "open": False, "history": False})
+        rep = self.build(tmp)
+        tiers = rep["graded"]["reference"]["tiers"]
+        self.assertEqual(len(tiers["heavy"]["dialog_settles_away"]), 1)
+        self.assertEqual(tiers["light"]["dialog_settles_away"], [])
+        self.assertEqual((tiers["heavy"]["dialog_level"], tiers["heavy"]["dialog_settled_ms"]["median"]), ("premium", 320.0))
+        self.assertIn("heavy: HA still held climate.clarity_0, sensor.clarity_10 after the view's own wait in 1 of 1 run(s)",
+                      report.markdown(rep))
+
     def test_a_slow_history_graph_slows_the_task(self):
         tmp = tempfile.mkdtemp()
         p, c = refstart(tmp, FAKE_DIALOG_SLOW_GRAPH="1500")

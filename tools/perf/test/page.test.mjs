@@ -626,3 +626,48 @@ test("the more-info dialogs are a light, a thermostat and a sensor with its hist
   for (const e of T.DIALOG.entities) assert.ok(!streamed.has(e.entity), e.entity);
   assert.ok(T.DIALOG.waitMs >= 10000 && T.DIALOG.closeWaitMs > 0 && T.DIALOG.stillMs > 0);
 });
+
+// ---- #410: HA done with a view's dialogs before the next view (s1v3a: heavy's opened on light)
+
+test("pendingShows: a dialog HA hasn't shown, by its open or HA's registry ask after its event", () => {
+  const fired = [{ entity: "light.clarity_2", t0: 100, opened: true },
+                 { entity: "climate.clarity_0", t0: 21000, opened: false },
+                 { entity: "sensor.clarity_10", t0: 42000, opened: false }];
+  // s1v3a's heavy: the thermostat and the sensor never opened and HA hadn't asked for either.
+  assert.deepEqual(S.pendingShows(fired, [{ entity: "light.clarity_2", at: 150 }]), ["climate.clarity_0", "sensor.clarity_10"]);
+  // An ask from before the event is an earlier dialog's, not this one's.
+  assert.deepEqual(S.pendingShows(fired, [{ entity: "climate.clarity_0", at: 900 }]), ["climate.clarity_0", "sensor.clarity_10"]);
+  // HA showed the thermostat late (on light, 82 s on): no longer pending; the sensor still is.
+  assert.deepEqual(S.pendingShows(fired, [{ entity: "climate.clarity_0", at: 103000 }]), ["sensor.clarity_10"]);
+  // Shown onto a sheet already open: no `opened`, but HA asked, so it isn't pending.
+  assert.deepEqual(S.pendingShows(fired, [{ entity: "climate.clarity_0", at: 21001 }, { entity: "sensor.clarity_10", at: 42000 }]), []);
+  assert.deepEqual(S.pendingShows([], null), []);
+  assert.deepEqual(S.pendingShows(undefined, []), []);
+});
+
+test("settleStep: done when nothing is pending, open or in the history; one open is closed; not clean at the limit", () => {
+  const idle = { pending: 0, open: false, history: false };
+  let st = S.settleStep(idle, 5, { start: 5 }, 1000);
+  assert.deepEqual([st.done, st.clean, st.close], [true, true, false]);
+  // Each of the three keeps it waiting.
+  for (const busy of [{ pending: 1 }, { open: true }, { history: true }]) {
+    st = S.settleStep(Object.assign({}, idle, busy), 500, { start: 0 }, 1000);
+    assert.deepEqual([st.done, st.clean], [false, false], JSON.stringify(busy));
+    assert.equal(st.close, !!busy.open, JSON.stringify(busy));
+  }
+  // The S1's heavy: a show HA holds past the limit.
+  st = S.settleStep({ pending: 2, open: false, history: true }, 1000, { start: 0 }, 1000);
+  assert.deepEqual([st.done, st.clean], [true, false]);
+  // The start is kept from the first look.
+  st = S.settleStep({ pending: 1, open: false, history: false }, 40, {}, 1000);
+  assert.equal(st.start, 40);
+  st = S.settleStep({ pending: 1, open: false, history: false }, 1040, st, 1000);
+  assert.deepEqual([st.done, st.clean], [true, false]);
+});
+
+test("the settle's limits are untimed waits within the runner's idle deadline (#410)", () => {
+  const D = T.DIALOG;
+  assert.ok(D.settleMs >= D.waitMs && D.beforeMs > 0, JSON.stringify(D));
+  // In place, then at the start view: each settleMs, with a line between (perfrun.py STAGE_IDLE_S, 180 s).
+  assert.ok(2 * D.settleMs + D.beforeMs < 180000);
+});
