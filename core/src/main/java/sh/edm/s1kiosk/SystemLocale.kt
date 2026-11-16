@@ -34,10 +34,9 @@ object SystemLocale {
     internal fun current(config: Configuration): Locale? =
         if (Platform.hasLocaleList) config.locales.takeIf { it.size() > 0 }?.get(0) else config.locale
 
-    /** Sets [config]'s language to [locale] alone. */
-    @Suppress("DEPRECATION")
+    /** Sets [config]'s language to [locale] alone, and its layout direction with it (an RTL language turns it). */
     internal fun setLocale(config: Configuration, locale: Locale) {
-        if (Platform.hasLocaleList) config.setLocales(LocaleList(locale)) else config.locale = locale
+        if (Platform.hasLocaleList) config.setLocales(LocaleList(locale)) else config.setLocale(locale)
     }
 
     /** Returns true if the language was changed (false if it already was, or on failure). */

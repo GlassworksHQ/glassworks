@@ -36,8 +36,8 @@ data class Sample(
     val wifiRssi: Int?,
     /** Mbit/s. */
     val wifiLinkSpeed: Int?,
-    /** `Process.getStartElapsedRealtime()`. */
-    val appStartElapsedMs: Long,
+    /** When this process started (`Process.getStartElapsedRealtime()`); null when it can't be told (Android 6, no `/proc/self/stat`). */
+    val appStartElapsedMs: Long?,
     /** The size of `/data`, for the settings page's storage meter. */
     val storageTotalBytes: Long? = null,
 )

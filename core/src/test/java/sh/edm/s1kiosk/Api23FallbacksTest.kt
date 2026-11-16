@@ -44,6 +44,15 @@ class Api23FallbacksTest {
         assertEquals(Locale.forLanguageTag("es-ES"), SystemLocale.current(config))
     }
 
+    @Test fun `a right-to-left language turns the layout direction on Android 6`() {
+        val config = Configuration()
+        SystemLocale.setLocale(config, Locale.forLanguageTag("en-US"))
+        assertEquals(android.view.View.LAYOUT_DIRECTION_LTR, config.layoutDirection)
+        SystemLocale.setLocale(config, Locale.forLanguageTag("ar"))
+        assertEquals(Locale.forLanguageTag("ar"), SystemLocale.current(config))
+        assertEquals(android.view.View.LAYOUT_DIRECTION_RTL, config.layoutDirection)
+    }
+
     @Test fun `a slider describes itself without the API 24 set-progress action`() {
         val slider = GlassSlider(app, 0f, 1f, 0.1f).apply { value = 0.5f }
         val info = AccessibilityNodeInfo.obtain()

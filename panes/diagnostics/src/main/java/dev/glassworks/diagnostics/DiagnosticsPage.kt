@@ -35,7 +35,7 @@ object DiagnosticsPage {
             ),
             SettingsItem.Tile(
                 "Uptime", duration(nowElapsedMs), "",
-                sample?.let { "App ${duration(nowElapsedMs - it.appStartElapsedMs)}" }.orEmpty(),
+                sample?.appStartElapsedMs?.let { "App ${duration(nowElapsedMs - it)}" }.orEmpty(),
             ),
         )
     }

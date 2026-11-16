@@ -67,11 +67,17 @@ class AndroidProbe(
         )
     }
 
-    /** When this process started, on the elapsed-realtime clock: from Android 7 Android says; below, `/proc/self/stat`. */
-    private fun appStartElapsedMs(): Long =
+    /** The process's start, once read: it never changes, so a later failed read doesn't lose it. */
+    private var appStart: Long? = null
+
+    /**
+     * When this process started, on the elapsed-realtime clock: from Android 7 Android says; below, `/proc/self/stat`.
+     * Null while that can't be read: unknown, not a guess.
+     */
+    private fun appStartElapsedMs(): Long? = appStart ?: (
         if (Platform.hasProcessStartTime) Process.getStartElapsedRealtime()
         else read(File(proc, "self/stat"))?.let(::parseProcessStartTicks)?.let { it * 1000 / ticksPerSecond }
-            ?: SystemClock.elapsedRealtime()
+        ).also { appStart = it }
 
     override fun lastExitReason(): Int? = runCatching { Platform.lastExitReason(context, context.packageName) }.getOrNull()
 
