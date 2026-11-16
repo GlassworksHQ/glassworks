@@ -27,6 +27,9 @@ class CodeOverlayMockups {
         val a = Mockup.activity()
         Mockup.save("manage-code-sign-in", Mockup.show(CodeOverlay.build(a, PanelCode.Shown("482913", "signin", "Sign in to manage this panel", 0), {})))
         Mockup.save("manage-code-reboot", Mockup.show(CodeOverlay.build(a, PanelCode.Shown("482913", "reboot", "Reboot the panel", 0), {})))
+        // Setup over the LAN (#34): the same overlay, for pairing a laptop.
+        Mockup.save("setup-lan-code", Mockup.show(CodeOverlay.build(a,
+            PanelCode.Shown("482913", dev.glassworks.setup.LanSetup.PURPOSE, dev.glassworks.setup.LanSetup.LABEL, 0), {})))
         // Over the night clock, as on the panel: nothing behind may show through.
         val behind = android.widget.FrameLayout(a).apply {
             setBackgroundColor(android.graphics.Color.BLACK)
