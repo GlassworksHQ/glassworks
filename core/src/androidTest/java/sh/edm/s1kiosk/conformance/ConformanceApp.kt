@@ -45,7 +45,7 @@ import sh.edm.s1kiosk.update.ReleaseLine
  */
 class ConformanceApp : Application(), GlassworksApp {
     override val glassworks: GlassworksRuntime by lazy {
-        GlassworksRuntime(FakeFrame, AppBuild("1.0.0", 10000, debug = true, product = "Conformance"), NoEngine, FakeParts(),
+        GlassworksRuntime(FakeFrame, AppBuild("1.0.0", 10000, debug = true, product = "Conformance"), BlankEngine, FakeParts(),
             releases = ReleaseLine("conformance", "conformance-", plainTags = false) { "conformance-${it.id}" })
     }
 }
@@ -76,9 +76,17 @@ class FakeLight : LightSource {
     override fun stop(context: Context) { onLux = null }
 }
 
-object NoEngine : Engine {
+/** An engine whose page shows nothing and loads nothing, so MainActivity runs here without GeckoView (#198). */
+object BlankEngine : Engine {
     override val started: EngineSettings? = null
-    override fun open(activity: Activity, host: PageHost, background: Int): Page = error("no page in the conformance test")
+    override fun open(activity: Activity, host: PageHost, background: Int): Page = object : Page {
+        override val view = android.view.View(activity).apply { setBackgroundColor(background) }
+        override fun load(url: String) {}
+        override fun reload() {}
+        override fun goBack() {}
+        override fun restart() {}
+        override fun post(message: org.json.JSONObject) {}
+    }
     override fun isContentProcess(processName: String) = false
 }
 

@@ -245,7 +245,7 @@ line, both ways:
   send `answered` restarts the radio on a same-mode request). Unknown optional fields are left out.
 - `ha.set_url` (first name `set_ha`, which still works) with `url` (http/https only): applied on the main thread exactly as the `url` intent extra
   (dashboard URL setting saved, then the dashboard reloads, or the process restarts when the
-  secure-context hosts change, after the reply). The panel's setup screen moves on by itself.
+  secure-context hosts or the dashboard's origin (scheme, host or port) change, after the reply). The panel's setup screen moves on by itself.
 - `radio.set_mode` (first name `set_radio`) with `mode`: through `RadioController.request`, like the
   radio card on the panel's Panes step. Only the ids in `radio.options` (the radio step's options, `RadioStep.OPTIONS`)
   are accepted. Any other id, also a `RadioMode` id the step doesn't offer, is `ok:false` with

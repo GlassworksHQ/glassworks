@@ -58,18 +58,18 @@
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true">
 
-        <!-- Landscape, either way up: the core's screens are laid out for a landscape panel.
+        <!-- No screenOrientation: the frame gives it at start (GenericAndroid.orientation, #198), landscape on a
+             tablet and portrait on the lululemon Mirror, either way up.
              Its intent extras change settings (the dashboard's address, the API key, remote debugging), and
              on a device with other apps any of them could send some. So starting it directly takes
              WRITE_SECURE_SETTINGS, which adb's shell holds and normal apps can't get; the app's own starts
              need none. Launchers and the home screen start it through the alias below, whose extras the
-             app drops (GenericParts.trustsExtras). -->
+             app drops (AppParts.trustsExtras). -->
         <activity
             android:name="sh.edm.s1kiosk.MainActivity"
             android:exported="true"
             android:permission="android.permission.WRITE_SECURE_SETTINGS"
             android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation"
             android:windowSoftInputMode="adjustResize"
             android:stateNotNeeded="true" />

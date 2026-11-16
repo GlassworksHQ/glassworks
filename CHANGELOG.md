@@ -87,6 +87,10 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **On a screen that stands portrait, the app is portrait.** On a device that isn't an Aqara S1, the app now
+  follows the screen's natural orientation, either way up: landscape on most tablets as before, portrait on a
+  screen that stands portrait, like the lululemon Mirror's. The S1 stays landscape. The setup screen doesn't fit a
+  portrait screen yet: until it does, set up such a device from Kiln or the Manage page.
 - **Kiln's technical log words the boot patch differently.** Kiln's boot patcher was rewritten, so the
   patch step now logs a few short lines such as "boot image: page 2048, gzip ramdisk, AVB footer"
   instead of Magisk's own messages. You see them under **Technical log** and in a saved failure

@@ -4,6 +4,8 @@
 
 package sh.edm.s1kiosk.conformance
 
+import android.content.pm.ActivityInfo
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.glassworks.esphome.DeviceIdentity
@@ -20,6 +22,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.MainActivity
 import sh.edm.s1kiosk.esphome.MdnsAdvertiser
 import sh.edm.s1kiosk.esphome.PanelDevice
 import sh.edm.s1kiosk.glassworks
@@ -27,8 +30,8 @@ import sh.edm.s1kiosk.glassworksRuntime
 
 /**
  * The core on a real Android, with nothing of the S1 (#23): [ConformanceApp]'s fake frame, fake engine and one
- * pane of its own. CI runs it on emulators at API 26, 29 and 34 (core-emulators.yml); the legacy build's API 23
- * is #198's.
+ * pane of its own. CI runs it on emulators at API 23 (the legacy build's floor, #198), 26, 29 and 34
+ * (core-emulators.yml).
  */
 @RunWith(AndroidJUnit4::class)
 class CoreConformanceTest {
@@ -40,6 +43,14 @@ class CoreConformanceTest {
         assertTrue(app is ConformanceApp)
         assertEquals("conformance", app.glassworks.frame.board)
         assertEquals("Conformance", runtime.build.product)
+    }
+
+    /** #198: the core's MainActivity starts, and stands as the frame says, on every Android the core runs on. */
+    @Test fun mainActivityStartsAndStandsAsTheFrameSays() {
+        ActivityScenario.launch(MainActivity::class.java).use { s ->
+            assertEquals("RESUMED", s.state.name)
+            s.onActivity { a -> assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, a.requestedOrientation) }
+        }
     }
 
     @Test fun aPaneTheFrameCantRunIsHidden() {

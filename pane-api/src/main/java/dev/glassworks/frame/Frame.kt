@@ -76,6 +76,13 @@ interface Frame {
     val input: Input get() = Input.TOUCH
 
     /**
+     * How the app's screen stands on this device, either way up: [Orientation.LANDSCAPE] (the S1, most tablets) or
+     * [Orientation.PORTRAIT] (a screen that stands portrait, like the lululemon Mirror's). Read when the activity
+     * starts, so a frame can ask the device (#198).
+     */
+    val orientation: Orientation get() = Orientation.LANDSCAPE
+
+    /**
      * Work the frame runs while the app's service runs, or null for none (the S1's: Wi-Fi scans while the
      * screen is off, #3). [onForegroundOnly] asks the service to take the types it may have now, when the
      * work found it needs one it didn't have (the location type for a scan).
@@ -133,6 +140,9 @@ enum class NamedBy { FRAME, MODEL }
 
 /** Whether a frame's screen takes a tap ([Frame.input]). */
 enum class Input { TOUCH, NONE }
+
+/** How a frame's screen stands ([Frame.orientation]). */
+enum class Orientation { LANDSCAPE, PORTRAIT }
 
 /** [manufacturer] ("Aqara"), [model] ("Panel Hub S1 Plus") and [chip] ("Allwinner A133", or the board's name where Android gives no chip). */
 class Hardware(val manufacturer: String, val model: String, val chip: String)

@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.os.Bundle
@@ -27,6 +28,7 @@ import dev.glassworks.pane.intentExtras
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
+import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
 import sh.edm.s1kiosk.dashboard.DashboardOptions
@@ -167,6 +169,9 @@ class MainActivity : Activity() {
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
         applyIntent(intent, fromNewIntent = false)
+        // The frame's orientation, either way up (#198). The S1's manifest already asks for landscape: no change there.
+        val portrait = glassworks.frame.orientation == Orientation.PORTRAIT
+        screenOrientation(portrait).let { if (requestedOrientation != it) requestedOrientation = it }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // 8 bits per channel: the dithered backdrop/voice glows would band again on an RGB565 surface.
@@ -177,10 +182,11 @@ class MainActivity : Activity() {
             }
         }
 
-        // Bake the dithered backdrop now, before the first frame (the overlays fill this landscape,
-        // full-screen window); until it is ready the loading screen draws 8-bit gradients.
+        // Bake the dithered backdrop now, before the first frame (the overlays fill this full-screen window, in the
+        // frame's orientation); until it is ready the loading screen draws 8-bit gradients.
         val real = android.graphics.Point().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealSize(it) }
-        Backdrop.prewarm(maxOf(real.x, real.y), minOf(real.x, real.y))
+        val (long, short) = maxOf(real.x, real.y) to minOf(real.x, real.y)
+        if (portrait) Backdrop.prewarm(short, long) else Backdrop.prewarm(long, short)
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
@@ -314,6 +320,9 @@ class MainActivity : Activity() {
 
     // ---- first-boot setup screen (docs/onboarding.md step 4; rules in setup/SetupState.kt)
 
+    /** When this activity was made: the app's start where Android 6 can't say it (#198). */
+    private val createdAt = SystemClock.elapsedRealtime()
+
     private fun setupInputs(): SetupInputs {
         val w = wifiStatus.snapshot()
         val now = SystemClock.elapsedRealtime()
@@ -328,7 +337,7 @@ class MainActivity : Activity() {
             apiKeySet = prefs.apiEncryption,
             haSkipped = prefs.haSetupSkipped,
             haHelloThisProcess = SetupSignals.haHello,
-            uptimeMs = now - android.os.Process.getStartElapsedRealtime(),
+            uptimeMs = now - (Platform.processStartElapsedMs() ?: createdAt),
             signedIn = HaAuth.signedIn,
             onAuthPage = FrontendUrls.isAuthorizePage(currentUrl, prefs.haBase),
             signedOut = signedOutHere,
@@ -612,8 +621,10 @@ class MainActivity : Activity() {
         Log.i(TAG, "Home Assistant at $url (dashboard setting: ${prefs.urlSetting})")
         refreshSetup()
         if (!prefs.isAutoUrl) return
-        if (prefs.secureHosts() != glassworks.engine.started?.secureHosts.orEmpty()) {
-            // The HA host must be in dom.securecontext.allowlist (mic), which Gecko reads at startup.
+        val started = glassworks.engine.started
+        if (prefs.engineStart() != KioskPrefs.engineStart(started?.secureHosts.orEmpty(), started?.dashboard)) {
+            // The HA host must be in dom.securecontext.allowlist (mic), which Gecko reads at startup, and the legacy
+            // engine holds every page to the dashboard's origin, which it takes once (#198).
             restartProcess()
             return
         }
@@ -643,9 +654,9 @@ class MainActivity : Activity() {
         intent ?: return
         var needsRestart = false
         intent.getStringExtra("url")?.takeIf { it.isNotBlank() }?.let {
-            val oldHosts = prefs.secureHosts()
+            val oldStart = prefs.engineStart()
             prefs.urlSetting = it // a URL, or "auto"
-            needsRestart = needsRestart || prefs.secureHosts() != oldHosts
+            needsRestart = needsRestart || prefs.engineStart() != oldStart // hosts, or the dashboard's origin (#198)
             if (fromNewIntent) loadDashboard()
         }
         intent.getStringExtra("ha_discovered")?.let { if (fromNewIntent) onHaFound(it) }
@@ -1097,6 +1108,10 @@ class MainActivity : Activity() {
             intent.replaceExtras(null as Bundle?)
             return true
         }
+
+        /** The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]): either way up. Public for tests. */
+        fun screenOrientation(portrait: Boolean): Int =
+            if (portrait) ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()
