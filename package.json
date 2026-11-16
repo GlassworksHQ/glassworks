@@ -14,7 +14,8 @@
     "kiln/apps/*",
     "frames/*/installer",
     "packages/*",
-    "site"
+    "site",
+    "tools/mirror"
   ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
