@@ -123,7 +123,7 @@ after):
 |---|---|---|
 | `system.img` | 850,905,808 bytes, `d13dd330…83ed5` | 850,905,808 bytes, `bdb6b844…e35c1` |
 | `userdata.sparse` | 154,944,572 bytes, `74b1f57a…cf908` | the same file |
-| `SHA256SUMS` | `74c4766d…4b4a4` | `c3cbc377…4d02a` |
+| `SHA256SUMS` | `74c4766d…3b4a4` | `c3cbc377…4d02a` |
 | `ro.build.fingerprint` | `…/MMB29M/11041605:userdebug/test-keys` | `…/MMB29M/11120023:userdebug/test-keys` |
 | What changed (release notes) | | "Fully dark sleep": the panel switches off completely in sleep |
 
