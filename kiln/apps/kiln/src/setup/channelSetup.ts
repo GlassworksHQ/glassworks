@@ -91,12 +91,13 @@ export class ChannelSetup {
   }
 
   /**
-   * Opens pairing over the LAN for 30 minutes (`pairing.arm`, #34) on the channel already open. False when there is
-   * none, or the app doesn't have it (an older app answers "Unknown request"): then it has no setup page either.
+   * Opens pairing over the LAN for 30 minutes (`pairing.arm`, #34) on the channel already open, and answers with the
+   * panel's state as it replied: its address now. Undefined when there is no channel, or the app doesn't have it (an
+   * older app answers "Unknown request"): then it has no setup page either.
    */
-  async armPairing(): Promise<boolean> {
-    if (!this.channel) return false;
-    return this.channel.armPairing().then(() => true, () => false);
+  async armPairing(): Promise<SetupState | undefined> {
+    if (!this.channel) return undefined;
+    return this.channel.armPairing().catch(() => undefined);
   }
 
   /** Stops the poll and lets the channel go; the next step opens it again. */

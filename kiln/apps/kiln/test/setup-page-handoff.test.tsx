@@ -59,6 +59,51 @@ describe('the hand-off to the panel\'s setup page', () => {
     s.close();
   });
 
+  it('links the address in the panel\'s reply to pairing.arm, and none when the reply has none', async () => {
+    const moved = demoSession('radio');
+    await toDone(moved, (x) => {
+      const c = steps(x).channel!;
+      // the panel's address changed between Finish and the reply (DHCP)
+      c.armPairing = async () => ({ ...(c as unknown as { state: object }).state, ip: '192.0.2.77' }) as never;
+    });
+    await vi.waitFor(() => expect(moved.store.state.done?.setupPage).toBe('http://192.0.2.77:8099/setup'));
+    moved.close();
+
+    const gone = demoSession('radio');
+    let replied = 0;
+    await toDone(gone, (x) => {
+      const c = steps(x).channel!;
+      c.armPairing = async () => { replied++; return ({ ...(c as unknown as { state: object }).state, ip: undefined }) as never; };
+    });
+    await vi.waitFor(() => expect(replied).toBe(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(gone.store.state.done?.setupPage).toBeUndefined();
+    gone.close();
+  });
+
+  it('a backup download that fails while the hand-off is pending shows its error, and the link stays', async () => {
+    const s = demoSession('radio');
+    s.store.dispatch({ type: 'backup', backup: { id: 's1-backup-20261116-101500', created: '', bootWasPatched: false, files: [{ part: 'boot', size: 1, sha256: '' }] } });
+    let reply!: () => void;
+    let fail!: (e: Error) => void;
+    (s as unknown as { d: { backups: { files: () => Promise<never> } } }).d.backups.files = () => new Promise((_, no) => { fail = no; });
+    await toDone(s, (x) => {
+      const c = steps(x).channel!;
+      const arm = c.armPairing.bind(c);
+      c.armPairing = async () => { await new Promise<void>((r) => { reply = r; }); return arm(); };
+    });
+    await vi.waitFor(() => expect(reply).toBeTypeOf('function'));
+    const download = s.downloadBackup(); // the read waits; Done is the one without the link
+    await vi.waitFor(() => expect(fail).toBeTypeOf('function'));
+    reply(); // the hand-off adds the link: a new Done object
+    await vi.waitFor(() => expect(s.store.state.done?.setupPage).toBe('http://192.0.2.50:8099/setup'));
+    fail(new Error('the stored backup is gone'));
+    await download;
+    expect(s.store.state.done?.backup?.error).toMatch(/the stored backup is gone/);
+    expect(s.store.state.done?.setupPage).toBe('http://192.0.2.50:8099/setup');
+    s.close();
+  });
+
   it('shows the address and opens the page in a new tab', async () => {
     const s = demoSession('done');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
