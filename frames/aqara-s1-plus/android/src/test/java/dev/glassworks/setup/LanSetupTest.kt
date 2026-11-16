@@ -147,8 +147,21 @@ class LanSetupTest {
             val session = pair()
             ws(session).use { b ->
                 assertTrue(b.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok"))
-                assertEquals("one paired channel at a time", 503, handshake(session).first)
+                ws(session).use { c ->
+                    assertEquals("the newer paired channel takes over", 0x88, b.nextFrameByte())
+                    assertTrue(c.ask("""{"id":3,"op":"pairing.arm"}""").getBoolean("ok"))
+                }
             }
+        }
+    }
+
+    @Test fun aChannelLeftOpenAfterDoneKeepsNoBrowserOut() {
+        val first = pair()
+        ws(first).use { a ->
+            a.ask("""{"id":1,"op":"state"}""")
+            assertEquals(200, post(LanSetup.DONE, cookie = first).status)
+            assertEquals("setup done closes its channel", 0x88, a.nextFrameByte())
+            ws(pair()).use { b -> assertTrue(b.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok")) }
         }
     }
 

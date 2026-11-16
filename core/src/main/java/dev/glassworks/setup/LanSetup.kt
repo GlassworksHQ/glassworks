@@ -17,6 +17,7 @@ import java.io.OutputStream
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The setup channel over the LAN (#34), on the panel's web port next to the Manage page. The WebSocket at
@@ -56,10 +57,13 @@ class LanSetup(
 
     /**
      * WebSockets at once, one of each kind: each holds one of the web server's few workers. An unpaired one can
-     * read the state only, so it never keeps a paired browser out (CodeRabbit on #376).
+     * read the state only, so it never keeps a paired browser out. The paired one is the newest: a browser that
+     * pairs again, or another one, takes it over, so a channel whose session ended can't hold it (CodeRabbit on #376).
      */
-    private val paired = AtomicInteger()
     private val unpaired = AtomicInteger()
+    private val held = AtomicReference<Held?>()
+
+    private class Held(val token: String?, val ws: WebSocketStreams)
 
     /** The answer for a request under `/setup/`, or null for one that isn't this class's (the Manage page takes it). */
     fun handle(req: HttpRequest): HttpResponse? {
@@ -76,7 +80,9 @@ class LanSetup(
                 req.method != "POST" -> HttpResponse.text(405, "Not allowed.")
                 !ManageServer.sameOrigin(req.headers) -> notOwnPage()
                 else -> {
-                    if (sessions.end(req.cookies[COOKIE])) event("Setup over the network finished")
+                    val token = req.cookies[COOKIE]
+                    if (sessions.end(token)) event("Setup over the network finished")
+                    held.get()?.takeIf { it.token == token }?.ws?.abort()
                     json(200, JSONObject().put("ok", true), cookie(""))
                 }
             }
@@ -124,20 +130,22 @@ class LanSetup(
         if (origin == null || !ManageServer.sameOrigin(req.headers)) return notOwnPage()
         val token = req.cookies[COOKIE]
         val isPaired = sessions.valid(token, touch = false)
-        val slot = if (isPaired) paired else unpaired
-        if (slot.get() >= 1) return HttpResponse.text(503, "Another browser is setting this panel up. Try again in a moment.")
+        if (!isPaired && unpaired.get() >= 1) return HttpResponse.text(503, "Another browser is reading this panel's setup. Try again in a moment.")
         return HttpResponse.webSocket(key, if (isPaired) idleMs.toInt() else unpairedIdleMs) { ws ->
-            if (slot.incrementAndGet() > 1) {
-                slot.decrementAndGet()
+            val mine = Held(token, ws)
+            if (isPaired) {
+                held.getAndSet(mine)?.ws?.abort()
+            } else if (unpaired.incrementAndGet() > 1) {
+                unpaired.decrementAndGet()
                 ws.close(1013)
                 return@webSocket
             }
             try {
                 serve(ws.input, ws.output) { sessions.valid(token, touch = true) }
             } catch (_: IOException) {
-                // The browser went away mid-write.
+                // The browser went away mid-write, or a newer paired channel took over.
             } finally {
-                slot.decrementAndGet()
+                if (isPaired) held.compareAndSet(mine, null) else unpaired.decrementAndGet()
                 ws.close()
             }
         }

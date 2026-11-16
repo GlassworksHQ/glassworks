@@ -66,6 +66,13 @@ class WebSocketStreams(private val raw: InputStream, private val rawOut: OutputS
         runCatching { send(OP_CLOSE, byteArrayOf((code shr 8).toByte(), code.toByte())) }
     }
 
+    /** Closes with [code] and drops the connection from another thread: a read waiting on the socket ends at once. */
+    fun abort(code: Int = 1000) {
+        close(code)
+        runCatching { raw.close() }
+        runCatching { rawOut.close() }
+    }
+
     /** The next data frame's payload, answering control frames on the way; null once the connection is over. */
     private fun nextData(): ByteArray? {
         while (!closed) {
