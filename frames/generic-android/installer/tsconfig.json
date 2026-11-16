@@ -1,7 +1,14 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["w3c-web-usb", "node"]
+    "types": [
+      "w3c-web-usb",
+      "node"
+    ]
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test",
+    "run-node.ts"
+  ]
 }
