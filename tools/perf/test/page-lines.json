@@ -1,5 +1,5 @@
 {
- "_comment": "The reference pages' log lines (keys only, no values). Most are as the S1 Plus logged them in smoke7 (d60ec95, S1 Kiosk 0.4.3, the panel's logcat, 2026-11-12); refdash and step/updates are protocol 4's harness on HA's real frontend (headless Chromium, 2026-11-13, opened by navigation in the loaded frontend), because smoke7's step/updates were cut off and protocol 4 adds to refdash. test_runner.FakeMatchesThePanel holds the fake adb to these shapes. camera is #174's harness line (keys from harness.js camerasEnd, 2026-11-13), with fetches (stats.js hlsFetches) since #182's smoke-cam1 round; heavy's is longer than a logcat line, so the fake splits it. Protocol 6 (#202) adds path (web_rtc or hls). Clarity v1 (#205) adds clarity to refdash, and t0_ms and nav_ms to camera (from harness.js, 2026-11-14). Clarity v2 (#264) adds drawn: the first screen drawn, logged before refdash (keys from harness.js reportUsable, 2026-11-14). Clarity v3 (#211) adds dialog: one per more-info dialog (keys from harness.js moreInfo, as HA's real frontend logged them in headless Chrome, 2026-11-16). #410 adds settle to done (HA done with the view's dialogs, untimed; null on a view asked for none) and dialogs_before to refdash (keys from harness.js settleView and reportUsable, 2026-11-16); a view whose dialogs HA still held logs a settle line before done (the same keys as done's settle, with t and stage), which the fake logs only under FAKE_SETTLE_VIA.",
+ "_comment": "The reference pages' log lines (keys only, no values). Most are as the S1 Plus logged them in smoke7 (d60ec95, S1 Kiosk 0.4.3, the panel's logcat, 2026-11-12); refdash and step/updates are protocol 4's harness on HA's real frontend (headless Chromium, 2026-11-13, opened by navigation in the loaded frontend), because smoke7's step/updates were cut off and protocol 4 adds to refdash. test_runner.FakeMatchesThePanel holds the fake adb to these shapes. camera is #174's harness line (keys from harness.js camerasEnd, 2026-11-13), with fetches (stats.js hlsFetches) since #182's smoke-cam1 round; heavy's is longer than a logcat line, so the fake splits it. Protocol 6 (#202) adds path (web_rtc or hls). Clarity v1 (#205) adds clarity to refdash, and t0_ms and nav_ms to camera (from harness.js, 2026-11-14). Clarity v2 (#264) adds drawn: the first screen drawn, logged before refdash (keys from harness.js reportUsable, 2026-11-14). Clarity v3 (#211) adds dialog: one per more-info dialog (keys from harness.js moreInfo, as HA's real frontend logged them in headless Chrome, 2026-11-16). #410 adds settle to done (HA done with the view's dialogs, untimed; null on a view asked for none) and dialogs_before to refdash (keys from harness.js settleView and reportUsable, 2026-11-16); a view whose dialogs HA still held logs a settle line before done (the keys of done's settle, with t and stage; FakeMatchesThePanel runs with FAKE_SETTLE_VIA so the fake logs one).",
  "tag": "Isolated Web Content",
  "max_line_bytes": 1023,
  "from_page_code": [
@@ -178,6 +178,18 @@
    "settled_ms",
    "show_duration_ms",
    "shown_ms",
+   "stage",
+   "t"
+  ],
+  "settle": [
+   "clean",
+   "closed",
+   "history",
+   "ms",
+   "nonce",
+   "open",
+   "pending",
+   "run",
    "stage",
    "t"
   ]

@@ -658,6 +658,9 @@ test("settleStep: done when nothing is pending, open or in the history; one open
   // The S1's heavy: a show HA holds past the limit.
   st = S.settleStep({ pending: 2, open: false, history: true }, 1000, { start: 0 }, 1000);
   assert.deepEqual([st.done, st.clean], [true, false]);
+  // One open at the limit is done waiting for, and still to be closed (the harness closes, then stops).
+  st = S.settleStep({ pending: 0, open: true, history: true }, 1000, { start: 0 }, 1000);
+  assert.deepEqual([st.done, st.clean, st.close], [true, false, true]);
   // The start is kept from the first look.
   st = S.settleStep({ pending: 1, open: false, history: false }, 40, {}, 1000);
   assert.equal(st.start, 40);
@@ -666,8 +669,13 @@ test("settleStep: done when nothing is pending, open or in the history; one open
 });
 
 test("the settle's limits are untimed waits within the runner's idle deadline (#410)", () => {
-  const D = T.DIALOG;
+  const D = T.DIALOG, P = T.PHASES;
   assert.ok(D.settleMs >= D.waitMs && D.beforeMs > 0, JSON.stringify(D));
-  // In place, then at the start view: each settleMs, with a line between (perfrun.py STAGE_IDLE_S, 180 s).
-  assert.ok(2 * D.settleMs + D.beforeMs < 180000);
+  // The longest the page can go without a line (perfrun.py STAGE_IDLE_S, 180 s), counted as if none
+  // came between: the last dialog's close wait and still, the stream's stop, the view's own settle and
+  // the one at the start view, the next view's check, and its navigation to its first line (drawn),
+  // allowed 60 s (the S1's slowest, light after heavy in s1v3a, took 11.6 s).
+  const navAllowanceMs = 60000;
+  const silent = D.closeWaitMs + D.stillMs + P.endStreamWaitMs + 2 * D.settleMs + D.beforeMs + navAllowanceMs;
+  assert.ok(silent < 180000, `${silent} ms`);
 });

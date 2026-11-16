@@ -1847,10 +1847,13 @@ def dialog_detail(ref):
         away = s_.get("dialog_settles_away") or []
         if away:
             held = sorted({e for x in away for e in (x.get("first") or {}).get("pending") or []})
+            back = sorted({x["at"] for x in away if x.get("at") and x.get("at") != x.get("via")})
             out.append(f"{t}: HA still held {', '.join(held) or 'a more-info dialog'} after the view's own wait in "
-                       f"{len(away)} of {len(runs)} run(s), so the view was left for the start view, untimed, where "
+                       f"{len(away)} of {len(runs)} run(s), so the page moved to the start view, untimed, where "
                        + ("they came and were closed" if all(x.get("clean") for x in away) else "not all of them came")
-                       + "; the next view opened from there. What the dialogs did within their wait is this view's result.")
+                       + "; the next view opened from wherever HA was then"
+                       + (f" ({', '.join(back)}: HA's late history.back() took it back)" if back else "")
+                       + ". What the dialogs did within their wait is this view's result.")
     return out
 
 

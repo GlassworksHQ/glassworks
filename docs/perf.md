@@ -966,38 +966,49 @@ dialog):
 A dialog that never opened, or never settled, within `DIALOG.waitMs` (20 s) fails its run: it was
 measured, and the panel didn't show it. The harness closes it anyway, so no dialog outlives its view.
 
-**No dialog of one view lands on the next (#410).** HA can still show a dialog after its 20 s: its
-dialog manager holds a show while its history entry for the dialog before is the current one (that
-close's `history.back()` hasn't landed), and retries on a timer (`make-dialog-manager.ts`
-`showDialog`). On the S1's heavy (s1v3a, 2026-11-16, PR head 0c9cc43c) neither landed while heavy was
-on screen. In all three runs its thermostat's and sensor's dialogs, which "never opened within 20 s",
-reached HA 0.3 to 0.9 s and about 5 s after the next view's navigation (the fake's
-`config/entity_registry/get` for `climate.clarity_0`, then `sensor.clarity_10` with its
-`history/stream`). They opened on that view, and the sensor's sheet stayed open over it until that
-view's own first dialog replaced it (its history subscription was ended only then). So light after
-heavy opened in 9.1 to 11.6 s (1.0 s when first), didn't scroll, and its own light dialog "never
-opened", in runs 2 and 3. Run 1's view after heavy was the HLS copy of typical, not graded. Desktop
-Firefox showed the same when HA's `history.back()` was held back (a scratch test, 2026-11-16).
-
-So, untimed, after a view's dialogs (and after the restart's warm-up), the harness waits until HA is
-done with them: each one it asked for shown (it opened, or HA asked for its entity's registry entry
-after the event, which HA's dialog does each time it shows one), none open (one that opens is closed)
-and no dialog's history entry current. It waits at most `DIALOG.settleMs` (30 s) on the view. If HA
-still holds one, the harness leaves the view for the start view, where the held dialogs land and are
-closed, and waits as long again. The next view then opens from wherever HA is: the start view, or the
-view again when HA's held `history.back()` lands after the move and takes it back (Chrome, 2026-11-16). Before each
-view's navigation it checks the same, for at most `DIALOG.beforeMs` (10 s). A view that would start
-on a dialog HA still holds isn't measured (an `error` line) rather than measured on it. None of these
-waits is in any time. What a dialog did within its 20 s stays its own view's result: heavy's dialogs
-that never opened stay heavy's failures. The `done` line's `settle` and the refdash's `dialogs_before`
-say what happened, and report.md says when a view was left for the start view. The harness also opens
-a view as HA's `navigate()` does, with the history state `{from}` alone, so no `dialog` key from the
-entry before rides into the new one.
 The run's record is the slowest to settle, how many failed, and the three animations' frames pooled
 (`report.py` `dialog_run`); a run with a dialog line lost is not measured. The frames are the page's
 own (rAF): they show the main thread. The sheet's slide is a CSS transform, which Gecko can run on its
 compositor while the main thread is busy, so rAF may count a hitch the screen didn't show. That is why
 they decide only premium, as live updates' pacing does.
+
+**No dialog of one view lands on the next (#410).** HA can still show a dialog after its 20 s. Its
+dialog manager holds a show while its history entry for a dialog is the current one and no dialog is
+open (`history.state.dialog` with an empty `OPEN_DIALOG_STACK`: the close's `history.back()` hasn't
+landed), and retries on a timer (`make-dialog-manager.ts` `showDialog`). On the S1's heavy (s1v3a,
+2026-11-16, PR head 0c9cc43c) that `back()` didn't land while heavy was on screen. In all three runs
+its thermostat's and sensor's dialogs, which "never opened within 20 s", reached HA 0.3 to 0.9 s and
+about 5 s after the next view's navigation (the fake's `config/entity_registry/get` for
+`climate.clarity_0`, then `sensor.clarity_10` with its `history/stream`). They opened on that view,
+and the sensor's sheet stayed open over it until that view's own first dialog replaced it (its history
+subscription was ended only then). So light after heavy opened in 9.1 to 11.6 s (1.0 s when first),
+didn't scroll, and its own light dialog "never opened", in runs 2 and 3. Run 1's view after heavy was
+the HLS copy of typical, not graded. Desktop Firefox showed the same when HA's `history.back()` was
+held back (a scratch test, 2026-11-16).
+
+So, untimed, after a view's dialogs and after the restart's warm-up, the harness waits until HA is
+done with them:
+
+1. Each one it asked for was shown: it opened, or HA asked for its entity's registry entry after the
+   event (HA's dialog does that each time it shows one). One that threw before its event was
+   dispatched was never asked for, so it isn't waited for.
+2. None is open: one that opens is closed, and so is one still open at the limit.
+3. No dialog's history entry is current.
+
+It waits at most `DIALOG.settleMs` (30 s). If HA still holds one, the harness moves to the start view
+(after the warm-up, which is on the start view, a new entry for the same view), where the held dialogs
+land and are closed, and waits as long again. The next view then opens from wherever HA is: the start
+view, or the view again when HA's held `history.back()` lands after the move and takes it back (Chrome,
+2026-11-16). Before each view's navigation the harness checks the same, for at most `DIALOG.beforeMs`
+(10 s). A view that would start on a dialog HA still holds isn't measured: it logs an `error` line
+with its nonce, and none of its tasks is graded in that run.
+
+None of these waits is in any time. What a dialog did within its 20 s stays its own view's result:
+heavy's dialogs that never opened stay heavy's failures. The `done` line's `settle` and the refdash's
+`dialogs_before` say what happened, and report.md says when a view was moved from. The harness also
+opens a view as HA's `navigate()` does, with the history state `{ from }` alone (`from` is the path
+left), so no key of the entry before, such as a `dialog`, rides into the new one; the dialog e2e test
+checks the state after a navigation.
 
 After each restart, before the first view opens, the harness opens and closes each dialog once on
 the start view, untimed (its lines say `stage: "warmup"`): HA makes the dialog's element on its first
@@ -1881,7 +1892,7 @@ load) and `t`:
 | `camera` | Views with streams (#174), logged before the swipes: `stage`, `path` (`web_rtc` or `hls`, protocol 6), `window_ms`, `t0_ms` and `nav_ms` (the window's start and the navigation, page clock; protocol 8), `fps`, `expected`, `found`, and per stream `w`, `h`, `first_frame_ms` (after the navigation), `shown_pct`, `max_gap_ms`, `stall_total_ms`, `frames` (presented, from the decoder), `callbacks` (`requestVideoFrameCallback`), `decoded`, `dropped`, `waiting`, `source`, `stall_presented` (frames presented inside the stalls, from rVFC's `presentedFrames`; `null` without rVFC), `gaps_source` (`webrtc`, `webrtc (bound)`, `webrtc (no freeze counts: n/a)`, `rvfc` or `timeupdate`: where `max_gap_ms` and `stall_total_ms` come from), `stalls_at` (where the stalls were, page clock), `callback_gaps` (WebRTC, protocol 8: the frame callbacks' `max_gap_ms`, `stall_total_ms`, `presented`, `callbacks`, `stalls_at`; detail), `span_ms` (WebRTC: the receiver samples' span, which shown is over), `path`, `others` (the camera's other players: `path`, `first_frame_ms`, `connected`), `webrtc` (WebRTC only: `stats.js` `webrtcStats`); then `fetches` (`segment` and `playlist`: `n`, `queued_ms`, `wait_ms`, `total_ms`, each `median`, `p95`, `max`; `segment.kb`, `segment.arrival_gap_max_ms`; `streams`) |
 | `dialog` | Clarity v3 (#211), one per more-info dialog, after the swipes (and after a restart with `stage` `warmup`, not graded): `stage` (the view), `n`, `of`, `entity`, `kind` (`light`, `climate`, `sensor`), `graph` (whether it has a history graph), `mode` (`bottom-sheet` or `dialog`, as HA showed it), `show_duration_ms` (its show animation, as the page computed it), `reduced_motion`, `opened`, `open_ms`, `shown_ms`, `graph_ms`, `settled_ms` (all after the tile's event; `null` when it didn't happen; `settled_ms`, graded, unrounded), `anim` (the open animation's frame stats), `anim_intervals`, `dropped` (refreshes missed), `longest_frame_ms`, `close_ms`, `close_longest_ms`, `error` and `close_error` (`null`, or why it didn't open, settle or close in time) |
 | `hello`, `js` | Animation test page: `ua`, `dpr`, `css`, `cores`, `load`; the JS workload's `runs`, `median_ms`, `p95_ms`, `checksum`, `expected` |
-| `settle` | #410: a view whose dialogs HA still held after `DIALOG.settleMs` on it, logged before it leaves for the start view: `stage`, `ms`, `clean` (`false`), `closed`, `pending` (the entities HA hadn't shown), `open`, `history` (a dialog's history entry still current) |
+| `settle` | #410: a view whose dialogs HA still held after `DIALOG.settleMs` on it, logged before the move to the start view: `stage`, `ms`, `clean` (`false`), `closed` (dialogs found open and closed), `pending` (the entities HA hadn't shown), `open`, `history` (a dialog's history entry still current). After a restart's warm-up (`stage` `warmup`, no nonce) it is logged again if HA still held one after the move too; the runner keeps those in `refstart-<k>.json` under `warmup_settle` |
 | `done`, `error` | `message` on error. At `done` the page has stopped its updates. A view's `done` has `settle` (#410, detail, untimed): how HA got done with its dialogs (`ms`, `clean`, `closed`, `pending`, `open`, `history`; with `via: "start"`, `first` (the view's own wait) and `at` (the view HA was on at the end), when it was left for the start view); `null` on a view asked for none |
 
 The restart page logs with an empty nonce (its parts are numbered `restart:<n>`): only `refdash` and

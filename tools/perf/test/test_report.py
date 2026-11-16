@@ -600,7 +600,12 @@ class DialogRuns(unittest.TestCase):
         s_ = {"dialog_runs": [failed, failed], "dialog_settles_away": [away]}
         lines = R.dialog_detail({"tiers": {"heavy": s_}})
         self.assertIn("heavy: HA still held climate.clarity_0, sensor.clarity_10 after the view's own wait in 1 of 2 run(s), "
-                      "so the view was left for the start view, untimed, where they came and were closed", lines[-1])
+                      "so the page moved to the start view, untimed, where they came and were closed; the next view "
+                      "opened from wherever HA was then.", lines[-1])
+        # Chrome, 2026-11-16: HA's held history.back() landed after the move and took it back to the view.
+        back = dict(away, at="heavy")
+        line = R.dialog_detail({"tiers": {"heavy": dict(s_, dialog_settles_away=[back])}})[-1]
+        self.assertIn("the next view opened from wherever HA was then (heavy: HA's late history.back() took it back).", line)
         # A view HA was done with at once says nothing more.
         self.assertFalse(any("start view" in x for x in R.dialog_detail({"tiers": {"light": {"dialog_runs": [failed]}}})))
 

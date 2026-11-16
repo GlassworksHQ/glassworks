@@ -106,7 +106,7 @@ function checkDialogs(t, lines, stage, mode) {
   return ds;
 }
 
-test("HA's more-info dialogs open, settle and close on a view at the S1's viewport, with and without motion", { timeout: 600000 }, async (t) => {
+test("HA's more-info dialogs open, settle and close on a view at the S1's viewport, with and without motion", { timeout: 900000 }, async (t) => {
   const why = missing();
   if (why) {
     if (MUST) assert.fail(`GW_PERF_E2E=1 but ${why}`);
@@ -169,8 +169,8 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
   await until("the warm-up's dialogs", () => page.lines.filter((l) => l.t === "dialog" && l.stage === "warmup").length === TIERS.DIALOG.entities.length, 120000);
   checkDialogs(t, page.lines, "warmup", "bottom-sheet");
 
-  const open = async (view, nonce) => {
-    const q = new URLSearchParams({ view, nonce, run: "1", taps: "0", swipes: "0", vsync: "16.667" });
+  const open = async (view, nonce, extra = {}) => {
+    const q = new URLSearchParams(Object.assign({ view, nonce, run: "1", taps: "0", swipes: "0", vsync: "16.667" }, extra));
     assert.equal((await fetch(`${base}/clarity/open?${q}`)).status, 204);
     const end = await until(`${view} done`, () => page.lines.find((l) => l.nonce === nonce && (l.t === "done" || l.t === "error")), 180000);
     assert.equal(end.t, "done", end.message);
@@ -231,6 +231,50 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
   const bOpen = asks.findIndex((e) => e.open && e.open.nonce === "d1a10004");
   // After B's command: B's own three asks, one per dialog, in order, and nothing of A's.
   assert.deepEqual(asks.slice(bOpen + 1).map((e) => e.msg.entity_id), TIERS.DIALOG.entities.map((e) => e.entity));
+
+  // A view's history entry is HA's own navigate()'s, { from } alone (#410): B's entry has HA's
+  // opensDialog from its dialogs now, and none of it rides into the next one (no dialogs on that one,
+  // so HA adds nothing to it).
+  assert.equal((await evaluate("JSON.stringify(history.state)")).includes('"opensDialog":true'), true);
+  await open("light", "d1a10005", { dialogs: "0" });
+  assert.deepEqual(JSON.parse(await evaluate("JSON.stringify(history.state)")), { from: "/clarity-ref/typical-nocam" });
+
+  // A dialog whose event never went out (it threw first) was never asked of HA: nothing waits for it.
+  await evaluate(`(() => { const d = EventTarget.prototype.dispatchEvent;
+    EventTarget.prototype.dispatchEvent = function (e) {
+      if (e && e.type === "hass-more-info") { EventTarget.prototype.dispatchEvent = d; throw new Error("clarity test: not dispatched"); }
+      return d.call(this, e); };
+    return true; })()`);
+  const thrown = await open("typical-nocam", "d1a10008", { dialogs: "1" });
+  const tl = thrown.find((l) => l.t === "dialog");
+  assert.equal(tl.opened, false);
+  assert.match(tl.error, /clarity test: not dispatched/);
+  // Its only dialog was never asked for, so there is nothing to settle (before, a record of it was
+  // waited for: 30 s, the start view, 30 s more, and the next view refused).
+  assert.equal(thrown.find((l) => l.t === "done").settle, null);
+
+  // #410: HA holds A's dialogs past both waits (the hold isn't let go this time). The next view's
+  // check before its navigation finds them still held: that view isn't measured (an error line with
+  // its nonce), rather than measured on them.
+  await evaluate("(window.__gwHold = true)");
+  const a2 = "d1a10006", q2 = new URLSearchParams({ view: "light", nonce: a2, run: "1", taps: "0", swipes: "0", vsync: "16.667" });
+  assert.equal((await fetch(`${base}/clarity/open?${q2}`)).status, 204);
+  const a2End = await until("A2 done", () => page.lines.find((l) => l.nonce === a2 && (l.t === "done" || l.t === "error")), 300000);
+  assert.equal(a2End.t, "done", a2End.message);
+  // On the view, HA held both shows; at the start view (a fresh `{ from }` entry) they came and were
+  // closed, but that close's history.back() is held too, so HA's history still says a dialog.
+  assert.deepEqual([a2End.settle.via, a2End.settle.clean, a2End.settle.first.pending],
+                   ["start", false, ["climate.clarity_0", "sensor.clarity_10"]]);
+  assert.equal(a2End.settle.history, true, JSON.stringify(a2End.settle));
+  const b2 = "d1a10007", qb2 = new URLSearchParams({ view: "typical-nocam", nonce: b2, run: "1", taps: "0", swipes: "0", vsync: "16.667" });
+  assert.equal((await fetch(`${base}/clarity/open?${qb2}`)).status, 204);
+  const b2End = await until("B2's line", () => page.lines.find((l) => l.nonce === b2 && (l.t === "done" || l.t === "error")), 120000);
+  assert.equal(b2End.t, "error");
+  assert.match(b2End.message, /HA wasn't done with the view before's more-info dialogs after 10 s \(its history entry still current\); this view isn't measured on them/);
+  assert.deepEqual(page.lines.filter((l) => l.nonce === b2).map((l) => l.t), ["error"]);     // nothing of it measured
+  // Let go: what HA held comes now, and the view after is measured clean (the reduced-motion one below).
+  await evaluate("(window.__gwRelease(), true)");
+  await sleep(3000);
 
   // prefers-reduced-motion: HA's sheet takes 1 ms and the graph doesn't animate.
   await cdp("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);

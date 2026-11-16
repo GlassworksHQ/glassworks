@@ -405,6 +405,13 @@ def refdash(nonce, url):
             C.sleep(float(os.environ["FAKE_STAGE_DELAY"]))
         page_log(dict(obj, nonce=nonce, run=1), split=not os.environ.get("FAKE_NO_SPLIT"), at=at)
 
+    # FAKE_DIALOG_HELD=<view> (#410): HA still held the view before's more-info dialogs at this view's
+    # check, before its navigation; the page isn't measured on them and says so (harness.js openView).
+    if os.environ.get("FAKE_DIALOG_HELD") == tier:
+        C.sleep(0.5)
+        gw({"t": "error", "message": "Error: HA wasn't done with the view before's more-info dialogs after 10 s "
+                                     "(climate.clarity_0, sensor.clarity_10 not shown yet); this view isn't measured on them"})
+        return
     # FAKE_SLOW_VIEW: the view takes this long to be usable (the runner keeps the screen awake).
     C.sleep(float(os.environ.get("FAKE_SLOW_VIEW", "0")))
     if os.environ.get("FAKE_NEVER_USABLE") == tier:

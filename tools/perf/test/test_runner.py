@@ -528,7 +528,8 @@ class FakeMatchesThePanel(unittest.TestCase):
         with open(os.path.join(HERE, "page-lines.json")) as f:
             want = json.load(f)["shapes"]
         tmp = tempfile.mkdtemp()
-        p, _ = refstart(tmp, taps=2, FAKE_SWIPES="1")
+        # #410: heavy's dialogs held past its own wait, so the fake logs a settle line too.
+        p, _ = refstart(tmp, taps=2, FAKE_SWIPES="1", FAKE_SETTLE_VIA="heavy")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         got = {}
         with open(os.path.join(tmp, "state", "page-lines.jsonl")) as f:
@@ -1169,6 +1170,22 @@ class MoreInfoDialogs(unittest.TestCase):
         self.assertEqual((tiers["heavy"]["dialog_level"], tiers["heavy"]["dialog_settled_ms"]["median"]), ("premium", 320.0))
         self.assertIn("heavy: HA still held climate.clarity_0, sensor.clarity_10 after the view's own wait in 1 of 1 run(s)",
                       report.markdown(rep))
+
+    def test_a_view_that_would_start_on_a_held_dialog_is_not_measured(self):
+        """#410: HA still held the view before's dialogs at a view's check before its navigation. The page
+        logs an `error` for that view (its nonce), and nothing of it is graded in that run."""
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_DIALOG_HELD="typical")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        typical = c["tiers"]["typical"]
+        self.assertIn("this view isn't measured on them", typical["error"])
+        self.assertNotIn("done", typical)
+        self.assertTrue(all(c["tiers"][t].get("done") for t in ("light", "typical-nocam", "heavy")))   # the run goes on
+        rep = self.build(tmp)
+        self.assertNotIn("typical", rep["graded"]["reference"]["tiers"])
+        for task in ("load", "blocking", "scroll", "updates", "camera", "dialog"):
+            self.assertIn(f"typical.{task}", rep["grade"]["missing"])
+        self.assertTrue(rep["grade"]["provisional"])                   # not graded on what it didn't measure
 
     def test_a_slow_history_graph_slows_the_task(self):
         tmp = tempfile.mkdtemp()

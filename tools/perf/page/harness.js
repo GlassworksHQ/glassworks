@@ -848,19 +848,20 @@
   // One dialog: fire the tile's event, follow each frame until it settled (or waitMs), let it be read
   // for stillMs, close it with its own close (the X button calls closeDialog) and follow the frames
   // until HA says it closed. `stage`: the view (graded) or "warmup". `fired` gets the event's record
-  // (#410: HA may still show one that didn't open in time, after the wait).
+  // once it is dispatched (#410: HA may still show one that didn't open in time, after the wait; one
+  // that threw before its event was never asked for, so nothing is waited for).
   async function moreInfo(spec, n, of, stage, fired) {
     const D = C.DIALOG, ev = dialogEvents();
-    const rec = { entity: spec.entity, t0: performance.now(), opened: false };
-    fired.push(rec);
+    const rec = { entity: spec.entity, t0: null, opened: false };
     try {
       const frames = [];
       let st = { opened: null, shown: null, graph: null, settled: null, done: false };
       const t0 = performance.now();
-      rec.t0 = t0;
       const e = new Event("hass-more-info", { bubbles: true, cancelable: false, composed: true });
       e.detail = { entityId: spec.entity };
       (currentView() || huiRoot() || document.body).dispatchEvent(e);
+      rec.t0 = t0;
+      fired.push(rec);
       while (!st.done && performance.now() - t0 < D.waitMs) {
         const ts = await frame();
         frames.push(ts);
@@ -929,9 +930,10 @@
   // ---- HA done with the dialogs (#410), untimed, before the next view's timing starts
   //
   // A dialog that didn't open within waitMs can still come later: HA's dialog manager holds a show
-  // while its history entry for the dialog before is the current one (the close's history.back()
-  // hasn't landed), and retries on a timer (make-dialog-manager.ts showDialog). On the S1's heavy
-  // (s1v3a, 2026-11-16) neither landed while heavy was on screen: its thermostat's and sensor's
+  // while its history entry for a dialog is the current one and no dialog is open (history.state.dialog
+  // with an empty OPEN_DIALOG_STACK: the close's history.back() hasn't landed), and retries on a timer
+  // (make-dialog-manager.ts showDialog). On the S1's heavy (s1v3a, 2026-11-16) that back() didn't land
+  // while heavy was on screen: its thermostat's and sensor's
   // dialogs opened 0.3 to 0.9 s and about 5 s after the next view's navigation, on that view, and the
   // sensor's sheet stayed open over it (its scroll and its first dialog failed, and its open took 9 to
   // 12 s). So after its dialogs, each view waits until HA has nothing pending, open or in the history
@@ -939,21 +941,25 @@
   // stays its view's result.
 
   // Waits until HA is done with the dialogs in `fired`: each shown (or opened), none open, and no
-  // dialog's history entry current. Bounded by limitMs. Returns { ms, clean, closed, pending, open,
-  // history } (detail).
+  // dialog's history entry current. Bounded by limitMs; one open at the limit is still asked to close.
+  // Returns { ms, clean, closed (dialogs found open and closed: one per opening, however many looks
+  // it stays open), pending, open, history } (detail).
   async function settleDialogs(fired, limitMs) {
     const t0 = performance.now();
-    let st = { start: t0 }, closed = 0, pending = [], open = null, hist = false;
+    let st = { start: t0 }, closed = 0, closing = false, pending = [], open = null, hist = false;
     for (;;) {
       pending = S.pendingShows(fired, dialogAsks);
       open = openDialog();
       hist = !!(history.state && history.state.dialog);
       st = S.settleStep({ pending: pending.length, open: !!open, history: hist }, performance.now(), st, limitMs);
-      if (st.done) break;
       if (st.close) {
+        if (!closing) closed++;
+        closing = true;
         open.closeDialog();
-        closed++;
+      } else {
+        closing = false;
       }
+      if (st.done) break;
       await sleep(100);
     }
     return { ms: Math.round(performance.now() - t0), clean: st.clean, closed, pending, open: !!open, history: hist };
@@ -964,12 +970,14 @@
   // is closed. The next view opens from wherever HA is then: the start view, or this view again when
   // HA's held history.back() lands after the move and takes it back (Chrome, 2026-11-16). Either way
   // HA is done with the dialogs. Logged on the view's `done` line.
-  async function settleView(fired) {
+  // `stage`: the view, or "warmup" after a restart (there the move is to the start view it is on: a
+  // new history entry, which HA's held history.back() lands against, without leaving the view).
+  async function settleView(fired, stage) {
     if (!fired.length) return null;
     const D = C.DIALOG, t0 = performance.now();
     const here = await settleDialogs(fired, D.settleMs);
     if (here.clean) return here;
-    log(Object.assign({ t: "settle", stage: V.tier }, here));       // the runner hears from the view meanwhile
+    log(Object.assign({ t: "settle", stage }, here));               // the runner hears from the view meanwhile
     const start = C.VIEWS[0];
     navigate(`/${C.DASHBOARD}/${start}`);
     const there = await settleDialogs(fired, D.settleMs);
@@ -1028,7 +1036,7 @@
     unwatch();
     frames.ticking = false;
     // #410: HA done with this view's dialogs before the next view's timing starts (detail, untimed).
-    const settle = await settleView(fired);
+    const settle = await settleView(fired, V.tier);
     log({ t: "done", stage: V.tier, settle });
   }
 
@@ -1043,7 +1051,9 @@
     // type's code; so no view pays for that by coming first in the run's order.
     if (landing === "start") {
       lastFired = await dialogs(C.DIALOG.entities, "warmup");
-      await settleDialogs(lastFired, C.DIALOG.settleMs);     // the first view's check waits for the rest
+      // As after a view's (#410): a dialog HA holds doesn't land on the run's first view.
+      const settle = await settleView(lastFired, "warmup");
+      if (settle && !settle.clean) log(Object.assign({ t: "settle", stage: "warmup" }, settle));
     }
     let last = "";
     for (;;) {
