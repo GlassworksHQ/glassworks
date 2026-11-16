@@ -1,6 +1,6 @@
 // The Mirror's test install, outside React: an APK file from this computer, the Mirror over WebUSB
 // adb, its read-only checks, then install or undo (@glassworks/lululemon-mirror-installer). Test only:
-// it exists behind ?apk=local because there is no release of S1 Kiosk's legacy build, and there
+// it exists behind ?apk=local because there is no release of Glassworks' legacy build, and there
 // must not be one yet (issue 198). The release-asset route stays for releases only.
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
@@ -73,7 +73,7 @@ export class MirrorSession {
 
   /**
    * The APK file: hashed so the tester can match it to the build they meant, and its package read so
-   * a file that isn't S1 Kiosk is refused here. Only the latest pick counts.
+   * a file that isn't Glassworks' legacy build is refused here. Only the latest pick counts.
    */
   async pickApk(name: string, data: Uint8Array | Promise<Uint8Array>): Promise<void> {
     const pick = ++this.picks;
@@ -87,7 +87,8 @@ export class MirrorSession {
     const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
     let pkg: string | undefined, error: string | undefined;
     try { pkg = await apkPackage(bytes); } catch (e) { error = (e as Error).message; }
-    // S1 Kiosk, for Android 6, with a home screen Android can open: refused here, before any write
+    // Glassworks' legacy build, for Android 6, with a home screen Android can open and the privileged
+    // permissions: refused here, before any write
     if (!error) try { await checkMirrorApk(bytes); } catch (e) { error = (e as Error).message.replace(/\.? Nothing was changed\.$/, ''); }
     if (pick !== this.picks) return;
     this.apk = error ? undefined : bytes;
@@ -96,7 +97,7 @@ export class MirrorSession {
 
   setHaUrl(haUrl: string) { this.set({ haUrl }); }
 
-  /** The picked APK's bytes when it is S1 Kiosk (the flash path builds it into the image). */
+  /** The picked APK's bytes when it is Glassworks' legacy build (the flash path builds it into the image). */
   apkBytes(): Uint8Array | undefined { return this.apk; }
 
   /** Must run inside the click: the browser's device list opens before its first await. */

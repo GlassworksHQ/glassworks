@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ManifestError, Steps, apkHome, apkInfo, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
+import { ManifestError, Steps, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
 import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
@@ -107,6 +107,21 @@ describe('the APK\'s package, read before anything is installed', () => {
   it('refuses a file that isn\'t an APK', async () => {
     const { apkPackage } = await import('../src');
     await expect(apkPackage(new TextEncoder().encode('not a real APK'))).rejects.toThrow(/isn't an APK/);
+  });
+});
+
+describe('the permissions an APK asks for, on one Android API', () => {
+  const perm = (el: string, name: string, attrs: FakeEl['attrs'] = {}): FakeEl => ({ el, attrs: { name: `android.permission.${name}`, ...attrs } });
+  const apk = fakeApk('dev.example', { home: [
+    perm('uses-permission', 'INTERNET'),
+    perm('uses-permission', 'BLUETOOTH', { maxSdkVersion: '30' }),
+    perm('uses-permission', 'REBOOT', { maxSdkVersion: '22' }),
+    perm('uses-permission-sdk-23', 'WRITE_SECURE_SETTINGS'),
+  ] });
+  it('drops one whose maxSdkVersion is below the API, and reads <uses-permission-sdk-23> from API 23 (#411 review)', async () => {
+    expect(await apkPermissions(apk, 23)).toEqual(['android.permission.INTERNET', 'android.permission.BLUETOOTH', 'android.permission.WRITE_SECURE_SETTINGS']);
+    expect(await apkPermissions(apk, 22)).toEqual(['android.permission.INTERNET', 'android.permission.BLUETOOTH', 'android.permission.REBOOT']);
+    expect(await apkPermissions(apk, 31)).toEqual(['android.permission.INTERNET', 'android.permission.WRITE_SECURE_SETTINGS']);
   });
 });
 

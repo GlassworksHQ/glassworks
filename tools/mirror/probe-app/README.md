@@ -20,10 +20,10 @@ It has no network and no Home Assistant. It asks for four permissions:
 
 ## Why it is called S1 Kiosk
 
-The Mirror pipeline accepts only the package `sh.edm.s1kiosk`: `patchSystem` in
-`frames/lululemon-mirror/installer/src/image.ts` refuses any other, and the first boot looks for
-`sh.edm.s1kiosk` and starts `sh.edm.s1kiosk/.MainActivity`. So the probe uses that package id and
-that activity name. It is still a different app, signed with a throwaway key: it can't update or be
+The Mirror pipeline normally installs Glassworks' legacy build (`dev.glassworks.generic_android.legacy`)
+and refuses `sh.edm.s1kiosk`. With `--probe` it takes `sh.edm.s1kiosk` instead, in the
+`/priv-app/S1Kiosk` folder the first runs were verified with, and the first boot starts
+`sh.edm.s1kiosk/.MainActivity`. So the probe keeps that package id and that activity name. It is still a different app, signed with a throwaway key: it can't update or be
 updated by a real S1 Kiosk build. That's fine on a test Mirror, where the probe is flashed in place
 of S1 Kiosk with a fresh userdata.
 
@@ -97,7 +97,7 @@ left out below. `PROBE` is the output folder of `build.sh`.
 
 0. **Flash** with the probe as the APK, with the harness ([README](../README.md)):
    ```sh
-   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk "$PROBE/probe-v1.apk"
+   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk "$PROBE/probe-v1.apk" --probe
    ```
    No `--ha-url` and no Wi-Fi: the probe uses neither. The first boot's `pm grant` of
    `RECORD_AUDIO`, `CAMERA` and `CHANGE_CONFIGURATION`, `appops` and `dpm set-active-admin` fail or

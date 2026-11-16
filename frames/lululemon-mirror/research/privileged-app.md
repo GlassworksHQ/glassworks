@@ -17,7 +17,9 @@ AOSP here is an assumption the probe tests.
 
 ## Question
 
-Kiln's Mirror image puts S1 Kiosk in `/system/priv-app/S1Kiosk` ([image-patch.md](image-patch.md)).
+Kiln's Mirror image put S1 Kiosk in `/system/priv-app/S1Kiosk` ([image-patch.md](image-patch.md)). Since
+2026-11-16 it puts the legacy build of Glassworks in `/system/priv-app/Glassworks`, and the probe still
+goes to `S1Kiosk` (the harness's `--probe`).
 If that makes it privileged, Glassworks gets three things on the Mirror without root:
 
 - `INSTALL_PACKAGES`: its own updates install with no confirmation;
@@ -176,16 +178,17 @@ All **read** from source (2026-11-15). Line numbers are in the files at `android
 | With `INSTALL_PACKAGES`, a `PackageInstaller` commit needs no tap; without it, `STATUS_PENDING_USER_ACTION` | Read 6; the probe on the unit (2026-11-16): v1 to v2 through `PackageInstaller` with no prompt | **Verified** (2026-11-16) for the case with `INSTALL_PACKAGES`; the case without it is read |
 | `WRITE_SECURE_SETTINGS` granted on the unit proves little by itself | Kiln's first boot runs `pm grant … WRITE_SECURE_SETTINGS` (`grantPermissions` in `@glassworks/app-adb`), which a `development` permission allows | Read |
 
-What it means for Glassworks, now that the probe confirmed it: S1 Kiosk updates itself on the Mirror from
+What it means for Glassworks, now that the probe confirmed it: Glassworks updates itself on the Mirror from
 Home Assistant with no tap and no root, can restart the Mirror, and writes its own settings. The APK
 Kiln flashes into `system` must already ask for every privileged permission a later version will
-need, because an update signed with our key can't add one (row 3).
+need, because an update signed with our key can't add one (row 3). Kiln refuses an APK that doesn't
+ask for all three.
 
 ## Can a privileged app approve an adb key?
 
 **Status (2026-11-16): read; the permission and the service verified on the unit (read-only); the
 approval itself untested.** The Mirror has no touchscreen, so its "Allow USB debugging?" dialog can't
-be answered on the glass. If S1 Kiosk could answer it, a Manage page "Allow
+be answered on the glass. If Glassworks could answer it, a Manage page "Allow
 a new computer over USB" would be possible.
 
 Read at `android-6.0.1_r81` (`platform/frameworks/base`):

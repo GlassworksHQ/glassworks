@@ -34,7 +34,7 @@ export interface FlashDeps {
   requestAdb(): Promise<PanelShell>;
   /** This browser's adb public key line, once loaded. */
   adbKey(): string | undefined;
-  /** S1 Kiosk's APK (the test-only local file), checked by the page. */
+  /** The app's APK (Glassworks' legacy build, the test-only local file), checked by the page. */
   apk(): Uint8Array | undefined;
   /** The boot animation, when Kiln has one staged. */
   bootAnimation?(): Promise<Uint8Array | undefined>;
@@ -163,7 +163,7 @@ export class FlashSession {
     const s = this.state;
     if (s.image?.state !== 'ok') return 'Select the downloaded system.img first.';
     if (s.back) return s.userdataFile?.state === 'ok' ? undefined : 'Select the downloaded userdata.sparse too.';
-    if (!this.d.apk()) return 'Pick S1 Kiosk\'s APK file first.';
+    if (!this.d.apk()) return 'Pick the Glassworks APK file first.';
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     if (!s.wifi.ssid !== !s.wifi.password && !s.wifi.ssid) return 'Give the Wi-Fi network\'s name too.';
     // the password is saved as WPA's PSK in the new userdata: refused here, before the build (wpaSupplicantConf)
@@ -209,7 +209,7 @@ export class FlashSession {
         this.log('Building the images');
         building = true;
         // the Wi-Fi goes into the new userdata (saved for Android, its password only as WPA's PSK), so the
-        // Mirror joins on its first boot with nothing tapped; sending it to S1 Kiosk after the boot stays a fallback
+        // Mirror joins on its first boot with nothing tapped; sending it to the app after the boot stays a fallback
         const wifi = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
         images = await this.d.images.build({
           apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settingsOverlay: await this.d.settingsOverlay?.(),

@@ -2,9 +2,9 @@
 // The Mirror's install over fastboot: the image in two clicks, the stock warning before any write,
 // the order of the writes, the first start over adb, the credit to Glass Panes, and the way back.
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { fakeApk } from '@glassworks/app-adb/fakes';
+import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
-import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -57,14 +57,14 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
 const image = () => Object.assign(new Blob(['x']), { name: 'system.img' });
 
 describe('installing Glassworks over fastboot', () => {
-  it('needs the image checked and S1 Kiosk picked before fastboot, then writes only after "I understand"', async () => {
+  it('needs the image checked and Glassworks picked before fastboot, then writes only after "I understand"', async () => {
     const { f, mirror, calls, adb } = setup();
     expect(f.blocked()).toMatch(/system\.img/);
     await f.downloadImage(); // one button: through the proxy, checked as it arrives
     expect(f.state.image).toMatchObject({ state: 'ok', progress: 1 });
     expect(f.state.proxyFailed).toBeUndefined();
     expect(f.blocked()).toMatch(/APK/);
-    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.setHaUrl('http://homeassistant.local:8123');
     expect(f.blocked()).toBeUndefined();
     f.toFastboot();
@@ -79,14 +79,14 @@ describe('installing Glassworks over fastboot', () => {
     expect(f.state.screen).toBe('adb');
     await f.connectAdb();
     expect(f.state).toMatchObject({ screen: 'done', firstBoot: { hidden: ['com.android.launcher3'], rotation: '270' } });
-    expect(adb.cmds).toContain(`am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://homeassistant.local:8123'`);
+    expect(adb.cmds).toContain(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`);
   });
 
   it('saves the Wi-Fi and the settings overlay into the images, and refuses a password WPA can\'t take before fastboot', async () => {
     const overlay = new Uint8Array([1, 2, 3]);
     const { f, mirror, built } = setup({ settingsOverlay: overlay });
     await f.downloadImage();
-    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.setWifi({ ssid: 'Home Net', password: 'short' });
     expect(f.blocked()).toMatch(/8 to 63 characters/);
     f.toFastboot();
@@ -97,7 +97,7 @@ describe('installing Glassworks over fastboot', () => {
     expect(built).toHaveLength(1);
     expect(built[0]!.wifi).toEqual({ ssid: 'Home Net', password: 'not-a-real-password' });
     expect(built[0]!.settingsOverlay).toBe(overlay);
-    await f.connectAdb(); // the first boot sends the network to S1 Kiosk too (the fallback)
+    await f.connectAdb(); // the first boot sends the network to Glassworks too (the fallback)
     // the Technical log, and the failure report saved from it: never the network's name or password (CLAUDE.md rule 2)
     expect(f.state.log).toContain('Wi-Fi: the network you entered');
     expect(f.state.log.join('\n')).not.toContain('Home Net');
@@ -114,7 +114,7 @@ describe('installing Glassworks over fastboot', () => {
   it('when the proxy can\'t serve the image, says why and falls back to download-and-select', async () => {
     const { f, calls } = setup({ proxy: 'down' });
     await f.downloadImage();
-    expect(f.state).toMatchObject({ image: undefined, proxyFailed: /answered 502: GitHub answered 503/ });
+    expect(f.state).toMatchObject({ image: undefined, proxyFailed: expect.stringMatching(/answered 502: GitHub answered 503/) });
     await f.selectImage(image());
     expect(f.state.image?.state).toBe('ok');
     expect(calls).toEqual(['fetch https://proxy.test/glass-panes/mirror-android-2/system.img', 'load']);
@@ -130,7 +130,7 @@ describe('installing Glassworks over fastboot', () => {
   it('a USB drop while writing: back to the files, and installing again builds again from the loaded image', async () => {
     const { f, mirror, calls } = setup({ flashFails: 1 });
     await f.downloadImage();
-    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     const go = async () => { f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash(); };
     await go();
     expect(f.state).toMatchObject({ screen: 'error', flashFailed: true });
@@ -145,7 +145,7 @@ describe('installing Glassworks over fastboot', () => {
   it('a failed build: back to the image, which must be selected or downloaded again (it may be patched halfway)', async () => {
     const { f, mirror, calls } = setup({ buildFails: true });
     await f.downloadImage();
-    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(f.state).toMatchObject({ screen: 'error', flashFailed: false });
     expect(f.state.image).toBeUndefined();
@@ -157,7 +157,7 @@ describe('installing Glassworks over fastboot', () => {
   it('after a refused write, "Try again without FILL" builds the zeros as RAW blocks', async () => {
     const { f, mirror, calls } = setup({ flashFails: 1 });
     await f.downloadImage();
-    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     render(<Flash flash={f} mirror={mirror} />);
     expect(screen.getByText('Try again without FILL')).toBeTruthy();
@@ -173,19 +173,19 @@ describe('installing Glassworks over fastboot', () => {
     const { flash, mirror } = await flashDemo('flash-done-chooser', true);
     expect(flash.state.firstBoot?.home.result).toBe('chooser');
     render(<Flash flash={flash} mirror={mirror} />);
-    expect(screen.getByText('S1 Kiosk isn\'t the only home screen yet.')).toBeTruthy();
+    expect(screen.getByText('Glassworks isn\'t the only home screen yet.')).toBeTruthy();
     expect(screen.getByText(/no touchscreen, so after a restart it would wait on that list/)).toBeTruthy();
   });
 
-  it('Done says when the S1 Kiosk build has no home screen, and offers no hiding: the launcher stays (2026-11-16)', async () => {
+  it('Done says when the Glassworks build has no home screen, and offers no hiding: the launcher stays (2026-11-16)', async () => {
     const { flash, mirror } = await flashDemo('flash-done-no-home', true);
     expect(flash.state.firstBoot?.home).toEqual({ result: 'none', left: ['com.android.launcher3'] });
     expect(flash.state.firstBoot?.hidden).toEqual([]);
     render(<Flash flash={flash} mirror={mirror} />);
-    expect(screen.getByText('This S1 Kiosk build has no home screen.')).toBeTruthy();
+    expect(screen.getByText('This Glassworks build has no home screen.')).toBeTruthy();
     expect(screen.getByText(/stays the Mirror's home screen, and the Mirror still starts to it/)).toBeTruthy();
     expect(screen.queryByText('Hide the other launcher again')).toBeNull();
-    expect(screen.queryByText('S1 Kiosk isn\'t the only home screen yet.')).toBeNull();
+    expect(screen.queryByText('Glassworks isn\'t the only home screen yet.')).toBeNull();
   });
 
   it('asks for the fastboot device inside the click, before anything is awaited', () => {
@@ -197,7 +197,7 @@ describe('installing Glassworks over fastboot', () => {
   it('a Mirror whose system partition is smaller than the image stops at fastboot, with nothing written', async () => {
     const { f, mirror, calls } = setup({ system: 0x40000000 });
     await f.selectImage(image());
-    await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+    await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot();
     await f.connectFastboot();
     expect(f.state.screen).toBe('fastboot');
@@ -209,14 +209,14 @@ describe('installing Glassworks over fastboot', () => {
 
   it('a failed write ends on the error screen, which says how to recover', async () => {
     const { flash } = await flashDemo('flash-error', true);
-    expect(flash.state).toMatchObject({ screen: 'error', error: /FAILed/ });
+    expect(flash.state).toMatchObject({ screen: 'error', error: expect.stringMatching(/FAILed/) });
     render(<Flash flash={flash} mirror={new MirrorSession({ connect: async () => { throw new Error('x'); } }, true)} />);
     expect(screen.getByText(/put it in fastboot again/)).toBeTruthy();
   });
 
   it('a wrong file says what\'s wrong and what to do', async () => {
     const { flash } = await flashDemo('flash-wrong', true);
-    expect(flash.state.image).toMatchObject({ state: 'bad', error: /download stopped early.*Download system\.img again/ });
+    expect(flash.state.image).toMatchObject({ state: 'bad', error: expect.stringMatching(/download stopped early.*Download system\.img again/) });
   });
 });
 
@@ -225,7 +225,7 @@ describe('the way back', () => {
     const { f, calls } = setup();
     f.wayBack(true);
     await f.selectImage(image());
-    expect(f.state.image).toMatchObject({ state: 'bad', error: /isn't system\.img, or the download stopped early/ });
+    expect(f.state.image).toMatchObject({ state: 'bad', error: expect.stringMatching(/isn't system\.img, or the download stopped early/) });
     await f.selectUserdata(Object.assign(new Blob(['y']), { name: 'userdata.sparse' }));
     expect(f.state.userdataFile).toMatchObject({ state: 'bad' });
     expect(calls).toEqual(['check system', 'check userdata']); // hashed in the worker, not on the page's thread

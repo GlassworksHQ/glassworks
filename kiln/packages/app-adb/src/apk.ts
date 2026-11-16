@@ -161,6 +161,21 @@ export async function apkInfo(apk: Uint8Array): Promise<ApkInfo> {
   return { package: pkg, ...(min !== undefined ? { minSdk: typeof min === 'string' && /^\d+$/.test(min) ? Number(min) : min } : {}), abis };
 }
 
+/**
+ * The permissions an APK's manifest asks for on Android API `api`, as Android names them:
+ * <uses-permission> unless its android:maxSdkVersion is below `api`, and <uses-permission-sdk-23>
+ * from API 23 on.
+ */
+export async function apkPermissions(apk: Uint8Array, api: number): Promise<string[]> {
+  const manifest = await zipEntry(apk, 'AndroidManifest.xml');
+  if (!manifest) throw new Error('this file isn\'t an APK (no AndroidManifest.xml)');
+  const tree = reading(() => axmlTree(manifest));
+  return tree.filter((e) => e.name === 'manifest').flatMap((m) => m.children)
+    .filter((e) => (e.name === 'uses-permission' || (e.name === 'uses-permission-sdk-23' && api >= 23)) && typeof e.attrs['android:name'] === 'string')
+    .filter((e) => !(Number(e.attrs['android:maxSdkVersion']) < api))
+    .map((e) => e.attrs['android:name'] as string);
+}
+
 /** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */
 export async function apkPackage(apk: Uint8Array): Promise<string> {
   return (await apkInfo(apk)).package;
@@ -172,7 +187,7 @@ export type AxmlValue = string | number | boolean | { type: number; data: number
 export interface AxmlElement { name: string; attrs: Record<string, AxmlValue>; children: AxmlElement[] }
 
 /** Framework attributes read by resource id (android.R.attr), as Android reads them. */
-const ATTR_BY_ID: Record<number, string> = { 0x01010003: 'name', 0x0101000e: 'enabled', 0x01010026: 'mimeType', 0x01010027: 'scheme', 0x01010202: 'targetActivity' };
+const ATTR_BY_ID: Record<number, string> = { 0x01010003: 'name', 0x0101000e: 'enabled', 0x01010026: 'mimeType', 0x01010027: 'scheme', 0x01010202: 'targetActivity', 0x01010271: 'maxSdkVersion' };
 
 /** Binary XML as a tree. An element left open at the end (no end event) still counts. */
 export function axmlTree(xml: Uint8Array): AxmlElement[] {
