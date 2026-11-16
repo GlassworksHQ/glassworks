@@ -125,13 +125,14 @@ On the S1 the fork sends exactly what `@glassworks/fastboot` sent before it (che
 large" above it, `FAIL` for unknown variables, and sparse writes. `test/flash-blob.test.ts` flashes raw
 and sparse images through it. Nothing here has run on a real Mirror. What #41 still needs:
 
-1. The Mirror's USB IDs, as a filter for `Fastboot.request` and `Fastboot.known`.
+1. The Mirror's USB IDs, as a filter for `Fastboot.request` and `Fastboot.known`. The Mirror's recipe uses
+   `18d1:d00d` (`MIRROR_FASTBOOT`), from the Glass Panes install guide: not yet seen by Kiln.
 2. The transfer size: 1 MiB or upstream's 16 KiB, measured on the Mirror (test plan step 5).
 3. Whether the `flash:` timeout is long enough for a 256 MiB piece on its eMMC.
-4. A verify step without `readPartition` (LK has no `upload`): Kiln-core calls `flashVerified` today,
-   so the recipe needs another step, such as a hash over adb after first boot.
-5. Large images from disk: `flashBlob` takes a `File`, but Kiln's asset path passes `Uint8Array`s, and
-   the release download would need OPFS and a streaming SHA-256.
+4. A verify step without `readPartition` (LK has no `upload`). The Mirror's recipe checks over adb
+   after the first boot instead: the build fingerprint and S1 Kiosk (`firstBoot`).
+5. Large images from disk: done in the Mirror's recipe. `@glassworks/ext4` streams the person's file into
+   OPFS with a streaming SHA-256, and `flashBlob` gets the built images as OPFS `File`s.
 6. LK's exact replies for a refused partition and for the `has-slot`, `is-logical` and `current-slot`
    variables `flashBlob` asks for. `FakeLk` answers every variable except `max-download-size` with
    `FAIL`, which is a guess. Make it match the Mirror's `getvar all` once it is read.

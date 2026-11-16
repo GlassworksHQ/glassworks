@@ -96,13 +96,20 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-Not available yet. As planned, it installs by flashing system and userdata over fastboot from a computer, not from Kiln.
+Not available yet. **Test only, today**, at `/lululemon-mirror?apk=local` in Kiln ([its recipe](installer)). Nothing of it has run on a real Mirror yet.
 
-**That erases lululemon's software for good.** There is no way to back up the stock image first, so there is no way back.
+**Over fastboot, from lululemon's software or the community image (#40):**
 
-Check before flashing: fastboot must report MSM8916 and the expected partition sizes. If anything differs, stop.
+1. Kiln downloads `system.img`, the [Glass Panes](https://github.com/git-nimrod/glass-panes) community image by [git-nimrod](https://github.com/git-nimrod), from its release through Refract, Kiln's download proxy (a Cloudflare Worker that stores nothing, #347), resuming if the connection drops, and checks its SHA-256 as it arrives. If the proxy can't serve it, you download it from the release yourself and select it.
+2. Kiln adds S1 Kiosk, the Glassworks boot animation and the screen's rotation to the image, in your browser, and makes a fresh userdata that lets only your browser's adb key in. Nothing is uploaded. What changes, and why: [image-patch.md](research/image-patch.md).
+3. You open the Mirror's back and hold its button as it powers on: fastboot. Kiln checks the partition sizes the image is made for, and stops if they differ.
+4. Kiln writes system and userdata, restarts the Mirror, and finishes over adb: Home Assistant's address, the Wi-Fi, S1 Kiosk as the only home screen.
 
-**Test only, today:** on a Mirror that already runs the community image, Kiln can install S1 Kiosk's legacy build over adb, from an APK file on your computer: `/lululemon-mirror?apk=local` ([its recipe](installer)). It changes nothing else on the Mirror. Making S1 Kiosk the home screen needs a choice on the Mirror, in Android's list of home screens: S1 Kiosk, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
+**That erases lululemon's software for good.** The Mirror's bootloader can't read anything back, so there is no backup, and no way to restore lululemon's software. Kiln says so and waits for your confirmation before it writes. The way back from Glassworks is the plain Glass Panes image, which Kiln can write too (Way back).
+
+The boot logo before Android starts stays lululemon's: it lives in the signed bootloader, which nothing here can change.
+
+**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs S1 Kiosk's legacy build from an APK file on your computer. It changes nothing else on the Mirror. Making S1 Kiosk the home screen needs a choice on the Mirror, in Android's list of home screens: S1 Kiosk, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
 
 ## Panes
 
@@ -129,7 +136,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [revisions.md](research/revisions.md): Which Mirror revisions are a target: the later NXP i.MX8 revisions, and why screen size doesn't identify it (read, no hardware)
 - [mirror-abis.md](research/mirror-abis.md): Which ABIs the Mirror's userspace runs: 64-bit in the community image, stock untested (#98)
 - [home-app.md](research/home-app.md): How adb without root makes S1 Kiosk the home screen on Android 6: no `cmd`, so Android's chooser and an Always tap (read-only, 2026-11-15)
-- [image-patch.md](research/image-patch.md): What Kiln changes in the community system image and what a fresh userdata needs for Kiln's own adb key; checked off-device, untested on the unit (#40)
+- [image-patch.md](research/image-patch.md): What Kiln changes in the community system image and what a fresh userdata needs for Kiln's own adb key; flashed on a real Mirror once (2026-11-16): boots, takes the adb key, portrait boot animation; the test APK has no home screen (#40)
 - [community-image-terms.md](research/community-image-terms.md): May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open (#40)
 
 ## Files

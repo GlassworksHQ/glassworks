@@ -1,0 +1,89 @@
+// The image from Kiln's release proxy, against a fake proxy: it resumes with Range where a connection
+// dropped, and refuses (so Kiln falls back to download-and-select) on a 5xx, a wrong size, or a
+// resume at the wrong place.
+import { createHash, randomBytes } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+import { MemoryStore, writeSparse, Disk } from '@glassworks/ext4';
+import { IMAGE_PROXY, ProxyError, loadSystem, resumableBody } from '../src';
+
+const URL = `${IMAGE_PROXY.base.replace('refract.glassworks.dev', 'proxy.test')}/${IMAGE_PROXY.systemImg}`;
+
+/** A fake proxy for `body`: `drops` cuts the first answers after that many bytes; `override` replaces an answer. */
+function proxy(body: Uint8Array, o: { drops?: number[]; override?: (n: number, range?: string) => Response | undefined } = {}) {
+  const asked: (string | undefined)[] = [];
+  const f = (async (_u: string | URL | Request, init?: RequestInit) => {
+    const range = (init?.headers as Record<string, string> | undefined)?.Range;
+    asked.push(range);
+    const n = asked.length;
+    const o2 = o.override?.(n, range);
+    if (o2) return o2;
+    const from = range ? Number(/bytes=(\d+)-/.exec(range)![1]) : 0;
+    const rest = body.subarray(from);
+    const cut = o.drops?.[n - 1];
+    const end = cut === undefined ? rest.length : Math.min(cut, rest.length);
+    let at = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(c) { // a piece at a time, then the drop: an error in start() would discard what was queued
+        if (at < end) { c.enqueue(rest.slice(at, Math.min(end, at + 7000))); at += 7000; return; }
+        if (cut === undefined) c.close(); else c.error(new TypeError('network error'));
+      },
+    });
+    return new Response(stream, range
+      ? { status: 206, headers: { 'content-range': `bytes ${from}-${body.length - 1}/${body.length}`, 'content-length': String(rest.length) } }
+      : { status: 200, headers: { 'content-length': String(body.length) } });
+  }) as typeof fetch;
+  return { f, asked };
+}
+
+async function read(s: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+const noSleep = async () => {};
+
+describe('the image from the release proxy', () => {
+  it('resumes with Range where each connection dropped, and gives every byte once', async () => {
+    const body = new Uint8Array(randomBytes(100_000));
+    const { f, asked } = proxy(body, { drops: [30_000, 25_000] });
+    const got = await read(resumableBody(URL, body.length, { fetch: f, sleep: noSleep }).stream());
+    expect(Buffer.from(got)).toEqual(Buffer.from(body));
+    expect(asked).toEqual([undefined, 'bytes=30000-', 'bytes=55000-']);
+  });
+
+  it.each([
+    ['a 5xx', (n: number) => (n === 1 ? new Response('upstream answered 404', { status: 502 }) : undefined), /answered 502: upstream answered 404/],
+    ['a wrong size', (n: number) => (n === 1 ? new Response('x', { status: 200, headers: { 'content-length': '5' } }) : undefined), /offers 5 bytes/],
+    ['a resume at the wrong place', (n: number) => (n === 2 ? new Response('x', { status: 206, headers: { 'content-range': 'bytes 0-99999/100000' } }) : undefined), /can't resume at byte 30000/],
+  ])('refuses %s at once, without retrying', async (_, override, msg) => {
+    const body = new Uint8Array(100_000);
+    const { f, asked } = proxy(body, { drops: [30_000], override });
+    const e = await read(resumableBody(URL, body.length, { fetch: f, sleep: noSleep }).stream()).then(() => undefined, (x: unknown) => x);
+    expect(e).toBeInstanceOf(ProxyError);
+    expect((e as Error).message).toMatch(msg);
+    expect(asked.length).toBe(override(1) ? 1 : 2); // no retry after the refusal
+  });
+
+  it('gives up after its retries when the network keeps failing', async () => {
+    const f = (async () => { throw new TypeError('Failed to fetch'); }) as typeof fetch;
+    await expect(read(resumableBody(URL, 10, { fetch: f, retries: 2, sleep: noSleep }).stream())).rejects.toThrow(/can't be reached \(Failed to fetch\)/);
+  });
+
+  it('streams into the image loader: unpacked and hashed on the way, through two dropped connections', async () => {
+    const d = new Disk(new MemoryStore(), 4096, 64);
+    await d.write(0, new Uint8Array(randomBytes(20 * 4096)));
+    await d.zeroFill(30, 10);
+    const parts: Uint8Array[] = [];
+    await writeSparse(d, (b) => { parts.push(b.slice()); });
+    const sparse = new Uint8Array(Buffer.concat(parts));
+    const want = { name: 'system.img', size: sparse.length, sha256: createHash('sha256').update(sparse).digest('hex') };
+    const { f, asked } = proxy(sparse, { drops: [10_000, 40_000] });
+    const loaded = await loadSystem(resumableBody(URL, sparse.length, { fetch: f, sleep: noSleep }), new MemoryStore(), () => {}, want);
+    expect(loaded.sha256).toBe(want.sha256);
+    expect(Buffer.from(await loaded.disk.read(0, 20))).toEqual(Buffer.from(await d.read(0, 20)));
+    expect(asked).toEqual([undefined, 'bytes=10000-', 'bytes=50000-']);
+  });
+
+  it('a proxy failure reaches the caller as ProxyError, not as a wrong file', async () => {
+    const f = (async () => new Response('down', { status: 503 })) as typeof fetch;
+    await expect(loadSystem(resumableBody(URL, 1000, { fetch: f, sleep: noSleep }), new MemoryStore(), () => {}, { name: 'system.img', size: 1000, sha256: '0' })).rejects.toBeInstanceOf(ProxyError);
+  });
+});

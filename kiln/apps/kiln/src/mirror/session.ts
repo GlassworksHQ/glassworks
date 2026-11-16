@@ -95,13 +95,18 @@ export class MirrorSession {
 
   setHaUrl(haUrl: string) { this.set({ haUrl }); }
 
+  /** The picked APK's bytes when it is S1 Kiosk (the flash path builds it into the image). */
+  apkBytes(): Uint8Array | undefined { return this.apk; }
+
   /** Must run inside the click: the browser's device list opens before its first await. */
   async connect(): Promise<void> {
+    if (this.state.connecting) return;
+    const req = this.d.connect(); // inside the click: the device list opens first
     this.set({ connecting: true, connectError: undefined });
     try {
-      this.panel = await this.d.connect();
+      this.panel = await req;
+      await this.check(); // Connect stays off until the check settles: a second Mirror can't slip in under this report
       this.set({ connecting: false });
-      await this.check();
     } catch (e) {
       this.set({ connecting: false, connectError: (e as Error).message });
     }

@@ -62,7 +62,7 @@ install on a real panel. Until it has, s1.edm.sh keeps serving the page in
 | `/aqara-s1-plus/undo` | Undo: how far back, which backup. "Keep its settings" checks the backup (kiln-core's `checkRestorable`) before Aqara's apps go back; a refused backup, or a broken plan in the recipe, changes nothing on the panel and links to undoing by hand | shows Undo |
 | `/aqara-s1-plus/undo/connect`, `/undo/restore`, `/undo/done` | Undo's recovery mode, writing, and done | go to `/aqara-s1-plus/undo` |
 | `/aqara-s1-plus/resume` | An alias of `/set-up` (s1.edm.sh's `#/resume`) | as `/set-up`: connects to an installed panel; the address then becomes `/aqara-s1-plus/set-up` |
-| `/lululemon-mirror` | **Test only.** With `?apk=local`: S1 Kiosk's legacy build from an APK file picked on this computer, installed over adb on a Mirror that runs the community image, with undo. Without it, the page says the Mirror doesn't install from Kiln yet. The picker shows the Mirror as a disabled card, not as installable (it is `planned`) | shows the test page or the "not yet" page |
+| `/lululemon-mirror` | **Test only.** With `?apk=local`: Glassworks onto a Mirror over fastboot (#40). One button downloads the Glass Panes `system.img` through Refract, Kiln's release proxy (#347; `IMAGE_PROXY`, `NEXT_PUBLIC_KILN_PROXY` at build time; Range resume), with download-and-select as the fallback when the proxy fails. Kiln checks it as it reads it, builds the images in a worker on OPFS (`src/mirror/flash.ts`, `images.ts`), flashes them and finishes over adb with this browser's key. Its way back writes the plain Glass Panes images. With `&mode=app`: S1 Kiosk alone over adb onto a Mirror already on the community image, with undo. The APK is a file picked on this computer. Without `?apk=local`, the page says the Mirror doesn't install from Kiln yet. The picker shows the Mirror as a disabled card, not as installable (it is `planned`) | shows the test page or the "not yet" page |
 | `/api/release-asset` | Streams an S1 Kiosk release APK from GitHub Releases (no CORS there) | — |
 
 The session is the truth and the address bar follows it (`src/wizard/routes.ts`, `useRouteSync.ts`).
@@ -101,7 +101,7 @@ know, and the screens say Kiln can't tell instead.
 | `src/wizard/screens.tsx` | One component per screen of the design, on Radix primitives |
 | `src/components/Credit.tsx` | The outside work an install stands on, from the frame's `credits` ([frames/README.md](../../../frames/README.md#credits)): `Credit` next to the step that uses it (`built="image"`: "This image is built by git-nimrod as part of Glass Panes."), `BuiltOn` on the start page and the done screen, `stepCredits()` to pick them from a recipe's `credits` |
 | `src/frames/aqara-s1-plus.ts` | What the screens say for the S1: the USB names to pick, help links, the radio's next steps |
-| `src/mirror/` | The Mirror's test page (`MirrorWizard.tsx`), its session (`session.ts`, no React) and demos (`demo.ts`), on `@glassworks/lululemon-mirror-installer` |
+| `src/mirror/` | The Mirror's test page (`MirrorWizard.tsx`). Its fastboot install: `flash.ts` (the session, no React), `FlashScreens.tsx`, `imageWorker.ts` and `images.ts` (the images on OPFS in a worker), `flashDemo.ts`. Its adb-only path: `session.ts`, `demo.ts`. On `@glassworks/lululemon-mirror-installer` |
 | `src/recovery/player.ts` | The recovery-mode player, drawing a frame's data. The S1's is `frames/aqara-s1-plus/design/recovery.json` (canonical); `docs/design/kiln/recovery/` keeps the prototype's copy, and a test keeps them equal |
 
 Rules that tests guard:
@@ -128,7 +128,9 @@ InstallFlow. Other `?demo=` names jump to one screen (`src/wizard/demo.ts`), for
 `app` and `app-update` (settings before a first install and an update), `app-installing` and
 `app-keyboard` (the install's steps), `wifi` (the panel on Wi-Fi already) and `wifi-new` (it isn't),
 `radio-thread` and `radio-thread-old` (a Thread router on an S1 Kiosk that gets the network from
-Home Assistant, and on 0.4.3, which can't). The Mirror's test page has its own: `/lululemon-mirror?demo=run`
+Home Assistant, and on 0.4.3, which can't). The Mirror's test page has its own. The fastboot install: `?demo=flash-image`, `flash-downloading`, `flash-proxy-failed`
+(the fallback), `flash-checking`, `flash-wrong` (a wrong file), `flash-ready`, `flash-fastboot`, `flash-fastboot-wrong`, `flash-confirm` (the stock warning),
+`flash-working`, `flash-adb`, `flash-done`, `flash-done-chooser` (another launcher survived), `flash-error` (a refused write, with the retry without FILL) and `flash-back` (the way back). The adb-only path: `?demo=run`
 clicks through a simulated Mirror (`src/mirror/demo.ts`); `pick`, `pick-wrong` (an APK that isn't S1 Kiosk),
 `checks`, `checks-fail`, `installing`, `home` (waiting for the person's choice on the Mirror), `home-clear`
 (another app's defaults to clear first), `done`, `done-unconfirmed`, `undo-done`, `undo-pending` (undo again to

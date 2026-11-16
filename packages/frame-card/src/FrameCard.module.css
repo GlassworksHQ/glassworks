@@ -219,6 +219,13 @@
   gap: 5px;
 }
 
+/* a frame's own label (the Mirror's reversibility, issue 146) is a sentence: it wraps inside the card */
+.tags > span.long {
+  white-space: normal;
+  border-radius: 10px;
+  max-width: 100%;
+}
+
 .tags > span.caution {
   color: color-mix(in srgb, var(--amber) 70%, var(--fg));
   border-color: color-mix(in srgb, var(--amber) 45%, transparent);

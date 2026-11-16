@@ -1,10 +1,10 @@
 # Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
 
-**Status (2026-11-15): images build and check clean off-device; nothing flashed yet.** Kiln patches
-the Glass Panes `system.img` and builds a new `userdata` in the browser
-(`frames/lululemon-mirror/installer/src/image.ts`). e2fsck finds the patched image as clean as the
-original. Whether the Mirror boots it, takes Kiln's adb key and turns its screen with
-`ro.sf.hwrotation` is **untested** until the root's and maintainer's real run.
+**Status (2026-11-16): flashed on a real Mirror once, end to end.** Kiln patches the Glass Panes
+`system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
+root's first real flash (below) booted it, took the computer's adb key, and turned the screen with
+`ro.sf.hwrotation`. The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
+Mirror still waits on an app that runs on API 23.
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (Android 6.0.1,
 `userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
@@ -20,7 +20,8 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 
 1. **The image itself** (2026-11-15, verified: `system.img` downloaded for the test only, SHA-256
    `d13dd330…83ed5` as published, deleted after). Read with `@glassworks/ext4`:
-   - Sparse v1.0, 4096-byte blocks, 314,554 blocks (1,288,413,184 bytes, the partition), 2,959
+   - Sparse v1.0, 4096-byte blocks, 314,554 blocks (1,288,413,184 bytes; the real Mirror's partition is
+     19 blocks bigger, see below), 2,959
      chunks, 207,732 blocks of data, **no FILL chunks**. Its ext4 has 312,086 blocks: the last
      2,468 blocks of the image are outside the filesystem, and Kiln keeps whatever the image has
      there.
@@ -89,7 +90,49 @@ for this browser, so there's no shared key (#29).
 
 What a fresh `userdata` loses: the community kiosk (good), its shared adb key (good), the Mirror's
 Wi-Fi, and the screen rotation (handled by `ro.sf.hwrotation` above). After the first boot, Kiln
-gives S1 Kiosk the Wi-Fi and the Home Assistant URL over adb, as it does on the S1.
+gives S1 Kiosk the Wi-Fi (over its Improv socket) and the Home Assistant URL over adb, as it does on
+the S1.
+
+### The first boot: S1 Kiosk as the only home screen
+
+The image ships Launcher3 (`com.android.launcher3`) as a home app, and the Mirror has no touchscreen
+to answer Android's chooser. adb's shell can't disable another app on Android 6, but it holds
+`MANAGE_USERS` (read 2026-11-15, [home-app.md](home-app.md)), which `pm hide` needs. So on the first
+boot Kiln runs `pm hide com.android.launcher3` (and `com.cyanogenmod.trebuchet` if present), and S1
+Kiosk is the only home app left: Android opens it with no chooser. **Untested** on the unit. The way
+back (the plain Glass Panes image) brings the launcher back, because it comes with a fresh userdata.
+
+Kiln then checks what HOME opened (`dumpsys activity activities`, `mFocusedActivity`). If it isn't
+S1 Kiosk (the chooser, or a launcher that survived `pm hide`), Done says so plainly. Without a
+touchscreen, the Mirror would wait on that chooser after a restart. Done offers "Hide the other
+launcher again", or a USB mouse to choose S1 Kiosk, then Always.
+
+The boot logo before Android stays lululemon's: it lives in the signed `aboot`/splash path that the
+locked bootloader checks, and option A writes only `system` and `userdata`.
+
+## The first real flash (2026-11-16, verified by the root)
+
+The root ran the install headless with `tools/mirror/flash-node.ts` (#370), the same installer
+code as Kiln's page, on the maintainer's Mirror. The Mirror was left on the patched image (a dev
+unit); the way back is ready.
+
+| Step | What happened |
+|---|---|
+| Fastboot checks | `partition-size:system` is **1,288,491,008** bytes: 314,573 blocks, 19 more than the image. The exact-size check refused it, so the check now takes a partition at least the image's size (#357) |
+| Flash `system` | Sent in 5 pieces (split to `max-download-size`), then `userdata` in 1. The first try stopped with "Cancelled" at about 20 %: the Node `usb` package gives every transfer a 1 s timeout. The harness now gives each transfer 120 s (#370). Kiln's page runs on Chrome's WebUSB, which has no such timeout |
+| Restart | Android started the patched image. adb came up with no prompt: the computer's `adbkey.pub` in the new `userdata`'s `adb_keys` worked |
+| Rotation | The boot animation ran **portrait and upright** with `ro.sf.hwrotation=270`. S1 Kiosk is in `/system/priv-app/S1Kiosk` |
+| HOME | **Didn't resolve to S1 Kiosk.** The legacy test APK (#346) ships `MainActivity`, `BootReceiver` and `KioskService` disabled, because the S1 app calls API 24+ and crashes on API 23; only `EngineCheckActivity` runs. The harness reported "NOT FIXED: HOME". This build can't be the Mirror's launcher: that needs the app on API 23 (the rest of #198, or the generic app on the legacy engine, #23) |
+
+What it changed in the install:
+
+- `makeOnlyHome` now asks Android whether S1 Kiosk answers HOME before it hides any launcher:
+  `am start -a android.intent.action.MAIN -c android.intent.category.HOME sh.edm.s1kiosk` (a bare
+  package as `am`'s last argument sets the intent's package; read from AOSP 6 `Am.makeIntent`). If
+  the answer is "unable to resolve", nothing is hidden, so a Mirror with no touchscreen keeps
+  Launcher3 as its home screen, and Kiln's Done screen says the build has no home screen. Before,
+  Launcher3 was hidden either way. The question itself is **untested** on the unit: the Mirror as
+  the root left it (this APK) should answer "unable to resolve".
 
 ## How to reproduce
 
@@ -102,14 +145,15 @@ Off-device only:
    e2fsprogs. On 2026-11-15 it passed in under a minute on an M-series Mac.
 3. Delete the download and the scratch folder. Never commit either.
 
-## Open questions, for the real run
+## Open questions
 
-- Does `ro.sf.hwrotation=270` turn both the boot animation and S1 Kiosk upright? If it doesn't, or
-  turns them the wrong way, flash the plain Glass Panes `system.img` (the way back) and rebuild
-  with `hwrotation` 90 or off. Off falls back to `settings put system user_rotation 3` over adb
-  after the first boot.
-- Does the Mirror's LK take sparse FILL chunks? `userdata` uses them for zeros (inode tables,
-  journal). `writeSparse(…, { fill: false })` sends RAW zeros instead, at about 200 MB more.
-- The LK's `max-download-size`, and how long the first boot takes while `dex2oat` optimises S1 Kiosk.
-- Whether the stock unit's `userdata` partition is the same 5,583,458,304 bytes. Kiln reads it
-  with `fastboot getvar partition-size:userdata` before it builds the image.
+- ~~Does `ro.sf.hwrotation=270` turn the boot animation upright?~~ Yes (2026-11-16). S1 Kiosk's own
+  screen waits on a build that runs on Android 6.
+- Does the Mirror's LK take sparse FILL chunks? `userdata` went in one download on 2026-11-16; the
+  report doesn't say whether that run used `--no-fill`. After a refused write, Kiln offers "Try
+  again without FILL", which builds the zeros as RAW blocks (about 200 MB more to send).
+- The LK's exact `max-download-size` (`system` took 5 pieces), and how long the first boot takes
+  while `dex2oat` optimises S1 Kiosk.
+- Whether a fresh `userdata` finishes Android's setup by itself (`com.android.provision`).
+- Whether the unit's `userdata` partition is the same 5,583,458,304 bytes as the Glass Panes
+  `userdata.sparse` fills. Kiln reads it with `fastboot getvar partition-size:userdata` before it builds.

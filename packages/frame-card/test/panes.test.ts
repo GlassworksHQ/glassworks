@@ -150,3 +150,13 @@ describe('the real frames', () => {
     expect(support('generic-android')).toMatchObject({ diagnostics: ['planned', true], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['depends', true], camera: ['depends', true] });
   });
 });
+
+import { cardTags } from '../src';
+
+describe('the reversible tag', () => {
+  const r = (reversible: { value: string; label?: string }) => ({ difficulty: { value: 'unknown' }, reversible, modifiesAndroid: { value: 'unknown' } }) as never;
+  it('uses the frame\'s own label when it has one (the Mirror, issue 146), else the value\'s default', () => {
+    expect(cardTags(r({ value: 'partly', label: 'Reversible to the community image, not to lululemon\'s software' }))[0]).toMatchObject({ text: 'Reversible to the community image, not to lululemon\'s software', severity: 'caution' });
+    expect(cardTags(r({ value: 'no' }))[0]).toMatchObject({ text: 'Not reversible', severity: 'warn' });
+  });
+});

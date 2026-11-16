@@ -5,7 +5,10 @@
   "description": "Fastboot over WebUSB for every frame: a fork of fastboot.js, with our U-Boot's oem run and partition read-back.",
   "license": "MIT",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./fake-lk": "./test/fake-lk.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
