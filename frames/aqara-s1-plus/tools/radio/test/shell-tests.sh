@@ -517,6 +517,13 @@ check "...and zigbeed got exactly the client's bytes" cmp -s "$T/sent" "$T/zb-go
 sleep 3   # the single slot (max-children=1) frees once the session's processes are gone
 r=$(session); check "the next client: the same" test "$r" = ok; [ "$r" = ok ] || echo "    $r"
 check "...and zigbeed got exactly its bytes" cmp -s "$T/sent" "$T/zb-got"
+# Who is connected (#217), from this container's own socket tables: a client holding the bridge's slot.
+sleep 3
+python3 -c 'import socket, time; s = socket.create_connection(("127.0.0.1", 6638)); time.sleep(8)' & HOLD=$!
+sleep 1; LOOPS=1 helper
+check "connected now: the client in the kernel's table (real /proc/net/tcp)" has "$(prop sys.s1kiosk.radio.peer)" "127.0.0.1 "
+kill $HOLD 2>/dev/null; wait $HOLD 2>/dev/null; sleep 1; LOOPS=1 helper
+check "...and nobody once it has gone" test "$(prop sys.s1kiosk.radio.peer)" = none
 # control: the same through a bridge without the relay (as before) does hand the stale bytes over
 /usr/bin/socat TCP-LISTEN:6640,reuseaddr FILE:/dev/ttyZigbeeNCP,raw,echo=0 >/dev/null 2>&1 &
 sleep 2; r=$(session 6640)
@@ -524,6 +531,42 @@ check "(control: without the relay the client gets the stale bytes first)" has "
 kill $ZBP 2>/dev/null; pkill -f /usr/bin/socat; pkill -f "sleep 1000"
 cp "$T/socat-mock" /vendor/bin/socat; rm -f /dev/ttyZigbeeNCP /tmp/ttyZigbeeNCP "$T/bin/zigbeed"
 echo off > "$T/props/persist.s1kiosk.radio_mode"; rm -f /data/s1kiosk/radio/radio.conf
+
+# ------------------------------------------------------------------------------- connected now
+# Fixture socket tables in the kernel's format (addresses as the little-endian panel prints them):
+# 0A0200C0 = 192.0.2.10 (the panel), 140200C0 = 192.0.2.20, C87100CB = 203.0.113.200; 19EE = 6638.
+echo "--- connected now (#217)"
+reset_radio; mkdir -p /data/s1kiosk/radio "$T/net"; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+HDR='  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode'
+HDR6='  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode'
+tcp() { { echo "$HDR"; i=0; for l in "$@"; do printf '%4d: %s 00000000:00000000 00:00000000 00000000     0        0 %d 1 00000000 20 4 30 10 -1\n' $i "$l" $((10000 + i)); i=$((i + 1)); done; } > "$T/net/tcp"; }
+tcp6() { { echo "$HDR6"; i=0; for l in "$@"; do printf '%4d: %s 00000000:00000000 00:00000000 00000000     0        0 %d 1 00000000 20 4 30 10 -1\n' $i "$l" $((20000 + i)); i=$((i + 1)); done; } > "$T/net/tcp6"; }
+LISTEN='00000000:19EE 00000000:0000 0A'
+peer() { LOOPS=${1:-1} helper S1R_PROC_NET="$T/net"; prop sys.s1kiosk.radio.peer; }
+echo off > "$T/props/persist.s1kiosk.radio_mode"; tcp "$LISTEN" "0A0200C0:19EE 140200C0:C350 01"; tcp6
+p=$(peer); check "off: nothing reported" test -z "$p" -a -e "$T/props/sys.s1kiosk.radio.peer"
+echo zigbee_tcp > "$T/props/persist.s1kiosk.radio_mode"; tcp "$LISTEN"
+check "coordinator, the bridge listening: nobody" test "$(peer)" = none
+tcp "$LISTEN" "0A0200C0:19EE 140200C0:C350 01"; t0=$(date +%s)
+p=$(peer 3)
+check "a client connected: its address and when it was first seen" test "${p% *}" = 192.0.2.20 -a "${p#* }" -ge "$t0" -a "${p#* }" -le $((t0 + 10))
+check "...written once while it stays" test "$(grep -c '^sys.s1kiosk.radio.peer=192.0.2.20 ' "$T/setprop.log")" = 1
+check "...and never in the log" test -z "$(grep -e 192.0.2 -e 140200C0 "$T/log")"
+check "...though its coming is" grep -q "EZSP client connected" "$T/log"
+tcp "$LISTEN" "0A0200C0:19EE C87100CB:C351 01"
+check "an address with the top bit set (203.0.113.200)" has "$(peer)" "203.0.113.200 "
+tcp "$LISTEN" "0A0200C0:19EE 140200C0:C350 06" "0A0200C0:1F91 140200C0:C352 01" "0A0200C0:C353 140200C0:19EE 01"
+check "closing (TIME_WAIT), another port, or a connection out to :6638: nobody" test "$(peer)" = none
+tcp "$LISTEN"; tcp6 "0000000000000000FFFF00000A0200C0:19EE 0000000000000000FFFF0000140200C0:C354 01"
+check "tcp6, IPv4-mapped: as IPv4" has "$(peer)" "192.0.2.20 "
+tcp6 "B80D0120000000000000000010000000:19EE B80D0120000000000000000020000000:C355 01"
+check "tcp6, IPv6: its 8 groups (2001:db8::20)" has "$(peer)" "2001:db8:0:0:0:0:0:20 "
+tcp "$LISTEN" "0A0200C0:19EE 140200C0:C350 01" "0A0200C0:19EE C87100CB:C351 01"; tcp6
+check "two in the table: one shown" test "$(peer | wc -w)" = 2
+echo thread_router > "$T/props/persist.s1kiosk.radio_mode"
+p=$(peer); check "another mode: cleared" test -z "$p"
+pkill -f "sleep 1000"; rm -rf "$T/net"; rm -f /data/s1kiosk/radio/radio.conf
+echo off > "$T/props/persist.s1kiosk.radio_mode"
 
 # ------------------------------------------------------------------------------- Thread dataset
 echo "--- Thread dataset hand-off"
