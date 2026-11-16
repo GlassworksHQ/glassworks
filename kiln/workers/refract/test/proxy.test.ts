@@ -12,10 +12,10 @@ import allowlist from '../allowlist.json';
 const dir = join(__dirname, '..');
 const config = JSON.parse(readFileSync(join(dir, 'wrangler.json'), 'utf8'));
 const KILN = 'https://kiln.glassworks.dev';
-const IMG = 'glass-panes/mirror-android-1/system.img';
-const SUMS = 'glass-panes/mirror-android-1/SHA256SUMS';
+const IMG = 'glass-panes/mirror-android-2/system.img';
+const SUMS = 'glass-panes/mirror-android-2/SHA256SUMS';
 const SUMS_TEXT =
-  'd13dd330bce43b1c46edb65a5eb95a77968f8fd9c413f166c4393e0072f83ed5  system.img\n' +
+  'bdb6b8445296666162256affa968d590075f56a8ad2229930f8502b9703e35c1  system.img\n' +
   '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908  userdata.sparse\n';
 const ETAG = '"0xFAKE"';
 const TIMEOUT_MS = 300;
@@ -118,14 +118,14 @@ describe('the allowlist', () => {
     expect(res.headers.get('Content-Length')).toBe('159');
     expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="SHA256SUMS"');
     expect(seen.map((r) => new URL(r.url).host)).toEqual(['github.com', 'release-assets.githubusercontent.com']);
-    expect(seen[0]!.url).toBe('https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/SHA256SUMS');
+    expect(seen[0]!.url).toBe('https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/SHA256SUMS');
   });
 
   it("pins the image to the release's own SHA256SUMS", () => {
     expect(SUMS_TEXT).toContain(`${allowlist[IMG].sha256}  system.img`);
   });
 
-  it.each(['nope', 'glass-panes/mirror-android-1/userdata.sparse', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
+  it.each(['nope', 'glass-panes/mirror-android-2/userdata.sparse', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
     'answers 404 to %s and never asks GitHub',
     async (path) => {
       const res = await get(path);
@@ -479,7 +479,7 @@ describe('credit', () => {
     const res = await get(IMG, { method: 'HEAD' });
     expect(res.headers.get('Link')).toBe(
       '<https://github.com/git-nimrod/glass-panes>; rel="author", ' +
-        '<https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/system.img>; rel="canonical"',
+        '<https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/system.img>; rel="canonical"',
     );
   });
 
@@ -490,7 +490,7 @@ describe('credit', () => {
     expect(index.assets.map((a) => a.id)).toEqual(Object.keys(allowlist));
     expect(index.assets[0]).toMatchObject({
       url: `https://refract.glassworks.dev/${IMG}`,
-      source: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/system.img',
+      source: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/system.img',
       size: 850905808,
       sha256: allowlist[IMG].sha256,
       credit: { name: 'git-nimrod', project: 'Glass Panes', line: 'Built by git-nimrod as part of Glass Panes.' },

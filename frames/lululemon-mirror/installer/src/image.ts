@@ -12,15 +12,15 @@ import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 export const GLASS_PANES = {
   /** The project and its developer: credited where the image is downloaded and on Done. */
   project: { name: 'Glass Panes', href: 'https://github.com/git-nimrod/glass-panes', developer: 'git-nimrod', developerHref: 'https://github.com/git-nimrod' },
-  release: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-1',
+  release: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2',
   system: {
     name: 'system.img',
-    url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/system.img',
+    url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/system.img',
     size: 850_905_808,
-    sha256: 'd13dd330bce43b1c46edb65a5eb95a77968f8fd9c413f166c4393e0072f83ed5',
+    sha256: 'bdb6b8445296666162256affa968d590075f56a8ad2229930f8502b9703e35c1',
   },
-  /** Its build.prop's fingerprint: read from the image on 2026-11-15. */
-  fingerprint: 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys',
+  /** Its build.prop's fingerprint: read from the image on 2026-11-16 (image 1's was …/11041605:…). */
+  fingerprint: 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys',
 } as const;
 
 export const LABELS = {
