@@ -15,8 +15,10 @@ Glassworks stack from #63; the S1's output and what was measured on the S1 are i
 
 ## Adding a frame
 
-Give the frame a `display` in its `frames/<id>/design/frame.json`, in pixels, as Android's boot
-animation sees the screen:
+Give the frame a `display` in its `frames/<id>/design/frame.json`, in pixels, upright, as people
+see the screen. If the panel stands turned and Android's boot animation plays in the panel's own
+framebuffer (the Mirror: 1080x1920 upright, a 1920x1080 panel), add `"boot": { "rotate": 90 }` (or
+270) rather than giving the panel's size:
 
 ```json
 "display": { "width": 1280, "height": 800 }
@@ -94,10 +96,10 @@ each new frame's first boot.
 
 ## Frames
 
-| Frame | Screen | Android | Splash | Zip | Measured |
-|---|---|---|---|---|---|
-| `aqara-s1-plus` | 1440x720 | 10 (API 29) | Allwinner | 8.69 MB, trimmed (9 MB budget) | On the panel, 2026-11-12 ([glass-tile](../glass-tile/README.md#what-the-panel-allows)) |
-| `lululemon-mirror` | 1080x1920, turned 90° into a 1920x1080 panel (`rotate`) | 6.0.1 (API 23) | None | 11.44 MB, full frames ([lululemon-mirror](../lululemon-mirror/README.md), rebuilt 2026-11-16) | The panel is 1920x1080, natural landscape, turned portrait. `ro.sf.hwrotation=270` turns Android's UI but not the boot animation: the earlier 1080x1920 version rendered sideways on the unit (2026-11-16). The turned frames need a photo on the unit |
+| Frame | Screen (upright) | Panel (`desc.txt`) | Android | Splash | Zip | Measured |
+|---|---|---|---|---|---|---|
+| `aqara-s1-plus` | 1440x720 | 1440x720 | 10 (API 29) | Allwinner | 8.69 MB, trimmed (9 MB budget) | On the panel, 2026-11-12 ([glass-tile](../glass-tile/README.md#what-the-panel-allows)) |
+| `lululemon-mirror` | 1080x1920 | 1920x1080, frames turned 90° (`rotate`) | 6.0.1 (API 23) | None | 11.44 MB, full frames ([lululemon-mirror](../lululemon-mirror/README.md), rebuilt 2026-11-16) | The panel is 1920x1080, natural landscape, turned portrait. `ro.sf.hwrotation=270` turns Android's UI but not the boot animation: the earlier 1080x1920 version rendered sideways on the unit (2026-11-16). The turned frames need a photo on the unit |
 
 ## What the build checks
 
