@@ -125,13 +125,28 @@ class NotificationOverlayTest {
         assertNull(hub.state.page)
     }
 
-    /** On a portrait screen (a tablet, the Mirror) the half view is the bottom half. */
+    /**
+     * On a portrait screen (a tablet, the Mirror) the half view is the bottom half: the page above its bar,
+     * the bar at the foot, a tap on the dashboard above closes it, and a tap in the sheet goes to the page.
+     */
     @Test
     @Config(qualifiers = "w800dp-h1280dp-port-mdpi")
     fun onAPortraitScreenTheHalfViewIsTheBottomHalf() {
         val events = halfHooks()
-        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half"}""")
-        assertEquals("area Rect(0, 640 - 800, 1208)", events[1])
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half","timeout":90}""")
+        center.handle("m", "Garage", """{"url":"/garage/0","size":"half"}""")
+        assertEquals(listOf("capture", "area Rect(0, 640 - 800, 1208)", "page http://homeassistant.local:8123/dashboard-door/0"), events)
+        Mockup.layout(overlay.rootView, 800, 1280)
+        val bar = views(overlay).filterIsInstance<TextView>().first { it.isShown && it.text.toString() == "Next" }
+        val at = IntArray(2).also { bar.getLocationInWindow(it) }
+        assertTrue("the bar is at the foot, under the page: y=${at[1]}", at[1] >= 1208 && at[1] + bar.height <= 1280)
+        assertTrue(views(overlay).filterIsInstance<TextView>().any { it.isShown && it.text.toString() == "Next in 1:30  ·  1 more waiting" })
+        val behind = views(overlay).first { it.javaClass.simpleName == "HalfDialog" }
+        assertFalse("in the sheet: the page's", tap(behind, 400f, 900f))
+        assertEquals("Doorbell", hub.state.page?.notification?.title)
+        assertTrue("above the sheet: next", tap(behind, 400f, 300f))
+        assertEquals("Garage", hub.state.page?.notification?.title)
+        assertEquals("the same dialog: no second capture or move", 1, events.count { it == "capture" })
     }
 
     @Test
