@@ -39,6 +39,13 @@ class EngineStartTest {
         assertEquals("the same host over https", true, restartsFor("http://192.0.2.10:8123/", "https://192.0.2.10:8123/"))
     }
 
+    /** java.net.URI gives no host for a non-ASCII name; the legacy engine reads it, so a port change must restart too. */
+    @Test fun `a Unicode dashboard host restarts on a port or scheme change too`() {
+        assertEquals(true, restartsFor("http://ält.example.org:8123/", "http://ält.example.org:8124/"))
+        assertEquals(true, restartsFor("http://ält.example.org:8123/", "https://ält.example.org:8123/"))
+        assertEquals(false, restartsFor("http://ält.example.org:8123/a", "http://ält.example.org:8123/b"))
+    }
+
     @Test fun `finding Home Assistant on auto restarts the engine`() {
         val prefs = KioskPrefs(app)
         prefs.urlSetting = KioskPrefs.AUTO

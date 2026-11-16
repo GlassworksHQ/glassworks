@@ -253,7 +253,11 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
      * dashboard's origin (the legacy engine holds every page to it, #198). The engine reads both once per process,
      * so when this differs from before a change, the process must restart.
      */
-    fun engineStart(): List<String> = secureHosts() + listOfNotNull(OAuth.origin(url))
+    fun engineStart(): List<String> = secureHosts() + listOfNotNull(OAuth.origin(url) ?: authority(url))
+
+    /** `scheme://authority` as Android's Uri reads it, for URLs java.net.URI refuses (a non-ASCII host). */
+    private fun authority(url: String): String? =
+        Uri.parse(url.trim()).let { u -> if (u.scheme.isNullOrEmpty() || u.authority.isNullOrEmpty()) null else "${u.scheme}://${u.authority}" }
 
     /** Hosts that Gecko should treat as a secure context, so getUserMedia/AudioWorklet work over http. */
     fun secureHosts(): List<String> {
