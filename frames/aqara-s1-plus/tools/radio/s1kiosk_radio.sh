@@ -71,6 +71,10 @@
 # Who is connected (#217): in the coordinator modes, sys.s1kiosk.radio.peer = "none" | "<address> <epoch
 # first seen>", the EZSP bridge's client from /proc/net/tcp and tcp6 (see peer_report); "" in other modes.
 #
+# Setup hotspot portal (#197): while the kiosk's setup hotspot is up, the hotspot's DNS and port 80 go to
+# the kiosk's own responders, so a phone that joins opens the setup page by itself (see "the setup
+# hotspot's captive portal" below). Status: sys.s1kiosk.portal.status. Runs in every mode.
+#
 # Developer override: with a root-made $DIR/dev-override file, a root-owned $DIR/s1kiosk_radio.sh runs
 # instead of everything else, and binaries in $DIR win. (Before v4 those were honoured without the
 # marker; a leftover copy would otherwise shadow every update.)
@@ -627,6 +631,165 @@ peer_report() { # every loop
   peer_show "$PEER_VALUE"
 }
 
+# --- the setup hotspot's captive portal (#197) -------------------------------------------------
+# A phone that joins the panel's setup hotspot should open the setup page by itself, as on hotel Wi-Fi.
+# Phones show that page when their connectivity check (iOS: http://captive.apple.com/hotspot-detect.html,
+# Android: http://connectivitycheck.gstatic.com/generate_204) gets a redirect. Android 10's local-only
+# hotspot hands out the AP's address as DNS (DHCP, and RDNSS in the RA), served by netd's dnsmasq with no
+# upstream: nothing resolves, so no phone ever sees a portal (docs/research/setup-hotspot-portal-and-name.md).
+# The app answers instead, but it can't bind ports below 1024. While the hotspot is up it runs a DNS
+# responder on udp:$PORTAL_DNS (every name -> the AP) and a redirect to its setup page on tcp:$PORTAL_HTTP,
+# bound to the AP's own addresses only. This loop sends the hotspot's udp:53 and tcp:80 to them (nat
+# PREROUTING, chain $PORTAL_CHAIN).
+# The rules exist only while all of these hold, checked every $PORTAL_EVERY s, and go within that time
+# once one stops: hostapd runs (Android 10 runs it only for an AP), the kiosk's uid owns a udp socket on
+# :$PORTAL_DNS and a listening tcp socket on :$PORTAL_HTTP bound to one IPv4 address, and that address is on a
+# Wi-Fi interface. They match only packets that come in on that interface, from its subnet, addressed
+# to the panel's own address there, so nothing on any other network can match them. No input but the
+# kernel's socket tables; another app can at most point the hotspot's DNS at the kiosk's own sockets.
+# IPv6: when the kiosk also has a udp socket on :$PORTAL_DNS at one IPv6 address, udp:53 to that address
+# goes there too (the RA's RDNSS). Status: sys.s1kiosk.portal.status = "off" | "on <iface>" | "error: ...".
+# The loop runs in every radio mode (also after "giving up") and starts with the helper, which first
+# removes whatever an earlier run left.
+PORTAL_DNS=8053
+PORTAL_HTTP=8098
+PORTAL_CHAIN=S1PORTAL
+PORTAL_PROP=sys.s1kiosk.portal.status
+PORTAL_EVERY=${S1R_PORTAL_SLEEP:-2}
+PORTAL_STATE=""; PORTAL_SHOWN=""; PORTAL_PID=""
+
+# The kiosk's sockets on one address: family proto port [state] -> each address (4: dotted, 6: hex).
+# Android's Java sockets are dual-stack, so a bind to an IPv4 address shows in udp6/tcp6 as IPv4-mapped.
+portal_addrs() {
+  pp_=$(printf '%04X' "$3")
+  for f_ in "$PROC_NET/$2" "$PROC_NET/${2}6"; do
+    [ -r "$f_" ] || continue
+    while read -r sl_ loc_ rem_ st_ q_ t_ r_ uid_ rest_; do
+      [ "$uid_" = "$APP_UID" ] && [ "${loc_##*:}" = "$pp_" ] || continue
+      [ -z "$4" ] || [ "$st_" = "$4" ] || continue
+      a_=${loc_%:*}
+      case "$1:${#a_}:$a_" in
+        4:8:*[!0]*) hex_ip4 "$a_" ;;
+        4:32:0000000000000000[Ff][Ff][Ff][Ff]0000*) a_=${a_#????????????????????????}; case "$a_" in *[!0]*) hex_ip4 "$a_" ;; esac ;;
+        6:32:0000000000000000[Ff][Ff][Ff][Ff]0000*|6:32:[Ff][Ee]80*) ;;
+        6:32:*[!0]*) echo "$a_" ;;
+      esac
+    done < "$f_"
+  done
+}
+
+# What the rules should be now: "<iface> <v4 address> <v4 prefix> [<v6 address>]", or nothing.
+portal_wanted() {
+  [ -n "$(pidof hostapd 2>/dev/null)" ] || return 0
+  [ -n "$APP_UID" ] || APP_UID=$(stat -c %u "$APP_DATA" 2>/dev/null)
+  case "$APP_UID" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$APP_UID" -ge 10000 ] || return 0
+  set -- $(portal_addrs 4 udp $PORTAL_DNS); [ $# = 1 ] || return 0; a4_=$1
+  set -- $(portal_addrs 4 tcp $PORTAL_HTTP 0A); [ "$*" = "$a4_" ] || return 0
+  # "23: wlan0    inet 192.168.43.1/24 brd ... scope global wlan0"
+  set -- $(ip -4 -o addr show 2>/dev/null | while read -r n_ i_ f_ c_ rest_; do
+    [ "$f_" = inet ] && [ "${c_%/*}" = "$a4_" ] && echo "$i_ ${c_#*/}"
+  done)
+  [ $# = 2 ] || return 0
+  case "$1" in wlan[0-9]*|ap[0-9]*|swlan[0-9]*|softap[0-9]*) ;; *) return 0 ;; esac
+  case "$2" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$2" -ge 16 ] && [ "$2" -le 30 ] || return 0
+  w_="$1 $a4_ $2"
+  set -- $(portal_addrs 6 udp $PORTAL_DNS)
+  [ $# = 1 ] && w_="$w_ $(hex_ip6 "$1")"
+  echo "$w_"
+}
+
+# the rules' lines in iptables-save's order: family iface v4 prefix [v6]
+portal_rules() {
+  if [ "$1" = 4 ]; then
+    echo "-A $PORTAL_CHAIN -s $3/$4 -d $3/32 -i $2 -p udp -m udp --dport 53 -j DNAT --to-destination $3:$PORTAL_DNS"
+    echo "-A $PORTAL_CHAIN -s $3/$4 -d $3/32 -i $2 -p tcp -m tcp --dport 80 -j DNAT --to-destination $3:$PORTAL_HTTP"
+  elif [ -n "$5" ]; then
+    echo "-A $PORTAL_CHAIN -d $5/128 -i $2 -p udp -m udp --dport 53 -j DNAT --to-destination [$5]:$PORTAL_DNS"
+  fi
+}
+portal_save() { if [ "$1" = 6 ]; then ip6tables-save -t nat; else iptables-save -t nat; fi; }
+
+# The rules for family $1 are in place for "$2": as many DNAT rules as wanted, each to the right address
+# and port on the right interface, and exactly one jump.
+portal_ok() {
+  s_=$(portal_save $1) || return 1
+  set -- $1 $2
+  n_=$(portal_rules "$@" | grep -c .)
+  [ "$(printf '%s\n' "$s_" | grep -c "^-A $PORTAL_CHAIN ")" = "$n_" ] || return 1
+  if [ "$1" = 4 ]; then
+    for p_ in $PORTAL_DNS $PORTAL_HTTP; do
+      printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination $3:$p_\$" || return 1
+    done
+  elif [ -n "$5" ]; then
+    # ip6tables-save shortens the address (2001:db8::20), so only its shape is checked here
+    printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination \[[0-9a-f:]*\]:$PORTAL_DNS\$" || return 1
+  fi
+  [ "$(printf '%s\n' "$s_" | grep -c "^-A PREROUTING .*-j $PORTAL_CHAIN\$")" = 1 ]
+}
+
+portal_clear() { # removes everything of ours, both families (one read each when there is nothing)
+  for f_ in 4 6; do
+    s_=$(portal_save $f_ 2>/dev/null)
+    case "$s_" in *"$PORTAL_CHAIN"*) ;; *) continue ;; esac
+    printf '%s\n' "$s_" | grep "^-A PREROUTING .*-j $PORTAL_CHAIN\$" | while read -r l_; do
+      # shellcheck disable=SC2086
+      ipt $f_ -t nat -D ${l_#-A } 2>/dev/null
+    done
+    ipt $f_ -t nat -F $PORTAL_CHAIN 2>/dev/null; ipt $f_ -t nat -X $PORTAL_CHAIN 2>/dev/null
+  done
+  return 0
+}
+
+portal_set() { # family "<iface> <v4> <prefix> [<v6>]": the chain's contents (atomic), then one jump
+  f_=$1; set -- $1 $2
+  {
+    echo "*nat"
+    echo ":$PORTAL_CHAIN - [0:0]"
+    portal_rules "$@"
+    echo "COMMIT"
+  } | if [ "$f_" = 6 ]; then ip6tables-restore -w 5 --noflush; else iptables-restore -w 5 --noflush; fi || return 1
+  [ "$(portal_save $f_ | grep -c "^-A PREROUTING .*-j $PORTAL_CHAIN\$")" = 1 ] && return 0
+  portal_save $f_ | grep "^-A PREROUTING .*-j $PORTAL_CHAIN\$" | while read -r l_; do
+    # shellcheck disable=SC2086
+    ipt $f_ -t nat -D ${l_#-A }
+  done
+  ipt $f_ -t nat -I PREROUTING 1 -j $PORTAL_CHAIN
+}
+
+portal_say() { [ "$1" = "$PORTAL_SHOWN" ] && return 0; PORTAL_SHOWN=$1; setp $PORTAL_PROP "$1"; say "setup hotspot portal: $1"; }
+portal_check() {
+  w_=$(portal_wanted)
+  if [ -z "$w_" ]; then
+    [ "$PORTAL_STATE" = off ] && return 0
+    portal_clear; PORTAL_STATE=off; portal_say off; return 0
+  fi
+  if portal_ok 4 "$w_" && portal_ok 6 "$w_"; then
+    # in place (also a new helper finding its predecessor's): kept as they are, no gap for the phones
+    PORTAL_STATE=$w_; portal_say "on ${w_%% *}"
+  else
+    portal_clear
+    if portal_set 4 "$w_" && portal_set 6 "$w_" && portal_ok 4 "$w_" && portal_ok 6 "$w_"; then
+      PORTAL_STATE=$w_; portal_say "on ${w_%% *}"
+    else
+      portal_clear; PORTAL_STATE=off; portal_say "error: iptables refused the rules"
+    fi
+  fi
+}
+portal_start() { # one check now (it also removes an earlier run's rules), then the loop
+  portal_check
+  parent_=$$
+  ( while :; do
+      sleep "$PORTAL_EVERY"
+      kill -0 "$parent_" 2>/dev/null || { portal_clear; exit 0; }
+      portal_check
+    done ) &
+  PORTAL_PID=$!
+}
+portal_stop() { alive "$PORTAL_PID" && kill "$PORTAL_PID"; PORTAL_PID=""; }
+loops_stop() { tz_stop; portal_stop; }
+
 # --- our processes ---------------------------------------------------------------------------
 BRIDGE_PID=""; BRIDGE_RANGE=""; OTBR_PID=""; JOINED=""; FAILS=0
 ZB_PID=""; ZB_SERVED=""; ZB_DEATHS=0
@@ -1049,7 +1212,7 @@ fw_do() { # id sha-prefix: the whole explicit operation; the helper restarts aft
   fi
   # Start over cleanly (children are gone; the loop state belongs to the old services).
   say "firmware: restarting the helper"
-  tz_stop
+  loops_stop
   exec /system/bin/sh "$0"
 }
 
@@ -1085,7 +1248,7 @@ fw_recover() {
       echo "stock $FW_APP $FW_SPINEL" > "$FW_DIR/current"
       fwdone "error $i_: the flash was interrupted; restored stock (APP $FW_APP)"
       say "firmware: restarting the helper"
-      tz_stop
+      loops_stop
       exec /system/bin/sh "$0"
     fi
   fi
@@ -1187,6 +1350,7 @@ TSTORED=""
 status applying
 zstate
 fw_init
+portal_start
 [ -n "$S1R_ONCE" ] && LOOPS=$S1R_ONCE   # tests: run this many loops, then exit
 
 while true; do
@@ -1198,7 +1362,7 @@ while true; do
     # radio without a trusted application after an interrupted flash: everything stays off
     WANT=""; enforce; br_net_off; fw_off
     status error "radio firmware missing after an interrupted flash: flash Aqara stock"
-    if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { tz_stop; exit 0; }; fi
+    if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { loops_stop; exit 0; }; fi
     sleep ${S1R_SLEEP:-3}; continue
   fi
   # Re-enforce every 3 s, in every mode incl. off: Aqara's boot sequence (zigbee_cpcd_factory ->
@@ -1223,6 +1387,6 @@ while true; do
     status error "services not in wanted state:$bad"
   fi
   if [ $FAILS -gt 20 ]; then status error "giving up after repeated failures"; exec sleep 2147483647; fi
-  if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { tz_stop; exit 0; }; fi
+  if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { loops_stop; exit 0; }; fi
   sleep ${S1R_SLEEP:-3}
 done
