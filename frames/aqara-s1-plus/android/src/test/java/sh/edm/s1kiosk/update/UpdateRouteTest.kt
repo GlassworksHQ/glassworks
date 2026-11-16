@@ -5,13 +5,16 @@ import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.frame.RootUpdates
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.update.SilentUpdates
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -27,6 +30,8 @@ import sh.edm.s1kiosk.KioskApp
 class UpdateRouteTest {
     private val app = RuntimeEnvironment.getApplication()
     private val managers = ArrayList<UpdateManager>()
+
+    @Before fun theAppsTarget() { app.applicationInfo.targetSdkVersion = 35 } // Robolectric's bare Application says 23
 
     @After fun tearDown() = managers.forEach { it.stop() }
 
@@ -73,6 +78,7 @@ class UpdateRouteTest {
         val root = FakeRoot(present = true)
         val m = started(frame(root))
         assertEquals("no note: it installs on its own", "", m.model.installNote)
+        assertEquals(SilentUpdates.RootService, m.silentUpdates)
         assertEquals("Installing 1.2.3 (root update service)", installVerified(m))
         assertEquals(listOf("1.2.3"), root.installed)
         assertEquals("no PackageInstaller session", 0, sessions())
@@ -88,16 +94,27 @@ class UpdateRouteTest {
         val root = FakeRoot(present = false)
         val m = started(frame(root))
         assertEquals(UpdateManager.NO_HELPER_NOTE, m.model.installNote)
+        assertEquals(SilentUpdates.NoRootService, m.silentUpdates)
         installVerified(m)
         assertEquals("the service is never asked", emptyList<String>(), root.installed)
         assertEquals(1, sessions())
     }
 
     @Test fun aFrameWithoutARootServiceInstallsWithPackageInstaller() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true)
         val m = started(frame(null))
-        assertEquals(UpdateManager.NO_TAP_NOTE, m.model.installNote) // Android 12+ (sdk 34)
-        installVerified(m)
+        assertEquals(SilentUpdates.SelfUpdate, m.silentUpdates) // Android 12+ (sdk 34)
+        assertEquals(UpdateManager.NO_TAP_NOTE, m.model.installNote)
+        assertEquals("Installing 1.2.3 without a tap", installVerified(m))
         assertEquals(1, sessions())
+    }
+
+    @Test fun withoutInstallUnknownAppsTheUpdateSaysItWaitsForConfirmation() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        val m = started(frame(null))
+        assertEquals(SilentUpdates.UnknownAppsOff, m.silentUpdates)
+        assertEquals(UpdateManager.CONFIRM_NOTE, m.model.installNote)
+        assertEquals("Installing 1.2.3: confirm on the screen", installVerified(m))
     }
 
     @Test fun theLastFailedRootInstallIsShownAtStart() {

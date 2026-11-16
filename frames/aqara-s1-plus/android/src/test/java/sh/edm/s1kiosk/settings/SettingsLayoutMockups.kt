@@ -50,7 +50,11 @@ class SettingsLayoutMockups {
 
     /** The radio's mode as the root helper has it, for the S1's Device page. */
     private val props = object : sh.edm.s1kiosk.radio.SysProps {
-        override fun get(name: String) = if (name == "persist.s1kiosk.radio_mode") "thread_router" else ""
+        override fun get(name: String) = when (name) {
+            "persist.s1kiosk.radio_mode" -> "thread_router"
+            "sys.s1kiosk.update.version" -> "1"
+            else -> ""
+        }
         override fun set(name: String, value: String) {}
     }
 
@@ -64,6 +68,7 @@ class SettingsLayoutMockups {
             // The frame's Device page, after Screen, as S1Settings puts it.
             val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app) { byId[it] }
                 else frame.deviceSection(app) { byId[it] }
+            device?.let { lastDevice = it }
             val at = m.sections.indexOfFirst { it.id == "screen" } + 1
             m.copy(frame = frameName, sections = m.sections.toMutableList().apply { if (device != null) add(at, device) })
         }
@@ -83,6 +88,17 @@ class SettingsLayoutMockups {
         return o
     }
 
+    private var lastDevice: dev.glassworks.pane.SettingsSection? = null
+
+    /** The same Device page on the Manage page (#269), as HTML to render beside the panel's. */
+    private fun manageDevice(name: String) {
+        val device = lastDevice ?: return
+        val f = ManageFixture()
+        f.statusFn = { f.status.copy(sections = listOf(device)) }
+        val b = f.Browser().also { it.signInWithHa() }
+        java.io.File(Mockup.dir!!, "$name-manage.html").writeBytes(b.get("/device").body)
+    }
+
     private fun shots(prefix: String, w: Int, h: Int, open: () -> KioskSettingsOverlay) {
         fun shot(name: String, id: String?, then: (KioskSettingsOverlay) -> Unit = {}) {
             val o = open()
@@ -99,6 +115,7 @@ class SettingsLayoutMockups {
         shot("06-about", "about")
         shot("07-edit-a-value", "dashboard") { it.previewEdit("Home Assistant") }
         shot("08-device", "device")
+        manageDevice("$prefix-08-device")
     }
 
     @Test
@@ -135,9 +152,11 @@ class SettingsLayoutMockups {
         o.previewSection("device")
         Mockup.idle()
         Mockup.save("layout-tablet-android11-08-device", o, 1280, 800)
+        manageDevice("layout-tablet-android11-08-device")
     }
 
     private fun aPixelTablet() {
+        app.applicationInfo.targetSdkVersion = 35 // the app's; Robolectric's bare Application says 23
         ShadowBuild.setManufacturer("Google")
         ShadowBuild.setModel("Pixel Tablet")
         for (f in listOf(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_BLUETOOTH_LE, PackageManager.FEATURE_CAMERA_ANY)) {
