@@ -153,6 +153,11 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
       }],
       ['HOME check', async () => {
         let home = res.firstBoot!.home;
+        if (home.result === 'none') {
+          // nothing was hidden, and hiding again wouldn't help: this APK has no home screen of its own
+          d.log(`    NO HOME SCREEN IN THIS APK: S1 Kiosk doesn't answer HOME (its launcher activity is off), so nothing was hidden: ${home.left.join(', ') || 'the image\'s launcher'} stays the home screen. Install a build made for Android 6.`);
+          return;
+        }
         if (home.result !== 'set') {
           d.log(`    HOME opened ${home.focused ?? 'something else'}${home.left.length ? `; still a home app: ${home.left.join(', ')}` : ''}: hiding again`);
           home = (await makeOnlyHome(await d.waitForAdb(), (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep)).home;

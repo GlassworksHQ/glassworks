@@ -108,6 +108,18 @@ describe('the headless install on a fake Mirror', () => {
   }, 60_000);
 });
 
+describe('an APK with no home screen (the first real flash, 2026-11-16)', () => {
+  it('hides no launcher, says so, and exits 1 without trying to hide again', async () => {
+    const { d, lines, run } = await install();
+    d.after.noHome = true;
+    const r = await run;
+    expect(r.firstBoot?.home).toEqual({ result: 'none', left: ['com.android.launcher3'] });
+    expect(d.after.cmds.some((c) => c.startsWith('pm hide'))).toBe(false);
+    expect(lines.join('\n')).toMatch(/NO HOME SCREEN IN THIS APK: .*com\.android\.launcher3 stays the home screen/);
+    expect(lines.some((l) => /hiding again/.test(l))).toBe(false);
+  }, 60_000);
+});
+
 describe('the way back on a fake Mirror', () => {
   it('checks both files, then writes them as they are', async () => {
     const img = await dryImage(work);

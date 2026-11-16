@@ -23,7 +23,8 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 7. Flash system. 8. Flash userdata. 9. Reboot.
 10. Wait for adb and `sys.boot_completed`.
 11. First boot: permissions, Home Assistant's address, Wi-Fi, the other launchers hidden.
-12. HOME check (hides the launchers again if HOME didn't open S1 Kiosk).
+12. HOME check (hides the launchers again if HOME didn't open S1 Kiosk). If the APK has no home
+    screen of its own, nothing was hidden: the image's launcher stays, and the run exits 1.
 13. Screenshot.
 
 ## Use
@@ -40,7 +41,8 @@ npx -y tsx@4.23.15 tools/mirror/flash-node.ts --help
 ```
 
 The adb serial is read from `/tmp/mirror-serial` (`--serial-file`) and is shown as `<serial>` in
-logs. The tool never restarts or kills the adb server. The images take about 2.5 GB in a temporary
+logs. The tool never restarts or kills the adb server. Each USB transfer gets 120 s: the `usb`
+package's default is 1 s, which stopped a real flash with "Cancelled" (2026-11-16). The images take about 2.5 GB in a temporary
 folder, which is removed at the end unless `--keep` or `--work` is given.
 
 The tests (`npm test -w @glassworks/mirror-root-run`) run the install and the way back on the fake
