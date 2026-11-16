@@ -276,7 +276,8 @@ public class ApiServer(
      * The device's Bluetooth proxy, or null for none (no flags in DeviceInfo or DeviceCapabilities,
      * subscriptions ignored). Its [BluetoothProxyHandler.onSubscribed] is called under a lock, so it
      * must not block. Replacing it while a client is subscribed tells the old one the subscriber left
-     * and the new one it came.
+     * and the new one it came, unless the new one's [BluetoothProxyHandler.authOnly] refuses that
+     * client: then the subscription ends.
      */
     @Volatile public var bluetooth: BluetoothProxyHandler? = null
         set(value) {
@@ -284,9 +285,9 @@ public class ApiServer(
                 val old = field
                 if (old === value) return
                 field = value
-                if (bluetoothConn == null) return
+                val c = bluetoothConn ?: return
                 old?.onSubscribed(false)
-                if (value == null) setBluetoothConn(null) else value.onSubscribed(true)
+                if (value == null || (value.authOnly && !c.authenticated)) setBluetoothConn(null) else value.onSubscribed(true)
             }
         }
 
@@ -303,9 +304,18 @@ public class ApiServer(
     /**
      * The Bluetooth proxy's active connections (GATT), or null for a proxy that only listens. Works only
      * next to [bluetooth]: requests come from its subscriber, and the flags it adds go out with it.
-     * Called under the same lock as [bluetooth], so it must not block either.
+     * Called under the same lock as [bluetooth], so it must not block either. Replacing it tells the old
+     * one to close its links ([BluetoothConnectionHandler.onSubscriberChanged]): it gets no more requests.
      */
     @Volatile public var bluetoothConnections: BluetoothConnectionHandler? = null
+        set(value) {
+            synchronized(bluetoothLock) {
+                val old = field
+                if (old === value) return
+                field = value
+                try { old?.onSubscriberChanged() } catch (t: Throwable) { EspHomeLog.w("Bluetooth onSubscriberChanged failed", t) }
+            }
+        }
 
     /**
      * Called after a command or an action call was handled, when a state may have changed. A device
@@ -672,7 +682,8 @@ public class ApiServer(
     private fun bluetoothRequest(c: Connection, request: GattRequest) {
         synchronized(bluetoothLock) {
             val handler = bluetoothConnections
-            if (handler != null && bluetooth != null && bluetoothConn === c) {
+            val bt = bluetooth
+            if (handler != null && bt != null && bluetoothConn === c && (!bt.authOnly || c.authenticated)) {
                 try { handler.onRequest(request) } catch (t: Throwable) { EspHomeLog.w("Bluetooth request failed", t) }
                 return
             }
@@ -683,13 +694,16 @@ public class ApiServer(
 
     /** `SubscribeBluetoothConnectionsFreeRequest`: the slot table, now; later changes go to the subscriber. */
     private fun subscribeConnectionsFree(c: Connection) {
-        val bt = bluetooth ?: return
-        val handler = bluetoothConnections ?: return
-        if (bt.authOnly && !c.authenticated) {
-            EspHomeLog.w("[${c.id}] Bluetooth connections subscription refused: only from an authenticated (encrypted, provisioned) connection")
-            return
+        // Under the lock, as sendBluetoothEvent: a newer table can't overtake this one on the way out.
+        synchronized(bluetoothLock) {
+            val bt = bluetooth ?: return
+            val handler = bluetoothConnections ?: return
+            if (bt.authOnly && !c.authenticated) {
+                EspHomeLog.w("[${c.id}] Bluetooth connections subscription refused: only from an authenticated (encrypted, provisioned) connection")
+                return
+            }
+            c.send(listOf(handler.connectionsFree().frame()))
         }
-        c.send(listOf(handler.connectionsFree().frame()))
     }
 
     /**

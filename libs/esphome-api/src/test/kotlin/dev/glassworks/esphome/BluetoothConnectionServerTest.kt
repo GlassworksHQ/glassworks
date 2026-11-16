@@ -247,6 +247,35 @@ class BluetoothConnectionServerTest {
         }
     }
 
+    /** #394 review: a replaced handler closes its links; it gets no more requests to answer them. */
+    @Test fun aReplacedHandlerClosesItsLinks() {
+        server.bluetoothConnections = links
+        var closed = 0
+        server.bluetoothConnections = object : BluetoothConnectionHandler by links {
+            override fun onSubscriberChanged() { closed++ }
+        }
+        assertEquals("the old one was told", 1, subscriberChanges)
+        server.bluetoothConnections = null
+        assertEquals(1, closed)
+        server.bluetoothConnections = null
+        assertEquals("clearing twice tells nobody again", 1, closed)
+    }
+
+    /** #394 review: a plaintext subscriber kept across a swap to a keyed proxy can't make requests. */
+    @Test fun swappingToAKeyedProxyEndsAPlaintextSubscription() {
+        start()
+        PlainClient(server.localPort).use { c ->
+            c.subscribe()
+            server.bluetooth = object : BluetoothProxyHandler by proxy {
+                override val authOnly = true
+            }
+            assertFalse("no subscriber now", server.sendBluetoothEvent(GattEvent.ServicesDone(ADDRESS)))
+            c.send(BluetoothConnectionMsg.GATT_READ_REQUEST, ProtoWriter().uint64(1, ADDRESS).uint32(2, 12))
+            assertEquals(GattEvent.NOT_CONNECTED, c.await(BluetoothConnectionMsg.GATT_ERROR_RESPONSE).uint32(3))
+        }
+        assertEquals(emptyList<GattRequest>(), requests)
+    }
+
     @Test fun removeBluetoothConnectionsRemovesOnlyTheHandlerItNames() {
         server.bluetoothConnections = links
         val other = object : BluetoothConnectionHandler by links {}
