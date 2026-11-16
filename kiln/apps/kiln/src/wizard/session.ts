@@ -459,7 +459,6 @@ export class Session implements SetupSteps {
 
   /** Done, with the backup to download. */
   finish(): void {
-    this.steps.close();
     const ip = this.steps.ip ?? this.ip;
     const b = this.s.backup;
     const wifi = this.wifiSsid;
@@ -479,6 +478,20 @@ export class Session implements SetupSteps {
         },
       },
     });
+    void this.handOff(ip);
+  }
+
+  /**
+   * The hand-off to the panel's own setup page (#34): a page on https can't reach the panel's http, so Done gives
+   * its address. Only for an app that has the page, which `pairing.arm` shows: it answers, and opens pairing for 30
+   * minutes, so the page pairs even once Home Assistant has the panel.
+   */
+  private async handOff(ip: string | undefined): Promise<void> {
+    const armed = ip ? await this.steps.armPairing() : false;
+    this.steps.close();
+    const d = this.s.done;
+    if (!armed || !d || this.closed || this.s.screen !== 'done') return;
+    this.dispatch({ type: 'done', done: { ...d, setupPage: `http://${ip}:8099/setup` } });
   }
 
   /** Done's download: the files from this session's run, or from this browser's store for an earlier session's. */

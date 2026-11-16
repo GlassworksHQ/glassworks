@@ -406,6 +406,12 @@ export function Done({ s, session, frame }: P) {
         </div>
       )}
       {d.backup?.error && <p className="status err" role="alert">{d.backup.error}</p>}
+      {d.setupPage && (
+        <div className="well">
+          <span className="grow"><span>Change these later from any computer on this network, on the panel&apos;s own page. It asks for a code the panel shows.</span><span className="small"><code>{d.setupPage}</code></span></span>
+          <a className="btn ghost" href={d.setupPage} target="_blank" rel="noopener">Open</a>
+        </div>
+      )}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
       <div className="foot">
         {s.flow === 'install' ? <button type="button" className="link" onClick={() => void session.click('undo', () => session.openUndo())}>Undo</button> : <span />}
