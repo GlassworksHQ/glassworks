@@ -104,10 +104,11 @@ class SetupHotspot(
             return
         }
         if (wasBlocked) {
-            // Back (Wi-Fi turned on): as after new Wi-Fi details, the saved network gets its minutes first.
+            // Back (Wi-Fi turned on): as after new Wi-Fi details, the saved network gets its minutes first. Only for a
+            // rule that was counting or on: one Close it (or setup's end) left Idle stays closed (#418 verifier, A-N1).
             wasBlocked = false
             error = null
-            policy.configured(clock())
+            if (policy.state != SetupHotspotPolicy.State.Idle) policy.configured(clock())
         }
         val d = policy.update(connected(), clock())
         apply(d)

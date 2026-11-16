@@ -70,6 +70,24 @@ class SetupHotspotScreenTest {
         assertTrue(texts(s).toString(), "Opening the panel's own Wi-Fi…" !in texts(s))
     }
 
+    private val wifiOff = HotspotStep.card(SetupHotspot.View.Off(null, dev.glassworks.platform.HotspotFailure.WIFI_OFF), HotspotPermission.Step.Ready, null)
+
+    @Test fun wifiOffSaysWhyAndTurnOnWifiOpensTheSettings() {
+        val s = screen(wifiOff)
+        val asked = mutableListOf<HotspotStep.Action>()
+        s.onHotspotAction = { asked += it }
+        assertTrue(texts(s).toString(), dev.glassworks.platform.HotspotFailure.WIFI_OFF.text in texts(s))
+        assertTrue("no QR code", !qrShown(s))
+        button(s, "Turn on Wi-Fi").performClick()
+        assertEquals(listOf(HotspotStep.Action.WIFI_SETTINGS), asked)
+    }
+
+    @Test fun wifiOffWithoutTouchSaysWhyAndTakesNoTap() {
+        val s = screen(wifiOff, Input.NONE)
+        assertTrue(texts(s).toString(), dev.glassworks.platform.HotspotFailure.WIFI_OFF.text in texts(s))
+        assertTrue(views(s).none { it.isShown && it is TextView && it.text.toString() == "Turn on Wi-Fi" })
+    }
+
     @Test fun whileOffOneButtonOffersIt() {
         val s = screen(offer)
         val asked = mutableListOf<HotspotStep.Action>()

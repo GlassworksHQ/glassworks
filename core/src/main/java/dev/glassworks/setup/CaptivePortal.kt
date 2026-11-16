@@ -58,23 +58,35 @@ class CaptivePortal(
     private val dnsPort: Int = DNS_PORT,
     private val httpPort: Int = HTTP_PORT,
 ) : Portal {
-    private var dns: List<DatagramSocket> = emptyList()
-    private var http: HttpServer? = null
+    /** A DNS socket and the thread that answers on it. */
+    private class Dns(val socket: DatagramSocket, val thread: Thread)
 
-    /** Answers on [at] from now on, instead of where it answered before. */
+    private var dns: List<Dns> = emptyList()
+    private var http: HttpServer? = null
+    private var httpOn: Inet4Address? = null
+
+    /**
+     * Answers on [at] from now on, instead of where it answered before. The web redirect keeps running when the IPv4
+     * address is the same (the IPv6 one coming later only moves DNS).
+     */
     @Synchronized
     override fun start(at: PortalAddresses) {
-        stop()
-        val to = page(at.v4.hostAddress!!)
+        stopDns()
+        if (httpOn != at.v4) stopHttp()
         dns = listOfNotNull(at.v4, at.v6).mapNotNull { a ->
             try {
-                DatagramSocket(InetSocketAddress(a, dnsPort)).also { s -> Thread({ serve(s, at.v4) }, "portal-dns").apply { isDaemon = true; start() } }
+                val s = DatagramSocket(InetSocketAddress(a, dnsPort))
+                Dns(s, Thread({ serve(s, at.v4) }, "portal-dns").apply { isDaemon = true; start() })
             } catch (e: IOException) {
                 log("portal: no DNS on ${if (a is Inet4Address) "IPv4" else "IPv6"}: ${e.message}"); null
             }
         }
-        http = HttpServer(httpPort, { redirect(to) }, bindAddress = at.v4, workers = 2, queued = 8, requestDeadlineMs = 5_000L).let { s ->
-            try { s.start(); s } catch (e: IOException) { log("portal: no web redirect: ${e.message}"); null }
+        if (http == null) {
+            val to = page(at.v4.hostAddress!!)
+            http = HttpServer(httpPort, { redirect(to) }, bindAddress = at.v4, workers = 2, queued = 8, requestDeadlineMs = 5_000L).let { s ->
+                try { s.start(); s } catch (e: IOException) { log("portal: no web redirect: ${e.message}"); null }
+            }
+            httpOn = at.v4.takeIf { http != null }
         }
         log("portal on (DNS ${dns.size}, redirect ${if (http != null) "on" else "off"})")
     }
@@ -82,11 +94,25 @@ class CaptivePortal(
     @Synchronized
     override fun stop() {
         if (dns.isEmpty() && http == null) return
-        dns.forEach { it.close() }
+        stopDns()
+        stopHttp()
+        log("portal off")
+    }
+
+    /**
+     * Closes the DNS sockets and waits for their threads: on Linux a thread blocked in `receive` keeps the socket, and
+     * its port, until it wakes. So the port is free when this returns, for a new start and for the root's check.
+     */
+    private fun stopDns() {
+        dns.forEach { it.socket.close() }
+        dns.forEach { it.thread.join(JOIN_MS) }
         dns = emptyList()
+    }
+
+    private fun stopHttp() {
         http?.stop()
         http = null
-        log("portal off")
+        httpOn = null
     }
 
     private fun serve(s: DatagramSocket, ap: Inet4Address) {
@@ -111,6 +137,7 @@ class CaptivePortal(
         const val HTTP_PORT = 8098
 
         private const val MAX_QUERY = 512
+        private const val JOIN_MS = 2_000L
 
         /** Every request: a `302` to the setup page. What makes iOS and Android show their sign-in page. */
         fun redirect(to: String): HttpResponse = HttpResponse(

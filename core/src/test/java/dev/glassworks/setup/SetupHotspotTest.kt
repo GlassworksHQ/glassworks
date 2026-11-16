@@ -165,6 +165,19 @@ class SetupHotspotTest {
     }
 
     @Test
+    fun `Close it, then Wi-Fi off and on again, keeps it closed`() {
+        setup.start(); at(3 * min); up()
+        setup.cancel()
+        radioLocked = true
+        setup.refresh() // a network callback while the radio is off
+        radioLocked = false
+        setup.refresh()
+        at(60 * min)
+        assertEquals("closed until the next Wi-Fi is set", 1, hotspot.starts)
+        assertEquals(View.Off(Stop.CANCELLED, null), setup.view)
+    }
+
+    @Test
     fun `it scans before it starts, while the radio still can, and starts only once the scan is done`() {
         holdScan = true
         setup.start(); at(3 * min)

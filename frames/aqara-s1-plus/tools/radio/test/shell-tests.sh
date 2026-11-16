@@ -835,7 +835,7 @@ if name.endswith('-save'):
     print('COMMIT'); sys.exit(0)
 if name.endswith('-restore'):
     open('/t/ipt/restores', 'a').write(name + '\n')
-    if os.path.exists('/t/ipt-refuse'): sys.exit(1)
+    if os.path.exists('/t/ipt-refuse') and fam in open('/t/ipt-refuse').read(): sys.exit(1)
     t = None
     for l in sys.stdin.read().splitlines():
         if l.startswith('*'): t = l[1:]; chains, rules = load(t)
@@ -904,8 +904,11 @@ check "...never with an address in the log" test -z "$(grep -e 192.168 -e 2001: 
 : > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.3
 check "a new helper keeps rules already in place: not rebuilt, one jump, the status written once" \
   test "$(cat "$T/ipt/restores" 2>/dev/null | wc -l)/$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')/$(grep -c '^sys.s1kiosk.portal.status=' "$T/setprop.log")" = 0/1/1
-sed -i '/^-A PREROUTING -j S1PORTAL$/d' "$T/ipt/4-nat"; portal
-check "a lost jump (netd restarted) is put back" test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1
+# first_check: until the helper started in the background has done its first check (its status line)
+first_check() { i=0; until grep -q '^sys.s1kiosk.portal.status=' "$T/setprop.log" || [ $i -ge 300 ]; do sleep 0.1; i=$((i + 1)); done; }
+: > "$T/setprop.log"; LOOPS=30 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check; sed -i '/^-A PREROUTING -j S1PORTAL$/d' "$T/ipt/4-nat"; wait $H
+check "a jump lost while it runs (netd restarted) is put back by the loop" test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1
 socks tcp6; portal
 check "the redirect's socket gone: everything removed, both families" \
   test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" -a "$(prop sys.s1kiosk.portal.status)" = off
@@ -916,22 +919,23 @@ socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
 check "the sockets of another app: no rules" test -z "$(nat 4 | grep S1PORTAL)"
 socks udp6 "0000000000000000FFFF000000000000:1F75 07 10050"; socks tcp6 "00000000000000000000000000000000:1FA2 0A 10050"; portal
 check "the kiosk on every address (not the hotspot's): no rules" test -z "$(nat 4 | grep S1PORTAL)"
+ap_up; socks udp6 "$AP4:1F75 07 10050" "00000000000000000000000000000000:1F75 07 10050"; portal
+check "an IPv6 DNS socket on every address ([::]): IPv4 rules only" test -n "$(nat 4 | grep '^-A S1PORTAL')" -a -z "$(nat 6 | grep '^-A S1PORTAL')"
 ap_up; echo "5: eth0    inet 192.168.43.1/24 brd 192.168.43.255 scope global eth0" > "$T/ip-addr4"; portal
 check "the address on a wired interface: no rules" test -z "$(nat 4 | grep S1PORTAL)"
 ap_up; echo "23: wlan0    inet 192.0.2.10/24 brd 192.0.2.255 scope global wlan0" > "$T/ip-addr4"; portal
 check "the address not on any interface: no rules" test -z "$(nat 4 | grep S1PORTAL)"
-ap_up; socks udp6 "$AP4:1F75 07 10050"; : > "$T/net/udp"
-socks udp "0A0200C0:1F75 07 10050"; portal
+ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6 "0000000000000000FFFF00000A0200C0:1F75 07 10050"; portal
 check "DNS on two addresses: no rules (which one is the hotspot's?)" test -z "$(nat 4 | grep S1PORTAL)"
 ap_up; socks udp6 "$AP4:1F75 07 10050"; portal
 check "no IPv6 socket: IPv4 only" test -n "$(nat 4 | grep '^-A S1PORTAL')" -a -z "$(nat 6 | grep '^-A S1PORTAL')"
 ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6; socks tcp "012BA8C0:1FA2 0A 10050"; socks tcp6; portal
 check "plain IPv4 sockets (udp, tcp) count too" test "$(nat 4 | grep -c '^-A S1PORTAL')" = 2
-ap_up; portal; hostapd_off; LOOPS=12 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
-H=$!; sleep 0.3; hostapd_on; wait $H
+ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=30 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check; hostapd_on; wait $H
 check "the loop between the helper's passes: up again within seconds" test -n "$(nat 4 | grep '^-A S1PORTAL')"
-ap_up; portal; touch /t/ipt-refuse; rm -f "$T/ipt/6-nat"; portal
-check "iptables refuses: nothing left half-done, and an error" \
+ap_up; portal; echo 6 > /t/ipt-refuse; rm -f "$T/ipt/6-nat"; portal
+check "ip6tables refuses after the IPv4 rules went in: nothing left half-done, and an error" \
   test -z "$(nat 4 | grep '^-A S1PORTAL')" -a "$(prop sys.s1kiosk.portal.status)" = "error: iptables refused the rules"
 rm -f /t/ipt-refuse; portal
 check "...and on once it takes them" test "$(prop sys.s1kiosk.portal.status)" = "on wlan0"

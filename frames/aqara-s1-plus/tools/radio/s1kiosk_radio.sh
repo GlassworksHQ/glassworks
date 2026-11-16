@@ -671,9 +671,10 @@ portal_addrs() {
       [ "$uid_" = "$APP_UID" ] && [ "${loc_##*:}" = "$pp_" ] || continue
       [ -z "$4" ] || [ "$st_" = "$4" ] || continue
       a_=${loc_%:*}
+      # 4: a wildcard bind comes out as 0.0.0.0, which no interface has, so portal_wanted drops it
       case "$1:${#a_}:$a_" in
-        4:8:*[!0]*) hex_ip4 "$a_" ;;
-        4:32:0000000000000000[Ff][Ff][Ff][Ff]0000*) a_=${a_#????????????????????????}; case "$a_" in *[!0]*) hex_ip4 "$a_" ;; esac ;;
+        4:8:*) hex_ip4 "$a_" ;;
+        4:32:0000000000000000[Ff][Ff][Ff][Ff]0000*) hex_ip4 "${a_#????????????????????????}" ;;
         6:32:0000000000000000[Ff][Ff][Ff][Ff]0000*|6:32:[Ff][Ee]80*) ;;
         6:32:*[!0]*) echo "$a_" ;;
       esac
@@ -693,8 +694,7 @@ portal_wanted() {
   set -- $(ip -4 -o addr show 2>/dev/null | while read -r n_ i_ f_ c_ rest_; do
     [ "$f_" = inet ] && [ "${c_%/*}" = "$a4_" ] && echo "$i_ ${c_#*/}"
   done)
-  [ $# = 2 ] || return 0
-  case "$1" in wlan[0-9]*|ap[0-9]*|swlan[0-9]*|softap[0-9]*) ;; *) return 0 ;; esac
+  case "$1" in wlan[0-9]*|ap[0-9]*|swlan[0-9]*|softap[0-9]*) ;; *) return 0 ;; esac   # also: no interface has it
   case "$2" in ''|*[!0-9]*) return 0 ;; esac
   [ "$2" -ge 16 ] && [ "$2" -le 30 ] || return 0
   w_="$1 $a4_ $2"

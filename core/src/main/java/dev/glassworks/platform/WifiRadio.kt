@@ -21,4 +21,17 @@ object WifiRadio {
         val owner = runCatching { ctx.getSystemService(DevicePolicyManager::class.java)?.isDeviceOwnerApp(ctx.packageName) }.getOrNull() == true
         return !owner
     }
+
+    /**
+     * Turns the radio on where this app may ([PlatformApi.appCanEnableWifi], or the device owner), so a setup hotspot
+     * started there can scan and join (#418 verifier, A-N2). True when the radio is on after the call. Where the app
+     * may not, it changes nothing and says false: [lockedOff] keeps the hotspot from starting then.
+     */
+    @Suppress("DEPRECATION") // setWifiEnabled: the call this is about
+    fun ensureOn(context: Context, platform: PlatformApi = Platform): Boolean {
+        val wifi = context.applicationContext.getSystemService(WifiManager::class.java) ?: return false
+        if (runCatching { wifi.isWifiEnabled }.getOrDefault(false)) return true
+        if (lockedOff(context, platform)) return false
+        return runCatching { wifi.setWifiEnabled(true) }.getOrDefault(false)
+    }
 }

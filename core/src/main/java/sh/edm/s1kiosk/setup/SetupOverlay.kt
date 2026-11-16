@@ -737,6 +737,8 @@ class SetupOverlay(
         if (ip == null) {
             cardTitle.text = "Waiting for Wi-Fi."
             cardBody.text = "Put the panel on Wi-Fi with Kiln on a computer, over USB. Then this screen shows where to set it up."
+            // Why the panel's own Wi-Fi isn't up (Wi-Fi off, Android closed it): nothing to press here, but said (A-N3).
+            m.hotspot?.status?.let { showStatus(it, tone(m.hotspot.tone)) }
             return
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"

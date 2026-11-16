@@ -12,8 +12,11 @@ below as the release notes.
   starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
   its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
   send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
-  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. On Android 13 and
-  newer the panel asks for Android's *Nearby devices* permission first, and says why.
+  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. Android may close it
+  sooner when nobody joins (10 minutes on the S1); it opens again 3 minutes later if no Wi-Fi works. With the
+  panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
+  so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
+  permission first, and says why.
 - **On the S1, the panel's own Wi-Fi is called Glassworks.** Its setup network is named `Glassworks_` and four
   digits instead of Android's `AndroidShare_`. Comes with the radio bundle, from the panel's next restart.
 - **On the S1, joining the panel's own Wi-Fi opens its setup page by itself.** As with a hotel's Wi-Fi, the

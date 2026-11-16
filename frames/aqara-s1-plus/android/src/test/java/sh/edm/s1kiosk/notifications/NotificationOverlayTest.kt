@@ -92,6 +92,26 @@ class NotificationOverlayTest {
         assertNull(hub.state.page)
     }
 
+    /** Until #230's dialog ships, `size: half` changes nothing on the screen: the same view, full screen, the same bar. */
+    @Test
+    fun aHalfViewOpensExactlyAsAFullOneForNow() {
+        fun opened(size: String): Pair<List<String?>, List<String>> {
+            pages.clear()
+            center.handle("Someone is at the door", "Doorbell", """{"tag":"doorbell","url":"/dashboard-door/0","timeout":90$size}""")
+            Mockup.layout(overlay.rootView)
+            val drawn = views(overlay).map { v ->
+                "${v.javaClass.name} ${v.visibility} ${v.left},${v.top} ${v.width}x${v.height} ${(v as? TextView)?.text ?: ""}"
+            }.toList()
+            click("Back now")
+            return pages.toList() to drawn
+        }
+        val full = opened("")
+        assertEquals(listOf("http://homeassistant.local:8123/dashboard-door/0", null), full.first)
+        assertTrue("the bar is drawn", full.second.any { it.endsWith("Back to your dashboard in 1:30") })
+        assertEquals(full, opened(""","size":"full""""))
+        assertEquals(full, opened(""","size":"half""""))
+    }
+
     @Test
     fun backClosesTheListThenThePage() {
         center.handle("m", "Doorbell", """{"url":"/dashboard-door/0"}""")

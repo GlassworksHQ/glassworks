@@ -48,8 +48,10 @@ class SetupHotspotPolicy(
         data class On(val since: Long, val until: Long, val asked: Boolean, val armed: Boolean) : State
     }
 
-    /** Why the hotspot last went off: shown on the setup screen, and logged. */
-    /** [ANDROID]: Android closed it by itself (on Android 10, after 10 minutes with nobody on it). */
+    /**
+     * Why the hotspot last went off: shown on the setup screen, and logged. [ANDROID]: Android closed it by itself (on
+     * Android 10, after 10 minutes with nobody on it).
+     */
     enum class Stop { CONNECTED, CONFIGURED, TIMED_OUT, ANDROID, CANCELLED, FAILED }
 
     /** Have the hotspot on when [on]. Call [update] again after [wakeInMs], or on the next change when null. */
