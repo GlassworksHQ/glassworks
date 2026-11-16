@@ -12,6 +12,14 @@ below as the release notes.
   page says who uses the radio now, for example "Home Assistant · 192.0.2.20 · since 14:32", or
   "Nobody". It follows a connect or disconnect within a few seconds. Home Assistant has the same text as
   the *Radio connected client* sensor, off by default. Comes with the radio bundle.
+- **Set the panel up from a laptop over Wi-Fi.** The panel serves its own setup page at
+  `http://<panel>:8099/setup`: pair with the 6-digit code the panel shows, then the Home Assistant and
+  radio steps, as in Kiln. No cable and no tap on the panel. Kiln's Done screen links it after an install
+  over USB.
+- **Allow setup over the network again.** Once Home Assistant has added the panel, nobody can pair with
+  it from the network until you allow it for 30 minutes: a new **Allow setup over the network** button on
+  the panel's device page in Home Assistant, the same row in the panel's settings (Home Assistant &
+  dashboard) and on the Manage page, or Kiln over USB.
 - **Kiln credits the projects an install is built on.** On the S1, the first screen, the install and
   the done screen say "Built on sunxi-tools by linux-sunxi and Magisk by topjohnwu", with links to
   both. The frames' pages on glassworks.dev have a "Built on community work" section, and the Mirror's

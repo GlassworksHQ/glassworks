@@ -39,6 +39,47 @@ The time zone page has everything the panel's has: the zone, picked from a
 list grouped by region, whether the panel keeps it, and Home Assistant's zone, with **Use it** when
 Home Assistant keeps another zone's clock.
 
+## Set up over the network
+
+A panel already on Wi-Fi can be set up from a laptop, with no cable and no tap on its screen (#34). Open
+`http://<panel>:8099/setup` on a computer on the same network: the panel's own page, a small build of
+Kiln's setup steps. Kiln's Done screen links it after an install over USB. A panel without touch shows
+the address and a QR code on its own setup screen (below); the Manage page and the panel's settings say it
+too, in **Allow setup over the network**.
+
+1. **Pair.** Press **Show the code on the panel**. The panel shows a 6-digit code ("Set up this panel from
+   a computer"). Type it on the page and press **Pair**. Only someone who can see the panel can pair.
+2. **Home Assistant.** The address the panel found, or type one, and sign in on the panel's sign-in page.
+3. **Radio.** What the Zigbee and Thread radio does, then what to do in Home Assistant for it.
+4. **Done.** The page ends the pairing. Reload it and it asks for a code again.
+
+| | |
+|---|---|
+| A wrong code | 5 tries per code. 10 wrong tries in 15 minutes lock code entry for a while. At most 6 new codes in 10 minutes |
+| How long a pairing lasts | Until Done, 30 minutes without a change, or 2 hours. Reading the panel's state doesn't count as a change: after 30 quiet minutes the page asks for a new code and carries on at the same step |
+| Which browser | The one that paired, from the address it paired from. A computer whose address changes (a `.local` name that switches between IPv4 and IPv6) pairs again |
+| Without pairing | The page and the panel's channel answer what the panel's state is, and refuse every change |
+
+**Pairing is off once Home Assistant has added the panel.** Nobody on the network can pair with it then.
+To set it up from a computer again, allow it for 30 minutes, any of three ways:
+
+- In Home Assistant, the panel's device page: **Allow setup over the network** (a button, under Configuration).
+- On the panel: Settings → **Home Assistant & dashboard** → **Allow setup over the network**. The Manage page has
+  the same row.
+- With Kiln over USB: at Done, Kiln allows it before it links the page.
+
+**Panels without touch.** On a frame whose screen takes no tap (`input = NONE`, the lululemon Mirror's), the
+panel's setup screen only shows where to set it up: the page's address and a QR code ("Scan to set it up."),
+and Sign in's QR code for a phone. The pairing code shows without Close, and goes when it's used or runs
+out. Wi-Fi comes from Kiln over USB first.
+
+**What the page can't protect against.** It is plain HTTP on your network, as the Manage page is: no
+browser trusts a certificate for a panel's local address. The session cookie is bound to the address that
+paired, so a copy taken off the network doesn't work from another device. Something that can also take
+over that address on your network could still use it, until Done or the 30 quiet minutes end it. The panel
+has no write timeout on the page's connection: a browser that stops reading holds one of the panel's web
+workers until the network gives up (minutes), or until another paired browser or Done ends it.
+
 ## Changing settings
 
 A change applies on its own, as on the panel: a switch when you click it, a slider with **Save**, a

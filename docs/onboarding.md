@@ -192,6 +192,9 @@ organization". `adb install -r` updates keep working.
 
 ### From the web installer: Improv Serial + setup channel (over adb) ✅
 
+The same setup channel also runs over the network, from the panel's own page at `http://<panel>:8099/setup`,
+paired with a code the panel shows: see [Set up over the network](manage.md#set-up-over-the-network) (#34).
+
 After installing the app, the web installer (kiln/, Tango over WebUSB) does the rest of onboarding
 from the computer through two byte streams it opens with adb's `localabstract:<name>` service. Both
 are abstract Unix sockets in the app, started by `KioskService` (`AdbSocketServer`, in the
