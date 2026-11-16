@@ -309,8 +309,11 @@ class S1Panes : AppParts {
 }
 
 
+/** The root helpers' app-readable directory (`PUB_DIR` in `s1kiosk_radio.sh` and `s1kiosk_bundle.sh`). */
+internal const val PUB_DIR = "/data/s1kiosk-pub"
+
 /**
  * The Bluetooth adapter's MAC, as the root helper publishes it (`s1kiosk_radio.sh` `bt_publish`, root
  * 0644): Android 10 hides it from apps (#246).
  */
-internal const val BLUETOOTH_ADDRESS_FILE = "/data/s1kiosk-pub/bluetooth-address"
+internal const val BLUETOOTH_ADDRESS_FILE = "$PUB_DIR/bluetooth-address"

@@ -71,7 +71,7 @@
 # Bluetooth address (#246): Android 10 hides the Bluetooth adapter's address from apps, and the app's
 # Bluetooth proxy sends it to Home Assistant (bluetooth_mac_address), as an ESPHome proxy does. Once
 # Android knows a real one (settings secure bluetooth_address, after Bluetooth was first on), it is
-# written to $PUB/bluetooth-address (root 0644, the app reads it). Tried at most once a minute until
+# written to $PUB_DIR/bluetooth-address (root 0644, the app reads it). Tried at most once a minute until
 # then, because `settings` starts a JVM. Never logged. Placeholders (all zero, 02:00:00:00:00:00,
 # broadcast) are never written.
 #
@@ -1135,7 +1135,7 @@ thread_stored() {
 }
 TSTORED=""
 
-PUB=${S1R_PUB:-/data/s1kiosk-pub}
+PUB_DIR=${S1R_PUB:-/data/s1kiosk-pub}   # as s1kiosk_bundle.sh: root 0755, app-readable
 BT_DONE=""; BT_NEXT=0
 bt_valid() { # AA:BB:CC:DD:EE:FF, and not a placeholder Android hands out
   h_='[0-9A-Fa-f][0-9A-Fa-f]'
@@ -1150,12 +1150,12 @@ bt_publish() {
   a_=$(settings get secure bluetooth_address 2>/dev/null | tr -d '\r')
   bt_valid "$a_" || return 0
   a_=$(echo "$a_" | tr a-f A-F)
-  if [ -L "$PUB" ] || { [ -e "$PUB" ] && [ ! -d "$PUB" ]; }; then rm -rf "$PUB"; fi
-  mkdir -p "$PUB" && chown root:root "$PUB" && chmod 755 "$PUB" || return 0
-  if [ -L "$PUB/bluetooth-address" ] || [ "$(cat "$PUB/bluetooth-address" 2>/dev/null)" != "$a_" ]; then
-    rm -f "$PUB/.bluetooth-address.tmp" "$PUB/bluetooth-address"
-    { echo "$a_" > "$PUB/.bluetooth-address.tmp" && chmod 644 "$PUB/.bluetooth-address.tmp" &&
-      mv -f "$PUB/.bluetooth-address.tmp" "$PUB/bluetooth-address"; } || return 0
+  if [ -L "$PUB_DIR" ] || { [ -e "$PUB_DIR" ] && [ ! -d "$PUB_DIR" ]; }; then rm -rf "$PUB_DIR"; fi
+  mkdir -p "$PUB_DIR" && chown root:root "$PUB_DIR" && chmod 755 "$PUB_DIR" || return 0
+  if [ -L "$PUB_DIR/bluetooth-address" ] || [ "$(cat "$PUB_DIR/bluetooth-address" 2>/dev/null)" != "$a_" ]; then
+    rm -f "$PUB_DIR/.bluetooth-address.tmp" "$PUB_DIR/bluetooth-address"
+    { echo "$a_" > "$PUB_DIR/.bluetooth-address.tmp" && chmod 644 "$PUB_DIR/.bluetooth-address.tmp" &&
+      mv -f "$PUB_DIR/.bluetooth-address.tmp" "$PUB_DIR/bluetooth-address"; } || return 0
   fi
   BT_DONE=1; say "bluetooth address published for the app"
 }

@@ -82,6 +82,7 @@ class AdapterMacTest {
 
     @Test fun aFailingReadNoField() {
         assertNull(field18 { throw IOException("read failed") })
+        clean()
         assertNull(field18 { throw SecurityException("denied") })
     }
 
@@ -95,7 +96,9 @@ class AdapterMacTest {
 
     @Test fun nothingOrNonsenseNoField() {
         for (bad in listOf(null, "", "\n", "00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF", "02:00:00:00:00", "02-00-00-00-00-02", "02:00:00:00:00:0G", "02:00:00:00:00:02; x")) {
+            clean() // each case on its own: a value one case let through must not answer the next
             assertNull("'$bad'", field18 { bad })
+            assertNull("'$bad' is never kept", BluetoothProxyPrefs(file).adapterMac)
         }
     }
 
