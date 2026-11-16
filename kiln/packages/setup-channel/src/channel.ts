@@ -82,6 +82,11 @@ export interface SetupState {
 
 type Reply = { id: number; ok: boolean; state?: SetupState; error?: string };
 
+/** The panel answered and said no (`ok:false`), as opposed to not answering at all. Its message is the panel's. */
+export class Refused extends Error {
+  override name = 'Refused';
+}
+
 export class SetupChannel {
   private buf = '';
   private nextId = 1;
@@ -116,7 +121,7 @@ export class SetupChannel {
       this.pending.set(id, (r) => {
         clearTimeout(t);
         if (r.ok && r.state) resolve(r.state);
-        else reject(new Error(r.error || `${op} failed`));
+        else reject(new Refused(r.error || `${op} failed`));
       });
       void this.io.write(new TextEncoder().encode(`${JSON.stringify({ id, op, ...args })}\n`)).catch(reject);
     });

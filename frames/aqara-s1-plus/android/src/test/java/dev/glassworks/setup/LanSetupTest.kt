@@ -5,6 +5,7 @@
 package dev.glassworks.setup
 
 import dev.glassworks.manage.PanelCode
+import dev.glassworks.testing.RepoFiles
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
@@ -47,6 +48,7 @@ class LanSetupTest {
     private val lan = LanSetup(
         serve = { i, o, may -> SetupChannel(backend, mayChange = may).serve(i, o, pollMs = 50) },
         code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, monoMs = { mono }, wallMs = { wall },
+        files = { name -> RepoFiles.file("core/src/main/assets/setup").resolve(name).takeIf { it.exists() }?.readBytes() ?: if (name == "inter.ttf") ByteArray(4) else null },
     )
     private lateinit var server: HttpServer
     private val host get() = "127.0.0.1:${server.localPort}"
@@ -200,9 +202,55 @@ class LanSetupTest {
         }
     }
 
+    @Test fun aSessionCountsOnlyFromTheAddressThatPaired() {
+        val session = pair()
+        assertTrue(JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+        assertFalse("a copied cookie from another device", JSONObject(get(LanSetup.PAIR, session, remote = "192.0.2.99").text()).getBoolean("paired"))
+        assertTrue("and it stays good for the browser that paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+    }
+
+    @Test fun doneFromAnotherAddressEndsNothing() {
+        val session = pair()
+        ws(session).use { c ->
+            assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok"))
+            assertEquals(200, post(LanSetup.DONE, cookie = session, remote = "192.0.2.99").status)
+            assertTrue("the session is still paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+            assertTrue("and its channel still works", c.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok"))
+            assertEquals(200, post(LanSetup.DONE, cookie = session).status)
+            assertTrue("done from its own address ends it and drops the channel", c.ended())
+        }
+        assertFalse(JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+    }
+
     @Test fun otherPathsGoToTheManagePage() {
-        assertEquals(null, lan.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to host))))
-        assertEquals(null, lan.handle(HttpRequest("GET", "/", emptyMap(), mapOf("host" to host))))
+        for (p in listOf("/", "/setupx", "/setup/other.js", "/setup/../manage")) assertEquals(p, null, lan.handle(HttpRequest("GET", p, emptyMap(), mapOf("host" to host))))
+    }
+
+    @Test fun thePanelServesItsSetupPage() {
+        for (p in listOf("/setup", "/setup/")) {
+            val r = get(p, null)
+            assertEquals(200, r.status)
+            assertEquals("text/html; charset=utf-8", r.headers["Content-Type"])
+            assertTrue(r.text(), r.text().contains("/setup/setup.js"))
+            val csp = r.headers["Content-Security-Policy"]!!
+            assertTrue(csp, csp.contains("connect-src 'self' ws://$host;"))
+            assertTrue(csp, csp.contains("script-src 'self';") && csp.contains("default-src 'none'"))
+        }
+        assertEquals("text/javascript; charset=utf-8", get("/setup/setup.js", null).headers["Content-Type"])
+        assertEquals("text/css; charset=utf-8", get("/setup/setup.css", null).headers["Content-Type"])
+        assertEquals("font/ttf", get("/setup/inter.ttf", null).headers["Content-Type"])
+        assertEquals(405, post("/setup").status)
+        assertEquals(400, lan.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to "evil.example")))!!.status)
+        val bare = LanSetup(serve = { _, _, _ -> }, code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { true })
+        assertEquals("a build without the page says so", 404, bare.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to host)))!!.status)
+    }
+
+    /** The build writes exactly the files the panel serves: a new chunk would otherwise go unserved. */
+    @Test fun theCommittedPageIsExactlyWhatThePanelServes() {
+        val built = RepoFiles.file("core/src/main/assets/setup").list()!!.toSet()
+        assertEquals(LanSetup.PAGE_TYPES.keys - "inter.ttf", built)
+        val html = RepoFiles.file("core/src/main/assets/setup/index.html").readText()
+        for (f in built - "index.html") assertTrue("index.html loads $f", html.contains("/setup/$f"))
     }
 
     // ------------------------------------------------------------------ helpers
@@ -228,11 +276,13 @@ class LanSetupTest {
         cookie?.let { put("cookie", "${LanSetup.COOKIE}=$it") }
     }
 
-    private fun post(path: String, form: String = "", cookie: String? = null, origin: String? = "http://$host"): HttpResponse =
+    /** As a browser on this machine: the address the WebSocket connections come from too. */
+    private fun post(path: String, form: String = "", cookie: String? = null, origin: String? = "http://$host", remote: String = LOOPBACK): HttpResponse =
         lan.handle(HttpRequest("POST", path, emptyMap(), headers(cookie, origin) + ("content-type" to "application/x-www-form-urlencoded"),
-            form.toByteArray()))!!
+            form.toByteArray(), remote = remote))!!
 
-    private fun get(path: String, cookie: String?): HttpResponse = lan.handle(HttpRequest("GET", path, emptyMap(), headers(cookie, null)))!!
+    private fun get(path: String, cookie: String?, remote: String = LOOPBACK): HttpResponse =
+        lan.handle(HttpRequest("GET", path, emptyMap(), headers(cookie, null), remote = remote))!!
 
     /** A WebSocket handshake on a real connection: the status, and the socket. */
     private fun handshake(cookie: String? = null, origin: String? = "http://$host", hostHeader: String = host): Pair<Int, Socket> {
@@ -314,5 +364,9 @@ class LanSetupTest {
             runCatching { s.getOutputStream().write(clientFrame(0x8, ByteArray(0))) }
             s.close()
         }
+    }
+
+    private companion object {
+        const val LOOPBACK = "127.0.0.1"
     }
 }

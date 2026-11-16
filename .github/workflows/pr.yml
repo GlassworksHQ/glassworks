@@ -452,6 +452,14 @@ jobs:
         run: npm run build -w kiln
       - name: Kiln (Next.js) builds
         run: npm run build -w @glassworks/kiln-app
+      - name: The panel's setup page in core's assets matches its sources (#34)
+        run: |
+          npm run build:lan -w @glassworks/kiln-app
+          if [ -n "$(git status --porcelain -- core/src/main/assets/setup)" ]; then
+            git status --short -- core/src/main/assets/setup
+            echo "::error::core/src/main/assets/setup differs from its sources. Rebuild it: npm run build:lan -w @glassworks/kiln-app"
+            exit 1
+          fi
 
   refract:
     runs-on: ubuntu-24.04

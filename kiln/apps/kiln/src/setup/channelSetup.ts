@@ -1,7 +1,7 @@
 // The setup steps that run over the app's setup channel: Home Assistant (the address, sign-in on the
 // panel's own page) and the radio role. The same code whether the channel comes over USB (Kiln's wizard,
 // through adb) or the LAN (the panel's own page, #34): only `open` differs.
-import { validHaUrl, type SetupChannel, type SetupState } from '@glassworks/setup-channel';
+import { Refused, validHaUrl, type SetupChannel, type SetupState } from '@glassworks/setup-channel';
 import type { Setup } from '../wizard/state';
 import { radioPlan, type PanelApp } from './radioPlan';
 
@@ -13,8 +13,8 @@ export interface ChannelSetupDeps {
   show(setup: Setup): void;
   /** Still on the setup screen: an answer that comes after the person moved on changes nothing. */
   here(): boolean;
-  /** Setup is over (Finish, Skip, or an older app that has no channel). */
-  done(): void;
+  /** Setup is over (Finish, Skip, or an older app that has no channel). A promise keeps the button busy until it settles. */
+  done(): void | Promise<void>;
   /** The app stopped answering at the radio step: why, or undefined when it has no channel at all. */
   unreachable(e?: unknown): void;
   /** The installed app, which decides how a Thread router gets its network. No answer counts as an older app. */
@@ -33,7 +33,8 @@ export interface SetupSteps {
   saveHa(url: string): Promise<void>;
   radio(): Promise<void>;
   applyRadio(mode: string): Promise<void>;
-  finish(): void;
+  /** Ends setup; a promise keeps the button that ran it busy until it settles. */
+  finish(): void | Promise<void>;
 }
 
 const NOT_AN_ADDRESS = 'That doesn\'t look like a web address (http://… or https://…).';
@@ -59,11 +60,16 @@ export class ChannelSetup {
     return this.channel;
   }
 
-  /** Runs a request; saving a new Home Assistant address can restart the app, so reconnect once and retry. */
+  /**
+   * Runs a request. Saving a new Home Assistant address can restart the app, so when the panel doesn't answer,
+   * reconnect once and retry. A refusal is an answer: it goes straight to the step (over the LAN, a second
+   * WebSocket would only hear "pair first" again).
+   */
   async request<T>(f: (c: SetupChannel) => Promise<T>): Promise<T> {
     try {
       return await f(this.channel!);
     } catch (first) {
+      if (first instanceof Refused) throw first;
       const g = this.gen;
       const old = this.channel;
       const again = await this.d.open(15);
@@ -102,7 +108,7 @@ export class ChannelSetup {
     const g = this.gen;
     const c = await this.connect();
     if (g !== this.gen) return;
-    if (!c) return this.d.done(); // older app: the panel's own setup does the rest
+    if (!c) return await this.d.done(); // older app: the panel's own setup does the rest
     c.onState = (s) => {
       const cur = this.d.phase();
       if (cur.phase === 'ha') this.haState(s, { note: cur.note, signingIn: cur.signingIn && !s.ha.signedIn });
@@ -189,6 +195,6 @@ export class ChannelSetup {
     if (stale()) return;
     const plan = radioPlan(mode, st.ip ?? this.ip ?? '<panel IP>', st.ha.url ?? '', st.radio.allowed, app ?? {});
     if (plan) { this.d.show({ phase: 'radio-next', plan }); return; }
-    this.d.done();
+    await this.d.done();
   }
 }
