@@ -51,17 +51,23 @@ too, in **Allow setup over the network**.
    a computer"). Type it on the page and press **Pair**. Only someone who can see the panel can pair.
 2. **Home Assistant.** The address the panel found, or type one, and sign in on the panel's sign-in page.
 3. **Radio.** What the Zigbee and Thread radio does, then what to do in Home Assistant for it.
-4. **Done.** The page ends the pairing. Reload it and it asks for a code again.
+4. **Done.** The page ends the pairing. Reload it and it asks for a code again (once Home Assistant has the
+   panel, allow setup over the network first, below).
+
+The page is plain HTTP on your local network. While you pair, others on the same network can see the code
+you type and the session cookie. The session only works from the address that paired, which limits replay.
 
 | | |
 |---|---|
 | A wrong code | 5 tries per code. 10 wrong tries in 15 minutes lock code entry for a while. At most 6 new codes in 10 minutes |
-| How long a pairing lasts | Until Done, 30 minutes without a change, or 2 hours. Reading the panel's state doesn't count as a change: after 30 quiet minutes the page asks for a new code and carries on at the same step |
+| How long a pairing lasts | Until Done, 30 minutes without a change, or 2 hours. Reading the panel's state doesn't count as a change: after 30 quiet minutes the page asks for a new code and carries on at the same step. If Home Assistant has added the panel in the meantime, allow setup over the network first |
 | Which browser | The one that paired, from the address it paired from. A computer whose address changes (a `.local` name that switches between IPv4 and IPv6) pairs again |
 | Without pairing | The page and the panel's channel answer what the panel's state is, and refuse every change |
 
 **Pairing is off once Home Assistant has added the panel.** Nobody on the network can pair with it then.
-To set it up from a computer again, allow it for 30 minutes, any of three ways:
+If Home Assistant adds the panel during setup, pairing closes but the session you have carries on. After
+Done, or once that session has run out, a new code alone can't resume: allow setup over the network first.
+It stays allowed for 30 minutes. Any of these allows it:
 
 - In Home Assistant, the panel's device page: **Allow setup over the network** (a button, under Configuration).
 - On the panel: Settings → **Home Assistant & dashboard** → **Allow setup over the network**. The Manage page has
