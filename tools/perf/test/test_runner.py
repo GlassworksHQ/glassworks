@@ -895,11 +895,12 @@ class Restart(unittest.TestCase):
         self.assertEqual((ref["graded_runs"], ref["timed_out"]), (1, [[1, "heavy"]]))
         heavy = ref["tiers"]["heavy"]
         self.assertIsNotNone(heavy["load_ms"])                                  # what heavy measured stands
-        self.assertEqual((heavy["timed_out_runs"], heavy["timed_out_tasks"]), (1, ["camera", "scroll", "tap", "updates"]))
+        self.assertEqual((heavy["timed_out_runs"], heavy["timed_out_tasks"]), (1, ["camera", "dialog", "scroll", "tap", "updates"]))
+        self.assertIn("| the view didn't get to them, slow |", report.markdown(rep))   # Clarity v3: its dialogs fail
         self.assertNotIn("heavy.scroll", rep["grade"]["missing"])               # what it didn't fails, measured
         self.assertEqual(rep["grade"]["bands"]["heavy"]["scroll"], "slow")
         self.assertFalse(any("deadline" in r for r in rep["grade"]["provisional_reasons"]), rep["grade"]["provisional_reasons"])
-        self.assertIn("heavy in run 1 (camera, scroll, tap, updates)", report.markdown(rep))   # named in the detail
+        self.assertIn("heavy in run 1 (camera, dialog, scroll, tap, updates)", report.markdown(rep))   # named in the detail
 
     def test_after_a_view_times_out_the_kiosk_restarts_and_the_run_carries_on(self):
         """#202, s1rtc3: heavy timed out in every run, and in runs 2 and 3 the views after it were never
@@ -995,7 +996,7 @@ class Restart(unittest.TestCase):
         self.assertEqual(c["tiers"]["typical"]["timed_out_after"], "usable")
         self.assertTrue(c["tiers"]["heavy"]["done"])
         rep = self.build(self.last_out)
-        self.assertEqual(rep["graded"]["reference"]["tiers"]["typical"]["timed_out_tasks"], ["blocking", "camera", "open", "scroll", "tap", "updates"])
+        self.assertEqual(rep["graded"]["reference"]["tiers"]["typical"]["timed_out_tasks"], ["blocking", "camera", "dialog", "open", "scroll", "tap", "updates"])
 
     def test_a_view_drawn_but_never_free_keeps_its_open_and_blocks_for_the_deadline(self):
         """#264's verifier: rubric 2 times the open to the draw, so a view that draws fast and is never
@@ -1014,7 +1015,7 @@ class Restart(unittest.TestCase):
             self.assertEqual(c["tiers"][v]["drawn"]["tier"], v)
         self.assertTrue(c["tiers"]["heavy"]["done"])
         t = self.build(self.last_out)["graded"]["reference"]["tiers"]["typical"]
-        self.assertEqual(t["timed_out_tasks"], ["blocking", "camera", "scroll", "tap", "updates"])
+        self.assertEqual(t["timed_out_tasks"], ["blocking", "camera", "dialog", "scroll", "tap", "updates"])
         self.assertLess(t["load_ms"]["median"], 1000)             # drawn 210 ms after the navigation (and its frame)
         self.assertEqual(t["blocking_ms"]["median"], c["tiers"]["typical"]["timed_out_s"] * 1000)
         self.assertIsNone((t.get("usable_ms") or {}).get("median"))

@@ -978,9 +978,9 @@ first in the run's order, as the start view's cards bring in every card type's c
 
 **Checked in Chrome** (2026-11-16, verified; `test/dialog.e2e.test.mjs`): HA's frontend on the fake,
 at the S1's viewport (960 x 480 CSS px, ratio 1.5), shows each as a bottom sheet with its 300 ms
-animation and settles in 305 to 395 ms; the sensor's graph is drawn at 20 to 35 ms. With
-`prefers-reduced-motion` the sheet takes 1 ms and they settle in 10 to 40 ms. At 1280 x 800 HA shows
-its centred dialog (200 ms), settled in 220 to 245 ms. The fake knows every command they send: the
+animation and settles in about 0.3 to 0.4 s; the sensor's graph is drawn 20 to 35 ms after the event.
+With `prefers-reduced-motion` the sheet takes 1 ms and they settle within 40 ms. At 1280 x 800 HA
+shows its centred dialog (200 ms), settled in about 0.22 to 0.26 s (two runs). The fake knows every command they send: the
 entity's registry entry (`config/entity_registry/get`, answered as HA answers an entity with none,
 `not_found`) and the sensor's history.
 

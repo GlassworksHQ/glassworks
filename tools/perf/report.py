@@ -1805,11 +1805,14 @@ def dialog_cell(s_, b):
         return "n/a (before Clarity v3)"
     if not runs:
         return "not measured"
-    failed = sum(1 for r in runs if r.get("failed") or r.get("timed_out"))
+    failed = sum(1 for r in runs if r.get("failed"))
+    late = sum(1 for r in runs if r.get("timed_out"))
     st = s_.get("dialog_settled_ms")
-    head = f"settled in {fmt(st, ' ms')}" if st and st.get("median") is not None else "never settled"
+    head = (f"settled in {fmt(st, ' ms')}" if st and st.get("median") is not None
+            else "the view didn't get to them" if late == len(runs) else "never settled")
     return (f"{head}, {b.get('dialog') or 'n/a'}"
-            + (f", {failed} of {len(runs)} run(s) had one that didn't open fully" if failed else ""))
+            + (f", {failed} of {len(runs)} run(s) had one that didn't open fully" if failed else "")
+            + (f", the view didn't finish in {late} of {len(runs)} run(s)" if late and late < len(runs) else ""))
 
 
 def dialog_detail(ref):
