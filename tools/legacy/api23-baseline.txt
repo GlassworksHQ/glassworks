@@ -86,5 +86,3 @@ sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.PackageInfo#getLongVer
 sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.PackageInfo#signingInfo
 sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.PackageInstaller.SessionParams#setRequireUserAction
 sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.SigningInfo#getApkContentsSigners
-sh/edm/s1kiosk/update/UpdateManager.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
-sh/edm/s1kiosk/update/UpdateManager.kt|java.net.URLConnection#getContentLengthLong

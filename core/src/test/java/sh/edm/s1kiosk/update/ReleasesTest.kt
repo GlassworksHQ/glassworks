@@ -192,14 +192,18 @@ class ReleasesTest {
     // ---------------------------------------------------------------- the generic app's own releases (#23)
 
     /** The fixture as a release of Glassworks for generic Android: its tag, and its APK names for [abis]. */
-    private fun genericRelease(version: String = "1.3.0", abis: List<String> = listOf("arm64-v8a", "armeabi-v7a")): JSONObject {
-        val tag = "generic-android-v$version"
+    private fun genericRelease(
+        version: String = "1.3.0",
+        abis: List<String> = listOf("arm64-v8a", "armeabi-v7a"),
+        tag: String = "generic-android-v$version",
+        stem: String = "glassworks-generic-android",
+    ): JSONObject {
         val base = JSONObject(release(tag, version).toString())
         val template = base.getJSONArray("assets")
         val assets = JSONArray()
         for (abi in abis) for (i in 0 until template.length()) {
             val a = JSONObject(template.getJSONObject(i).toString())
-            val name = a.getString("name").replace("s1-kiosk-", "glassworks-generic-android-$abi-")
+            val name = a.getString("name").replace("s1-kiosk-", "$stem-$abi-")
             a.put("name", name).put("browser_download_url", "https://github.com/GlassworksHQ/glassworks/releases/download/$tag/$name")
             assets.put(a)
         }
@@ -236,6 +240,33 @@ class ReleasesTest {
         assertEquals(AppVersion(1, 3, 0), s1.offer!!.version)
         assertNull(s1.problem)
         assertNull("S1 Kiosk's APK under a generic tag is no offer", Releases.newest(Releases.parseList(list(release("generic-android-v2.0.0", "2.0.0"))), tablet, ReleaseLine.GENERIC_ANDROID).offer)
+    }
+
+    /** The legacy build's release (#198): its own tag and APK names, as [genericRelease]'s. */
+    private fun legacyRelease(version: String = "1.3.0") =
+        genericRelease(version, tag = "generic-android-legacy-v$version", stem = "glassworks-generic-android-legacy")
+
+    /** #198: the legacy build (Android 6-7) has its own line, and the generic one never reads its tags, nor back. */
+    @Test fun theLegacyBuildReadsOnlyItsOwnTags() {
+        val legacy = ReleaseLine.GENERIC_ANDROID_LEGACY
+        assertEquals(AppVersion(1, 2, 3), legacy.tagVersion("generic-android-legacy-v1.2.3"))
+        assertNull(legacy.tagVersion("generic-android-v1.2.3"))
+        assertNull(legacy.tagVersion("v1.2.3"))
+        assertNull(legacy.tagVersion("aqara-s1-plus-v1.2.3"))
+        assertNull("the generic line's prefix is a prefix of the legacy one's: still not its tag", ReleaseLine.GENERIC_ANDROID.tagVersion("generic-android-legacy-v1.2.3"))
+        assertNull(ReleaseLine.S1_KIOSK.tagVersion("generic-android-legacy-v1.2.3"))
+    }
+
+    @Test fun theLegacyBuildTakesItsOwnApkAndNeitherTakesTheOthers() {
+        val o = Releases.offer(Releases.parse(legacyRelease().toString()), listOf("arm64-v8a", "armeabi-v7a", "armeabi"), ReleaseLine.GENERIC_ANDROID_LEGACY)
+        assertEquals("glassworks-generic-android-legacy-arm64-v8a-1.3.0.apk", o.apk.name)
+        // Newest first: the generic 2.0.0 above the legacy 1.3.0, and the other way round.
+        val legacy = Releases.newest(Releases.parseList(list(genericRelease("2.0.0"), legacyRelease("1.3.0"))), tablet, ReleaseLine.GENERIC_ANDROID_LEGACY)
+        assertEquals(AppVersion(1, 3, 0), legacy.offer!!.version)
+        assertNull(legacy.problem)
+        val generic = Releases.newest(Releases.parseList(list(legacyRelease("2.0.0"), genericRelease("1.3.0"))), tablet, ReleaseLine.GENERIC_ANDROID)
+        assertEquals(AppVersion(1, 3, 0), generic.offer!!.version)
+        assertNull(generic.problem)
     }
 
     @Test fun prefixedTagIsInstallable() {

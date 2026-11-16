@@ -16,6 +16,7 @@ import dev.glassworks.pane.SettingsSection
 import dev.glassworks.platform.Platform
 import dev.glassworks.screen.LightSource
 import dev.glassworks.screen.PresenceSource
+import dev.glassworks.update.InstallRights
 import java.util.concurrent.ScheduledExecutorService
 
 /**
@@ -59,10 +60,15 @@ class GenericAndroid(
         const val ANDROID_TITLE = "Android"
         const val ALLOW_INSTALLS = "Allow “Install unknown apps” for the app in Android's settings"
 
-        /** Whether app updates install with nobody at the screen (#277): as device owner, or on Android 12 or newer with the install permission. */
+        /**
+         * Whether app updates install with nobody at the screen (#277): as device owner, as a privileged system app
+         * (the Mirror's, #198), or on Android 12 or newer with the install permission.
+         */
         fun updates(context: Context): String = when {
             // A device owner installs without a tap on any Android the app runs on (Android 6 and newer).
             deviceOwner(context) -> "Available: the app is the device owner"
+            // So does a privileged system app (INSTALL_PACKAGES), which Kiln makes of the legacy build on the Mirror.
+            InstallRights.installsPackages(context) -> "Available: the app is a system app with the install permission"
             !Platform.canInstallWithoutUserAction -> "Not on this Android: it needs Android 12 or newer, or the app as device owner"
             !runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false) -> ALLOW_INSTALLS
             else -> "Available"

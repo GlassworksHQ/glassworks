@@ -76,6 +76,15 @@ class ReleaseLine(
 
         /** Glassworks for generic Android (frames/generic-android): `generic-android-v1.2.3`, `glassworks-generic-android-<abi>-1.2.3.apk`. */
         val GENERIC_ANDROID = ReleaseLine("glassworks-generic-android", "generic-android-", plainTags = false) { abi -> "glassworks-generic-android-${abi.id}" }
+
+        /**
+         * Its legacy build for Android 6 and 7 (#198: GeckoView 144, locked to Home Assistant), which the lululemon
+         * Mirror runs too: `generic-android-legacy-v1.2.3`, `glassworks-generic-android-legacy-<abi>-1.2.3.apk`. Its
+         * own line: a legacy app is never offered the current build (it needs Android 8), nor the other way round.
+         */
+        val GENERIC_ANDROID_LEGACY = ReleaseLine("glassworks-generic-android-legacy", "generic-android-legacy-", plainTags = false) { abi ->
+            "glassworks-generic-android-legacy-${abi.id}"
+        }
     }
 }
 
