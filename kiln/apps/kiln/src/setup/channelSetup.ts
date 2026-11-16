@@ -1,7 +1,7 @@
 // The setup steps that run over the app's setup channel: Home Assistant (the address, sign-in on the
 // panel's own page) and the radio role. The same code whether the channel comes over USB (Kiln's wizard,
 // through adb) or the LAN (the panel's own page, #34): only `open` differs.
-import { validHaUrl, type SetupChannel, type SetupState } from '@glassworks/setup-channel';
+import { Refused, validHaUrl, type SetupChannel, type SetupState } from '@glassworks/setup-channel';
 import type { Setup } from '../wizard/state';
 import { radioPlan, type PanelApp } from './radioPlan';
 
@@ -59,11 +59,16 @@ export class ChannelSetup {
     return this.channel;
   }
 
-  /** Runs a request; saving a new Home Assistant address can restart the app, so reconnect once and retry. */
+  /**
+   * Runs a request. Saving a new Home Assistant address can restart the app, so when the panel doesn't answer,
+   * reconnect once and retry. A refusal is an answer: it goes straight to the step (over the LAN, a second
+   * WebSocket would only hear "pair first" again).
+   */
   async request<T>(f: (c: SetupChannel) => Promise<T>): Promise<T> {
     try {
       return await f(this.channel!);
     } catch (first) {
+      if (first instanceof Refused) throw first;
       const g = this.gen;
       const old = this.channel;
       const again = await this.d.open(15);

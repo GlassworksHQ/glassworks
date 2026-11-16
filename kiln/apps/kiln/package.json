@@ -11,7 +11,8 @@
     "start": "next start --port 5174",
     "stage": "node ../../scripts/stage-assets.mjs --out apps/kiln/public/assets",
     "test": "vitest run",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "build:lan": "vite build --config lan/vite.config.ts"
   },
   "dependencies": {
     "@glassworks/adb": "0.0.0",

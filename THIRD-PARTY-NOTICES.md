@@ -176,6 +176,14 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
     `e1d6480102fed30739fead0faee463101f892c8f` (SHA-256
     `29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031`)
   - Used by the app's own screens: voice overlay, timers, settings menu, setup and loading screens.
+- `assets/setup/`: the setup page the panel serves at `/setup` (#34), a build of Kiln's setup steps
+  (`kiln/apps/kiln/lan/`). This project's code is MIT. It bundles:
+  - **React** and **React DOM** 19.3.0, **scheduler** 0.28.0: MIT, "Copyright (c) Meta Platforms, Inc.
+    and affiliates." https://github.com/facebook/react. Their `@license` headers stay in `setup.js`.
+  - **Radix Primitives** `@radix-ui/react-radio-group` 1.5.1 and `@radix-ui/react-collapsible` 1.2.1,
+    with the `@radix-ui/*` packages they use (a subset of those listed under Kiln in section 4): MIT,
+    "Copyright (c) 2022 WorkOS". https://github.com/radix-ui/primitives
+  - The licence text: `LICENSES/MIT.txt`.
 - No machine-learning models are bundled by the app. The wake word models are downloaded by the
   panel at runtime (section 5). GeckoView's `omni.ja` has its own assets, such as the Liberation fonts
   used by its PDF viewer (SIL OFL 1.1). Those are listed in `about:license`.

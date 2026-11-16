@@ -12,12 +12,15 @@ export const NOT_PAIRED = 'Pair with the panel first: enter the code it shows.';
 /** A ByteStream over an open WebSocket, and when it ended (the close code). */
 export type WebSocketStream = ByteStream & { closed: Promise<number> };
 
+const REFUSED = 'The panel refused the connection. Reload this page, or try again in a minute.';
+
 /**
- * Opens [url] and resolves once it is open. Each write goes as one text frame (the channel writes whole
- * lines); every frame that comes back goes to `onData` as UTF-8 bytes, also those that came before it
- * was registered. `make` is for tests.
+ * Opens [url] and resolves once it is open; rejects when the panel refuses, errs, or doesn't open it within
+ * `timeoutMs`. Each write goes as one text frame (the channel writes whole lines); every frame that comes back
+ * goes to `onData` as UTF-8 bytes, also those that came before it was registered. An error after it opened
+ * closes it, so `closed` always settles. `make` is for tests.
  */
-export function openWebSocketStream(url: string, make: (url: string) => WebSocket = (u) => new WebSocket(u)): Promise<WebSocketStream> {
+export function openWebSocketStream(url: string, make: (url: string) => WebSocket = (u) => new WebSocket(u), timeoutMs = 10_000): Promise<WebSocketStream> {
   const ws = make(url);
   ws.binaryType = 'arraybuffer';
   const enc = new TextEncoder();
@@ -43,11 +46,26 @@ export function openWebSocketStream(url: string, make: (url: string) => WebSocke
     async close() { ws.close(); },
   };
   return new Promise((resolve, reject) => {
-    let open = false;
-    ws.onopen = () => { open = true; resolve(stream); };
+    let settled = false;
+    const fail = (why: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.close(); } catch { /* already closing */ }
+      reject(new Error(why));
+    };
+    const timer = setTimeout(() => fail('The panel didn\'t answer. Is it on, and on this network?'), timeoutMs);
+    ws.onopen = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(stream);
+    };
+    // before it opened: refused; after: a browser closes it next, and this makes sure of it
+    ws.onerror = () => { if (settled) ws.close(); else fail(REFUSED); };
     ws.onclose = (e: CloseEvent) => {
       ended(e.code);
-      if (!open) reject(new Error('The panel refused the connection. Reload this page, or try again in a minute.'));
+      fail(REFUSED);
     };
   });
 }

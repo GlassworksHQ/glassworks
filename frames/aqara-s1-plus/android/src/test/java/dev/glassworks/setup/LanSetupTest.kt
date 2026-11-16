@@ -5,6 +5,7 @@
 package dev.glassworks.setup
 
 import dev.glassworks.manage.PanelCode
+import dev.glassworks.testing.RepoFiles
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
@@ -47,6 +48,7 @@ class LanSetupTest {
     private val lan = LanSetup(
         serve = { i, o, may -> SetupChannel(backend, mayChange = may).serve(i, o, pollMs = 50) },
         code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, monoMs = { mono }, wallMs = { wall },
+        files = { name -> RepoFiles.file("core/src/main/assets/setup").resolve(name).takeIf { it.exists() }?.readBytes() ?: if (name == "inter.ttf") ByteArray(4) else null },
     )
     private lateinit var server: HttpServer
     private val host get() = "127.0.0.1:${server.localPort}"
@@ -201,8 +203,34 @@ class LanSetupTest {
     }
 
     @Test fun otherPathsGoToTheManagePage() {
-        assertEquals(null, lan.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to host))))
-        assertEquals(null, lan.handle(HttpRequest("GET", "/", emptyMap(), mapOf("host" to host))))
+        for (p in listOf("/", "/setupx", "/setup/other.js", "/setup/../manage")) assertEquals(p, null, lan.handle(HttpRequest("GET", p, emptyMap(), mapOf("host" to host))))
+    }
+
+    @Test fun thePanelServesItsSetupPage() {
+        for (p in listOf("/setup", "/setup/")) {
+            val r = get(p, null)
+            assertEquals(200, r.status)
+            assertEquals("text/html; charset=utf-8", r.headers["Content-Type"])
+            assertTrue(r.text(), r.text().contains("/setup/setup.js"))
+            val csp = r.headers["Content-Security-Policy"]!!
+            assertTrue(csp, csp.contains("connect-src 'self' ws://$host;"))
+            assertTrue(csp, csp.contains("script-src 'self';") && csp.contains("default-src 'none'"))
+        }
+        assertEquals("text/javascript; charset=utf-8", get("/setup/setup.js", null).headers["Content-Type"])
+        assertEquals("text/css; charset=utf-8", get("/setup/setup.css", null).headers["Content-Type"])
+        assertEquals("font/ttf", get("/setup/inter.ttf", null).headers["Content-Type"])
+        assertEquals(405, post("/setup").status)
+        assertEquals(400, lan.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to "evil.example")))!!.status)
+        val bare = LanSetup(serve = { _, _, _ -> }, code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { true })
+        assertEquals("a build without the page says so", 404, bare.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to host)))!!.status)
+    }
+
+    /** The build writes exactly the files the panel serves: a new chunk would otherwise go unserved. */
+    @Test fun theCommittedPageIsExactlyWhatThePanelServes() {
+        val built = RepoFiles.file("core/src/main/assets/setup").list()!!.toSet()
+        assertEquals(LanSetup.PAGE_TYPES.keys - "inter.ttf", built)
+        val html = RepoFiles.file("core/src/main/assets/setup/index.html").readText()
+        for (f in built - "index.html") assertTrue("index.html loads $f", html.contains("/setup/$f"))
     }
 
     // ------------------------------------------------------------------ helpers

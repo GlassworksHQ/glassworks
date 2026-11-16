@@ -85,7 +85,7 @@ function PlanStep({ st }: { st: RadioStep }) {
   );
 }
 
-export function RadioNext({ steps, setup }: StepProps<'radio-next'>) {
+export function RadioNext({ busy, steps, setup }: StepProps<'radio-next'>) {
   const { plan } = setup;
   const led = plan.steps.some((st) => st.primary);
   const [more, setMore] = useState(false);
@@ -101,7 +101,7 @@ export function RadioNext({ steps, setup }: StepProps<'radio-next'>) {
           <Collapsible.Content><ol className="next" style={list}>{plan.more.map((st) => <PlanStep key={st.title} st={st} />)}</ol></Collapsible.Content>
         </Collapsible.Root>
       )}
-      <div className="foot"><span /><button type="button" className={`btn ${led ? 'ghost' : 'ember'}`} onClick={() => steps.finish()}>Finish</button></div>
+      <div className="foot"><span /><button type="button" className={`btn ${led ? 'ghost' : 'ember'}`} disabled={busy} onClick={() => steps.finish()}>Finish</button></div>
     </section>
   );
 }

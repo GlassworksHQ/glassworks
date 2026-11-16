@@ -137,6 +137,33 @@ clicks through a simulated Mirror (`src/mirror/demo.ts`); `pick`, `pick-wrong` (
 finish) and `error` jump to one screen. They work in `next dev`,
 or in a build made with `NEXT_PUBLIC_KILN_DEMO=1`.
 
+## The panel's setup page
+
+The panel serves a small build of Kiln's setup steps at `http://<panel>:8099/setup` (#34), so a panel
+already on Wi-Fi can be set up from a laptop with no cable. The steps are the wizard's own
+(`src/setup/`: `ChannelSetup` and `steps.tsx`); the page adds pairing with the code on the panel's
+screen (`src/lan/`). It runs the setup channel over the panel's `/setup/channel` WebSocket.
+
+```sh
+npm run build:lan -w @glassworks/kiln-app          # writes core/src/main/assets/setup (committed)
+node kiln/apps/kiln/lan/fake-panel.mjs [--closed]  # http://localhost:8099/setup against a fake panel; the code is 482913
+```
+
+CI rebuilds the page and fails when the committed files differ, so commit the build with its sources.
+The bundle carries React's licence headers, and THIRD-PARTY-NOTICES.md lists what it bundles.
+
+How it behaves:
+
+- Before pairing, the page asks the panel to show a code and checks the one typed (`/setup/pair`). The
+  panel's limits apply: 5 wrong tries kill a code, 10 in 15 minutes lock code entry.
+- A pairing lasts until Done, 30 minutes without a change, or 2 hours. Reading the state doesn't count
+  as a change. When the panel ends it, the page asks for a new code and carries on at the same step.
+- Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
+  network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.
+- What is left: the panel has no write timeout on the WebSocket. A browser that stops reading while the
+  panel writes holds one of the panel's web workers until the OS gives up on the TCP send (minutes).
+  A newer paired browser or Done ends such a channel at once.
+
 ## Vercel
 
 `vercel.json` installs and builds from the repo root (the workspace root): `npm ci`, then the blobs,
