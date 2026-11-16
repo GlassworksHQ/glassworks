@@ -89,4 +89,11 @@ class ReadingsTest {
         contentProcesses = null, cpuTemperature = null, memoryAvailableBytes = null, appPssBytes = null,
         storageFreeBytes = null, wifiRssi = null, wifiLinkSpeed = null, appStartElapsedMs = 0,
     )
+
+    /** Field 22 of `/proc/<pid>/stat`, for Android 6, which has no Process.getStartElapsedRealtime (#198). */
+    @Test fun processStartTicksComeFromField22() {
+        val stat = "4242 (sh.edm.s1kiosk (x)) S 1 1 0 0 -1 4194624 1 0 0 0 7 3 0 0 20 0 50 0 123456 1000 200 18446744073709551615"
+        assertEquals(123456L, parseProcessStartTicks(stat))
+        assertEquals(null, parseProcessStartTicks("4242 (short) S 1 2"))
+    }
 }

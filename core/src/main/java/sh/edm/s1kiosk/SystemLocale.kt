@@ -2,6 +2,7 @@ package sh.edm.s1kiosk
 
 import android.content.res.Configuration
 import android.os.LocaleList
+import dev.glassworks.platform.Platform
 import android.util.Log
 import java.util.Locale
 
@@ -23,14 +24,29 @@ object SystemLocale {
         return Locale.forLanguageTag(tag).takeIf { it.language.isNotEmpty() }
     }
 
+    /** The system's activity manager service (hidden API): `getService()` from Android 8, `ActivityManagerNative` below. */
+    private fun activityManagerService(): Any =
+        if (Platform.hasActivityManagerGetService) Class.forName("android.app.ActivityManager").getMethod("getService").invoke(null)!!
+        else Class.forName("android.app.ActivityManagerNative").getMethod("getDefault").invoke(null)!!
+
+    /** [config]'s first language: its LocaleList from Android 7, its single `locale` below. */
+    @Suppress("DEPRECATION")
+    internal fun current(config: Configuration): Locale? =
+        if (Platform.hasLocaleList) config.locales.takeIf { it.size() > 0 }?.get(0) else config.locale
+
+    /** Sets [config]'s language to [locale] alone, and its layout direction with it (an RTL language turns it). */
+    internal fun setLocale(config: Configuration, locale: Locale) {
+        if (Platform.hasLocaleList) config.setLocales(LocaleList(locale)) else config.setLocale(locale)
+    }
+
     /** Returns true if the language was changed (false if it already was, or on failure). */
     fun set(tag: String): Boolean {
         val locale = parse(tag) ?: run { Log.w(TAG, "not a language tag: $tag"); return false }
         return try {
-            val am = Class.forName("android.app.ActivityManager").getMethod("getService").invoke(null)!!
+            val am = activityManagerService()
             val config = am.javaClass.getMethod("getConfiguration").invoke(am) as Configuration
-            if (config.locales.size() > 0 && config.locales[0] == locale) return false
-            config.setLocales(LocaleList(locale))
+            if (current(config) == locale) return false
+            setLocale(config, locale)
             Configuration::class.java.getField("userSetLocale").setBoolean(config, true)
             am.javaClass.getMethod("updatePersistentConfiguration", Configuration::class.java).invoke(am, config)
             Log.i(TAG, "system language set to ${locale.toLanguageTag()}")

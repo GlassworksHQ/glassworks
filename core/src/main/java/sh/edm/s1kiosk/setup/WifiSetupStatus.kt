@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Handler
+import dev.glassworks.platform.Platform
 import android.os.Looper
 
 /**
@@ -69,7 +70,7 @@ class ConnectivityWifiStatus(private val ctx: Context) : WifiSetupStatus {
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) { main.post(onChange) }
         }
         try {
-            cm.registerDefaultNetworkCallback(cb)
+            Platform.registerDefaultNetworkCallback(cm, cb) // an internet request below Android 7 (#198)
             callback = cb
         } catch (_: Exception) {
         }

@@ -83,7 +83,7 @@ object OAuth {
             val i = part.indexOf('=')
             val k = dec(if (i < 0) part else part.substring(0, i))
             val v = if (i < 0) "" else dec(part.substring(i + 1))
-            out.putIfAbsent(k, v)
+            if (k !in out) out[k] = v // the first wins (putIfAbsent is API 24)
         }
         return out
     }

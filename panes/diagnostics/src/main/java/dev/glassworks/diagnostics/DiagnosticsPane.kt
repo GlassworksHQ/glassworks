@@ -68,7 +68,7 @@ class DiagnosticsPane(
         // The timestamps change only on a restart or a clock fix, so they cost Home Assistant nothing.
         Metric("uptime", "Uptime", deviceClass = "timestamp", stateClass = 0, enabled = true, band = CLOCK_BAND_S) { _, c -> ((c.wallMs - c.elapsedMs) / 1000).toFloat() },
         Metric("app_uptime", "App uptime", deviceClass = "timestamp", stateClass = 0, band = CLOCK_BAND_S) { _, c ->
-            ((c.wallMs - (c.elapsedMs - c.appStartElapsedMs)) / 1000).toFloat()
+            c.appStartElapsedMs?.let { ((c.wallMs - (c.elapsedMs - it)) / 1000).toFloat() }
         },
         Metric("web_content_processes", "Web content processes", "mdi:tab", band = 1f) { _, c -> c.contentProcesses?.toFloat() },
     )

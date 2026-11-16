@@ -21,6 +21,11 @@ import org.robolectric.annotation.Config
  */
 class PlatformTest {
     private val queries: List<Triple<String, Int, (PlatformApi) -> Boolean>> = listOf(
+        Triple("hasDefaultNetworkCallback", 24) { it.hasDefaultNetworkCallback },
+        Triple("hasLocaleList", 24) { it.hasLocaleList },
+        Triple("hasSetProgressAction", 24) { it.hasSetProgressAction },
+        Triple("hasProcessStartTime", 24) { it.hasProcessStartTime },
+        Triple("hasActivityManagerGetService", 26) { it.hasActivityManagerGetService },
         Triple("hasNotificationChannels", 26) { it.hasNotificationChannels },
         Triple("hasForegroundServiceStart", 26) { it.hasForegroundServiceStart },
         Triple("hasDisplayCutoutMode", 28) { it.hasDisplayCutoutMode },
@@ -76,5 +81,24 @@ class PlatformOnDeviceTest {
         val outer = Intent("test.OUTER").putExtra(Intent.EXTRA_INTENT, inner)
         assertEquals("test.INNER", Platform.intentExtra(outer, Intent.EXTRA_INTENT)?.action)
         assertEquals(null, Platform.intentExtra(Intent("test.EMPTY"), Intent.EXTRA_INTENT))
+    }
+}
+
+/**
+ * The fallbacks on a real Android 6 framework (Robolectric's API 23 jar), where the newer methods don't exist: a
+ * call that reached one would throw NoSuchMethodError here (#198, the legacy build).
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [23], application = Application::class)
+class PlatformApi23Test {
+    @Test
+    fun `the default-network callback falls back to an internet request on Android 6`() {
+        assertEquals(23, Platform.apiLevel)
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val cb = object : android.net.ConnectivityManager.NetworkCallback() {}
+        Platform.registerDefaultNetworkCallback(cm, cb)
+        org.junit.Assert.assertTrue(org.robolectric.Shadows.shadowOf(cm).networkCallbacks.contains(cb))
+        cm.unregisterNetworkCallback(cb)
     }
 }
