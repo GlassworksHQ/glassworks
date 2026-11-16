@@ -8,6 +8,10 @@ import dev.glassworks.manage.ManagePage
 import sh.edm.s1kiosk.KioskPrefs
 import dev.glassworks.web.HttpServer
 import sh.edm.s1kiosk.glassworks
+import dev.glassworks.frame.nodeName
+import sh.edm.s1kiosk.setup.SetupChannelServer
+import dev.glassworks.manage.PanelHosts
+import dev.glassworks.setup.LanSetup
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -25,6 +29,9 @@ object HaAuth {
         }
         data class Failed(val reason: String, val signedOut: Boolean) : Access()
     }
+
+    /** The Manage log reads it as "Setup" (S1Manage.logSource). */
+    private const val LAN_TAG = "S1Kiosk.SetupChannel"
 
     private lateinit var prefs: KioskPrefs
     private val main = Handler(Looper.getMainLooper())
@@ -99,6 +106,17 @@ object HaAuth {
         val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, thread = threadJoin)
         val m = manage ?: context.glassworks.managePage(context, signIn, tokens, prefs).also { manage = it; it.startLog() }
         val s = m.http(OAuth.SIGNIN_PORT)
+        // Setup over the LAN (#34) shares the port: the setup channel's own loop, gated by pairing with the panel's code.
+        val frame = context.glassworks.frame
+        val lan = LanSetup(
+            serve = SetupChannelServer.lan(context, context.glassworks),
+            code = context.glassworks.panelCode,
+            // The ESPHome name, from the MAC PanelDevice saved (a panel that never announced itself has none yet).
+            ownHosts = { PanelHosts.now(prefs.deviceMac.takeIf { it.isNotEmpty() }?.let(frame::nodeName)) { msg, e -> AuthLog.w("$msg: $e") } },
+            pairingOpen = { prefs.lanPairingOpen },
+            event = { msg -> android.util.Log.i(LAN_TAG, msg) },
+        )
+        s.front = lan::handle
         try {
             s.start()
             server = s

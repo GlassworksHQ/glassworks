@@ -61,7 +61,9 @@ class CodeOverlay(private val context: Context, private val onClose: () -> Unit)
             val col = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
-                addView(text("MANAGE THIS PANEL", 11f, Inter.MEDIUM, FAINT).apply { letterSpacing = 0.14f }, wrap())
+                // A setup code (#34) pairs a laptop for setup over the LAN, not for the Manage page.
+                val eyebrow = if (shown.purpose == dev.glassworks.setup.LanSetup.PURPOSE) "SET UP THIS PANEL" else "MANAGE THIS PANEL"
+                addView(text(eyebrow, 11f, Inter.MEDIUM, FAINT).apply { letterSpacing = 0.14f }, wrap())
                 addView(text(shown.label + ".", 26f, Inter.LIGHT, FG).apply { setPadding(0, (10 * dp).toInt(), 0, (24 * dp).toInt()) }, wrap())
                 addView(text(shown.code.chunked(3).joinToString("  "), 64f, Inter.LIGHT, FG).apply { letterSpacing = 0.12f }, wrap())
                 addView(text("Type it in the browser. It works once, for 5 minutes.", 15f, Inter.REGULAR, MUTED).apply {

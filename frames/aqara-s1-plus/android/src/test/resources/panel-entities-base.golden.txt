@@ -30,6 +30,7 @@ illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=fals
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
+lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -112,6 +113,7 @@ illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=fals
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
+lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -196,6 +198,7 @@ illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=fals
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
+lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -271,6 +274,7 @@ illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=fals
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
+lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -346,6 +350,7 @@ illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=fals
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
+lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault

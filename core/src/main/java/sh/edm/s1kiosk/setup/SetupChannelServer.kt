@@ -8,6 +8,8 @@ import sh.edm.s1kiosk.Glassworks
 import sh.edm.s1kiosk.InstallerGlue
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaAuth
+import java.io.InputStream
+import java.io.OutputStream
 
 /**
  * The setup channel on `@s1kiosk_setup` (adb `localabstract:`), started by KioskService. Thin glue:
@@ -23,13 +25,25 @@ object SetupChannelServer {
     fun start(context: Context, runtime: Glassworks) {
         if (server != null) return
         val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime))
-        server = AdbSocketServer(SetupChannel.SOCKET, TAG) { input, output -> channel().serve(input, output) }.also { it.start() }
+        server = AdbSocketServer(SetupChannel.SOCKET, TAG) { input, output -> channel { true }.serve(input, output) }.also { it.start() }
     }
 
-    /** Makes a channel per connection, over the panes' steps as setup takes them (Glassworks.setupSteps). Public for tests. */
-    fun channels(context: Context, runtime: Glassworks, backend: SetupChannel.Backend): () -> SetupChannel {
+    /**
+     * Makes a channel per connection, over the panes' steps as setup takes them (Glassworks.setupSteps). [mayChange]
+     * is the LAN's pairing gate; over USB every request may run. Public for tests.
+     */
+    fun channels(context: Context, runtime: Glassworks, backend: SetupChannel.Backend): (mayChange: () -> Boolean) -> SetupChannel {
         val steps = runtime.setupSteps(context)
-        return { SetupChannel(backend, steps) { Log.i(TAG, it) } }
+        return { mayChange -> SetupChannel(backend, steps, { Log.i(TAG, it) }, mayChange) }
+    }
+
+    /**
+     * The setup channel's loop for the LAN's WebSocket (dev.glassworks.setup.LanSetup): the same channel as USB's,
+     * gated by the browser's pairing.
+     */
+    fun lan(context: Context, runtime: Glassworks): (InputStream, OutputStream, () -> Boolean) -> Unit {
+        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime))
+        return { input, output, mayChange -> channel(mayChange).serve(input, output) }
     }
 
     fun stop() {
@@ -54,6 +68,12 @@ object SetupChannelServer {
                     signinUrl = ChannelState.signinUrl(ip, haUrl),
                 ),
             )
+        }
+
+        override fun armPairing(): String? {
+            prefs.armLanSetup()
+            Log.i(TAG, "Pairing over the network re-armed over the setup channel")
+            return null
         }
 
         /**
