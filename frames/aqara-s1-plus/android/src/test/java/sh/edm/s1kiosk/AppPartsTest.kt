@@ -61,7 +61,7 @@ class AppPartsTest {
     }
 
     private val parts = Parts()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false), NoEngine, parts)
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false), NoEngine, parts, releases = sh.edm.s1kiosk.update.ReleaseLine.S1_KIOSK)
 
     @Test fun theRuntimeRunsTheAppsPanesInItsOrderAndMarksTheOnesTheFrameCantRun() {
         val defs = runtime.paneDefinitions(app)
