@@ -12,6 +12,7 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from '../src/mirror/demo';
 import { MirrorWizard, Screens, keyedConnect } from '../src/mirror/MirrorWizard';
 import { MirrorSession, mirrorMode } from '../src/mirror/session';
+import { registry } from '../src/wizard/registry';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -19,7 +20,7 @@ beforeAll(() => {
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} })) as never;
   globalThis.ResizeObserver = class { observe() {} disconnect() {} } as never;
 });
-afterEach(() => { cleanup(); history.replaceState(null, '', '/'); });
+afterEach(() => { cleanup(); registry.clear(); history.replaceState(null, '', '/'); });
 
 const until = async (f: () => boolean, ms = 10_000) => {
   const end = Date.now() + ms;

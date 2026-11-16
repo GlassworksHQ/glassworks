@@ -18,6 +18,8 @@ import { FlashSession } from './flash';
 import { FLASH_DEMOS, flashDemo, type FlashDemo } from './flashDemo';
 import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
 import { workerImages } from './images';
+import { registry } from '../wizard/registry';
+import { MIRROR_BASE, keptMirror } from './activity';
 import { MirrorSession, mirrorMode, type MirrorState } from './session';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the S1's do. */
@@ -279,10 +281,18 @@ export function MirrorWizard() {
   const [start] = useState(() => {
     const m = mirrorMode(location.search, DEMO_ON, DEMOS);
     const flashFirst = m.demo ? m.demo.startsWith('flash-') : new URLSearchParams(location.search).get('mode') !== 'app';
-    return { m, flashFirst, real: m.demo ? undefined : realSessions(m.on) };
+    if (m.demo) return { m, flashFirst };
+    // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
+    const earlier = registry.activity(MIRROR_BASE);
+    if (!m.on && !earlier) return { m, flashFirst, real: realSessions(false) };
+    const kept = keptMirror(() => realSessions(true), flashFirst);
+    // back to a running install (or from a link without ?apk=local): as it was; otherwise the address's path
+    if (kept === earlier && m.on && !kept.running()) kept.flashMode = flashFirst;
+    return { m, flashFirst: kept.flashMode, real: kept.sessions, kept };
   });
   const [demo, setDemo] = useState<{ mirror: MirrorSession; flash?: FlashSession }>();
-  const [flashMode, setFlashMode] = useState(start.flashFirst);
+  const [flashMode, setMode] = useState(start.flashFirst);
+  const setFlashMode = (on: boolean) => { if (start.kept) start.kept.flashMode = on; setMode(on); };
   useEffect(() => {
     const d = start.m.demo;
     if (!d) return;
@@ -300,12 +310,6 @@ export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: M
   const ms = useSyncExternalStore(mirror.subscribe, mirror.get, mirror.get);
   const chip = useBrowserChip();
   useEffect(() => { document.title = s.screen === 'adb' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln'; }, [s.screen]);
-  useEffect(() => {
-    if (s.screen !== 'working') return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
-    addEventListener('beforeunload', warn);
-    return () => removeEventListener('beforeunload', warn);
-  }, [s.screen]);
   return (
     <Shell steps={flashRail(s)} level={flashLevel(s)} error={s.screen === 'error'} chip={chip}>
       <FlashScreens f={flash} s={s} m={mirror} ms={ms} />
@@ -320,12 +324,6 @@ export function Screens({ session, toFlash }: { session: MirrorSession; toFlash?
   useEffect(() => {
     document.title = s.screen === 'working' && s.phases.at(-1)?.step === 'home' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln';
   }, [s]);
-  useEffect(() => {
-    if (s.screen !== 'working') return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
-    addEventListener('beforeunload', warn);
-    return () => removeEventListener('beforeunload', warn);
-  }, [s.screen]);
   const p = { s, session };
   return (
     <Shell steps={rail(s)} level={level(s)} error={s.screen === 'error'} chip={chip}>

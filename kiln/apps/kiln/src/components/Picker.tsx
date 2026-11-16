@@ -19,14 +19,25 @@ const INSTALLABLE = FRAMES.filter((f) => ships(f.status) && f.kiln);
 /** s1.edm.sh's old links (/#/wifi, …) belong to the S1, the only frame that had them. */
 const OLD_LINKS_FRAME = '/aqara-s1-plus';
 
+const NONE: readonly never[] = [];
+/** `href` is a route of the frame at `base` (/lululemon-mirror?apk=local is the Mirror's). */
+const isUnder = (href: string, base: string) => href === base || href.startsWith(`${base}/`) || href.startsWith(`${base}?`);
+
 function useRunning(): { href: string; name: string } | undefined {
   const entry = useSyncExternalStore(registry.subscribe, registry.get, () => undefined);
+  const others = useSyncExternalStore(registry.subscribe, registry.activities, () => NONE);
   const [, tick] = useState(0);
-  useEffect(() => entry?.session.store.subscribe(() => tick((n) => n + 1)), [entry]);
-  if (!entry) return undefined;
-  const s = entry.session.store.state;
-  if (status(s) !== 'running' && s.screen !== 'setup') return undefined;
-  return { href: entry.base + ROUTES[canonical(s)], name: entry.name };
+  useEffect(() => {
+    const offs = [...(entry ? [entry.session.store.subscribe(() => tick((n) => n + 1))] : []), ...others.map((a) => a.subscribe(() => tick((n) => n + 1)))];
+    return () => { for (const off of offs) off(); };
+  }, [entry, others]);
+  const s = entry?.session.store.state;
+  if (entry && s && (status(s) === 'running' || s.screen === 'setup')) return { href: entry.base + ROUTES[canonical(s)], name: entry.name };
+  for (const a of others) {
+    const href = a.running();
+    if (href) return { href, name: a.name };
+  }
+  return undefined;
 }
 
 export function Picker() {
@@ -68,7 +79,7 @@ export function Picker() {
             <span aria-hidden="true">·</span>
             <Link className="link" href={`${frame}${ROUTES['set-up']}`}>Finish setting up</Link>
           </span>
-          <button type="button" className="btn ember" disabled={!frame} onClick={() => router.push(running?.href.startsWith(`${frame}/`) || running?.href === frame ? running.href : frame)}>Continue</button>
+          <button type="button" className="btn ember" disabled={!frame} onClick={() => router.push(running && isUnder(running.href, frame) ? running.href : frame)}>Continue</button>
         </div>
       </section>
     </Shell>
