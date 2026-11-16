@@ -8,8 +8,9 @@ bootloader is locked (`secure: yes`, `Device unlocked: false`), which rules out 
 RAM-booting our own image; `system` stays writable, so the published image can always go back. What
 that root buys is a short path list — `/firmware/image`, the top-level files in `/persist` — and
 nothing that needs a block device, `setenforce` or a root shell — and it cannot drive Android
-either: `pm`, `svc` and `am` all fail on `app_process`, which is out of its reach (§7). Equipment: three `system` flashes
-(the published image unchanged, then two patched ones) and a few small files in `/persist`; no
+either: `pm`, `svc` and `am` all fail on `app_process`, which is out of its reach (§7). Equipment:
+eleven `system` flashes in all — the published image three times (first unchanged, then twice as the
+restore), five hook builds and three cleanup builds — plus a few small files in `/persist`; no
 bootloader unlock, no boot/modem/oem writes.
 
 Device: lululemon Studio Mirror (MSM8916 / APQ8016E, Android 6.0.1), running the community
@@ -400,11 +401,14 @@ from the policy, `dmesg` and AOSP 6.0.1_r81; `flash_recovery` stays untested and
 - The unit was found with Glass Panes `mirror-android-1` system, kiosk 0.12.0 as the focused HOME app,
   `com.android.launcher3` hidden, `user_rotation=3`, `accelerometer_rotation=0`, and every boot of it
   since still comes up that way (§7's flashes were checked against exactly those five things).
-- §7's writes, for the record: three `system` flashes (published image unchanged; hook v1, which
-  created nothing; hook v2, which wrote the inventory) and nothing else. No `boot`, `recovery`,
-  `userdata`, `modem`, `oem` or partition-table write, and no unlock attempt.
+- §7's writes, for the record: **eleven `system` flashes** and nothing else. The published image
+  three times (once unchanged as the writability test, twice as the restore at the end), five hook
+  builds (the failed directory attempt, the inventory, the firmware batch copy, and two
+  `pm`/`svc`/`setprop` test builds) and three cleanup builds. No `boot`, `recovery`, `userdata`,
+  `modem`, `oem` or partition-table write, and no unlock attempt.
 - §7 leaves files in `/persist` while it runs: the `gw-*` batch, plus `gw-done.txt` recording what
-  was copied. They are firmware copies and must be deleted (one more hook run) and never committed.
+  was copied. They are firmware copies and must be deleted by a boot on a cleanup build and never
+  committed.
   `/persist` itself also holds device-unique values — `boardserial.txt`, `bt.txt`, `bt_mac.pst`,
   `eth.txt`, `deviceid.txt` — which is why only the listing, never the contents, is in this note.
 - The firmware copies live outside the repo, in `~/.t3/glassworks-m1/29-mirror/` (`firmware/` plus
