@@ -252,6 +252,14 @@ uid=0(root) gid=0(root) groups=0(root) context=u:r:qti_init_shell:s0
 That is the domain §5 predicted from `type_transition init shell_exec process qti_init_shell`; the
 service execs `/system/bin/sh`, so the script's own `system_file` label only has to stay readable.
 
+The hook's body and the exact flash commands are deliberately not in this note. It is a recipe for
+writing a persistent `system` image on a locked device, and on a stock unit that is the one-way door
+described below, so a note that anyone can copy-paste is the wrong place for it. What a maintainer
+needs is here: the file, its mode and label, that appending in place keeps both, how the image is
+expanded and re-sparsified, and that `e2fsck -fn` afterwards shows only the `make_ext4fs` inode-bitmap
+quirk the untouched image also has. The scripts used (the appended blocks and the sparse-image
+encoder) live with the other working files, outside the repo.
+
 **First attempt, and the one rule that mattered.** Creating a directory failed:
 
 ```
@@ -272,7 +280,7 @@ rule at all.
 | Path | Root in `qti_init_shell` |
 |---|---|
 | `/firmware/image` (`firmware_file`) | read, list |
-| `/persist` top-level files (`persist_file`) | read, write, create files, chmod |
+| `/persist` top-level files (`persist_file`) | `{ ioctl read write create getattr setattr lock append unlink rename open }` — read, write, create, rename, delete, chmod |
 | `/persist` subdirs (`drm`, `display`, `misc`, `hlos_rfs`, `rfs`, `data`) | **denied**, each has its own label |
 | `/data` (`system_data_file`) | dirs only, no files |
 | Block devices (`block_device`, `boot_block_device`, …) | **denied** — no partition dumps |
@@ -309,8 +317,12 @@ the honest description: a boot-time root for copying firmware, not a way to driv
 in batches: `qti_init_shell` may write there, but the space is calibration storage, not scratch.
 
 **Reversibility, split in two.** On this unit the change is `/system` only, the published image is on
-disk with its hash, and reflashing takes about a minute — so any point in this work can be undone,
-and the firmware copy leaves nothing behind once its files are deleted. On a **stock, virgin**
+disk with its hash, and reflashing takes about a minute — so any point in this work can be undone.
+That was **run, not assumed** at the end of this pass: the published image went back, one cleanup
+boot deleted the `gw-*` files, and the unit came up with `post_boot.sh` at its original 80502 bytes
+ending in `esac`, `/persist` at 220.0K used with no `gw-*` left, the kiosk focused and rotation 3.
+Deleting those files is a permission the domain has (`unlink` and `rename` are both in the rule
+above), and it is what cleared each batch between boots. On a **stock, virgin**
 Mirror it is a one-way door: the hook needs a system image to write, only the community image can be
 written (the vendor's system cannot be read out, so it cannot be restored), and the read is worth the
 same either way. Anyone reaching for this on an untouched unit should know that before, not after.
