@@ -98,6 +98,10 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
+  `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
+  setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
+  shows Kiln's name or its orange colours. The steps and words are the same.
 - **On a screen that stands portrait, the app is portrait.** On a device that isn't an Aqara S1, the app now
   follows the screen's natural orientation, either way up: landscape on most tablets as before, portrait on a
   screen that stands portrait, like the lululemon Mirror's. The S1 stays landscape. On a portrait screen the

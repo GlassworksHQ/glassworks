@@ -1,10 +1,13 @@
-// The panel's own setup page (#34), on Kiln's design: the same frame, rail and cards as the wizard, with
-// pairing first and Kiln's setup steps (src/setup/steps.tsx) after it.
+// The panel's own setup page (#34): the frame, rail and cards of Kiln's wizard, with pairing first and
+// Kiln's setup steps (src/setup/steps.tsx) after it. It wears the panel's look, not Kiln's: the Glassworks
+// lockup and stack here, the panel's colours in lan/lan.css.
+import lockup from '@glassworks/brand/lockup-on-dark.svg?raw';
 import { useState, useSyncExternalStore } from 'react';
-import { Mark } from '../components/Mark';
-import { Stack } from '../components/Stack';
 import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
 import type { LanSession, LanView } from './lanSession';
+import { PanelStack, type PlateLook } from './PanelStack';
+
+const LOCKUP = `data:image/svg+xml,${encodeURIComponent(lockup)}`;
 
 const RAIL = ['Pair with the panel', 'Wi-Fi', 'Home Assistant', 'Radio', 'Done'] as const;
 
@@ -13,6 +16,18 @@ function railAt(v: LanView): number {
   if (v.at !== 'setup') return 0;
   if (v.setup.phase === 'wifi') return 1;
   return v.setup.phase === 'radio' || v.setup.phase === 'radio-next' ? 3 : 2;
+}
+
+/**
+ * The stack as the panel's setup screen draws it: the plates set one per step, none on the first and all
+ * three on the last; done lights the top plate. A lost panel shows the next plate in rose.
+ */
+function stackLooks(v: LanView, at: number): [PlateLook, PlateLook, PlateLook] {
+  if (v.at === 'done') return ['lit', 'outline', 'outline'];
+  const set = Math.floor((3 * at) / (RAIL.length - 1));
+  const looks = [0, 1, 2].map((i): PlateLook => (2 - i < set ? 'outline' : 'ghost')) as [PlateLook, PlateLook, PlateLook];
+  if (v.at === 'lost') looks[Math.max(0, 2 - set)] = 'bad';
+  return looks;
 }
 
 function Pair({ lan, v, busy }: { lan: LanSession; v: Extract<LanView, { at: 'pair' }>; busy: boolean }) {
@@ -87,10 +102,11 @@ export function LanPage({ lan }: { lan: LanSession }) {
   const v = st.view;
   const at = railAt(v);
   const paired = v.at === 'setup' || v.at === 'done';
+  const looks = stackLooks(v, at);
   return (
     <div className="app">
       <header className="top">
-        <span className="brand"><Mark /><span className="wide">Glassworks <b>Kiln</b></span><span className="narrow">Kiln</span></span>
+        <span className="brand"><img className="lockup" src={LOCKUP} alt="Glassworks" /></span>
         <span className="narrow small">{at >= RAIL.length ? 'Done' : `${at + 1} of ${RAIL.length}`}</span>
         <span className={`chip ${paired ? 'ok' : 'work'}`}><span className="dot" />{v.at === 'done' ? 'Set up' : paired ? 'Paired' : 'Not paired'}</span>
       </header>
@@ -102,9 +118,9 @@ export function LanPage({ lan }: { lan: LanSession }) {
               return <li key={name} className={mark} aria-current={mark === 'now' ? 'step' : undefined}><span className="mk" /><span>{name}</span></li>;
             })}
           </ol>
-          <div className="rail-stack"><Stack level={v.at === 'done' ? 4 : 3} error={v.at === 'lost'} /></div>
+          <div className="rail-stack"><PanelStack looks={looks} width={120} /></div>
         </nav>
-        <div className="phone-stack"><Stack level={v.at === 'done' ? 4 : 3} error={v.at === 'lost'} width={150} /></div>
+        <div className="phone-stack"><PanelStack looks={looks} width={88} /></div>
         <main className="main"><Screen lan={lan} v={v} busy={!!st.busy} /></main>
       </div>
     </div>
