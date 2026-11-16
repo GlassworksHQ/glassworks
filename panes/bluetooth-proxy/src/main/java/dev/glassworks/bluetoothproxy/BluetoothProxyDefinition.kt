@@ -24,6 +24,12 @@ import java.util.concurrent.ScheduledExecutorService
 class BluetoothProxyDefinition(
     private val file: SharedPreferences,
     private val radio: ProxyRadio,
+    /**
+     * Reads the Bluetooth adapter's MAC where the frame can (the S1: its root helper's file), for
+     * Home Assistant's `bluetooth_mac_address`. The default has none: HA keys the scanner on the device's
+     * ESPHome MAC, as before (#246).
+     */
+    readAdapterMac: () -> String? = { null },
     private val page: ((SettingsItem.NativeHost, BluetoothProxyModel) -> SettingsItem.NativeView)? = null,
 ) : PaneDefinition, BluetoothProxyModel {
     override val id = "bluetooth-proxy"
@@ -40,8 +46,11 @@ class BluetoothProxyDefinition(
     @Volatile private var live: BluetoothProxyPane? = null
 
     /** The pane for the device's run. [device] is the shell's device thread. */
+    /** For the whole process: settled once, so every pane this run builds sends the same MAC. */
+    private val adapterMac = AdapterMac(readAdapterMac, BluetoothProxyPrefs(file))
+
     fun pane(ctx: PaneContext, device: ScheduledExecutorService) =
-        BluetoothProxyPane(ctx, radio, device, connect = BluetoothProxyPrefs(file).connect).also { live = it }
+        BluetoothProxyPane(ctx, radio, device, connect = BluetoothProxyPrefs(file).connect, adapterMac = { adapterMac.value }).also { live = it }
 
     /** "Listen and connect" (#246): kept, and handed to the running pane. */
     override var connect: Boolean

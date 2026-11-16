@@ -458,6 +458,7 @@ the last one the root side needs, since everything above the loader then updates
 | Thread leave (v4) | app: `files/radio/thread-leave` (taken within 3 s in any mode, ignored after 2 min); helper: `sys.s1kiosk.radio.thread_leave` = `<ok\|error> <epoch>: <detail>` |
 | Bundle state (v4) | root: `/data/s1kiosk-pub/radio-bundle` (root 0644 in a root 0755 dir) = `<ok\|bad\|none> <version> <floor>`, what the app decides from |
 | Radio firmware (v4) | app: `files/radio/fw-request` = `<id> <sha256 prefix>` (taken within 3 s, ignored after 2 min); helper: `sys.s1kiosk.radio.fw` = `<idle\|flashing\|ok\|error> <id>[: detail]`, `sys.s1kiosk.radio.fw_targets` = `<id>:<sha12>:<APP> …` |
+| Bluetooth address (#246) | helper: `/data/s1kiosk-pub/bluetooth-address` (root 0644) = the Bluetooth adapter's MAC, upper case, from `settings get secure bluetooth_address`, once Android knows a real one (asked once a minute until then; never all zero, `02:00:00:00:00:00` or broadcast). Never logged. The app sends it to Home Assistant as the proxy's `bluetooth_mac_address`; no file means it sends none. Part of the helper, so it comes with the radio bundle |
 | Developer override | only with a root-created `$DIR/dev-override`: a root-owned `$DIR/s1kiosk_radio.sh` runs instead of everything, and binaries in `$DIR` win. Before v4 these were honoured without the marker; now a leftover copy is ignored (and logged), so it can't shadow updates |
 
 Behaviour: the helper brings Aqara's services to the table above (consumers stopped first),

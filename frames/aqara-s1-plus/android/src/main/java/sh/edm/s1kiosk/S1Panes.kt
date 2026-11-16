@@ -96,7 +96,12 @@ class S1Panes : AppParts {
             granted = { context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
             pickers = { c -> sh.edm.s1kiosk.camera.CameraUseCards(c) },
         )
-        val bluetoothProxy = BluetoothProxyDefinition(panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(context), ::BluetoothProxyPage)
+        // The Bluetooth adapter's MAC comes from the root helper (#246); without the helper there is no
+        // file, and Home Assistant keys the proxy on the panel's ESPHome MAC, as before.
+        val bluetoothProxy = BluetoothProxyDefinition(
+            panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(context),
+            readAdapterMac = { java.io.File(BLUETOOTH_ADDRESS_FILE).readText() }, page = ::BluetoothProxyPage,
+        )
         return listOf(AssistDefinition(panePrefs.paneFile("assist")), SendspinDefinition(panePrefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
             frameDefinitions + camera + DiagnosticsDefinition(panePrefs.paneFile("diagnostics"))
     }
@@ -303,3 +308,9 @@ class S1Panes : AppParts {
     }
 }
 
+
+/**
+ * The Bluetooth adapter's MAC, as the root helper publishes it (`s1kiosk_radio.sh` `bt_publish`, root
+ * 0644): Android 10 hides it from apps (#246).
+ */
+internal const val BLUETOOTH_ADDRESS_FILE = "/data/s1kiosk-pub/bluetooth-address"

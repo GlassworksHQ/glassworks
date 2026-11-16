@@ -80,6 +80,7 @@ echo "Result: Parcel(00000000    '....')"
 EOF
 w "$T/bin/settings" <<'EOF'
 #!/bin/sh
+echo "$*" >> /t/settings.calls
 case "$1" in
   get) cat "/t/settings.$2.$3" 2>/dev/null || echo 1 ;;
   put) echo "$4" > "/t/settings.$2.$3" ;;
@@ -755,6 +756,32 @@ LOOPS=1 helper
 check "the app's off marker: no zone kept or adopted" test "$(prop persist.s1kiosk.timezone)" = "(off)" -a ! -s "$T/tz-calls"
 check "...and the status names it, for the app to confirm" has "$(prop sys.s1kiosk.timezone.status)" "error: '(off)' is not a time zone id"
 pkill -f "sleep 1000"
+
+# ---------------------------------------------------------------------------------- Bluetooth address
+# #246: the adapter's address for the app's Bluetooth proxy. Made-up, locally administered addresses only.
+echo "--- Bluetooth address"
+reset_radio; echo off > "$T/props/persist.s1kiosk.radio_mode"
+BTP=$T/pub; rm -rf "$BTP"; rm -f "$T/settings.secure.bluetooth_address"
+LOOPS=1 helper S1R_PUB="$BTP"
+check "Android has none yet (the mock answers 1): nothing written" test ! -e "$BTP/bluetooth-address"
+for bad in null 02:00:00:00:00:00 00:00:00:00:00:00 ff:ff:ff:ff:ff:ff 02:00:00:00:00 02:00:00:00:00:0g '02:00:00:00:00:01; reboot' ' 02:00:00:00:00:01'; do
+  printf '%s' "$bad" > "$T/settings.secure.bluetooth_address"; LOOPS=1 helper S1R_PUB="$BTP"
+  check "placeholder or malformed '$bad': never written" test ! -e "$BTP/bluetooth-address"
+done
+: > "$T/settings.calls"; printf null > "$T/settings.secure.bluetooth_address"
+LOOPS=3 helper S1R_PUB="$BTP"
+check "until there is one, asked once a minute, not every loop" test "$(grep -c 'get secure bluetooth_address' "$T/settings.calls")" = 1
+printf '02:aa:00:00:00:01' > "$T/settings.secure.bluetooth_address"; : > "$T/log"
+LOOPS=1 helper S1R_PUB="$BTP"
+check "a real address is written for the app, upper case" test "$(cat "$BTP/bluetooth-address")" = 02:AA:00:00:00:01
+check "...root 0644 in a root 0755 dir" test "$(stat -c %a:%u "$BTP/bluetooth-address")/$(stat -c %a:%u "$BTP")" = "644:0/755:0"
+check "...and never logged" sh -c "! grep -qi '02:aa:00:00:00:01' '$T/log' && grep -q 'bluetooth address published' '$T/log'"
+: > "$T/settings.calls"; LOOPS=3 helper S1R_PUB="$BTP"
+check "once written, asked once per start only" test "$(grep -c 'get secure bluetooth_address' "$T/settings.calls")" = 1
+echo keep > "$T/not-ours"; rm -f "$BTP/bluetooth-address"; ln -s "$T/not-ours" "$BTP/bluetooth-address"
+LOOPS=1 helper S1R_PUB="$BTP"
+check "a planted symlink is replaced, its target untouched" test ! -L "$BTP/bluetooth-address" -a "$(cat "$T/not-ours")" = keep -a "$(cat "$BTP/bluetooth-address")" = 02:AA:00:00:00:01
+rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
 
 echo
 echo "shell tests: $PASS passed, $FAILS failed"

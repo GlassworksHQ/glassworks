@@ -291,6 +291,16 @@ public class ApiServer(
         }
 
     /**
+     * The Bluetooth adapter's own MAC (`AA:BB:CC:DD:EE:FF`), sent with the proxy ([bluetooth]) as
+     * `bluetooth_mac_address` (DeviceInfo field 18) and the capabilities' `mac_address`, as an ESPHome
+     * proxy does. Home Assistant keys the scanner on it (bleak-esphome connect.py:
+     * `bluetooth_mac_address or mac_address`). Null, the default, sends neither, and HA keys the scanner
+     * on [DeviceIdentity.macAddress]. Set a real adapter address or null, never a placeholder, and keep
+     * it the same for the device's life: a change makes HA see a new scanner.
+     */
+    @Volatile public var bluetoothMacAddress: String? = null
+
+    /**
      * The Bluetooth proxy's active connections (GATT), or null for a proxy that only listens. Works only
      * next to [bluetooth]: requests come from its subscriber, and the flags it adds go out with it.
      * Called under the same lock as [bluetooth], so it must not block either.
@@ -1021,9 +1031,9 @@ public class ApiServer(
 
         private fun capabilities(): ProtoWriter {
             val w = ProtoWriter()
-            // bluetooth_proxy = 1 { feature_flags = 1 }. Clients read the flags here from API 1.15 on.
-            // Its mac_address (2) waits on the GATT decision (#246); HA falls back to the device MAC.
-            if (bluetooth != null) w.message(1, ProtoWriter().uint32(1, bluetoothFlags()))
+            // bluetooth_proxy = 1 { feature_flags = 1, mac_address = 2 }. Clients read the flags here from
+            // API 1.15 on. Without the adapter's MAC, HA falls back to the device MAC.
+            if (bluetooth != null) w.message(1, ProtoWriter().uint32(1, bluetoothFlags()).string(2, bluetoothMacAddress))
             // voice_assistant = 2 { feature_flags = 1 }
             w.message(2, ProtoWriter().uint32(1, identity().voiceFeatures))
             // sendspin = 6 { feature_flags = 1, client_id = 2 } (client id empty until the client has started)
@@ -1127,6 +1137,7 @@ public class ApiServer(
                 .string(12, d.manufacturer, force = true)
                 .string(13, d.friendlyName, force = true)
                 .uint32(15, bluetoothFlags())
+                .string(18, bluetoothMacAddress.takeIf { bluetooth != null })
                 .uint32(17, d.voiceFeatures)
                 // api_encryption_supported (19) / api_encryption_provisionable (26), as an ESPHome
                 // build with `api: encryption:` and no YAML key (api_connection.cpp device_info).

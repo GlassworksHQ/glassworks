@@ -16,6 +16,9 @@ publish the matching section below as the release notes.
   (aioesphomeapi 46.25.0 connects only through a proxy with both). Only the client that holds the
   advertisement subscription may ask, so requests follow `BluetoothProxyHandler.authOnly`. Pairing
   and cache clearing are answered "failed" at once (#246).
+- **The Bluetooth adapter's own MAC.** Set `ApiServer.bluetoothMacAddress` and the proxy sends it as
+  `bluetooth_mac_address` (DeviceInfo field 18) and in the capabilities, as an ESPHome proxy does; Home
+  Assistant then keys the scanner on it. Unset, nothing changes: HA keys it on the device MAC.
 
 ### Fixed
 - **Home Assistant finds the Bluetooth proxy's flags where API 1.15 and later put them.** With

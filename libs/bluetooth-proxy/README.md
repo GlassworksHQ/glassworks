@@ -143,7 +143,7 @@ Status words:
 - **Not yet**: no decision either way.
 - **Not planned**: we won't, for the reason given.
 
-**Count for bluetooth-proxy** (against ESPHome 2026.10.2): 7 supported, 1 partial, 0 planned, 4 not yet, 2 not planned.
+**Count for bluetooth-proxy** (against ESPHome 2026.10.2): 7 supported, 1 partial, 0 planned, 3 not yet, 3 not planned.
 
 | Feature | ESPHome | bluetooth-proxy | Since | Notes |
 |---|---|---|---|---|
@@ -160,7 +160,7 @@ Status words:
 | Pairing and bonding | `PAIRING`, pair and unpair (85, 86) | Not yet | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246) leaves it out at first: a PIN raises Android's dialog over the app |
 | Clearing the GATT cache | `CACHE_CLEARING` (88) | Not yet | | [#246](https://github.com/GlassworksHQ/glassworks/issues/246): only if the hidden `BluetoothGatt.refresh()` works |
 | Connection parameters | `CONNECTION_PARAMS_SETTING` (145, 146) | Not yet | | Android offers three connection priorities, not exact parameters |
-| The adapter's own MAC address | `bluetooth_mac_address` in DeviceInfo | Not yet | | Android hides it from apps. HA keys the scanner on the device MAC instead; [#246](https://github.com/GlassworksHQ/glassworks/issues/246) decides |
+| The adapter's own MAC address | `bluetooth_mac_address` in DeviceInfo | Not planned: Android hides it from apps | | An app that can read it sets `ApiServer.bluetoothMacAddress` (the S1, through its root helper, #246). Without it, HA keys the scanner on the device MAC |
 
 `tools/check-parity-tables.py` checks the status words and the count.
 

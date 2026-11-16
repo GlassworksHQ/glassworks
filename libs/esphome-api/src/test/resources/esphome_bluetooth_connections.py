@@ -21,6 +21,7 @@ async def main(port: int, psk: str, address: int) -> None:
     info = await cli.device_info()
     flags = info.bluetooth_proxy_feature_flags_compat(cli.api_version)
     out = {
+        "source": info.bluetooth_mac_address or info.mac_address,
         "connectable": bool(flags & BluetoothProxyFeature.ACTIVE_CONNECTIONS),
         "remote_caching": bool(flags & BluetoothProxyFeature.REMOTE_CACHING),
         "pairing": bool(flags & BluetoothProxyFeature.PAIRING),

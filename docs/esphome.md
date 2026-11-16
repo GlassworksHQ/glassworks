@@ -344,6 +344,12 @@ services › Bluetooth*, and hears the BLE sensors near the panel through it. No
   them on there; the panel's settings page shows both anyway. Both are unavailable while the pane is off.
 - Android hands Bluetooth results to apps only while **location** is on. The settings page offers to
   turn Bluetooth and location on when they are off.
+- **The scanner's address.** On the S1 the proxy tells Home Assistant the panel's own Bluetooth
+  address, as an ESPHome proxy does, read through the root helper (Android hides it from apps). It is
+  read once when the app starts and kept from then on. When it can't be read (no root helper yet,
+  Bluetooth never turned on, an error), the proxy sends none and Home Assistant keys the scanner on the
+  panel's ESPHome MAC, as before. Other frames always do the latter. Home Assistant shows the Bluetooth
+  address as a new scanner the first time; the old one can be removed.
 - The panel never logs or keeps the addresses it hears. They go only to Home Assistant, and only
   over an encrypted connection with the panel's key: Home Assistant 2026.11 and later sets it when
   you add the panel. Without a key, the proxy answers nobody, so no one else on the LAN can listen.

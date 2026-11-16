@@ -80,6 +80,11 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **Home Assistant sees the S1's Bluetooth proxy as a new scanner, once.** The proxy now tells Home
+  Assistant the panel's own Bluetooth address, as ESPHome proxies do, instead of the panel's network
+  address. So after this update Home Assistant lists the panel's scanner under a new address in its
+  Bluetooth settings, once; you can remove the old one. If the panel can't read its Bluetooth address
+  (Bluetooth never turned on yet), nothing changes until it can. Comes with the radio bundle.
 - **The panel's secrets are encrypted on its storage.** The Home Assistant sign-in, the ESPHome API
   key, the camera password and the Sendspin pairing are sealed with a key in Android's Keystore, so a
   copy of the app's settings files holds none of them. The update keeps them all: the panel stays
