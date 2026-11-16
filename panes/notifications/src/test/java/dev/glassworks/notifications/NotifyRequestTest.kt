@@ -140,4 +140,35 @@ class NotifyRequestTest {
         assertEquals(NotifyRequest.MAX_TITLE, n.title.length)
         assertTrue(n.message.endsWith("…"))
     }
+
+    @Test
+    fun sizeIsFullOrHalf() {
+        assertEquals(ViewSize.HALF, post(data = """{"url":"/dashboard-door/0","size":"half"}""").size)
+        assertEquals(ViewSize.HALF, post(data = """{"url":"/dashboard-door/0","size":" Half "}""").size)
+        assertEquals(ViewSize.FULL, post(data = """{"url":"/dashboard-door/0","size":"full"}""").size)
+        assertTrue(refused("""{"url":"/dashboard-door/0","size":"quarter"}""").contains("use full or half"))
+        assertEquals("a null size is no size", ViewSize.FULL, post(data = """{"url":"/dashboard-door/0","size":null}""").size)
+    }
+
+    /** #230 adds `size` and nothing else: every call without it reads exactly as before, full screen. */
+    @Test
+    fun withoutSizeACallReadsAsBefore() {
+        val calls = listOf(
+            "",
+            """{"tag":"doorbell","priority":"high","sound":"doorbell","url":"/dashboard-door/0","timeout":90}""",
+            """{"actions":[{"action":"look","title":"Look","uri":"/lovelace/garage"}],"sticky":true}""",
+            """{"image":"/api/camera_proxy/camera.porch","push":{"interruption-level":"critical"}}""",
+        )
+        for (data in calls) {
+            val n = post(data = data)
+            assertEquals(data, ViewSize.FULL, n.size)
+            assertEquals(data, n, post(data = if (data.isEmpty()) """{"size":"full"}""" else data.dropLast(1) + ""","size":"full"}"""))
+        }
+    }
+
+    @Test
+    fun aHalfViewIsStillOnlyOnThisHomeAssistant() {
+        assertTrue(refused("""{"url":"https://example.com/door","size":"half"}""").contains("this panel's Home Assistant"))
+        assertTrue(refused("""{"url":"//example.com/door","size":"half"}""").contains("this panel's Home Assistant"))
+    }
 }
