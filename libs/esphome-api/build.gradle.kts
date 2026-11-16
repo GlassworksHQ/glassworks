@@ -3,18 +3,10 @@
 plugins {
     `java-library`
     id("org.jetbrains.kotlin.jvm")
+    id("glassworks.jvm")
     id("com.toasttab.expediter") version "0.2.0"
     id("org.jetbrains.dokka")
     id("com.vanniktech.maven.publish") // dev.glassworks:esphome-api, set up in the root build.gradle.kts
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
-
-kotlin {
-    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }
 
 dependencies {

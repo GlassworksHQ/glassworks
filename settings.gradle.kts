@@ -1,4 +1,6 @@
 pluginManagement {
+    // The module build conventions, glassworks.android and glassworks.jvm (#282).
+    includeBuild("build-logic")
     repositories {
         google()
         mavenCentral()

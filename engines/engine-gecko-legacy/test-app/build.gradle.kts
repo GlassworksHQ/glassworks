@@ -10,6 +10,7 @@
 //   ./gradlew :kiosk-legacy:assembleDebug     → engines/engine-gecko-legacy/test-app/build/outputs/apk/debug/kiosk-legacy-debug.apk
 plugins {
     id("com.android.application")
+    id("glassworks.android")
 }
 
 val s1App = rootProject.layout.projectDirectory.dir("frames/aqara-s1-plus/android")
@@ -21,10 +22,6 @@ val testBuild: String = (System.getenv("S1_TEST_BUILD")).orEmpty().trim()
 android {
     // The S1 app's: its sources use sh.edm.s1kiosk.R and sh.edm.s1kiosk.BuildConfig.
     namespace = "sh.edm.s1kiosk"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
     defaultConfig {
         applicationId = "sh.edm.s1kiosk.legacy"
         minSdk = 23
@@ -38,8 +35,6 @@ android {
     buildFeatures { buildConfig = true }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
         // java.time and friends on API 23-25 (the S1 app's code assumes API 26).
         isCoreLibraryDesugaringEnabled = true
     }

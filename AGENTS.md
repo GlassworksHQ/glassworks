@@ -16,6 +16,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | Path | What | Language |
 |---|---|---|
 | `settings.gradle.kts` | The Gradle root is the repo root. This file maps every module to its folder | Kotlin |
+| `build-logic/` | What every module builds with: `glassworks.android` (compileSdk, minSdk 26, JDK 17, the `testing/kotlin` tests) and `glassworks.jvm` (JDK 17). A module's build file keeps its namespace, dependencies and what differs | Kotlin |
 | `frames/aqara-s1-plus/android` | S1 Kiosk (`:kiosk`), the GeckoView kiosk app (`sh.edm.s1kiosk`, never rename it) | Kotlin, Android |
 | `frames/generic-android/android` | Glassworks for generic Android (`:generic-android`, `dev.glassworks.generic_android`): the core as an app for any Android 8+ device, no root | Kotlin, Android |
 | `core/`, `pane-api/` | The Glassworks core (`dev.glassworks.*`) and the pane API every pane builds on | Kotlin, Android |

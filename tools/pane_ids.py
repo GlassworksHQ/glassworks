@@ -4,13 +4,13 @@ import os
 import re
 
 
-# Where Gradle modules live, as RepoFiles.SEARCH (testing/kotlin): app/ before #21's split, the rest after it.
-MODULE_TOPS = ("app", "libs", "core", "pane-api", "engines", "panes", "frames")
+# Where Gradle modules live, as RepoFiles.SEARCH (testing/kotlin), by top folder.
+MODULE_TOPS = ("libs", "core", "pane-api", "engines", "panes", "frames")
 SKIP = {"build", ".gradle", ".kotlin", "node_modules", ".git", "test", "androidTest"}
 
 
 def main_sources(root):
-    """Every module's src/main/java and src/main/kotlin under [root], in either layout of #21."""
+    """Every module's src/main/java and src/main/kotlin under [root]."""
     found = []
     for top in MODULE_TOPS:
         for d, dirs, _ in os.walk(os.path.join(root, top)):
