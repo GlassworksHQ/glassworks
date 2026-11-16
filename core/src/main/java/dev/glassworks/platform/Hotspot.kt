@@ -73,7 +73,9 @@ object HotspotAddress {
      */
     fun pick(interfaces: List<Interface>): String? = interfaces
         .filter { it.up && WIFI.matches(it.name) }
-        .sortedBy { if (it.name.startsWith("wlan")) 1 else 0 }
+        // An AP interface first. Among wlans the highest number: with the client still up on wlan0, AOSP puts the
+        // AP on wlan1 (CodeRabbit on #418).
+        .sortedWith(compareBy({ it.name.startsWith("wlan") }, { -(it.name.removePrefix("wlan").toIntOrNull() ?: 0) }))
         .firstNotNullOfOrNull { i -> i.ipv4.firstOrNull(::private) }
 
     /** [pick] over the device's interfaces now. */

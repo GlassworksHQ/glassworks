@@ -83,7 +83,8 @@ interface Glassworks {
 
     /**
      * The setup hotspot (#197), set while KioskService runs (it needs the service's foreground). The setup screen
-     * draws it and asks for it; Wi-Fi details, setup's end and the setup page's Done stop it. Main thread only.
+     * draws it and asks for it; Wi-Fi details, setup's end and the setup page's Done stop it. Set and used on the main
+     * thread; other threads (the setup page's pairing gate) read only its `isOn`.
      */
     var setupHotspot: dev.glassworks.setup.SetupHotspot?
 

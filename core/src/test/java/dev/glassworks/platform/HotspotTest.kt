@@ -93,5 +93,9 @@ class HotspotTest {
         assertNull(HotspotAddress.pick(listOf(Interface("ap0", up = false, ipv4 = listOf("192.168.49.1")))))
         assertNull(HotspotAddress.pick(listOf(Interface("wlan0", up = true, ipv4 = listOf("198.51.100.7")))))
         assertEquals("172.20.0.1", HotspotAddress.pick(listOf(Interface("swlan0", up = true, ipv4 = listOf("172.20.0.1")))))
+        assertEquals("the AP on wlan1, the client on wlan0", "192.168.49.1", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20")),
+            Interface("wlan1", up = true, ipv4 = listOf("192.168.49.1")),
+        )))
     }
 }

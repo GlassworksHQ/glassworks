@@ -82,7 +82,7 @@ class SetupHotspotPolicy(
             }
             else -> s
         }
-        return decision(now)
+        return decision(now, connected)
     }
 
     /**
@@ -127,8 +127,9 @@ class SetupHotspotPolicy(
     /** Time left before the hotspot stops by itself, while it's on. */
     fun leftMs(now: Long): Long? = (state as? State.On)?.let { (it.until - now).coerceAtLeast(0) }
 
-    private fun decision(now: Long): Decision = when (val s = state) {
-        is State.Waiting -> Decision(false, s.since + graceMs - now)
+    private fun decision(now: Long, connected: Boolean): Decision = when (val s = state) {
+        // Connected during a hold: wake at its end too, where a connection that outlasts it disarms (CodeRabbit on #418).
+        is State.Waiting -> Decision(false, minOf(s.since + graceMs, s.holdUntil?.takeIf { connected && it > now } ?: Long.MAX_VALUE) - now)
         State.Idle -> Decision(false, null)
         is State.On -> Decision(true, s.until - now)
     }

@@ -31,8 +31,41 @@ class LocalOnlyHotspot(
     private val ctx = context.applicationContext
     private var reservation: LocalOnlyAp.Reservation? = null
 
-    /** Each start's number: a callback from a start that [stop] has ended since is dropped. */
+    /** Who hears the hotspot now; null once [stop] ran. */
+    private var current: ((Hotspot.Event) -> Unit)? = null
+
+    /**
+     * A request is out and Android hasn't answered it. A new start waits for that answer instead of asking again:
+     * Android refuses a second request from the same app while one is pending (CodeRabbit on #418).
+     */
+    private var asked = false
+
+    /** Each start's number, for the refusals [start] posts itself. */
     private var generation = 0
+
+    /** One listener for every request: the answer goes to whoever [current] is when it comes. */
+    private val listener = object : LocalOnlyAp.Listener {
+        override fun onStarted(r: LocalOnlyAp.Reservation) {
+            asked = false
+            // Nobody wants it any more (stop() ran since): Android's reservation goes back at once.
+            val to = current ?: run { runCatching { r.close() }; return }
+            reservation = r
+            // Unreadable, or reading it threw: closed again by stop(), never left open.
+            val net = runCatching { r.network() }.getOrNull()
+            if (net == null) { stop(); to(Hotspot.Event.Failed(HotspotFailure.FAILED)); return }
+            to(Hotspot.Event.Started(net))
+        }
+
+        override fun onStopped() {
+            reservation = null
+            current?.invoke(Hotspot.Event.Stopped)
+        }
+
+        override fun onFailed(reason: Int) {
+            asked = false
+            current?.invoke(Hotspot.Event.Failed(failure(reason)))
+        }
+    }
 
     override fun start(onEvent: (Hotspot.Event) -> Unit) {
         stop()
@@ -42,39 +75,24 @@ class LocalOnlyHotspot(
             if (ctx.checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) { fail(HotspotFailure.NO_PERMISSION); return }
         }
         if (platform.hotspotNeedsLocationOn && !locationOn()) { fail(HotspotFailure.LOCATION_OFF); return }
-        val listener = object : LocalOnlyAp.Listener {
-            override fun onStarted(r: LocalOnlyAp.Reservation) {
-                // A start that stop() ended since: Android's reservation is nobody's, so it goes back at once.
-                if (generation != mine) { runCatching { r.close() }; return }
-                reservation = r
-                // Unreadable, or reading it threw: closed again by stop(), never left open.
-                val net = runCatching { r.network() }.getOrNull()
-                if (net == null) { stop(); onEvent(Hotspot.Event.Failed(HotspotFailure.FAILED)); return }
-                onEvent(Hotspot.Event.Started(net))
-            }
-
-            override fun onStopped() {
-                if (generation != mine) return
-                reservation = null
-                onEvent(Hotspot.Event.Stopped)
-            }
-
-            override fun onFailed(reason: Int) {
-                if (generation == mine) onEvent(Hotspot.Event.Failed(failure(reason)))
-            }
-        }
+        current = onEvent
+        if (asked) return // the request still out answers this start
+        asked = true
         try {
-            if (!ap.start(listener, handler)) fail(HotspotFailure.NOT_ALLOWED)
+            if (!ap.start(listener, handler)) { asked = false; fail(HotspotFailure.NOT_ALLOWED) }
         } catch (_: SecurityException) {
+            asked = false
             fail(if (platform.hotspotNeedsLocationOn && !locationOn()) HotspotFailure.LOCATION_OFF else HotspotFailure.NO_PERMISSION)
         } catch (_: IllegalStateException) {
             // This app already holds a reservation Android hasn't let go of.
+            asked = false
             fail(HotspotFailure.FAILED)
         }
     }
 
     override fun stop() {
         generation++
+        current = null
         reservation?.let { runCatching { it.close() } }
         reservation = null
     }

@@ -467,7 +467,7 @@ class MainActivity : Activity() {
             }
             HotspotStep.Action.ALLOW -> (hotspotPermission() as? HotspotPermission.Step.Explain)?.let {
                 hotspotPermissionAsked = true
-                requestPermissions(arrayOf(it.permission), REQ_HOTSPOT)
+                requestPermissions(HotspotPermission.request(it.permission), REQ_HOTSPOT)
             }
             HotspotStep.Action.STOP -> { hotspotAsked = false; h.cancel() }
         }

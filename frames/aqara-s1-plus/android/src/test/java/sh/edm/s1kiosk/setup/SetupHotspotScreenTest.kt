@@ -61,6 +61,15 @@ class SetupHotspotScreenTest {
         assertEquals(listOf(HotspotStep.Action.STOP), asked)
     }
 
+    @Test fun opening_thenOnLeavesNoOpeningLineUnderTheCard() {
+        val s = screen(HotspotStep.card(SetupHotspot.View.Starting, HotspotPermission.Step.Ready, null))
+        assertTrue("Opening the panel's own Wi-Fi…" in texts(s))
+        s.render(s.model!!.copy(hotspot = on))
+        Mockup.idle()
+        Mockup.layout(s)
+        assertTrue(texts(s).toString(), "Opening the panel's own Wi-Fi…" !in texts(s))
+    }
+
     @Test fun whileOffOneButtonOffersIt() {
         val s = screen(offer)
         val asked = mutableListOf<HotspotStep.Action>()

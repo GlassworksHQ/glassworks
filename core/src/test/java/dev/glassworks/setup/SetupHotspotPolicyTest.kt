@@ -89,6 +89,17 @@ class SetupHotspotPolicyTest {
     }
 
     @Test
+    fun `a connection that outlasts the hold disarms at the hold's end, so a later drop doesn't re-arm`() {
+        p.configured(now = 0)
+        p.update(connected = true, now = 0)
+        p.update(connected = false, now = min)
+        assertEquals("wakes when the hold ends", Decision(false, 90_000), p.update(connected = true, now = 90_000))
+        assertEquals(Decision(false, null), p.update(connected = true, now = 3 * min))
+        assertFalse(p.update(connected = false, now = 4 * min).on)
+        assertFalse(p.update(connected = false, now = 30 * min).on)
+    }
+
+    @Test
     fun `a new network that fails brings the hotspot back, the only way back without touch`() {
         p.update(false, 3 * min)
         p.configured(now = 4 * min)

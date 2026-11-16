@@ -71,16 +71,17 @@ class LocalOnlyHotspotTest {
     }
 
     @Test
-    fun `a newer start's reservation stays, the older one's goes`() {
+    fun `a start while a request is still out waits for it - one request, and its reservation is the new start's`() {
         hotspot.start { events += it }
-        val first = ap.listeners.single()
-        hotspot.start { events += it }
-        val old = Res { net }
-        val new = Res { net }
-        ap.listeners.last().onStarted(new)
-        first.onStarted(old)
-        assertEquals(1, old.closes)
-        assertEquals(0, new.closes)
+        hotspot.stop()
+        val later = mutableListOf<Hotspot.Event>()
+        hotspot.start { later += it }
+        assertEquals("Android refuses a second pending request, so none is made", 1, ap.listeners.size)
+        val r = Res { net }
+        ap.listeners.single().onStarted(r)
+        assertEquals(0, r.closes)
+        assertEquals(emptyList<Hotspot.Event>(), events)
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Started(net)), later)
     }
 
     @Test
