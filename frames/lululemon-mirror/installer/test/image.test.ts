@@ -87,6 +87,21 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest())).toBe(before2);
   }, 60_000);
 
+  it('takes the ABI that has libraries, not an empty lib/<abi>/ folder before it (#354 review)', async () => {
+    const img = join(dir, 'abi.img');
+    mke2fs(img, 64, MAKE_EXT4FS, systemTree());
+    const disk = await load(img);
+    const v7 = new Uint8Array([7, 7, 7]);
+    // a directory entry for arm64-v8a, the real library under armeabi-v7a
+    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'arm64-v8a': { '': new Uint8Array(0) }, 'armeabi-v7a': { 'libxul.so': v7 } } });
+    const log: string[] = [];
+    await patchSystem(await Ext4.open(disk), { apk, time: T }, (l) => log.push(l));
+    await dump(disk, img);
+    expect(fsck(img).code).toBe(0);
+    expect(Buffer.from(debugfsCat(img, `${APP_DIR}/lib/arm/libxul.so`))).toEqual(Buffer.from(v7));
+    expect(log).toContain('1 native library for armeabi-v7a in /priv-app/S1Kiosk/lib/arm');
+  }, 60_000);
+
   it('builds a fresh userdata that lets only this browser\'s adb key in', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
     const key = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';
@@ -124,7 +139,9 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       const { disk } = await readSparse(createReadStream(REAL!, { highWaterMark: 1 << 20 }), (h) => new Disk(fileStore(work), h.blockSize, h.blocks), { onBytes: (b) => sha.update(b) });
       expect(hex(sha.digest())).toBe(GLASS_PANES.system.sha256);
       await dump(disk, join(dir, 'original.raw'));
-      const baseline = fsck(join(dir, 'original.raw')).out.split('\n').filter((l) => /Fix\?/.test(l));
+      // every question e2fsck -n asks (Fix?, Clear?, Salvage?, …) answers itself "no": compare them all
+      const problems = (out: string) => out.split('\n').filter((l) => /\?\s+(no|yes)\s*$/.test(l) || /Fix\?/.test(l));
+      const baseline = problems(fsck(join(dir, 'original.raw')).out);
 
       await patchSystem(await Ext4.open(disk), { apk: APK, bootAnimation: ANIM, hwrotation: 270 });
       const out = openSync(join(dir, 'out.img'), 'w');
@@ -143,7 +160,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       closeSync(dev);
       void flashed;
       const r = fsck(join(dir, 'flashed.raw'));
-      const findings = r.out.split('\n').filter((l) => /Fix\?/.test(l));
+      const findings = problems(r.out);
       expect(findings).toEqual(baseline); // the image's own make_ext4fs quirk, nothing new
       const img = join(dir, 'flashed.raw');
       expect(Buffer.from(debugfsCat(img, `${APP_DIR}/S1Kiosk.apk`))).toEqual(Buffer.from(APK));

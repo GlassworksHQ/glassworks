@@ -76,8 +76,10 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): pick S1 Kiosk's legacy build. Nothing was changed.`);
   if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: pick S1 Kiosk's legacy build. Nothing was changed.`);
   const names = zipNames(o.apk);
-  const abi = LIB_DIRS.find(([a]) => names.some((n) => n.startsWith(`lib/${a}/`)));
-  const libs = abi ? names.filter((n) => n.startsWith(`lib/${abi[0]}/`) && n.endsWith('.so') && !n.slice(`lib/${abi[0]}/`.length).includes('/')) : [];
+  // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them: an empty lib/<abi>/ folder doesn't count
+  const soIn = (a: string) => names.filter((n) => n.startsWith(`lib/${a}/`) && n.endsWith('.so') && !n.slice(`lib/${a}/`.length).includes('/'));
+  const abi = LIB_DIRS.find(([a]) => soIn(a).length > 0);
+  const libs = abi ? soIn(abi[0]) : [];
 
   if (await fs.exists(APP_DIR)) { await fs.remove(APP_DIR, { recursive: true, time }); log(`replaced ${APP_DIR}`); }
   await fs.mkdir(APP_DIR, dirAttrs(time));

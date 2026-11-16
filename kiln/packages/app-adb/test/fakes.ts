@@ -1,9 +1,14 @@
 // A tiny stand-in APK: a zip with only an AndroidManifest.xml in binary XML, naming `pkg`. Enough for
 // apkPackage, the tests and Kiln's demos. Nothing in it would install.
 
-function axml(pkg: string, utf8: boolean, minSdk?: number, stripNames = false): Uint8Array {
-  // strings: 0 manifest, 1 package, 2 pkg, 3 uses-sdk, 4 minSdkVersion (left empty, as some builds do, with stripNames)
-  const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion'];
+/** `shadow`: an unqualified minSdkVersion before the real one; `minSdkKind`: its value type (0x10, int, by default). */
+interface AxmlOptions { minSdk?: number; stripNames?: boolean; shadow?: number; minSdkKind?: number }
+
+function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
+  const { minSdk, stripNames = false } = o;
+  // strings: 0 manifest, 1 package, 2 pkg, 3 uses-sdk, 4 minSdkVersion (left empty, as some builds do, with
+  // stripNames), 5 the android namespace, 6 a second, unqualified "minSdkVersion" (no resource id)
+  const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion', 'http://schemas.android.com/apk/res/android', 'minSdkVersion'];
   const enc = new TextEncoder();
   const bodies = strs.map((s) => {
     if (utf8) { const b = enc.encode(s); return Uint8Array.of(s.length, b.length, ...b, 0); }
@@ -18,8 +23,9 @@ function axml(pkg: string, utf8: boolean, minSdk?: number, stripNames = false): 
   bodies.reduce((o, b) => { offsets.push(o); data.set(b, o); return o + b.length; }, 0);
   const poolHdr = 28, poolSize = poolHdr + strs.length * 4 + data.length;
   const mapSize = 8 + 5 * 4; // resource ids for strings 0-4: only minSdkVersion has one
-  const elemSize = 16 + 20 + 20;
-  const total = 8 + poolSize + mapSize + elemSize + (minSdk !== undefined ? elemSize : 0);
+  const elemSize = (attrs: number) => 16 + 20 + 20 * attrs;
+  const sdkAttrs = o.shadow !== undefined ? 2 : 1;
+  const total = 8 + poolSize + mapSize + elemSize(1) + (minSdk !== undefined ? elemSize(sdkAttrs) : 0);
   const x = new Uint8Array(total);
   const v = new DataView(x.buffer);
   v.setUint16(0, 0x0003, true); v.setUint16(2, 8, true); v.setUint32(4, total, true);
@@ -33,18 +39,27 @@ function axml(pkg: string, utf8: boolean, minSdk?: number, stripNames = false): 
   v.setUint16(p, 0x0180, true); v.setUint16(p + 2, 8, true); v.setUint32(p + 4, mapSize, true);
   v.setUint32(p + 8 + 4 * 4, 0x0101020c, true);
   p += mapSize;
-  const element = (name: number, attr: number, kind: number, data: number) => {
-    v.setUint16(p, 0x0102, true); v.setUint16(p + 2, 16, true); v.setUint32(p + 4, elemSize, true);
-    v.setUint32(p + 8, 1, true); v.setUint32(p + 12, 0xffffffff, true);
+  const NONE = 0xffffffff;
+  const element = (name: number, attrs: { ns: number; attr: number; kind: number; data: number }[]) => {
+    const size = elemSize(attrs.length);
+    v.setUint16(p, 0x0102, true); v.setUint16(p + 2, 16, true); v.setUint32(p + 4, size, true);
+    v.setUint32(p + 8, 1, true); v.setUint32(p + 12, NONE, true);
     const e = p + 16;
-    v.setUint32(e, 0xffffffff, true); v.setUint32(e + 4, name, true); v.setUint16(e + 8, 20, true); v.setUint16(e + 10, 20, true); v.setUint16(e + 12, 1, true);
-    const a = e + 20;
-    v.setUint32(a, 0xffffffff, true); v.setUint32(a + 4, attr, true); v.setUint32(a + 8, kind === 0x03 ? data : 0xffffffff, true);
-    v.setUint16(a + 12, 8, true); x[a + 15] = kind; v.setUint32(a + 16, data, true);
-    p += elemSize;
+    v.setUint32(e, NONE, true); v.setUint32(e + 4, name, true); v.setUint16(e + 8, 20, true); v.setUint16(e + 10, 20, true); v.setUint16(e + 12, attrs.length, true);
+    attrs.forEach(({ ns, attr, kind, data }, i) => {
+      const a = e + 20 + i * 20;
+      v.setUint32(a, ns, true); v.setUint32(a + 4, attr, true); v.setUint32(a + 8, kind === 0x03 ? data : NONE, true);
+      v.setUint16(a + 12, 8, true); x[a + 15] = kind; v.setUint32(a + 16, data, true);
+    });
+    p += size;
   };
-  element(0, 1, 0x03, 2);
-  if (minSdk !== undefined) element(3, 4, 0x10, minSdk);
+  element(0, [{ ns: NONE, attr: 1, kind: 0x03, data: 2 }]);
+  if (minSdk !== undefined) {
+    element(3, [
+      ...(o.shadow !== undefined ? [{ ns: NONE, attr: 6, kind: 0x10, data: o.shadow }] : []),
+      { ns: 5, attr: 4, kind: o.minSdkKind ?? 0x10, data: minSdk },
+    ]);
+  }
   return x;
 }
 
@@ -77,8 +92,11 @@ function zip(files: [string, Uint8Array][]): Uint8Array {
 }
 
 /** `libs`: native libraries by ABI, e.g. { 'arm64-v8a': { 'libxul.so': bytes } }. */
-/** `minSdk`: a <uses-sdk android:minSdkVersion>; `stripNames`: its attribute named only by resource id. */
-export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Record<string, Record<string, Uint8Array>>; minSdk?: number; stripNames?: boolean } = {}): Uint8Array {
+/**
+ * `minSdk`: a <uses-sdk android:minSdkVersion>; `stripNames`: its attribute named only by resource id;
+ * `shadow`: an unqualified minSdkVersion before it (Android ignores it); `minSdkKind`: its value type.
+ */
+export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Record<string, Record<string, Uint8Array>> } & AxmlOptions = {}): Uint8Array {
   const libs = Object.entries(o.libs ?? {}).flatMap(([abi, fs]) => Object.entries(fs).map(([n, b]): [string, Uint8Array] => [`lib/${abi}/${n}`, b]));
-  return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8, o.minSdk, o.stripNames)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs]);
+  return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8, o)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs]);
 }

@@ -61,8 +61,9 @@ const NO_NAMESPACE = new Set(['package']);
 
 /**
  * The value of attribute `attr` on the first element `element` in binary XML: a string, or a number
- * for an integer value (TYPE_INT_DEC or TYPE_INT_HEX). The attribute is found by name, or by its
- * resource id when the build left the name out.
+ * for an integer value (TYPE_INT_DEC or TYPE_INT_HEX). A framework attribute (ATTR_IDS) is found by its
+ * resource id, as Android finds it; by name only when the build gave it no id and it is namespaced.
+ * Any other value type (a reference, a float, …) throws: Kiln can't tell what Android would read.
  */
 export function axmlAttribute(xml: Uint8Array, element: string, attr: string): string | number | undefined {
   const dv = new DataView(xml.buffer, xml.byteOffset, xml.byteLength);
@@ -98,14 +99,19 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
         for (let i = 0; i < aCount; i++) {
           const a = ext + aStart + i * aSize;
           const ns = dv.getUint32(a, true), nameIdx = dv.getUint32(a + 4, true);
-          if (strings[nameIdx] !== attr && (ATTR_IDS[attr] === undefined || resIds[nameIdx] !== ATTR_IDS[attr])) continue;
+          const id = ATTR_IDS[attr];
+          if (id !== undefined) {
+            // an unqualified minSdkVersion, or one with another id, isn't the one Android checks
+            const byId = resIds[nameIdx];
+            if (ns === 0xffffffff || (byId !== undefined ? byId !== id : strings[nameIdx] !== attr)) continue;
+          } else if (strings[nameIdx] !== attr) continue;
           // <manifest package> has no namespace: an android:package (or any namespaced one) isn't it
           if (NO_NAMESPACE.has(attr) && ns !== 0xffffffff) continue;
           const raw = dv.getUint32(a + 8, true), kind = xml[a + 15], data = dv.getUint32(a + 16, true);
           if (raw !== 0xffffffff) return strings[raw];
           if (kind === 0x03) return strings[data];                 // TYPE_STRING
           if (kind === 0x10 || kind === 0x11) return data | 0;      // TYPE_INT_DEC, TYPE_INT_HEX
-          return undefined;
+          throw new Error(`this APK's ${element} ${attr} is a value Kiln can't read (type 0x${(kind ?? 0).toString(16)}), so it can't check it`);
         }
         return undefined;
       }

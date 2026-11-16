@@ -37,7 +37,10 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
    - `e2fsck -fn` on the unmodified image: `Padding at end of inode bitmap is not set`, and nothing
      else. That's a known `make_ext4fs` quirk the kernel ignores.
 
-2. **The maintainer's Mirror, read-only adb** (2026-11-15, verified; serial left out):
+2. **The maintainer's Mirror, read-only adb** (2026-11-15, verified; serial left out). Each read
+   is `adb shell <command>` exactly as written in the left column (for a file, `cat <path>`, with
+   `grep -n` for one line). The right column quotes the output, cut to the lines that matter, and
+   leaves out anything device-unique:
 
    | Read | Result |
    |---|---|
@@ -46,7 +49,7 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
    | `/system/build.prop:174` | `persist.sys.usb.config=…,adb`: loaded after `/default.prop`, so adb stays on with an empty `userdata` |
    | `/file_contexts` (0644, readable) | `/data(/.*)?` `system_data_file`, `/data/misc/adb(/.*)?` `adb_keys_file`, `/system(/.*)?` `system_file` |
    | `getprop ro.crypto.state` | `unencrypted`. `fstab.qcom` is 0640 root, unreadable |
-   | `pm list packages` | `com.android.provision` present: a fresh `userdata` finishes setup by itself |
+   | `pm list packages` | `com.android.provision` present. Whether a fresh `userdata` then finishes setup by itself is **untested** until the first real flash |
    | `wm size`; `dumpsys display`; `dumpsys window` | Physical 1920×1080, base rotation 0, `ro.sf.hwrotation` unset; `mUserRotation=3`, locked (`user_rotation=3`, `accelerometer_rotation=0`), kept in `userdata`'s settings |
 
 3. **The Glass Panes `userdata.sparse`** (2026-11-15, read: its first 2 MiB only). Its ext4 fills
