@@ -4,7 +4,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MemoryStore, writeSparse, Disk } from '@glassworks/ext4';
-import { IMAGE_PROXY, ProxyError, loadSystem, resumableBody } from '../src';
+import { IMAGE_PROXY, ProxyError, loadSystem, resumableBody, retryAfterMs } from '../src';
 
 const URL = `${IMAGE_PROXY.base.replace('refract.glassworks.dev', 'proxy.test')}/${IMAGE_PROXY.systemImg}`;
 
@@ -60,6 +60,31 @@ describe('the image from the release proxy', () => {
     expect(e).toBeInstanceOf(ProxyError);
     expect((e as Error).message).toMatch(msg);
     expect(asked.length).toBe(override(1) ? 1 : 2); // no retry after the refusal
+  });
+
+  it('honours Retry-After on a 429: waits as asked, then resumes where it stopped', async () => {
+    const body = new Uint8Array(randomBytes(100_000));
+    const waits: number[] = [];
+    const busy = (n: number) => (n === 2 ? new Response('slow down', { status: 429, headers: { 'retry-after': '7' } }) : undefined);
+    const { f, asked } = proxy(body, { drops: [30_000], override: busy });
+    const got = await read(resumableBody(URL, body.length, { fetch: f, sleep: async (ms) => { waits.push(ms); } }).stream());
+    expect(Buffer.from(got)).toEqual(Buffer.from(body));
+    expect(asked).toEqual([undefined, 'bytes=30000-', 'bytes=30000-']);
+    expect(waits).toEqual([1000, 7000]);
+  });
+
+  it('falls back at once when Retry-After asks for more than a minute', async () => {
+    const f = (async () => new Response('', { status: 429, headers: { 'retry-after': '600' } })) as typeof fetch;
+    await expect(read(resumableBody(URL, 10, { fetch: f, sleep: noSleep }).stream())).rejects.toThrow(/busy for 600 s \(429\)/);
+  });
+
+  it('reads Retry-After as seconds or as an HTTP date', () => {
+    const now = Date.parse('2026-11-15T12:00:00Z');
+    expect(retryAfterMs('5', now)).toBe(5000);
+    expect(retryAfterMs('Sun, 15 Nov 2026 12:00:30 GMT', now)).toBe(30_000);
+    expect(retryAfterMs('Sun, 15 Nov 2026 11:00:00 GMT', now)).toBe(0);
+    expect(retryAfterMs('soon', now)).toBeUndefined();
+    expect(retryAfterMs(null, now)).toBeUndefined();
   });
 
   it('gives up after its retries when the network keeps failing', async () => {

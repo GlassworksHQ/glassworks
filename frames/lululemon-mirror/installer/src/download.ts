@@ -1,7 +1,8 @@
 // The system image straight from Refract (#347, kiln/workers/refract: our Cloudflare Worker that
 // streams allowlisted release files with CORS for Kiln and Range, and stores nothing; maintainer,
 // 2026-11-15) into the image loader, as one stream.
-// A dropped connection resumes with Range where it stopped, so nothing is read twice. When the proxy
+// A dropped connection resumes with Range where it stopped, so nothing is read twice. A 429 (Refract's
+// rate limit) waits as long as its Retry-After asks, up to a minute, then tries again. When the proxy
 // can't serve the file (a network error that keeps coming back, a 5xx, a wrong size), Kiln falls
 // back to the person downloading it from GitHub and selecting it.
 
@@ -15,6 +16,19 @@ export const IMAGE_PROXY = {
 export class ProxyError extends Error {}
 /** An answer that retrying won't change (a refusal, a wrong size): fall back at once. */
 class Refused extends ProxyError {}
+/** 429, or 503 with Retry-After: Refract's rate limit. Wait as long as it asks, then try again. */
+class Busy extends ProxyError { constructor(m: string, readonly ms: number) { super(m); } }
+
+/** The longest Retry-After Kiln waits out; a longer one falls back to download-and-select. */
+export const MAX_RETRY_AFTER_MS = 60_000;
+
+/** Retry-After as milliseconds: delta-seconds or an HTTP date (RFC 9110 10.2.3). */
+export function retryAfterMs(v: string | null, now = Date.now()): number | undefined {
+  if (!v) return undefined;
+  if (/^\d+$/.test(v.trim())) return Number(v.trim()) * 1000;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? undefined : Math.max(0, t - now);
+}
 
 export interface ResumeOptions {
   fetch?: typeof fetch;
@@ -39,6 +53,11 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
           r = await f(url, { headers: got ? { Range: `bytes=${got}-` } : {}, cache: 'no-store' });
         } catch (e) {
           throw new ProxyError(`the download proxy can't be reached (${(e as Error).message})`);
+        }
+        if (r.status === 429 || (r.status === 503 && r.headers.has('retry-after'))) {
+          const ms = retryAfterMs(r.headers.get('retry-after'));
+          if (ms !== undefined && ms > MAX_RETRY_AFTER_MS) throw new Refused(`the download proxy is busy for ${Math.ceil(ms / 1000)} s (${r.status})`);
+          throw new Busy(`the download proxy is busy (${r.status})`, ms ?? 0);
         }
         if (r.status >= 500) throw new Refused(`the download proxy answered ${r.status}${await reason(r)}`);
         if (got === 0) {
@@ -69,7 +88,7 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
             } catch (e) {
               reader = undefined;
               if (e instanceof Refused || ++tries > retries) { c.error(e instanceof ProxyError ? e : new ProxyError((e as Error).message)); return; }
-              await sleep(1000 * tries);
+              await sleep(e instanceof Busy && e.ms ? e.ms : 1000 * tries);
             }
           }
         },
