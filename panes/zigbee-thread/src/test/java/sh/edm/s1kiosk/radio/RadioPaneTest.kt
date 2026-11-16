@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -109,7 +110,7 @@ class RadioPaneTest {
         peer?.let { props.props[RadioHelper.PROP_PEER] = it }
         val zone = java.util.TimeZone.getDefault()
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
-        try { return entity("radio_connected").shownState().orEmpty() } finally { java.util.TimeZone.setDefault(zone) }
+        try { return pane.radio.connectedNow() } finally { java.util.TimeZone.setDefault(zone) }
     }
 
     @Test fun connectedNowNamesHomeAssistantAndSaysSinceWhen() {
@@ -132,6 +133,24 @@ class RadioPaneTest {
 
     @Test fun onlyTheCoordinatorHasAClient() {
         assertEquals("Only the Zigbee coordinator takes a client", connectedNow("192.0.2.20 1794753130", mode = "thread_router"))
+    }
+
+    @Test fun homeAssistantGetsOnlyWhatARefreshSaw() {
+        // CodeRabbit on #391: a publish between refreshes must not send a client the change check never saw,
+        // or its leaving would never be published.
+        connectedNow("none")
+        pane.radio.refresh()
+        val sensor = entity("radio_connected")
+        assertEquals("Nobody", sensor.shownState())
+        props.props[RadioHelper.PROP_PEER] = "198.51.100.7 1794753130"
+        assertEquals("a publish before the refresh still says Nobody", "Nobody", sensor.shownState())
+        pane.radio.refresh()
+        assertTrue(sensor.shownState().orEmpty(), sensor.shownState().orEmpty().startsWith("198.51.100.7 · since "))
+        val before = changed
+        props.props[RadioHelper.PROP_PEER] = "none"
+        pane.radio.refresh()
+        assertEquals("its leaving is published", before + 1, changed)
+        assertEquals("Nobody", sensor.shownState())
     }
 
     @Test fun aNewClientIsPublishedToHomeAssistantOnTheNextRefresh() {

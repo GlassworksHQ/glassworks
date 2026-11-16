@@ -222,6 +222,23 @@ class RadioDefinitionTest {
     }
 
     @Test
+    fun connectedNowOnThePageIsReadAfreshNotFromHomeAssistantsSensor() {
+        // The sensor lags up to 15 s (the radio's refresh); the page reads the controller each time it draws.
+        var live = "Nobody"
+        val pane = object : dev.glassworks.pane.Pane {
+            override val id = "radio"
+            override fun entities() = listOf(dev.glassworks.esphome.TextSensorEntity("radio_connected", "Radio connected client", get = { "Home Assistant · 192.0.2.20 · since 14:32" }))
+        }
+        val readout = object : RadioReadout by FixedReadout(null, running = false) {
+            override fun connectedNow() = live
+        }
+        val row = (radioDefinition(app, readout).settings(pane).single().items.last() as dev.glassworks.pane.SettingsItem.Group).items.single() as dev.glassworks.pane.SettingsItem.Info
+        assertEquals("Nobody", row.detail())
+        live = "198.51.100.7 · since 14:40"
+        assertEquals("198.51.100.7 · since 14:40", row.detail())
+    }
+
+    @Test
     fun aRequestThatNeverQueuedIsntPending() {
         // Verifier bd94c950: after stop() the radio thread refuses work; the count must not leak.
         val c = RadioController(TestInit(), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = false, log = {}, filesDir = tmp.root)

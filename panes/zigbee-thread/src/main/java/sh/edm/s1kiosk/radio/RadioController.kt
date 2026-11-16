@@ -153,8 +153,13 @@ class RadioController(
     @Volatile private var helperShown = ""
     @Volatile private var firmwareShown = ""
     @Volatile private var fwSelectedShown = RadioFirmware.KEEP
-    /** [connectedNow] as Home Assistant last got it: a change makes [refresh] publish. */
+    /**
+     * [connectedNow] as the last [refresh] read it. Home Assistant's sensor shows this, not a live read: a
+     * publish between refreshes could otherwise send a client that [refresh] never saw, and its leaving
+     * would then never be published.
+     */
     @Volatile private var connectedShown = ""
+    fun connectedText(): String = connectedShown
     fun helperStatusText(): String = helperShown
     fun firmwareText(): String = firmwareShown
     fun firmwareSelected(): String = fwSelectedShown
