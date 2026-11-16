@@ -38,11 +38,12 @@ interface AppParts {
     val mainActivity: Class<out Activity>
 
     /**
-     * Whether the extras of [intent], which started or reached the app's activity, may change settings. S1 Kiosk
-     * trusts all: it is the panel's one app, and adb, Kiln and Clarity drive it with them. An app on a device
-     * with other apps trusts only an entry point they can't use (#23); the activity drops the rest's extras.
+     * Whether the extras of [intent], which started or reached the app's activity, may change settings. Only a
+     * start of [mainActivity] itself, which the app's manifest guards with WRITE_SECURE_SETTINGS (adb, root, the
+     * system and the app get in; other apps don't), may. A launcher alias, which any app can start, may not
+     * (#23, #374); the activity drops its extras.
      */
-    fun trustsExtras(intent: Intent): Boolean = true
+    fun trustsExtras(intent: Intent): Boolean = intent.component?.className == mainActivity.name
 
     /** The file that holds the settings of the pane with id [namespace]. */
     fun paneFile(context: Context, namespace: String): SharedPreferences

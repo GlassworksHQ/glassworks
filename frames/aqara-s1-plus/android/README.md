@@ -187,6 +187,12 @@ $A --es base_backend auto      # wall base: auto (UART unless Aqara cloud blocki
 $A --es base_transport tcp:127.0.0.1:9999   # UART backend on frames/aqara-s1-plus/tools/bracket/base_emulator.py (adb reverse); "" = /dev/ttyS3
 ```
 
+Only adb, root, the system (HOME) and the app itself can start `MainActivity`: it takes
+`WRITE_SECURE_SETTINGS`, which adb's shell holds and Android waives for root, the system and the app.
+Another app on the panel can't send these extras. The launcher icon starts the alias
+`sh.edm.s1kiosk.Launcher`, and the app ignores the extras of a start through it
+(logged as `ignored the extras of a start through .Launcher`).
+
 Do **not** change `wm density` to scale the UI. On this panel it breaks GeckoView's surface
 size until reboot. Use `zoom` instead.
 

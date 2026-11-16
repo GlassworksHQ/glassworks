@@ -66,7 +66,11 @@ class GeckoPinHarness(
     fun idle() = shadowOf(Looper.getMainLooper()).idle()
     fun advance(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
 
-    fun newIntent(i: Intent) { controller.newIntent(i); idle() }
+    /** Delivers [i] as Android does: with its component set, to MainActivity when the test named none. */
+    fun newIntent(i: Intent) {
+        controller.newIntent(if (i.component == null) Intent(i).setClass(app, MainActivity::class.java) else i)
+        idle()
+    }
 
     /** The activity's root views, bottom to top. */
     fun rootChildren(): List<android.view.View> {
