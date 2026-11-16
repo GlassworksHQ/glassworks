@@ -1,8 +1,8 @@
 # Kiln clean-room rewrite: rules, specs and vectors
 
-**Status (2026-11-15): specs and vectors ready, rewrite not started.** Tracked in #355.
+**Status (2026-11-16): done.** Both rewrites landed: `kiln/packages/fel` in #372 (it booted U-Boot on a real S1) and `kiln/packages/bootpatch` in #373 (its output is byte-identical to the old patcher on the S1 goldens and the S1's own stock boot image). Kiln holds no GPL code. Tracked in #355.
 
-Kiln's FEL client (`kiln/packages/fel`) and boot patcher (`kiln/packages/bootpatch`) hold code derived
+Kiln's FEL client (`kiln/packages/fel`) and boot patcher (`kiln/packages/bootpatch`) held code derived
 from sunxi-tools (GPL-2.0-or-later) and Magisk v31.1 (GPL-3.0-only). The maintainer decided on
 2026-11-15 to rewrite those parts in a clean room, so Kiln and both packages stay MIT and hard rule 4
 holds. The audit that found the code is in #348.
@@ -15,6 +15,10 @@ The work is split between two people:
 | Implementer | **No**, and must not | Deletes the listed files unread, writes new code from the specs, the public docs and the vectors |
 
 ## For the implementer
+
+> **Historical.** These steps and the "Don't open" list describe how the 2026 rewrite was done. The work is
+> finished; keep them as the record of the clean room, not as a to-do. A new clean-room job would start from a
+> new spec and its own list.
 
 1. Read [fel-spec.md](fel-spec.md) and [bootpatch-spec.md](bootpatch-spec.md), and the public
    documents they cite.

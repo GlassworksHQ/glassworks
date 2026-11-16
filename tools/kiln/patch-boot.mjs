@@ -1,0 +1,93 @@
+#!/usr/bin/env node
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 aguilaair
+//
+// Patch an S1 boot image with Kiln's boot patcher (kiln/packages/bootpatch), on the host, the way
+// Kiln does in the browser. Touches no device and no network: it reads the files named below and
+// writes one output file.
+//
+//   node tools/kiln/patch-boot.mjs <boot.img> <out.img> --apk <Magisk-v31.1.apk> [options]
+//
+//   --apk <file>          the official Magisk v31.1 APK (required; checked against its SHA-256 in kiln/assets.lock.json)
+//   --overlay-dir <dir>   take every overlay file from one directory, by its file name (the layout of
+//                         the golden set's fixtures/overlay). Default: the repo's own files and build
+//                         outputs, as frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh uses them
+//   --adb-key <file|none> adb public key to authorize on first boot (default ~/.android/adbkey.pub)
+//   --no-anim             no boot animation (BOOT_ANIMATION=none in the CLI)
+//   --preinit <device>    PREINITDEVICE for a stock image (default cache)
+//   --package <dir>       the bootpatch package to use (default: this checkout's). Point it at another
+//                         checkout's kiln/packages/bootpatch to compare two patchers on the same input
+//
+// Needs Node 22.18 or later (it loads the package's TypeScript directly).
+import { readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { registerHooks } from 'node:module';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const { values: opt, positionals } = parseArgs({
+  allowPositionals: true,
+  options: {
+    apk: { type: 'string' }, 'overlay-dir': { type: 'string' }, 'adb-key': { type: 'string' },
+    'no-anim': { type: 'boolean' }, preinit: { type: 'string' }, package: { type: 'string' },
+  },
+});
+const [input, output] = positionals;
+if (!input || !output || !opt.apk) {
+  console.error('usage: node tools/kiln/patch-boot.mjs <boot.img> <out.img> --apk <Magisk-v31.1.apk> [options]');
+  process.exit(2);
+}
+
+// The package's sources import each other without extensions, as the bundler allows.
+registerHooks({
+  resolve(spec, ctx, next) {
+    try { return next(spec, ctx); } catch (e) {
+      if (!spec.startsWith('.') || /\.[cm]?[jt]s$/.test(spec)) throw e;
+      return next(`${spec}.ts`, ctx);
+    }
+  },
+});
+const pkg = resolve(opt.package ?? join(REPO, 'kiln/packages/bootpatch'));
+const { patchBoot, s1Overlay } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
+
+const read = (p) => new Uint8Array(readFileSync(p));
+const sha256 = (d) => createHash('sha256').update(d).digest('hex');
+const fail = (msg) => { console.error(msg); process.exit(1); };
+
+const apk = read(opt.apk);
+const pinned = JSON.parse(readFileSync(join(REPO, 'kiln/assets.lock.json'), 'utf8')).assets.find((a) => a.name === 'magisk').sha256;
+if (sha256(apk) !== pinned) fail(`${opt.apk} is not the pinned Magisk APK (sha256 ${pinned})`);
+const root = join(REPO, 'frames/aqara-s1-plus/tools/root');
+const radio = join(REPO, 'frames/aqara-s1-plus/tools/radio');
+const from = opt['overlay-dir']
+  ? (name) => read(join(opt['overlay-dir'], name))
+  : (name) => read({
+    's1kiosk_radio.rc': join(radio, name), 's1kiosk_radio.sh': join(radio, name),
+    'otbr-agent': join(radio, 'out', name), 'ot-ctl': join(radio, 'out', name),
+    's1kiosk_verify': join(root, 'out', name),
+    's1kiosk_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
+  }[name] ?? join(root, name));
+const adbKey = opt['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
+if (!opt['overlay-dir'] && !readFileSync(join(radio, 'out/BUILD-INFO.txt'), 'utf8').includes('/data/s1kiosk/radio/run')) {
+  fail('otbr was built with the wrong OTBR_RUNTIME_DIR (need /data/s1kiosk/radio/run)');
+}
+
+const overlay = s1Overlay({
+  radioRc: from('s1kiosk_radio.rc'), radioSh: from('s1kiosk_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
+  firstbootRc: from('s1kiosk_firstboot.rc'), firstbootSh: from('s1kiosk_firstboot.sh'),
+  adbKeys: adbKey === 'none' ? new Uint8Array(0) : read(adbKey),
+  netwatchRc: from('s1kiosk_netwatch.rc'), netwatchSh: from('s1kiosk_netwatch.sh'),
+  updateRc: from('s1kiosk_update.rc'), updateSh: from('s1kiosk_update.sh'),
+  bundleRc: from('s1kiosk_bundle.rc'), bundleSh: from('s1kiosk_bundle.sh'),
+  verify: from('s1kiosk_verify'), bundlePub: from('s1kiosk_bundle.pub'),
+  branding: opt['no-anim'] ? undefined : { rc: from('s1kiosk_branding.rc'), bootAnimation: from('s1kiosk_bootanimation.zip') },
+});
+
+const r = await patchBoot({ boot: read(input), magiskApk: apk, overlay, preinitDevice: opt.preinit });
+writeFileSync(output, r.image);
+for (const line of r.log) console.log(line);
+console.log(`--- Magisk config:\n${r.magiskConfig}--- wasMagisk: ${r.wasMagisk}`);
+console.log(`${output}: ${r.image.length} bytes, sha256 ${sha256(r.image)}`);
