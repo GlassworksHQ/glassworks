@@ -1,11 +1,12 @@
-# The Glassworks core on Android emulators at API 26, 29 and 34 (#23): the conformance test
+# The Glassworks core on Android emulators at API 23, 26, 29 and 34 (#23, #198): the conformance test
 # (core/src/androidTest, CoreConformanceTest) boots the core with a fake frame, a fake engine and one pane,
 # and checks what any frame relies on: the app owns the runtime, a pane the frame can't run is hidden, secrets
 # survive in Android's Keystore, the screen follows the frame's sensors, and the ESPHome device serves Home
-# Assistant with the frame's panes. API 23 belongs to the legacy build (#198); pr.yml's libs-api23 runs the
-# libraries there.
+# Assistant with the frame's panes. API 23 is the legacy build's floor (#198): that job builds the test APK at
+# minSdk 23 with core library desugaring, as the legacy build runs the core (tools/legacy/api23-emulator.gradle, a
+# Gradle init script). pr.yml's libs-api23 runs the libraries there.
 #
-# Cost: three jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a
+# Cost: four jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a
 # minute of tests). Only when Android code or this file changes, on pull requests and on pushes to main. No secrets; GeckoView isn't in it (the
 # runners' emulators are x86_64, and no frame builds an x86 GeckoView), so the engine is a fake.
 name: Core on emulators
@@ -25,6 +26,7 @@ on:
       - '*.gradle.kts'
       - 'gradle/**'
       - 'gradle.properties'
+      - 'tools/legacy/api23-emulator.gradle'
       - '.github/workflows/core-emulators.yml'
   push:
     branches: [main]
@@ -42,6 +44,7 @@ on:
       - '*.gradle.kts'
       - 'gradle/**'
       - 'gradle.properties'
+      - 'tools/legacy/api23-emulator.gradle'
       - '.github/workflows/core-emulators.yml'
 
 permissions:
@@ -59,6 +62,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - api: 23
+            target: default
+            init: --init-script tools/legacy/api23-emulator.gradle
           - api: 26
             target: default
           - api: 29
@@ -85,7 +91,7 @@ jobs:
         run: sdkmanager --install "platforms;android-37.2"
 
       - name: Build the conformance test APK
-        run: ./gradlew --no-daemon :glassworks-core:assembleDebugAndroidTest
+        run: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:assembleDebugAndroidTest
 
       - name: Enable KVM
         run: |
@@ -100,7 +106,7 @@ jobs:
           arch: x86_64
           target: ${{ matrix.target }}
           disable-animations: true
-          script: ./gradlew --no-daemon :glassworks-core:connectedDebugAndroidTest
+          script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest
 
       - name: Test report
         if: always()

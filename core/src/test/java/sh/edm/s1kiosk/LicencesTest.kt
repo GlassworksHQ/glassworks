@@ -33,6 +33,8 @@ class LicencesTest {
             "LGPL-2.1-or-later" to "LGPL-2.1", "GCC-exception-3.1" to "GCC-exception-3.1",
             "LicenseRef-Silabs-MSLA" to "LicenseRef-Silabs-MSLA",
             "OFL-1.1" to "OFL-1.1",
+            // desugar_jdk_libs, in the generic app's legacy APK (#198).
+            "GPL-2.0-only WITH Classpath-exception-2.0" to "GPL-2.0", "Classpath-exception-2.0" to "Classpath-exception-2.0",
         )
         for ((id, file) in needed) {
             assertTrue("notices should name $id", id in notices)

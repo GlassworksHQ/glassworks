@@ -9,8 +9,10 @@
 #            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy and
 #            sendspin are linted only (an emulator has no Bluetooth to scan with, nor a Sendspin server)
 #   api23    the legacy build's floor (#198): lint's NewApi over the core, the pane API, the panes and the
-#            legacy engine at minSdk 23 (tools/legacy/api23-report.py), failing on a call above API 23 that
-#            tools/legacy/api23-baseline.txt doesn't list. Only when the Android code or this file changes
+#            legacy engine at minSdk 23, and over the generic app's legacy build (tools/legacy/api23-report.py),
+#            failing on a call above API 23 that tools/legacy/api23-baseline.txt doesn't list. Then the generic
+#            app's own lint (lintDebug: its manifest, the system permissions it asks for on purpose). Only when
+#            the Android code or this file changes
 #   libs-publish  a dry run of the Maven Central release (#153, docs/releasing.md "Libraries"): each
 #            library's public API checked against its api/<name>.api dump, every published library
 #            to mavenLocal, unsigned, its files checked, then fresh apps built
@@ -40,7 +42,9 @@
 #   size-generic  the same check for Glassworks for generic Android (#23, frames/generic-android): its
 #            release APK for each ABI of its frame.json against frames/generic-android/budgets.json. This
 #            branch only, no change column, so it costs two builds (about 4 minutes); the report is the
-#            job summary. Only when something that goes into that APK, or this file, changes
+#            job summary. Then its legacy build (#198, arm64-v8a) builds, with its id, minSdk and the
+#            system permissions checked; no budget yet. Only when something that goes into those APKs, or
+#            this file, changes
 #   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
 #            Python image and fails if the committed files differ. A few minutes, so it runs only
 #            when branding/boot, branding/glass-tile, branding/bootlogos.json, the S1's frame.json
@@ -247,6 +251,11 @@ jobs:
             echo "### Calls above API 23 (the legacy build's floor, #198)"
             python3 tools/legacy/api23-report.py --no-gradle | sed -n '1,/^$/p'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: The generic app's lint
+        if: steps.changed.outputs.run == 'true'
+        # Without the report's init script: every check, at its own minSdk. Its manifest asks for
+        # INSTALL_PACKAGES, REBOOT and WRITE_SECURE_SETTINGS on purpose (tools:ignore="ProtectedPermissions").
+        run: ./gradlew --no-daemon :generic-android:lintDebug
 
   libs-publish:
     runs-on: ubuntu-24.04
@@ -763,6 +772,22 @@ jobs:
             ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a"
             cp frames/generic-android/android/build/outputs/apk/release/generic-android-release-unsigned.apk "$RUNNER_TEMP/generic/$a.apk"
           done
+
+      - name: The legacy build (#198)
+        if: steps.changed.outputs.run == 'true'
+        # The Mirror's ABI. Its GeckoView follows -PlegacyAbi, the APK -Ps1Abi: the build checks they match.
+        run: |
+          ./gradlew --no-daemon :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
+          apk=frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
+          badging="$("$aapt2" dump badging "$apk")"
+          grep -q "^package: name='dev.glassworks.generic_android.legacy'" <<< "$badging" || { echo "::error::the legacy APK isn't dev.glassworks.generic_android.legacy"; exit 1; }
+          grep -q "^minSdkVersion:'23'" <<< "$badging" || { echo "::error::the legacy APK's minSdk isn't 23"; exit 1; }
+          for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
+            grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::the legacy APK doesn't ask for $perm"; exit 1; }
+          done
+          unzip -l "$apk" | grep -q "lib/arm64-v8a/libxul.so" || { echo "::error::the legacy APK has no arm64-v8a GeckoView"; exit 1; }
+          echo "Legacy APK (arm64-v8a): $(stat -c %s "$apk") bytes" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Size and budget
         if: steps.changed.outputs.run == 'true'

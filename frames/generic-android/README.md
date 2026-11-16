@@ -79,7 +79,22 @@ Android 6 and 7 (API 23-25) get a legacy build of this app (#198): GeckoView 144
 Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a separate app,
 `dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
 updates the other. The same APK serves older tablets and the lululemon Mirror, where Kiln flashes it into
-`/system/priv-app`. Status: the code is in; the build itself (its Gradle variant) and its release come next.
+`/system/priv-app`.
+
+It is the `legacy` build type of [`android/`](android): the same sources, manifest and key as the release build,
+with its own id, GeckoView 144 (`:engine-gecko-legacy`), minSdk 23 and core library desugaring. A build type, not
+a product flavor, so the release build stays as it was: a flavor would add `BuildConfig.FLAVOR` to it. Its
+GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
+
+```sh
+./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
+# → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
+```
+
+Status: it builds (CI builds it on every change, and test builds carry it), and CI runs the core's conformance
+test on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no release. **Don't install it on Android 6 or 7
+yet:** `MainActivity` still makes API 24+ calls, so it would crash at start, and as the home app at every boot. Two
+things wait: the app's own start on Android 6 (#198 Phase B), and Kiln's Mirror recipe taking this id.
 Both builds ask for `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` (system permissions, for the
 Mirror), which rules them out of Google Play as they are. #403 discusses a Play variant.
 Why one legacy app and not a Mirror app of its own: [The legacy build's id](#the-legacy-builds-id).
@@ -98,8 +113,8 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 ## Install
 
 It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet. To try a
-branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
-([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
+branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs, the legacy build's
+(`glassworks-generic-legacy-test-…`) included ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
 
 ## Updates
 

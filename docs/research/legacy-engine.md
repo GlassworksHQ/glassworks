@@ -295,7 +295,8 @@ doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
 API 23 in every Android library module: it runs lint's `NewApi` check with minSdk lowered to 23 for that run only
 (`tools/legacy/api23-lint.gradle`, a Gradle init script; no build file changes) and reads lint's reports. Run it
 from the repo root: `python3 tools/legacy/api23-report.py > table.md`. `:engine-gecko` is left out (the current
-engine, API 26; the legacy build lints its sources inside `:engine-gecko-legacy`), and so are the apps.
+engine, API 26; the legacy build lints its sources inside `:engine-gecko-legacy`). Of the apps, it lints the generic
+app's legacy build (its `legacy` build type, minSdk 23 of its own: the app's own sources only).
 
 CI runs it on every PR that touches Android code (`api23` in `pr.yml`) against `tools/legacy/api23-baseline.txt`,
 and fails on a call above API 23 that the baseline doesn't list. Desugared calls never fail it: the legacy build
@@ -492,6 +493,26 @@ app is never offered a build that needs Android 8, and a current app is never of
 
 An update keeps only the privileged permissions the `/system` copy requested. So the legacy build declares
 `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` from its first build (Phase D); a later build can't add one.
+
+## The legacy build (#198 Phase D)
+
+The legacy build is the `legacy` build type of Glassworks for generic Android (`frames/generic-android/android`):
+`dev.glassworks.generic_android.legacy`, minSdk 23, `:engine-gecko-legacy` in place of `:engine-gecko`, core library
+desugaring, and a manifest (`src/legacy`) that overrides the minSdk 26 of the core, the pane API and the panes. How
+to build it, and why a build type and not a flavor: [its README](../../frames/generic-android/README.md#the-legacy-build-android-6-and-7).
+**Don't install it on an Android 6-7 device yet.** Its `MainActivity` still makes API 24+ calls (Phase B, after
+#332), so it would crash at start, and with `BootReceiver` and the home screen on, at every boot. Until then this
+note's test APK (`:kiosk-legacy`, with those entry points off) stays the way to try the engine on a device.
+
+What checks it, besides the unit tests of the shared sources:
+
+| Check | What | Where |
+|---|---|---|
+| `LegacyBuildTest` | Its id is the one the app picks the legacy line by; each build has one engine; every module above API 23 is in `overrideLibrary` | `./gradlew test` |
+| `size-generic` | It builds for arm64-v8a, with its id, minSdk 23, the three system permissions and GeckoView's native code | `pr.yml` |
+| `api23` | No new call above API 23 in the app's own sources | `pr.yml` |
+| The conformance test on API 23 | The core boots on Android 6 with a fake frame and engine, built at minSdk 23 with desugaring (`tools/legacy/api23-emulator.gradle`) | `core-emulators.yml` |
+| Generic test build | Signed legacy APKs per ABI, 0.1.0 and 0.1.1 | `generic-test-build.yml` (test-build branches) |
 
 ## How to reproduce
 

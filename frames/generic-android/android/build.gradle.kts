@@ -1,6 +1,13 @@
 // Glassworks for generic Android (#23): the core and the panes that need no special hardware, as an app any
 // Android 8+ device installs (frames/generic-android). Its own applicationId and signing key: it never installs
 // over S1 Kiosk (sh.edm.s1kiosk), and the two can sit side by side on one device.
+//
+// Its legacy build (#198) is the `legacy` build type: Android 6-7 (minSdk 23) on GeckoView 144, locked to the
+// panel's Home Assistant (engines/engine-gecko-legacy), as dev.glassworks.generic_android.legacy, for older tablets
+// and the lululemon Mirror. Same sources, manifest and key as the release build; its own id and release line.
+//   ./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
+// A build type, not a product flavor: a flavor adds BuildConfig.FLAVOR to every variant, so the current release APK
+// would change. debug and release stay exactly as they were (same tasks, same APK).
 plugins {
     id("com.android.application")
     id("glassworks.android")
@@ -64,7 +71,18 @@ android {
             isMinifyEnabled = false
             signingConfig = if (haveReleaseKey) signingConfigs.getByName("release") else null
         }
+        // The legacy build (#198): the release build's settings and key, its own id. Its minSdk (23) and engine
+        // are set below; the libraries have no legacy build type, so they give it their release one.
+        create("legacy") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".legacy"
+            matchingFallbacks += "release"
+        }
     }
+
+    // java.time, Base64 and friends below API 26, for the legacy build. The setting is the module's, so the release
+    // build has it too: at its minSdk 26 those calls are Android's own and nothing is rewritten.
+    compileOptions { isCoreLibraryDesugaringEnabled = true }
 
     packaging {
         jniLibs { useLegacyPackaging = true }
@@ -77,12 +95,24 @@ android {
     sourceSets.getByName("test").java.srcDir(rootProject.file("testing/gecko"))
 }
 
+// The legacy build runs on Android 6 and up, and has no unit tests of its own: they run on the release build's
+// sources and GeckoView 159 (the shadows in testing/gecko). The emulators run the core on API 23 (core-emulators.yml).
+androidComponents {
+    beforeVariants(selector().withBuildType("legacy")) { v ->
+        v.minSdk = 23
+        v.enableUnitTest = false
+    }
+}
+
 dependencies {
     // The core, the Gecko engine, and the panes that need no special hardware: Assist (with its timers) and
-    // Sendspin. Nothing S1: no radio, wall base, time zone or root side.
+    // Sendspin. Nothing S1: no radio, wall base, time zone or root side. The engine is GeckoView 159, but
+    // GeckoView 144 for the legacy build (#198): both have the same classes, so each build has one.
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
-    implementation(project(":engine-gecko"))
+    debugImplementation(project(":engine-gecko"))
+    releaseImplementation(project(":engine-gecko"))
+    "legacyImplementation"(project(":engine-gecko-legacy"))
     implementation(project(":pane-assist"))
     implementation(project(":pane-timers"))
     implementation(project(":pane-sendspin"))
@@ -92,6 +122,10 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
     testImplementation("org.robolectric:robolectric:4.17")
+
+    // GPL-2.0 with the Classpath exception, like the JDK it backports (THIRD-PARTY-NOTICES.md). The classes the
+    // legacy build calls go into its APK; at the release build's minSdk 26 none do.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 // The licences screen and the notices check are S1 Kiosk's (frames/aqara-s1-plus/android/build.gradle.kts),
@@ -127,11 +161,11 @@ androidComponents {
     onVariants { v -> v.sources.assets?.addGeneratedSourceDirectory(licenceAssets, LicenceAssets::outputDir) }
 }
 
-// Every library in the release APK must be listed, with its version, in THIRD-PARTY-NOTICES.md
-// (`group:name:version`). Runs before release builds, so a dependency bump can't ship without its notice.
+// Every library in the release and legacy APKs must be listed, with its version, in THIRD-PARTY-NOTICES.md
+// (`group:name:version`). Runs before those builds, so a dependency bump can't ship without its notice.
 // Reads only the resolved dependency graph Gradle already has for the build.
-val checkThirdPartyNotices = tasks.register("checkThirdPartyNotices") {
-    val modules = configurations.named("releaseRuntimeClasspath").flatMap { c ->
+fun checkNotices(name: String, variant: String) = tasks.register(name) {
+    val modules = configurations.named("${variant}RuntimeClasspath").flatMap { c ->
         c.incoming.resolutionResult.rootComponent.map { root ->
             val seen = sortedSetOf<String>()
             val todo = ArrayDeque(listOf(root))
@@ -158,7 +192,21 @@ val checkThirdPartyNotices = tasks.register("checkThirdPartyNotices") {
                 missing.joinToString("\n  "))
     }
 }
+val checkThirdPartyNotices = checkNotices("checkThirdPartyNotices", "release")
+val checkLegacyNotices = checkNotices("checkLegacyThirdPartyNotices", "legacy")
 tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkThirdPartyNotices) }
+tasks.matching { it.name == "preLegacyBuild" }.configureEach { dependsOn(checkLegacyNotices) }
+
+// The legacy engine's GeckoView is built for -PlegacyAbi (root build.gradle.kts), the APK for -Ps1Abi: they must
+// match, or the APK would carry no engine for its ABI.
+val checkLegacyAbi by tasks.registering {
+    val apk = s1Abi
+    val engine = providers.provider { (rootProject.extra["legacyAbi"] as Lazy<*>).value as String }
+    doLast {
+        if (engine.get() != apk) throw GradleException("legacy build: -PlegacyAbi (${engine.get()}) must be the APK's -Ps1Abi ($apk)")
+    }
+}
+tasks.matching { it.name == "preLegacyBuild" }.configureEach { dependsOn(checkLegacyAbi) }
 
 
 val checkReleaseSigning by tasks.registering {
@@ -173,4 +221,4 @@ val checkReleaseSigning by tasks.registering {
         if (keyFile == null) logger.warn("release APK is UNSIGNED: set GENERIC_KEYSTORE_FILE, GENERIC_KEYSTORE_PASSWORD, GENERIC_KEY_ALIAS, GENERIC_KEY_PASSWORD to sign it")
     }
 }
-tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkReleaseSigning) }
+tasks.matching { it.name == "preReleaseBuild" || it.name == "preLegacyBuild" }.configureEach { dependsOn(checkReleaseSigning) }
