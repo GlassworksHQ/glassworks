@@ -249,6 +249,72 @@ GeckoView's `ContentBlocking` can't do this part: it blocks by tracker lists and
 an origin we choose. So the per-request blocking is a built-in web extension (`assets/lockdown`), the same way the
 S1 helper is built in.
 
+## The allowed origin, once (#198 part 2)
+
+Since this part, the lockdown takes its origin from the configured dashboard URL when the engine starts
+(`EngineSettings.dashboard`, `LockdownPolicy.start`), once per process. Before, it took the origin of the app's
+last `page.load`, so any load by the app could move it.
+
+| | Before | Now |
+|---|---|---|
+| Where the origin comes from | The app's last `page.load(url)` | The configured dashboard (`KioskPrefs.url`), read at the engine's first open |
+| An app load of another origin later | Moved the origin there | Refused like any page, with the note |
+| No dashboard yet (auto, HA not found) | Nothing loaded until the first load | Nothing loads in this process; finding HA restarts it |
+| A new dashboard address | Followed on the next load | Needs a new process: the settings menu's field restarts the app (`SettingsMenuTest`), the installer's `ha.set` restarts when `KioskPrefs.engineStart()` (secure hosts + dashboard origin) changes (`EngineStartTest`) |
+
+Tested by `LockdownPolicyTest` (set once; a second `start`, an app load elsewhere and a window elsewhere change
+nothing; no dashboard stays empty) and `EngineStartTest` (a new path on the same origin doesn't restart; a new
+host, port or scheme does; finding HA on auto does; the engine starts with the configured URL or none).
+
+On the API 23 emulator (2026-11-15, verified): the engine check started on `127.0.0.1:18125` loaded the check page
+as before (4 frames and 2 pages refused). Then, in the same process (same pid, `am start --activity-clear-task`
+with `--es url http://127.0.0.1:18126/`), the new dashboard address was refused: `Lockdown: refused page from
+127.0.0.1:18126`, nothing reached the other origin's server, and with nothing else on screen the engine showed
+"127.0.0.1:18126 isn't the Home Assistant the panel started with, so it didn't open. … If the dashboard's address
+changed, restart the app." (`Lockdown.ELSEWHERE`; `NO_DASHBOARD` when there was none at start).
+
+## What runs on the legacy engine
+
+What #198's item 3 asks: the same core and panes as the current engine, where the engine allows. Two layers:
+the engine (verified on the Mirror and the emulators, above), and the app's own code on Android 6–7, which
+doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
+
+**The engine, in the page:**
+
+| Feature | On the legacy engine | How sure |
+|---|---|---|
+| The dashboard (HA's frontend), sign-in through `/auth/authorize` | Works | Verified on the Mirror and API 23 (steps 5, 11) |
+| The helper extension: `window.s1kiosk`, the native port | Works | Verified (steps 4, 11) |
+| Hiding HA's header and sidebar, the external-auth bridge (`window.externalApp`) | Same `content.js`; needs the app's MainActivity to answer it | Untested: the app doesn't run on API 23 yet |
+| Camera cards | HLS only: WebRTC is off | Read (HA's frontend falls back when `RTCPeerConnection` is missing); untested |
+| Map cards, iframe and webpage cards, brand icons, anything from another origin | Blocked, with the note | Verified for the kinds of request (steps 4, 12); not with a real map card |
+| Downloads (backups, logs) | Refused | Verified (step 12) |
+| `window.open` to HA (e.g. "open in a new tab") | Loads in place | Verified (step 12) |
+
+**The app's code on API 23–25.** Android lint's `NewApi` check, run on every module with `minSdk` lowered to 23 in
+a scratch build (2026-11-15, not committed; `./gradlew :<module>:lintDebug` with `lint { checkOnly += "NewApi" }`).
+Calls that core library desugaring covers (the test APK enables it) are left out. Calls in `pane-api`'s `Platform`
+are behind its own runtime checks, which lint can't see; MainActivity's API 28–30 window calls likely go through
+`Platform` too, unread.
+
+| Module | Calls above API 23 (level) | What it means |
+|---|---|---|
+| core | `registerDefaultNetworkCallback` (24) in `WifiSetupStatus`, `ImprovController`, `UpdateManager`; `NotificationChannel`, `startForegroundService` (26) in `KioskService`; `LocaleList` (24) in `SystemLocale`; `Font.Builder` (29) in `ui/Inter`; `HashMap.putIfAbsent` (24) in `Http`, `OAuth`; `PackageInfo.signingInfo`, `getLongVersionCode` (28), `SessionParams.setRequireUserAction` (31) in `UpdateManager`; `ACTION_SET_PROGRESS` (24) in `GlassSlider`; window insets (28, 30) and `Process.getStartElapsedRealtime` (24) in `MainActivity` | The app crashes at start (verified, step 9). Each needs a `Platform` query with a fallback before the app runs on Android 6–7 |
+| pane-api | `Platform` only (29, 30, 34): behind runtime checks | Nothing to do |
+| `assist` (+ `libs/voice`) | None | Native; should run where the hardware is (`MICROPHONE`, `SPEAKER`). Untested |
+| `bluetooth-proxy` (+ its lib) | None | Same (`BLUETOOTH_LE`). Untested |
+| `camera` | `ConcurrentHashMap.KeySetView.clear` (24) in `OnvifServer` | One call to replace. Its RTSP and ONVIF servers are native, not in the page, so the lockdown doesn't touch them |
+| `diagnostics` | `Process.getStartElapsedRealtime` (24) | One call behind a `Platform` query; its content-process count already knows `:tab<n>` (#346) |
+| `notifications` | None | Opens HA views in the page: same origin, allowed |
+| `sendspin` (+ `libs/sendspin`) | None after desugaring (5 calls desugared) | Native audio. Untested |
+| `timers` | None | Untested |
+| `zigbee-thread` (radio), `wall-base` | `Process.waitFor(timeout)` (26), autofill (26) | S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered elsewhere |
+| `esphome-api-android`, `improv` | None | — |
+
+**`Pane.requires` stays honest.** Every pane's `requires` names hardware only, and no pane needs the page to reach
+another origin, so the legacy engine needs no new capability: a pane is offered on a legacy device by the same
+hardware checks as anywhere. What keeps a pane from running there is the app's API 24+ calls above, not the engine.
+
 ## How to reproduce
 
 Off-device: `./gradlew :engine-gecko-legacy:testDebugUnitTest` (the policy in Kotlin and in `policy.js`, the gate).
@@ -273,6 +339,7 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
   redirects to another origin (`http` → `https`, a reverse proxy), and HA's external sign-in providers. Each is
   refused today and says so on the page.
 - GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
-- The allowed origin follows the app's own loads (`page.load`). Setting it once, from the configured dashboard URL,
-  is #198's next part.
+- `MainActivity`'s `url` intent extra still restarts only when the secure-context hosts change. A same-host change
+  of port or scheme over that extra reloads instead, and the legacy engine then refuses the new dashboard (with the
+  note) until the app restarts. The fix is one line (`engineStart()` in place of `secureHosts()`), after #364.
 - The app itself on API 23–25: the API 24+ calls behind `registerDefaultNetworkCallback`.

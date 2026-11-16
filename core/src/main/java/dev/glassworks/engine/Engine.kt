@@ -41,6 +41,12 @@ data class EngineSettings(
     val zoom: Float,
     /** Lets a desktop browser debug the page. */
     val remoteDebugging: Boolean,
+    /**
+     * The dashboard URL the app is set to, or null while there is none (Home Assistant not found yet). An engine
+     * that holds pages to one origin (the legacy engine, #198) takes this URL's origin, once: like the rest of these
+     * settings it can't change in this process, so a new dashboard address needs a process restart.
+     */
+    val dashboard: String? = null,
 )
 
 /** A page in one activity. Call it on the main thread. */

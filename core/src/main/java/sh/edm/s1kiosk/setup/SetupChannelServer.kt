@@ -58,16 +58,18 @@ object SetupChannelServer {
 
         /**
          * As the `url` intent extra (MainActivity.applyIntent): saves the dashboard URL setting, then
-         * reloads the dashboard, or restarts the process when the secure-context hosts changed. The
-         * setting is saved first so the reply already has it; the reload/restart runs after the reply.
+         * reloads the dashboard, or restarts the process when what the engine starts with changed: the
+         * secure-context hosts, or the dashboard's origin (KioskPrefs.engineStart; the legacy engine holds
+         * pages to it for the life of the process, #198). The setting is saved first so the reply already has
+         * it; the reload/restart runs after the reply.
          */
         override fun setHa(url: String): SetupChannel.HaChange {
             val restart = InstallerGlue.onMain {
-                val before = prefs.secureHosts()
+                val before = prefs.engineStart()
                 prefs.urlSetting = url
-                prefs.secureHosts() != before
+                prefs.engineStart() != before
             } ?: return SetupChannel.HaChange(error = "The panel didn't save the address; try again.")
-            Log.i(TAG, "Home Assistant address set from the installer: $url${if (restart) " (restarting for the secure-context hosts)" else ""}")
+            Log.i(TAG, "Home Assistant address set from the installer: $url${if (restart) " (restarting: the engine starts with it)" else ""}")
             return SetupChannel.HaChange(afterReply = {
                 InstallerGlue.post(if (restart) 300L else 0L) {
                     val sink = runtime.commandSink

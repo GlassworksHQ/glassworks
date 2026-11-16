@@ -66,6 +66,7 @@ class GeckoEngine(
         val app = context.applicationContext
         val s = settings(app)
         started = s
+        guard?.start(s.dashboard)
         val config = writeConfig(app, s)
         val rs = GeckoRuntimeSettings.Builder()
             .configFilePath(config.absolutePath)
@@ -179,9 +180,17 @@ class GeckoEngine(
 
         override fun load(url: String) {
             val g = guard ?: return run { session?.loadUri(url) }
-            g.appLoads(url)
+            // The app's own load is a page like any other: off the dashboard's origin, it's refused (and noted). With
+            // nothing on screen yet, the note has no page to show in, so the guard's words go over the page instead.
+            if (!g.allows(PageGuard.Load.PAGE, url)) {
+                if (shown.isNullOrEmpty() || shown == "about:blank") showStuck(g.refusedAppLoad(url))
+                return
+            }
             g.whenReady({ showStuck(null); session?.loadUri(url) }, ::showStuck)
         }
+
+        /** Where the page is (onLocationChange), for a guard's refusal of the app's own load. */
+        private var shown: String? = null
 
         /** The guard's words for why nothing loads, over the page (GeckoView is a FrameLayout); null takes them away. */
         private var stuck: TextView? = null
@@ -276,7 +285,10 @@ class GeckoEngine(
                 url: String?,
                 perms: MutableList<PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean,
-            ) = host.onLocationChange(url)
+            ) {
+                shown = url
+                host.onLocationChange(url)
+            }
 
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny>? {
                 val current = request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_CURRENT

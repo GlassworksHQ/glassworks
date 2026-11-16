@@ -586,7 +586,10 @@ Android 6 and 7 (API 23–25) can't run current GeckoView, so they get a frozen 
 `engines/engine-gecko-legacy` (#198). It compiles engine-gecko's `GeckoEngine.kt` unchanged, so the
 `Engine` API, the extension and every `PageHost` call are the same. Its `GeckoVariant` adds a
 `PageGuard`, and the current engine has none. A frozen engine gets no security fixes, so the guard
-holds the page to one origin: the one the app loads with `page.load(url)`.
+holds the page to one origin: the configured dashboard's (`EngineSettings.dashboard`), taken once when
+the engine starts. Nothing in the session moves or widens it, not even the app's own `page.load` of
+another origin, which is refused. A new dashboard address restarts the process: the settings menu's
+field does, and so does the installer when `KioskPrefs.engineStart()` changes.
 
 | What the page tries | Legacy engine |
 |---|---|
@@ -597,8 +600,10 @@ holds the page to one origin: the one the app loads with `page.load(url)`.
 | WebRTC, and Gecko's own early connections (DNS prefetch, preconnect) | Off: HA's frontend uses HLS for cameras |
 | Anything, before the lockdown extension is up | Waits; after 20 s, or if the extension can't start, the page says so and nothing loads |
 
-A pane that needs another origin in the page doesn't work on the legacy engine. The research and the
-emulator runs are in [legacy-engine.md](../../../../../../docs/research/legacy-engine.md).
+A pane that needs another origin in the page doesn't work on the legacy engine; none of today's do
+(their `requires` are hardware only). Which core features and panes run on Android 6–7, and what each
+still calls above API 23, is in [legacy-engine.md](../../../../../../docs/research/legacy-engine.md#what-runs-on-the-legacy-engine),
+with the research and the emulator and Mirror runs.
 
 ## Threads
 

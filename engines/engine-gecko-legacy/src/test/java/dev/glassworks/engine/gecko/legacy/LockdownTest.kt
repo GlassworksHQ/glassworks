@@ -38,6 +38,19 @@ class LockdownTest {
         )
     }
 
+    /** The app's own load refused, with nothing on screen: the words say why (#198 part 2). RFC 5737 hosts. */
+    @Test fun `a refused app load says whether there's no dashboard or it's another address`() {
+        val none = Lockdown("test").also { it.start(null) }
+        assertEquals(Lockdown.NO_DASHBOARD, none.refusedAppLoad("http://192.0.2.10:8123/"))
+
+        val started = Lockdown("test").also { it.start("http://192.0.2.10:8123/lovelace/0") }
+        started.start("http://192.0.2.11:8123/") // ignored: the origin is set once
+        assertFalse(started.allows(dev.glassworks.engine.gecko.PageGuard.Load.PAGE, "http://192.0.2.11:8123/"))
+        val why = started.refusedAppLoad("http://192.0.2.11:8123/")
+        assertTrue(why, why.startsWith("192.0.2.11:8123 isn't the Home Assistant the panel started with"))
+        assertTrue(why, why.contains("restart the app"))
+    }
+
     /** The extension never connects: after [Lockdown.READY_TIMEOUT_MS] the page says so, and the load still waits. */
     @Test fun `a lockdown that doesn't start says so after the timeout, and nothing loads`() {
         val timers = mutableListOf<Pair<Long, () -> Unit>>()
