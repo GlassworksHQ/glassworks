@@ -11,14 +11,15 @@ import java.io.File
  * bundled font), from the repo root and across every Gradle module, wherever the module sits (#21).
  *
  * A module is a folder with `src/main` under one of [SEARCH]: `core`, `pane-api`, `engines/<x>`, `panes/<x>`,
- * `libs/<x>`, `frames/<id>/android` and `frames/<id>/panes/<x>` (`app/` too, the layout before #21's split). A test
- * finds the same files from whichever module runs it, so moving code between modules changes no test.
+ * `libs/<x>`, `frames/<id>/android` and `frames/<id>/panes/<x>`. A test finds the same files from whichever module
+ * runs it, so moving code between modules changes no test.
  *
  * Nothing here skips. A lookup that finds nothing, or fewer files than the caller expects, fails: a
  * scan that silently sees nothing would let a confinement test pass with nothing checked.
  *
- * Compiled into each module's tests from this one folder (`testing/kotlin`, added as a test source
- * folder in the module's build file). `packages/frame-card/scripts/panes.mjs` searches the same [SEARCH].
+ * Compiled into each module's tests from this one folder (`testing/kotlin`, a test source folder of every
+ * module but the libraries: glassworks.android in build-logic). `packages/frame-card/scripts/panes.mjs`
+ * searches the same [SEARCH].
  */
 object RepoFiles : RepoTree({
     generateSequence(File("").absoluteFile) { it.parentFile }
@@ -29,7 +30,7 @@ object RepoFiles : RepoTree({
 /** [RepoFiles] over any tree: the repo, or a made-up layout in a test. */
 open class RepoTree(findRoot: () -> File) {
     /** Where modules are looked for, relative to the repo root. `*` is one folder level. */
-    val SEARCH = listOf("app", "libs", "core", "pane-api", "engines", "panes", "frames/*/android", "frames/*/panes")
+    val SEARCH = listOf("libs", "core", "pane-api", "engines", "panes", "frames/*/android", "frames/*/panes")
 
     /** Folders never walked into: build output, caches, and a module's own sources. */
     private val skip = setOf("build", ".gradle", ".kotlin", "node_modules", "src", ".git")
