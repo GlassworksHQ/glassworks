@@ -120,6 +120,31 @@ class LanSetupTest {
         ws(session).use { c -> assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok")) }
     }
 
+    @Test fun atMostFourSessionsAndTheLeastRecentlyUsedGoesFirst() {
+        val sessions = (1..4).map { mono += 1_000; pair() }
+        // A change counts as use: the first session is now the most recently used.
+        mono += 1_000
+        ws(sessions[0]).use { c -> assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok")) }
+        mono += 1_000
+        val fifth = pair()
+        fun paired(s: String) = JSONObject(get(LanSetup.PAIR, s).text()).getBoolean("paired")
+        assertFalse("the least recently used session was ended", paired(sessions[1]))
+        for (s in listOf(sessions[0], sessions[2], sessions[3], fifth)) assertTrue(paired(s))
+    }
+
+    @Test fun aSessionEndsTwoHoursAfterPairingHoweverOftenItIsUsed() {
+        val session = pair()
+        // A change every 20 minutes keeps it from going idle, up to just under 2 hours.
+        repeat(5) {
+            mono += 20 * 60_000L
+            ws(session).use { c -> assertTrue("used at ${mono / 60_000} min", c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok")) }
+        }
+        mono += 19 * 60_000L + 59_000L
+        ws(session).use { c -> assertTrue("still good just under 2 h", c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok")) }
+        mono += 1_000L
+        ws(session).use { c -> assertEquals(SetupChannel.NOT_PAIRED, c.ask("""{"id":1,"op":"pairing.arm"}""").getString("error")) }
+    }
+
     @Test fun aSessionEndsWhenSetupIsDoneOrIdle() {
         val done = pair()
         assertEquals(200, post(LanSetup.DONE, cookie = done).status)
