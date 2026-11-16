@@ -2,8 +2,11 @@
 // Copyright (c) 2026 aguilaair
 // Written clean-room from docs/research/kiln-cleanroom/bootpatch-spec.md ("Reading the boot image").
 //
-// The repack keeps only the header page, the blocks, the vbmeta block and the AVB footer. Any
-// non-zero byte elsewhere after the last block would be lost, so the patch must refuse the image.
+// The repack keeps only the header page, the blocks, the vbmeta block and the AVB footer. The spec
+// checks two of the ranges it drops: from the end of the last block to the vbmeta block (to the end
+// of the image without AVB data), and from the end of the vbmeta block to the footer. A non-zero
+// byte there would be lost, so the patch must refuse the image. Padding inside the header page and
+// between blocks is not checked.
 
 import { describe, expect, it } from 'vitest';
 import { type MagiskBinaries, patchBootImage } from '../src/index';
