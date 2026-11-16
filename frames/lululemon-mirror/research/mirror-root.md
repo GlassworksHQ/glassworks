@@ -236,7 +236,7 @@ Confidence: everything in §1–§4 and §6 is **verified** on the unit (2026-11
 - **`qti_init_shell` root via `post_boot.sh`:** enough for userspace root at `boot_completed`;
   combined with a matching `.ko`, enough for kernel code. Both need a `system` flash and a way back.
 - **Is platform signing enough for the kiosk?** For #40's modem/vendor blobs, no (no `/firmware`).
-  For kiosk control and a `/persist` listing (Wi-Fi NV file names), likely yes; reading those files is untested, with no flash and no root.
+  For kiosk control and a `/persist` listing (Wi-Fi NV file names), likely yes, with no flash and no root. Reading those files is untested.
 
 ## Next steps
 
