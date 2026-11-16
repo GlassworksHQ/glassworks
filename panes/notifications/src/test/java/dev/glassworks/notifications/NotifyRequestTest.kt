@@ -147,6 +147,7 @@ class NotifyRequestTest {
         assertEquals(ViewSize.HALF, post(data = """{"url":"/dashboard-door/0","size":" Half "}""").size)
         assertEquals(ViewSize.FULL, post(data = """{"url":"/dashboard-door/0","size":"full"}""").size)
         assertTrue(refused("""{"url":"/dashboard-door/0","size":"quarter"}""").contains("use full or half"))
+        assertEquals("a null size is no size", ViewSize.FULL, post(data = """{"url":"/dashboard-door/0","size":null}""").size)
     }
 
     /** #230 adds `size` and nothing else: every call without it reads exactly as before, full screen. */

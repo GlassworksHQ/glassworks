@@ -123,6 +123,8 @@ object NotifyRequest {
     }
 
     private fun size(d: JSONObject): ViewSize {
+        // Android's JSONObject reads a JSON null as "null" (the test classpath's org.json doesn't), so a null is absent
+        if (!d.has("size") || d.isNull("size")) return ViewSize.FULL
         val raw = d.optString("size", "").trim().takeIf { it.isNotEmpty() } ?: return ViewSize.FULL
         return ViewSize.parse(raw) ?: throw IllegalArgumentException("unknown size '$raw'; use full or half")
     }
