@@ -162,17 +162,20 @@ left out below. `PROBE` is the output folder of `build.sh`.
    - `perm.MANAGE_USB granted` in step 1, and `RESULT allow-adb-key OK sent sha256:…`.
    - **No new line in `adb_keys`**, and logcat's `UsbDebuggingManager: Fingerprints do not match. Got
      <MD5 of the test key>, expected <null or the last computer asked about>`. Android writes a key
-     only when its fingerprint matches the computer adb is asking about at that moment
-     (`UsbDebuggingManager.java:236`–`248`). Here no computer with the test key is asking, so the call
-     approves nothing. `adbkey.py fingerprint` prints the test key's MD5 to match logcat's `Got`.
+     only when its fingerprint matches the last computer adb asked about
+     (`UsbDebuggingManager.java:236`–`248`). It keeps that one even after a deny or an unplug. Here no
+     computer with the test key has asked, so the call approves nothing. `adbkey.py fingerprint` prints the test key's MD5 to match logcat's `Got`.
    - **With a computer asking** (optional, needs a second computer):
      1. On the second computer, move its own `~/.android/adbkey*` aside and copy the test pair there,
-        so its adb offers only the test key.
+        so its adb offers only the test key. Then `unset ADB_VENDOR_KEYS` and run `adb kill-server`
+        there (that computer's own server, not the shared one), so the server loads the test key
+        rather than the key it had in memory.
      2. Plug it into the Mirror instead of yours. `adb devices` there shows `unauthorized`, and the
         Mirror shows "Allow USB debugging?" with no way to tap it. Android now remembers that key's
         fingerprint as the one being asked about (`UsbDebuggingManager.java:279`), until another
         computer asks.
-     3. Unplug it, plug yours back in, and run the `allow-adb-key` line again.
+     3. Unplug it, plug yours back in, run `adb logcat -c` (the first try's "do not match" line would
+        otherwise still be there), and run the `allow-adb-key` line again.
      4. Expect a new line in `adb_keys` with the test key's fingerprint, and no "do not match" line.
      5. Plug the second computer in again: its `adb devices` should show the Mirror as `device`.
 
@@ -201,8 +204,8 @@ one back first.
 | Step 3: privileged lost after the update | Each update would lose the permissions: Kiln would have to flash every new version into `system` |
 | Step 4: `RESULT settings OK` | Glassworks can write secure settings (screen timeout, stay awake, location) without adb's help |
 | Step 5: restarts and comes back as HOME | Glassworks can restart the Mirror from Home Assistant, and boots straight into Glassworks, the updated version included |
-| Step 6: `perm.MANAGE_USB granted`, `RESULT allow-adb-key OK`, no new key and "Fingerprints do not match" | As read: Glassworks can answer the computer the Mirror is asking about, but can't add a key no computer asked for. A Manage page "Allow a new computer over USB" works only while that computer is plugged in and asking. The page would need its key: Kiln can send it (it knows the browser's key), or the person types its fingerprint to confirm |
-| Step 6 with a computer asking: the key written, the computer connects | The Manage page can approve a computer that's plugged in and asking, with no touchscreen. This is the case that makes the feature possible |
+| Step 6: `perm.MANAGE_USB granted`, `RESULT allow-adb-key OK`, no new key and "Fingerprints do not match" | As read: Glassworks can answer the last computer the Mirror asked about, but can't add a key no computer asked for. A Manage page "Allow a new computer over USB" works only after that computer has asked. The page needs that computer's full public key, not just its fingerprint: Kiln can send the key (it holds the browser's key), and the page shows the fingerprint so the person can confirm it |
+| Step 6 with a computer asking: the key written, the computer connects | The Manage page can approve the computer that last asked, with no touchscreen. This is the case that makes the feature possible |
 | Step 6: the test key written with no computer asking | Android on this image doesn't check the fingerprint (it differs from AOSP). Any app holding `MANAGE_USB` could then let any key in, so Glassworks would need to guard who can ask it |
 | Step 6: `FAIL java.lang.SecurityException … MANAGE_USB` | The privileged grant didn't cover `MANAGE_USB` (it was missing from the flashed copy, or the image differs). No Manage-page approval without root |
 | Step 6: `FAIL java.lang.ClassNotFoundException` or `NoSuchMethodException` | This image's framework names it differently: look at its `IUsbManager` before going further |

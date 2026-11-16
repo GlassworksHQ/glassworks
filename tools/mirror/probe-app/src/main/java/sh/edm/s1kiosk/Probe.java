@@ -65,16 +65,23 @@ final class Probe {
      */
     static String adbKeyProblem(String line) {
         if (line == null || line.trim().isEmpty()) return "no --es key <adb public key line>";
-        byte[] key = decodeBase64(line.trim().split("\\s+")[0]);
+        // Android appends the string it's given to adb_keys as one line: a line break would add another key
+        if (line.trim().indexOf('\n') >= 0 || line.trim().indexOf('\r') >= 0) return "the key must be one line";
+        byte[] key = decodeBase64(adbKeyToken(line));
         if (key == null) return "the key isn't base64";
         if (key.length != ADB_KEY_BYTES) return "the key is " + key.length + " bytes, not adb's " + ADB_KEY_BYTES;
         if (le32(key, 0) != 64) return "the key isn't a 2048-bit adb key (len " + le32(key, 0) + ", not 64)";
         return null;
     }
 
+    /** The base64 key alone, without user@host: what adbKeyProblem checks, and all the probe passes to Android. */
+    static String adbKeyToken(String line) {
+        return line.trim().split("\\s+")[0];
+    }
+
     /** "sha256:<first 16 hex digits>" of the decoded key: enough to match it, never the key itself. */
     static String keyFingerprint(String line) {
-        byte[] key = decodeBase64(line.trim().split("\\s+")[0]);
+        byte[] key = decodeBase64(adbKeyToken(line));
         if (key == null) return "sha256:?";
         try {
             byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(key);
@@ -89,7 +96,7 @@ final class Probe {
     /** allow-adb-key's line once Android took the call: what it means, and the fingerprint only. */
     static String adbKeySent(String fingerprint) {
         return result("allow-adb-key", true, "sent " + fingerprint + " (alwaysAllow=true): Android writes it only if it matches"
-            + " the computer adb is asking about; check /data/misc/adb/adb_keys");
+            + " the last computer adb asked about; check /data/misc/adb/adb_keys");
     }
 
     /** allow-adb-key's line when the call threw: the exception's class and message, and the fingerprint only. */

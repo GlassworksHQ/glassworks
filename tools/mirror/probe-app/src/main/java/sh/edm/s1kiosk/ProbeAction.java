@@ -96,7 +96,7 @@ public class ProbeAction extends Activity {
      * IUsbManager.allowUsbDebugging(boolean alwaysAllow, String publicKey) (Android 6.0.1_r81:
      * IUsbManager.aidl:103; UsbService.java:329 enforces MANAGE_USB), by reflection, alwaysAllow = true.
      * The call is asynchronous and returns nothing: UsbDebuggingManager (:236) writes the key to
-     * /data/misc/adb/adb_keys only when its fingerprint matches the computer adb is asking about.
+     * /data/misc/adb/adb_keys only when its fingerprint matches the last computer adb asked about.
      * So OK here means "Android took the call", and adb_keys says what it did.
      * There is deliberately no clearUsbDebuggingKeys: it would remove the root's own key, and the
      * Mirror has no touchscreen to allow it again.
@@ -111,7 +111,8 @@ public class ProbeAction extends Activity {
         try {
             Object binder = Class.forName("android.os.ServiceManager").getMethod("getService", String.class).invoke(null, "usb");
             Object usb = Class.forName("android.hardware.usb.IUsbManager$Stub").getMethod("asInterface", IBinder.class).invoke(null, binder);
-            usb.getClass().getMethod("allowUsbDebugging", boolean.class, String.class).invoke(usb, true, key.trim());
+            // only the checked key: Android appends what it's given to adb_keys as is
+            usb.getClass().getMethod("allowUsbDebugging", boolean.class, String.class).invoke(usb, true, Probe.adbKeyToken(key));
             Log.i(Probe.TAG, Probe.adbKeySent(fp));
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;

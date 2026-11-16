@@ -84,6 +84,16 @@ public class ProbeTest {
     }
 
     @Test
+    public void onlyTheCheckedKeyGoesToAndroidAndALineBreakIsRefused() {
+        String a = keyLine(64, 524), b = Base64.getEncoder().encodeToString(new byte[524]) + " other@host";
+        // Android appends what it gets to adb_keys as is: a second line would be a second, unchecked key
+        assertEquals("the key must be one line", Probe.adbKeyProblem(a + "\n" + b));
+        assertEquals("the key must be one line", Probe.adbKeyProblem(a + "\r" + b));
+        assertEquals(a.split(" ")[0], Probe.adbKeyToken("  " + a + "  "));
+        assertFalse(Probe.adbKeyToken(a).contains(" "));
+    }
+
+    @Test
     public void theFingerprintIsASha256PrefixOfTheKeyAndNeverTheKey() throws Exception {
         String line = keyLine(64, 524);
         byte[] key = Base64.getDecoder().decode(line.split(" ")[0]);

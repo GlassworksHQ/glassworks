@@ -170,13 +170,13 @@ All **read** from source (2026-11-15). Line numbers are in the files at `android
 
 | Claim | Evidence | How sure |
 |---|---|---|
-| An app in `/system/priv-app` gets `INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`, whatever its key | Reads 1–3 | Read, untested on the unit |
-| An update signed with the same key keeps them, and stays privileged across reboots | Reads 4–5 | Read, untested on the unit |
+| An app in `/system/priv-app` gets `INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`, whatever its key | Reads 1–3; the probe on the unit (2026-11-16): `privileged yes`, `INSTALL_PACKAGES` and `REBOOT` granted from `/system/priv-app` | **Verified** (2026-11-16) |
+| An update signed with the same key keeps them, and stays privileged across reboots | Reads 4–5; the probe on the unit (2026-11-16): after the silent update, an updated system app in `/data/app`, still `PRIVILEGED`, all three kept, and again after a reboot | **Verified** (2026-11-16) |
 | An update gets a privileged permission only if the `/system` copy asked for it, unless the update is signed with the platform key (or the permission's own key) | Read 3: the signature check comes first, then the updated-system-app branch | Read |
-| With `INSTALL_PACKAGES`, a `PackageInstaller` commit needs no tap; without it, `STATUS_PENDING_USER_ACTION` | Read 6 | Read, untested on the unit |
+| With `INSTALL_PACKAGES`, a `PackageInstaller` commit needs no tap; without it, `STATUS_PENDING_USER_ACTION` | Read 6; the probe on the unit (2026-11-16): v1 to v2 through `PackageInstaller` with no prompt | **Verified** (2026-11-16) for the case with `INSTALL_PACKAGES`; the case without it is read |
 | `WRITE_SECURE_SETTINGS` granted on the unit proves little by itself | Kiln's first boot runs `pm grant … WRITE_SECURE_SETTINGS` (`grantPermissions` in `@glassworks/app-adb`), which a `development` permission allows | Read |
 
-What it means for Glassworks, if the probe confirms it: S1 Kiosk updates itself on the Mirror from
+What it means for Glassworks, now that the probe confirmed it: S1 Kiosk updates itself on the Mirror from
 Home Assistant with no tap and no root, can restart the Mirror, and writes its own settings. The APK
 Kiln flashes into `system` must already ask for every privileged permission a later version will
 need, because an update signed with our key can't add one (row 3).
@@ -195,20 +195,22 @@ Read at `android-6.0.1_r81` (`platform/frameworks/base`):
 | 2 | `core/java/android/hardware/usb/IUsbManager.aidl:103` | `void allowUsbDebugging(boolean alwaysAllow, String publicKey)`. Hidden; the app reaches it through `ServiceManager.getService("usb")` and `IUsbManager.Stub.asInterface`, by reflection |
 | 3 | `services/usb/java/com/android/server/usb/UsbService.java:329` | `enforceCallingOrSelfPermission(MANAGE_USB)`, then `UsbDeviceManager.allowUsbDebugging` (`UsbDeviceManager.java:940`), which posts `MESSAGE_ADB_ALLOW` to `UsbDebuggingManager` |
 | 4 | `UsbDebuggingManager.java:236`–`248` | On `MESSAGE_ADB_ALLOW`, the key's fingerprint (MD5 of the decoded key) must equal `mFingerprints`, else it logs "Fingerprints do not match" and **does nothing**. On a match with `alwaysAllow`, `writeKey` appends the key to `/data/misc/adb/adb_keys` (line 403), and adbd is told "OK" |
-| 5 | `UsbDebuggingManager.java:271`–`281` | `mFingerprints` is set only on `MESSAGE_ADB_CONFIRM`: adbd asking about a computer that just connected with an unknown key. It keeps that value until the next computer asks |
+| 5 | `UsbDebuggingManager.java:271`–`281` | `mFingerprints` is set only on `MESSAGE_ADB_CONFIRM`: adbd asking about a computer that just connected with an unknown key. It keeps that value until the next computer asks: a deny, an unplug or the dialog going away doesn't clear it, so a later call with that same key still writes it |
 | 6 | `IUsbManager.aidl:109`, `UsbDebuggingManager.java` `MESSAGE_ADB_CLEAR` | `clearUsbDebuggingKeys` deletes the whole `adb_keys` file. The probe never calls it: it would remove every key, the root's included, with no touchscreen to allow one again |
 
-**What we expect.** `allowUsbDebugging` is not a way to add any key. It answers the one computer the
-Mirror is asking about (or asked about last).
+**What we expect.** `allowUsbDebugging` is not a way to add any key. It answers the last computer the
+Mirror asked about.
 - A key no computer asked for is ignored.
-- A key that matches a computer still plugged in and asking is written, and that computer connects.
+- A key that matches the last computer asked about is written, even after a deny or an unplug, and
+  that computer connects when it next tries.
 
 The call is asynchronous and returns nothing, so the app can't tell which happened: `adb_keys` and
 logcat do.
 
-**For Glassworks.** A Manage page could approve "the computer that is plugged in and asking", if it
-knows that computer's key: Kiln can send it, since it holds the browser's key. It can't pre-approve
-keys. The probe's step 6 tests both cases: no computer asking, and with a second computer asking.
+**For Glassworks.** A Manage page could approve "the computer that last asked", if it has that
+computer's full public key. A fingerprint can only confirm a key, not supply it. Kiln can send the
+key, since it holds the browser's key, and the page can show its fingerprint to confirm. It can't
+pre-approve keys. The probe's step 6 tests both cases: no computer asking, and with a second computer asking.
 
 ## How to reproduce
 
