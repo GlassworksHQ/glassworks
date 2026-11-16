@@ -140,12 +140,25 @@ class LanSetupTest {
         assertEquals(null, shown)
     }
 
-    @Test fun twoChannelsAtOnceAtMost() {
+    @Test fun anUnpairedChannelNeverKeepsAPairedOneOut() {
         ws().use { a ->
-            ws().use { b ->
-                a.ask("""{"id":1,"op":"state"}"""); b.ask("""{"id":1,"op":"state"}""")
-                assertEquals(503, handshake().first)
+            a.ask("""{"id":1,"op":"state"}""")
+            assertEquals("one unpaired channel at a time", 503, handshake().first)
+            val session = pair()
+            ws(session).use { b ->
+                assertTrue(b.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok"))
+                assertEquals("one paired channel at a time", 503, handshake(session).first)
             }
+        }
+    }
+
+    @Test fun anUnpairedChannelIsClosedSoonWhenIdle() {
+        val quick = LanSetup(serve = { i, o, may -> SetupChannel(backend, mayChange = may).serve(i, o, pollMs = 50) },
+            code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, unpairedIdleMs = 300)
+        server.front = quick::handle
+        ws().use { c ->
+            c.ask("""{"id":1,"op":"state"}""")
+            assertEquals("closed by the panel", 0x88, c.nextFrameByte())
         }
     }
 
@@ -239,6 +252,17 @@ class LanSetupTest {
                     val o = JSONObject(l)
                     if (o.opt("id") == id) return o
                 }
+            }
+        }
+
+        /** The first byte of the next frame from the panel. */
+        fun nextFrameByte(): Int {
+            while (true) {
+                val b0 = inp.readUnsignedByte()
+                var len = inp.readUnsignedByte()
+                if (len == 126) len = inp.readUnsignedShort()
+                inp.skipBytes(len)
+                if (b0 != 0x81) return b0
             }
         }
 

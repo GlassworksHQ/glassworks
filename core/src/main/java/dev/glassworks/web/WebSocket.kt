@@ -94,7 +94,8 @@ class WebSocketStreams(private val raw: InputStream, private val rawOut: OutputS
         else if (len == 127L) { len = 0; repeat(8) { len = (len shl 8) or byte().toLong() } }
         // Reserved bits without an extension, an unmasked client, or a fragmented or long control frame.
         if (b0 and 0x70 != 0 || !masked || (control && (b0 and 0x80 == 0 || len > 125))) { close(1002); return null }
-        if (len > maxFrame) { close(1009); return null }
+        // A 64-bit length with its top bit set (the RFC forbids it) reads as negative.
+        if (len < 0 || len > maxFrame) { close(1009); return null }
         val mask = ByteArray(4).also(::fill)
         val payload = ByteArray(len.toInt()).also(::fill)
         for (i in payload.indices) payload[i] = (payload[i].toInt() xor mask[i and 3].toInt()).toByte()
