@@ -102,6 +102,10 @@ describe('the test install', () => {
   it('a file that isn\'t S1 Kiosk is named and blocks Install; the inputs stay editable on Checks', async () => {
     const s = await mirrorDemo('pick-wrong', true);
     expect(s.state.apk).toMatchObject({ package: 'com.nimrod.mirrorkiosk', error: /not S1 Kiosk/ });
+    // a build whose home screen is off (the first real flash, 2026-11-16): refused at the picker, before any write
+    await s.pickApk('kiosk-legacy-test.apk', fakeApk('sh.edm.s1kiosk', { home: 'off' }));
+    expect(s.state.apk).toMatchObject({ package: 'sh.edm.s1kiosk', error: /can't be the Mirror's home screen: its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off.*made for Android 6$/ });
+    expect(s.apkBytes()).toBeUndefined();
     await s.connect();
     expect(s.installBlocked()).toMatch(/Pick another file/);
     render(<Screens session={s} />);

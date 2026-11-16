@@ -7,7 +7,8 @@
 // another app. The person picks S1 Kiosk and "Always" in Android's chooser on the Mirror, and Kiln
 // waits until Android records that choice (frames/lululemon-mirror/research/home-app.md).
 import type { PanelShell } from '@glassworks/adb';
-import { ACT, PKG, Steps, apkPackage, dropAdmin, grantPermissions, kioskVersion, q, startApp, type StepFn } from '@glassworks/app-adb';
+import { ACT, PKG, Steps, dropAdmin, grantPermissions, kioskVersion, q, startApp, type StepFn } from '@glassworks/app-adb';
+import { checkMirrorApk } from './image';
 
 const HOME_INTENT = 'am start -a android.intent.action.MAIN -c android.intent.category.HOME';
 /** The home app the Mirror had before S1 Kiosk, kept on the Mirror for undo. adb's shell owns /data/local/tmp. */
@@ -197,8 +198,8 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   const bad = report.checks.filter((c) => !c.ok);
   if (bad.length) throw new Error(`this doesn't look like a Mirror Kiln can install on (${bad.map((c) => `${c.what}: ${c.found}, needs ${c.need}`).join('; ')}). Nothing was changed.`);
 
-  const pkg = await apkPackage(o.apk);
-  if (pkg !== PKG) throw new Error(`this APK is ${pkg}, not S1 Kiosk (${PKG}). Nothing was changed.`);
+  // S1 Kiosk, on API 23, with a home screen Android can open: else the Mirror is left at the chooser
+  const pkg = (await checkMirrorApk(o.apk)).package;
   r.detail(`APK: ${pkg}`);
 
   // the home app to give back on undo: kept on the Mirror once the install worked, never before

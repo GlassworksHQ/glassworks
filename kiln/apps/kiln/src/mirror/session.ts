@@ -3,9 +3,9 @@
 // it exists behind ?apk=local because there is no release of S1 Kiosk's legacy build, and there
 // must not be one yet (issue 198). The release-asset route stays for releases only.
 import type { PanelShell } from '@glassworks/adb';
-import { PKG, apkPackage } from '@glassworks/app-adb';
+import { apkPackage } from '@glassworks/app-adb';
 import {
-  checkMirror, installMirror, undoMirror, type Installed, type MirrorPhase, type MirrorReport, type Removed,
+  checkMirror, checkMirrorApk, installMirror, undoMirror, type Installed, type MirrorPhase, type MirrorReport, type Removed,
 } from '@glassworks/lululemon-mirror-installer';
 
 export type MirrorScreen = 'off' | 'pick' | 'checks' | 'working' | 'done' | 'error';
@@ -87,8 +87,9 @@ export class MirrorSession {
     const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
     let pkg: string | undefined, error: string | undefined;
     try { pkg = await apkPackage(bytes); } catch (e) { error = (e as Error).message; }
+    // S1 Kiosk, for Android 6, with a home screen Android can open: refused here, before any write
+    if (!error) try { await checkMirrorApk(bytes); } catch (e) { error = (e as Error).message.replace(/\.? Nothing was changed\.$/, ''); }
     if (pick !== this.picks) return;
-    if (!error && pkg !== PKG) error = `this APK is ${pkg}, not S1 Kiosk (${PKG})`;
     this.apk = error ? undefined : bytes;
     this.set({ apk: { name, size: bytes.length, sha256, package: pkg, ...(error ? { error } : {}) } });
   }

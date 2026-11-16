@@ -6,16 +6,40 @@ import { createReadStream, closeSync, existsSync, mkdirSync, openSync, readSync,
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { fakeApk } from '@glassworks/app-adb/fakes';
+import { HOME_ACTIVITY, app, fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
-import { APP_DIR, GLASS_PANES, buildUserdata, patchSystem, setProp } from '../src';
+import { APP_DIR, GLASS_PANES, buildUserdata, checkMirrorApk, patchSystem, setProp } from '../src';
 
 const T = 1_700_000_000;
 const MAKE_EXT4FS = ['-O', '^metadata_csum,^64bit,^flex_bg,^dir_index,^huge_file,^dir_nlink,^extra_isize,uninit_bg,resize_inode'];
 const libs = { 'arm64-v8a': { 'libxul.so': new Uint8Array(randomBytes(300_000)), 'libmozglue.so': new Uint8Array(randomBytes(20_000)) }, 'armeabi-v7a': { 'libxul.so': new Uint8Array(10) } };
 const APK = fakeApk('sh.edm.s1kiosk', { libs });
 const ANIM = new Uint8Array(randomBytes(50_000));
+
+describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => {
+  const act = (filters: FakeEl[], attrs: FakeEl['attrs'] = {}): FakeEl => ({ el: 'activity', attrs: { name: '.MainActivity', ...attrs }, children: filters });
+  it('takes S1 Kiosk with MAIN, HOME and DEFAULT in one filter', async () => {
+    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23 }))).resolves.toMatchObject({ package: 'sh.edm.s1kiosk' });
+  });
+  it.each([
+    ['HOME without DEFAULT (am start -c HOME resolves with MATCH_DEFAULT_ONLY)', app(act([filter(['MAIN'], ['HOME'])])), /no activity with MAIN, HOME and DEFAULT in one intent filter/],
+    ['MAIN+HOME and MAIN+DEFAULT in separate filters', app(act([filter(['MAIN'], ['HOME']), filter(['MAIN'], ['DEFAULT'])])), /no activity with MAIN, HOME and DEFAULT/],
+    ['a launcher activity, no HOME', app(act([filter(['MAIN'], ['LAUNCHER', 'DEFAULT'])])), /no activity with MAIN, HOME and DEFAULT/],
+    ['MAIN, HOME and DEFAULT with a <data> scheme (the HOME intent carries no data)', app(act([{ el: 'intent-filter', children: [...filter(['MAIN'], ['HOME', 'DEFAULT']).children!, { el: 'data', attrs: { scheme: 'example' } }] }])), /no activity with MAIN, HOME and DEFAULT/],
+    ['its application turned off', app(HOME_ACTIVITY(), { enabled: false }), /its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off in its manifest/],
+    ['enabled from a resource', app(HOME_ACTIVITY({ enabled: { ref: 0x7f040001 } })), /depends on a resource Kiln doesn't read/],
+  ])('refuses %s, with nothing changed', async (_, home, msg) => {
+    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23, home }))).rejects.toThrow(msg);
+    await expect(checkMirrorApk(fakeApk('sh.edm.s1kiosk', { minSdk: 23, home }))).rejects.toThrow(/Nothing was changed\.$/);
+  });
+  it('says a manifest it can\'t parse can\'t be read, never a RangeError', async () => {
+    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23 });
+    const at = new TextDecoder('latin1').decode(apk).indexOf('AndroidManifest.xml') + 'AndroidManifest.xml'.length;
+    new DataView(apk.buffer, apk.byteOffset).setUint32(at + 16, 0x00ffffff, true); // its string pool claims 16M strings
+    await expect(checkMirrorApk(apk)).rejects.toThrow(/^this APK's AndroidManifest\.xml can't be read\. Nothing was changed\.$/);
+  });
+});
 
 describe('setProp', () => {
   it('replaces every earlier assignment and keeps the rest', () => {
@@ -83,6 +107,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('com.nimrod.mirrorkiosk') })).rejects.toThrow(/not S1 Kiosk.*Nothing was changed/);
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 26 }) })).rejects.toThrow(/needs Android API 26.*pick S1 Kiosk's legacy build\. Nothing was changed/);
     await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { x86_64: { 'libxul.so': new Uint8Array(4) } } }) })).rejects.toThrow(/native code only for x86_64.*Nothing was changed/);
+    // no home screen Android can open: the Mirror would start to nothing (its first real flash, 2026-11-16)
+    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'off' }) })).rejects.toThrow(/can't be the Mirror's home screen: its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off in its manifest.*Nothing was changed/);
+    await expect(patchSystem(await Ext4.open(disk2), { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: 'none' }) })).rejects.toThrow(/it has no home screen \(no activity with MAIN, HOME and DEFAULT in one intent filter\)/);
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
     expect(hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest())).toBe(before2);
   }, 60_000);

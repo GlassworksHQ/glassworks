@@ -116,7 +116,7 @@ export async function dropAdmin(p: PanelShell, sleep: (ms: number) => Promise<vo
   return false;
 }
 
-export { apkInfo, apkPackage, axmlAttribute, zipEntry, zipNames, type ApkInfo } from './apk';
+export { ManifestError, apkHome, apkInfo, apkPackage, axmlAttribute, axmlTree, zipEntry, zipNames, type ApkInfo, type AxmlElement, type AxmlValue } from './apk';
 
 /**
  * Gives the app a Wi-Fi network over its Improv socket, once it listens (it starts with the app).
