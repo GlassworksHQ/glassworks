@@ -28,9 +28,22 @@ export type RatingKey = (typeof RATING_KEYS)[number];
 /** Android's ABI names (`Build.SUPPORTED_ABIS`) */
 export const ABIS = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'] as const;
 export type Abi = (typeof ABIS)[number];
+/**
+ * The three kinds of device (issue 403, maintainer 2026-11-16). `full`: a frame with its own app and a Kiln
+ * recipe (the S1). `device`: a frame that runs the generic app, with a recipe or settings of its own
+ * (the Mirror, Generic Android). `tested`: a device that installs the generic app as it is, with no
+ * recipe or code of its own; `base` names the frame whose app and install it uses.
+ */
+export const FRAME_KINDS = ['full', 'device', 'tested'] as const;
+export type FrameKind = (typeof FRAME_KINDS)[number];
+export const KIND_TEXT: Record<FrameKind, string> = { full: 'Full frame', device: 'Device frame', tested: 'Tested device' };
 
 export interface FrameDesign {
   id: string;
+  /** full frame, device frame or tested device (FRAME_KINDS) */
+  kind: FrameKind;
+  /** a tested device only: the frame whose app and install it uses, e.g. `generic-android` */
+  base?: string;
   name: string;
   /** the maker's part of `name`, set light in the frame's banner; the rest of `name` is bold. `name` starts with it and a space */
   brand?: string;
@@ -123,6 +136,22 @@ export function creditProblems(f: Pick<FrameDesign, 'credits'>): string[] {
     if (c?.quote !== undefined && (c.quote === null || typeof c.quote !== "object" || !isText(c.quote.text) || !isHttps(c.quote.href))) out.push(`${at}.quote: needs its text and an https link to where it's from`);
     if (c?.card !== undefined && typeof c.card !== 'boolean') out.push(`${at}.card: should be true or false`);
   });
+  return out;
+}
+
+/**
+ * What's wrong with a frame's `kind` and `base`, one line per problem; empty when it's fine. `frames`
+ * is every frame's id and kind, to check `base` against. A tested device has a `base` that is a frame
+ * of another kind, and nothing a recipe needs (`kiln`, `app`, `recovery`); no other kind has a `base`.
+ */
+export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'app' | 'recovery'>, frames: Pick<FrameDesign, 'id' | 'kind'>[]): string[] {
+  if (!(FRAME_KINDS as readonly unknown[]).includes(f.kind)) return [`kind: should be one of ${FRAME_KINDS.join(', ')}`];
+  if (f.kind !== 'tested') return f.base === undefined ? [] : ['base: only a tested device has one'];
+  const out: string[] = [];
+  const base = frames.find((x) => x.id === f.base);
+  if (typeof f.base !== 'string' || !base) out.push('base: a tested device names the frame whose app it installs, e.g. generic-android');
+  else if (base.kind === 'tested') out.push(`base: ${f.base} is a tested device itself; name the frame it installs as`);
+  for (const k of ['kiln', 'app', 'recovery'] as const) if (f[k] !== undefined) out.push(`${k}: a tested device has no recipe of its own; its base's install is used`);
   return out;
 }
 
