@@ -26,6 +26,7 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
     ['HOME without DEFAULT (am start -c HOME resolves with MATCH_DEFAULT_ONLY)', app(act([filter(['MAIN'], ['HOME'])])), /no activity with MAIN, HOME and DEFAULT in one intent filter/],
     ['MAIN+HOME and MAIN+DEFAULT in separate filters', app(act([filter(['MAIN'], ['HOME']), filter(['MAIN'], ['DEFAULT'])])), /no activity with MAIN, HOME and DEFAULT/],
     ['a launcher activity, no HOME', app(act([filter(['MAIN'], ['LAUNCHER', 'DEFAULT'])])), /no activity with MAIN, HOME and DEFAULT/],
+    ['MAIN, HOME and DEFAULT with a <data> scheme (the HOME intent carries no data)', app(act([{ el: 'intent-filter', children: [...filter(['MAIN'], ['HOME', 'DEFAULT']).children!, { el: 'data', attrs: { scheme: 'example' } }] }])), /no activity with MAIN, HOME and DEFAULT/],
     ['its application turned off', app(HOME_ACTIVITY(), { enabled: false }), /its home screen \(sh\.edm\.s1kiosk\.MainActivity\) is turned off in its manifest/],
     ['enabled from a resource', app(HOME_ACTIVITY({ enabled: { ref: 0x7f040001 } })), /depends on a resource Kiln doesn't read/],
   ])('refuses %s, with nothing changed', async (_, home, msg) => {

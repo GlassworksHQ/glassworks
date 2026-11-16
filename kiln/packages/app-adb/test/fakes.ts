@@ -113,7 +113,7 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
 }
 
 /** A zip of stored (uncompressed) files. */
-function zip(files: [string, Uint8Array][]): Uint8Array {
+export function zip(files: [string, Uint8Array][]): Uint8Array {
   const te = new TextEncoder();
   const locals: Uint8Array[] = [], centrals: Uint8Array[] = [];
   let off = 0;

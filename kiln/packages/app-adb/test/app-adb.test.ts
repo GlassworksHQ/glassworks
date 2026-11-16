@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
 import { ManifestError, Steps, apkHome, apkInfo, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
-import { HOME_ACTIVITY, app, fakeApk, filter, type FakeEl } from './fakes';
+import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
   cmds: string[] = [];
@@ -133,6 +133,14 @@ describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16
     expect(await home(app(act('.MainActivity', filters)))).toEqual({ on: [], off: [], unclear: [] });
   });
 
+  it.each([
+    ['a <data> scheme', { el: 'data', attrs: { scheme: 'example' } }],
+    ['a <data> MIME type', { el: 'data', attrs: { mimeType: 'text/plain' } }],
+  ])('MAIN, HOME and DEFAULT with %s is no home screen: the HOME intent carries no data', async (_, data) => {
+    const f = filter(['MAIN'], ['HOME', 'DEFAULT']);
+    expect(await home(app(act('.MainActivity', [{ ...f, children: [...f.children!, data as FakeEl] }])))).toEqual({ on: [], off: [], unclear: [] });
+  });
+
   it('enabled from a resource is unclear; an application turned off turns its activities off', async () => {
     expect(await home(app(HOME_ACTIVITY({ enabled: { ref: 0x7f040001 } })))).toEqual({ on: [], off: [], unclear: [`${P}.MainActivity`] });
     expect(await home(app(HOME_ACTIVITY(), { enabled: false }))).toEqual({ on: [], off: [`${P}.MainActivity`], unclear: [] });
@@ -154,6 +162,20 @@ describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16
     new DataView(apk.buffer, apk.byteOffset).setUint32(at + 8 + 8, 0x00ffffff, true); // its string pool claims 16M strings
     await expect(apkHome(apk)).rejects.toBeInstanceOf(ManifestError);
     await expect(apkInfo(apk)).rejects.toThrow(/^this APK's AndroidManifest\.xml can't be read$/);
+  });
+
+  it('a manifest cut short (its last end element missing 8 bytes) is a ManifestError, not the tree read from what is left', async () => {
+    const manifest = (await zipEntry(fakeApk(P), 'AndroidManifest.xml'))!;
+    const cut = manifest.slice(0, manifest.length - 8);
+    expect(() => axmlTree(cut)).toThrow(ManifestError);
+    const apk = zip([['AndroidManifest.xml', cut]]);
+    await expect(apkHome(apk)).rejects.toBeInstanceOf(ManifestError);
+    await expect(apkInfo(apk)).rejects.toBeInstanceOf(ManifestError);
+    expect(axmlTree(manifest)[0]!.name).toBe('manifest'); // the whole one reads
+    // the document's size made to agree with the cut: its last chunk still claims 8 bytes more than are left
+    const agreed = cut.slice();
+    new DataView(agreed.buffer).setUint32(4, agreed.length, true);
+    expect(() => axmlTree(agreed)).toThrow(ManifestError);
   });
 
   it('reads the tree with the package and minSdkVersion around it unchanged', async () => {
