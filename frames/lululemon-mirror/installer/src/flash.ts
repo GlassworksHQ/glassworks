@@ -203,7 +203,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
 /** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */
 export const GLASS_PANES_USERDATA = {
   name: 'userdata.sparse',
-  url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/userdata.sparse',
+  url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/userdata.sparse',
   size: 154_944_572,
   sha256: '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908',
 } as const;

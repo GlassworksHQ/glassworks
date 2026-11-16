@@ -8,7 +8,7 @@ export const MIRROR_KIOSK = 'com.nimrod.mirrorkiosk/.MainActivity';
 export const LAUNCHER3 = 'com.android.launcher3/.Launcher';
 const OURS = 'sh.edm.s1kiosk/.MainActivity';
 /** The Glass Panes image's build fingerprint (image.ts GLASS_PANES). */
-const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys';
+const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys';
 const PKG = 'sh.edm.s1kiosk';
 
 export interface FakeMirrorOptions {

@@ -1,12 +1,14 @@
 # Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
 
-**Status (2026-11-16): flashed on a real Mirror once, end to end.** Kiln patches the Glass Panes
+**Status (2026-11-16): flashed on a real Mirror once, end to end, with image 1.** Image 2 (below) is
+checked offline only: its run on the unit, and its fully dark sleep, are still to do. Kiln patches the Glass Panes
 `system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
 root's first real flash (below) booted it, took the computer's adb key, and turned the screen with
 `ro.sf.hwrotation`. The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
 Mirror still waits on an app that runs on API 23.
 
-Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (Android 6.0.1,
+Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
+below), and since 2026-11-16 `mirror-android-2` (below, offline only, not yet on the unit) (Android 6.0.1,
 `userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
 `@glassworks/ext4` (#353), e2fsprogs 1.47.4.
 
@@ -109,6 +111,25 @@ launcher again", or a USB mouse to choose S1 Kiosk, then Always.
 
 The boot logo before Android stays lululemon's: it lives in the signed `aboot`/splash path that the
 locked bootloader checks, and option A writes only `system` and `userdata`.
+
+## Image 2 (`mirror-android-2`, 2026-11-16)
+
+Kiln pins Glass Panes `mirror-android-2` (published 2026-11-16) from #29's follow-up. Read
+2026-11-16 from GitHub's release API and the image itself (downloaded for the test only, deleted
+after):
+
+| | Image 1 | Image 2 |
+|---|---|---|
+| `system.img` | 850,905,808 bytes, `d13dd330…83ed5` | 850,905,808 bytes, `bdb6b844…e35c1` |
+| `userdata.sparse` | 154,944,572 bytes, `74b1f57a…cf908` | the same file |
+| `SHA256SUMS` | `74c4766d…4b4a4` | `c3cbc377…4d02a` |
+| `ro.build.fingerprint` | `…/MMB29M/11041605:userdebug/test-keys` | `…/MMB29M/11120023:userdebug/test-keys` |
+| What changed (release notes) | | "Fully dark sleep": the panel switches off completely in sleep |
+
+`GW_MIRROR_SYSTEM_IMG=<image 2> npm test -w @glassworks/lululemon-mirror-installer` passed on
+2026-11-16 in 25 s: the hash matches the pin, the patch applies, and e2fsck finds nothing in the
+flashed result that the original doesn't have. The patch's checks read the fingerprint, so image 1
+is refused from now on, and the way back (`checkDownload`) takes image 2's `system.img`.
 
 ## The first real flash (2026-11-16, verified by the root)
 

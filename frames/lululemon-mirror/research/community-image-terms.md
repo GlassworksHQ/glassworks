@@ -90,7 +90,9 @@ person" as the fallback.
 
 ## Open questions
 
-- Does the release's `SHA256SUMS` stay put? Kiln would pin `d13dd330…83ed5` for `system.img`.
+- Does the release's `SHA256SUMS` stay put? It did for image 1. Kiln now pins image 2
+  (`mirror-android-2`, 2026-11-16, `bdb6b844…e35c1`). Its release notes' "Licences and credit"
+  section reads the same as image 1's (read 2026-11-16), so the answer above holds for it.
   Refract checks only the size pinned in its `allowlist.json` (it streams, so it never hashes the
   file): a changed release of another size fails there with a 502. One of the same size streams
   through, and Kiln rejects it by its SHA-256.

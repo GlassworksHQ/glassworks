@@ -48,7 +48,7 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const adb = new FirstBootMirror();
   const requestFastboot = vi.fn(async () => fb);
-  const f = new FlashSession({ images, imageUrl: 'https://proxy.test/glass-panes/mirror-android-1/system.img', requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
+  const f = new FlashSession({ images, imageUrl: 'https://proxy.test/glass-panes/mirror-android-2/system.img', requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
   return { f, mirror, calls, adb, requestFastboot };
 }
 
@@ -69,7 +69,7 @@ describe('installing Glassworks over fastboot', () => {
     await f.connectFastboot();
     expect(f.state.screen).toBe('confirm');
     await f.flash(); // not understood yet: nothing happens
-    const fetched = 'fetch https://proxy.test/glass-panes/mirror-android-1/system.img';
+    const fetched = 'fetch https://proxy.test/glass-panes/mirror-android-2/system.img';
     expect(calls).toEqual([fetched]);
     f.understand(true);
     await f.flash();
@@ -86,7 +86,7 @@ describe('installing Glassworks over fastboot', () => {
     expect(f.state).toMatchObject({ image: undefined, proxyFailed: /answered 502: GitHub answered 503/ });
     await f.selectImage(image());
     expect(f.state.image?.state).toBe('ok');
-    expect(calls).toEqual(['fetch https://proxy.test/glass-panes/mirror-android-1/system.img', 'load']);
+    expect(calls).toEqual(['fetch https://proxy.test/glass-panes/mirror-android-2/system.img', 'load']);
   });
 
   it('without a proxy, it is download-and-select from the start', async () => {
@@ -221,7 +221,7 @@ describe('every flash demo screen', () => {
     const failed = await flashDemo('flash-proxy-failed', true);
     render(<Flash flash={failed.flash} mirror={failed.mirror} />);
     expect(screen.getByText(/couldn't download it directly: the download proxy answered 502/)).toBeTruthy();
-    expect(screen.getByText('Download system.img').closest('a')!.getAttribute('href')).toBe('https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/system.img');
+    expect(screen.getByText('Download system.img').closest('a')!.getAttribute('href')).toBe('https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/system.img');
     expect(screen.getByText('Select the downloaded system.img')).toBeTruthy();
   });
 
