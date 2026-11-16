@@ -186,8 +186,8 @@ class SetupChannel(
         val ssid = req.optString("ssid", "")
         val password = req.optString("password", "")
         val why = when {
-            ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name has 1 to 32 characters."
-            !validPassword(password) -> "A Wi-Fi password has at most 63 characters, or is a 64-digit hex key."
+            ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name is 1 to 32 bytes long (an accented letter takes 2)."
+            !validPassword(password) -> "A Wi-Fi password is at most 63 bytes long (an accented letter takes 2), or a 64-digit hex key."
             backend.state().online -> ON_A_NETWORK
             else -> null
         }
@@ -264,13 +264,13 @@ class SetupChannel(
         val CORE_OPS = setOf("state", HA_SET_URL, "set_ha", PAIRING_ARM, WIFI_SCAN, WIFI_JOIN)
 
         /**
-         * No network takes a longer password: at most 63 characters, or 64 hex digits (a raw WPA key). Shorter ones go
+         * No network takes a longer password: at most 63 bytes of UTF-8, or 64 ASCII hex digits (a raw WPA key). Shorter ones go
          * on to the provisioner, which checks them against the network's security: WPA2 wants 8, WPA3-SAE and WEP
          * don't (CodeRabbit on #418).
          */
         fun validPassword(p: String): Boolean =
             // WPA counts bytes: "é" is one character and two bytes (CodeRabbit on #416).
-            p.toByteArray(Charsets.UTF_8).size <= 63 || (p.length == 64 && p.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' })
+            p.toByteArray(Charsets.UTF_8).size <= 63 || (p.length == 64 && p.all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' })
         const val POLL_MS = 1_500L
         /** Longer lines are dropped (requests are tiny). */
         const val MAX_LINE = 16 * 1024

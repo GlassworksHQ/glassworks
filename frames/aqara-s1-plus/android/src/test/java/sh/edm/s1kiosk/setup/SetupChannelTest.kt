@@ -179,9 +179,11 @@ class SetupChannelTest {
         assertTrue(err("Example-WiFi", "x".repeat(64)).isNotEmpty())
         assertTrue(err("Example-WiFi", "0123456789abcdef".repeat(4) + "0").isNotEmpty())
         assertTrue("63 characters, but 64 bytes in UTF-8", err("Example-WiFi", "é" + "x".repeat(62)).isNotEmpty())
+        assertTrue("64 digits, but not ASCII hex", err("Example-WiFi", "\uFF10".repeat(64)).isNotEmpty())
+        assertEquals("63 bytes is the longest passphrase", "", err("Example-WiFi", "x".repeat(63)))
         assertEquals("", err("Example-WiFi", ""))
         assertEquals("", err("Example-WiFi", "0123456789abcdef".repeat(4)))
-        assertEquals(listOf("join Example-WiFi", "join Example-WiFi", "join Example-WiFi"), f.calls)
+        assertEquals(List(4) { "join Example-WiFi" }, f.calls)
     }
 
     @Test

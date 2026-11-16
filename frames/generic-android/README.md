@@ -123,11 +123,19 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet. To try a
-branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
+It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet.
+
+Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403), with no
+screen yet. Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
+installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
+admin; the camera too, once a build asks for it) and reads each grant back, makes it the home screen (`cmd package set-home-activity` on Android 7+, else
+Android's chooser), and hands over to setup over the LAN. Its table of brands maps a USB vendor ID, or adb's
+maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
+device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
+
+To try a branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
 ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)). Not the legacy build's yet: its APK
-carries `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception), which waits for the maintainer's call, and it
-can't run on Android 6-7 before #198's Phase B.
+carries `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception), which waits for the maintainer's call.
 
 ## Updates
 
@@ -273,10 +281,12 @@ API 26, 29 and 34 in CI: `CoreConformanceTest` boots the core with a fake frame
 
 ## Research notes
 
-None yet. A note about this device goes in `research/` ([how](../../docs/research/README.md#the-research-notes)).
+- [kiln-install.md](research/kiln-install.md): which adb commands work on which Android, and how Kiln tells a
+  device's brand before USB debugging is on (#403)
 
 ## Files
 
 - [`design/frame.json`](design/frame.json): the catalog data and the 3D model
 - [`android/`](android): the app (`:generic-android`), Glassworks for generic Android
+- [`installer/`](installer): Kiln's recipe, headless for now (#403)
 - [`budgets.json`](budgets.json): the app's size budget, per ABI and per pane ([docs/size.md](../../docs/size.md#budgets)); its RAM budgets are still to set
