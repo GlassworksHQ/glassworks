@@ -85,12 +85,16 @@ internal class Lockdown(
         }
     }
 
-    override fun appLoads(url: String) {
-        if (policy.appLoads(url)) {
-            Log.i(logTag, "Lockdown: pages may load ${policy.origin}")
-            sendOrigin()
-        }
+    override fun start(dashboard: String?) {
+        if (!policy.start(dashboard)) return
+        val origin = policy.origin
+        if (origin != null) Log.i(logTag, "Lockdown: pages may load $origin, for this process")
+        else Log.w(logTag, "Lockdown: no dashboard address (or one the lockdown can't read), so nothing loads")
+        sendOrigin()
     }
+
+    override fun refusedAppLoad(url: String): String =
+        if (policy.origin == null) NO_DASHBOARD else ELSEWHERE.replace("{host}", Origin.host(url).ifEmpty { "This address" })
 
     override fun allows(kind: PageGuard.Load, url: String): Boolean {
         if (policy.allows(kind, url)) return true
@@ -116,6 +120,10 @@ internal class Lockdown(
         private const val WHY = "This panel's browser engine is frozen, so it only loads your Home Assistant, and only " +
             "with its lockdown on."
         const val FAILED = "Home Assistant can't load: the lockdown didn't start.\n\n$WHY\n\nRestart the app. If this stays, report it."
+        const val NO_DASHBOARD = "Home Assistant can't load: the panel started without a dashboard address.\n\n$WHY\n\n" +
+            "Restart the app after setting it."
+        const val ELSEWHERE = "{host} isn't the Home Assistant the panel started with, so it didn't open.\n\n$WHY\n\n" +
+            "If the dashboard's address changed, restart the app."
         const val SLOW = "Home Assistant can't load yet: the lockdown hasn't started.\n\n$WHY\n\nWaiting for it…"
     }
 }

@@ -14,16 +14,32 @@ import org.junit.Test
 /** The legacy engine's lockdown (#198): pages, frames, new windows and downloads. Addresses are RFC 5737. */
 class LockdownPolicyTest {
     private val ha = "http://192.0.2.10:8123"
-    private val policy = LockdownPolicy().also { it.appLoads("$ha/lovelace/0?external_auth=1") }
+    private val policy = LockdownPolicy().also { it.start("$ha/lovelace/0?external_auth=1") }
 
-    @Test fun `the app's load sets the origin`() {
+    @Test fun `the configured dashboard sets the origin`() {
         assertEquals(ha, policy.origin)
-        assertFalse("the same origin again is no change", policy.appLoads("$ha/energy"))
-        assertTrue(policy.appLoads("https://homeassistant.local/"))
-        assertEquals("https://homeassistant.local", policy.origin)
     }
 
-    @Test fun `before the app loads anything nothing from the network loads`() {
+    /** #198 part 2: the origin is set once, when the engine starts, and nothing in the session moves or widens it. */
+    @Test fun `the origin is set once, and a later start or an app load elsewhere changes nothing`() {
+        assertFalse("a second start is ignored", policy.start("https://homeassistant.local/"))
+        assertFalse(policy.start(null))
+        assertEquals(ha, policy.origin)
+        assertFalse("the app's own load elsewhere is a page like any other", policy.allows(Load.PAGE, "https://homeassistant.local/"))
+        assertFalse(policy.allows(Load.WINDOW, "https://homeassistant.local/"))
+        assertEquals(ha, policy.origin)
+    }
+
+    @Test fun `a first start without a dashboard stays empty, so nothing loads and nothing can set it later`() {
+        val fresh = LockdownPolicy()
+        assertTrue(fresh.start(null))
+        assertNull(fresh.origin)
+        assertFalse(fresh.start("$ha/"))
+        assertNull(fresh.origin)
+        assertFalse(fresh.allows(Load.PAGE, "$ha/"))
+    }
+
+    @Test fun `before the engine starts nothing from the network loads`() {
         val fresh = LockdownPolicy()
         assertNull(fresh.origin)
         assertFalse(fresh.allows(Load.PAGE, "$ha/"))
@@ -38,7 +54,7 @@ class LockdownPolicyTest {
     @Test fun `a dashboard host Gecko would write differently allows nothing`() {
         for (configured in listOf("http://faß.example.org:8123/", "http://fa%C3%9F.example.org:8123/")) {
             val fresh = LockdownPolicy()
-            assertFalse(configured, fresh.appLoads(configured))
+            assertTrue(configured, fresh.start(configured))
             assertNull(configured, fresh.origin)
             assertFalse(configured, fresh.allows(Load.PAGE, configured))
             assertFalse(configured, fresh.allows(Load.PAGE, "http://xn--fa-hia.example.org:8123/"))
@@ -46,10 +62,12 @@ class LockdownPolicyTest {
         }
     }
 
-    @Test fun `an app load that isn't a network URL leaves the origin alone`() {
-        assertFalse(policy.appLoads("about:blank"))
-        assertFalse(policy.appLoads("data:text/html,hi"))
-        assertEquals(ha, policy.origin)
+    @Test fun `a dashboard that isn't a network URL sets no origin`() {
+        for (dashboard in listOf("about:blank", "data:text/html,hi", "", "auto")) {
+            val fresh = LockdownPolicy()
+            fresh.start(dashboard)
+            assertNull(dashboard, fresh.origin)
+        }
     }
 
     @Test fun `top-level pages load only from Home Assistant`() {
@@ -88,9 +106,9 @@ class LockdownPolicyTest {
         assertFalse(policy.allows(Load.DOWNLOAD, "blob:$ha/1f2e"))
     }
 
-    @Test fun `a new dashboard origin moves the lockdown with it`() {
-        policy.appLoads("https://homeassistant.local/dashboard-wall/0")
-        assertTrue(policy.allows(Load.PAGE, "https://homeassistant.local/"))
-        assertFalse(policy.allows(Load.PAGE, "$ha/"))
+    @Test fun `a new dashboard origin takes a new engine (a process restart)`() {
+        val next = LockdownPolicy().also { it.start("https://homeassistant.local/dashboard-wall/0") }
+        assertTrue(next.allows(Load.PAGE, "https://homeassistant.local/"))
+        assertFalse(next.allows(Load.PAGE, "$ha/"))
     }
 }

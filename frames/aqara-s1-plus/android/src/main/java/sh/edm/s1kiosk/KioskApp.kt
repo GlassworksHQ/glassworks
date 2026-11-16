@@ -33,11 +33,18 @@ class KioskApp : Application(), GlassworksApp {
             GlassworksRuntime(frame, build, engine(build), S1Panes(), paneFrame)
 
         /**
+         * What the engine starts with, from the settings: read once, at the first open. The dashboard is the
+         * configured URL (none while Home Assistant isn't found): the legacy engine holds pages to its origin (#198).
+         */
+        internal fun engineSettings(context: android.content.Context, build: AppBuild): EngineSettings =
+            KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug), dashboard = url.ifEmpty { null }) }
+
+        /**
          * GeckoView, with the kiosk's helper extension (assets/extension). Its settings are read once, when
          * MainActivity first opens a page.
          */
         private fun engine(build: AppBuild): Engine = GeckoEngine(
-            settings = { context -> KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug)) } },
+            settings = { context -> engineSettings(context, build) },
             extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
             logTag = "S1Kiosk",
             generatedBy = "S1 Kiosk",

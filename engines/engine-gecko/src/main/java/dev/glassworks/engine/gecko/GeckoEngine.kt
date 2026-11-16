@@ -66,6 +66,7 @@ class GeckoEngine(
         val app = context.applicationContext
         val s = settings(app)
         started = s
+        guard?.start(s.dashboard)
         val config = writeConfig(app, s)
         val rs = GeckoRuntimeSettings.Builder()
             .configFilePath(config.absolutePath)
@@ -174,14 +175,31 @@ class GeckoEngine(
                 it.close()
             }
             session = null
+            shown = null // the new session is empty until it reports a location
             start()
         }
 
         override fun load(url: String) {
             val g = guard ?: return run { session?.loadUri(url) }
-            g.appLoads(url)
+            // The app's own load is a page like any other: off the dashboard's origin, it's refused (and noted). With
+            // nothing on screen yet, the note has no page to show in, so the guard's words go over the page instead.
+            if (!g.allows(PageGuard.Load.PAGE, url)) {
+                if (blank(shown)) {
+                    showStuck(g.refusedAppLoad(url))
+                    refusalShown = true
+                }
+                return
+            }
             g.whenReady({ showStuck(null); session?.loadUri(url) }, ::showStuck)
         }
+
+        /** Where the page is (onLocationChange), for a guard's refusal of the app's own load. */
+        private var shown: String? = null
+
+        /** The words over the page are a refusal, which a page that then commits takes away (not a wait). */
+        private var refusalShown = false
+
+        private fun blank(url: String?) = url.isNullOrEmpty() || url == "about:blank"
 
         /** The guard's words for why nothing loads, over the page (GeckoView is a FrameLayout); null takes them away. */
         private var stuck: TextView? = null
@@ -190,6 +208,7 @@ class GeckoEngine(
             if (message == null) {
                 stuck?.let { view.removeView(it) }
                 stuck = null
+                refusalShown = false
                 return
             }
             val t = stuck ?: TextView(activity).apply {
@@ -276,7 +295,14 @@ class GeckoEngine(
                 url: String?,
                 perms: MutableList<PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean,
-            ) = host.onLocationChange(url)
+            ) {
+                shown = url
+                if (refusalShown && !blank(url)) {
+                    showStuck(null)
+                    refusalShown = false
+                }
+                host.onLocationChange(url)
+            }
 
             override fun onLoadRequest(session: GeckoSession, request: GeckoSession.NavigationDelegate.LoadRequest): GeckoResult<AllowOrDeny>? {
                 val current = request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_CURRENT

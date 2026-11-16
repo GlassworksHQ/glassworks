@@ -30,7 +30,8 @@ import org.json.JSONObject
  *
  *   adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/sh.edm.s1kiosk.legacycheck.EngineCheckActivity --es url http://127.0.0.1:18125/
  *
- * The URL is the app's own load, so its origin is the one the lockdown allows. Without `url` it opens the last one.
+ * The URL is the dashboard the engine starts with, so its origin is the one the lockdown allows, for the life of
+ * the process: to check another origin, `am force-stop` the app first. Without `url` it opens the last one.
  * Debug builds only; never in the S1 app. One GeckoView runtime per process: don't open MainActivity in the same run.
  */
 class EngineCheckActivity : Activity() {
@@ -109,7 +110,12 @@ class EngineCheckActivity : Activity() {
         /** The same engine, extension and settings shape as KioskApp's. */
         private val engine: Engine by lazy {
             GeckoEngine(
-                settings = { EngineSettings(secureHosts = emptyList(), zoom = 0f, remoteDebugging = true) },
+                // The dashboard is the URL this check was opened with (saved before the first open): the lockdown takes
+                // its origin once, so a check of another origin needs `am force-stop` first.
+                settings = { ctx ->
+                    val url = ctx.getSharedPreferences("legacy_check", android.content.Context.MODE_PRIVATE).getString("url", null)
+                    EngineSettings(secureHosts = emptyList(), zoom = 0f, remoteDebugging = true, dashboard = url)
+                },
                 extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
                 logTag = TAG,
                 generatedBy = "Legacy engine check",

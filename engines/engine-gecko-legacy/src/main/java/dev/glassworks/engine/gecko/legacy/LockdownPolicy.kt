@@ -10,26 +10,34 @@ import dev.glassworks.engine.gecko.PageGuard.Load
  * What the legacy engine lets a page load (#198). The engine is frozen (GeckoView 144, no security fixes), so
  * it shows the panel's Home Assistant and nothing else:
  *
- * - The app's own loads set the allowed origin ([appLoads]): the dashboard URL the person configured.
+ * - The allowed origin is the configured dashboard's ([start]), set once when the engine starts. Nothing in the
+ *   session moves or widens it: not the page, and not a later load by the app. A new dashboard address restarts
+ *   the process (the S1 app's settings do), and the new engine starts with it.
+ * - The app's own loads are pages too: one elsewhere is refused.
  * - A top-level page loads only from that origin. `about:blank` is allowed (an empty page).
  * - A frame loads only from that origin, or is `about:blank`/`about:srcdoc` (they inherit the page's origin)
  *   or the lockdown's own note (`moz-extension:`). Cross-origin iframes and web cards are refused.
  * - A new window loads in place, as in the current engine, if it is Home Assistant's; any other is refused.
  * - Downloads are always refused.
  *
- * Before the app has loaded anything, nothing from the network loads. Subresources (images, map tiles,
+ * Without a dashboard (Home Assistant not found yet), nothing from the network loads. Subresources (images, map tiles,
  * fetches, WebSockets) don't pass through here: the lockdown extension blocks them (assets/lockdown).
  */
 internal class LockdownPolicy {
-    /** The origin pages may use, from the app's last load. */
+    /** The origin pages may use: the configured dashboard's, from [start]. */
     @Volatile var origin: String? = null
         private set
 
-    /** The app loads [url]. Returns true if the allowed origin changed. */
-    fun appLoads(url: String): Boolean {
-        val o = Origin.of(url) ?: return false
-        if (o == origin) return false
-        origin = o
+    private var started = false
+
+    /**
+     * The engine starts with the configured [dashboard] URL (null: none yet). Only the first call counts: returns
+     * false, and changes nothing, after that.
+     */
+    fun start(dashboard: String?): Boolean {
+        if (started) return false
+        started = true
+        origin = Origin.of(dashboard)
         return true
     }
 

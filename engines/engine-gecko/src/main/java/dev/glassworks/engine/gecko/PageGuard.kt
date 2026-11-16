@@ -18,14 +18,20 @@ internal interface PageGuard {
     /** Called once, when the runtime exists. */
     fun attach(runtime: GeckoRuntime)
 
-    /** The app loads [url] itself ([dev.glassworks.engine.Page.load]): its origin is the one pages may use. */
-    fun appLoads(url: String)
+    /**
+     * The engine starts with the configured [dashboard] URL ([dev.glassworks.engine.EngineSettings.dashboard]): its
+     * origin is the one pages may use, for the life of the process. Called once, before any load.
+     */
+    fun start(dashboard: String?)
 
     /**
      * Runs [load] once the guard is in force: at once if it is, else when it is (never, if it can't be). If it
      * can't be, or is slow to, [stuck] says why in words for the screen.
      */
     fun whenReady(load: () -> Unit, stuck: (String) -> Unit)
+
+    /** Words for the screen when the app's own load of [url] is refused and the page shows nothing else. */
+    fun refusedAppLoad(url: String): String
 
     /** Whether [url] may load as [kind]. The guard notes a refusal on the page and in the log. */
     fun allows(kind: Load, url: String): Boolean
