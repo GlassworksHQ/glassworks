@@ -73,6 +73,36 @@ describe('the APK\'s package, read before anything is installed', () => {
     expect(await apkPackage(new Uint8Array(Buffer.concat([local, z, central, end])))).toBe('sh.edm.s1kiosk');
   });
 
+  it('reads minSdkVersion (by name, or by resource id when the name is stripped) and the ABIs', async () => {
+    const { fakeApk } = await import('./fakes');
+    const { apkInfo } = await import('../src');
+    expect(await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'arm64-v8a': { 'libxul.so': new Uint8Array(1) } } }))).toEqual({ package: 'sh.edm.s1kiosk', minSdk: 23, abis: ['arm64-v8a'] });
+    expect(await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, stripNames: true, utf8: true }))).toEqual({ package: 'sh.edm.s1kiosk', minSdk: 26, abis: [] });
+    expect((await apkInfo(fakeApk('sh.edm.s1kiosk'))).minSdk).toBeUndefined();
+    // an unqualified minSdkVersion first isn't the one Android checks: the framework attribute is (#354 review)
+    expect((await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, shadow: 23 }))).minSdk).toBe(26);
+    expect((await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, shadow: 23, utf8: true }))).minSdk).toBe(26);
+    // a raw string that disagrees with the typed value: Android reads the typed one (#354 review)
+    expect((await apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 26, minSdkRaw: '23' }))).minSdk).toBe(26);
+  });
+
+  it('refuses a minSdkVersion it can\'t read (a reference) rather than reading it as absent', async () => {
+    const { fakeApk } = await import('./fakes');
+    const { apkInfo } = await import('../src');
+    await expect(apkInfo(fakeApk('sh.edm.s1kiosk', { minSdk: 0x7f0a0001, minSdkKind: 0x01 }))).rejects.toThrow(/uses-sdk minSdkVersion is a value Kiln can't read \(type 0x1\)/);
+  });
+
+  it('reads only the un-namespaced package attribute', async () => {
+    const { fakeApk } = await import('./fakes');
+    const { zipEntry, axmlAttribute } = await import('../src');
+    const xml = (await zipEntry(fakeApk('sh.edm.s1kiosk'), 'AndroidManifest.xml'))!.slice();
+    // the fake's first attribute is <manifest package>: give it a namespace, as a crafted APK could
+    const dv = new DataView(xml.buffer);
+    let at = 8; at += dv.getUint32(at + 4, true); at += dv.getUint32(at + 4, true); // string pool, resource map
+    dv.setUint32(at + 16 + 20, 1, true);
+    expect(axmlAttribute(xml, 'manifest', 'package')).toBeUndefined();
+  });
+
   it('refuses a file that isn\'t an APK', async () => {
     const { apkPackage } = await import('../src');
     await expect(apkPackage(new TextEncoder().encode('not a real APK'))).rejects.toThrow(/isn't an APK/);

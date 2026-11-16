@@ -10,16 +10,33 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(s).arrayBuffer());
 }
 
+/** The names of the files in a zip, from its central directory. */
+export function zipNames(zip: Uint8Array): string[] {
+  const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const { count, at: first } = centralDirectory(zip, dv);
+  const out: string[] = [];
+  for (let i = 0, at = first; i < count; i++) {
+    if (dv.getUint32(at, true) !== 0x02014b50) throw new Error('this APK\'s zip directory is broken');
+    const nlen = dv.getUint16(at + 28, true);
+    out.push(td8.decode(zip.subarray(at + 46, at + 46 + nlen)));
+    at += 46 + nlen + dv.getUint16(at + 30, true) + dv.getUint16(at + 32, true);
+  }
+  return out;
+}
+
+function centralDirectory(zip: Uint8Array, dv: DataView): { count: number; at: number } {
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 0xffff); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) return { count: dv.getUint16(i + 10, true), at: dv.getUint32(i + 16, true) };
+  }
+  throw new Error('this file isn\'t an APK (no zip directory)');
+}
+
 /** One file out of a zip, by name (stored or deflated). Undefined if it isn't there. */
 export async function zipEntry(zip: Uint8Array, name: string): Promise<Uint8Array | undefined> {
   const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
-  let eocd = -1;
-  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 22 - 0xffff); i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) throw new Error('this file isn\'t an APK (no zip directory)');
-  const count = dv.getUint16(eocd + 10, true);
-  let at = dv.getUint32(eocd + 16, true);
+  const cd = centralDirectory(zip, dv);
+  const count = cd.count;
+  let at = cd.at;
   for (let i = 0; i < count; i++) {
     if (dv.getUint32(at, true) !== 0x02014b50) throw new Error('this APK\'s zip directory is broken');
     const method = dv.getUint16(at + 10, true), csize = dv.getUint32(at + 20, true);
@@ -37,11 +54,22 @@ export async function zipEntry(zip: Uint8Array, name: string): Promise<Uint8Arra
   return undefined;
 }
 
-/** The value of attribute `attr` on the first element `element` in binary XML. */
-export function axmlAttribute(xml: Uint8Array, element: string, attr: string): string | undefined {
+/** Android's resource ids for the manifest attributes read here (android.R.attr). */
+const ATTR_IDS: Record<string, number> = { minSdkVersion: 0x0101020c };
+/** Attributes that only count without a namespace. */
+const NO_NAMESPACE = new Set(['package']);
+
+/**
+ * The value of attribute `attr` on the first element `element` in binary XML: a string, or a number
+ * for an integer value (TYPE_INT_DEC or TYPE_INT_HEX). A framework attribute (ATTR_IDS) is found by its
+ * resource id, as Android finds it; by name only when the build gave it no id and it is namespaced.
+ * Any other value type (a reference, a float, …) throws: Kiln can't tell what Android would read.
+ */
+export function axmlAttribute(xml: Uint8Array, element: string, attr: string): string | number | undefined {
   const dv = new DataView(xml.buffer, xml.byteOffset, xml.byteLength);
   if (dv.getUint16(0, true) !== 0x0003) throw new Error('AndroidManifest.xml isn\'t binary XML');
   let strings: string[] = [];
+  let resIds: number[] = [];
   for (let at = dv.getUint16(2, true); at + 8 <= xml.length;) {
     const type = dv.getUint16(at, true), hsize = dv.getUint16(at + 2, true), size = dv.getUint32(at + 4, true);
     if (size < 8) break;
@@ -61,16 +89,29 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
           strings.push(td16.decode(xml.subarray(p, p + len * 2)));
         }
       }
+    } else if (type === 0x0180) {
+      resIds = [];
+      for (let o = at + hsize; o < at + size; o += 4) resIds.push(dv.getUint32(o, true));
     } else if (type === 0x0102) {
       const ext = at + hsize;
       if (strings[dv.getUint32(ext + 4, true)] === element) {
         const aStart = dv.getUint16(ext + 8, true), aSize = dv.getUint16(ext + 10, true), aCount = dv.getUint16(ext + 12, true);
         for (let i = 0; i < aCount; i++) {
           const a = ext + aStart + i * aSize;
-          if (strings[dv.getUint32(a + 4, true)] !== attr) continue;
-          const raw = dv.getUint32(a + 8, true);
-          if (raw !== 0xffffffff) return strings[raw];
-          return xml[a + 15] === 0x03 ? strings[dv.getUint32(a + 16, true)] : undefined; // TYPE_STRING
+          const ns = dv.getUint32(a, true), nameIdx = dv.getUint32(a + 4, true);
+          const id = ATTR_IDS[attr];
+          if (id !== undefined) {
+            // an unqualified minSdkVersion, or one with another id, isn't the one Android checks
+            const byId = resIds[nameIdx];
+            if (ns === 0xffffffff || (byId !== undefined ? byId !== id : strings[nameIdx] !== attr)) continue;
+          } else if (strings[nameIdx] !== attr) continue;
+          // <manifest package> has no namespace: an android:package (or any namespaced one) isn't it
+          if (NO_NAMESPACE.has(attr) && ns !== 0xffffffff) continue;
+          const raw = dv.getUint32(a + 8, true), kind = xml[a + 15], data = dv.getUint32(a + 16, true);
+          // the typed value is what Android reads; the raw string is only a copy that could disagree with it
+          if (kind === 0x10 || kind === 0x11) return data | 0;      // TYPE_INT_DEC, TYPE_INT_HEX
+          if (kind === 0x03) return strings[data] ?? (raw !== 0xffffffff ? strings[raw] : undefined); // TYPE_STRING
+          throw new Error(`this APK's ${element} ${attr} is a value Kiln can't read (type 0x${(kind ?? 0).toString(16)}), so it can't check it`);
         }
         return undefined;
       }
@@ -80,11 +121,26 @@ export function axmlAttribute(xml: Uint8Array, element: string, attr: string): s
   return undefined;
 }
 
-/** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */
-export async function apkPackage(apk: Uint8Array): Promise<string> {
+export interface ApkInfo {
+  package: string;
+  /** android:minSdkVersion: a number, or a codename for a preview SDK; undefined when not set (API 1) */
+  minSdk?: number | string;
+  /** the ABIs it has native code for (lib/<abi>/), none for a pure-Java APK */
+  abis: string[];
+}
+
+/** What an APK needs of a device, read in the browser before anything goes to it. */
+export async function apkInfo(apk: Uint8Array): Promise<ApkInfo> {
   const manifest = await zipEntry(apk, 'AndroidManifest.xml');
   if (!manifest) throw new Error('this file isn\'t an APK (no AndroidManifest.xml)');
   const pkg = axmlAttribute(manifest, 'manifest', 'package');
-  if (!pkg) throw new Error('this APK\'s manifest names no package');
-  return pkg;
+  if (typeof pkg !== 'string' || !pkg) throw new Error('this APK\'s manifest names no package');
+  const min = axmlAttribute(manifest, 'uses-sdk', 'minSdkVersion');
+  const abis = [...new Set(zipNames(apk).map((n) => /^lib\/([^/]+)\/[^/]+\.so$/.exec(n)?.[1]).filter((x): x is string => !!x))];
+  return { package: pkg, ...(min !== undefined ? { minSdk: typeof min === 'string' && /^\d+$/.test(min) ? Number(min) : min } : {}), abis };
+}
+
+/** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */
+export async function apkPackage(apk: Uint8Array): Promise<string> {
+  return (await apkInfo(apk)).package;
 }

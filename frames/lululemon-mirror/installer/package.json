@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@glassworks/adb": "0.0.0",
-    "@glassworks/app-adb": "0.0.0"
+    "@glassworks/app-adb": "0.0.0",
+    "@glassworks/ext4": "0.0.0"
   }
 }

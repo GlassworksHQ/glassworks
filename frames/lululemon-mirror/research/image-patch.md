@@ -1,0 +1,115 @@
+# Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
+
+**Status (2026-11-15): images build and check clean off-device; nothing flashed yet.** Kiln patches
+the Glass Panes `system.img` and builds a new `userdata` in the browser
+(`frames/lululemon-mirror/installer/src/image.ts`). e2fsck finds the patched image as clean as the
+original. Whether the Mirror boots it, takes Kiln's adb key and turns its screen with
+`ro.sf.hwrotation` is **untested** until the root's and maintainer's real run.
+
+Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (Android 6.0.1,
+`userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
+`@glassworks/ext4` (#353), e2fsprogs 1.47.4.
+
+## Question
+
+Option A (#40): a locked stock Mirror takes only `system` and `userdata` over fastboot, and has no
+touchscreen. What must `system` gain, and what must a fresh `userdata` hold, so that the first boot
+comes up as Glassworks and lets Kiln in over adb with its own key, with no shared key?
+
+## What we read
+
+1. **The image itself** (2026-11-15, verified: `system.img` downloaded for the test only, SHA-256
+   `d13dd330…83ed5` as published, deleted after). Read with `@glassworks/ext4`:
+   - Sparse v1.0, 4096-byte blocks, 314,554 blocks (1,288,413,184 bytes, the partition), 2,959
+     chunks, 207,732 blocks of data, **no FILL chunks**. Its ext4 has 312,086 blocks: the last
+     2,468 blocks of the image are outside the filesystem, and Kiln keeps whatever the image has
+     there.
+   - ext4 as `make_ext4fs` makes it: `has_journal ext_attr resize_inode filetype extent
+     sparse_super large_file uninit_bg`, 256-byte inodes, 10 groups, 102,035 blocks free.
+   - Every file is `root:root` with `u:object_r:system_file:s0`, in the inode.
+   - `/app` (57) and `/priv-app` (40) don't include the community kiosk: no
+     `com.nimrod.mirrorkiosk` in `system`.
+   - Bundled apps with native code keep it next to the APK: `/priv-app/DefaultContainerService/lib/arm64/`,
+     `/priv-app/FMRadio/lib/arm64/`.
+   - `/media` holds only `audio`: no `bootanimation.zip`.
+   - `build.prop`: `ro.build.fingerprint=Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys`,
+     `persist.sys.usb.config=diag,serial_smd,rmnet_bam,adb`, no `ro.sf.hwrotation`.
+   - `e2fsck -fn` on the unmodified image: `Padding at end of inode bitmap is not set`, and nothing
+     else. That's a known `make_ext4fs` quirk the kernel ignores.
+
+2. **The maintainer's Mirror, read-only adb** (2026-11-15, verified; serial left out). Each read
+   is `adb shell <command>` exactly as written in the left column (for a file, `cat <path>`, with
+   `grep -n` for one line). The right column quotes the output, cut to the lines that matter, and
+   leaves out anything device-unique:
+
+   | Read | Result |
+   |---|---|
+   | `pm path com.nimrod.mirrorkiosk`; `dumpsys package` | `/data/app/com.nimrod.mirrorkiosk-2`, no `SYSTEM` flag: it lives in `userdata` only |
+   | `getprop ro.adb.secure`; `/default.prop` | `1`; the stock ramdisk sets `persist.sys.usb.config=none` |
+   | `/system/build.prop:174` | `persist.sys.usb.config=…,adb`: loaded after `/default.prop`, so adb stays on with an empty `userdata` |
+   | `/file_contexts` (0644, readable) | `/data(/.*)?` `system_data_file`, `/data/misc/adb(/.*)?` `adb_keys_file`, `/system(/.*)?` `system_file` |
+   | `getprop ro.crypto.state` | `unencrypted`. `fstab.qcom` is 0640 root, unreadable |
+   | `pm list packages` | `com.android.provision` present. Whether a fresh `userdata` then finishes setup by itself is **untested** until the first real flash |
+   | `wm size`; `dumpsys display`; `dumpsys window` | Physical 1920×1080, base rotation 0, `ro.sf.hwrotation` unset; `mUserRotation=3`, locked (`user_rotation=3`, `accelerometer_rotation=0`), kept in `userdata`'s settings |
+
+3. **The Glass Panes `userdata.sparse`** (2026-11-15, read: its first 2 MiB only). Its ext4 fills
+   the whole partition, 1,363,149 blocks (5,583,458,304 bytes), so there is no crypto footer at the
+   end. The release notes say the project's shared adb key is in it.
+
+## Result
+
+### `system`: what Kiln changes
+
+| Change | Why | How sure |
+|---|---|---|
+| `/priv-app/S1Kiosk/S1Kiosk.apk`, `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and S1 Kiosk's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`); untested on the unit |
+| Its native libraries in `/priv-app/S1Kiosk/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
+| `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
+| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns SurfaceFlinger's whole output, the boot animation included, and makes the panel's natural orientation portrait. 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Untested.** The image's SurfaceFlinger is CAF's (DragonBoard LA.BR.1.2.7), which reads `ro.sf.hwrotation`. Check it on the real run (below) |
+| Nothing removed | The community kiosk isn't in `system` | Verified (read 1) |
+
+The patcher refuses, with nothing written, an image whose fingerprint isn't the one above, and an
+APK that isn't `sh.edm.s1kiosk`. A second run gives the same image.
+
+### `userdata`: what a fresh one needs
+
+A new, empty ext4 the size of the partition, with only this:
+
+| Path | Owner, mode | Label | Why |
+|---|---|---|---|
+| `/` | `system:system` 0771 | `system_data_file` | As `init.rc` sets it on `post-fs-data` |
+| `/misc` | `system:misc` 01771 | `system_data_file` | `init.rc`: `mkdir /data/misc 01771 system misc` |
+| `/misc/adb` | `system:shell` 02750 | `adb_keys_file` | `init.rc`: `mkdir /data/misc/adb 02750 system shell` |
+| `/misc/adb/adb_keys` | `system:shell` 0640 | `adb_keys_file` | Android 6's `adbd` takes keys from `/adb_keys` (the signed ramdisk: out of reach) and `/data/misc/adb/adb_keys`, nowhere else. It runs as `shell`, so it reads it through the group |
+| `/lost+found` | `root:root` 0770 | `system_data_file` | e2fsck expects it |
+
+Everything else is made by init on the first boot (`mkdir` sets owner and mode even on a directory
+that exists), and `restorecon_recursive /data` relabels anything mislabelled. The key is Kiln's own
+for this browser, so there's no shared key (#29).
+
+What a fresh `userdata` loses: the community kiosk (good), its shared adb key (good), the Mirror's
+Wi-Fi, and the screen rotation (handled by `ro.sf.hwrotation` above). After the first boot, Kiln
+gives S1 Kiosk the Wi-Fi and the Home Assistant URL over adb, as it does on the S1.
+
+## How to reproduce
+
+Off-device only:
+
+1. Download `system.img` from the Glass Panes release and check it against the release's `SHA256SUMS`.
+2. `GW_MIRROR_SYSTEM_IMG=/path/to/system.img npm test -w @glassworks/lululemon-mirror-installer`.
+   It patches the image in a scratch folder, writes the sparse image Kiln would flash, "flashes" it
+   onto a file full of other bytes, and needs e2fsck to report only the original's own quirk. Needs
+   e2fsprogs. On 2026-11-15 it passed in under a minute on an M-series Mac.
+3. Delete the download and the scratch folder. Never commit either.
+
+## Open questions, for the real run
+
+- Does `ro.sf.hwrotation=270` turn both the boot animation and S1 Kiosk upright? If it doesn't, or
+  turns them the wrong way, flash the plain Glass Panes `system.img` (the way back) and rebuild
+  with `hwrotation` 90 or off. Off falls back to `settings put system user_rotation 3` over adb
+  after the first boot.
+- Does the Mirror's LK take sparse FILL chunks? `userdata` uses them for zeros (inode tables,
+  journal). `writeSparse(…, { fill: false })` sends RAW zeros instead, at about 200 MB more.
+- The LK's `max-download-size`, and how long the first boot takes while `dex2oat` optimises S1 Kiosk.
+- Whether the stock unit's `userdata` partition is the same 5,583,458,304 bytes. Kiln reads it
+  with `fastboot getvar partition-size:userdata` before it builds the image.
