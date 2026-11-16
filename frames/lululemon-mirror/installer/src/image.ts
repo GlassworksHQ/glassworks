@@ -103,7 +103,7 @@ async function checkApk(apk: Uint8Array, app: MirrorApp): Promise<ApkInfo> {
   if (typeof min !== 'number' || min > MIRROR_API) throw new Error(`this APK needs Android API ${min}, and the Mirror runs Android 6 (API ${MIRROR_API}): ${pick}. Nothing was changed.`);
   if (info.abis.length && !info.abis.some((a) => LIB_DIRS.some(([x]) => x === a))) throw new Error(`this APK has native code only for ${info.abis.join(', ')}, not for the Mirror's arm64-v8a or armeabi-v7a: ${pick}. Nothing was changed.`);
   // only the copy in /system can ask for a privileged permission: an update can never add one later
-  const asks = new Set(await apkPermissions(apk));
+  const asks = new Set(await apkPermissions(apk, MIRROR_API));
   const missing = PRIVILEGED.filter((p) => !asks.has(p));
   if (missing.length) {
     throw new Error(`this APK doesn't ask for ${missing.map((m) => m.replace('android.permission.', '')).join(', ')}. Android 6 grants a privileged permission only to what the copy in /system asks for, and an update can never add one: ${pick}. Nothing was changed.`);

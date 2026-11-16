@@ -161,13 +161,19 @@ export async function apkInfo(apk: Uint8Array): Promise<ApkInfo> {
   return { package: pkg, ...(min !== undefined ? { minSdk: typeof min === 'string' && /^\d+$/.test(min) ? Number(min) : min } : {}), abis };
 }
 
-/** The permissions an APK's manifest asks for (<uses-permission android:name>), as Android names them. */
-export async function apkPermissions(apk: Uint8Array): Promise<string[]> {
+/**
+ * The permissions an APK's manifest asks for on Android API `api`, as Android names them:
+ * <uses-permission> unless its android:maxSdkVersion is below `api`, and <uses-permission-sdk-23>
+ * from API 23 on.
+ */
+export async function apkPermissions(apk: Uint8Array, api: number): Promise<string[]> {
   const manifest = await zipEntry(apk, 'AndroidManifest.xml');
   if (!manifest) throw new Error('this file isn\'t an APK (no AndroidManifest.xml)');
   const tree = reading(() => axmlTree(manifest));
   return tree.filter((e) => e.name === 'manifest').flatMap((m) => m.children)
-    .filter((e) => e.name === 'uses-permission' && typeof e.attrs['android:name'] === 'string').map((e) => e.attrs['android:name'] as string);
+    .filter((e) => (e.name === 'uses-permission' || (e.name === 'uses-permission-sdk-23' && api >= 23)) && typeof e.attrs['android:name'] === 'string')
+    .filter((e) => !(Number(e.attrs['android:maxSdkVersion']) < api))
+    .map((e) => e.attrs['android:name'] as string);
 }
 
 /** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */

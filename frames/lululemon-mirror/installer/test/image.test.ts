@@ -51,6 +51,10 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
     await expect(checkMirrorApk(fakeApk(PKG, { minSdk: 23, home }))).rejects.toThrow(
       new RegExp(`doesn't ask for ${perm.replace('android.permission.', '')}\\. Android 6 grants a privileged permission only to what the copy in /system asks for.*Nothing was changed\\.$`));
   });
+  it('refuses a privileged permission Android 6 wouldn\'t grant (maxSdkVersion below 23) (#411 review)', async () => {
+    const home = [...PERMS.map((e) => e.attrs!.name === 'android.permission.REBOOT' ? { ...e, attrs: { ...e.attrs, maxSdkVersion: '22' } } : e), ...app(HOME_ACTIVITY())];
+    await expect(checkMirrorApk(fakeApk(PKG, { minSdk: 23, home }))).rejects.toThrow(/doesn't ask for REBOOT\./);
+  });
   it('refuses S1 Kiosk\'s id by default, and takes it only as the probe (MIRROR_PROBE)', async () => {
     const s1 = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
     await expect(checkMirrorApk(s1)).rejects.toThrow(/this APK is sh\.edm\.s1kiosk, not Glassworks \(dev\.glassworks\.generic_android\.legacy\)/);

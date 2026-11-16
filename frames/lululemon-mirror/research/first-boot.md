@@ -93,7 +93,7 @@ from `system` or the fresh `userdata` it already builds?
 | The person's network | `network={ ssid psk key_mgmt=WPA-PSK priority=1 }` after the template; the PSK is PBKDF2-HMAC-SHA1 (passphrase, SSID, 4096, 256 bits), never the password | `userdata`'s `/misc/wifi/wpa_supplicant.conf`, 0660 1000:1010, `wifi_data_file` | Read: AOSP 6.0.1 wifi.c; tests on the IEEE 802.11i vectors |
 | Screen stays on | Overlay: `def_screen_off_timeout` 2147483647 (no timeout in practice) and `def_stay_on_while_plugged_in` true. DatabaseHelper turns that into **1** (AC only), not 7: there is no default that gives 7 | Overlay | Read: `DatabaseHelper.java:2580` |
 | Portrait, no auto-rotate | Overlay: `def_accelerometer_rotation` false. Rotation stays 0, the natural orientation, which `ro.sf.hwrotation=270` makes portrait. **No `user_rotation` is needed** | Overlay, `build.prop` | Read. `ro.sf.hwrotation` turning the UI upright still needs a look; it did **not** turn the boot animation |
-| Our app as HOME | Unchanged: `makeOnlyHome` hides the image's launchers only once our app (now the legacy build of Glassworks) answers HOME, and Kiln refuses an APK without one (#385) | | |
+| Our app as HOME | Unchanged: `makeOnlyHome` hides the image's launchers only once our app answers HOME, and Kiln refuses an APK without one (#385) | | Verified with the probe app (below). The legacy build of Glassworks, Kiln's app since 2026-11-16, has not run on a Mirror yet |
 
 The overlay is `frames/lululemon-mirror/overlay` (`AndroidManifest.xml`, `res/values/defaults.xml`).
 `build.sh` builds `GlassworksSettings.apk`: `aapt2`, then v1 signing with AOSP's public test key
