@@ -52,13 +52,15 @@ any frame's own numbers.
 
 The test also measures RAM on the reference dashboards (per process, at idle and at the peak, and
 per pane), the panel as you run it (your own dashboard, memory, CPU) and animation capacity. Those
-are reported separately and never graded. It needs no app changes: every page runs in the kiosk's
-own GeckoView, loaded the way the kiosk loads your dashboard.
+are reported separately and never graded. Every page runs in the kiosk's own GeckoView, loaded the
+way the kiosk loads your dashboard. The one thing it needs from the app is the test hold, which
+keeps the screen on for the run (#240; see [What it changes on the device](#what-it-changes-on-the-device)).
 
 ## Run it
 
 You need adb, Python 3.11 or later, ffmpeg with libx264 (for the camera streams; it runs only on your
-computer) and the kiosk installed on the device. The first run makes a Python venv for the fake's
+computer) and the kiosk installed on the device, built from `main` after #240 (it has the test
+hold; the runner refuses an app without it). The first run makes a Python venv for the fake's
 WebRTC camera (aiortc, about 93 MB on macOS (measured 2026-11-14), from `tools/perf/webrtc-requirements.txt`, every wheel's hash
 checked) in `~/.cache/glassworks-perf`. The computer needs an IPv4 address that isn't loopback (any
 network interface that is up; the camera's packets never leave the computer). Let the device idle for 10 minutes
@@ -139,26 +141,36 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
   runner then reads the kiosk's log to check what it runs (see [RAM](#ram)). On exit they are put
   back to the settings you gave. While a pane is off, the panel doesn't play music, hear its wake
   word, drive the wall base, keep the time zone or sample its diagnostics.
-- **The screen stays on** because the runner sends the kiosk's own wake intent (`--es screen on`):
-  just before each view opens, every 8 s while it opens and between views, and when it goes live.
-  While a view is live only once nothing has touched the panel for 10 s (its taps and swipes are
-  touches). During the restart, from the force-stop until the restart page is done (and through a
-  recovery's restart), Android's own wake key (`input keyevent KEYCODE_WAKEUP`) at the stop, at
-  the relaunch and every 8 s: the kiosk's intent would launch the stopped app and change the restart
-  being measured. In s1rtc7 run 2 (2026-11-14, 01:12) the screen went off 20.4 s after the stop,
-  before the kiosk's first frame, which then waited 280 s for the screen. It changes no setting. If the screen goes off anyway during a graded run
-  (Android's `PowerManagerService: Going to sleep` in logcat), that run is an error: with the
-  screen off Gecko runs no animation frames and slows its timers, so nothing timed then is the
-  panel's. In smoke10 (9d986c9, 22:06, the kiosk's 20 s night timeout) the screen went off three
-  times: light's view switch waited 22 s for it to wake, typical's main thread looked busy for
-  112 s, and heavy never ran.
-- **Idle samples and the animation test page** keep the screen on the same way: an idle sample
-  sends the wake intent every 8 s through its settle and its window, and the test page on every
-  line it logs. If the screen goes off anyway, the sample (`screen_off`) or the run (a `screen_off`
-  line in `synthetic-<n>.jsonl`) records it, and the report lists it and leaves it out. In s1v7
-  (131f6da, 2026-11-13) the screen went off at the end of the third `ref-idle` window, 0.14 s before
-  the runner's wake, after the graded run had ended: no graded window overlapped it, and the RAM
-  was read after the wake. Before this, that sample would have counted.
+- **The screen stays on** through the kiosk's test hold (#240): `--ez test_hold true --ei
+  test_hold_s 1800`. While it lasts, the kiosk's idle timeout doesn't turn the screen off. It changes
+  nothing else: brightness and night dimming stay what the panel shows without it, so a run at night
+  is measured at the night's brightness, as before #240. It changes no setting, and Home
+  Assistant sees no setting change. It outlives a restart of the app: the app keeps it in its memory
+  and in a file outside its settings and backups (`no_backup/test_hold`), so the new process holds
+  the screen from its start. In the S1's night run (2026-11-16) a hold that died with the process let
+  the new process's own 20 s night timeout turn the screen off in every graded restart. It ends after
+  its time, at `--ez test_hold false`, or at a reboot. The runner sets it first and checks the kiosk's log for its answer
+  (`test hold on for 1800 s`). An app that doesn't answer within 15 s is refused, with no fallback.
+  It sets it again before each part and before each view opens, so a long run never outlasts it,
+  and ends it on exit. From the force-stop until the next view's hold (and through a recovery's
+  restart), Android's own wake key (`input keyevent KEYCODE_WAKEUP`) goes at the stop, at the
+  relaunch and every 8 s, for the time the app is down: the kiosk's intent would launch the stopped
+  app and change the restart being measured. In s1rtc7 run 2 (2026-11-14, 01:12) the
+  screen went off 20.4 s after the stop, before the kiosk's first frame, which then waited 280 s
+  for the screen. If the screen goes off anyway during a graded run (Android's
+  `PowerManagerService: Going to sleep` in logcat), that run is an error: with the screen off Gecko
+  runs no animation frames and slows its timers, so nothing timed then is the panel's. In smoke10
+  (9d986c9, 22:06, the kiosk's 20 s night timeout) the screen went off three times: light's view
+  switch waited 22 s for it to wake, typical's main thread looked busy for 112 s, and heavy never
+  ran. Before #240 the runner sent the kiosk's wake intent (`--es screen on`) every 8 s between
+  views and to a live view after 10 s without a touch, and still lost the screen: s1rtc5 run 1 lost
+  heavy's 16 to 20 s after its last tap.
+- **Idle samples and the animation test page** set the test hold before they start. If the screen
+  goes off anyway, the sample (`screen_off`) or the run (a `screen_off` line in
+  `synthetic-<n>.jsonl`) records it, and the report lists it and leaves it out. In s1v7 (131f6da,
+  2026-11-13) the screen went off at the end of the third `ref-idle` window, 0.14 s before the
+  runner's wake, after the graded run had ended: no graded window overlapped it, and the RAM was
+  read after the wake. Before this, that sample would have counted.
 - **Taps and swipes**, only on the reference pages and only when the page asks: each page logs
   where its "Living room" toggle is (`input tap`) and where to swipe (`input swipe`), tagged with
   that page load's nonce. A request with another page's nonce is ignored. Before anything reaches
@@ -799,12 +811,10 @@ nothing else:
 
 Before, the whole run waited out its 900 s and was dropped (smoke 7); then the run's later views
 weren't opened (s1rtc3); then heavy, usable after 43 s and still working, ran out of a 300 s
-per-view deadline before its swipes (s1rtc4). The runner also sends the kiosk's wake intent during a
-live view once nothing has touched the panel for 10 s (`live_wakes`; it was 30 s until s1rtc5, whose
-heavy lost the screen at night 16 to 20 s after its last tap), and Android's wake key through each
-restart (`restart_wakes`): see "The screen stays on". A page stuck on a busy panel can outlast the
-kiosk's idle timeout (20 s at night on the S1), and with the screen off nothing measured is the
-panel's. A graded run may take up to 1800 s (`--timeout`).
+per-view deadline before its swipes (s1rtc4). A page stuck on a busy panel can outlast the kiosk's idle
+timeout (20 s at night on the S1), and with the screen off nothing measured is the panel's: the
+test hold keeps it on (`holds`, one before each view), and Android's wake key through each
+restart (`restart_wakes`): see "The screen stays on". A graded run may take up to 1800 s (`--timeout`).
 None of this moves a threshold.
 
 **Drawn long before usable** (detail). A view is usable when its first screen is drawn and its main
@@ -1730,7 +1740,7 @@ load) and `t`:
 |---|---|
 | `drawn` | Protocol 2: a reference view's first screen drawn, logged at once: `tier`, `protocol`, `clarity`, `nav_ms`, `usable` (`rendered_tick_ms`, `first_screen_cards`, `head_cards`, as in `refdash`), `origin_epoch_ms`, `epoch_ms`. The runner keeps it as the view's `drawn`; `refdash` follows once the main thread is free |
 | `refdash` | A reference view, usable: `tier` (the view: `start` for the restart page, or `light`, `typical`, `heavy`), `protocol`, `clarity` (`2`; v1: `1`), `frontend` (HA's frontend release), `nodes`, `cards` (the view's cards), `cards_rendered` (how many HA had built when it was usable), `css` (viewport), `dpr`, `scroll_height`, `fcp_ms`, `lcp_ms`, `load_ms` (the frontend's own load: the restart page only, else `null`), `nav_ms` (the navigation to the view; 0 for the frontend's own load), `video_caps` (`mse_h264`, `native_hls`, `rvfc`, `webrtc`: which camera player paths the engine offers), `usable` (`rendered_tick_ms`, the frame in which it was drawn; `first_screen_cards`; `head_cards`, the 10 head cards it waited for; `interactive_ms`, when the main thread's free stretch began; `busy_ms`, protocol 8, the longest a probe waited each second until then; protocol 2: `blocking_ms`, the frames' time past 50 ms from the draw to usable, `long_frames`, how many frames were over 50 ms, and `longest_frame_ms`) (all after `performance.timeOrigin`), `origin_epoch_ms` and `epoch_ms`, which tie the page's clock to logcat's |
-| `warmup` | `stage`, `n`. The page goes live; the runner wakes the screen and stops polling SurfaceFlinger |
+| `warmup` | `stage`, `n`. The page goes live; the runner stops polling SurfaceFlinger |
 | `measure` | `stage`, `n`. A window starts. For `updates`, the live check: `moving`, `offscreen`, `targets`, `update_every_ms` |
 | `step` | `stage` (`updates`, `scroll`, or a ladder family), `n`, `window_ms` (the window's length on the page's clock), `raf` (frame stats). For `updates`: `t0` (the window's start on the page's clock), `pacing_ms` (the stretch `raf_times` covers), `from` (`sent`: the changes start when the fake sent them), `stream_at_ms` (when the harness asked for the stream), `raf_times` and `changes` (`[sent, arrived, transition ms, kind, tick]`: every change the fake sent up to the window's end, from its schedule; `arrived` and `tick` are `null` for one that hadn't reached the page when the window was logged; kind 0 a sensor value, 2 an on/off change (1, the clock, was protocol 3's); tick, the animation frame it was drawn in), all ms after `t0`. For `scroll`: `scrolled_px`, `hit_edge`, `changes_during`, `first_scroll_ms`, `raf_intervals`. The runner reads SurfaceFlinger |
 | `input-ready` | `x`, `y` (device pixels), `taps`. The runner taps |
@@ -1913,7 +1923,7 @@ GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.gecko.test.mjs
 ```
 
 `test_runner.py` runs `run.sh` and `perfrun.py` end to end against a fake panel (`test/fake_adb.py`)
-and the fake Home Assistant. A panel's waits are real seconds (a wake every 8 s, a 180 s stage
+and the fake Home Assistant. A panel's waits are real seconds (a wake key every 8 s in a restart, a 180 s stage
 deadline), so these runs go on a compressed clock: every wait and timestamp of the runner,
 `lanprobe.py` and the fake panel goes through `clock.py`, and the tests set `GW_PERF_TIME_SCALE=0.2`.
 A wait then takes a fifth of its seconds, and the clock runs five times as fast, so recorded times
