@@ -85,7 +85,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   /** A step's state, unless the panel said this browser isn't paired (the pairing ran out): then pair again. */
   private showStep(setup: Setup) {
     const ranOut = ((setup.phase === 'ha' || setup.phase === 'radio') && setup.error === NOT_PAIRED) ||
-      (setup.phase === 'wifi' && setup.status === NOT_PAIRED);
+      (setup.phase === 'wifi' && (setup.status === NOT_PAIRED || setup.joining?.error === NOT_PAIRED));
     if (ranOut) {
       this.resume = setup.phase;
       this.steps.close();

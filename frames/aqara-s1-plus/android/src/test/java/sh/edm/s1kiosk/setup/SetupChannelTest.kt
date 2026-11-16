@@ -175,11 +175,12 @@ class SetupChannelTest {
             JSONObject().put("id", 1).put("op", "wifi.join").put("ssid", ssid).put("password", password).toString()).first).optString("error", "")
         assertTrue(err("", "correct horse").isNotEmpty())
         assertTrue(err("x".repeat(33), "correct horse").isNotEmpty())
-        assertTrue(err("Example-WiFi", "short").isNotEmpty())
+        assertEquals("a WPA3 or WEP key may be short: the provisioner checks it", "", err("Example-WiFi", "seven77"))
         assertTrue(err("Example-WiFi", "x".repeat(64)).isNotEmpty())
+        assertTrue(err("Example-WiFi", "0123456789abcdef".repeat(4) + "0").isNotEmpty())
         assertEquals("", err("Example-WiFi", ""))
         assertEquals("", err("Example-WiFi", "0123456789abcdef".repeat(4)))
-        assertEquals(listOf("join Example-WiFi", "join Example-WiFi"), f.calls)
+        assertEquals(listOf("join Example-WiFi", "join Example-WiFi", "join Example-WiFi"), f.calls)
     }
 
     @Test

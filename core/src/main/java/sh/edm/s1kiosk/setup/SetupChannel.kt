@@ -187,7 +187,7 @@ class SetupChannel(
         val password = req.optString("password", "")
         val why = when {
             ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name has 1 to 32 characters."
-            !validPassword(password) -> "A Wi-Fi password has 8 to 63 characters, or none for an open network."
+            !validPassword(password) -> "A Wi-Fi password has at most 63 characters."
             backend.state().online -> ON_A_NETWORK
             else -> null
         }
@@ -263,9 +263,13 @@ class SetupChannel(
         /** The core's requests, by every name they have. */
         val CORE_OPS = setOf("state", HA_SET_URL, "set_ha", PAIRING_ARM, WIFI_SCAN, WIFI_JOIN)
 
-        /** WPA's rule: 8 to 63 characters, 64 hex digits (a raw key), or none for an open network. */
+        /**
+         * No network takes a longer password: at most 63 characters, or 64 hex digits (a raw WPA key). Shorter ones go
+         * on to the provisioner, which checks them against the network's security: WPA2 wants 8, WPA3-SAE and WEP
+         * don't (CodeRabbit on #418).
+         */
         fun validPassword(p: String): Boolean =
-            p.isEmpty() || p.length in 8..63 || (p.length == 64 && p.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' })
+            p.length <= 63 || (p.length == 64 && p.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' })
         const val POLL_MS = 1_500L
         /** Longer lines are dropped (requests are tiny). */
         const val MAX_LINE = 16 * 1024

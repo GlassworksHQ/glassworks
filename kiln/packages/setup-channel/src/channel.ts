@@ -100,6 +100,11 @@ export class Refused extends Error {
   override name = 'Refused';
 }
 
+/** The request never left this browser: the connection was gone before it could be written. Nothing reached the panel. */
+export class NotSent extends Error {
+  override name = 'NotSent';
+}
+
 export class SetupChannel {
   private buf = '';
   private nextId = 1;
@@ -141,7 +146,11 @@ export class SetupChannel {
         if (r.ok && r.state) resolve(r);
         else reject(new Refused(r.error || `${op} failed`));
       });
-      void this.io.write(new TextEncoder().encode(`${JSON.stringify({ id, op, ...args })}\n`)).catch(reject);
+      void this.io.write(new TextEncoder().encode(`${JSON.stringify({ id, op, ...args })}\n`)).catch((e: unknown) => {
+        clearTimeout(t);
+        this.pending.delete(id);
+        reject(new NotSent(`couldn't send ${op} to the panel${e instanceof Error ? ` (${e.message})` : ''}`));
+      });
     });
   }
 
