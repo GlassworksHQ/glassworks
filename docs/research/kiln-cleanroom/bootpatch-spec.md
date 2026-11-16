@@ -1,6 +1,6 @@
 # Clean-room spec: `kiln/packages/bootpatch`
 
-**Status (2026-11-15): spec ready, rewrite not started (#355).** This page says what Kiln's boot
+**Status (2026-11-15): spec ready. The rewrite passes the vectors and the S1 goldens, and waits on a real panel (#355).** This page says what Kiln's boot
 image patcher must do, in behaviour and formats. It is the input for an implementer who has not read
 Magisk's source. Read [README.md](README.md) first: it says what you may open and what you must not.
 
@@ -270,7 +270,7 @@ the SHA-1 of all of `I`'s bytes, in lower-case hex.
    after the backup, so they are neither backed up nor listed.
 8. **Refuse the DTB patches the CLI would make**, which Kiln doesn't do:
    - the DTB contains `"/system_root"` followed by a NUL: refuse, with a message that contains
-     `patched by old` ("This boot image's DTB was patched by an old Magisk.");
+     `patched by old` ("This boot image's DTB was patched by old Magisk versions.");
    - the DTB contains `"skip_initramfs"`: refuse, with `skip_initramfs`.
 9. **Write the ramdisk** (below), then compress it the way it came. A gzip ramdisk becomes gzip
    (best compression). An xz ramdisk becomes xz (BCJ detection on the whole archive). A raw one stays

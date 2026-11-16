@@ -1,6 +1,6 @@
 # Kiln clean-room rewrite: rules, specs and vectors
 
-**Status (2026-11-15): specs and vectors ready, rewrite not started.** Tracked in #355.
+**Status (2026-11-15): specs and vectors ready. The bootpatch rewrite passes the vectors and the S1 goldens, and waits on a real panel; the FEL rewrite is not started.** Tracked in #355.
 
 Kiln's FEL client (`kiln/packages/fel`) and boot patcher (`kiln/packages/bootpatch`) hold code derived
 from sunxi-tools (GPL-2.0-or-later) and Magisk v31.1 (GPL-3.0-only). The maintainer decided on

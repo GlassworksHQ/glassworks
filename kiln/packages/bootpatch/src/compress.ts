@@ -1,4 +1,4 @@
-// magiskboot v31.1's compressors, compiled to wasm (see wasm/src/lib.rs and wasm/build-wasm.sh).
+// The compressors of the boot patch, compiled to wasm (see wasm/src/lib.rs and wasm/build-wasm.sh).
 //
 // The boot patch must be byte-identical to magiskboot, and neither the browser's CompressionStream
 // (zlib) nor liblzma produce the same bytes as the Rust crates magiskboot uses (flate2 + zlib-rs at
@@ -11,7 +11,7 @@ export interface Compressor {
   /** Multi-member gunzip (magiskboot `unpack`). Throws on corrupt input. */
   gunzip(data: Uint8Array): Uint8Array;
   /**
-   * xz preset 6, CRC32 check, BCJ filter chosen by magiskboot's detect_bcj_filter over the first
+   * xz preset 6, CRC32 check, BCJ filter chosen by the spec's detection (bootpatch-spec.md) over the first
    * `sniffLen` bytes. `compress=xz` sniffs 4096 bytes; cpio `backup` sniffs the whole entry.
    */
   xz(data: Uint8Array, sniffLen?: number): Uint8Array;

@@ -8,5 +8,7 @@ these crates from crates.io, at the exact versions in Cargo.lock (the ones Magis
   hybrid-array 0.4.15, typenum 1.20.1, cfg-if 1.0.5   MIT OR Apache-2.0
   Rust standard library (rustc 1.91.1)              MIT OR Apache-2.0
 
-No Magisk (GPLv3) code is included: only the same third-party compression crates, so the output
-bytes match magiskboot's. The full licence texts ship with each crate's source (crates.io).
+src/lib.rs is this project's own code, written clean-room from
+docs/research/kiln-cleanroom/bootpatch-spec.md (#355). It holds no Magisk (GPLv3) code. It uses the
+same third-party compression crates as magiskboot, so the output bytes match.
+The full licence texts ship with each crate's source (crates.io).
