@@ -610,6 +610,13 @@ public class ApiServer(
         true
     }
 
+    /** Takes [handler] out if it is still [bluetoothConnections] (not if another one replaced it). True if it was. */
+    public fun removeBluetoothConnections(handler: BluetoothConnectionHandler): Boolean = synchronized(bluetoothLock) {
+        if (bluetoothConnections !== handler) return false
+        bluetoothConnections = null
+        true
+    }
+
     private fun subscribeBluetooth(c: Connection) {
         synchronized(bluetoothLock) {
             val bt = bluetooth ?: return

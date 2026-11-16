@@ -12,7 +12,7 @@ publish the matching section below as the release notes.
   `BluetoothConnectionHandler` next to `ApiServer.bluetooth`, and Home Assistant can connect to BLE
   devices through the proxy: connect and disconnect, services, reads, writes, descriptors,
   notifications and the free-slot count. Requests arrive as `GattRequest`; answer with
-  `sendBluetoothEvent(GattEvent…)`. The flags then add `ACTIVE_CONNECTIONS` and `REMOTE_CACHING`
+  `sendBluetoothEvent(GattEvent…)`; `removeBluetoothConnections` takes it out again. The flags then add `ACTIVE_CONNECTIONS` and `REMOTE_CACHING`
   (aioesphomeapi 46.25.0 connects only through a proxy with both). Only the client that holds the
   advertisement subscription may ask, so requests follow `BluetoothProxyHandler.authOnly`. Pairing
   and cache clearing are answered "failed" at once (#246).

@@ -247,6 +247,15 @@ class BluetoothConnectionServerTest {
         }
     }
 
+    @Test fun removeBluetoothConnectionsRemovesOnlyTheHandlerItNames() {
+        server.bluetoothConnections = links
+        val other = object : BluetoothConnectionHandler by links {}
+        assertFalse(server.removeBluetoothConnections(other))
+        assertTrue(server.bluetoothConnections === links)
+        assertTrue(server.removeBluetoothConnections(links))
+        assertEquals(null, server.bluetoothConnections)
+    }
+
     /** Pairing, unpairing, cache clearing and v1 connects are answered "failed", so a client doesn't wait out its timeout. */
     @Test fun unsupportedDeviceRequestsFailAtOnce() {
         start()

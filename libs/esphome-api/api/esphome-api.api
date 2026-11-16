@@ -104,6 +104,7 @@ public final class dev/glassworks/esphome/ApiServer {
 	public final fun getVoice ()Ldev/glassworks/esphome/VoiceAssistantHandler;
 	public final fun publishStates ()V
 	public final fun removeBluetooth (Ldev/glassworks/esphome/BluetoothProxyHandler;)Z
+	public final fun removeBluetoothConnections (Ldev/glassworks/esphome/BluetoothConnectionHandler;)Z
 	public final fun replaceKey ([B)V
 	public final fun sendBluetoothAdvertisements (Ljava/util/List;)Z
 	public final fun sendBluetoothEvent (Ldev/glassworks/esphome/GattEvent;)Z
