@@ -136,6 +136,9 @@ describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16
   it.each([
     ['a <data> scheme', { el: 'data', attrs: { scheme: 'example' } }],
     ['a <data> MIME type', { el: 'data', attrs: { mimeType: 'text/plain' } }],
+    // a build that strips attribute names keeps their resource ids, which Android reads
+    ['a <data> scheme by resource id only', { el: 'data', attrs: { '#0x01010027': 'example' } }],
+    ['a <data> MIME type by resource id only', { el: 'data', attrs: { '#0x01010026': 'text/plain' } }],
   ])('MAIN, HOME and DEFAULT with %s is no home screen: the HOME intent carries no data', async (_, data) => {
     const f = filter(['MAIN'], ['HOME', 'DEFAULT']);
     expect(await home(app(act('.MainActivity', [{ ...f, children: [...f.children!, data as FakeEl] }])))).toEqual({ on: [], off: [], unclear: [] });
@@ -145,6 +148,12 @@ describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16
     expect(await home(app(HOME_ACTIVITY({ enabled: { ref: 0x7f040001 } })))).toEqual({ on: [], off: [], unclear: [`${P}.MainActivity`] });
     expect(await home(app(HOME_ACTIVITY(), { enabled: false }))).toEqual({ on: [], off: [`${P}.MainActivity`], unclear: [] });
     expect(await home(app(HOME_ACTIVITY({ enabled: true }), { enabled: true }))).toEqual({ on: [`${P}.MainActivity`], off: [], unclear: [] });
+  });
+
+  it('reads name and enabled by resource id when the build stripped their names', async () => {
+    const stripped = (attrs: FakeEl['attrs']): FakeEl => ({ el: 'activity', attrs, children: [filter(['MAIN'], ['HOME', 'DEFAULT'])] });
+    expect(await home(app(stripped({ '#0x01010003': '.Home' })))).toEqual({ on: [`${P}.Home`], off: [], unclear: [] });
+    expect(await home(app(stripped({ '#0x01010003': '.Home', '#0x0101000e': false })))).toEqual({ on: [], off: [`${P}.Home`], unclear: [] });
   });
 
   it('an activity-alias counts by its own enabled bit, over an enabled or a disabled target', async () => {

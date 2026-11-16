@@ -2,7 +2,8 @@
 // apkPackage, the tests and Kiln's demos. Nothing in it would install.
 
 /** An element under <manifest>, after <uses-sdk>; its attributes are android: ones. A boolean is
- * TYPE_INT_BOOLEAN, `{ ref }` a resource reference (@bool/…), a string TYPE_STRING. */
+ * TYPE_INT_BOOLEAN, `{ ref }` a resource reference (@bool/…), a string TYPE_STRING. A key `#0x0101…`
+ * is an attribute whose name string the build stripped: an empty name, only its resource id. */
 export interface FakeEl { el: string; attrs?: Record<string, string | boolean | { ref: number }>; children?: FakeEl[] }
 
 /** An intent filter with these actions and categories (short names: MAIN, HOME, DEFAULT, LAUNCHER). */
@@ -40,9 +41,17 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
   // raw string for minSdkRaw, which can disagree with the typed value); then the tree's own strings
   const strs = ['manifest', 'package', pkg, 'uses-sdk', stripNames ? '' : 'minSdkVersion', 'http://schemas.android.com/apk/res/android', 'minSdkVersion', '23'];
   const idx = (str: string) => { const i = strs.indexOf(str, 8); if (i >= 0) return i; strs.push(str); return strs.length - 1; };
+  // resource ids by string index: minSdkVersion's, then a stripped attribute's (its own empty string each)
+  const ids = new Map<number, number>([[4, 0x0101020c]]);
+  const stripped = new Map<string, number>();
+  const attrIdx = (k: string) => {
+    if (!k.startsWith('#')) return idx(k);
+    if (!stripped.has(k)) { strs.push(''); stripped.set(k, strs.length - 1); ids.set(strs.length - 1, Number(k.slice(1))); }
+    return stripped.get(k)!;
+  };
   const home = o.home ?? 'on';
   const tree: FakeEl[] = home === 'none' ? [] : home === 'on' ? app(HOME_ACTIVITY()) : home === 'off' ? app(HOME_ACTIVITY({ enabled: false })) : home;
-  const intern = (e: FakeEl) => { idx(e.el); for (const [k, val] of Object.entries(e.attrs ?? {})) { idx(k); if (typeof val === 'string') idx(val); } e.children?.forEach(intern); };
+  const intern = (e: FakeEl) => { idx(e.el); for (const [k, val] of Object.entries(e.attrs ?? {})) { attrIdx(k); if (typeof val === 'string') idx(val); } e.children?.forEach(intern); };
   tree.forEach(intern);
 
   const enc = new TextEncoder();
@@ -67,8 +76,9 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
     offsets.forEach((off, i) => v.setUint32(poolHdr + i * 4, off, true));
     x.set(data, poolHdr + strs.length * 4);
   });
-  const mapSize = 8 + 5 * 4; // resource ids for strings 0-4: only minSdkVersion has one
-  chunk(mapSize, (v) => { v.setUint16(0, 0x0180, true); v.setUint16(2, 8, true); v.setUint32(4, mapSize, true); v.setUint32(8 + 4 * 4, 0x0101020c, true); });
+  // the resource map: one id per string up to the last one with an id (0 for the others)
+  const mapSize = 8 + (Math.max(...ids.keys()) + 1) * 4;
+  chunk(mapSize, (v) => { v.setUint16(0, 0x0180, true); v.setUint16(2, 8, true); v.setUint32(4, mapSize, true); for (const [i, id] of ids) v.setUint32(8 + i * 4, id, true); });
   const NONE = 0xffffffff;
   type Attr = { ns: number; attr: number; kind: number; data: number; raw?: number };
   const element = (name: number, attrs: Attr[]) => chunk(36 + 20 * attrs.length, (v, x) => {
@@ -87,9 +97,9 @@ function axml(pkg: string, utf8: boolean, o: AxmlOptions = {}): Uint8Array {
   });
   const write = (e: FakeEl) => {
     element(idx(e.el), Object.entries(e.attrs ?? {}).map(([k, val]): Attr => {
-      if (typeof val === 'string') return { ns: 5, attr: idx(k), kind: 0x03, data: idx(val) };
-      if (typeof val === 'boolean') return { ns: 5, attr: idx(k), kind: 0x12, data: val ? NONE : 0 };
-      return { ns: 5, attr: idx(k), kind: 0x01, data: val.ref };
+      if (typeof val === 'string') return { ns: 5, attr: attrIdx(k), kind: 0x03, data: idx(val) };
+      if (typeof val === 'boolean') return { ns: 5, attr: attrIdx(k), kind: 0x12, data: val ? NONE : 0 };
+      return { ns: 5, attr: attrIdx(k), kind: 0x01, data: val.ref };
     }));
     e.children?.forEach(write);
     end(idx(e.el));
