@@ -168,6 +168,11 @@ addresses or ranges separated by spaces or commas, e.g. `192.0.2.10 198.51.100.0
 turn the check off. Leave it empty for "Home Assistant only". The same setting is on the panel itself:
 tap the top-left corner five times, *Radio*, *Who may connect*.
 
+In the Zigbee coordinator role, the same page says who is connected now, under *The radio*:
+`Home Assistant · 192.0.2.20 · since 14:32`, another computer's address, or *Nobody*. It follows a
+connect or disconnect within a few seconds. Home Assistant has it too, as the **Radio connected
+client** sensor (off by default).
+
 If **Radio status** says `nobody yet (waiting for Home Assistant to connect over ESPHome)` and stays
 that way, Home Assistant is probably connecting without an encryption key (Home Assistant older than
 2026.11). Update Home Assistant, or put its address in **Radio allowed clients**.

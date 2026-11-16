@@ -8,6 +8,10 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **See who is connected to the Zigbee radio.** In the Zigbee coordinator role, the radio's settings
+  page says who uses the radio now, for example "Home Assistant · 192.0.2.20 · since 14:32", or
+  "Nobody". It follows a connect or disconnect within a few seconds. Home Assistant has the same text as
+  the *Radio connected client* sensor, off by default. Comes with the radio bundle.
 - **Kiln credits the projects an install is built on.** On the S1, the first screen, the install and
   the done screen say "Built on sunxi-tools by linux-sunxi and Magisk by topjohnwu", with links to
   both. The frames' pages on glassworks.dev have a "Built on community work" section, and the Mirror's

@@ -68,6 +68,9 @@
 # sys.s1kiosk.timezone.status = "<ok|error|none> [<id>][: detail]". The loop runs whatever the radio
 # mode does (also after "giving up"), and is restarted with the helper.
 #
+# Who is connected (#217): in the coordinator modes, sys.s1kiosk.radio.peer = "none" | "<address> <epoch
+# first seen>", the EZSP bridge's client from /proc/net/tcp and tcp6 (see peer_report); "" in other modes.
+#
 # Developer override: with a root-made $DIR/dev-override file, a root-owned $DIR/s1kiosk_radio.sh runs
 # instead of everything else, and binaries in $DIR win. (Before v4 those were honoured without the
 # marker; a leftover copy would otherwise shadow every update.)
@@ -570,6 +573,58 @@ fw_off() {
   [ "$FW_STATE" = clear ] && return 0
   fw_clear; FW_STATE=clear; FW_EFF=""
   setprop $PROP_ALLOWED ""; FW_ALLOWED_SHOWN=""
+}
+
+# --- who is connected now (#217) ---------------------------------------------------------------
+# $PROP_PEER: the EZSP bridge's client in the coordinator modes, from the kernel's socket tables (Android
+# 10 doesn't let the app read them): "none" | "<address> <epoch seconds first seen>"; "" in every other
+# mode. One peer at most (the bridge serves one client); the one shown stays while it is connected. The
+# address is for the app and Home Assistant only, never for the log.
+PROP_PEER=sys.s1kiosk.radio.peer
+PROC_NET=${S1R_PROC_NET:-/proc/net}
+PEER_KEY=""; PEER_VALUE=""; PEER_SHOWN=unset
+
+hex_ip4() { # 8 hex digits as /proc/net/tcp prints them (little-endian, as this panel is) -> dotted
+  h4_=$((0x$1)); echo "$((h4_ & 255)).$(((h4_ >> 8) & 255)).$(((h4_ >> 16) & 255)).$(((h4_ >> 24) & 255))"
+}
+hex_ip6() { # 32 hex digits, four little-endian words -> 8 groups without leading zeros; IPv4-mapped -> dotted
+  case "$1" in 0000000000000000[Ff][Ff][Ff][Ff]0000*) hex_ip4 "${1#????????????????????????}"; return ;; esac
+  o6_=""; r6_=$1
+  while [ -n "$r6_" ]; do
+    w6_=${r6_%"${r6_#????????}"}; r6_=${r6_#????????}; w6_=$((0x$w6_))
+    o6_="$o6_:$(printf '%x:%x' $(( ((w6_ & 255) << 8) | ((w6_ >> 8) & 255) )) $(( (((w6_ >> 16) & 255) << 8) | ((w6_ >> 24) & 255) )))"
+  done
+  echo "${o6_#:}"
+}
+peer_find() { # port -> the remote "<hex address>:<hex port>" of each ESTABLISHED (01) socket on that local port
+  pp_=$(printf '%04X' "$1")
+  for f_ in "$PROC_NET/tcp" "$PROC_NET/tcp6"; do
+    [ -r "$f_" ] || continue
+    while read -r sl_ loc_ rem_ st_ rest_; do
+      [ "$st_" = 01 ] && [ "${loc_##*:}" = "$pp_" ] && echo "$rem_"
+    done < "$f_"
+  done
+}
+peer_show() { [ "$1" = "$PEER_SHOWN" ] && return 0; PEER_SHOWN=$1; setprop $PROP_PEER "$1"; }
+peer_report() { # every loop
+  case "$MODE" in zigbee_tcp|zigbee_tcp_thread) ;; *) PEER_KEY=""; peer_show ""; return 0 ;; esac
+  k_=""; first_=""
+  for c_ in $(peer_find "$ZIGBEE_PORT"); do
+    [ -n "$first_" ] || first_=$c_
+    [ "$c_" = "$PEER_KEY" ] && k_=$c_
+  done
+  [ -n "$k_" ] || k_=$first_
+  if [ -z "$k_" ]; then
+    [ -n "$PEER_KEY" ] && say "EZSP client disconnected"
+    PEER_KEY=""; peer_show none; return 0
+  fi
+  if [ "$k_" != "$PEER_KEY" ]; then
+    PEER_KEY=$k_; a_=${k_%:*}
+    if [ ${#a_} = 32 ]; then a_=$(hex_ip6 "$a_"); else a_=$(hex_ip4 "$a_"); fi
+    PEER_VALUE="$a_ $(date +%s)"
+    say "EZSP client connected"
+  fi
+  peer_show "$PEER_VALUE"
 }
 
 # --- our processes ---------------------------------------------------------------------------
@@ -1138,6 +1193,7 @@ while true; do
   fw_request   # an explicit firmware request runs first (and restarts the helper when done)
   thread_leave # "Leave Thread network", in every mode
   thread_stored
+  peer_report
   if [ -n "$FW_HOLD" ]; then
     # radio without a trusted application after an interrupted flash: everything stays off
     WANT=""; enforce; br_net_off; fw_off
