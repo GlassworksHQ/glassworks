@@ -168,14 +168,14 @@ All **read** from source (2026-11-15). Line numbers are in the files at `android
 |---|---|---|
 | An app in `/system/priv-app` gets `INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`, whatever its key | Reads 1–3 | Read, untested on the unit |
 | An update signed with the same key keeps them, and stays privileged across reboots | Reads 4–5 | Read, untested on the unit |
-| An update can't add a privileged permission the `/system` copy didn't ask for | Read 3, the updated-system-app branch | Read |
+| An update gets a privileged permission only if the `/system` copy asked for it, unless the update is signed with the platform key (or the permission's own key) | Read 3: the signature check comes first, then the updated-system-app branch | Read |
 | With `INSTALL_PACKAGES`, a `PackageInstaller` commit needs no tap; without it, `STATUS_PENDING_USER_ACTION` | Read 6 | Read, untested on the unit |
 | `WRITE_SECURE_SETTINGS` granted on the unit proves little by itself | Kiln's first boot runs `pm grant … WRITE_SECURE_SETTINGS` (`grantPermissions` in `@glassworks/app-adb`), which a `development` permission allows | Read |
 
 What it means for Glassworks, if the probe confirms it: S1 Kiosk updates itself on the Mirror from
 Home Assistant with no tap and no root, can restart the Mirror, and writes its own settings. The APK
 Kiln flashes into `system` must already ask for every privileged permission a later version will
-need, because an update can't add one (row 3).
+need, because an update signed with our key can't add one (row 3).
 
 ## How to reproduce
 
@@ -183,8 +183,9 @@ Off-device: fetch the files above at `android-6.0.1_r81` from android.googlesour
 (`…/+/refs/tags/android-6.0.1_r81/<path>?format=TEXT`, base64) and read the lines given.
 
 On the unit: the test sequence in [tools/mirror/probe-app](../../../tools/mirror/probe-app/README.md#the-test-on-the-mirror).
-It flashes `system` and `userdata` with the probe as the APK, then works over adb only. Undo: flash
-again with the APK the unit had, or the way back.
+It flashes `system` and `userdata` with the probe as the APK, then works over adb only. To put the
+APK back, flash again with the APK the unit had, or the way back. Neither brings back the unit's old
+`userdata`: every flash writes a fresh one, and the bootloader can't read the old one back first.
 
 ## Open questions
 

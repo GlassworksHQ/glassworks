@@ -137,7 +137,9 @@ left out below. `PROBE` is the output folder of `build.sh`.
    Expect the Mirror to restart, `mFocusedActivity` to be `sh.edm.s1kiosk/.MainActivity`, and the
    status lines to show version 2, still privileged, all three granted.
 
-To leave the unit as it was, flash it again with the APK it had before (or the way back).
+To put the APK back, flash again with the APK the unit had before (or the way back). That doesn't bring
+back the unit's old `userdata`: every flash writes a fresh one, and the bootloader can't read the old
+one back first.
 
 ## What each outcome means for Glassworks
 
@@ -147,8 +149,8 @@ To leave the unit as it was, flash it again with the APK it had before (or the w
 | Step 1: `privileged no`, or `INSTALL_PACKAGES` denied | The image doesn't do what AOSP 6 does (a vendor change, or the APK isn't where Kiln put it). Updates would need a tap, or root, or the platform key ([mirror-root.md](../../../frames/lululemon-mirror/research/mirror-root.md)) |
 | Step 2: `RESULT update OK` | Glassworks can update itself on the Mirror with no tap and no root, from Home Assistant's update entity |
 | Step 2: `FAIL needs a tap` | `INSTALL_PACKAGES` didn't count: updates need someone at the Mirror with a mouse, or another route |
-| Step 2: `FAIL STATUS_FAILURE_INCOMPATIBLE` | The two APKs aren't signed by the same key: rebuild both from one `PROBE_OUT` |
-| Step 3: still privileged, permissions kept | An update keeps the privileged permissions, as long as the APK in `/system` asked for them. So the APK in Kiln's image must already ask for every privileged permission a later version needs: an update can't add one |
+| Step 2: `FAIL STATUS_FAILURE_CONFLICT: INSTALL_FAILED_UPDATE_INCOMPATIBLE … different signature` | The two APKs aren't signed by the same key: rebuild both from one `PROBE_OUT`. Android 6 maps a signature mismatch to `STATUS_FAILURE_CONFLICT` (`PackageManager.installStatusToPublicStatus`); `STATUS_FAILURE_INCOMPATIBLE` is something else (SDK, ABI, a missing feature) |
+| Step 3: still privileged, permissions kept | An update keeps the privileged permissions, as long as the APK in `/system` asked for them. So the APK in Kiln's image must already ask for every privileged permission a later version needs: an update signed with our key can't add one (only a platform-signed one could) |
 | Step 3: privileged lost after the update | Each update would lose the permissions: Kiln would have to flash every new version into `system` |
 | Step 4: `RESULT settings OK` | Glassworks can write secure settings (screen timeout, stay awake, location) without adb's help |
 | Step 5: restarts and comes back as HOME | Glassworks can restart the Mirror from Home Assistant, and boots straight into Glassworks, the updated version included |

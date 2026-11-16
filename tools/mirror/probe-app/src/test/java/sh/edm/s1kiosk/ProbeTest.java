@@ -19,13 +19,14 @@ public class ProbeTest {
 
     @Test
     public void failuresNameTheStatusAndKeepAndroidsMessage() {
-        assertEquals("RESULT update FAIL STATUS_FAILURE_INCOMPATIBLE: INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: sh.edm.s1kiosk",
-            Probe.installResult(7, "INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: sh.edm.s1kiosk"));
+        // Android 6 reports a signature mismatch as STATUS_FAILURE_CONFLICT (PackageManager.installStatusToPublicStatus)
+        assertEquals("RESULT update FAIL STATUS_FAILURE_CONFLICT: INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: sh.edm.s1kiosk",
+            Probe.installResult(5, "INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: sh.edm.s1kiosk"));
+        assertEquals("RESULT update FAIL STATUS_FAILURE_INCOMPATIBLE: INSTALL_FAILED_OLDER_SDK", Probe.installResult(7, "INSTALL_FAILED_OLDER_SDK"));
         assertEquals("RESULT update FAIL STATUS_FAILURE", Probe.installResult(1, ""));
         assertEquals("RESULT update FAIL STATUS_FAILURE_BLOCKED", Probe.installResult(2, null));
         assertEquals("RESULT update FAIL STATUS_FAILURE_ABORTED", Probe.installResult(3, null));
         assertEquals("RESULT update FAIL STATUS_FAILURE_INVALID", Probe.installResult(4, null));
-        assertEquals("RESULT update FAIL STATUS_FAILURE_CONFLICT", Probe.installResult(5, null));
         assertEquals("RESULT update FAIL STATUS_FAILURE_STORAGE", Probe.installResult(6, null));
         assertEquals("RESULT update FAIL status 42: what", Probe.installResult(42, "what"));
     }
