@@ -56,7 +56,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
   {
     "id": "bluetooth-proxy",
     "name": "Bluetooth proxy",
-    "does": "Relays nearby BLE sensors to Home Assistant, listening only.",
+    "does": "Relays nearby BLE sensors to Home Assistant, and connects to devices that need it.",
     "requires": [
       "bluetooth-le"
     ],

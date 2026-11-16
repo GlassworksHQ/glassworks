@@ -8,6 +8,7 @@ import dev.glassworks.frame.Capability
 import android.content.SharedPreferences
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PaneDefinition
+import dev.glassworks.pane.PaneState
 import dev.glassworks.pane.PaneSwitch
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
@@ -43,7 +44,7 @@ class BluetoothProxyDefinition(
         BluetoothProxyPane(ctx, radio, device, connect = BluetoothProxyPrefs(file).connect).also { live = it }
 
     /** "Listen and connect" (#246): kept, and handed to the running pane. */
-    var connect: Boolean
+    override var connect: Boolean
         get() = BluetoothProxyPrefs(file).connect
         set(value) {
             BluetoothProxyPrefs(file).connect = value
@@ -51,7 +52,7 @@ class BluetoothProxyDefinition(
         }
 
     /** The connections in use, or null in listen only or while the proxy isn't running. */
-    fun connections(): ProxyConnections? = live?.connections()
+    override fun connections(): ProxyConnections? = live?.connections()
 
     val on: Boolean get() = switch.on
 
@@ -70,6 +71,9 @@ class BluetoothProxyDefinition(
             items = listOf(page?.let { p -> SettingsItem.Native(id, "Devices and Allow", twin = { ProxyPage.twin(this) }) { host -> p(host, this) } }
                 ?: SettingsItem.Note { phase().entityText ?: "Off" }),
             unavailable = { if (radio.unavailable() == ScanFailure.NO_BLE) "it has no Bluetooth LE" else null },
+            // On, but Bluetooth, location or the permission stops it: Can't run, with why, and the page keeps
+            // its switch and its "Turn on" card. Otherwise the chip says On, from the switch.
+            status = { phase().cantRun?.let { PaneState(PaneState.Kind.CANT_RUN, it) } },
         ),
     )
 

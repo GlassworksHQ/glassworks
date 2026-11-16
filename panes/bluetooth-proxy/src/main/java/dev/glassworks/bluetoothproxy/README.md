@@ -57,11 +57,12 @@ one long-running scan, only while HA listens, within Android's limits. This pane
 
 The page is the frame's to draw: the definition takes a factory and hands it a
 `BluetoothProxyModel`. On the S1 that is `sh.edm.s1kiosk.settings.BluetoothProxyPage`, as approved on
-#121: a status line, a card when Bluetooth or location is off, the advertisements and scanner
+#121: a status line, a card when Bluetooth or location is off, the advertisements, scanner and connections
 tiles, then the pane's entities as Home Assistant shows them. Its words come from `ProxyPage`, and the
 section's native item carries `ProxyPage.twin`, so the Manage page shows the same page with its own
 rows, and its card's button turns Bluetooth or location on from a browser too.
 
-**Not yet on the page:** the "Listen only / Listen and connect" choice and the connections tile
-(#246). The entities are in
+In "Listen and connect" (#246) the page also has the *Connections* tile and the mode pick. While the
+pane is on but Bluetooth, location or the permission stops it, the section's `status` says Can't run
+with the reason; `unavailable` stays for no Bluetooth LE, which hides the switch. The entities are in
 [docs/esphome.md](../../../../../../../../docs/esphome.md#bluetooth-proxy).

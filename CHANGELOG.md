@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **The Bluetooth proxy can connect to devices.** Its settings page has a new choice: *Listen only*,
+  as before, or *Listen and connect*. With the second, Home Assistant can connect through the panel to
+  BLE devices that need a connection, such as locks, SwitchBots and sensors with a key, up to 3 at
+  once. A *Connections* tile shows how many are in use. It stays on *Listen only* until you pick it,
+  and the panel never pairs with a device.
 - **Kiln credits the projects an install is built on.** On the S1, the first screen, the install and
   the done screen say "Built on sunxi-tools by linux-sunxi and Magisk by topjohnwu", with links to
   both. The frames' pages on glassworks.dev have a "Built on community work" section, and the Mirror's
@@ -231,6 +236,9 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **The Bluetooth proxy says when it can't run.** With the pane on but Bluetooth or location off, or
+  the location permission missing, the settings menu and the Manage page said it was running. They
+  now say *Can't run* and why.
 - **Kiln's device cards stay still with reduced motion.** With "reduce motion" on in the operating
   system, a card no longer jumps up when you point at it or tab to it.
 - **The Overview's pane list reads cleanly.** On the Manage page, each status chip has its gap

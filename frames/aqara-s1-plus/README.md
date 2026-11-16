@@ -414,7 +414,7 @@ browser, the radio and the wall base protocol: it's all written up in
 | Zigbee and Thread radio | Beta | Zigbee coordinator or router, and Thread. |
 | Time zone | Beta | Worked out: needs no special hardware. |
 | Diagnostics | Alpha | Worked out: needs no special hardware. Not yet checked on a panel. |
-| Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 (2026-11-14); the pane itself not yet. |
+| Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 (2026-11-14); the pane itself not yet. GATT connections (*Listen and connect*, #246) not yet met the S1. |
 | Notifications | Alpha | Worked out: needs no special hardware (the speaker plays its sounds). First run on the S1 2026-11-14; the critical alert's rerun pending. |
 | Camera | No | Worked out: needs a camera. The S1 has none; its settings say the pane can't run. |
 | Wall base | Alpha | The driver passes against an emulator that Aqara's own `bracket_cli` accepts. It has not yet been tried on a real base ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)). |
@@ -440,7 +440,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [framework-restart.md](research/framework-restart.md): Android 10's ActivityManager breaking during fast kiosk restarts, and `system_server` restarting; the likely (untested) cause of the panel "dropping off USB"
 - [boot-animation.md](research/boot-animation.md): What Android 10's boot animation and the 32 MiB boot image allow: texture caching, trim, the size budget, and what was cut from the #63 design
 - [idle-cpu.md](research/idle-cpu.md): Why the kiosk uses ~40% of a core at idle: the wake word's embedding model, per-thread numbers, and the options (#105)
-- [bluetooth.md](research/bluetooth.md): The panel's Bluetooth (RTL8821CS, shared with Wi-Fi), Android 10's scan rules from AOSP, and what HA needs from an ESPHome Bluetooth proxy (#121)
+- [bluetooth.md](research/bluetooth.md): The panel's Bluetooth (RTL8821CS, shared with Wi-Fi), Android 10's scan rules from AOSP, what HA needs from an ESPHome Bluetooth proxy (#121), and GATT connections on Android 10 (#246)
 - [view-open.md](research/view-open.md): Where typical's 4.7 s view open goes: HA's JavaScript on one Gecko thread at 1.5 GHz; the app candidates tried on the panel (none helped), and what's left upstream (#244)
 - [install-crash-loop.md](research/install-crash-loop.md): Why the kiosk crash-looped after installs: Android 10's ActivityManager LRU bug (one step per kiosk force-stop), not dex2oat; the netwatch check that restarts the framework (#248)
 

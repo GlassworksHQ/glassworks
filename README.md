@@ -89,7 +89,8 @@ A pane is a feature the panel can run or leave out. These are the panes today:
 - **Wall base**: the S1 Plus's mains relay base.
 - **Time zone**: the panel's time zone as an entity, kept across reboots.
 - **Diagnostics**: CPU, temperature, RAM, storage, Wi-Fi and uptime as entities.
-- **Bluetooth proxy**: the panel listens for Bluetooth devices and passes them to Home Assistant.
+- **Bluetooth proxy**: the panel listens for Bluetooth devices and passes them to Home Assistant, and
+  can connect to the ones that need it (*Listen and connect*, new).
 - **Notifications**: Home Assistant's notifications over the dashboard, with a picture, buttons and a
   sound, or a dashboard view full screen for a doorbell.
 - **Camera**: on a panel with a camera, presence from motion, snapshots and an opt-in ONVIF/RTSP
