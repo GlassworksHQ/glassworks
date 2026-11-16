@@ -130,7 +130,7 @@ class FramePanesTest {
         val channel = SetupChannelServer.channels(app, r, object : SetupChannel.Backend {
             override fun state() = ChannelState(ip = "192.0.2.10", ha = ChannelState.Ha(null, "", false, null))
             override fun setHa(url: String) = SetupChannel.HaChange()
-        })()
+        })({ true })
         fun reply(op: String) = JSONObject(channel.handle("""{"id":1,"op":"$op"}""").first)
         assertTrue(reply("state").getBoolean("ok"))
         assertTrue(reply("camera.look").getBoolean("ok"))

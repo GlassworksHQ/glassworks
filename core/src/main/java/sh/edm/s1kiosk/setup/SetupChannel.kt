@@ -25,6 +25,9 @@ import java.util.concurrent.TimeUnit
  * ```
  * The state is the core's (`ip`, `ha`) plus each pane step's own part under its id (`radio`). The S1's
  * first names (`set_ha`, `set_radio`, `set_radio_allow`) still work: Kiln sends them.
+ * `pairing.arm` opens pairing over the LAN again for a while (dev.glassworks.setup.LanSetup).
+ * The same loop serves the LAN's WebSocket (LanSetup), where [mayChange] is false until the browser
+ * has paired: then every request but `state` is refused. Over USB it is always true.
  * While a client is connected, `{"event":"state","state":{…}}` is pushed whenever the serialized
  * state changes (checked every [SetupChannel.POLL_MS]). No secrets ever cross it: no tokens, no API
  * key, no passwords. Wi-Fi goes over Improv Serial instead, the installer's other adb socket.
@@ -71,6 +74,8 @@ class SetupChannel(
     /** The panes' setup steps (through SetupFlow.usable): their state and ops ([SetupStep.ops]). */
     steps: List<SetupStep> = emptyList(),
     private val log: (String) -> Unit = {},
+    /** Whether a request that changes something may run now; `state` always may. */
+    private val mayChange: () -> Boolean = { true },
 ) {
 
     interface Backend {
@@ -81,6 +86,9 @@ class SetupChannel(
          * Blocking. [HaChange.afterReply] runs once the reply is written (e.g. a process restart).
          */
         fun setHa(url: String): HaChange
+
+        /** Opens pairing over the LAN again for a while, though Home Assistant has adopted the panel. Null when it worked. */
+        fun armPairing(): String? = "This panel can't be set up over the network."
     }
 
     data class HaChange(val error: String? = null, val afterReply: (() -> Unit)? = null)
@@ -109,6 +117,17 @@ class SetupChannel(
         log("request ${id ?: "-"} $asked")
         return when (op) {
             "state" -> reply(id, state = state()) to null
+            else -> if (!mayChange()) reply(id, error = NOT_PAIRED) to null else changing(id, op, asked, req)
+        }
+    }
+
+    /** A request that changes something, once [mayChange] allowed it. */
+    private fun changing(id: Any?, op: String, asked: String, req: JSONObject): Pair<String, (() -> Unit)?> =
+        when (op) {
+            PAIRING_ARM -> when (val err = backend.armPairing()) {
+                null -> reply(id, state = state())
+                else -> reply(id, error = err)
+            } to null
             HA_SET_URL -> {
                 val url = req.optString("url", "").trim()
                 if (!ChannelState.validHaUrl(url)) {
@@ -127,7 +146,6 @@ class SetupChannel(
                 }
             }
         }
-    }
 
     /** The state the client last got (reply or event), to push only changes. */
     private var lastSent: String? = null
@@ -185,10 +203,12 @@ class SetupChannel(
     companion object {
         const val SOCKET = "s1kiosk_setup"
         const val HA_SET_URL = "ha.set_url"
+        const val PAIRING_ARM = "pairing.arm"
+        const val NOT_PAIRED = "Pair with the panel first: enter the code it shows."
         /** The core's keys in the state; no step may take them. */
         val CORE_KEYS = setOf("ip", "ha")
         /** The core's requests, by every name they have. */
-        val CORE_OPS = setOf("state", HA_SET_URL, "set_ha")
+        val CORE_OPS = setOf("state", HA_SET_URL, "set_ha", PAIRING_ARM)
         const val POLL_MS = 1_500L
         /** Longer lines are dropped (requests are tiny). */
         const val MAX_LINE = 16 * 1024

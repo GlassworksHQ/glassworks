@@ -69,6 +69,23 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
         get() = sp.getBoolean(KEY_HA_SEEN, false)
         set(v) = sp.edit().putBoolean(KEY_HA_SEEN, v).apply()
 
+    /**
+     * Until when (wall clock, ms) pairing over the LAN is open again after Home Assistant adopted the panel: the
+     * Home Assistant button or the installer's USB op re-arm it (dev.glassworks.setup.LanSetup, #34). 0 = not armed.
+     */
+    var lanSetupUntil: Long
+        get() = sp.getLong("lan_setup_until", 0L)
+        private set(v) = sp.edit().putLong("lan_setup_until", v).apply()
+
+    /** Pairing over the LAN is open: Home Assistant hasn't adopted the panel yet, or it was re-armed lately. */
+    val lanPairingOpen: Boolean
+        get() = !haSeen || System.currentTimeMillis() < lanSetupUntil
+
+    /** Opens pairing over the LAN for [dev.glassworks.setup.LanSetup.ARM_MS] from now. */
+    fun armLanSetup() {
+        lanSetupUntil = System.currentTimeMillis() + dev.glassworks.setup.LanSetup.ARM_MS
+    }
+
     /** The panel has been online over Wi-Fi at least once (the boot screen's "Connecting to Wi-Fi…" hint). */
     var wifiSeen: Boolean
         get() = sp.getBoolean(KEY_WIFI_SEEN, false)

@@ -146,6 +146,7 @@ open the entity, and turn on *Enabled*.
 | Restart app | `restart_app` | core | config | on | Used often |
 | Screen mode | `screen_mode` | core | config | on | Automations (night, away) |
 | App update | `app_update` | core | config | on | HA shows updates only while it is on |
+| Allow setup over the network | `lan_setup` | core | config | on | The way back to setup from a laptop once HA has the panel |
 | IP address | `ip_address` | core | diagnostic | on | People check it |
 | Auto brightness | `auto_brightness` | core | config | off | Set once |
 | Idle timeout | `idle_timeout` | core | config | off | Set once |
@@ -251,6 +252,7 @@ So on a panel HA already has:
 | button `Open device settings` | `open_settings` | opens the panel's hidden settings dialog on its screen |
 | button `Restart app` | `restart_app` | restarts the kiosk process |
 | button `Start Wi-Fi setup (Bluetooth)` | `improv_ble` | starts Improv over Bluetooth on demand ([onboarding.md](onboarding.md)) |
+| button `Allow setup over the network` | `lan_setup` | opens pairing for setup over the LAN for 30 minutes. Pairing is open until HA adds the panel, then closed until this button (or the installer over USB) opens it again |
 | switch `Hide HA header` | `hide_ha_header` | header + sidebar, applied live |
 | media_player `Speaker` | `speaker` | play/pause/stop, volume, mute, play media, announce; formats: mp3 (default + announcement) |
 | switch `Music Assistant player (Sendspin)` | `sendspin` | the native Sendspin player ([sendspin.md](sendspin.md)), default on; off sends `client/goodbye` `user_request`; encrypted connection only ([Panes on and off](#panes-on-and-off)) |
