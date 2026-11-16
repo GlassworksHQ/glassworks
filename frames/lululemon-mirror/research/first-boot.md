@@ -1,7 +1,7 @@
 # Mirror first boot: how a fresh userdata comes up with nothing to tap
 
-**Status (2026-11-16): built and checked offline, untested on the unit.** Kiln's images now set,
-before the first boot:
+**Status (2026-11-16): verified on the unit.** The root's Mirror run (below) found every claim true on
+the glass, with nothing tapped. Kiln's images now set, before the first boot:
 
 - Wi-Fi on, with the person's network saved;
 - the screen staying on;
@@ -115,7 +115,26 @@ Offline, nothing touches a device:
    On 2026-11-16 it passed: the overlay and `ro.lockscreen.disable.default` are in, and e2fsck finds
    nothing new.
 
-## Root's test plan (the Mirror; untested until this runs)
+## The run on the Mirror (2026-11-16, verified by the root)
+
+A local build of #395 (3af4c89b) merged with main (a72c4702): image 2, #389's turned boot animation,
+and #398's probe app as the APK (an app with MAIN, HOME and DEFAULT on API 23). Flashed with
+`tools/mirror/flash-node.ts` and a Wi-Fi network from a file. Nothing was tapped on the glass. The
+full table is on #395.
+
+| Check | Result |
+|---|---|
+| `/vendor` | `vendor -> /system/vendor`; `GlassworksSettings.apk` in `/vendor/overlay`, applied |
+| Wi-Fi | `wifi_on=1`, connected on its own at the first boot and again after a reboot |
+| Screen | `screen_off_timeout=2147483647`, `stay_on_while_plugged_in=1`; it doesn't sleep |
+| Rotation | `accelerometer_rotation=0`, portrait. The boot animation (#389) upright on the glass (the maintainer's photo) |
+| Lock screen | `mShowingLockscreen=false` at the first boot, after sleep and wake, and after a reboot |
+| Home | the probe's `.MainActivity`; Launcher3 hidden once it answered HOME |
+
+The run also found that the first boot's Wi-Fi step logged the network's name. It now reads "Wi-Fi:
+the network you entered", and tests check that no log line holds the name or the password.
+
+## The root's test plan (as run above)
 
 Flash with this build (Kiln or `tools/mirror/flash-node.ts`), with the Wi-Fi name and password
 given, a Home Assistant address, and an APK that has a home screen on API 23. Then, touching nothing
@@ -141,9 +160,9 @@ If any step fails, write down what it showed. The way back is the plain Glass Pa
 
 ## Open questions
 
-- Whether the overlay applies to SettingsProvider, which runs in the system process. AOSP says
-  resource dirs apply to every package's context; untested.
-- Whether Android 6 keeps a pre-saved network enabled for auto-join when there is no
-  `networkHistory.txt`. Read: it loads networks from wpa_supplicant and adds defaults; untested.
-- Whether the Mirror's power supply counts as AC for `stay_on_while_plugged_in`. The timeout covers
-  it either way.
+- ~~Whether the overlay applies to SettingsProvider, which runs in the system process.~~ Yes
+  (2026-11-16): `wifi_on=1`, the timeout and rotation came from it.
+- ~~Whether Android 6 keeps a pre-saved network enabled for auto-join with no `networkHistory.txt`.~~
+  Yes (2026-11-16): it joined at the first boot and after a reboot.
+- Whether the Mirror's power supply counts as AC for `stay_on_while_plugged_in`. Not checked; the
+  timeout keeps the screen on either way.

@@ -4,8 +4,9 @@
 checked offline only: its run on the unit, and its fully dark sleep, are still to do. Kiln patches the Glass Panes
 `system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
 root's first real flash (below) booted it and took the computer's adb key. `ro.sf.hwrotation` turns
-Android's UI but **not the boot animation**, which rendered sideways (now turned frame by frame,
-untested on the unit). The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
+Android's UI but **not the boot animation**, which rendered sideways. The frames are now turned
+themselves (#389), and on 2026-11-16 the turned animation ran upright on the glass (the maintainer's
+photo; [first-boot.md](first-boot.md)). The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
 Mirror still waits on an app that runs on API 23.
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
@@ -69,7 +70,7 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 | `/priv-app/S1Kiosk/S1Kiosk.apk`, `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and S1 Kiosk's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK is in `/system/priv-app/S1Kiosk`; its privileged permissions are untested (the test build doesn't run its main activity) |
 | Its native libraries in `/priv-app/S1Kiosk/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
 | `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
-| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns Android's UI (SurfaceFlinger's display transform) and makes the panel's natural orientation portrait. It doesn't turn the boot animation, which draws straight to the panel, so its frames are turned themselves (`boot.rotate`). 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Corrected 2026-11-16:** it does **not** turn the boot animation. On the first real flash the portrait 1080x1920 animation rendered sideways (the maintainer's photo). An earlier version of this note said "verified upright": that came from the property, not from looking. The boot animation's frames are now turned themselves (`branding/lululemon-mirror`, `boot.rotate`), untested on the unit. Whether it turns Android's UI upright also still needs a look at the screen (the image's SurfaceFlinger is CAF's, DragonBoard LA.BR.1.2.7, which reads it) |
+| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns Android's UI (SurfaceFlinger's display transform) and makes the panel's natural orientation portrait. It doesn't turn the boot animation, which draws straight to the panel, so its frames are turned themselves (`boot.rotate`). 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Corrected 2026-11-16:** it does **not** turn the boot animation. On the first real flash the portrait 1080x1920 animation rendered sideways (the maintainer's photo). An earlier version of this note said "verified upright": that came from the property, not from looking. The boot animation's frames are now turned themselves (`branding/lululemon-mirror`, `boot.rotate`): upright on the glass (2026-11-16, the maintainer's photo). Android's UI with it is portrait (2026-11-16, [first-boot.md](first-boot.md)) |
 | Nothing removed | The community kiosk isn't in `system` | Verified (read 1) |
 
 The patcher refuses, with nothing written, an image whose fingerprint isn't the one above, and an
@@ -171,7 +172,7 @@ Off-device only:
 ## Open questions
 
 - Does `ro.sf.hwrotation=270` turn the boot animation? **No** (2026-11-16, seen on the unit: sideways).
-  The frames are turned in the zip now; that needs a photo. Android's UI with it needs a look too.
+  The frames are turned in the zip now, and run upright (2026-11-16, photo). Android's UI is portrait.
 - ~~Does the Mirror's LK take sparse FILL chunks?~~ Yes (2026-11-16): the run used FILL (no
   `--no-fill`), and both `system` (5 pieces) and `userdata` (1) flashed. "Try again without FILL"
   (`--no-fill` in the harness) stays as the fallback for an LK that refuses them.
