@@ -61,20 +61,17 @@ class ViewQueueTest {
 
     @Test
     fun theButtonSaysWhereItLeads() {
-        val one = ViewQueue().arrive(door)
-        val two = one.arrive(garage)
-        assertEquals(ViewButton.NEXT, two.button(ViewSize.FULL, Input.TOUCH))
-        assertEquals(ViewButton.NEXT, two.button(ViewSize.HALF, Input.TOUCH))
-        assertEquals(ViewButton.BACK_NOW, one.button(ViewSize.FULL, Input.TOUCH))
-        assertEquals(ViewButton.CLOSE, one.button(ViewSize.HALF, Input.TOUCH))
+        assertEquals(ViewButton.NEXT, ViewButton.of(1, ViewSize.FULL, Input.TOUCH))
+        assertEquals(ViewButton.NEXT, ViewButton.of(2, ViewSize.HALF, Input.TOUCH))
+        assertEquals(ViewButton.BACK_NOW, ViewButton.of(0, ViewSize.FULL, Input.TOUCH))
+        assertEquals(ViewButton.CLOSE, ViewButton.of(0, ViewSize.HALF, Input.TOUCH))
         assertEquals(listOf("Next", "Back now", "Close"), ViewButton.entries.map { it.label })
     }
 
     @Test
-    fun noButtonWithoutTouchOrWithoutAView() {
-        assertNull(ViewQueue().arrive(door).arrive(garage).button(ViewSize.FULL, Input.NONE))
-        assertNull(ViewQueue().arrive(door).button(ViewSize.HALF, Input.NONE))
-        assertNull(ViewQueue().button(ViewSize.FULL, Input.TOUCH))
+    fun noButtonWithoutTouch() {
+        assertNull(ViewButton.of(1, ViewSize.FULL, Input.NONE))
+        assertNull(ViewButton.of(0, ViewSize.HALF, Input.NONE))
     }
 
     @Test

@@ -52,6 +52,8 @@ class NotificationsPane(
     private val schedule: (delayMs: Long, action: () -> Unit) -> Future<*>,
     private val haBase: () -> String?,
     private val now: () -> Long,
+    /** Whether the panel's screen takes a tap (the frame's input). */
+    private val touch: () -> Boolean = { true },
 ) : Pane {
     override val id = "notifications" // ID; tools/size reads this literal
 
@@ -90,8 +92,7 @@ class NotificationsPane(
     private val outputs = object : NotificationOutputs {
         override fun render(cards: List<NotificationStore.Entry>, page: NotificationStore.Entry?, list: List<NotificationStore.Entry>) {
             val urgent = (cards + listOfNotNull(page)).any { it.delivery.overNight }
-            val critical = cards.any { it.notification.priority == Priority.CRITICAL } ||
-                page?.notification?.priority == Priority.CRITICAL
+            val critical = cards.any { it.notification.priority == Priority.CRITICAL }
             val silenced = synchronized(lock) {
                 // Under the pane's lock, as Do not disturb's publish: neither overwrites the other with an older state.
                 hub.publish(NotificationsHub.State(cards, page, list, prefs.doNotDisturb))
@@ -150,7 +151,7 @@ class NotificationsPane(
         val c = NotificationCenter(
             NotificationStore(now), outputs,
             report = { r -> ctx.fireEvent(HomeAssistantEvent(ActionReport.EVENT, r.data)) },
-            doNotDisturb = { prefs.doNotDisturb }, haBase = haBase, now = now, schedule = schedule,
+            doNotDisturb = { prefs.doNotDisturb }, haBase = haBase, now = now, schedule = schedule, touch = touch,
         )
         synchronized(lock) { center = c }
         hub.attach(c)

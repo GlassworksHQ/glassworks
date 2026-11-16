@@ -2,7 +2,7 @@
 
 Home Assistant sends a notification, and the panel shows it over the dashboard: a title, a message, a
 camera's picture, up to three buttons and a sound. A button press goes back to Home Assistant, where
-an automation acts on it. A notification can also open a dashboard view full screen, like a doorbell
+an automation acts on it. A notification can also open a dashboard view, full screen or half, like a doorbell
 view with its camera, and go back to the normal dashboard afterwards.
 
 It works through the panel's ESPHome device alone. Nothing to install in Home Assistant.
@@ -56,9 +56,9 @@ data:
 | `actions` | Up to 3 buttons: `[{"action": "open_gate", "title": "Open the gate"}]`. Add `"uri": "/lovelace/garage"` to also open that view |
 | `sound` | `chime`, `doorbell`, `alert` or `none`. Without it: none for low, a chime for normal and high, the alert for critical |
 | `timeout` | Seconds until it closes by itself |
-| `url` | A dashboard view on this Home Assistant, opened full screen at once, like `/dashboard-door/0` |
+| `url` | A dashboard view on this Home Assistant, like `/dashboard-door/0`. It opens at once, or after the view that is open. See [Open a view](#open-a-view) |
 | `sticky` | `true`: a button press leaves it open |
-| `size` | **Coming** ([#230](https://github.com/GlassworksHQ/glassworks/issues/230)): `half` will open the view as a dialog over half the screen. `full` is the default. The panel takes the key already, and opens every view full screen for now |
+| `size` | `full` (the default) or `half`: the view, and the views of its buttons' `uri`, as a dialog over half the screen |
 
 Write `data` as a JSON string. A block string is the easiest to read:
 
@@ -96,7 +96,8 @@ is no `priority`. The call fails, with the reason in the script's trace, when:
 - `timeout` isn't a number of seconds between 1 and a day.
 
 One difference: on a phone, `url` opens when you tap the notification. On the panel it opens at once,
-which is what a doorbell wants. Use an action's `uri` for "open it when I tap".
+which is what a doorbell wants. Use an action's `uri` for "open it when I tap". A critical one is the
+exception: see [Open a view](#open-a-view).
 
 ### Clear one
 
@@ -107,6 +108,36 @@ data:
   title: ""
   data: '{"tag": "parcel"}'
 ```
+
+## Open a view
+
+`url` opens a dashboard view of this Home Assistant on the panel, in the dashboard that is already
+loaded, and goes back to the dashboard afterwards.
+
+```yaml
+action: esphome.aqara_s1_plus_a1b2c3_notify
+data:
+  title: Doorbell
+  message: Someone is at the door.
+  data: '{"tag": "doorbell", "url": "/dashboard-door/0", "size": "half", "timeout": 90}'
+```
+
+- **Full or half.** Without `size`, the view takes the whole screen. With `"size": "half"` it is a
+  dialog over half the screen: a panel on the right of a landscape screen (the S1), a sheet at the
+  bottom of a portrait one. The dashboard stays behind it as a still picture, dimmed.
+- **One button.** A bar at the foot of the view shows its title, the time left, and one button. It
+  says *Next* when another view is waiting, *Back now* on the last full view, and *Close* on the last
+  half one. Tapping outside a half view does the same, and so do Back and the time running out.
+- **One at a time.** The open view keeps the screen. A view that arrives meanwhile waits its turn, and
+  the bar says "Next in 0:24 · 1 more waiting". A new one with the tag of a waiting one takes its
+  place in the line. A button's `uri`, or a tap in the list, opens at once, in front. A waiting view's
+  `timeout` keeps running, so one that runs out while it waits never opens.
+- **Critical ones don't open by themselves.** A critical notification is the alert screen, always.
+  With a `url`, the alert gets an **Open the view** button, which opens it full screen. That matches
+  the phone, where `url` opens when you tap the notification.
+- **A screen without touch** (the lululemon Mirror) has no button. The view moves on when its time runs
+  out, or when Home Assistant clears it. A view with no `timeout` closes after 2 minutes there.
+- Do not disturb holds a view like any other notification: it goes to the list, and opens from there.
 
 ## When someone presses a button
 
@@ -208,17 +239,6 @@ Not yet run on a panel (2026-11-15).
 
 `esphome.<panel>_notify` stays in Home Assistant, like every pane's entities (#67), and answers
 "Notifications are off on this panel". Turn them on, and the same scripts work.
-
-## Coming: a view as a dialog
-
-[#230](https://github.com/GlassworksHQ/glassworks/issues/230) adds two things to `url`, and the design
-is waiting for approval:
-
-- `size: half` opens the view as a dialog over half the screen, with the dashboard behind it.
-- A view that arrives while another is open waits its turn, and the bar's button says *Next*.
-
-Until it ships, every view opens full screen, as described above, and a newer view takes the screen
-from an older one. Scripts can send `size` already.
 
 ## What it can't do yet
 

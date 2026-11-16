@@ -1,10 +1,13 @@
 package sh.edm.s1kiosk.notifications
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
+import dev.glassworks.frame.Input
 import dev.glassworks.notifications.NotificationCenter
 import dev.glassworks.notifications.NotificationOutputs
 import dev.glassworks.notifications.NotificationStore
@@ -92,24 +95,112 @@ class NotificationOverlayTest {
         assertNull(hub.state.page)
     }
 
-    /** Until #230's dialog ships, `size: half` changes nothing on the screen: the same view, full screen, the same bar. */
+    /** #230: the open view keeps the screen; its one button says Next while another waits, and opens it. */
     @Test
-    fun aHalfViewOpensExactlyAsAFullOneForNow() {
-        fun opened(size: String): Pair<List<String?>, List<String>> {
-            pages.clear()
-            center.handle("Someone is at the door", "Doorbell", """{"tag":"doorbell","url":"/dashboard-door/0","timeout":90$size}""")
-            Mockup.layout(overlay.rootView)
-            val drawn = views(overlay).map { v ->
-                "${v.javaClass.name} ${v.visibility} ${v.left},${v.top} ${v.width}x${v.height} ${(v as? TextView)?.text ?: ""}"
-            }.toList()
-            click("Back now")
-            return pages.toList() to drawn
-        }
-        val full = opened("")
-        assertEquals(listOf("http://homeassistant.local:8123/dashboard-door/0", null), full.first)
-        assertTrue("the bar is drawn", full.second.any { it.endsWith("Back to your dashboard in 1:30") })
-        assertEquals(full, opened(""","size":"full""""))
-        assertEquals(full, opened(""","size":"half""""))
+    fun nextOpensTheViewThatWaits() {
+        center.handle("Someone is at the door", "Doorbell", """{"url":"/dashboard-door/0","timeout":90}""")
+        center.handle("Open for 20 minutes", "Garage", """{"url":"/garage/0"}""")
+        assertEquals(listOf<String?>("http://homeassistant.local:8123/dashboard-door/0"), pages)
+        assertEquals("Next in 1:30  ·  1 more waiting", shownText().first { it.startsWith("Next in") })
+        assertFalse("the bar counts it, not the pill", shownText().any { it.contains("Show all") })
+        click("Next")
+        assertEquals("http://homeassistant.local:8123/garage/0", pages.last())
+        click("Back now")
+        assertEquals(null, pages.last())
+        assertNull(hub.state.page)
+    }
+
+    /** #230: a half view takes the dashboard's picture, then moves the page into the right half, over the bar's 72 dp. */
+    @Test
+    fun aHalfViewOpensInADialogOverThePictureOfTheDashboard() {
+        val events = halfHooks()
+        center.handle("Someone is at the door", "Doorbell", """{"url":"/dashboard-door/0","timeout":90,"size":"half"}""")
+        assertEquals(
+            listOf("capture", "area Rect(720, 0 - 1440, 612)", "page http://homeassistant.local:8123/dashboard-door/0"),
+            events,
+        )
+        assertTrue(shownText().contains("Closes in 1:30"))
+        click("Close")
+        assertEquals(listOf("page null", "area null"), events.drop(3).sortedDescending())
+        assertNull(hub.state.page)
+    }
+
+    /** On a portrait screen (a tablet, the Mirror) the half view is the bottom half. */
+    @Test
+    @Config(qualifiers = "w800dp-h1280dp-port-mdpi")
+    fun onAPortraitScreenTheHalfViewIsTheBottomHalf() {
+        val events = halfHooks()
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half"}""")
+        assertEquals("area Rect(0, 640 - 800, 1208)", events[1])
+    }
+
+    @Test
+    fun aTapOutsideAHalfViewClosesItAndATapInsideGoesToThePage() {
+        halfHooks()
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half"}""")
+        center.handle("m", "Garage", """{"url":"/garage/0","size":"half"}""")
+        Mockup.layout(overlay.rootView)
+        val behind = views(overlay).first { it.javaClass.simpleName == "HalfDialog" }
+        assertFalse("inside: the page's", tap(behind, 1000f, 300f))
+        assertEquals("Doorbell", hub.state.page?.notification?.title)
+        assertTrue(tap(behind, 200f, 300f))
+        assertEquals("outside: next", "Garage", hub.state.page?.notification?.title)
+        assertEquals(listOf("http://homeassistant.local:8123/dashboard-door/0", "http://homeassistant.local:8123/garage/0"), pages)
+    }
+
+    /** #230: on a frame without touch, a view's screen has nothing to tap: no button, and taps outside do nothing. */
+    @Test
+    fun withoutTouchNothingOnAViewTakesATap() {
+        overlay.input = Input.NONE
+        halfHooks()
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half","timeout":90}""")
+        center.handle("m", "Garage", """{"url":"/garage/0","timeout":60}""")
+        Mockup.layout(overlay.rootView)
+        assertEquals(emptyList<View>(), views(overlay).filter { it.isShown && (it.isClickable || it.hasOnClickListeners()) }.toList())
+        assertTrue(shownText().contains("Next in 1:30  ·  1 more waiting"))
+        assertFalse(shownText().any { it in setOf("Next", "Close", "Back now") })
+        val behind = views(overlay).first { it.javaClass.simpleName == "HalfDialog" }
+        assertFalse(tap(behind, 200f, 300f))
+        assertEquals("Doorbell", hub.state.page?.notification?.title)
+    }
+
+    /** #230: a critical one with a view is the stage, with "Open the view" first; there is no such button without touch. */
+    @Test
+    fun aCriticalOneOpensItsViewFromTheStage() {
+        center.handle("The kitchen smoke alarm went off.", "Smoke in the kitchen", """{"priority":"critical","url":"/fire/0"}""")
+        assertTrue("the stage, not the view", pages.isEmpty())
+        overlay.input = Input.NONE
+        overlay.update(hub.state)
+        Mockup.layout(overlay.rootView)
+        assertFalse(shownText().contains(NotificationOverlay.OPEN_THE_VIEW))
+        overlay.input = Input.TOUCH
+        overlay.update(hub.state)
+        click(NotificationOverlay.OPEN_THE_VIEW)
+        assertEquals(listOf<String?>("http://homeassistant.local:8123/fire/0"), pages)
+        assertTrue(hub.state.cards.isEmpty())
+        assertTrue(shownText().contains("Back now"))
+    }
+
+    private fun halfHooks(): MutableList<String> {
+        val events = mutableListOf<String>()
+        overlay.capturePage = { done -> events += "capture"; done(Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888)) }
+        overlay.onPageArea = { area -> events += "area $area" }
+        overlay.onPage = { url -> pages += url; events += "page $url" }
+        return events
+    }
+
+    private fun shownText(): List<String> {
+        Mockup.layout(overlay.rootView)
+        return views(overlay).filterIsInstance<TextView>().filter { it.isShown }.map { it.text.toString() }.toList()
+    }
+
+    /** A tap at ([x], [y]) on [v]: whether it took it. */
+    private fun tap(v: View, x: Float, y: Float): Boolean {
+        val down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, x, y, 0)
+        val took = v.dispatchTouchEvent(down)
+        if (took) v.dispatchTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_UP, x, y, 0))
+        Mockup.idle()
+        return took
     }
 
     @Test

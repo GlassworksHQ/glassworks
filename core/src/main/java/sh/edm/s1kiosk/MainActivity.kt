@@ -289,6 +289,8 @@ class MainActivity : Activity() {
     private val overlayHost = object : OverlayHost {
         override val activity get() = this@MainActivity
         override fun openInPage(url: String?) = if (url != null) this@MainActivity.openInPage(url) else backToDashboard()
+        override fun placePage(area: android.graphics.Rect?) { page?.view?.let { dev.glassworks.engine.PageCapture.place(it, area) } }
+        override fun capturePage(done: (android.graphics.Bitmap?) -> Unit) = dev.glassworks.engine.PageCapture.capture(page, done)
         override fun hideMenu() { if (::settingsOverlay.isInitialized && settingsOverlay.isShowing) settingsOverlay.hide() }
         override fun post(block: () -> Unit) { handler.post(block) }
     }

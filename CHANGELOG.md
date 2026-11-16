@@ -90,6 +90,12 @@ below as the release notes.
   keep Home Assistant's in one tap. Voice has the wake word, its threshold, mute, mic gain, the wake
   sound and the overlay. Music shows what plays and its volume. Radio shows its firmware and the root
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
+- **A notification can open its view over half the screen, and views take turns.** Add
+  `"size": "half"` to a notification with a `url`, and the view opens as a dialog on the right of the
+  screen (at the bottom of a portrait one), with the dashboard dimmed behind it. A view that arrives
+  while another is open now waits its turn instead of taking the screen. The bar's one button says
+  *Next* while another waits. A critical notification with a `url` shows the alert first, with an
+  **Open the view** button. See [Open a view](docs/notifications.md#open-a-view).
 
 ### Changed
 - **On a screen that stands portrait, the app is portrait.** On a device that isn't an Aqara S1, the app now
