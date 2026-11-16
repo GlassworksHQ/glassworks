@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, creditProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
+import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, creditProblems, kindProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
 
 /*
  * The frame catalog: every `frames/<id>/design/frame.json` in this repo, read at build time (the
@@ -20,12 +20,15 @@ const ORDER: Record<Stage, number> = { stable: 0, beta: 1, alpha: 2, development
  * frame.json is written by hand, so the fields every page relies on are checked when it is read:
  * a bad file fails the build here, naming the file, instead of crashing a page later.
  */
-function check(file: string, f: FrameDesign, id: string) {
+function check(file: string, f: FrameDesign, id: string, all: FrameDesign[]) {
   const bad = (why: string) => {
     throw new Error(`${file}: ${why} (format: frames/README.md)`);
   };
   if (f.id !== id) bad(`id "${f.id}" isn't its folder's name "${id}"`);
   if (!(f.status in ORDER)) bad(`status "${f.status}" isn't one of ${Object.keys(ORDER).join(", ")}`);
+  // full frame, device frame or tested device; a tested device names the frame it installs as (#403)
+  const kind = kindProblems(f, all);
+  if (kind.length) bad(kind.join("; "));
   // it rates only panes that exist (a pane it doesn't rate is worked out from `provides`; issue 231)
   for (const [p, r] of Object.entries(f.panes ?? {})) {
     if (!PANE_IDS.includes(p) && !(p in PANE_ALIASES)) bad(`panes.${p}: no pane has that id`);
@@ -48,19 +51,16 @@ function check(file: string, f: FrameDesign, id: string) {
   }
 }
 
-function read(id: string): FrameDesign {
-  const file = path.join(FRAMES, id, "design", "frame.json");
-  const f = JSON.parse(fs.readFileSync(file, "utf8")) as FrameDesign;
-  check(file, f, id);
-  return f;
-}
+const file = (id: string) => path.join(FRAMES, id, "design", "frame.json");
 
 function load(): FrameDesign[] {
-  return fs
+  const ids = fs
     .readdirSync(FRAMES, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && fs.existsSync(path.join(FRAMES, e.name, "design", "frame.json")))
-    .map((e) => read(e.name))
-    .sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.name.localeCompare(b.name, "en"));
+    .filter((e) => e.isDirectory() && fs.existsSync(file(e.name)))
+    .map((e) => e.name);
+  const all = ids.map((id) => JSON.parse(fs.readFileSync(file(id), "utf8")) as FrameDesign);
+  all.forEach((f, i) => check(file(ids[i]!), f, ids[i]!, all));
+  return all.sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.name.localeCompare(b.name, "en"));
 }
 
 export const frames: FrameDesign[] = load();

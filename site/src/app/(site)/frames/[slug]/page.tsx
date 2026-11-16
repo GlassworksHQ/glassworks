@@ -11,6 +11,7 @@ import { ClarityChipLink } from "@/components/clarity/ClarityChipLink";
 import { CLARITY, clarityFor } from "@/lib/clarity";
 import { frameById, frames, installLink } from "@/lib/frames";
 import { getDocs } from "@/lib/docs";
+import { KIND_TEXT } from "@glassworks/frame-card";
 import { frameSeo, ratingKeys, ratingText, ships, type Support } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
@@ -53,6 +54,7 @@ async function Device({ params }: { params: Params }) {
   const d = frameById(slug);
   if (!d) notFound();
   const install = installLink(d);
+  const base = d.base ? frameById(d.base) : undefined;
   const c = clarityFor(d.id);
   const live = ships(d.status);
 
@@ -91,7 +93,7 @@ async function Device({ params }: { params: Params }) {
               </ClarityChipLink>
             )}
             <Chip>
-              Frame <code>{d.id}</code>
+              {KIND_TEXT[d.kind]} <code>{d.id}</code>
             </Chip>
           </div>
           <h1 className={s.h1}>{d.name}</h1>
@@ -121,7 +123,15 @@ async function Device({ params }: { params: Params }) {
               </a>
             )}
           </div>
-          <p className={s.how}>{install ? d.install.how : `Not in Kiln yet. ${d.install.how}`}</p>
+          <p className={s.how}>
+            {install ? d.install.how : `Not in Kiln yet. ${d.install.how}`}
+            {base && (
+              <>
+                {" "}
+                A tested device: it runs <Link href={`/frames/${base.id}`}>{base.name}</Link> as it is.
+              </>
+            )}
+          </p>
         </div>
         <HeroModel f={d} />
       </header>

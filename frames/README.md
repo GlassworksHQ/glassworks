@@ -17,6 +17,22 @@ and glassworks.dev read them from here.
 | [`aqara-s1-plus`](aqara-s1-plus) | Beta | yes | `frame.json`, `recovery.json` |
 | [`lululemon-mirror`](lululemon-mirror) | Planned | test only: over fastboot with the community image, or adb onto it (`/lululemon-mirror?apk=local`) | `frame.json` only (no recovery drawing yet) |
 | [`generic-android`](generic-android) | Planned | not yet | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
+| [`google-pixel-tablet`](google-pixel-tablet) | Planned | none of its own: it installs as `generic-android` | `frame.json` only. A tested device: the generic app as it is |
+
+### Three kinds of device
+
+Every frame says which kind it is (`kind`; maintainer, #403, 2026-11-16). The site shows it on the card and
+the frame's page.
+
+| `kind` | Shown as | What | Frames |
+|---|---|---|---|
+| `full` | Full frame | Its own app and a Kiln recipe (FEL, boot patch, root) | `aqara-s1-plus` |
+| `device` | Device frame | The generic app, with a recipe or settings picked at runtime; no code of its own | `lululemon-mirror`, `generic-android` |
+| `tested` | Tested device | The generic app as it is, installed like on any Android device. No recipe, no code. `base` names the frame it installs as | `google-pixel-tablet` |
+
+`kindProblems()` ([`packages/frame-card`](../packages/frame-card/README.md)) checks it: a tested device has a
+`base` that is another kind of frame, and no `kiln`, `app` or `recovery`; no other kind has a `base`.
+glassworks.dev's build and Kiln's `frame-designs.test.ts` run it.
 
 Every device glassworks.dev lists has a frame here, planned ones included. The site's URL for a frame is
 its id here, always (`/frames/<id>`): a frame id never changes, because Kiln's routes, the boot generator
@@ -31,6 +47,8 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | Field | What |
 |---|---|
 | `id` | The frame's id, the same as its folder (and Kiln's route, `/<id>`) |
+| `kind` | `full`, `device` or `tested` ([above](#three-kinds-of-device)) |
+| `base` | A tested device only: the frame whose app and install it uses (`generic-android`) |
 | `name` | The product's name, e.g. `Aqara S1 Plus` |
 | `brand` | Optional. The maker's part of `name` (`Aqara`), set light in the frame's banner; the rest of `name` is bold. `name` must start with it and a space |
 | `aka` | Optional. Other names it is sold under |
@@ -123,6 +141,7 @@ storing it.
 | `aqara-s1-plus` | sunxi-tools (linux-sunxi), the FEL protocol Kiln's recovery-mode step follows; Magisk (topjohnwu), the root the boot patch adds |
 | `lululemon-mirror` | Glass Panes (git-nimrod), the Android image it runs; research from repairman29, Onemoremichael and olm3ca; MDME's teardown |
 | `generic-android` | None |
+| `google-pixel-tablet` | None |
 
 ### `abis`
 
@@ -136,6 +155,7 @@ way), so today: `armeabi-v7a` and `arm64-v8a`. `ApkAbiListsTest` checks that the
 | `aqara-s1-plus` | `armeabi-v7a` | The panel's 32-bit userspace (`ro.product.cpu.abilist` = `armeabi-v7a,armeabi`, read on a panel 2026-11-12) |
 | `lululemon-mirror` | `arm64-v8a`, `armeabi-v7a` | The community image's `ro.product.cpu.abilist` (`arm64-v8a,armeabi-v7a,armeabi`, read from its `system.img` 2026-11-12). Not read on a stock unit ([mirror-abis.md](lululemon-mirror/research/mirror-abis.md)) |
 | `generic-android` | `arm64-v8a`, `armeabi-v7a` | The ARM tablets and phones it targets. No x86 APK is built |
+| `google-pixel-tablet` | `arm64-v8a` | Tensor G2's 64-bit-only userspace, a public fact for the Pixel 7. Not read on a Pixel Tablet yet |
 
 ### The render
 
@@ -180,6 +200,7 @@ into `~/.cache/glassworks-perf`. Kiln's `catalog.ts` then imports the new file.
 | `aqara-s1-plus` | 1440×720 | 0.989 (fitted) | 1 row of 4 sections | 42.4 KiB |
 | `lululemon-mirror` | 1080×1920 | 0.94 (pinned) | 3 rows of 3 | 77.5 KiB |
 | `generic-android` | 1920×1200 | 0.867 (fitted) | 2 rows of 4 (the ninth section is below the edge) | 73.4 KiB |
+| `google-pixel-tablet` | 2560×1600 | 0.784 (fitted) | 3 rows: 4, 4 and 1 sections | 73.8 KiB |
 
 `kiln/apps/kiln/test/frame-designs.test.ts` checks every `design/frame.json`: Kiln lists it, every
 rating and pane is there, `recovery` exists, the render is a WebP at the screen's size, and the mockup
