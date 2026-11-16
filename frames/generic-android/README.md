@@ -93,10 +93,17 @@ one built without it. Its GeckoView follows `-PlegacyAbi`, and the build fails u
 # → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
 ```
 
-Status: it builds (CI builds and checks it on every change, without publishing it), and CI runs the core's conformance
-test on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no release. **Don't install it on Android 6 or 7
-yet:** `MainActivity` still makes API 24+ calls, so it would crash at start, and as the home app at every boot. Two
-things wait: the app's own start on Android 6 (#198 Phase B), and Kiln's Mirror recipe taking this id.
+Status: it builds (CI builds and checks it on every change, without publishing it), and CI's conformance test starts
+the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
+release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
+What waits: a first device run, the maintainer's call on `desugar_jdk_libs`, and Kiln's Mirror recipe taking this id.
+
+The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
+
+- **Orientation:** the screen's natural orientation (rotation 0), either way up. Landscape on most tablets; portrait
+  on the Mirror, whose image sets `ro.sf.hwrotation=270`, and on a tablet that stands portrait at rotation 0.
+- **Touch:** with input devices listed and no touchscreen among them (the Mirror), setup works from a computer
+  instead of the screen (#34).
 Neither build can go on Google Play as it is: each updates itself from the repo's releases, and Play updates
 the apps it installs itself. A Play build would need a variant without the self-updater (#403). Play wouldn't grant
 the system permissions both builds ask for (`INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`, for the Mirror)

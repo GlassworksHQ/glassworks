@@ -4,5 +4,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <application android:name="sh.edm.s1kiosk.conformance.ConformanceApp" />
+    <application android:name="sh.edm.s1kiosk.conformance.ConformanceApp">
+        <!-- The core's MainActivity on the fake frame and a blank engine (CoreConformanceTest, #198). -->
+        <activity
+            android:name="sh.edm.s1kiosk.MainActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation" />
+    </application>
 </manifest>

@@ -29,6 +29,7 @@ dev/glassworks/platform/Platform.kt|android.content.Context#registerReceiver
 dev/glassworks/platform/Platform.kt|android.content.Intent#getParcelableExtra
 dev/glassworks/platform/Platform.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
 dev/glassworks/platform/Platform.kt|android.net.NetworkCapabilities#getTransportInfo
+dev/glassworks/platform/Platform.kt|android.os.Process#getStartElapsedRealtime
 dev/glassworks/secrets/SecretPrefs.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getDecoder
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getEncoder
@@ -40,7 +41,6 @@ sh/edm/s1kiosk/KioskService.kt|android.app.NotificationChannel#setShowBadge
 sh/edm/s1kiosk/KioskService.kt|android.app.NotificationChannel()
 sh/edm/s1kiosk/KioskService.kt|android.app.NotificationManager#createNotificationChannel
 sh/edm/s1kiosk/KioskService.kt|android.content.Context#startForegroundService
-sh/edm/s1kiosk/MainActivity.kt|android.os.Process#getStartElapsedRealtime
 sh/edm/s1kiosk/MainActivity.kt|android.view.Window#getInsetsController
 sh/edm/s1kiosk/MainActivity.kt|android.view.Window#setDecorFitsSystemWindows
 sh/edm/s1kiosk/MainActivity.kt|android.view.WindowInsets.Type#navigationBars
@@ -59,9 +59,8 @@ sh/edm/s1kiosk/auth/OAuth.kt|java.util.Base64.Encoder#withoutPadding
 sh/edm/s1kiosk/base/LocalServiceLink.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/base/UartBaseLink.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/frame/AqaraCloud.kt|java.lang.Process#waitFor
-# The two AppManage.kt lines come with #364 (the #23 stack, open on 2026-11-16): keep them until it merges.
+# AppManage.kt: DevicePolicyManager.reboot behind Platform.hasDeviceOwnerReboot (#198 Phase B).
 sh/edm/s1kiosk/manage/AppManage.kt|android.app.admin.DevicePolicyManager#reboot
-sh/edm/s1kiosk/manage/AppManage.kt|android.os.Process#getStartElapsedRealtime
 sh/edm/s1kiosk/radio/RadioController.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/radio/ui/RadioSectionView.kt|android.view.View#setImportantForAutofill
 sh/edm/s1kiosk/sendspin/PrefsSsStore.kt|java.util.Base64#getUrlDecoder

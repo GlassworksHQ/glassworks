@@ -20,6 +20,9 @@ import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import android.system.Os
+import android.system.OsConstants
 
 /**
  * What the running Android can do. This is the only place in the app that reads
@@ -44,6 +47,9 @@ open class PlatformApi(
 
     /** `AccessibilityAction.ACTION_SET_PROGRESS` exists (Android 7): a slider can be set to a value, not only stepped. */
     val hasSetProgressAction: Boolean get() = apiLevel >= 24
+
+    /** `DevicePolicyManager.reboot` exists (Android 7): a device owner can restart the device. */
+    val hasDeviceOwnerReboot: Boolean get() = apiLevel >= 24
 
     /** `Process.getStartElapsedRealtime` exists (Android 7). Below it, `/proc/self/stat` has the start time. */
     val hasProcessStartTime: Boolean get() = apiLevel >= 24
@@ -184,6 +190,18 @@ open class PlatformApi(
         (if (apiLevel >= 31) capabilities?.transportInfo as? WifiInfo else null)
             ?: runCatching { wifi?.connectionInfo }.getOrNull()
 
+    /**
+     * When this process started, in ms on the elapsed-realtime clock: from Android 7 Android says; below, the start
+     * time in [procSelfStat] (`/proc/self/stat`), as the diagnostics pane reads it (#198). Null when that can't be
+     * read: unknown, not a guess.
+     */
+    fun processStartElapsedMs(
+        procSelfStat: () -> String? = { runCatching { java.io.File("/proc/self/stat").readText() }.getOrNull() },
+        ticksPerSecond: () -> Long = { Os.sysconf(OsConstants._SC_CLK_TCK) },
+    ): Long? =
+        if (hasProcessStartTime) Process.getStartElapsedRealtime()
+        else procSelfStat()?.let(::procStatStartTicks)?.let { ticks -> ticksPerSecond().takeIf { it > 0 }?.let { ticks * 1000 / it } }
+
     /** An [Intent] extra, read with the typed getter from Android 13 and the deprecated one below. */
     fun intentExtra(intent: Intent, name: String): Intent? =
         if (apiLevel >= 33) intent.getParcelableExtra(name, Intent::class.java)
@@ -206,4 +224,14 @@ object Platform : PlatformApi(Build.VERSION.SDK_INT) {
 
     /** The hardware platform (`Build.HARDWARE`, `ro.hardware`): the S1's A133 says "sun50iw10p1". */
     val hardware: String get() = Build.HARDWARE.orEmpty()
+}
+
+/**
+ * `starttime` from `/proc/<pid>/stat` (field 22): when the process started, in clock ticks since boot. Counted from
+ * the last `)`, since the command name in brackets may hold spaces or brackets of its own.
+ */
+fun procStatStartTicks(procPidStat: String): Long? {
+    val f = procPidStat.substringAfterLast(')', "").trim().split(Regex("\\s+"))
+    if (f.size < 20) return null
+    return f[19].toLongOrNull()
 }

@@ -133,4 +133,34 @@ class SetupMockups {
         shot("setup-17-no-touch-signin", model(SetupFlow.SIGNIN), input = Input.NONE)
         shot("setup-18-no-touch-radio", model("radio"), radio = coordinator, input = Input.NONE)
     }
+
+    /**
+     * A screen that stands portrait and takes no tap: the lululemon Mirror's 1080x1920 glass (#198), which the app now
+     * fills portrait (GenericAndroid.orientation) and sets up from a computer (Input.NONE).
+     *   ./gradlew :kiosk:testDebugUnitTest --tests '*SetupMockups.portraitWithoutTouch' -Ps1MockupDir=<dir>
+     */
+    @Test
+    @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    fun portraitWithoutTouch() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        for ((name, m) in listOf(
+            "portrait-01-no-touch-wifi" to model(SetupFlow.WIFI, wifi = offline, panelIp = null),
+            "portrait-02-no-touch-ha" to model(SetupFlow.HA),
+            "portrait-03-no-touch-signin" to model(SetupFlow.SIGNIN),
+        )) {
+            val a = Mockup.activity()
+            val s = s1SetupOverlay(a, panes(a, null)).also { it.input = Input.NONE }
+            a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
+            s.render(m)
+            Mockup.idle()
+            Mockup.save(name, s, 1080, 1920)
+        }
+        val a = Mockup.activity()
+        val o = LoadingOverlay(a)
+        a.setContentView(o, android.view.ViewGroup.LayoutParams(-1, -1))
+        o.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, "homeassistant.local"))
+        o.previewPhase(0.62f)
+        Mockup.idle()
+        Mockup.save("portrait-04-connecting", o, 1080, 1920)
+    }
 }

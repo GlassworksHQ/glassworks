@@ -347,15 +347,15 @@ are already guarded. Read at each call site (2026-11-16), they split like this (
 | core: `web/Http`, `auth/OAuth` | `HashMap.putIfAbsent` (24) | Fixed: plain Kotlin |
 | `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size`, `.remove` (24) | Fixed: the sets are typed `MutableSet` |
 | `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | Fixed: `Platform.hasProcessStartTime`; below it `/proc/self/stat`'s start time |
-| core: `MainActivity` | `Process.getStartElapsedRealtime` (24) | **Open**; waits for #364/#332, which own the file |
-| core: `manage/AppManage` (#364) | `Process.getStartElapsedRealtime` (24): the Manage page's uptime; `DevicePolicyManager.reboot` (24) | **Open**, Phase B: the uptime would fail the Manage page's status on API 23; it needs `/proc/self/stat`'s start time as `pane-diagnostics` reads it, which `MainActivity` needs too. The reboot fails safe (`runCatching`, device owner only); the Mirror would reboot with `REBOOT` instead |
+| core: `MainActivity`, `manage/AppManage` | `Process.getStartElapsedRealtime` (24): setup's grace time, the Manage page's uptime | Fixed (Phase B): `Platform.processStartElapsedMs`, `/proc/self/stat`'s start time below 24, as `pane-diagnostics` reads it (`PlatformApi23Test`) |
+| core: `manage/AppManage` | `DevicePolicyManager.reboot` (24) | Fixed (Phase B): `Platform.hasDeviceOwnerReboot`; a system app holding `REBOOT` (the Mirror) reboots through `PowerManager.reboot` instead, on any Android (`RebootRouteTest`) |
 | core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | Fixed (Phase C): `Platform.registerDefaultNetworkCallback`; `contentLength`, an `Int`, is enough under the APK size limit |
 | `pane-zigbee-thread`, `aqara-s1-plus-wall-base` | `Process.waitFor(timeout)`, autofill (26) | Open, but S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered on a legacy device |
 | The libraries, `pane-assist`, `-bluetooth-proxy`, `-notifications`, `-timers`, `-sendspin`, `engine-gecko-legacy` | None (`pane-sendspin`'s five are desugared) | Ready as far as API levels go; untested on a device |
 
 Each fix has a test on Robolectric's Android 6 framework (`Api23FallbacksTest`, `PlatformApi23Test`,
-`AndroidProbeApi23Test`), where the old call throws `NoSuchMethodError` or `NoSuchFieldError`. Left for the app's
-own start on API 23: `MainActivity`'s calls (Phase B, after #332).
+`AndroidProbeApi23Test`, `RebootRouteTest`), where the old call throws `NoSuchMethodError` or `NoSuchFieldError`. The
+core's conformance test starts `MainActivity` on an API 23 emulator (`core-emulators.yml`, Phase B).
 
 <details><summary>The full list (109 calls)</summary>
 
@@ -501,9 +501,18 @@ The legacy build is the `legacy` build type of Glassworks for generic Android (`
 `dev.glassworks.generic_android.legacy`, minSdk 23, `:engine-gecko-legacy` in place of `:engine-gecko`, core library
 desugaring, and a manifest (`src/legacy`) that overrides the minSdk 26 of the core, the pane API and the panes. How
 to build it, and why a build type and not a flavor: [its README](../../frames/generic-android/README.md#the-legacy-build-android-6-and-7).
-**Don't install it on an Android 6-7 device yet.** Its `MainActivity` still makes API 24+ calls (Phase B, after
-#332), so it would crash at start, and with `BootReceiver` and the home screen on, at every boot. Until then this
-note's test APK (`:kiosk-legacy`, with those entry points off) stays the way to try the engine on a device.
+**Not tried on a device yet.** Phase B fixed `MainActivity`'s API 24+ calls, and the core's conformance test starts
+`MainActivity` on an API 23 emulator, but no Android 6-7 device has run the legacy APK. Try it on one where a crash
+loop is cheap first: with `BootReceiver` and the home screen on, a crash at start would repeat at every boot.
+`:kiosk-legacy` (those entry points off) stays the safe way to try the engine alone.
+
+What Phase B added for the Mirror, from the device and not from frame code (`GenericAndroid`, `GenericAndroidDeviceTest`):
+
+| What | How | Tested |
+|---|---|---|
+| Portrait glass | `Frame.orientation`: the screen's natural orientation (rotation 0), which `ro.sf.hwrotation=270` makes portrait on the Mirror. `MainActivity` asks for it, either way up, at start. The S1's frame keeps landscape, as its manifest asks | `OrientationTest` (the S1 unchanged; a portrait screen gets portrait); `GenericAndroidDisplayTest` |
+| No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
+| Restart | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
 
 What checks it, besides the unit tests of the shared sources:
 
@@ -543,7 +552,7 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
   redirects to another origin (`http` → `https`, a reverse proxy), and HA's external sign-in providers. Each is
   refused today and says so on the page.
 - GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
-- `MainActivity`'s `url` intent extra still restarts only when the secure-context hosts change. A same-host change
-  of port or scheme over that extra reloads instead, and the legacy engine then refuses the new dashboard (with the
-  note) until the app restarts. The fix is one line (`engineStart()` in place of `secureHosts()`), after #364.
-- The app itself on API 23–25: `MainActivity`'s API 24+ calls (Phase B).
+- The app itself on an Android 6-7 device: Phase B's code ran only on Robolectric and an API 23 emulator (no
+  GeckoView there: the conformance test's engine is blank).
+- A natural-portrait tablet now shows the app portrait (Phase B's rule), where it was always landscape. Fine for the
+  Mirror; whether small portrait tablets want landscape is a setting for later.

@@ -7,8 +7,14 @@ package dev.glassworks.frame
 import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Point
+import android.hardware.display.DisplayManager
+import android.hardware.input.InputManager
 import android.os.Build
 import android.provider.Settings
+import android.view.Display
+import android.view.InputDevice
+import android.view.Surface
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.SettingsItem
@@ -38,6 +44,25 @@ class GenericAndroid(
 
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 
+    /**
+     * The device's natural orientation (its screen at rotation 0), either way up: landscape on most tablets,
+     * portrait on the lululemon Mirror, whose image sets `ro.sf.hwrotation=270` (#198). Landscape when it can't tell.
+     */
+    override val orientation: Orientation get() = runCatching {
+        val d = context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY) ?: return@runCatching null
+        val size = Point().also { @Suppress("DEPRECATION") d.getRealSize(it) }
+        orientationOf(size.x, size.y, d.rotation)
+    }.getOrNull() ?: Orientation.LANDSCAPE
+
+    /**
+     * [Input.NONE] when Android lists input devices and none is a touchscreen (the Mirror's, #198): setup then works
+     * from a computer (#34). [Input.TOUCH] otherwise, and when it can't tell.
+     */
+    override val input: Input get() = runCatching {
+        val im = context.getSystemService(InputManager::class.java) ?: return@runCatching null
+        inputOf(im.inputDeviceIds) { id -> im.getInputDevice(id)?.supportsSource(InputDevice.SOURCE_TOUCHSCREEN) == true }
+    }.getOrNull() ?: Input.TOUCH
+
     override fun systemSettingsIntents() = listOf(Intent(Settings.ACTION_SETTINGS))
 
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = emptyList<Pane>()
@@ -52,6 +77,17 @@ class GenericAndroid(
         ))
 
     companion object {
+        /** The orientation of a screen [width] x [height] px at [rotation] (`Surface.ROTATION_*`) when turned back to 0. */
+        fun orientationOf(width: Int, height: Int, rotation: Int): Orientation {
+            val turned = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
+            val (w, h) = if (turned) height to width else width to height
+            return if (h > w) Orientation.PORTRAIT else Orientation.LANDSCAPE
+        }
+
+        /** [Input.NONE] when there are input devices ([ids]) and none [isTouchscreen]; else [Input.TOUCH]. */
+        fun inputOf(ids: IntArray, isTouchscreen: (Int) -> Boolean): Input =
+            if (ids.isNotEmpty() && ids.none(isTouchscreen)) Input.NONE else Input.TOUCH
+
         /** The Device page's id on every frame. */
         const val DEVICE = "device"
         const val UPDATES_TITLE = "Updates without a tap"

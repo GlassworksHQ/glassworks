@@ -106,4 +106,14 @@ class PlatformApi23Test {
         assertTrue(shadowOf(cm).networkCallbacks.contains(cb))
         cm.unregisterNetworkCallback(cb)
     }
+
+    /** #198: Android 6 has no Process.getStartElapsedRealtime; the start comes from /proc/self/stat (ticks since boot). */
+    @Test
+    fun `the process start comes from proc self stat on Android 6`() {
+        val stat = "4242 (sh.edm.s1kiosk (x)) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 4200 20 21"
+        assertEquals("4200 ticks at 100 Hz", 42_000L, Platform.processStartElapsedMs({ stat }, { 100L }))
+        assertEquals("unknown, not a guess", null, Platform.processStartElapsedMs({ null }, { 100L }))
+        assertEquals(null, Platform.processStartElapsedMs({ "4242 (short) S 1 2" }, { 100L }))
+        assertEquals("no tick rate", null, Platform.processStartElapsedMs({ stat }, { 0L }))
+    }
 }

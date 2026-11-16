@@ -8,6 +8,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.manage.HaSignIn
@@ -27,6 +28,7 @@ import dev.glassworks.manage.Tile
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.pane.shown
+import dev.glassworks.platform.Platform
 import dev.glassworks.platform.WifiLink
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
@@ -133,7 +135,7 @@ open class AppManage(
                 frame = model.frame,
                 version = version,
                 // The app's, as the line it sits on is the app's: the device's is in the diagnostics (#263).
-                uptimeMs = SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime(),
+                uptimeMs = Platform.processStartElapsedMs()?.let { SystemClock.elapsedRealtime() - it } ?: 0L,
                 haBase = prefs.haBase,
                 tiles = listOf(haTile(), wifiTile(), engineTile(), memoryTile()),
                 // The panes the panel's rail lists, no more: one the frame can't run has no section, so it isn't shown (#23).
@@ -272,11 +274,20 @@ open class AppManage(
         // After the page's answer has gone out: the restart ends this process, and the HTTP worker with it.
         override fun restartApp() = toActivity("restart", ACTION_DELAY_MS)
 
-        override val canReboot: Boolean get() = runCatching { dpm?.isDeviceOwnerApp(app.packageName) == true }.getOrDefault(false)
+        /** A privileged system app holds REBOOT (the Mirror's, flashed into /system/priv-app, #198). */
+        private val holdsReboot get() = app.checkSelfPermission(android.Manifest.permission.REBOOT) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        private val deviceOwner get() = runCatching { dpm?.isDeviceOwnerApp(app.packageName) == true }.getOrDefault(false)
+
+        override val canReboot: Boolean get() = holdsReboot || (deviceOwner && Platform.hasDeviceOwnerReboot)
 
         override fun reboot(): String? {
-            if (!canReboot) return "The app can only reboot the panel as its device owner."
-            main.postDelayed({ runCatching { dpm?.reboot(ComponentName(app, AdminReceiver::class.java)) }.onFailure { Log.w(TAG, "reboot failed", it) } }, ACTION_DELAY_MS)
+            if (!canReboot) return "The app can only reboot the panel as its device owner (Android 7 or newer), or as a system app."
+            main.postDelayed({
+                runCatching {
+                    if (holdsReboot) app.getSystemService(PowerManager::class.java)?.reboot(null)
+                    else dpm?.reboot(ComponentName(app, AdminReceiver::class.java))
+                }.onFailure { Log.w(TAG, "reboot failed", it) }
+            }, ACTION_DELAY_MS)
             return null
         }
 
