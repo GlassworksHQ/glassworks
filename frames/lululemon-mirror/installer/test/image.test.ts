@@ -163,6 +163,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(fsck(img).code).toBe(0);
     expect(Buffer.from(debugfsCat(img, `${APP_DIR}/lib/arm/libxul.so`))).toEqual(Buffer.from(v7));
     expect(log).toContain('1 native library for armeabi-v7a in /priv-app/S1Kiosk/lib/arm');
+    // no settings overlay: the image's own first boot, so no lock-screen default either (--no-settings-overlay)
+    expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).not.toContain('ro.lockscreen');
+    expect(debugfs(img, 'ls /vendor')).not.toContain('overlay');
   }, 60_000);
 
   it('refuses a library it can\'t unpack before writing anything (#354 review)', async () => {

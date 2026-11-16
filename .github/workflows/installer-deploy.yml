@@ -32,6 +32,7 @@ on:
       - '!frames/*/installer/test/**'
       - '!frames/**/*.md'
       - 'branding/**'
+      - 'frames/lululemon-mirror/overlay/**'   # GlassworksSettings.apk, staged as mirror-settings-overlay
       - 'docs/img/fel-button.jpg'
       - 'frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh'
       - 'frames/aqara-s1-plus/tools/radio/s1kiosk_radio.rc'

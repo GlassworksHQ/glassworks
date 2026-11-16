@@ -54,7 +54,8 @@ from `system` or the fresh `userdata` it already builds?
    `LockSettingsService` (lines 103–112) writes `lockscreen.disabled=1` into a new `locksettings.db`
    when it is true, and `DatabaseHelper` (line 2483) seeds it too. `LockPatternUtils.isLockScreenDisabled`
    honours it when no PIN or pattern is set. The only migration that clears it does so with more
-   than one switchable user (`LockSettingsService.java:233`). A fresh userdata has one.
+   than one switchable user (`LockSettingsService.java:233`–`255`, the clearing at about line 245). A
+   fresh userdata has one.
 
 4. **A static resource overlay for SettingsProvider** (2026-11-16, read: AOSP 6.0.1
    `PackageManagerService.java:2066` and `:5588`, `rootdir/init.rc:31`). Android 6 scans

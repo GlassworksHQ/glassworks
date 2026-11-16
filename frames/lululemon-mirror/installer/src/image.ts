@@ -49,7 +49,11 @@ export interface SystemPatch {
   bootAnimation?: Uint8Array;
   /** ro.sf.hwrotation: how the screen is turned. The Mirror stands portrait on a 1920×1080 panel: 270. */
   hwrotation?: 0 | 90 | 180 | 270;
-  /** GlassworksSettings.apk (frames/lululemon-mirror/overlay): SettingsProvider's defaults for a first boot with nothing to tap. */
+  /**
+   * GlassworksSettings.apk (frames/lululemon-mirror/overlay): SettingsProvider's defaults for a first
+   * boot with nothing to tap. It brings ro.lockscreen.disable.default=true with it; without it, the
+   * first boot is the image's own.
+   */
   settingsOverlay?: Uint8Array;
   /** Seconds since 1970 for new files; default now. */
   time?: number;
@@ -161,12 +165,15 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     log(SETTINGS_OVERLAY.path);
   }
 
-  // No swipe lock screen: SettingsProvider's DatabaseHelper and LockSettingsService both read it when
-  // they make a fresh userdata's settings (AOSP 6.0.1; the image's services and SettingsProvider dex
-  // have the string, read 2026-11-16). The Mirror has no touchscreen to swipe it away.
-  let next = setProp(prop, 'ro.lockscreen.disable.default', 'true');
-  if (o.hwrotation !== undefined) next = setProp(next, 'ro.sf.hwrotation', String(o.hwrotation));
-  if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ro.lockscreen.disable.default=true${o.hwrotation !== undefined ? `, ro.sf.hwrotation=${o.hwrotation}` : ''}`); }
+  // No swipe lock screen, with the overlay: the two make the first boot with nothing to tap, and
+  // without the overlay the first boot is the image's own. SettingsProvider's DatabaseHelper and
+  // LockSettingsService both read it when they make a fresh userdata's settings (AOSP 6.0.1; the
+  // image's services and SettingsProvider dex have the string, read 2026-11-16).
+  let next = prop;
+  const set: string[] = [];
+  if (o.settingsOverlay) { next = setProp(next, 'ro.lockscreen.disable.default', 'true'); set.push('ro.lockscreen.disable.default=true'); }
+  if (o.hwrotation !== undefined) { next = setProp(next, 'ro.sf.hwrotation', String(o.hwrotation)); set.push(`ro.sf.hwrotation=${o.hwrotation}`); }
+  if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ${set.join(', ')}`); }
   await fs.flush();
 }
 

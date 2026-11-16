@@ -99,6 +99,13 @@ describe('installing Glassworks over fastboot', () => {
     expect(built[0]!.settingsOverlay).toBe(overlay);
   });
 
+  it('the flash-wifi-short demo shows the refusal of a password WPA can\'t take', async () => {
+    const { flash, mirror } = await flashDemo('flash-wifi-short', true);
+    expect(flash.blocked()).toMatch(/8 to 63 characters/);
+    render(<Flash flash={flash} mirror={mirror} />);
+    expect(screen.getByText(/The Wi-Fi password must be 8 to 63 characters/)).toBeTruthy();
+  });
+
   it('when the proxy can\'t serve the image, says why and falls back to download-and-select', async () => {
     const { f, calls } = setup({ proxy: 'down' });
     await f.downloadImage();

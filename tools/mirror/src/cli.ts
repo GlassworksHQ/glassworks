@@ -26,8 +26,9 @@ install (WRITES system and userdata):
   --wifi-ssid <name> --wifi-pass-file <file>   Wi-Fi for S1 Kiosk (the password from a file)
   --boot-animation <zip>   default: branding/lululemon-mirror/bootanimation.zip; --no-boot-animation
   --no-fill                zeros as RAW blocks, for an LK that refuses FILL chunks
-  --no-settings-overlay    leave out frames/lululemon-mirror/overlay/GlassworksSettings.apk (Wi-Fi on,
-                           no screen timeout, no lock screen, no auto-rotate on the first boot)
+  --no-settings-overlay    the image's own first boot: leave out frames/lululemon-mirror/overlay/
+                           GlassworksSettings.apk and ro.lockscreen.disable.default (Wi-Fi on, no screen
+                           timeout, no lock screen, no auto-rotate)
   --screenshot <png>       default: ./mirror-after.png
 way back (WRITES system and userdata):
   --way-back --image <system.img> --userdata <userdata.sparse>
