@@ -76,4 +76,12 @@ class ViewQueueTest {
         assertNull(ViewQueue().arrive(door).button(ViewSize.HALF, Input.NONE))
         assertNull(ViewQueue().button(ViewSize.FULL, Input.TOUCH))
     }
+
+    @Test
+    fun aListTheCallerChangesLaterDoesntChangeTheQueue() {
+        val ids = mutableListOf(door)
+        val q = ViewQueue(ids)
+        ids.clear()
+        assertEquals(door, q.open)
+    }
 }

@@ -22,7 +22,14 @@ import dev.glassworks.frame.Input
  * Which views join is the caller's: not one Do not disturb holds, and not a critical one (its stage
  * covers everything). Immutable.
  */
-data class ViewQueue(val ids: List<Long> = emptyList()) {
+class ViewQueue(ids: List<Long> = emptyList()) {
+    /** Its own copy: a list the caller changes later doesn't change the queue. */
+    val ids: List<Long> = ids.toList()
+
+    override fun equals(other: Any?): Boolean = other is ViewQueue && other.ids == ids
+    override fun hashCode(): Int = ids.hashCode()
+    override fun toString(): String = "ViewQueue($ids)"
+
     val open: Long? get() = ids.firstOrNull()
 
     /** How many wait behind [open]. */
