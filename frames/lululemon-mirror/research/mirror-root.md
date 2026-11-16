@@ -27,8 +27,9 @@ does a lesser foothold (platform signing) already give us?
 
 ## What we tried
 
-All on 2026-11-15 unless noted. Nothing was written to the device; every probe is read-only adb as
-`shell`, or an `adb install`/`uninstall` of a test app to `/data/app` (no `system` touched).
+All on 2026-11-15 unless noted. Nothing was flashed and `system` was not touched. The only writes
+were to `/data`: `magiskpolicy` pushed to `/data/local/tmp` (§3, deleted after), and a test app
+installed to `/data/app` and uninstalled after (§6). Every other probe is read-only adb as `shell`.
 
 ### 1. Unit identity and state (verified)
 
@@ -178,8 +179,8 @@ WRITE_SECURE_SETTINGS = 0 (GRANTED)
 
 Then: `adb uninstall dev.glassworks.mirrorprobe` → `Success`. **This is the practical lever that
 needs neither a flash nor root**: platform signing gives uid 1000 / `system_app` with
-`WRITE_SECURE_SETTINGS` (rotation and other kiosk control) and `/persist` reads (the WCNSS Wi-Fi NV
-and calibration, part of #40). It does **not** reach `/firmware` (modem), `/oem`, or any block
+`WRITE_SECURE_SETTINGS` (rotation and other kiosk control) and a `/persist` listing (the WCNSS Wi-Fi NV
+and calibration file names, part of #40; opening the files was not recorded). It does **not** reach `/firmware` (modem), `/oem`, or any block
 device, so modem/vendor-firmware blobs and partition backups still need root or the §5 leads.
 
 ## Result
@@ -187,7 +188,7 @@ device, so modem/vendor-firmware blobs and partition backups still need root or 
 | Route | Verdict | Evidence |
 |---|---|---|
 | AOSP `su` at `/system/xbin/su` (the plan) | **Dead end** | No `su` domain, no permissive domain, no `shell→su_exec` transition (§3) |
-| Platform-signed app → uid system / `system_app` | **Works, no flash, no root** | §6: uid 1000, `WRITE_SECURE_SETTINGS`, `/persist` readable; `/firmware`/`/oem`/block devices denied |
+| Platform-signed app → uid system / `system_app` | **Works, no flash, no root** | §6: uid 1000, `WRITE_SECURE_SETTINGS`, `/persist` listable; `/firmware`/`/oem`/block devices denied |
 | Custom kernel module (`.ko`) | Open, untested, kernel code | §4: unsigned modules load, but `MODVERSIONS` needs an exact-matching build; `wlan` must be chain-loaded |
 | Re-enable `flash_recovery` (add `/system/bin/install-recovery.sh`) | Open, untested, `system`-only | §5: domain can read `boot`/`recovery` block devices → a path to a boot backup + the RAM-boot test |
 | Hook `init.qcom.post_boot.sh` → `qti_init_shell` | Open, untested, `system`-only | §5: runs as root (caps incl. `sys_module`) at `boot_completed`; no block-device/`setenforce` access |
@@ -198,11 +199,17 @@ Confidence: everything in §1–§4 and §6 is **verified** on the unit (2026-11
 
 ## How to reproduce
 
-- §1–§4, §6 reads: read-only adb as `shell`, plus an `adb install`/`uninstall` of a `/data/app`
-  test APK (nothing in `system` touched). Address the unit with `adb -s $(cat /tmp/mirror-serial)`.
+- §1–§4 reads: read-only adb as `shell`; §3 also pushes `magiskpolicy` to `/data/local/tmp`
+  (delete it after). Address the unit with `adb -s $(cat /tmp/mirror-serial)`.
 - Off-device analysis used `magiskpolicy --print-rules` (GPL; see below) and the SDK build-tools.
   The platform test key is public: AOSP `build` repo, tag `android-6.0.1_r81`,
   `target/product/security/platform.{pk8,x509.pem}`.
+- §6 probe (writes `/data/app` only): build an APK whose manifest sets
+  `android:sharedUserId="android.uid.system"` and has a broadcast receiver that logs `id`, the
+  `WRITE_SECURE_SETTINGS` check and a directory listing of each path in §6. Build it with
+  `aapt2`/`d8`, `zipalign` it, sign it with `apksigner` and the platform key above, then
+  `adb install` it, send the broadcast with `adb shell am broadcast`, and read `logcat`. Undo:
+  `adb uninstall dev.glassworks.mirrorprobe`. The probe source is not in the repo.
 - Nothing here needs undoing. The test APK was uninstalled; `/data/local/tmp` was cleared.
 
 ## Housekeeping / provenance
@@ -229,7 +236,7 @@ Confidence: everything in §1–§4 and §6 is **verified** on the unit (2026-11
 - **`qti_init_shell` root via `post_boot.sh`:** enough for userspace root at `boot_completed`;
   combined with a matching `.ko`, enough for kernel code. Both need a `system` flash and a way back.
 - **Is platform signing enough for the kiosk?** For #40's modem/vendor blobs, no (no `/firmware`).
-  For kiosk control and `/persist` (Wi-Fi NV), likely yes, with no flash and no root.
+  For kiosk control and a `/persist` listing (Wi-Fi NV file names), likely yes; reading those files is untested, with no flash and no root.
 
 ## Next steps
 
@@ -244,5 +251,5 @@ The open leads, as described above (all untested, all need a `system` flash and 
   or `setenforce` access (§5).
 
 **Not root, but useful:** a platform test-key app already runs as uid 1000 / `system_app` with
-`WRITE_SECURE_SETTINGS` and `/persist` reads, with no flash (§6). It does not reach `/firmware`,
+`WRITE_SECURE_SETTINGS` and a `/persist` listing, with no flash (§6). It does not reach `/firmware`,
 `/oem` or block devices.
