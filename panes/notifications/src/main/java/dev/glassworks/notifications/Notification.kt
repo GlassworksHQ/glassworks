@@ -42,6 +42,19 @@ enum class Sound(val id: String) {
 }
 
 /**
+ * How much of the screen a notification's view takes (#230): [FULL], as since #118, or [HALF], a dialog
+ * over part of the dashboard. Only [FULL] is drawn so far: a [HALF] view opens full screen until the
+ * dialog ships, so a script can name it already.
+ */
+enum class ViewSize(val id: String) {
+    FULL("full"), HALF("half");
+
+    companion object {
+        fun parse(s: String): ViewSize? = entries.firstOrNull { it.id == s.trim().lowercase() }
+    }
+}
+
+/**
  * One button on a notification. Tapping it reports [id] to Home Assistant (Companion's `action`).
  * [uri], if set, is a page on the panel's own Home Assistant that the tap also opens, already checked
  * by [HaUrls].
@@ -68,6 +81,8 @@ data class Notification(
     val url: String? = null,
     /** Companion's `sticky`: tapping an action does not close it. */
     val sticky: Boolean = false,
+    /** How much of the screen [url] and the buttons' views take (#230). */
+    val size: ViewSize = ViewSize.FULL,
 )
 
 /** What one call of the `notify` action asks for. */
