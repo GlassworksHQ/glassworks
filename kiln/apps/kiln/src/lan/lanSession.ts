@@ -2,7 +2,7 @@
 // (src/setup) over the panel's /setup/channel WebSocket. The panel serves this page at /setup, so every
 // request goes to its own origin.
 import { NOT_PAIRED, SetupChannel } from '@glassworks/setup-channel';
-import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
+import { ChannelSetup, type SetupSteps, type WifiSteps } from '../setup/channelSetup';
 import { THREAD_FROM_HA } from '../setup/radioPlan';
 import type { Setup } from '../wizard/state';
 
@@ -36,13 +36,13 @@ export const DONE = '/setup/done';
 /** The note when the panel ended the pairing under the page: it lasts 30 minutes without a change. */
 export const RAN_OUT = 'The pairing ran out: it lasts 30 minutes without a change. Pair again to carry on where you were.';
 
-export class LanSession implements SetupSteps {
+export class LanSession implements SetupSteps, WifiSteps {
   state: LanState = { view: { at: 'connecting' } };
   private listeners = new Set<() => void>();
   private readonly steps: ChannelSetup;
   private running?: string;
   /** The step to go back to after pairing again. */
-  private resume?: 'ha' | 'radio';
+  private resume?: 'wifi' | 'ha' | 'radio';
 
   constructor(private readonly d: LanDeps) {
     this.steps = new ChannelSetup({
@@ -84,7 +84,9 @@ export class LanSession implements SetupSteps {
 
   /** A step's state, unless the panel said this browser isn't paired (the pairing ran out): then pair again. */
   private showStep(setup: Setup) {
-    if ((setup.phase === 'ha' || setup.phase === 'radio') && setup.error === NOT_PAIRED) {
+    const ranOut = ((setup.phase === 'ha' || setup.phase === 'radio') && setup.error === NOT_PAIRED) ||
+      (setup.phase === 'wifi' && (setup.status === NOT_PAIRED || setup.joining?.error === NOT_PAIRED));
+    if (ranOut) {
       this.resume = setup.phase;
       this.steps.close();
       this.set({ view: { at: 'pair', open: true, shown: false, note: RAN_OUT } });
@@ -163,9 +165,14 @@ export class LanSession implements SetupSteps {
     this.resume = undefined;
     this.set({ view: { at: 'setup', setup: { phase: 'waiting', note: 'Connecting to the panel.' } } });
     if (back === 'radio') await this.steps.radio();
-    else await this.steps.homeAssistant();
+    else if (back === 'ha') await this.steps.homeAssistant();
+    else await this.steps.wifi(); // an offline panel (on its setup hotspot) starts with Wi-Fi, one on a network with HA
   }
 
+  wifi(): Promise<void> { return this.steps.wifi(); }
+  scanWifi(): Promise<void> { return this.steps.scanWifi(); }
+  joinWifi(ssid: string, psk: string): Promise<void> { return this.steps.joinWifi(ssid, psk); }
+  homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
   radio(): Promise<void> { return this.steps.radio(); }

@@ -3,15 +3,16 @@
 import { useState, useSyncExternalStore } from 'react';
 import { Mark } from '../components/Mark';
 import { Stack } from '../components/Stack';
-import { HomeAssistant, Radio, RadioNext } from '../setup/steps';
+import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
 import type { LanSession, LanView } from './lanSession';
 
-const RAIL = ['Pair with the panel', 'Home Assistant', 'Radio', 'Done'] as const;
+const RAIL = ['Pair with the panel', 'Wi-Fi', 'Home Assistant', 'Radio', 'Done'] as const;
 
 function railAt(v: LanView): number {
-  if (v.at === 'done') return 4;
+  if (v.at === 'done') return 5;
   if (v.at !== 'setup') return 0;
-  return v.setup.phase === 'radio' || v.setup.phase === 'radio-next' ? 2 : 1;
+  if (v.setup.phase === 'wifi') return 1;
+  return v.setup.phase === 'radio' || v.setup.phase === 'radio-next' ? 3 : 2;
 }
 
 function Pair({ lan, v, busy }: { lan: LanSession; v: Extract<LanView, { at: 'pair' }>; busy: boolean }) {
@@ -70,6 +71,7 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
     case 'setup': {
       const s = v.setup;
       switch (s.phase) {
+        case 'wifi': return <Wifi busy={busy} steps={lan} setup={s} />;
         case 'ha': return <HomeAssistant key="ha" busy={busy} steps={lan} setup={s} />;
         case 'radio': return <Radio key={s.radio.mode} busy={busy} steps={lan} setup={s} />;
         case 'radio-next': return <RadioNext busy={busy} steps={lan} setup={s} />;

@@ -1,7 +1,7 @@
 // The setup steps that run over the app's setup channel: Home Assistant (the address, sign-in on the
 // panel's own page) and the radio role. The same code whether the channel comes over USB (Kiln's wizard,
 // through adb) or the LAN (the panel's own page, #34): only `open` differs.
-import { Refused, validHaUrl, type SetupChannel, type SetupState } from '@glassworks/setup-channel';
+import { NOT_PAIRED, NotSent, Refused, validHaUrl, type SetupChannel, type SetupState, type WifiNetwork } from '@glassworks/setup-channel';
 import type { Setup } from '../wizard/state';
 import { radioPlan, type PanelApp } from './radioPlan';
 
@@ -36,6 +36,23 @@ export interface SetupSteps {
   /** Ends setup; a promise keeps the button that ran it busy until it settles. */
   finish(): void | Promise<void>;
 }
+
+/** What the Wi-Fi step calls: the wizard's Session (Improv Serial over USB), or the panel page's controller. */
+export interface WifiSteps {
+  click(name: string, run: () => Promise<void> | void): Promise<void>;
+  /** The step from the start (Try again). */
+  wifi(): Promise<void>;
+  /** Looks for networks again ("Use another network"). */
+  scanWifi(): Promise<void>;
+  /** Sends the network ("" for an open one). */
+  joinWifi(ssid: string, psk: string): Promise<void>;
+  /** On to Home Assistant: Continue, or skip Wi-Fi. */
+  homeAssistant(): Promise<void>;
+}
+
+/** Under the joining steps on the panel's page: the join closes the panel's setup Wi-Fi, and this page with it. */
+export const joinNote = (ssid: string) =>
+  `The panel closes its setup Wi-Fi and joins ${ssid}. Its screen shows how it goes. Put this phone back on your own Wi-Fi.`;
 
 const NOT_AN_ADDRESS = 'That doesn\'t look like a web address (http://… or https://…).';
 
@@ -129,6 +146,53 @@ export class ChannelSetup {
       if (!this.d.here() || this.d.phase().phase !== 'ha') { clearInterval(this.haTimer); return; }
       void this.request((x) => x.getState()).catch(() => {});
     }, 3000);
+  }
+
+  /**
+   * Wi-Fi over the channel: the panel's own page, reached on its setup hotspot (issue 197). A panel already on a network,
+   * or an app that doesn't say, goes on to Home Assistant: the panel refuses a join while it is on a network.
+   */
+  async wifi(): Promise<void> {
+    const g = this.gen;
+    const c = await this.connect();
+    if (g !== this.gen) return;
+    if (!c) { this.d.unreachable(); return; }
+    if (c.state?.online !== false) { await this.homeAssistant(); return; }
+    await this.scanWifi();
+  }
+
+  /** The networks the panel sees, from a fresh scan. */
+  async scanWifi(): Promise<void> {
+    const looking = { phase: 'wifi' as const, over: 'lan' as const, status: 'Looking for networks the panel can see…' };
+    this.d.show(looking);
+    let networks: WifiNetwork[] = [];
+    try { networks = await this.request((x) => x.scanWifi()); } catch (e) {
+      if (!(e instanceof Refused)) { this.d.unreachable(e); return; }
+      if (e.message === NOT_PAIRED) { this.d.show({ ...looking, status: e.message }); return; }
+    }
+    if (!this.d.here() || this.d.phase().phase !== 'wifi') return;
+    this.d.show({ ...looking, networks, status: networks.length ? `${networks.length} in range of the panel` : 'None found. Type the name.' });
+  }
+
+  /**
+   * Sends the network. The panel answers, then joins: on its setup hotspot that closes this page's connection, so the
+   * page doesn't wait for the outcome, and a connection that drops right after sending counts as sent.
+   */
+  async joinWifi(ssid: string, psk: string): Promise<void> {
+    const s = this.d.phase();
+    if (s.phase !== 'wifi') return;
+    if (!ssid) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'Pick or type a network.' } }); return; }
+    this.d.show({ ...s, joining: { ssid, step: 'sent' } });
+    try {
+      await this.channel!.joinWifi(ssid, psk);
+    } catch (e) {
+      if (e instanceof Refused) { this.d.show({ ...s, joining: { ssid, step: 'err', error: e.message } }); return; }
+      // Never written: the panel has nothing, so this is an error to try again from, not a join under way.
+      if (e instanceof NotSent) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'This page lost the panel before it could send the network. Try again.' } }); return; }
+      // Written, but no answer: the panel may have closed its hotspot as it joined
+    }
+    this.close();
+    this.d.show({ ...s, joining: { ssid, step: 'join' }, joinNote: joinNote(ssid) });
   }
 
   /** Sign in: the tab opens inside the click, and is pointed at the panel's sign-in page once the address is saved. */

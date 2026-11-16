@@ -109,7 +109,7 @@ class RadioThreadJoinTest {
         )
         channel = SetupChannel(object : SetupChannel.Backend {
             override fun state() = ChannelState(IP, ChannelState.Ha(null, "http://homeassistant.local:8123", signedIn, null))
-            override fun setHa(url: String) = SetupChannel.HaChange()
+            override fun setHa(url: String) = SetupChannel.Change()
         }, listOf(definition.step), log = { seen += it })
     }
 
