@@ -19,6 +19,15 @@ dev/glassworks/manage/ManageServer.kt|java.util.Collection#removeIf
 dev/glassworks/manage/Sessions.kt|java.util.Base64#getUrlEncoder
 dev/glassworks/manage/Sessions.kt|java.util.Base64.Encoder#encodeToString
 dev/glassworks/manage/Sessions.kt|java.util.Base64.Encoder#withoutPadding
+dev/glassworks/platform/LocalOnlyHotspot.kt|LocalOnlyHotspotCallback
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.SoftApConfiguration#getPassphrase
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.SoftApConfiguration#getSsid
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager#startLocalOnlyHotspot
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotCallback
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotCallback()
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotReservation#close
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotReservation#getSoftApConfiguration
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotReservation#getWifiConfiguration
 dev/glassworks/platform/Platform.kt|TransportInfo
 dev/glassworks/platform/Platform.kt|android.app.ActivityManager#getHistoricalProcessExitReasons
 dev/glassworks/platform/Platform.kt|android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode
