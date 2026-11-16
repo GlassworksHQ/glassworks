@@ -291,25 +291,183 @@ doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
 | Downloads (backups, logs) | Refused | Verified (step 12) |
 | `window.open` to HA (e.g. "open in a new tab") | Loads in place | Verified (step 12) |
 
-**The app's code on API 23–25.** Android lint's `NewApi` check, run on every module with `minSdk` lowered to 23 in
-a scratch build (2026-11-15, not committed; `./gradlew :<module>:lintDebug` with `lint { checkOnly += "NewApi" }`).
-Calls that core library desugaring covers (the test APK enables it) are left out. Calls in `pane-api`'s `Platform`
-are behind its own runtime checks, which lint can't see; MainActivity's API 28–30 window calls likely go through
-`Platform` too, unread.
+**The app's code on API 23–25: the porting checklist.** `tools/legacy/api23-report.py` lists every call above
+API 23 in every Android library module: it runs lint's `NewApi` check with minSdk lowered to 23 for that run only
+(`tools/legacy/api23-lint.gradle`, a Gradle init script; no build file changes) and reads lint's reports. Run it
+from the repo root: `python3 tools/legacy/api23-report.py > table.md`. `:engine-gecko` is left out (the current
+engine, API 26; the legacy build lints its sources inside `:engine-gecko-legacy`), and so are the apps.
 
-| Module | Calls above API 23 (level) | What it means |
+CI runs it on every PR that touches Android code (`api23` in `pr.yml`) against `tools/legacy/api23-baseline.txt`,
+and fails on a call above API 23 that the baseline doesn't list. Desugared calls never fail it: the legacy build
+enables core library desugaring. Lint can't see a `Platform` check, so a call behind one stays in lint's findings
+and in the baseline; remove a line only when lint stops reporting the call (the call is gone, or behind an
+`SDK_INT` check lint understands). A lint detector that fails (`LintError`) fails the report too. Generated
+sources are checked: `:engine-gecko-legacy` compiles the shared `GeckoEngine.kt` from `build/generated`.
+
+The run of 2026-11-16 (main at 21196149): 111 calls, 46 of them desugared, so **65 to port**:
+
+| Module | Calls above API 23 | Of them desugared |
 |---|---|---|
-| core | `registerDefaultNetworkCallback` (24) in `WifiSetupStatus`, `ImprovController`, `UpdateManager`; `NotificationChannel`, `startForegroundService` (26) in `KioskService`; `LocaleList` (24) in `SystemLocale`; `Font.Builder` (29) in `ui/Inter`; `HashMap.putIfAbsent` (24) in `Http`, `OAuth`; `PackageInfo.signingInfo`, `getLongVersionCode` (28), `SessionParams.setRequireUserAction` (31) in `UpdateManager`; `ACTION_SET_PROGRESS` (24) in `GlassSlider`; window insets (28, 30) and `Process.getStartElapsedRealtime` (24) in `MainActivity` | The app crashes at start (verified, step 9). Each needs a `Platform` query with a fallback before the app runs on Android 6–7 |
-| pane-api | `Platform` only (29, 30, 34): behind runtime checks | Nothing to do |
-| `assist` (+ `libs/voice`) | None | Native; should run where the hardware is (`MICROPHONE`, `SPEAKER`). Untested |
-| `bluetooth-proxy` (+ its lib) | None | Same (`BLUETOOTH_LE`). Untested |
-| `camera` | `ConcurrentHashMap.KeySetView.clear` (24) in `OnvifServer` | One call to replace. Its RTSP and ONVIF servers are native, not in the page, so the lockdown doesn't touch them |
-| `diagnostics` | `Process.getStartElapsedRealtime` (24) | One call behind a `Platform` query; its content-process count already knows `:tab<n>` (#346) |
-| `notifications` | None | Opens HA views in the page: same origin, allowed |
-| `sendspin` (+ `libs/sendspin`) | None after desugaring (5 calls desugared) | Native audio. Untested |
-| `timers` | None | Untested |
-| `zigbee-thread` (radio), `wall-base` | `Process.waitFor(timeout)` (26), autofill (26) | S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered elsewhere |
-| `esphome-api-android`, `improv` | None | — |
+| `:esphome-api-android` | 0 | 0 |
+| `:improv` | 0 | 0 |
+| `:bluetooth-proxy` | 0 | 0 |
+| `:sendspin` | 0 | 0 |
+| `:voice` | 0 | 0 |
+| `:glassworks-pane-api` | 9 | 0 |
+| `:glassworks-core` | 84 | 37 |
+| `:engine-gecko-legacy` | 0 | 0 |
+| `:pane-diagnostics` | 1 | 0 |
+| `:pane-bluetooth-proxy` | 0 | 0 |
+| `:pane-camera` | 6 | 4 |
+| `:pane-notifications` | 0 | 0 |
+| `:pane-assist` | 0 | 0 |
+| `:pane-timers` | 0 | 0 |
+| `:pane-sendspin` | 5 | 5 |
+| `:aqara-s1-plus-wall-base` | 3 | 0 |
+| `:pane-zigbee-thread` | 3 | 0 |
+
+Lint can't see a `Platform` check (`Platform.hasX` is a property, not an `SDK_INT` comparison), so many of these
+are already guarded. Read at each call site (2026-11-16), the 65 split like this:
+
+| Where | Calls (level) | State |
+|---|---|---|
+| core: `KioskService` | `NotificationChannel`, `Notification.Builder(context, channel)` (26); `startForegroundService` (26) | Guarded: `Platform.hasNotificationChannels`, `hasForegroundServiceStart` |
+| core: `ui/Inter` | `Font.Builder`, `FontFamily.Builder`, `Typeface.CustomFallbackBuilder` (29) | Guarded: `Platform.hasFontBuilder`; below it the system font |
+| core: `MainActivity` | window insets and cutout (28, 30) | Guarded: `Platform.hasWindowInsetsController`, `hasDisplayCutoutMode` |
+| core: `update/UpdateManager` | `signingInfo`, `getLongVersionCode` (28); `setRequireUserAction` (31) | Guarded: `Platform.hasSigningInfo`, `hasLongVersionCode`, `canInstallWithoutUserAction` |
+| core: `frame/GenericAndroid` | `canRequestPackageInstalls` (26) | Guarded: `Platform.canInstallWithoutUserAction` |
+| pane-api: `platform/Platform` | 9 calls (26–34) | Guarded: `Platform`'s own queries |
+| core: `setup/WifiSetupStatus`, `improv/ImprovController` | `registerDefaultNetworkCallback` (24) | **Open.** The first crash on API 23 (step 9) |
+| core: `SystemLocale` | `Configuration.getLocales`/`setLocales`, `LocaleList` (24) | **Open.** Inside a `try`, but a missing method is an `Error`, which it doesn't catch |
+| core: `ui/GlassSlider` | `AccessibilityAction.ACTION_SET_PROGRESS` (24) | **Open** |
+| core: `web/Http`, `auth/OAuth` | `HashMap.putIfAbsent` (24) | **Open** (desugaring doesn't cover it) |
+| `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size` (24) | **Open** |
+| `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | **Open** |
+| core: `MainActivity` | `Process.getStartElapsedRealtime` (24) | **Open**; waits for #364/#332, which own the file |
+| core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | **Open**; waits for #365, which owns the file |
+| `pane-zigbee-thread`, `aqara-s1-plus-wall-base` | `Process.waitFor(timeout)`, autofill (26) | Open, but S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered on a legacy device |
+| The libraries, `pane-assist`, `-bluetooth-proxy`, `-notifications`, `-timers`, `-sendspin`, `engine-gecko-legacy` | None (`pane-sendspin`'s five are desugared) | Ready as far as API levels go; untested on a device |
+
+So the app's own start on API 23 needs the open calls in core, the camera and diagnostics fixed (#198 Phase A),
+then `MainActivity`'s and `UpdateManager`'s two (after #364/#365).
+
+<details><summary>The full list (111 calls)</summary>
+
+| Module | File | Line | Call | API | Desugared |
+|---|---|---|---|---|---|
+| `:aqara-s1-plus-wall-base` | `sh/edm/s1kiosk/base/LocalServiceLink.kt` | 126 | `java.lang.Process#waitFor` | 26 |  |
+| `:aqara-s1-plus-wall-base` | `sh/edm/s1kiosk/base/UartBaseLink.kt` | 71 | `java.lang.Process#waitFor` | 26 |  |
+| `:aqara-s1-plus-wall-base` | `sh/edm/s1kiosk/frame/AqaraCloud.kt` | 35 | `java.lang.Process#waitFor` | 26 |  |
+| `:glassworks-core` | `dev/glassworks/frame/GenericAndroid.kt` | 63 | `android.content.pm.PackageManager#canRequestPackageInstalls` | 26 |  |
+| `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 147 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 147 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 147 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 158 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 158 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 158 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 71 | `java.util.Collection#removeIf` | 24 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 75 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 75 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 75 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 81 | `java.util.Collection#removeIf` | 24 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 481 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 481 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/ManageServer.kt` | 481 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 181 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 181 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 181 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 186 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 186 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/manage/Sessions.kt` | 186 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/secrets/SecretPrefs.kt` | 40 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 62 | `java.util.Base64#getEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 62 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 70 | `java.util.Base64#getDecoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 70 | `java.util.Base64.Decoder#decode` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64#getDecoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64.Decoder#decode` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/web/Http.kt` | 100 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:glassworks-core` | `dev/glassworks/web/Http.kt` | 282 | `java.util.HashMap#putIfAbsent` | 24 |  |
+| `:glassworks-core` | `dev/glassworks/web/Http.kt` | 293 | `java.util.HashMap#putIfAbsent` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 141 | `android.app.NotificationManager#createNotificationChannel` | 26 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 142 | `android.app.NotificationChannel()` | 26 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 143 | `android.app.NotificationChannel#setShowBadge` | 26 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 156 | `android.app.Notification.Builder()` | 26 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 183 | `android.content.Context#startForegroundService` | 26 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 175 | `android.view.WindowManager.LayoutParams#layoutInDisplayCutoutMode` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 175 | `android.view.WindowManager.LayoutParams#layoutInDisplayCutoutMode` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 330 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 727 | `android.view.Window#setDecorFitsSystemWindows` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 728 | `android.view.Window#getInsetsController` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.WindowInsets.Type#navigationBars` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.WindowInsets.Type#statusBars` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.WindowInsetsController#hide` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 730 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 730 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.content.res.Configuration#getLocales` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.content.res.Configuration#getLocales` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.os.LocaleList#get` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.os.LocaleList#get` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.os.LocaleList#size` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 33 | `android.content.res.Configuration#setLocales` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 33 | `android.os.LocaleList()` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 86 | `java.util.HashMap#putIfAbsent` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 105 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 105 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 105 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 110 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 110 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 111 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/improv/ImprovController.kt` | 500 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/setup/WifiSetupStatus.kt` | 72 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/GlassSlider.kt` | 127 | `android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction#ACTION_SET_PROGRESS` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder#setSlant` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder#setWeight` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder()` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 58 | `android.graphics.fonts.Font.Builder#build` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 58 | `android.graphics.fonts.Font.Builder#setFontVariationSettings` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 59 | `android.graphics.Typeface.CustomFallbackBuilder()` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 59 | `android.graphics.fonts.FontFamily.Builder#build` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 59 | `android.graphics.fonts.FontFamily.Builder()` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 60 | `android.graphics.Typeface.CustomFallbackBuilder#setSystemFallback` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 61 | `android.graphics.Typeface.CustomFallbackBuilder#setStyle` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 61 | `android.graphics.fonts.FontStyle()` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 62 | `android.graphics.Typeface.CustomFallbackBuilder#build` | 29 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 122 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 304 | `java.net.URLConnection#getContentLengthLong` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 359 | `android.content.pm.PackageInfo#signingInfo` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 359 | `android.content.pm.SigningInfo#getApkContentsSigners` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 364 | `android.content.pm.PackageInfo#getLongVersionCode` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 493 | `android.content.pm.PackageInstaller.SessionParams#setRequireUserAction` | 31 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 108 | `android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode` | 34 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 117 | `android.content.Context#registerReceiver` | 26 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 127 | `android.app.Service#startForeground` | 29 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 138 | `android.app.ActivityManager#getHistoricalProcessExitReasons` | 30 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 139 | `android.app.ApplicationExitInfo#getProcessName` | 30 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 139 | `android.app.ApplicationExitInfo#getReason` | 30 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 149 | `TransportInfo` | 29 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 149 | `android.net.NetworkCapabilities#getTransportInfo` | 29 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 154 | `android.content.Intent#getParcelableExtra` | 33 |  |
+| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 116 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 157 | `java.util.concurrent.ConcurrentHashMap.KeySetView#clear` | 24 |  |
+| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 359 | `java.util.Collection#removeIf` | 24 | yes |
+| `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 58 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 166 | `java.util.concurrent.ConcurrentHashMap.KeySetView#size` | 24 |  |
+| `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 374 | `java.util.concurrent.ConcurrentHashMap.KeySetView#remove` | 24 | yes |
+| `:pane-diagnostics` | `dev/glassworks/diagnostics/AndroidProbe.kt` | 65 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
+| `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 81 | `java.util.Base64#getUrlDecoder` | 26 | yes |
+| `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 81 | `java.util.Base64.Decoder#decode` | 26 | yes |
+| `:pane-zigbee-thread` | `sh/edm/s1kiosk/radio/RadioController.kt` | 28 | `java.lang.Process#waitFor` | 26 |  |
+| `:pane-zigbee-thread` | `sh/edm/s1kiosk/radio/ui/RadioSectionView.kt` | 223 | `android.view.View#setImportantForAutofill` | 26 |  |
+| `:pane-zigbee-thread` | `sh/edm/s1kiosk/radio/ui/RadioSectionView.kt` | 223 | `android.view.View#setImportantForAutofill` | 26 |  |
+
+</details>
 
 **`Pane.requires` stays honest.** Every pane's `requires` names hardware only, and no pane needs the page to reach
 another origin, so the legacy engine needs no new capability: a pane is offered on a legacy device by the same
