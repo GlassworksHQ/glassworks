@@ -80,6 +80,15 @@ class SetupHotspotTest {
     }
 
     @Test
+    fun `a connection nobody reported still stops it within 30 seconds`() {
+        setup.start(); at(3 * min); up()
+        connected = true // no refresh(): a network callback that never came
+        at(3 * min + 30_000)
+        assertFalse(hotspot.on)
+        assertEquals(View.Off(Stop.CONNECTED, null), setup.view)
+    }
+
+    @Test
     fun `connecting stops it`() {
         setup.start(); at(3 * min); up()
         connected = true

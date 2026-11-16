@@ -108,6 +108,9 @@ no cable and no Bluetooth (an iPhone too).
 4. **When it closes.** Once Wi-Fi is set, after 15 minutes, or with **Close it**, and when setup is done. Then
    the panel tries your Wi-Fi again for 3 minutes, and opens its own again if that still fails. **Close it**
    keeps it closed until the next Wi-Fi is set.
+   One limit: Wi-Fi details sent while the panel is still on its old network (over the LAN, Bluetooth or USB)
+   keep its own Wi-Fi ready for 3 minutes only. A panel that is still on the old network after that, and fails
+   to join the new one later, doesn't open its own Wi-Fi by itself: restart it, or press **Set up from a phone**.
 
 | | |
 |---|---|

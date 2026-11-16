@@ -28,6 +28,11 @@ class SetupHotspot(
     private val log: (String) -> Unit = {},
     graceMs: Long = 3 * 60_000L,
     maxOnMs: Long = 15 * 60_000L,
+    /**
+     * While on, [connected] is read again at least this often. The caller calls [refresh] on every network change;
+     * this is rule 2's net if a change goes unheard (a callback Android didn't send).
+     */
+    private val checkMs: Long = 30_000L,
 ) {
     /** What the setup screen shows. */
     sealed interface View {
@@ -109,7 +114,8 @@ class SetupHotspot(
         if (d.on && run == null) startHotspot()
         else if (!d.on && run != null) stopHotspot(policy.lastStop?.name?.lowercase() ?: "off")
         cancelWake?.invoke()
-        cancelWake = d.wakeInMs?.let { schedule(it.coerceAtLeast(0)) { cancelWake = null; refresh() } }
+        val wake = if (d.on) minOf(d.wakeInMs ?: checkMs, checkMs) else d.wakeInMs
+        cancelWake = wake?.let { schedule(it.coerceAtLeast(0)) { cancelWake = null; refresh() } }
         onChange()
     }
 

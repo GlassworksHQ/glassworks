@@ -106,7 +106,9 @@ class SetupHotspotPolicy(
     /**
      * Wi-Fi details arrived (the setup page, Bluetooth, USB): off, so the panel can join, and armed again. A
      * connection in the next [graceMs] (the old network, before the panel leaves it) keeps it armed: if the new
-     * network then fails, the hotspot comes back [graceMs] after the panel was last connected.
+     * network then fails, the hotspot comes back [graceMs] after the panel was last connected. A connection that
+     * outlasts the hold disarms it as usual: a join that starts only after [graceMs] and fails gets no hotspot until
+     * the next start or an [ask] (docs/manage.md says so).
      */
     fun configured(now: Long) {
         if (state is State.On) lastStop = Stop.CONFIGURED
