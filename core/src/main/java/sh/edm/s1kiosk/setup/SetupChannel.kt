@@ -198,7 +198,8 @@ class SetupChannel(
             ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name is 1 to 32 bytes long (an accented letter takes 2)."
             !validPassword(password) -> "A Wi-Fi password is at most 63 bytes long (an accented letter takes 2), or a 64-digit hex key."
             backend.state().online -> ON_A_NETWORK
-            // Before the reply, not after: the page hears it instead of "Joining…" (S1 panel run on e7d2d49d).
+            // A refusal in the reply, not a join after it: the page swaps its brief "Joining…" for this as soon as the
+            // reply comes (S1 panel run on e7d2d49d).
             backend.wifiRadioLocked() -> WIFI_OFF
             else -> null
         }

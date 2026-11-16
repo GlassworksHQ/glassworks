@@ -12,8 +12,11 @@ below as the release notes.
   starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
   its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
   send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
-  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. On Android 13 and
-  newer the panel asks for Android's *Nearby devices* permission first, and says why.
+  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. Android may close it
+  sooner when nobody joins (10 minutes on the S1); it opens again 3 minutes later if no Wi-Fi works. With the
+  panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
+  so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
+  permission first, and says why.
 - **Every device says what kind it is, and the Pixel Tablet is listed.** On glassworks.dev and in Kiln's
   device list, each card now says whether it is a full frame with its own code (the S1), a device frame
   that runs the generic app with its own settings (the Mirror, generic Android), or a tested device that

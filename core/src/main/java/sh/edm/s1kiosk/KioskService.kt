@@ -112,6 +112,9 @@ class KioskService : Service() {
             blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
             // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.
             beforeStart = { start ->
+                // Where the app may turn the radio on (Android 9 and older, the device owner), it does: an off radio
+                // couldn't scan nor join. Where it may not, the hotspot is blocked before it gets here.
+                if (!WifiRadio.ensureOn(this)) Log.w(HOTSPOT_TAG, "Wi-Fi is off, and it didn't come on")
                 val asked = ImprovController.scanFromInstaller { nets ->
                     glassworks.hotspotScan = nets.map { sh.edm.s1kiosk.setup.WifiNetwork(it.ssid, it.rssi, secure = it.auth != "NO") }
                     Log.i(HOTSPOT_TAG, "scanned before the hotspot: ${nets.size} networks")
