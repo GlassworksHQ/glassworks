@@ -66,11 +66,14 @@ class WebSocketStreams(private val raw: InputStream, private val rawOut: OutputS
         runCatching { send(OP_CLOSE, byteArrayOf((code shr 8).toByte(), code.toByte())) }
     }
 
-    /** Closes with [code] and drops the connection from another thread: a read waiting on the socket ends at once. */
-    fun abort(code: Int = 1000) {
-        close(code)
-        runCatching { raw.close() }
+    /**
+     * Drops the connection from another thread, with no close frame: a read or a write blocked on the socket ends at
+     * once. It never takes the write lock, which a write to a browser that stopped reading can hold.
+     */
+    fun abort() {
+        closed = true
         runCatching { rawOut.close() }
+        runCatching { raw.close() }
     }
 
     /** The next data frame's payload, answering control frames on the way; null once the connection is over. */
