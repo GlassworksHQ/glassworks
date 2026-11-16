@@ -52,9 +52,13 @@ class GenericApp : Application(), GlassworksApp {
         internal fun runtime(frame: Frame, build: AppBuild): GlassworksRuntime =
             GlassworksRuntime(frame, build, engine(build), GenericParts(), releases = releaseLine(BuildConfig.APPLICATION_ID))
 
-        /** The releases this build updates from: the legacy build's own line (#198), else the generic app's. */
+        /**
+         * The releases this build updates from: the legacy build's own line (#198), its debug build's
+         * (`applicationIdSuffix ".debug"`) included, else the generic app's. A debug legacy build on the generic
+         * line would be offered releases that need Android 8.
+         */
         internal fun releaseLine(applicationId: String): ReleaseLine =
-            if (applicationId == LEGACY_APPLICATION_ID) ReleaseLine.GENERIC_ANDROID_LEGACY else ReleaseLine.GENERIC_ANDROID
+            if (applicationId.removeSuffix(".debug") == LEGACY_APPLICATION_ID) ReleaseLine.GENERIC_ANDROID_LEGACY else ReleaseLine.GENERIC_ANDROID
 
         /**
          * What the engine starts with, from the settings: read once, at the first open. The dashboard is the

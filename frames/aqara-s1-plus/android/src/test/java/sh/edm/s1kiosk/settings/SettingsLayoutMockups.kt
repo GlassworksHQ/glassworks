@@ -119,13 +119,29 @@ class SettingsLayoutMockups {
     @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
     fun tablet() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        aPixelTablet()
+        shots("layout-tablet", 1280, 800) {
+            menu(GenericAndroid(app), "Pixel Tablet", listOf(panes.voice(), panes.music(), panes.timeZone()), setOf("diagnostics"), "2.4 of 8 GB")
+        }
+    }
+
+    /** Its Device page below Android 12: updates install without a tap only as device owner or as a system app (#198). */
+    @Test
+    @Config(sdk = [30], qualifiers = "w1280dp-h800dp-land-mdpi")
+    fun tabletOnAndroid11() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        aPixelTablet()
+        val o = menu(GenericAndroid(app), "Pixel Tablet", listOf(panes.voice()), setOf("diagnostics"), "2.4 of 8 GB")
+        o.previewSection("device")
+        Mockup.idle()
+        Mockup.save("layout-tablet-android11-08-device", o, 1280, 800)
+    }
+
+    private fun aPixelTablet() {
         ShadowBuild.setManufacturer("Google")
         ShadowBuild.setModel("Pixel Tablet")
         for (f in listOf(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_BLUETOOTH_LE, PackageManager.FEATURE_CAMERA_ANY)) {
             shadowOf(app.packageManager).setSystemFeature(f, true)
-        }
-        shots("layout-tablet", 1280, 800) {
-            menu(GenericAndroid(app), "Pixel Tablet", listOf(panes.voice(), panes.music(), panes.timeZone()), setOf("diagnostics"), "2.4 of 8 GB")
         }
     }
 }

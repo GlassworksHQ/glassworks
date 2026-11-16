@@ -161,7 +161,9 @@ class GenericAppTest {
     @Test fun theLegacyBuildUpdatesFromItsOwnLine() {
         assertSame(ReleaseLine.GENERIC_ANDROID_LEGACY, GenericApp.releaseLine("dev.glassworks.generic_android.legacy"))
         assertSame(ReleaseLine.GENERIC_ANDROID, GenericApp.releaseLine(BuildConfig.APPLICATION_ID))
-        assertSame("only the exact id", ReleaseLine.GENERIC_ANDROID, GenericApp.releaseLine("dev.glassworks.generic_android.legacy.debug"))
+        assertSame("its debug build too", ReleaseLine.GENERIC_ANDROID_LEGACY, GenericApp.releaseLine("dev.glassworks.generic_android.legacy.debug"))
+        assertSame(ReleaseLine.GENERIC_ANDROID, GenericApp.releaseLine("dev.glassworks.generic_android.debug"))
+        assertSame("only that id", ReleaseLine.GENERIC_ANDROID, GenericApp.releaseLine("dev.glassworks.generic_android.legacy.other"))
     }
 
     /** #198: the legacy engine stays on the dashboard's origin, which it takes once, at the first open. */

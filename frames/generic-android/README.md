@@ -78,8 +78,29 @@ first (`adb shell am force-stop <id>`).
 Android 6 and 7 (API 23-25) get a legacy build of this app (#198): GeckoView 144, locked to the panel's Home
 Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a separate app,
 `dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
-updates the other. The same APK serves older tablets and the lululemon Mirror, where Kiln flashes it into
-`/system/priv-app`. Status: the code is in; the build itself (its Gradle variant) and its release come next.
+updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln will flash it into
+`/system/priv-app` once its Mirror recipe takes this id (today it takes `sh.edm.s1kiosk`).
+
+It is the `legacy` build type of [`android/`](android): the same sources, manifest and key as the release build,
+with its own id, GeckoView 144 (`:engine-gecko-legacy`), minSdk 23 and core library desugaring. A build type, not
+a product flavor, so the release build keeps its tasks (a flavor would rename them and add `BuildConfig.FLAVOR`).
+Desugaring is the module's, though (AGP has no per-variant switch), so it changes the release APK too: no desugared
+library code goes in at minSdk 26, but D8 adds a small dex of inert API stubs, and the APK isn't byte-identical to
+one built without it. Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
+
+```sh
+./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
+# → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
+```
+
+Status: it builds (CI builds and checks it on every change, without publishing it), and CI runs the core's conformance
+test on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no release. **Don't install it on Android 6 or 7
+yet:** `MainActivity` still makes API 24+ calls, so it would crash at start, and as the home app at every boot. Two
+things wait: the app's own start on Android 6 (#198 Phase B), and Kiln's Mirror recipe taking this id.
+Neither build can go on Google Play as it is: each updates itself from the repo's releases, and Play updates
+the apps it installs itself. A Play build would need a variant without the self-updater (#403). Play wouldn't grant
+the system permissions both builds ask for (`INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`, for the Mirror)
+either.
 Why one legacy app and not a Mirror app of its own: [The legacy build's id](#the-legacy-builds-id).
 
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
@@ -97,7 +118,9 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet. To try a
 branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
-([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
+([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)). Not the legacy build's yet: its APK
+carries `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception), which waits for the maintainer's call, and it
+can't run on Android 6-7 before #198's Phase B.
 
 ## Updates
 
@@ -113,10 +136,11 @@ repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
 
 So no app ever offers itself another's APK.
 
-The check reads the repo's 30 newest releases (`Releases.LIST_URL`, `per_page=30`), all apps and libraries
-together, and takes the newest of its own among them. So if more than 30 releases of other parts come
-out after this app's newest one, the app sees no update until its next release: every app should release
-at least once in any 30 of the repo's releases. One page keeps each check (after the app starts, then every 24 hours) to one request
+The check reads the repo's 100 newest releases (`Releases.LIST_URL`, `per_page=100`, GitHub's largest page),
+all apps and libraries together, and takes the newest of its own among them. So if more than 100 releases of
+other parts come out after this app's newest one, the app sees no update until its next release: every app
+should release at least once in any 100 of the repo's releases. A full page is about 1 MB (7 kB a release on
+2026-11-16); the check reads up to 4 MB. One page keeps each check (after the app starts, then every 24 hours) to one request
 against GitHub's limit of 60 an hour without a token. The release workflow doesn't build the generic app
 yet, and there has been no release of it. Its first release needs its key ([Signing](#signing)) and
 `release.yml` steps for the names above.

@@ -482,7 +482,7 @@ usual `--ez camera_enabled true` on the main activity.
   a blank version after an offline start). After a check: `latest_version`, `release_url`, and
   `release_summary` (the release notes, cut to HA's 255 characters). A status line goes on top of
   the summary when there is one, e.g. a failed install.
-- **Check:** `GET https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=30`, then
+- **Check:** `GET https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=100` (read up to 4 MB), then
   the newest release whose tag is `v<version>` or `aqara-s1-plus-v<version>`. Other frames' and
   libraries' releases in the same repo are skipped; a refused newer release is reported, and the
   newest acceptable one is still offered.
@@ -514,8 +514,9 @@ usual `--ez camera_enabled true` on the main activity.
      new version reports the result in *Update status*.
   5. Without the service (generic Android, or an S1 boot image from before it:
      `sys.s1kiosk.update.version` unset), a PackageInstaller session instead.
-     - Below Android 12, Android asks for confirmation on the screen, unless the app is device owner.
-       The summary says so while an update waits.
+     - Below Android 12, Android asks for confirmation on the screen, unless the app is device owner
+       or a privileged system app holding `INSTALL_PACKAGES` (the Mirror, which Kiln flashes into
+       `/system/priv-app`; #198). The summary says so while an update waits.
      - On Android 12+ the session asks for no user action (`setRequireUserAction(USER_ACTION_NOT_REQUIRED)`,
        with the `UPDATE_PACKAGES_WITHOUT_USER_ACTION` permission), and the status is "Installing
        1.2.3 without a tap". Android can still ask: when "Install unknown apps" isn't allowed, or

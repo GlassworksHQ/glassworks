@@ -106,6 +106,7 @@ dependencies {
     implementation(project(":improv"))
     implementation(project(":bluetooth-proxy"))
 
-    // Build time only (GPL-2.0 with the Classpath exception, like the JDK it backports): rewrites java.time calls.
+    // GPL-2.0 with the Classpath exception, like the JDK it backports: the classes the app calls (java.time and
+    // friends) are compiled into the APK. This debug APK is never published; the legacy release is the generic app's.
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

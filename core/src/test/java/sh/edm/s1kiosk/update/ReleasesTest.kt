@@ -257,6 +257,21 @@ class ReleasesTest {
         assertNull(ReleaseLine.S1_KIOSK.tagVersion("generic-android-legacy-v1.2.3"))
     }
 
+    /** Its id is the product in the update check's User-Agent (glassworks-generic-android-legacy/1.2.3). */
+    @Test fun theLegacyLinesIdIsItsOwn() {
+        assertEquals("glassworks-generic-android-legacy", ReleaseLine.GENERIC_ANDROID_LEGACY.id)
+        assertEquals("glassworks-generic-android", ReleaseLine.GENERIC_ANDROID.id)
+    }
+
+    /**
+     * One page holds three app lines and the libraries now: GitHub's largest (100). At 7 kB a release on average
+     * and 10 kB at most (2026-11-16), a full page is about 1 MB, inside the check's cap with room to spare.
+     */
+    @Test fun oneCheckReadsAHundredReleasesWithinItsCap() {
+        assertTrue(Releases.LIST_URL, Releases.LIST_URL.endsWith("?per_page=100"))
+        assertTrue(UpdateManager.MAX_JSON_BYTES >= 100 * 10 * 1024 * 3)
+    }
+
     @Test fun theLegacyBuildTakesItsOwnApkAndNeitherTakesTheOthers() {
         val o = Releases.offer(Releases.parse(legacyRelease().toString()), listOf("arm64-v8a", "armeabi-v7a", "armeabi"), ReleaseLine.GENERIC_ANDROID_LEGACY)
         assertEquals("glassworks-generic-android-legacy-arm64-v8a-1.3.0.apk", o.apk.name)

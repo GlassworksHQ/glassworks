@@ -58,7 +58,8 @@ fun Test.readsRepoFiles(repo: File) {
     val roots = listOf("libs", "core", "pane-api", "engines", "panes", "frames") // RepoFiles.SEARCH, by top folder
     inputs.files(roots.map { dir ->
         fileTree(File(repo, dir)) {
-            include("**/src/main/**", "**/build.gradle.kts", "**/blueprints/*.yaml") // the panes' blueprints (BlueprintCatalogTest)
+            // The panes' blueprints (BlueprintCatalogTest); the generic app's legacy manifest (LegacyBuildTest).
+            include("**/src/main/**", "**/src/legacy/**", "**/build.gradle.kts", "**/blueprints/*.yaml")
             exclude("**/build/**", "**/node_modules/**", "**/.gradle/**")
         }
     }).withPropertyName("repoModules").withPathSensitivity(PathSensitivity.RELATIVE)

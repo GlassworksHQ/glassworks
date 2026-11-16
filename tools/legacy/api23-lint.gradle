@@ -1,6 +1,6 @@
 // The API 23 report's Gradle init script (#198, MIT). It changes no build file: for this run only, every Android
-// library module builds at minSdk 23 and runs only lint's NewApi check, so lint lists each call that needs more than
-// Android 6. tools/legacy/api23-report.py runs it; by hand:
+// library module builds at minSdk 23, and it and the generic app's legacy build run only lint's NewApi check, so lint
+// lists each call that needs more than Android 6. tools/legacy/api23-report.py runs it; by hand:
 //
 //   ./gradlew --init-script tools/legacy/api23-lint.gradle :glassworks-core:lintDebug
 //   → core/build/reports/lint-results-debug.xml
@@ -8,21 +8,32 @@
 // Touches only build outputs. :engine-gecko is left out: it is the current engine (GeckoView 159, API 26), and the
 // legacy build compiles its sources in :engine-gecko-legacy, which this script covers.
 
+// The apps whose legacy build the report lints (api23-report.py's APPS): their `legacy` build type has minSdk 23 of
+// its own, so only lint's settings change, and lint reads only the app's own sources.
+def legacyApps = [':generic-android']
+
+def newApiOnly(ext) {
+    ext.lint.checkOnly.clear()
+    ext.lint.checkOnly.add('NewApi')
+    ext.lint.abortOnError = false
+    ext.lint.xmlReport = true
+    ext.lint.checkDependencies = false
+    // :engine-gecko-legacy compiles the shared GeckoEngine.kt from build/generated: lint skips
+    // generated sources unless told to, and that file is the engine's main code.
+    ext.lint.checkGeneratedSources = true
+}
+
 allprojects { p ->
     if (p.path == ':engine-gecko') return
     p.plugins.withId('com.android.library') {
         p.androidComponents {
             finalizeDsl { ext ->
                 ext.defaultConfig.minSdk = 23
-                ext.lint.checkOnly.clear()
-                ext.lint.checkOnly.add('NewApi')
-                ext.lint.abortOnError = false
-                ext.lint.xmlReport = true
-                ext.lint.checkDependencies = false
-                // :engine-gecko-legacy compiles the shared GeckoEngine.kt from build/generated: lint skips
-                // generated sources unless told to, and that file is the engine's main code.
-                ext.lint.checkGeneratedSources = true
+                newApiOnly(ext)
             }
         }
+    }
+    if (p.path in legacyApps) p.plugins.withId('com.android.application') {
+        p.androidComponents { finalizeDsl { ext -> newApiOnly(ext) } }
     }
 }

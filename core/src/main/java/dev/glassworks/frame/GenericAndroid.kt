@@ -69,7 +69,7 @@ class GenericAndroid(
             deviceOwner(context) -> "Available: the app is the device owner"
             // So does a privileged system app (INSTALL_PACKAGES), which Kiln makes of the legacy build on the Mirror.
             InstallRights.installsPackages(context) -> "Available: the app is a system app with the install permission"
-            !Platform.canInstallWithoutUserAction -> "Not on this Android: it needs Android 12 or newer, or the app as device owner"
+            !Platform.canInstallWithoutUserAction -> "Not on this Android: it needs Android 12 or newer, the app as device owner, or the app as a system app"
             !runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false) -> ALLOW_INSTALLS
             else -> "Available"
         }

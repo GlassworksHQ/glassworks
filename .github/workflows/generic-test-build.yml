@@ -8,6 +8,9 @@
 #
 # What it is:
 #   - The release variant, applicationId dev.glassworks.generic_android. It never installs over S1 Kiosk.
+#   - Not the legacy build (#198): its APK carries desugar_jdk_libs code (GPL-2.0 with the Classpath exception),
+#     which waits for the maintainer's call on the no-GPL rule, and it can't run on Android 6-7 before #198's Phase B.
+#     pr.yml's size-generic builds and checks it without publishing it.
 #   - Signed with a key made for this run only: the app has no release key yet (frames/generic-android/README.md,
 #     "Signing"). Two APKs of one run update each other; an APK of another run doesn't, so
 #     uninstall first (that wipes the app's settings).
@@ -92,6 +95,10 @@ jobs:
             badging="$("$aapt2" dump badging "$apk")"
             grep -q "^package: name='dev.glassworks.generic_android'" <<< "$badging" || { echo "::error::$apk is not dev.glassworks.generic_android"; exit 1; }
             grep -q "^minSdkVersion:'26'" <<< "$badging" || { echo "::error::$apk: minSdk is not 26"; exit 1; }
+            # A privileged system app's permissions, from the first build on (the Mirror, #198).
+            for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
+              grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::$apk doesn't ask for $perm"; exit 1; }
+            done
             # versionCode = major*10000 + minor*100 + patch, so 0.1.1 installs over 0.1.0 in place.
             IFS=. read -r major minor patch <<< "$(sed -E 's/^glassworks-generic-test-([0-9.]+)-.*/\1/' <<< "$apk")"
             grep -q "versionCode='$((major * 10000 + minor * 100 + patch))'" <<< "$badging" || { echo "::error::$apk: unexpected versionCode"; exit 1; }

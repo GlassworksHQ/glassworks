@@ -1,0 +1,25 @@
+// The core's conformance test on Android 6 (#198, MIT): a Gradle init script for core-emulators.yml's API 23 job.
+// It changes no build file: for this run only, every Android library builds at minSdk 23, as the legacy build runs
+// them (frames/generic-android/android/src/legacy/AndroidManifest.xml overrides their floor), and the core's test
+// APK gets core library desugaring, as the legacy build has it (java.time, Base64).
+//
+//   ./gradlew --init-script tools/legacy/api23-emulator.gradle :glassworks-core:connectedDebugAndroidTest
+//
+// Touches only build outputs. :engine-gecko is left out: the current engine (GeckoView 159, API 26), which the
+// conformance test doesn't use (its engine is a fake).
+
+allprojects { p ->
+    if (p.path == ':engine-gecko') return
+    p.plugins.withId('com.android.library') {
+        p.androidComponents {
+            finalizeDsl { ext ->
+                ext.defaultConfig.minSdk = 23
+                if (p.path == ':glassworks-core') ext.compileOptions.coreLibraryDesugaringEnabled = true
+            }
+        }
+        if (p.path == ':glassworks-core') {
+            // GPL-2.0 with the Classpath exception, as in the legacy build (THIRD-PARTY-NOTICES.md).
+            p.dependencies.add('coreLibraryDesugaring', 'com.android.tools:desugar_jdk_libs:2.1.5')
+        }
+    }
+}

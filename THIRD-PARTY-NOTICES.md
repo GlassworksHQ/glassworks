@@ -55,6 +55,43 @@ of `:kiosk`, including transitive dependencies. The versions are the ones Gradle
   APK (`about:license`, in `assets/omni.ja`). It is also at
   https://hg.mozilla.org/releases/mozilla-release/file/7b34a03a910d0385299f4a9f27aa585a786862d8/toolkit/content/license.html
 
+### The legacy build of Glassworks for generic Android (#198)
+
+`dev.glassworks.generic_android.legacy`, for Android 6 and 7: the `legacy` build type of
+[`frames/generic-android/android`](frames/generic-android/android). Its libraries are the generic app's (all
+listed in this section), with these differences. `checkLegacyThirdPartyNotices` in that build file fails a legacy
+build if one is missing here.
+
+- **GeckoView 144** in place of 159: `org.mozilla.geckoview:geckoview-arm64-v8a:144.0.20251027123126` (the
+  arm64-v8a APK), `org.mozilla.geckoview:geckoview-armeabi-v7a:144.0.20251027123126` (the armeabi-v7a APK), and
+  `org.mozilla.geckoview:geckoview-exoplayer2:144.0.20251027123126`. Licence, copyright, upstream and `about:license`
+  as for GeckoView 159 above. Source: mozilla-release revision `5f480a9ab713ba79e5a14face39aacb038c36f30`,
+  https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30
+- **desugar_jdk_libs** 2.1.5 (`com.android.tools:desugar_jdk_libs:2.1.5`): OpenJDK's `java.time`, `java.util`
+  and other classes for Android versions that lack them (core library desugaring). The build compiles the ones the
+  app calls into the APK's code. Licence: GPL-2.0-only WITH Classpath-exception-2.0 (`LICENSES/GPL-2.0.txt`,
+  `LICENSES/Classpath-exception-2.0.txt`): the exception lets the app link it and keep its own licence.
+  Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
+  (release 2.1.5). The current builds (minSdk 26) set it up too, but none of its classes go into their APKs.
+- **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
+  build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
+  - `androidx.annotation:annotation-experimental:1.5.1`
+  - `androidx.annotation:annotation-jvm:1.9.1`
+  - `androidx.annotation:annotation:1.9.1`
+  - `androidx.collection:collection-jvm:1.5.0`
+  - `androidx.collection:collection:1.5.0`
+  - `androidx.concurrent:concurrent-futures:1.1.0`
+  - `androidx.core:core:1.17.0`
+  - `androidx.lifecycle:lifecycle-common-jvm:2.9.3`
+  - `androidx.lifecycle:lifecycle-common:2.9.3`
+  - `androidx.lifecycle:lifecycle-process:2.9.3`
+  - `androidx.lifecycle:lifecycle-runtime-android:2.9.3`
+  - `androidx.lifecycle:lifecycle-runtime:2.9.3`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1`
+
 ### Libraries the app uses directly
 
 - **TensorFlow Lite** 2.16.1: `org.tensorflow:tensorflow-lite:2.16.1`, `org.tensorflow:tensorflow-lite-api:2.16.1`.
@@ -530,6 +567,8 @@ renders above:
 | U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`tools/fel/uboot/`](https://github.com/GlassworksHQ/glassworks/tree/8b2bf488fed3c7ba8343a32c67c9651066479128/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
+| GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
+| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198) | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
 | GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
 | libstdc++, libgcc_s | GPL-3.0-or-later WITH GCC-exception-3.1 | installer, radio bundle | The Ubuntu GCC cross source packages: `gcc-11-cross` for the static copies in `otbr-agent`/`ot-ctl`, and those named in `sisdk/NOTICE.txt` for `sisdk/lib/`. All are on https://launchpad.net/ubuntu |
