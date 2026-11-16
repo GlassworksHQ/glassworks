@@ -14,7 +14,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.bluetoothproxy.BleScanner
+import dev.glassworks.esphome.bluetoothproxy.BluetoothConnectionEngine
 import dev.glassworks.esphome.bluetoothproxy.BluetoothProxyEngine
+import dev.glassworks.esphome.bluetoothproxy.GattLink
+import dev.glassworks.esphome.bluetoothproxy.GattRadio
 import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 import dev.glassworks.esphome.bluetoothproxy.ScanPower
 import dev.glassworks.esphome.ApiServer
@@ -49,6 +52,8 @@ class BluetoothProxyPaneTest {
                 override fun release() { calls += "release" }
             }
         }
+        var gattRadios = 0
+        override fun newGattRadio(): GattRadio { gattRadios++; return GattRadio { _: Long, _: GattLink.Listener -> null } }
         override fun unavailable() = why
         override fun turnBluetoothOn() = false
         override fun turnLocationOn() = false
@@ -124,6 +129,72 @@ class BluetoothProxyPaneTest {
         assertTrue(engine is BluetoothProxyEngine)
         pane.bind(s)
         assertSame("binding the same server again keeps the engine", engine, s.bluetooth)
+        pane.stop()
+    }
+
+    @Test fun listenOnlyOffersNoConnections() {
+        val pane = BluetoothProxyPane(ctx, Radio(), device)
+        val s = server()
+        pane.bind(s)
+        pane.start()
+        assertNull(s.bluetoothConnections)
+        assertNull(pane.connections())
+        pane.stop()
+    }
+
+    @Test fun listenAndConnectRunsTheConnectionsNextToTheScan() {
+        val pane = BluetoothProxyPane(ctx, Radio(), device, connect = true)
+        val s = server()
+        pane.bind(s)
+        assertNull("off: no connections either", s.bluetoothConnections)
+        pane.start()
+        assertTrue(s.bluetoothConnections is BluetoothConnectionEngine)
+        assertEquals(ProxyConnections(0, 3), pane.connections())
+        pane.stop()
+        assertNull(s.bluetoothConnections)
+        assertNull(pane.connections())
+    }
+
+    @Test fun switchingTheModeWhileOnMakesHomeAssistantRereadTheFlags() {
+        val pane = BluetoothProxyPane(ctx, Radio(), device)
+        val s = server()
+        pane.bind(s)
+        pane.start()
+        val before = rebuilds
+        pane.setConnect(true)
+        assertTrue(s.bluetoothConnections is BluetoothConnectionEngine)
+        assertEquals(before + 1, rebuilds)
+        pane.setConnect(true)
+        assertEquals("the same mode again changes nothing", before + 1, rebuilds)
+        pane.setConnect(false)
+        assertNull(s.bluetoothConnections)
+        assertEquals(before + 2, rebuilds)
+        pane.stop()
+    }
+
+    @Test fun theModeChosenWhileOffAppliesWhenItStarts() {
+        val radio = Radio()
+        val pane = BluetoothProxyPane(ctx, radio, device)
+        val s = server()
+        pane.bind(s)
+        pane.setConnect(true)
+        assertEquals("nothing to reread while off", 0, rebuilds)
+        assertNull(s.bluetoothConnections)
+        pane.start()
+        assertTrue(s.bluetoothConnections is BluetoothConnectionEngine)
+        assertEquals(1, radio.gattRadios)
+        pane.stop()
+    }
+
+    @Test fun aNewServerGetsTheConnectionsAndTheOldOneLosesThem() {
+        val pane = BluetoothProxyPane(ctx, Radio(), device, connect = true)
+        val first = server()
+        pane.bind(first)
+        pane.start()
+        val second = server()
+        pane.bind(second)
+        assertNull(first.bluetoothConnections)
+        assertTrue(second.bluetoothConnections is BluetoothConnectionEngine)
         pane.stop()
     }
 }

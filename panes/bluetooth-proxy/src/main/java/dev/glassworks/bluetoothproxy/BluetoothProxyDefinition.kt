@@ -21,7 +21,7 @@ import java.util.concurrent.ScheduledExecutorService
  * to draw: [page] builds it from this definition. Without one, the page is a line of text.
  */
 class BluetoothProxyDefinition(
-    file: SharedPreferences,
+    private val file: SharedPreferences,
     private val radio: ProxyRadio,
     private val page: ((SettingsItem.NativeHost, BluetoothProxyModel) -> SettingsItem.NativeView)? = null,
 ) : PaneDefinition, BluetoothProxyModel {
@@ -39,7 +39,19 @@ class BluetoothProxyDefinition(
     @Volatile private var live: BluetoothProxyPane? = null
 
     /** The pane for the device's run. [device] is the shell's device thread. */
-    fun pane(ctx: PaneContext, device: ScheduledExecutorService) = BluetoothProxyPane(ctx, radio, device).also { live = it }
+    fun pane(ctx: PaneContext, device: ScheduledExecutorService) =
+        BluetoothProxyPane(ctx, radio, device, connect = BluetoothProxyPrefs(file).connect).also { live = it }
+
+    /** "Listen and connect" (#246): kept, and handed to the running pane. */
+    var connect: Boolean
+        get() = BluetoothProxyPrefs(file).connect
+        set(value) {
+            BluetoothProxyPrefs(file).connect = value
+            live?.setConnect(value)
+        }
+
+    /** The connections in use, or null in listen only or while the proxy isn't running. */
+    fun connections(): ProxyConnections? = live?.connections()
 
     val on: Boolean get() = switch.on
 

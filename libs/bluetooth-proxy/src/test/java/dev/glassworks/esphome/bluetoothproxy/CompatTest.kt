@@ -13,4 +13,9 @@ class CompatTest {
             CompatApi(31).scanPermissions,
         )
     }
+
+    @Test fun connectingNeedsBluetoothConnectOnlyFromAndroid12() {
+        assertEquals(emptyList<String>(), CompatApi(29).connectPermissions)
+        assertEquals(listOf("android.permission.BLUETOOTH_CONNECT"), CompatApi(31).connectPermissions)
+    }
 }

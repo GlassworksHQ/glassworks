@@ -111,10 +111,52 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
 - **Does Android pad the scan record?** The library strips trailing zero padding and keeps whole AD
   structures. If Android 10 pads the advertisement *before* the scan response, the scan response
   would be lost. Compare a known sensor's data on the panel with an ESP32 proxy's. Untested.
-- **GATT connections:** how many the RTL8821CS holds at once, and whether Android 10's hidden
-  attribute handles match ESPHome's. See the active-connections design in #121. Untested.
+- **GATT connections:** how many links the RTL8821CS holds at once, and whether the handles match an
+  ESP32 proxy's. See [GATT connections](#gatt-connections-246) below. Untested.
 - **The scanner's source.** The proxy doesn't send `bluetooth_mac_address` (field 18), so HA keys
   the scanner on the panel's ESPHome MAC (the Wi-Fi MAC, or one derived from the serial). Android 10
   hides the Bluetooth MAC from apps. Fine for listening; to decide before GATT connections.
 - **Next to the Matter pane's BLE advertising (#47).** Android allows a scan and an advertiser at
   once; the chip doing both was not tried.
+
+## GATT connections (#246)
+
+**Status (2026-11-15): read, untested on the panel.** The connection engine
+(`libs/bluetooth-proxy` `BluetoothConnectionEngine`, `AndroidGattRadio`) is built from what is read
+below. The panel plan in the #246 pane PR runs it with a real device.
+
+### What Home Assistant needs (read)
+
+| Fact | Source |
+|---|---|
+| aioesphomeapi refuses to connect through a proxy without `REMOTE_CACHING`: "old CONNECT method is no longer supported". Only the v3 connect types (4 with cache, 5 without) are sent | aioesphomeapi 46.25.0 `client.py` `bluetooth_device_connect` |
+| With `REMOTE_CACHING`, HA keeps the services and the MTU per address, and writes the CCCD itself after a notify request. So the proxy's notify only arms notifications locally | bleak-esphome `client.py` (main, 2026-11-15) `connect`, `start_notify` |
+| Answers go to the client that holds the advertisement subscription. A new subscriber, or none, closes every link | ESPHome 2026.10.2 `bluetooth_proxy.cpp` `send_device_connection`, `subscribe_api_connection`, `loop` |
+| No free slot: answered "not connected" with error 0. Default `connection_slots`: 3 | `bluetooth_proxy.cpp` `answer_device_disconnected_`; `__init__.py` `DEFAULT_CONNECTION_SLOTS` |
+| HA calls a proxy connectable, and asks for its slot table, only with `ACTIVE_CONNECTIONS` | bleak-esphome `connect.py` `connect_scanner` |
+
+### What Android 10 gives an app (read)
+
+| Fact | Source | What the engine does |
+|---|---|---|
+| `connectGatt(ctx, false, cb, TRANSPORT_LE)` connects. The address type is hidden from apps, but a `BluetoothDevice` from a scan result carries it | `BluetoothDevice`, `GattService` (android10-release) | Connects to the device the scanner heard (`RecentDevices`, the last 256, in memory). Else `getRemoteDevice`, which assumes a public address: a random-address device connects only if heard recently |
+| One GATT operation at a time per `BluetoothGatt`: a second start returns false until the first's callback | `BluetoothGatt.mDeviceBusy` | A queue per link; an operation without a callback in 10 s drops the link, since Android won't start another |
+| A service's and a characteristic's instance id is the ATT handle (the characteristic's value handle) | `BluetoothGatt.onSearchComplete` builds them from `GattDbElement.id`, the attribute handle | Sends instance ids as handles |
+| A descriptor's instance id is hidden (`@hide getInstanceId()`). Lint's `SoonBlockedPrivateApi` flags reflection on it | `BluetoothGattDescriptor` (android10-release); AGP 9 lint | The ATT layout: a characteristic's descriptors are the attributes right after its value handle, in order (Core spec Vol 3 Part G 3.3). No private API |
+| `BluetoothGatt.refresh()` is hidden and marked `@UnsupportedAppUsage` (greylist on 10). It clears Android's cache for one open client only | `BluetoothGatt`, `GattService.refreshDevice` | Not used. `CACHE_CLEARING` isn't sent; clear-cache requests are answered "failed" |
+| A device that answers "insufficient authentication" can make Android start pairing on its own, which may show a dialog | `GattService`, bluedroid `bta_gattc` | Nothing it can stop. `PAIRING` isn't sent, so HA never asks the proxy to pair |
+| `BLUETOOTH_CONNECT` is a runtime permission from Android 12; below that the install-time `BLUETOOTH` covers it | `Manifest.permission` | `Compat.connectPermissions` |
+
+Read-only facts from the dev panel (2026-11-15): Android 10, S1 Kiosk 0.4.3 targets SDK 35, chip
+"8821CS or 8821CSH or 8821CS-VB", `dumpsys bluetooth_manager` lists no GATT clients and no link limit.
+
+### Still open (untested)
+
+- **The link limit.** Android's stack allows 7 GATT links (believed, not checked). The RTL8821CS
+  may hold fewer. The engine starts at 3, like ESPHome. Record what the panel run finds here.
+- **Handles against an ESP32 proxy.** Connect the same device through both and compare the services
+  HA caches. A mismatch breaks a cache HA built from the other proxy.
+- **`refresh()` on the panel.** Whether reflection reaches it with target SDK 35, and whether it
+  clears anything. Needed before `CACHE_CLEARING`.
+- **Scanning next to 1–3 links,** and next to the Matter pane's BLE advertising (#47).
+

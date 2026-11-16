@@ -30,4 +30,8 @@ internal class CompatApi(private val level: Int) {
         level >= 29 -> listOf(Manifest.permission.ACCESS_FINE_LOCATION)
         else -> listOf(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
+
+    /** The runtime permissions a GATT connection needs: `BLUETOOTH_CONNECT` from Android 12; none below (install-time). */
+    @get:SuppressLint("InlinedApi") // a string constant, asked for only on Android 12+
+    val connectPermissions: List<String> get() = if (level >= 31) listOf(Manifest.permission.BLUETOOTH_CONNECT) else emptyList()
 }
