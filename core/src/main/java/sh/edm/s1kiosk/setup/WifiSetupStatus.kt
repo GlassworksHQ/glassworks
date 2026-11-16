@@ -6,8 +6,8 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Handler
-import dev.glassworks.platform.Platform
 import android.os.Looper
+import dev.glassworks.platform.Platform
 
 /**
  * What the setup screen's Wi-Fi step shows. The default ([ConnectivityWifiStatus]) only looks at

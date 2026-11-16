@@ -489,6 +489,11 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
 
 ## Open questions
 
+- Setting the system language on Android 6 (`SystemLocale.set`, the installer's `set_locale`): it reaches the
+  activity manager through the hidden `ActivityManagerNative.getDefault()`, which Robolectric doesn't provide.
+  `SystemLocaleApi23SetTest` only shows it fails safe (false, nothing thrown); whether it works is a device check
+  (#198 Phase D).
+
 - Memory over hours on the Mirror (2 minutes: about 250 MB), and whether the low-memory killer ever takes the
   content process.
 - The extensions process: GeckoView runs extensions out of process; `extensions.webextensions.remote=false`

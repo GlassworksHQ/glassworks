@@ -6,12 +6,17 @@ package dev.glassworks.platform
 
 import android.app.Application
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.os.Build
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
@@ -94,11 +99,11 @@ class PlatformApi23Test {
     @Test
     fun `the default-network callback falls back to an internet request on Android 6`() {
         assertEquals(23, Platform.apiLevel)
-        val app = org.robolectric.RuntimeEnvironment.getApplication()
-        val cm = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val cb = object : android.net.ConnectivityManager.NetworkCallback() {}
+        val app = RuntimeEnvironment.getApplication()
+        val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val cb = object : ConnectivityManager.NetworkCallback() {}
         Platform.registerDefaultNetworkCallback(cm, cb)
-        org.junit.Assert.assertTrue(org.robolectric.Shadows.shadowOf(cm).networkCallbacks.contains(cb))
+        assertTrue(shadowOf(cm).networkCallbacks.contains(cb))
         cm.unregisterNetworkCallback(cb)
     }
 }

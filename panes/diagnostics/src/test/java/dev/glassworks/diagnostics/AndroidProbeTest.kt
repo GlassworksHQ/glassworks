@@ -9,6 +9,9 @@ import android.app.Application
 import android.net.wifi.WifiManager
 import android.os.DeadSystemException
 import android.os.Environment
+import android.os.Process
+import android.system.Os
+import android.system.OsConstants
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -22,6 +25,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
 import org.robolectric.shadows.ShadowActivityManager
+import org.robolectric.shadows.ShadowProcess
 import org.robolectric.shadows.ShadowStatFs
 import org.robolectric.shadows.ShadowWifiInfo
 import java.io.File
@@ -103,7 +107,7 @@ class AndroidProbeApi23Test {
         assertEquals(null, probe.sample().appStartElapsedMs)
         File(proc, "self").mkdirs()
         File(proc, "self/stat").writeText("4242 (sh.edm.s1kiosk) S 1 1 0 0 -1 4194624 1 0 0 0 7 3 0 0 20 0 50 0 360000 1000 200\n")
-        val ticks = android.system.Os.sysconf(android.system.OsConstants._SC_CLK_TCK)
+        val ticks = Os.sysconf(OsConstants._SC_CLK_TCK)
         assertEquals(360000L * 1000 / ticks, probe.sample().appStartElapsedMs)
         File(proc, "self/stat").writeText("garbage")
         assertEquals(360000L * 1000 / ticks, probe.sample().appStartElapsedMs)
@@ -113,8 +117,29 @@ class AndroidProbeApi23Test {
         val proc = tmp.newFolder("proc")
         File(proc, "self").mkdirs()
         File(proc, "self/stat").writeText("4242 (sh.edm.s1kiosk) S 1 1 0 0 -1 4194624 1 0 0 0 7 3 0 0 20 0 50 0 360000 1000 200\n")
-        val ticks = android.system.Os.sysconf(android.system.OsConstants._SC_CLK_TCK)
+        val ticks = Os.sysconf(OsConstants._SC_CLK_TCK)
         val probe = AndroidProbe(RuntimeEnvironment.getApplication(), null, { false }, proc = proc, thermal = tmp.newFolder("thermal"))
         assertEquals(360000L * 1000 / ticks, probe.sample().appStartElapsedMs)
+    }
+}
+
+/** Robolectric's Process has no start time (0): this one says 4242, so the probe's use of it shows. */
+@Implements(Process::class)
+class StartTimeShadow : ShadowProcess() {
+    companion object {
+        @JvmStatic @Implementation
+        fun getStartElapsedRealtime(): Long = 4242L
+    }
+}
+
+/** From Android 7 the probe takes the start time from Process (#380's modern branch), not from `/proc`. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29], application = Application::class, shadows = [StartTimeShadow::class])
+class AndroidProbeStartTimeTest {
+    @get:Rule val tmp = TemporaryFolder()
+
+    @Test fun appStartComesFromProcess() {
+        val probe = AndroidProbe(RuntimeEnvironment.getApplication(), null, { false }, proc = tmp.newFolder("proc"), thermal = tmp.newFolder("thermal"))
+        assertEquals(4242L, probe.sample().appStartElapsedMs)
     }
 }
