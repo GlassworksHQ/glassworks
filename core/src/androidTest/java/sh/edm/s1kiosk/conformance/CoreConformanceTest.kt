@@ -10,7 +10,6 @@ import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.pane.CantRun
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
 import org.junit.Assert.assertArrayEquals
@@ -81,22 +80,23 @@ class CoreConformanceTest {
     }
 
     @Test fun theDeviceServesHomeAssistantWithTheFramesPanes() {
-        val announced = ArrayList<DeviceIdentity>()
+        val announced = ArrayList<Pair<DeviceIdentity, Int>>()
         val mdns = object : MdnsAdvertiser {
-            override fun start(identity: DeviceIdentity, port: Int, encrypted: Boolean, provisionable: Boolean) { synchronized(announced) { announced += identity } }
+            override fun start(identity: DeviceIdentity, port: Int, encrypted: Boolean, provisionable: Boolean) { synchronized(announced) { announced += identity to port } }
             override fun stop() {}
         }
-        val port = ServerSocket(0).use { it.localPort }
         val loopback = InetAddress.getByName("127.0.0.1")
         val exec = Executors.newSingleThreadScheduledExecutor()
         val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = mdns,
-            apiPort = port, apiBindAddress = loopback)
+            apiPort = 0, apiBindAddress = loopback)   // the server picks a free port and announces it
         try {
             exec.submit { device.startInternal() }.get()
             assertEquals(listOf("speaker-pane"), device.paneList().map { it.id })
             val ids = device.entityList().map { it.objectId }
             assertTrue(ids.toString(), "app_version" in ids && "speaker_state" in ids)
-            assertTrue("announced as its own model", synchronized(announced) { announced.single() }.model == "Conformance Tablet (Conformance)")
+            val (identity, port) = synchronized(announced) { announced.single() }
+            assertTrue("announced as its own model", identity.model == "Conformance Tablet (Conformance)")
+            assertTrue("announced the port it listens on, got $port", port > 0)
             Socket().use { s ->
                 s.connect(InetSocketAddress(loopback, port), 5_000)
                 s.soTimeout = 10_000
