@@ -17,9 +17,9 @@ describe('Session.close', () => {
     const s = demoSession('home-assistant');
     await s.route('home-assistant');
     expect(s.store.state.setup.phase).toBe('ha');
-    const internals = s as unknown as { withSetup: () => Promise<unknown>; setup: { close(): Promise<void> }; panel: { close?: () => Promise<void> } };
-    const poll = vi.spyOn(internals, 'withSetup');
-    const setupClose = vi.spyOn(internals.setup, 'close');
+    const internals = s as unknown as { steps: { request: () => Promise<unknown>; channel: { close(): Promise<void> } }; panel: { close?: () => Promise<void> } };
+    const poll = vi.spyOn(internals.steps, 'request');
+    const setupClose = vi.spyOn(internals.steps.channel, 'close');
     const panelClose = vi.fn(async () => {});
     internals.panel.close = panelClose;
     vi.advanceTimersByTime(3000);

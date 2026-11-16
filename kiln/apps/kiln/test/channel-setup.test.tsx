@@ -1,0 +1,150 @@
+// @vitest-environment jsdom
+// The setup steps run over any setup channel, not only the wizard's adb one (#34): the same code and
+// screens serve the panel's own page over the LAN, where an unpaired browser is refused every change.
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { NOT_PAIRED, SetupChannel, type SetupState } from '@glassworks/setup-channel';
+import type { ByteStream } from 'improv-serial';
+import { afterEach, describe, expect, it } from 'vitest';
+import { ChannelSetup, type SetupSteps } from '../src/setup/channelSetup';
+import { HomeAssistant, Radio } from '../src/setup/steps';
+import type { Setup } from '../src/wizard/state';
+
+afterEach(() => cleanup());
+
+const panelState: SetupState = {
+  ip: '192.0.2.10',
+  ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: 'http://192.0.2.10:8099/signin' },
+  radio: { mode: 'off', status: 'Off', helper: true, options: [{ id: 'off', label: 'Off', detail: '' }, { id: 'zigbee_tcp', label: 'Zigbee coordinator', detail: '' }] },
+};
+
+/** The panel's side of the channel: `state` always answers; a change answers only once `paired`. */
+function lanPanel() {
+  let cb: (c: Uint8Array) => void = () => {};
+  const st = structuredClone(panelState);
+  const self = {
+    paired: false,
+    asked: [] as string[],
+    stream: {
+      onData: (f: (c: Uint8Array) => void) => { cb = f; },
+      close: async () => {},
+      write: async (d: Uint8Array) => {
+        for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
+          const m = JSON.parse(line);
+          self.asked.push(m.op);
+          let reply: object;
+          if (m.op !== 'state' && !self.paired) reply = { id: m.id, ok: false, error: NOT_PAIRED };
+          else {
+            if (m.op === 'set_ha') st.ha.url = m.url;
+            if (m.op === 'set_radio') st.radio.mode = m.mode;
+            reply = { id: m.id, ok: true, state: st };
+          }
+          queueMicrotask(() => cb(new TextEncoder().encode(`${JSON.stringify(reply)}\n`)));
+        }
+      },
+    } satisfies ByteStream,
+  };
+  return self;
+}
+
+function controller(panel: ReturnType<typeof lanPanel>) {
+  let phase: Setup = { phase: 'waiting', note: '' };
+  const steps = new ChannelSetup({
+    open: async () => { const c = new SetupChannel(panel.stream); await c.getState(); return c; },
+    phase: () => phase,
+    show: (s) => { phase = s; },
+    here: () => true,
+    done: () => {},
+    unreachable: (e) => { throw e; },
+    app: async () => undefined,
+  });
+  return { steps, phase: () => phase };
+}
+
+describe('the setup steps over the LAN', () => {
+  it('an unpaired browser reads the state, and is told to pair when it changes something', async () => {
+    const panel = lanPanel();
+    const c = controller(panel);
+    await c.steps.homeAssistant();
+    expect(c.phase()).toMatchObject({ phase: 'ha', ha: { discovered: 'http://homeassistant.local:8123' } });
+    await c.steps.saveHa('http://192.0.2.20:8123');
+    expect(c.phase()).toMatchObject({ phase: 'ha', busy: false, error: NOT_PAIRED });
+    // as over USB, a refused change is tried once more on a fresh channel
+    expect(panel.asked).toEqual(['state', 'set_ha', 'state', 'set_ha']);
+    c.steps.close();
+  });
+
+  it('a paired browser saves the address and sets the radio, then sees what to do in Home Assistant', async () => {
+    const panel = lanPanel();
+    panel.paired = true;
+    const c = controller(panel);
+    await c.steps.homeAssistant();
+    await c.steps.saveHa('http://192.0.2.20:8123');
+    expect(c.phase()).toMatchObject({ phase: 'radio', radio: { mode: 'off' } });
+    await c.steps.applyRadio('zigbee_tcp');
+    expect(c.phase()).toMatchObject({ phase: 'radio-next', plan: { title: 'Use the radio in Home Assistant.' } });
+    expect(panel.asked).toEqual(['state', 'set_ha', 'state', 'set_radio']);
+    c.steps.close();
+  });
+
+  it('a close while the channel is still opening keeps nothing open and shows nothing', async () => {
+    const panel = lanPanel();
+    let phase: Setup = { phase: 'waiting', note: '' };
+    let release!: () => void;
+    const closed: string[] = [];
+    const steps = new ChannelSetup({
+      open: async () => {
+        await new Promise<void>((r) => { release = r; });
+        const c = new SetupChannel(panel.stream);
+        await c.getState();
+        c.close = async () => { closed.push('late channel'); };
+        return c;
+      },
+      phase: () => phase, show: (st) => { phase = st; }, here: () => true,
+      done: () => { phase = { phase: 'waiting', note: 'done' }; }, unreachable: () => {}, app: async () => undefined,
+    });
+    const opening = steps.homeAssistant();
+    await new Promise((r) => setTimeout(r, 0));
+    steps.close();
+    release();
+    await opening;
+    expect(phase).toEqual({ phase: 'waiting', note: '' });
+    expect(closed).toEqual(['late channel']);
+  });
+
+  it('a reconnect closes the channel it replaces', async () => {
+    const panel = lanPanel();
+    const opened: { closed: boolean }[] = [];
+    let phase: Setup = { phase: 'waiting', note: '' };
+    const steps = new ChannelSetup({
+      open: async () => {
+        const c = new SetupChannel(panel.stream);
+        await c.getState();
+        const mark = { closed: false };
+        opened.push(mark);
+        c.close = async () => { mark.closed = true; };
+        return c;
+      },
+      phase: () => phase, show: (st) => { phase = st; }, here: () => true, done: () => {}, unreachable: () => {}, app: async () => undefined,
+    });
+    await steps.homeAssistant();
+    await steps.saveHa('http://192.0.2.20:8123');
+    expect(opened.map((o) => o.closed)).toEqual([true, false]);
+    steps.close();
+  });
+
+  it('the step screens need only SetupSteps, not the wizard\'s session', () => {
+    const calls: string[] = [];
+    const steps: SetupSteps = {
+      click: async (name, run) => { calls.push(name); await run(); },
+      signIn: () => {}, saveHa: async (u) => { calls.push(`saveHa ${u}`); }, radio: async () => {},
+      applyRadio: async (m) => { calls.push(`applyRadio ${m}`); }, finish: () => {},
+    };
+    const { unmount } = render(<HomeAssistant busy={false} steps={steps} setup={{ phase: 'ha', ha: panelState.ha }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(calls).toEqual(['save-ha', 'saveHa http://homeassistant.local:8123']);
+    unmount();
+    render(<Radio busy={false} steps={steps} setup={{ phase: 'radio', radio: panelState.radio, note: '' }} />);
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Finish' })); });
+    expect(calls.at(-1)).toBe('applyRadio off');
+  });
+});

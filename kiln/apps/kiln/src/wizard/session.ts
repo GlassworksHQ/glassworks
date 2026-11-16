@@ -12,8 +12,9 @@ import {
   BackupRefused, InstallFlow, backupZip, checkRestorable, fmtSize, readBackupZip, restoreFromBackup,
   type BackupFile, type BackupMeta, type BackupStore, type Devices, type Recipe,
 } from '@glassworks/kiln-core';
-import { SETUP_SOCKET, SetupChannel, validHaUrl, type SetupState } from '@glassworks/setup-channel';
-import { radioPlan, type FrameUi } from '../frames/aqara-s1-plus';
+import { SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
+import type { FrameUi } from '../frames/aqara-s1-plus';
+import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
 import { explain } from './explain';
 import { AskBridge, flowUi } from './flowUi';
 import { initial, reduce, type Action, type AppSettings, type Flow, type Setup, type WizardState } from './state';
@@ -55,7 +56,7 @@ export interface SessionDeps {
 
 const notPicked = (e: unknown) => e instanceof DOMException && e.name === 'NotFoundError';
 
-export class Session {
+export class Session implements SetupSteps {
   readonly store: Store;
   readonly asks: AskBridge;
   private readonly ui;
@@ -65,7 +66,7 @@ export class Session {
   private result?: { meta: BackupMeta; files: BackupFile[] };
   private panel?: PanelShell;
   private improv?: ImprovSerialClient;
-  private setup?: SetupChannel;
+  private readonly steps: ChannelSetup;
   private undoFiles?: Map<string, Uint8Array>;
   /** The backup in this browser, when Undo uses it: Undo offers it as a download. */
   private undoBackup?: { meta: BackupMeta; files: BackupFile[] };
@@ -74,11 +75,8 @@ export class Session {
   private wifiHint?: string;
   /** what the person chose on the settings step, shown again if they go back to it */
   private chosen?: AppSettings;
-  /** the Home Assistant address as the person typed it, shown again if they go back to the step */
-  haAddress?: string;
   /** the app is on the panel: provision put it there, or `pm path` found it */
   private hasApp = false;
-  private haTimer?: ReturnType<typeof setInterval>;
   private readonly sleep: (ms: number) => Promise<void>;
   private running?: string;
   private began = false;
@@ -92,12 +90,11 @@ export class Session {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    clearInterval(this.haTimer);
+    this.steps.close();
     const quiet = (p?: Promise<unknown>) => { void p?.catch(() => {}); };
-    quiet(this.setup?.close());
     quiet(this.improv?.close());
     quiet((this.panel as { close?: () => Promise<void> } | undefined)?.close?.());
-    this.setup = this.improv = this.panel = undefined;
+    this.improv = this.panel = undefined;
   }
 
   get isClosed(): boolean { return this.closed; }
@@ -113,6 +110,20 @@ export class Session {
     // Loaded up front, so a later click can call requestDevice() without waiting on IndexedDB first.
     this.keyReady = d.loadKey().then((k) => (this.key = k));
     this.keyReady.catch(() => {});
+    this.steps = new ChannelSetup({
+      open: (tries) => this.openSetup(tries),
+      phase: () => this.s.setup,
+      show: (setup) => this.setupPhase(setup),
+      here: () => !this.closed && this.s.screen === 'setup',
+      done: () => this.finish(),
+      unreachable: (e) => this.fail(3, e ?? new Error(`${this.d.frame.app} isn't answering. Is it installed and running?`), true),
+      // which S1 Kiosk is on the panel decides how a Thread router gets its network (read-only)
+      app: async () => {
+        const v = await kioskVersion(this.panel!, this.lid());
+        return { version: v?.name, code: v?.code };
+      },
+      openTab: (url) => (this.d.openTab ?? ((u) => window.open(u, '_blank')))(url),
+    });
   }
 
   private get s() { return this.store.state; }
@@ -373,9 +384,7 @@ export class Session {
    * Android (`dumpsys wifi`, read-only). Undefined when it isn't, or an older app can't say.
    */
   private async panelOnWifi(): Promise<{ ip: string; ssid?: string } | undefined> {
-    this.setup ??= await this.openSetup();
-    if (!this.setup) return undefined;
-    const st = await this.withSetup((x) => x.getState()).catch(() => undefined);
+    const st = await this.steps.state();
     if (!st?.ip) return undefined;
     this.ip = st.ip;
     // read-only and only for the name: a panel slow to answer doesn't hold up the step
@@ -438,124 +447,20 @@ export class Session {
     return undefined;
   }
 
-  /** Runs a setup-channel request; saving a new Home Assistant address can restart the app, so reconnect once and retry. */
-  private async withSetup<T>(f: (c: SetupChannel) => Promise<T>): Promise<T> {
-    try {
-      return await f(this.setup!);
-    } catch (first) {
-      const onState = this.setup?.onState;
-      const again = await this.openSetup(15);
-      if (!again) throw first;
-      if (onState) again.onState = onState;
-      this.setup = again;
-      return f(again);
-    }
-  }
+  // ---- the steps over the app's setup channel (src/setup/channelSetup.ts) ----------------------
 
-  private haState(s: SetupState, extra: { note?: string; error?: string; busy?: boolean; signingIn?: boolean } = {}) {
-    this.ip = s.ip ?? this.ip;
-    this.setupPhase({ phase: 'ha', ha: s.ha, ...extra });
-  }
-
-  /** Home Assistant: the address (what the panel found), sign-in on the panel's own page. */
-  async homeAssistant(): Promise<void> {
-    this.setup ??= await this.openSetup();
-    if (!this.setup) return this.finish(); // older app: the panel's own setup does the rest
-    this.setup.onState = (s) => {
-      const cur = this.s.setup;
-      if (cur.phase === 'ha') this.haState(s, { note: cur.note, signingIn: cur.signingIn && !s.ha.signedIn });
-    };
-    this.haState(this.setup.state!);
-    clearInterval(this.haTimer);
-    this.haTimer = setInterval(() => {
-      if (this.closed || this.s.setup.phase !== 'ha') { clearInterval(this.haTimer); return; }
-      void this.withSetup((x) => x.getState()).catch(() => {});
-    }, 3000);
-  }
-
-  /** Sign in: the tab opens inside the click, and is pointed at the panel's sign-in page once the address is saved. */
-  signIn(url: string): void {
-    const s = this.s.setup;
-    if (s.phase !== 'ha') return;
-    if (!validHaUrl(url)) { this.haState({ ...this.setup!.state!, ha: s.ha }, { error: 'That doesn\'t look like a web address (http://… or https://…).' }); return; }
-    const tab = (this.d.openTab ?? ((u) => window.open(u, '_blank')))('about:blank');
-    this.setupPhase({ ...s, error: undefined, signingIn: true, note: 'Sign in on the tab that opened. This page notices when you are done.' });
-    void (async () => {
-      try {
-        const st = url === this.setup?.state?.ha.url ? this.setup.state : await this.withSetup((x) => x.setHa(url));
-        if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
-        if (tab) tab.location.href = st.ha.signinUrl;
-        else if (!window.open(st.ha.signinUrl, '_blank')) throw new Error('The browser blocked the sign-in tab. Allow pop-ups for this page, then sign in again.');
-      } catch (e) {
-        tab?.close();
-        const cur = this.s.setup;
-        if (cur.phase === 'ha') this.setupPhase({ ...cur, note: undefined, signingIn: false, error: (e as Error).message });
-      }
-    })();
-  }
-
-  async saveHa(url: string): Promise<void> {
-    const s = this.s.setup;
-    if (s.phase !== 'ha') return;
-    if (url && url !== this.setup?.state?.ha.url) {
-      if (!validHaUrl(url)) { this.setupPhase({ ...s, error: 'That doesn\'t look like a web address (http://… or https://…).' }); return; }
-      this.setupPhase({ ...s, busy: true, error: undefined });
-      try { await this.withSetup((x) => x.setHa(url)); } catch (e) { this.setupPhase({ ...s, busy: false, error: (e as Error).message }); return; }
-    }
-    await this.radio();
-  }
-
-  /** The radio role. */
-  async radio(): Promise<void> {
-    this.setup ??= await this.openSetup();
-    if (!this.setup) { this.fail(3, new Error(`${this.d.frame.app} isn't answering. Is it installed and running?`), true); return; }
-    let st: SetupState;
-    try {
-      st = await this.withSetup((x) => x.getState());
-    } catch (e) {
-      this.fail(3, e, true); // e.g. the app restarted and didn't come back: say so, not "Connecting…" forever
-      return;
-    }
-    this.setupPhase({
-      phase: 'radio', radio: st.radio,
-      note: st.radio.helper ? `Now: ${st.radio.status}` : 'Only Off is available: this panel has no root helper for the radio.',
-    });
-  }
-
-  async applyRadio(mode: string): Promise<void> {
-    const s = this.s.setup;
-    if (s.phase !== 'radio') return;
-    const was = this.setup!.state!.radio;
-    // keeping the mode still answers the panel's radio step (a fresh panel left on Off); an app that
-    // doesn't say whether it's answered restarts the radio on a same-mode request, so it's left alone
-    if (mode !== was.mode || was.answered === false) {
-      this.setupPhase({ ...s, busy: true, note: mode !== was.mode ? 'Switching the radio…' : s.note, error: undefined });
-      // the answer can come after the person has moved on (Done, another route): then it changes nothing here
-      const stale = () => this.closed || this.s.screen !== 'setup' || this.s.setup.phase !== 'radio';
-      try {
-        const r = await this.withSetup((x) => x.setRadio(mode));
-        if (stale()) return;
-        this.setupPhase({ ...s, radio: r.radio, busy: false, note: r.radio.status });
-      } catch (e) {
-        if (stale()) return;
-        this.setupPhase({ ...s, busy: false, error: (e as Error).message });
-        return;
-      }
-    }
-    const st = this.setup!.state!;
-    // which S1 Kiosk is on the panel decides how a Thread router gets its network (read-only)
-    // no answer counts as an older app: the Thread step then keeps the way that works on every version
-    const app = mode === 'thread_router' ? await kioskVersion(this.panel!, this.lid()).catch(() => undefined) : undefined;
-    if (this.closed || this.s.screen !== 'setup' || this.s.setup.phase !== 'radio') return;
-    const plan = radioPlan(mode, st.ip ?? this.ip ?? '<panel IP>', st.ha.url ?? '', st.radio.allowed, { version: app?.name, code: app?.code });
-    if (plan) { this.setupPhase({ phase: 'radio-next', plan }); return; }
-    this.finish();
-  }
+  get haAddress(): string | undefined { return this.steps.haAddress; }
+  set haAddress(v: string | undefined) { this.steps.haAddress = v; }
+  homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
+  signIn(url: string): void { this.steps.signIn(url); }
+  saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
+  radio(): Promise<void> { return this.steps.radio(); }
+  applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
 
   /** Done, with the backup to download. */
   finish(): void {
-    clearInterval(this.haTimer);
-    void this.setup?.close();
+    this.steps.close();
+    const ip = this.steps.ip ?? this.ip;
     const b = this.s.backup;
     const wifi = this.wifiSsid;
     const total = b ? b.files.reduce((n, f) => n + f.size, 0) : 0;
@@ -564,7 +469,7 @@ export class Session {
         title: 'Done.',
         body: wifi
           ? `The panel is on ${wifi}. Home Assistant finds it by itself as an ESPHome device.`
-          : `On the panel, join Wi-Fi and sign in to Home Assistant. Home Assistant then finds it as an ESPHome device${this.ip ? ` (${this.ip}, port 6053)` : ''}.`,
+          : `On the panel, join Wi-Fi and sign in to Home Assistant. Home Assistant then finds it as an ESPHome device${ip ? ` (${ip}, port 6053)` : ''}.`,
         backup: b && {
           name: `${b.id}.zip`,
           info: `${b.files.length} partitions · ${fmtSize(total)}`,

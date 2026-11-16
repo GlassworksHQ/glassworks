@@ -4,7 +4,7 @@ import type { SetupState } from '@glassworks/setup-channel';
 import { demoSession } from '../src/wizard/demo';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const panel = (s: object) => (s as { setup: { state: SetupState } }).setup.state;
+const panel = (s: object) => (s as unknown as { steps: { channel: { state: SetupState } } }).steps.channel.state;
 
 describe('the radio step', () => {
   it('keeps Skip from finishing while a radio change is pending, and a late answer changes nothing after Done', async () => {
@@ -24,7 +24,7 @@ describe('the radio step', () => {
   it('shows a failure when the app doesn\'t answer, instead of waiting forever', async () => {
     const s = demoSession('radio');
     await s.route('radio');
-    vi.spyOn(s as unknown as { withSetup: () => Promise<unknown> }, 'withSetup').mockRejectedValue(new Error('the app restarted and is not answering'));
+    vi.spyOn((s as unknown as { steps: { request: () => Promise<unknown> } }).steps, 'request').mockRejectedValue(new Error('the app restarted and is not answering'));
     await s.radio();
     expect(s.store.state.screen).toBe('error');
     expect(s.store.state.failure).toMatchObject({ at: 3, raw: 'the app restarted and is not answering' });
@@ -35,8 +35,9 @@ describe('the radio step', () => {
     const s = demoSession('radio');
     await s.route('radio');
     expect(panel(s).radio).toMatchObject({ mode: 'off', answered: false });
+    const seen = (s as unknown as { steps: { channel: { state: SetupState } } }).steps.channel; // Done lets the channel go
     await s.click('radio', () => s.applyRadio('off'));
-    expect(panel(s).radio).toMatchObject({ mode: 'off', answered: true });
+    expect(seen.state.radio).toMatchObject({ mode: 'off', answered: true });
     expect(s.store.state.screen).toBe('done');
     s.close();
   }, 10_000);
@@ -45,7 +46,7 @@ describe('the radio step', () => {
     const s = demoSession('radio');
     await s.route('radio');
     delete panel(s).radio.answered; // apps before #155: a same-mode request restarts their radio
-    const sent = vi.spyOn(s as unknown as { withSetup: () => Promise<unknown> }, 'withSetup');
+    const sent = vi.spyOn((s as unknown as { steps: { request: () => Promise<unknown> } }).steps, 'request');
     await s.click('radio', () => s.applyRadio('off'));
     expect(sent).not.toHaveBeenCalled();
     expect(s.store.state.screen).toBe('done');
