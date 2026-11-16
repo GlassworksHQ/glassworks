@@ -455,6 +455,7 @@ the last one the root side needs, since everything above the loader then updates
 | Loader (v4) | the boot image's `s1kiosk_radio.sh` checks `$DIR/bundle/current` with `s1kiosk_bundle.sh --check` (signature, every file's SHA-256, version not below the floor) at every start and runs its `s1kiosk_radio.sh`; binaries: bundle first, then the boot image. A bundle helper that exits within a minute 3 times running is marked `bad-<v>` and the boot image's helper runs. Props: `sys.s1kiosk.radio.source` = `boot[ (why)]` \| `bundle <v>` \| `dev`, `sys.s1kiosk.radio.bundle` = `none` \| `ok <v>` \| `bad: <why>` |
 | Zigbee stack (v4) | app: `persist.s1kiosk.radio_zigbee` = `aqara` (default) \| `sisdk`; helper: `sys.s1kiosk.radio.zigbee` = `aqara` \| `sisdk ready <ver>` \| `sisdk missing <ver> <sha256>` (app: download it) \| `sisdk no-runtime` \| `sisdk bad <why>`; zigbeed hand-off in the app's `files/radio/zigbeed-8.2.2` |
 | Time zone (v4) | app/installer: `persist.s1kiosk.timezone` = an Olson id; helper: a background loop re-applies it with `service call alarm 3 s16 <id>` when `persist.sys.timezone` differs (Aqara's SystemManager resets it to `Antarctica/Casey` at boot), every 5 s for 10 min, then every 15 s; `sys.s1kiosk.timezone.status` = `<ok\|error\|none> [<id>][: detail]`. Runs in every mode, also after the helper gave up; part of the helper, so it updates with the radio bundle. With no zone chosen, the zone in place at the helper's first look is adopted unless it is `Antarctica/Casey`/`GMT`/`UTC`. So an empty value doesn't mean "keep none": the app's time zone pane, turned off (#67), writes `(off)`, which isn't an id, and the helper keeps and adopts nothing and reports `error: '(off)' is not a time zone id` (read 2026-11-14 from `tz_valid`/`tz_check`; pinned in `frames/aqara-s1-plus/tools/radio/test/shell-tests.sh`). Turned on, the app writes the zone back, or empty if it kept none |
+| Connected now (#217) | helper: `sys.s1kiosk.radio.peer` = `none` \| `<address> <epoch first seen>` in `zigbee_tcp` (and `zigbee_tcp_thread`), `""` in every other mode. Read every 3 s from the ESTABLISHED sockets on `ZIGBEE_PORT` in `/proc/net/tcp` and `/proc/net/tcp6` (Android 10 doesn't let the app read them); IPv4-mapped IPv6 as IPv4, IPv6 as 8 groups. One client at most: the one shown stays while it is connected. The log says only "EZSP client connected/disconnected", never the address. Helpers before it leave the prop unset |
 | Thread leave (v4) | app: `files/radio/thread-leave` (taken within 3 s in any mode, ignored after 2 min); helper: `sys.s1kiosk.radio.thread_leave` = `<ok\|error> <epoch>: <detail>` |
 | Bundle state (v4) | root: `/data/s1kiosk-pub/radio-bundle` (root 0644 in a root 0755 dir) = `<ok\|bad\|none> <version> <floor>`, what the app decides from |
 | Radio firmware (v4) | app: `files/radio/fw-request` = `<id> <sha256 prefix>` (taken within 3 s, ignored after 2 min); helper: `sys.s1kiosk.radio.fw` = `<idle\|flashing\|ok\|error> <id>[: detail]`, `sys.s1kiosk.radio.fw_targets` = `<id>:<sha12>:<APP> …` |
@@ -703,6 +704,14 @@ Assistant entities and the Thread join from Home Assistant, as a Glassworks pane
 - **Helper present:** every mode, Off included, is delegated (prop + `ctl.restart`, see the
   contract). The app never touches Aqara's services itself then. On app start it restarts the helper
   only if its mode or status doesn't match. `Radio status` shows the helper's status.
+- **Connected now** (#217): the Radio page's *The radio* block says who uses the coordinator's EZSP port
+  now, from the helper's `sys.s1kiosk.radio.peer`: `Home Assistant · 192.0.2.20 · since 14:32` (named when
+  it is the address of Home Assistant's last authenticated ESPHome connection; `The panel itself` for
+  loopback), another client by its address, or `Nobody`. Other roles say "Only the Zigbee coordinator
+  takes a client"; a helper without it says "Not known". The page reads the prop every couple of seconds
+  with `SystemProperties.get` (no process), and the helper every 3 s, so a connect or disconnect shows
+  within about 5 s. The same text is the `Radio connected client` diagnostic sensor (off by default),
+  published on the 15 s refresh.
 - `Radio status` is refreshed on the radio thread every 15 s and after every change, so no `getprop`
   runs on the ESPHome thread.
 - Helper v4 entities: `Zigbee stack` (select, config), `Radio helper` (diagnostic: which helper and

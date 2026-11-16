@@ -190,6 +190,7 @@ open the entity, and turn on *Enabled*.
 | Thread dataset | `thread_dataset` | radio | config | off | Once per network |
 | Thread join | `thread_join` | radio | diagnostic | off | Only during a join |
 | Radio helper, Radio firmware | `radio_helper`, `radio_firmware` | radio | diagnostic | off | Troubleshooting |
+| Radio connected client | `radio_connected` | radio | diagnostic | off | Troubleshooting |
 | Keep time zone | `keep_time_zone` | time zone | config | off | Set once: the pane's on/off |
 | Time zone | `time_zone` | time zone | config | off | Set once |
 | Time zone status | `time_zone_status` | time zone | diagnostic | off | Troubleshooting |
@@ -267,6 +268,7 @@ So on a panel HA already has:
 | text `Radio allowed clients` | `radio_allowed_clients` | who may reach the radio's ports besides Home Assistant: addresses or CIDRs, `any`, or empty = Home Assistant only ([radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md#who-may-connect)) |
 | select `Zigbee stack` | `zigbee_stack` | `Aqara 7.3.3 (EZSP 12, ZHA)` (default) or `Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)` ([radio.md](../frames/aqara-s1-plus/docs/radio.md#zigbee-stack-aqara-or-silicon-labs-helper-v4)); encrypted connection only, needs helper v4 |
 | text_sensor `Radio helper` | `radio_helper` | diagnostic; which root helper runs (boot image or radio bundle, version) and whether the boot image needs updating |
+| text_sensor `Radio connected client` | `radio_connected` | diagnostic; who uses the Zigbee coordinator's EZSP port now: `Home Assistant · 192.0.2.20 · since 14:32`, another client's address, or `Nobody` ([radio.md](../frames/aqara-s1-plus/docs/radio.md#app-side)); needs the radio bundle from the same release |
 | text_sensor `Radio firmware` | `radio_firmware` | diagnostic; the radio's firmware version, flash progress or result |
 | select `Radio firmware image` | `radio_firmware_image` | `Keep current`, `Aqara stock image`, `Image from the radio bundle`; arms the choice for 2 minutes ([radio.md](../frames/aqara-s1-plus/docs/radio.md#radio-firmware-updates-helper-v4)); encrypted connection only |
 | button `Flash radio firmware` | `radio_firmware_flash` | flashes the armed image; encrypted connection only |

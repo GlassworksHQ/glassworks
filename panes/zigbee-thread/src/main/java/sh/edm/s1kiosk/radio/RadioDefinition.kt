@@ -372,14 +372,13 @@ class RadioDefinition(
     }
 
     /**
-     * The same section and, while the radio's pane is built, "The radio": its firmware and the root
-     * helper, as Home Assistant has them (#212). "Connected now" waits for the helper to report the live
-     * peer (#217).
+     * The same section and, while the radio's pane is built, "The radio": who is connected now (#217), its
+     * firmware and the root helper, as Home Assistant has them (#212).
      */
     override fun settings(running: Pane?): List<SettingsSection> {
         val own = settings()
         val entities = running?.entities().orEmpty().associateBy { it.objectId }
-        val rows = listOf("radio_firmware" to "Firmware", "radio_helper" to "Radio helper").mapNotNull { (objectId, title) ->
+        val rows = listOf("radio_connected" to "Connected now", "radio_firmware" to "Firmware", "radio_helper" to "Radio helper").mapNotNull { (objectId, title) ->
             entities[objectId]?.let { e -> SettingsItem.Info({ title }, { e.shownState() ?: dev.glassworks.pane.UNKNOWN }) }
         }
         if (rows.isEmpty()) return own
