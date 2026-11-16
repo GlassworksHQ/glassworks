@@ -64,6 +64,13 @@ class WebSocketTest {
         assertArrayEquals(byteArrayOf(0x88.toByte(), 2, 0x03, 0xf1.toByte()), out.toByteArray())
     }
 
+    @Test fun aLengthWithItsTopBitSetClosesAsTooBig() {
+        val head = byteArrayOf(0x81.toByte(), (0x80 or 127).toByte(), 0x80.toByte(), 0, 0, 0, 0x7f, 0xff.toByte(), 0xff.toByte(), 0xff.toByte())
+        val (ws, out) = streams(head + byteArrayOf(1, 2, 3, 4))
+        assertEquals(-1, ws.input.read())
+        assertArrayEquals(byteArrayOf(0x88.toByte(), 2, 0x03, 0xf1.toByte()), out.toByteArray())
+    }
+
     private fun streams(input: ByteArray): Pair<WebSocketStreams, ByteArrayOutputStream> {
         val out = ByteArrayOutputStream()
         return WebSocketStreams(ByteArrayInputStream(input), out) to out

@@ -48,12 +48,18 @@ class LanSetup(
     private val idleMs: Long = 30 * 60_000L,
     private val maxMs: Long = 2 * 3600_000L,
     private val maxSessions: Int = 4,
-    /** WebSockets at once: each holds one of the web server's few workers. */
-    private val maxConnections: Int = 2,
+    /** How long an unpaired WebSocket may wait for the browser; a paired one waits [idleMs]. */
+    private val unpairedIdleMs: Int = 60_000,
 ) {
     private val random = SecureRandom()
     private val sessions = Sessions()
-    private val connections = AtomicInteger()
+
+    /**
+     * WebSockets at once, one of each kind: each holds one of the web server's few workers. An unpaired one can
+     * read the state only, so it never keeps a paired browser out (CodeRabbit on #376).
+     */
+    private val paired = AtomicInteger()
+    private val unpaired = AtomicInteger()
 
     /** The answer for a request under `/setup/`, or null for one that isn't this class's (the Manage page takes it). */
     fun handle(req: HttpRequest): HttpResponse? {
@@ -116,11 +122,13 @@ class LanSetup(
         val key = WebSocketStreams.key(req) ?: return HttpResponse.text(400, "This address takes a WebSocket only.")
         val origin = req.headers["origin"]
         if (origin == null || !ManageServer.sameOrigin(req.headers)) return notOwnPage()
-        if (connections.get() >= maxConnections) return HttpResponse.text(503, "Another browser is setting this panel up. Try again in a moment.")
         val token = req.cookies[COOKIE]
-        return HttpResponse.webSocket(key, idleMs.toInt()) { ws ->
-            if (connections.incrementAndGet() > maxConnections) {
-                connections.decrementAndGet()
+        val isPaired = sessions.valid(token, touch = false)
+        val slot = if (isPaired) paired else unpaired
+        if (slot.get() >= 1) return HttpResponse.text(503, "Another browser is setting this panel up. Try again in a moment.")
+        return HttpResponse.webSocket(key, if (isPaired) idleMs.toInt() else unpairedIdleMs) { ws ->
+            if (slot.incrementAndGet() > 1) {
+                slot.decrementAndGet()
                 ws.close(1013)
                 return@webSocket
             }
@@ -129,7 +137,7 @@ class LanSetup(
             } catch (_: IOException) {
                 // The browser went away mid-write.
             } finally {
-                connections.decrementAndGet()
+                slot.decrementAndGet()
                 ws.close()
             }
         }
