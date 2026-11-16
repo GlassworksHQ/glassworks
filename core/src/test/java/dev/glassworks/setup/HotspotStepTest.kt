@@ -30,7 +30,7 @@ class HotspotStepTest {
         assertEquals("Join the panel's Wi-Fi.", c.title)
         val body = c.body!!
         assertTrue(body, "\n$url\n" in body && "abcdefghjkmn" in body && "“Example-Setup”" in body)
-        assertEquals("Wi-Fi · closes in 15 minutes", c.label)
+        assertEquals("Wi-Fi · closes within 15 minutes", c.label)
         assertEquals(Action.STOP, c.action)
     }
 
@@ -38,7 +38,7 @@ class HotspotStepTest {
     fun `on, before the panel has its address - the text says it shows here`() {
         val c = HotspotStep.card(SetupHotspot.View.On(net, 60_000L, asked = true), ready, null)
         assertTrue(c.body!!, "the address that shows here" in c.body!!)
-        assertEquals("Wi-Fi · closes in 1 minute", c.label)
+        assertEquals("Wi-Fi · closes within 1 minute", c.label)
     }
 
     @Test
@@ -72,6 +72,19 @@ class HotspotStepTest {
     fun `after 15 minutes it says the panel tries your Wi-Fi again`() {
         val c = HotspotStep.card(off(Stop.TIMED_OUT), ready, null)
         assertTrue(c.status!!, "15 minutes" in c.status!!)
+        assertEquals(Action.OPEN, c.action)
+    }
+
+    @Test
+    fun `the radio off and locked - why, and Turn on Wi-Fi`() {
+        assertEquals(Card(status = HotspotFailure.WIFI_OFF.text, tone = Tone.ROSE, action = Action.WIFI_SETTINGS),
+            HotspotStep.card(off(error = HotspotFailure.WIFI_OFF), ready, null))
+    }
+
+    @Test
+    fun `Android closed it - a line, and the offer again`() {
+        val c = HotspotStep.card(off(Stop.ANDROID), ready, null)
+        assertTrue(c.status!!, "Android closed" in c.status!!)
         assertEquals(Action.OPEN, c.action)
     }
 

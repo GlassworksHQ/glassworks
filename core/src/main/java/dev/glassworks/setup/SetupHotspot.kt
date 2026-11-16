@@ -33,6 +33,12 @@ class SetupHotspot(
      * this is rule 2's net if a change goes unheard (a callback Android didn't send).
      */
     private val checkMs: Long = 30_000L,
+    /**
+     * Why the hotspot can't do its job now, or null when it can. While set it doesn't start, and stops if it runs: on
+     * Android 10+ an app can't turn a Wi-Fi radio on, so with the radio off the panel couldn't join what the phone
+     * sends (S1 panel run on e7d2d49d). Read on every refresh, and at least every [checkMs] while set.
+     */
+    private val blocked: () -> HotspotFailure? = { null },
 ) {
     /** What the setup screen shows. */
     sealed interface View {
@@ -60,6 +66,9 @@ class SetupHotspot(
     private var cancelWake: (() -> Unit)? = null
     private var closed = false
 
+    /** The last refresh found it [blocked]: the rule waited, and starts over when the block lifts. */
+    private var wasBlocked = false
+
     val view: View get() {
         val r = run
         val net = r?.network
@@ -77,6 +86,23 @@ class SetupHotspot(
     /** Connectivity changed, or a wake is due. */
     fun refresh() {
         if (closed) return
+        val block = blocked()
+        if (block != null) {
+            // The rule waits: nothing starts, a running hotspot stops, and the screen says why. Read again soon.
+            wasBlocked = true
+            if (run != null) stopHotspot("blocked: ${block.name.lowercase()}")
+            error = block
+            cancelWake?.invoke()
+            cancelWake = schedule(checkMs) { cancelWake = null; refresh() }
+            onChange()
+            return
+        }
+        if (wasBlocked) {
+            // Back (Wi-Fi turned on): as after new Wi-Fi details, the saved network gets its minutes first.
+            wasBlocked = false
+            error = null
+            policy.configured(clock())
+        }
         val d = policy.update(connected(), clock())
         apply(d)
     }
@@ -85,6 +111,7 @@ class SetupHotspot(
     fun ask(): Boolean {
         if (closed) return false
         error = null
+        blocked()?.let { error = it; onChange(); return false }
         if (!policy.ask(connected(), clock())) return false
         refresh()
         return true
@@ -146,7 +173,7 @@ class SetupHotspot(
                     log("setup hotspot stopped by Android")
                     run = null
                     isOn = false
-                    policy.failed()
+                    policy.androidStopped(clock())
                     refresh()
                 }
             }

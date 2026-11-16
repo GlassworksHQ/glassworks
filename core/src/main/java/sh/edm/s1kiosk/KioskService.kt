@@ -15,6 +15,8 @@ import android.net.NetworkRequest
 import android.os.SystemClock
 import dev.glassworks.frame.ServiceWork
 import dev.glassworks.platform.Hotspot
+import dev.glassworks.platform.HotspotFailure
+import dev.glassworks.platform.WifiRadio
 import dev.glassworks.platform.NetworkUp
 import dev.glassworks.platform.Platform
 import dev.glassworks.setup.SetupHotspot
@@ -107,6 +109,7 @@ class KioskService : Service() {
             clock = SystemClock::elapsedRealtime,
             schedule = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } },
             log = { Log.i(HOTSPOT_TAG, it) },
+            blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
         )
         glassworks.setupHotspot = hs
         val cb = object : ConnectivityManager.NetworkCallback() {

@@ -79,6 +79,8 @@ object SetupChannelServer {
             )
         }
 
+        override fun wifiRadioLocked(): Boolean = dev.glassworks.platform.WifiRadio.lockedOff(ctx)
+
         /** A fresh scan through Improv's provisioner, as Kiln's USB scan (ImprovSerialServer). */
         override fun scanWifi(): List<WifiNetwork> {
             val got = AtomicReference<List<ScannedNetwork>>(emptyList())

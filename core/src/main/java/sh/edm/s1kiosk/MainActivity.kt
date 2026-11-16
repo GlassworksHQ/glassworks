@@ -470,6 +470,7 @@ class MainActivity : Activity() {
                 requestPermissions(HotspotPermission.request(it.permission), REQ_HOTSPOT)
             }
             HotspotStep.Action.STOP -> { hotspotAsked = false; h.cancel() }
+            HotspotStep.Action.WIFI_SETTINGS -> openWifiSettings()
         }
         refreshSetup()
     }

@@ -37,9 +37,12 @@ class SetupHotspotTest {
     private var connected = false
     private val wakes = mutableListOf<Pair<Long, () -> Unit>>()
     private val hotspot = FakeHotspot()
+    /** The radio is off and can't be turned on (Android 10+), when set. */
+    private var radioLocked = false
     private val setup = SetupHotspot(
         hotspot, connected = { connected }, clock = { now },
         schedule = { d, r -> val w = (now + d) to r; wakes += w; { wakes.remove(w) } },
+        blocked = { if (radioLocked) HotspotFailure.WIFI_OFF else null },
     )
 
     /** Moves the clock to [t], running each wake that falls due on the way. */
@@ -146,12 +149,41 @@ class SetupHotspotTest {
     }
 
     @Test
-    fun `Android ending it counts as off, and nothing restarts it by itself`() {
+    fun `Android closing it by itself (nobody joined) is a stop, and the hotspot comes back 3 minutes later`() {
         setup.start(); at(3 * min); up()
-        hotspot.listener!!(Hotspot.Event.Stopped)
-        at(120 * min)
+        at(13 * min)
+        hotspot.listener!!(Hotspot.Event.Stopped) // the S1's SoftApManager: 10 minutes with no station
+        assertEquals(View.Off(Stop.ANDROID, null), setup.view)
+        at(16 * min - 1)
         assertEquals(1, hotspot.starts)
-        assertEquals(View.Off(Stop.FAILED, null), setup.view)
+        at(16 * min)
+        assertEquals(2, hotspot.starts)
+    }
+
+    @Test
+    fun `with the radio off and locked, it never starts, and the screen says why`() {
+        radioLocked = true
+        setup.start()
+        at(30 * min)
+        assertEquals(0, hotspot.starts)
+        assertEquals(View.Off(null, HotspotFailure.WIFI_OFF), setup.view)
+        assertFalse("asked for, it is refused too", setup.ask())
+        assertEquals(0, hotspot.starts)
+    }
+
+    @Test
+    fun `the radio going off while it runs stops it, and back on it opens by the rule again`() {
+        setup.start(); at(3 * min); up()
+        radioLocked = true
+        at(3 * min + 30_000)
+        assertFalse(hotspot.on)
+        assertEquals(View.Off(null, HotspotFailure.WIFI_OFF), setup.view)
+        radioLocked = false
+        at(3 * min + 60_000)
+        assertFalse("Wi-Fi back on: the saved network gets 3 minutes first", hotspot.on)
+        assertTrue("and the screen no longer says Wi-Fi is off", (setup.view as View.Off).error == null)
+        at(6 * min + 60_000)
+        assertTrue(hotspot.on)
     }
 
     @Test

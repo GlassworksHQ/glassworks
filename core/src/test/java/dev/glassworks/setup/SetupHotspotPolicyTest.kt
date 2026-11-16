@@ -140,6 +140,24 @@ class SetupHotspotPolicyTest {
     }
 
     @Test
+    fun `Android closing it re-arms, as the 15 minutes do`() {
+        p.update(false, 3 * min)
+        p.androidStopped(now = 13 * min)
+        assertEquals(Stop.ANDROID, p.lastStop)
+        assertEquals(Decision(false, 3 * min), p.update(false, 13 * min))
+        assertTrue(p.update(false, 16 * min).on)
+    }
+
+    @Test
+    fun `Android closing one asked for after the panel had been online leaves it off`() {
+        p.update(true, 0)
+        p.update(false, min)
+        p.ask(false, 2 * min)
+        p.androidStopped(now = 5 * min)
+        assertEquals(Decision(false, null), p.update(false, 5 * min))
+    }
+
+    @Test
     fun `a start that failed waits for someone to ask, so it doesn't loop`() {
         p.update(false, 3 * min)
         p.failed()

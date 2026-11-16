@@ -120,6 +120,9 @@ class SetupChannel(
          * reply: joining can take the panel off the network the browser reached it on.
          */
         fun joinWifi(ssid: String, password: String): Change = Change(error = "This panel can't join Wi-Fi from here.")
+
+        /** The Wi-Fi radio is off and the app can't turn it on (Android 10+): a join could never happen. */
+        fun wifiRadioLocked(): Boolean = false
     }
 
     /** What a change request did: [error] refuses it; [afterReply] runs once the reply is written. */
@@ -189,6 +192,8 @@ class SetupChannel(
             ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name is 1 to 32 bytes long (an accented letter takes 2)."
             !validPassword(password) -> "A Wi-Fi password is at most 63 bytes long (an accented letter takes 2), or a 64-digit hex key."
             backend.state().online -> ON_A_NETWORK
+            // Before the reply, not after: the page hears it instead of "Joining…" (S1 panel run on e7d2d49d).
+            backend.wifiRadioLocked() -> WIFI_OFF
             else -> null
         }
         if (why != null) return reply(id, error = why) to null
@@ -256,6 +261,7 @@ class SetupChannel(
         const val PAIRING_ARM = "pairing.arm"
         const val WIFI_SCAN = "wifi.scan"
         const val WIFI_JOIN = "wifi.join"
+        const val WIFI_OFF = "The panel's Wi-Fi is turned off, and it can't turn it on itself. Turn on Wi-Fi on the panel first."
         const val ON_A_NETWORK = "The panel is on a network already. Change its Wi-Fi on the panel's screen."
         const val NOT_PAIRED = "Pair with the panel first: enter the code it shows."
         /** The core's keys in the state; no step may take them. */

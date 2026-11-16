@@ -49,7 +49,8 @@ class SetupHotspotPolicy(
     }
 
     /** Why the hotspot last went off: shown on the setup screen, and logged. */
-    enum class Stop { CONNECTED, CONFIGURED, TIMED_OUT, CANCELLED, FAILED }
+    /** [ANDROID]: Android closed it by itself (on Android 10, after 10 minutes with nobody on it). */
+    enum class Stop { CONNECTED, CONFIGURED, TIMED_OUT, ANDROID, CANCELLED, FAILED }
 
     /** Have the hotspot on when [on]. Call [update] again after [wakeInMs], or on the next change when null. */
     data class Decision(val on: Boolean, val wakeInMs: Long?)
@@ -115,7 +116,17 @@ class SetupHotspotPolicy(
         state = State.Waiting(now, holdUntil = now + graceMs)
     }
 
-    /** The hotspot didn't start, or Android stopped it: off, until someone asks again. */
+    /**
+     * Android closed the hotspot by itself (S1, Android 10: SoftApManager's 10-minute timeout with no station). As
+     * after [maxOnMs]: the saved network gets [graceMs], then rule 1 again (S1 panel run on e7d2d49d).
+     */
+    fun androidStopped(now: Long) {
+        val s = state as? State.On ?: return
+        lastStop = Stop.ANDROID
+        state = if (s.armed) State.Waiting(now) else State.Idle
+    }
+
+    /** The hotspot didn't start: off, until someone asks again. */
     fun failed() {
         if (state is State.On) lastStop = Stop.FAILED
         state = State.Idle

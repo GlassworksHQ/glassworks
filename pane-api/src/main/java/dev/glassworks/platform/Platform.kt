@@ -139,6 +139,12 @@ open class PlatformApi(
     /** A local-only hotspot refuses to start while location is off (Android 8 to 12). From 13 the nearby permission replaces it. */
     val hotspotNeedsLocationOn: Boolean get() = apiLevel in 26..32
 
+    /**
+     * An app may turn the Wi-Fi radio on (`WifiManager.setWifiEnabled`). From Android 10, for apps targeting it,
+     * only the device owner or a system app may; the call returns false.
+     */
+    val appCanEnableWifi: Boolean get() = apiLevel < 29
+
     /** A hotspot reservation describes its network as a `SoftApConfiguration` (Android 11). Below it, a `WifiConfiguration`. */
     val hasSoftApConfiguration: Boolean get() = apiLevel >= 30
 

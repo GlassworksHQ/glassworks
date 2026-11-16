@@ -116,7 +116,8 @@ no cable and no Bluetooth (an iPhone too).
 | | |
 |---|---|
 | Who can join | Anyone who sees the panel's screen: the password shows only there, and changes each time (WPA2). Pairing still needs the code the panel shows |
-| While it's open | On most devices, the S1 among them, the panel's Wi-Fi client is off: it is on no network until the hotspot closes. 2.4 GHz |
+| While it's open | On most devices, the S1 among them, the panel's Wi-Fi client is off: it is on no network until the hotspot closes. 2.4 GHz. Android may close it sooner than 15 minutes when nobody joins (10 minutes on the S1); then it counts as closed, and opens again 3 minutes later if no Wi-Fi works |
+| Wi-Fi turned off | From Android 10 an app can't turn Wi-Fi on. With the panel's Wi-Fi off, it doesn't open its own: it couldn't join what the phone sends. The setup screen says so, with **Turn on Wi-Fi** |
 | Android 8 and newer | Android's local-only hotspot: Android names it (`AndroidShare_…` on the S1) and picks its key. No setting changes. On Android 13 and newer the panel asks for *Nearby devices* first; on 8 to 12 it needs location on |
 | Android 6 and 7 | A hidden Android call opens it as `Glassworks-…`. The panel puts back the device's own hotspot settings and its Wi-Fi when it closes |
 | A captive portal | Not yet: the page doesn't open by itself. It comes later, on panels with root |

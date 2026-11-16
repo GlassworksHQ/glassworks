@@ -58,6 +58,7 @@ enum class HotspotFailure(val text: String) {
     TETHERING_ON("Android's own hotspot is on. Turn it off to open the setup Wi-Fi."),
     NOT_ALLOWED("This device doesn't let apps open a Wi-Fi hotspot."),
     NO_CHANNEL("No free Wi-Fi channel for the setup Wi-Fi."),
+    WIFI_OFF("The panel's Wi-Fi is turned off, and the panel can't turn it on itself. Turn on Wi-Fi first."),
     FAILED("The setup Wi-Fi didn't start."),
 }
 

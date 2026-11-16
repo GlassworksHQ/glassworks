@@ -16,7 +16,11 @@ object HotspotStep {
     enum class Tone { MUTED, AMBER, ROSE }
 
     /** The one action. [OPEN] asks for the hotspot, [ALLOW] asks Android for the permission first. */
-    enum class Action(val label: String) { OPEN("Set up from a phone"), ALLOW("Allow"), STOP("Close it"), RETRY("Try again") }
+    enum class Action(val label: String) {
+        OPEN("Set up from a phone"), ALLOW("Allow"), STOP("Close it"), RETRY("Try again"),
+        /** The radio is off and the panel can't turn it on: Android's Wi-Fi panel or settings. */
+        WIFI_SETTINGS("Turn on Wi-Fi"),
+    }
 
     /**
      * The step's card while the hotspot is on ([title], [body], [qr]: the text of a "join this Wi-Fi" QR code), or
@@ -39,7 +43,8 @@ object HotspotStep {
      */
     fun card(view: SetupHotspot.View, permission: HotspotPermission.Step, setupUrl: String?): Card = when (view) {
         is SetupHotspot.View.On -> Card(
-            label = "Wi-Fi · closes in ${minutes(view.leftMs)}",
+            // "within": Android may close it sooner when nobody joins (10 minutes on the S1's Android 10).
+            label = "Wi-Fi · closes within ${minutes(view.leftMs)}",
             title = "Join the panel's Wi-Fi.",
             // Short lines that fit beside the QR code; the address alone on one, as Android would break it at a dot.
             body = "Scan it with a phone, then open\n" + (setupUrl ?: "the address that shows here") +
@@ -51,7 +56,12 @@ object HotspotStep {
         is SetupHotspot.View.Off -> when {
             permission is HotspotPermission.Step.Blocked -> Card(status = permission.why, tone = Tone.ROSE)
             permission is HotspotPermission.Step.Explain -> Card(status = permission.why, tone = Tone.AMBER, action = Action.ALLOW)
+            view.error == HotspotFailure.WIFI_OFF -> Card(status = view.error.text, tone = Tone.ROSE, action = Action.WIFI_SETTINGS)
             view.error != null && view.error != HotspotFailure.NO_PERMISSION -> Card(status = view.error.text, tone = Tone.ROSE, action = Action.RETRY)
+            view.stopped == Stop.ANDROID -> Card(
+                status = "Android closed the panel's own Wi-Fi: nobody joined it for a while. It opens again if no Wi-Fi works.",
+                action = Action.OPEN,
+            )
             view.stopped == Stop.TIMED_OUT -> Card(
                 status = "The panel's own Wi-Fi closed after 15 minutes, and the panel tries your Wi-Fi again.", action = Action.OPEN,
             )

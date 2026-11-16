@@ -72,6 +72,8 @@ class SetupChannelTest {
         override fun armPairing(): String? { calls += "arm"; return null }
 
         var networks = listOf(WifiNetwork("Example-WiFi", -50, true))
+        var radioLocked = false
+        override fun wifiRadioLocked() = radioLocked
         override fun scanWifi(): List<WifiNetwork> { calls += "scan"; return networks }
         override fun joinWifi(ssid: String, password: String): SetupChannel.Change {
             calls += "join $ssid"
@@ -166,6 +168,15 @@ class SetupChannelTest {
         val unpaired = Fake(base)
         assertEquals(SetupChannel.NOT_PAIRED, JSONObject(unpaired.channel { false }.handle(join).first).getString("error"))
         assertTrue(online.calls.none { it.startsWith("join") } && unpaired.calls.none { it.startsWith("join") })
+    }
+
+    @Test
+    fun wifiJoinIsRefusedBeforeTheReplyWhenTheRadioIsOffAndLocked() {
+        val f = Fake(base).apply { radioLocked = true }
+        val (reply, after) = f.channel().handle(join)
+        assertEquals(SetupChannel.WIFI_OFF, JSONObject(reply).getString("error"))
+        assertNull("nothing runs after the reply", after)
+        assertTrue(f.calls.none { it.startsWith("join") })
     }
 
     @Test
