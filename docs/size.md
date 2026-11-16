@@ -24,7 +24,7 @@ on the device by [Clarity](perf.md#ram).
 | Part | What is in it |
 |---|---|
 | Engine (GeckoView) | `org.mozilla.*` and `org.webrtc.*` classes, Gecko's native libraries (`libxul.so` and the rest) and `assets/omni.ja` |
-| Core | Everything else: the shell, `dev.glassworks.*` outside the panes, the ESPHome and Improv libraries, Kotlin, AndroidX, resources, and the core's assets (`assets/extension/`, `assets/dexopt/`, `assets/licenses/`, and `assets/blueprints.json`, every pane's blueprint list that the core's card reads) |
+| Core | Everything else: the shell, `dev.glassworks.*` outside the panes, the ESPHome and Improv libraries, Kotlin, AndroidX, resources, and the core's assets (`assets/extension/`, `assets/dexopt/`, `assets/licenses/`, `assets/blueprints.json`, every pane's blueprint list that the core's card reads, and `assets/setup/`, the setup page the panel serves at `/setup`) |
 | Pane `<id>` | The pane's own classes (its package, and classes elsewhere that only it uses), the libraries only it uses, and its assets under `assets/panes/<id>/` (or a path `parts.json` names for it: the radio's `assets/radio-bundle/`) |
 | Shared library `<name>` | A library more than one part uses, counted once and in nobody's own total |
 | Zip overhead | The APK's own headers and directory |
