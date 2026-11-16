@@ -513,7 +513,6 @@ What checks it, besides the unit tests of the shared sources:
 | `size-generic` | It builds for arm64-v8a, with its id, minSdk 23, the three system permissions and GeckoView's native code | `pr.yml` |
 | `api23` | No new call above API 23 in the app's own sources | `pr.yml` |
 | The conformance test on API 23 | The core boots on Android 6 with a fake frame and engine, built at minSdk 23 with desugaring (`tools/legacy/api23-emulator.gradle`) | `core-emulators.yml` |
-| Generic test build | Signed legacy APKs per ABI, 0.1.0 and 0.1.1 | `generic-test-build.yml` (test-build branches) |
 
 ## How to reproduce
 

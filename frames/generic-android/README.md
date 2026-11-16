@@ -93,7 +93,7 @@ one built without it. Its GeckoView follows `-PlegacyAbi`, and the build fails u
 # → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
 ```
 
-Status: it builds (CI builds it on every change, and test builds carry it), and CI runs the core's conformance
+Status: it builds (CI builds and checks it on every change, without publishing it), and CI runs the core's conformance
 test on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no release. **Don't install it on Android 6 or 7
 yet:** `MainActivity` still makes API 24+ calls, so it would crash at start, and as the home app at every boot. Two
 things wait: the app's own start on Android 6 (#198 Phase B), and Kiln's Mirror recipe taking this id.
@@ -117,8 +117,10 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 ## Install
 
 It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet. To try a
-branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs, the legacy build's
-(`glassworks-generic-legacy-test-…`) included ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
+branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
+([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)). Not the legacy build's yet: its APK
+carries `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception), which waits for the maintainer's call, and it
+can't run on Android 6-7 before #198's Phase B.
 
 ## Updates
 
