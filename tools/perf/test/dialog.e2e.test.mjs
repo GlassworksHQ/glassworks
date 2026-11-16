@@ -96,9 +96,11 @@ function checkDialogs(t, lines, stage, mode) {
     assert.equal(d.close_error, null, `${d.kind}: ${d.close_error}`);
     assert.equal(d.mode, mode, `${d.kind}: shown as ${d.mode}`);
     assert.equal(d.of, TIERS.DIALOG.entities.length);
-    assert.ok(d.opened && d.open_ms >= 0 && d.open_ms <= d.shown_ms && d.shown_ms <= d.settled_ms, JSON.stringify(d));
+    // settled_ms is graded and unrounded; the detail points are to 0.1 ms.
+    const settled = Math.round(d.settled_ms * 10) / 10;
+    assert.ok(d.opened && d.open_ms >= 0 && d.open_ms <= d.shown_ms && d.shown_ms <= settled, JSON.stringify(d));
     assert.ok(d.close_ms > 0, `${d.kind}: close ${d.close_ms}`);
-    if (d.graph) assert.ok(d.graph_ms !== null && d.graph_ms <= d.settled_ms, `${d.kind}: graph ${d.graph_ms}`);
+    if (d.graph) assert.ok(d.graph_ms !== null && d.graph_ms <= settled, `${d.kind}: graph ${d.graph_ms}`);
     else assert.equal(d.graph_ms, null);
   }
   return ds;
