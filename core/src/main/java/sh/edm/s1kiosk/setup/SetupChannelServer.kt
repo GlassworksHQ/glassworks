@@ -104,7 +104,7 @@ object SetupChannelServer {
 
         /** Joins as an installer's join, so the panel's Wi-Fi step shows the progress and the outcome. */
         override fun joinWifi(ssid: String, password: String): SetupChannel.Change {
-            Log.i(TAG, "Wi-Fi details from the setup page: joining (${password.length} character password)")
+            Log.i(TAG, "Wi-Fi details from the setup page: joining")
             return SetupChannel.Change(afterReply = {
                 InstallerGlue.post {
                     if (!ImprovController.connectFromInstaller(ssid, password)) Log.w(TAG, "Wi-Fi: the panel's Wi-Fi isn't ready yet")
