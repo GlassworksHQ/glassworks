@@ -55,6 +55,13 @@ describe('the command sequence, per Android version', () => {
     expect(p.cmds).not.toContain('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
   });
 
+  it('Android 7.0 (API 24) is the first with set-home-activity', async () => {
+    const { p, res } = await run({ ...LEVELS.api25!, sdk: 24, release: '7.0' });
+    expect(res.plan.app).toBe(LEGACY);
+    expect(res.home).toMatchObject({ how: 'set-home-activity', state: 'set' });
+    expect(p.cmds.some((c) => c.startsWith('cmd package set-home-activity'))).toBe(true);
+  });
+
   it('Android 14: grants what the app asks for, reads each back, starts it with the URL and hands over to setup', async () => {
     const { p, res } = await run(LEVELS.api34!);
     expect(res.grants).toEqual([
