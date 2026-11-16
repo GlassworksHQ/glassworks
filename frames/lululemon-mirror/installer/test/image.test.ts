@@ -122,6 +122,16 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
   }, 60_000);
 
+  it('refuses an APK that lists the same library twice, before writing anything (#354 review)', async () => {
+    const img = join(dir, 'duplib.img');
+    mke2fs(img, 64, MAKE_EXT4FS, systemTree());
+    const disk = await load(img);
+    const before = hex(new Sha256().update(await disk.read(0, disk.blocks)).digest());
+    const apk = fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'armeabi-v7a': { 'libxul.so': new Uint8Array([1]) } }, extraEntries: [['lib/armeabi-v7a/libxul.so', new Uint8Array([2])]] });
+    await expect(patchSystem(await Ext4.open(disk), { apk, time: T })).rejects.toThrow(/libxul\.so more than once.*Nothing was changed/);
+    expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
+  }, 60_000);
+
   it('builds a fresh userdata that lets only this browser\'s adb key in', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
     const key = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';

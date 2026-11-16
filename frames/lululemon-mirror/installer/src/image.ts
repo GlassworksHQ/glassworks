@@ -82,10 +82,15 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   const libs = abi ? soIn(abi[0]) : [];
   // read every library before the first write: one Kiln can't unpack must leave the image as it was
   const payloads: [string, Uint8Array][] = [];
+  const seen = new Set<string>();
   for (const n of libs) {
+    const dest = n.split('/').pop()!;
+    // two entries for the same lib/<abi>/<name>.so would write one then fail on the second: refuse before any write
+    if (seen.has(dest)) throw new Error(`this APK lists ${abi![0]}/${dest} more than once. Nothing was changed.`);
+    seen.add(dest);
     const data = await zipEntry(o.apk, n).catch((e: Error) => { throw new Error(`${e.message}. Nothing was changed.`); });
     if (!data) throw new Error(`this APK lists ${n} but Kiln can't read it. Nothing was changed.`);
-    payloads.push([n.split('/').pop()!, data]);
+    payloads.push([dest, data]);
   }
 
   if (await fs.exists(APP_DIR)) { await fs.remove(APP_DIR, { recursive: true, time }); log(`replaced ${APP_DIR}`); }

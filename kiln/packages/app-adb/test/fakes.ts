@@ -97,7 +97,8 @@ function zip(files: [string, Uint8Array][]): Uint8Array {
  * `minSdk`: a <uses-sdk android:minSdkVersion>; `stripNames`: its attribute named only by resource id;
  * `shadow`: an unqualified minSdkVersion before it (Android ignores it); `minSdkKind`: its value type.
  */
-export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Record<string, Record<string, Uint8Array>> } & AxmlOptions = {}): Uint8Array {
+export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Record<string, Record<string, Uint8Array>>; extraEntries?: [string, Uint8Array][] } & AxmlOptions = {}): Uint8Array {
   const libs = Object.entries(o.libs ?? {}).flatMap(([abi, fs]) => Object.entries(fs).map(([n, b]): [string, Uint8Array] => [`lib/${abi}/${n}`, b]));
-  return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8, o)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs]);
+  // extraEntries goes in verbatim, so a test can repeat a name (a zip may list the same path twice)
+  return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8, o)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs, ...(o.extraEntries ?? [])]);
 }
