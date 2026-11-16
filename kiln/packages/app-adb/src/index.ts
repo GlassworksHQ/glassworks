@@ -119,8 +119,9 @@ export async function startApp(r: Steps, opts: { haUrl?: string; locale?: string
  */
 export async function dropAdmin(p: PanelShell, sleep: (ms: number) => Promise<void>, app: AppId = S1_KIOSK): Promise<boolean> {
   await p.run(`am start -n ${app.activity} --ez remove_admin true`);
+  // the admin's component (pkg/cls): a bare package would also match another package that starts with it
   for (let i = 0; i < 30; i++) {
-    if (!(await p.run('dumpsys device_policy')).out.includes(app.package)) return true;
+    if (!(await p.run('dumpsys device_policy')).out.includes(`${app.package}/`)) return true;
     await sleep(500);
   }
   return false;

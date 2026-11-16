@@ -271,7 +271,9 @@ This page is the index of every note. Notes about one device live with its frame
 
 ### Generic Android ([`frames/generic-android/`](../../frames/generic-android/README.md))
 
-No notes yet.
+| Note | Question |
+|---|---|
+| [kiln-install.md](../../frames/generic-android/research/kiln-install.md) | Which adb commands install Glassworks, grant it what it needs and set the home screen on Android 6, 7 and 8+, and what tells Kiln a device's brand before USB debugging is on (read, untested on a device, #403) |
 
 User-facing guides stay one level up, in [docs/](../README.md).
 
