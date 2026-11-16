@@ -7,8 +7,15 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 SDK=${ANDROID_HOME:-$HOME/Library/Android/sdk}
-BT=$(ls -d "$SDK"/build-tools/* | sort -V | grep -v rc | tail -1)
-JAR=$(ls -d "$SDK"/platforms/android-* | sort -V | grep -v '\.' | tail -1)/android.jar
+# Pinned: aapt2 writes the platform's version into the manifest (compileSdkVersion), so another
+# platform or build-tools gives other bytes than SETTINGS_OVERLAY.sha256.
+BUILD_TOOLS=36.0.0
+PLATFORM=android-36
+BT=$SDK/build-tools/$BUILD_TOOLS
+JAR=$SDK/platforms/$PLATFORM/android.jar
+for need in "$BT/aapt2" "$BT/apksigner" "$BT/zipalign" "$JAR"; do
+  [ -e "$need" ] || { echo "missing $need: sdkmanager \"build-tools;$BUILD_TOOLS\" \"platforms;$PLATFORM\"" >&2; exit 1; }
+done
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 KEYS=https://android.googlesource.com/platform/build/+/refs/tags/android-6.0.1_r81/target/product/security
 key() { curl -sfL "$KEYS/$1?format=TEXT" | base64 -d > "$TMP/$1"; echo "$2  $TMP/$1" | shasum -a 256 -c - >/dev/null; }

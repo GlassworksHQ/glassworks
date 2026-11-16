@@ -12,7 +12,7 @@ Each mechanism was read from Android 6.0.1's source and checked against the Glas
 files. None has run on a Mirror yet. The root's test plan is at the end.
 
 Device: lululemon Mirror (MSM8916), Glass Panes `mirror-android-2` (Android 6.0.1, `userdebug`,
-`test-keys`, no pre-optimised odex). Tools: `@glassworks/ext4`, Android SDK build-tools 36.0.0
+`test-keys`, no pre-optimised odex). Tools: `@glassworks/ext4`, Android SDK build-tools 36.0.0 and platform android-36 (pinned in `build.sh`)
 (`aapt2`, `apksigner`), AOSP source at `android-6.0.1_r81` (android.googlesource.com).
 
 ## Question
