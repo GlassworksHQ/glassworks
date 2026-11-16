@@ -111,10 +111,41 @@ class CaptivePortalTest {
         } finally {
             portal.stop()
         }
-        // Its sockets are gone: the same ports are free again. SO_REUSEADDR as the portal's own server sets it: Linux
-        // keeps the closed connection in TIME_WAIT, but still refuses the bind while a listener is there.
+        // Its DNS socket is gone when stop() returns: the port is free at once.
         DatagramSocket(InetSocketAddress(lo, dns)).close()
-        ServerSocket().use { it.reuseAddress = true; it.bind(InetSocketAddress(lo, web)) }
+        // The web server's too, within a moment (its accept thread wakes up). SO_REUSEADDR as the portal's own server
+        // sets it: Linux keeps the closed connection in TIME_WAIT, but still refuses the bind while a listener is there.
+        val until = System.nanoTime() + 3_000_000_000L
+        while (true) {
+            val freed = runCatching { ServerSocket().use { it.reuseAddress = true; it.bind(InetSocketAddress(lo, web)) } }
+            if (freed.isSuccess) break
+            if (System.nanoTime() > until) throw freed.exceptionOrNull()!!
+            Thread.sleep(50)
+        }
+    }
+
+    @Test
+    fun `a new start on the same IPv4 address rebinds DNS on the same port and keeps the redirect`() {
+        val lo = InetAddress.getByName("127.0.0.1") as Inet4Address
+        val dns = freePort()
+        val web = freePort()
+        val portal = CaptivePortal({ "http://$it:8099/setup" }, dnsPort = dns, httpPort = web)
+        portal.start(PortalAddresses(lo))
+        try {
+            repeat(3) { portal.start(PortalAddresses(lo)) } // what PortalHotspot does when the IPv6 address comes
+            DatagramSocket().use { s ->
+                s.soTimeout = 5_000
+                val q = query("captive.apple.com")
+                s.send(DatagramPacket(q, q.size, InetSocketAddress(lo, dns)))
+                s.receive(DatagramPacket(ByteArray(512), 512))
+            }
+            val c = URL("http://127.0.0.1:$web/generate_204").openConnection() as HttpURLConnection
+            c.instanceFollowRedirects = false
+            assertEquals(302, c.responseCode)
+            c.disconnect()
+        } finally {
+            portal.stop()
+        }
     }
 
     @Test
