@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Every device says what kind it is, and the Pixel Tablet is listed.** On glassworks.dev and in Kiln's
+  device list, each card now says whether it is a full frame with its own code (the S1), a device frame
+  that runs the generic app with its own settings (the Mirror, generic Android), or a tested device that
+  runs the generic app as it is. The Google Pixel Tablet is the first tested device. Its support is
+  planned and not yet checked on a real unit.
 - **See who is connected to the Zigbee radio.** In the Zigbee coordinator role, the radio's settings
   page says who uses the radio now, for example "Home Assistant · 192.0.2.20 · since 14:32", or
   "Nobody". It follows a connect or disconnect within a few seconds. Home Assistant has the same text as
