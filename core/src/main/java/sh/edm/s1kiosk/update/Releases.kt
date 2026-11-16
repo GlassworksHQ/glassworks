@@ -156,7 +156,7 @@ object Releases {
      * pre-release, odd assets), the newest acceptable one is still offered, and [ReleasePick.problem]
      * says what was wrong with the newer one. No release of this app at all: no offer, no problem.
      */
-    fun newest(releases: List<GithubRelease>, deviceAbis: List<String>, line: ReleaseLine = ReleaseLine.S1_KIOSK): ReleasePick {
+    fun newest(releases: List<GithubRelease>, deviceAbis: List<String>, line: ReleaseLine): ReleasePick {
         var best: UpdateOffer? = null
         var refused: Pair<AppVersion, String>? = null
         for (r in releases) {
@@ -180,7 +180,7 @@ object Releases {
      * preferred first; an ABI with half its pair is skipped for the next one), or
      * missing/odd assets. Download URLs must be HTTPS release downloads on github.com for this tag.
      */
-    fun offer(r: GithubRelease, deviceAbis: List<String>, line: ReleaseLine = ReleaseLine.S1_KIOSK): UpdateOffer {
+    fun offer(r: GithubRelease, deviceAbis: List<String>, line: ReleaseLine): UpdateOffer {
         if (r.draft) throw ReleaseFormatException("release ${r.tag} is a draft")
         if (r.prerelease) throw ReleaseFormatException("release ${r.tag} is a pre-release")
         val v = line.tagVersion(r.tag) ?: throw ReleaseFormatException("tag '${r.tag.take(40)}' is not a version of this app")

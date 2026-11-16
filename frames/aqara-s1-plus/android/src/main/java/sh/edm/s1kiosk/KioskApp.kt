@@ -10,6 +10,7 @@ import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import sh.edm.s1kiosk.update.ReleaseLine
 
 class KioskApp : Application(), GlassworksApp {
 
@@ -30,7 +31,7 @@ class KioskApp : Application(), GlassworksApp {
          * pass a fake [paneFrame]. Internal: the app makes one per process (one GeckoView runtime, one hub).
          */
         internal fun runtime(frame: Frame, build: AppBuild, paneFrame: Frame = frame): GlassworksRuntime =
-            GlassworksRuntime(frame, build, engine(build), S1Panes(), paneFrame)
+            GlassworksRuntime(frame, build, engine(build), S1Panes(), paneFrame, ReleaseLine.S1_KIOSK)
 
         /**
          * GeckoView, with the kiosk's helper extension (assets/extension). Its settings are read once, when
