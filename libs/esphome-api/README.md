@@ -71,10 +71,10 @@ ESPHome device. Package `dev.glassworks.esphome`, MIT licensed.
 - **Voice assistant:** the messages are wired through `VoiceAssistantHandler`: start and stop, API
   audio, events, timers, announcements and wake word configuration. The audio, wake word and UI
   stay in your app.
-- **Bluetooth proxy (passive):** the feature flags in DeviceInfo, the advertisement subscription
-  (one client at a time; a newer one replaces it, as in ESPHome) and batched raw advertisements,
-  through `BluetoothProxyHandler` and `sendBluetoothAdvertisements`. No GATT connections yet. The
-  Android scanner is [bluetooth-proxy](../bluetooth-proxy/README.md).
+- **Bluetooth proxy (passive):** the feature flags in DeviceInfo and DeviceCapabilities, the
+  advertisement subscription (one client at a time; a newer one replaces it, as in ESPHome) and
+  batched raw advertisements, through `BluetoothProxyHandler` and `sendBluetoothAdvertisements`. No
+  GATT connections yet. The Android scanner is [bluetooth-proxy](../bluetooth-proxy/README.md).
 - **Sendspin pairing-token hand-off:** for HA → Music Assistant, through `SendspinTokenSource`.
   Leave it unset if you don't have a Sendspin player.
 - **Noise cipher:** `NoiseCipher`, Noise's ChaChaPoly cipher state, is reusable on its own. S1
@@ -181,7 +181,7 @@ Status words:
 - **Not yet**: no decision either way.
 - **Not planned**: we won't, for the reason given.
 
-**Count for esphome-api** (against ESPHome 2026.10.2): 26 supported, 10 partial, 1 planned, 14 not yet, 15 not planned.
+**Count for esphome-api** (against ESPHome 2026.10.2): 27 supported, 9 partial, 1 planned, 14 not yet, 15 not planned.
 
 `tools/check-parity-tables.py` checks these words and the count. `ParityTableTest` checks that the
 entity types marked Supported or Partial are exactly the ones the server lists.
@@ -209,8 +209,8 @@ entity types marked Supported or Partial are exactly the ones the server lists.
 | Project name and version | `project_name`, `project_version`, and the same mDNS TXT records | Not yet | | |
 | Sub-devices and areas | `devices`, `areas`, `area`, `suggested_area`, and `device_id` on every entity | Not yet | | Every entity belongs to the one device |
 | Deep sleep flag | `has_deep_sleep` | Not planned: a microcontroller power mode | | |
-| Device capabilities | `DeviceCapabilitiesResponse` (149, 150) | Partial: voice and Sendspin blocks only | 0.1.0 | No `bluetooth_proxy` block. The proxy flags go in DeviceInfo, which HA still reads ([#337](https://github.com/GlassworksHQ/glassworks/issues/337)) |
-| Time from Home Assistant | `GetTimeRequest`, `GetTimeResponse` (36, 37) | Partial: the time zone only | 0.1.0 | `onTimeZone` gets the `timezone` string, which ESPHome deprecated in 2026.9 for `parsed_timezone` ([#337](https://github.com/GlassworksHQ/glassworks/issues/337)). The epoch is ignored: Android keeps its own clock |
+| Device capabilities | `DeviceCapabilitiesResponse` (149, 150) | Supported | Unreleased | The voice, Sendspin and Bluetooth proxy blocks. 0.1.1 and older leave out the proxy's flags, which HA still reads from DeviceInfo ([#337](https://github.com/GlassworksHQ/glassworks/issues/337)). The proxy's MAC address is its own row under [Bluetooth proxy](#bluetooth-proxy) |
+| Time from Home Assistant | `GetTimeRequest`, `GetTimeResponse` (36, 37) | Partial: the time zone only | 0.1.0 | `onTimeZone` gets the `timezone` string. ESPHome deprecated it in 2026.9 for `parsed_timezone`. After 0.1.1, an answer with only `parsed_timezone` gives the same POSIX rule with numeric names (`<+01>-1<+02>-2,M3.5.0/2,M10.5.0/3`). The epoch is ignored: Android keeps its own clock |
 | mDNS discovery | `_esphomelib._tcp`, TXT `friendly_name`, `version`, `mac`, `network`, `board`, `api_encryption`, `api_encryption_supported`, `api_provisioning` | Supported (android) | esphome-api-android 0.1.0 | `EspHomeMdns`. Without Android, advertise it yourself ([Use](#use)) |
 | Firmware mDNS records | TXT `platform`, `config_hash`, `ota_signed`, `package_import_url` | Not planned: they describe an ESPHome firmware build (chip, YAML hash, signed OTA, dashboard import) | | |
 

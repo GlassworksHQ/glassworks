@@ -273,9 +273,10 @@ public class ApiServer(
     @Volatile public var sendspin: SendspinTokenSource? = null
 
     /**
-     * The device's Bluetooth proxy, or null for none (no flags in DeviceInfo, subscriptions ignored).
-     * Its [BluetoothProxyHandler.onSubscribed] is called under a lock, so it must not block. Replacing
-     * it while a client is subscribed tells the old one the subscriber left and the new one it came.
+     * The device's Bluetooth proxy, or null for none (no flags in DeviceInfo or DeviceCapabilities,
+     * subscriptions ignored). Its [BluetoothProxyHandler.onSubscribed] is called under a lock, so it
+     * must not block. Replacing it while a client is subscribed tells the old one the subscriber left
+     * and the new one it came.
      */
     @Volatile public var bluetooth: BluetoothProxyHandler? = null
         set(value) {
@@ -311,7 +312,9 @@ public class ApiServer(
      * Called (on a connection thread) with Home Assistant's time zone. The server asks for the time
      * (`GetTimeRequest`) once an authenticated client subscribes to states, and Home Assistant's answer
      * carries its zone (`GetTimeResponse.timezone`) as a POSIX `TZ` rule, like
-     * `CET-1CEST,M3.5.0,M10.5.0/3`: aioesphomeapi turns HA's IANA zone into one.
+     * `CET-1CEST,M3.5.0,M10.5.0/3`: aioesphomeapi turns HA's IANA zone into one. An answer with only
+     * `parsed_timezone` (ESPHome 2026.9 deprecated the string) gets the same rule with numeric names,
+     * like `<+01>-1<+02>-2,M3.5.0/2,M10.5.0/3`.
      */
     @Volatile public var onTimeZone: ((String) -> Unit)? = null
 
@@ -870,7 +873,7 @@ public class ApiServer(
                 }
                 Msg.PING_RESPONSE -> Unit
                 // Only an authenticated client was asked: anyone else's zone is not Home Assistant's.
-                Msg.GET_TIME_RESPONSE -> if (authenticated) m.string(2).takeIf { it.isNotBlank() }?.let { zone ->
+                Msg.GET_TIME_RESPONSE -> if (authenticated) timeZoneOf(m)?.let { zone ->
                     try { onTimeZone?.invoke(zone) } catch (t: Throwable) { EspHomeLog.w("onTimeZone failed", t) }
                 }
                 Msg.DEVICE_INFO_REQUEST -> reply(Msg.DEVICE_INFO_RESPONSE, deviceInfo())
@@ -941,8 +944,12 @@ public class ApiServer(
         }
 
         private fun capabilities(): ProtoWriter {
+            val w = ProtoWriter()
+            // bluetooth_proxy = 1 { feature_flags = 1 }. Clients read the flags here from API 1.15 on.
+            // Its mac_address (2) waits on the GATT decision (#246); HA falls back to the device MAC.
+            bluetooth?.let { bt -> w.message(1, ProtoWriter().uint32(1, bt.featureFlags)) }
             // voice_assistant = 2 { feature_flags = 1 }
-            val w = ProtoWriter().message(2, ProtoWriter().uint32(1, identity().voiceFeatures))
+            w.message(2, ProtoWriter().uint32(1, identity().voiceFeatures))
             // sendspin = 6 { feature_flags = 1, client_id = 2 } (client id empty until the client has started)
             sendspin?.let { ss ->
                 w.message(6, ProtoWriter().uint32(1, SendspinApi.FEATURE_PAIRING_TOKEN).string(2, ss.clientIdIfStarted()))

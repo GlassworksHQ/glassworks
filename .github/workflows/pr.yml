@@ -107,7 +107,7 @@ jobs:
           apk=$(tools/release/android-layout.sh file "$GRADLE_ROOT" build/outputs/apk/release/kiosk-release-unsigned.apk)
           tools/release/check-update-compat.sh "$apk"
 
-      # EspHomeKeepaliveTest (#180), EspHomeActionsCameraTest (#120), EspHomeHaEventTest (#118) and BluetoothProxyHomeAssistantTest (#121) against the real aioesphomeapi
+      # EspHomeKeepaliveTest (#180), EspHomeActionsCameraTest (#120), EspHomeHaEventTest (#118), EspHomeCapsTimeTest (#337) and BluetoothProxyHomeAssistantTest (#121) against the real aioesphomeapi
       # client. They skip without ESPHOME_PYTHON, so this step fails if one skipped. About 30 s (venv
       # from hashed wheels, then those tests only), and only when the Android code or this file changed. The kiosk's EspHomeApiTest uses the same
       # client but isn't here yet. It failed once in two CI runs (#184).
@@ -144,13 +144,14 @@ jobs:
             -r "$esphome_api/test-requirements.txt"
           results=$esphome_api/build/test-results/test
           reports="$results/TEST-dev.glassworks.esphome.EspHomeKeepaliveTest.xml $results/TEST-dev.glassworks.esphome.EspHomeActionsCameraTest.xml
-            $results/TEST-dev.glassworks.esphome.EspHomeHaEventTest.xml
+            $results/TEST-dev.glassworks.esphome.EspHomeHaEventTest.xml $results/TEST-dev.glassworks.esphome.EspHomeCapsTimeTest.xml
             $bluetooth_proxy/build/test-results/testDebugUnitTest/TEST-dev.glassworks.esphome.bluetoothproxy.BluetoothProxyHomeAssistantTest.xml"
           # --rerun: Gradle doesn't see ESPHOME_PYTHON, and the Unit tests step left the task up to date.
           # On a failure, the report's message holds the Python client's output.
           ESPHOME_PYTHON="$RUNNER_TEMP/esphome-venv/bin/python" ./gradlew --no-daemon --continue \
             :esphome-api:test --tests dev.glassworks.esphome.EspHomeKeepaliveTest \
-            --tests dev.glassworks.esphome.EspHomeActionsCameraTest --tests dev.glassworks.esphome.EspHomeHaEventTest --rerun \
+            --tests dev.glassworks.esphome.EspHomeActionsCameraTest --tests dev.glassworks.esphome.EspHomeHaEventTest \
+            --tests dev.glassworks.esphome.EspHomeCapsTimeTest --rerun \
             :bluetooth-proxy:testDebugUnitTest --tests dev.glassworks.esphome.bluetoothproxy.BluetoothProxyHomeAssistantTest --rerun \
             || { cat $reports; exit 1; }
           for report in $reports; do
