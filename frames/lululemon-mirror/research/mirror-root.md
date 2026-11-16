@@ -7,7 +7,8 @@ verified on the unit, with `id` reporting uid 0 and the firmware list it read ba
 bootloader is locked (`secure: yes`, `Device unlocked: false`), which rules out boot writes and
 RAM-booting our own image; `system` stays writable, so the published image can always go back. What
 that root buys is a short path list — `/firmware/image`, the top-level files in `/persist` — and
-nothing that needs a block device, `setenforce` or a root shell. Equipment: three `system` flashes
+nothing that needs a block device, `setenforce` or a root shell — and it cannot drive Android
+either: `pm`, `svc` and `am` all fail on `app_process`, which is out of its reach (§7). Equipment: three `system` flashes
 (the published image unchanged, then two patched ones) and a few small files in `/persist`; no
 bootloader unlock, no boot/modem/oem writes.
 
@@ -268,7 +269,6 @@ whole channel, and it is why §5's `/cache` idea could never have worked: `shell
 rule at all.
 
 **What this root can and cannot do** (policy, cross-checked by the run above):
-
 | Path | Root in `qti_init_shell` |
 |---|---|
 | `/firmware/image` (`firmware_file`) | read, list |
@@ -278,6 +278,23 @@ rule at all.
 | Block devices (`block_device`, `boot_block_device`, …) | **denied** — no partition dumps |
 | `setenforce`, policy load | **denied** |
 | Sockets `adbd` can reach | none (`adbd → appdomain` covers apps, not this domain) |
+
+**Android's own tools are out of reach, and that fixes what this root is good for.** `pm`, `svc` and
+`am` are one-line scripts that `exec app_process`, which is `zygote_exec` in the policy. The hook
+asked it directly (2026-11-15):
+
+```
+$ PATH=/system/bin:$PATH pm list packages
+/system/bin/pm[6]: app_process: not found          # exit 127, and not the word "denied"
+avc: denied { getattr } for pid=1617 comm="sh" path="/system/bin/app_process64"
+  scontext=u:r:qti_init_shell:s0 tcontext=u:object_r:zygote_exec:s0 tclass=file
+$ svc wifi enable                                  # same, exit 127
+```
+
+It cannot even `getattr` the launcher, so no package list, no Wi-Fi toggle, no broadcast, no
+`dumpsys`. `setprop` to a name the property service does not already know exits 0 and changes
+nothing. This root works with files, `/persist`, `sysfs` and `/proc` — **not with Android**. That is
+the honest description: a boot-time root for copying firmware, not a way to drive the system.
 
 **What `/firmware/image` holds** (names and sizes only; the bytes stay outside the repo):
 
@@ -365,8 +382,9 @@ from the policy, `dmesg` and AOSP 6.0.1_r81; `flash_recovery` stays untested and
   was copied. They are firmware copies and must be deleted (one more hook run) and never committed.
   `/persist` itself also holds device-unique values — `boardserial.txt`, `bt.txt`, `bt_mac.pst`,
   `eth.txt`, `deviceid.txt` — which is why only the listing, never the contents, is in this note.
-- The firmware copies themselves live outside the repo, in `~/src/mirror-root-research/`, like the
-  rest of the pulled material.
+- The firmware copies live outside the repo, in `~/.t3/glassworks-m1/29-mirror/` (`firmware/` plus
+  a manifest of size and md5 per file), like the rest of the pulled material in
+  `~/src/mirror-root-research/`. Nothing from `/firmware` or `/persist` is committed.
 - §5's pull analysis (2026-11-15) was done with **reads only**: no push, no install, no flash. Every
   adb command in it is `ls`/`cat`/`dmesg` as `shell`, and the off-device work is AOSP source plus
   the policy dump from §3.
@@ -391,9 +409,11 @@ Where the work stands, in order, as of 2026-11-15:
   went). Then one more hook run deletes the `gw-*` files, and `fastboot flash system` with the
   published image removes the hook. The firmware itself stays outside the repo.
 - **Custom `.ko`:** reproduce this kernel's `vermagic`/CRCs from CAF `msm-3.10` + this `.config`;
-  a replacement `wlan` must chain-load the original (§4). This is the only way past §7's limits, and
-  the only step here that can damage the panel — a wrong regulator or panel value is physical damage
-  and there is no working EDL loader for this chip to fall back on.
+  a replacement `wlan` must chain-load the original (§4). This is the only way past §7's limits
+  (`sys_module` is in the domain's capability set), and the only step here that can damage the
+  panel — a wrong regulator or panel value is physical damage, and there is no working EDL loader
+  for this chip to fall back on. **This note stops here**: the firmware copy and #41 are what this
+  pass set out to get, and the kernel route is a separate decision, not a follow-on.
 - **Kiosk work, no flash at all:** the platform test-key app (§6) for Wi-Fi, rotation and lock screen.
   That is a different thread's job and needs none of the above.
 
