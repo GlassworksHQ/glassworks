@@ -4,8 +4,8 @@
 What it touches on the device:
   device     read-only (getprop, /proc, dumpsys, wm size).
   hold       `am start --ez test_hold true --ei test_hold_s <s>`, the kiosk's test hold (#240): the
-             screen on, in the app's memory only (no setting changes), until it expires, the app
-             stops, or `hold --off` (`--ez test_hold false`). Then reads logcat for the kiosk's answer.
+             screen on (no setting changes), through restarts of the app, until it expires or
+             `hold --off` (`--ez test_hold false`). Then reads logcat for the kiosk's answer.
   synthetic  `am start` the app if it isn't running, then the test hold, then `am start --es open
              <page>` (one-off navigation; the saved dashboard URL is not changed), and `input tap` on
              the test page's tap target when --taps > 0.
@@ -13,7 +13,7 @@ What it touches on the device:
              `am force-stop` the app. A home-app kiosk is relaunched by the system; otherwise
              `am start -W` starts it. Either way it comes back on the saved dashboard.
   refstart   As coldstart, with `input keyevent KEYCODE_WAKEUP` through the restart; once the kiosk's
-             own page has finished, the test hold again before each view (the restart ended it), and
+             own page has finished, the test hold again before each view, and
              each reference dashboard in turn (opened by the fake Home Assistant; the saved URL is not changed),
              `input tap` on its toggle when --taps > 0, and `input swipe` where the page asks (only
              on our page, only for the run's nonce).
@@ -49,8 +49,8 @@ class Device:
         return r.stdout
 
     def hold(self):
-        """The kiosk's test hold again, for TEST_HOLD_S from now: after a restart ended it, or before a
-        part that may outlast what is left of it. run.sh checked the kiosk takes it (cmd_hold). It
+        """The kiosk's test hold again, for TEST_HOLD_S from now, before a part that may outlast what is
+        left of it. run.sh checked the kiosk takes it (cmd_hold). It
         returns once adb has sent it, so it never lands in a view being measured."""
         self.sh(f"am start -n {self.component} {HOLD_ON}")
 
@@ -262,8 +262,10 @@ def cmd_panes(dev, a):
 
 
 # The kiosk's test hold (#240): the screen on past the idle timeout for TEST_HOLD_S, and nothing else
-# changed (brightness and night dimming stay as they are). It lives in the app's memory, so it ends with
-# the process: the runner sends it again before each part and each view. The app logs it as TEST_HOLD_RE.
+# changed (brightness and night dimming stay as they are). It outlives a restart of the app (the S1's
+# night run, 2026-11-16: without that, the new process's 20 s night timeout turned the screen off in
+# every graded restart). The runner sends it again before each part and each view, so a long run
+# never outlasts it. The app logs it as TEST_HOLD_RE.
 TEST_HOLD_S = 1800
 HOLD_ON = f"--ez test_hold true --ei test_hold_s {TEST_HOLD_S}"
 TEST_HOLD_RE = re.compile(r"test hold (?:on|renewed) for \d+ s")
@@ -363,11 +365,12 @@ SLEEP_RE = re.compile(r"PowerManagerService.*Going to sleep|Going to sleep due t
 # Before it, the wake intents every 8 s and a live view's after 10 s without a touch did, and still
 # lost it: s1rtc5 run 1 (23:50) lost heavy's screen 16 to 20 s after its last tap, while the page
 # waited out its camera window before the swipes.
-# From the force-stop until the restart page is done (and through a recovery's restart), the hold has
-# died with the app, so Android's wake key this often, and once at the stop and once at the relaunch:
-# s1rtc7 run 2 lost the screen 20.4 s after the stop, before the kiosk's first frame, which then
-# waited 280 s for the screen to come back. The kiosk's own intent would start the stopped app and
-# change the restart being measured.
+# From the force-stop until the next view's hold (and through a recovery's restart), Android's wake key
+# this often, and once at the stop and once at the relaunch, for the time the app is down: s1rtc7 run 2
+# lost the screen 20.4 s after the stop, before the kiosk's first frame, which then waited 280 s for
+# the screen to come back. The kiosk's own intent would start the stopped app and change the restart
+# being measured. The wake key doesn't reset the kiosk's own idle timer once it runs: the hold,
+# which outlives the restart, does that.
 RESTART_WAKE_S = float(os.environ.get("GW_PERF_RESTART_WAKE_S", "8"))
 # The CPU clock each view ran at (detail, #244: the S1's power HAL held 1.2 of its 1.608 GHz): every
 # core's scaling_cur_freq this often while a view is open, and each core's cpuinfo_max_freq once.
@@ -499,8 +502,8 @@ def cmd_coldstart(dev, a):
                     res.setdefault("cpu_khz", []).append([cur[0], round(C.now(), 1), khz])
 
     def hold():
-        """The test hold, for TEST_HOLD_S from now, before each view opens: a restart ended the last one,
-        and a long run would outlast it. Not in a timed window: the view's open starts after it."""
+        """The test hold, for TEST_HOLD_S from now, before each view opens, so a long run never outlasts
+        it. Not in a timed window: the view's open starts after it."""
         st["held"] = True                      # keep_awake's wake key stops now
         dev.hold()
         res["holds"] = res.get("holds", 0) + 1
@@ -834,7 +837,7 @@ def cmd_coldstart(dev, a):
                     pass
                 paused.clear()
                 st["recovering"] = {"at": C.now()}
-                st["held"] = False            # the restart ends the hold
+                st["held"] = False            # the wake key again until the next view's hold
                 res.setdefault("recoveries", []).append({"after": view})
                 dev.nudge()
                 dev.sh(f"am force-stop {dev.package}")

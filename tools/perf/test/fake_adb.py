@@ -71,8 +71,9 @@ def held():
 
 
 def test_hold(cmd):
-    """The kiosk's test hold (#240), in its memory: the screen on until it ends, expires or the app
-    stops, logged as the kiosk logs it. FAKE_NO_TEST_HOLD: a kiosk before #240, which ignores it."""
+    """The kiosk's test hold (#240): the screen on until it ends or expires, through a restart of the
+    app too, logged as the kiosk logs it. FAKE_NO_TEST_HOLD: a kiosk before #240, which ignores it.
+    FAKE_HOLD_DIES: as #332's first version, whose hold died with the process."""
     if os.environ.get("FAKE_NO_TEST_HOLD"):
         return
     was = held()
@@ -85,6 +86,7 @@ def test_hold(cmd):
     elif was:
         save("test_hold.json", None)
         save("awake_at.json", C.now())       # the idle timeout counts from the end
+        save("kiosk_awake_at.json", C.now())
         said = "test hold off (ended)"
     else:
         return
@@ -98,6 +100,10 @@ def shell(cmd):
     if os.environ.get("FAKE_SCREEN_SLEEP_S") and ("KEYCODE_WAKEUP" in cmd
                                                    or cmd.startswith(("input swipe", "input tap"))):
         save("awake_at.json", C.now())       # what keeps the fake screen on (a wake, a touch)
+        if "KEYCODE_WAKEUP" not in cmd or state("asleep.json"):
+            # The kiosk's own timer counts touches, and a screen that comes back on; the wake key
+            # alone doesn't reset it (the S1's night run, 2026-11-16).
+            save("kiosk_awake_at.json", C.now())
         save("asleep.json", False)
         if "KEYCODE_WAKEUP" in cmd:
             save("nudges.json", state("nudges.json", 0) + 1)
@@ -143,8 +149,8 @@ def shell(cmd):
             # FAKE_VOICE_LOST: as S1 Kiosk 0.4.3, which saves voice_enabled asynchronously and exits
             # to restart at once, so the write is lost.
             save("intents.json", state("intents.json", []) + [dict(ez)])
-            if ("restart", "true") in ez:
-                save("test_hold.json", None)     # the hold dies with the process
+            if ("restart", "true") in ez and os.environ.get("FAKE_HOLD_DIES"):
+                save("test_hold.json", None)
             keep = {k: v for k, v in ez if k != "restart" and not (k == "voice_enabled" and os.environ.get("FAKE_VOICE_LOST"))}
             save("settings.json", dict(state("settings.json", {}), **keep))
         m = re.search(r"--es open '([^']+)'", cmd)
@@ -263,7 +269,8 @@ def shell(cmd):
     if cmd.startswith("wm density"):
         return "Physical density: 240\n"
     if cmd.startswith("am force-stop"):
-        save("test_hold.json", None)         # the hold dies with the process
+        if os.environ.get("FAKE_HOLD_DIES"):
+            save("test_hold.json", None)
         save("stopped.json", True)
         save("session_up.json", False)
         if os.environ.get("FAKE_HOME_RELAUNCH"):
@@ -551,6 +558,7 @@ def dashboard():
     """A cold start as on the S1: Displayed, then 0.6 s later GeckoView's own about:blank (the session
     is up from here), then the kiosk's own dashboard."""
     line("ActivityManager", f"Start proc 5555:{PKG}/u0a83 for activity {{{PKG}/{PKG}.MainActivity}}", pid=1918)
+    save("kiosk_awake_at.json", C.now())   # the new process's idle timer starts
     line("ActivityTaskManager", f"Displayed {PKG}/.MainActivity: +1s714ms", pid=1918)
     C.sleep(0.6)
     line("GeckoSession", "handleMessage GeckoView:PageStart uri=about:blank")
@@ -625,8 +633,10 @@ def take_commands(base):
 
 
 def screen_timeout(after_s):
-    """As the S1 at night: the screen goes off after_s seconds after the last wake or touch."""
+    """As the S1 at night: the screen goes off after_s seconds after the last wake or touch.
+    FAKE_KIOSK_IDLE_S: the kiosk's own idle timer too, which a wake key doesn't reset."""
     save("awake_at.json", state("awake_at.json") or C.now())
+    kiosk_s = float(os.environ.get("FAKE_KIOSK_IDLE_S") or 0)
     while True:
         C.sleep(0.1)
         awake_at = state("awake_at.json")
@@ -635,6 +645,10 @@ def screen_timeout(after_s):
         if not state("asleep.json") and not held() and C.now() - awake_at > after_s:
             save("asleep.json", True)
             line("PowerManagerService", "Going to sleep due to timeout (uid 1000)...", pid=1919)
+        kiosk_at = state("kiosk_awake_at.json")
+        if kiosk_s and kiosk_at and not state("asleep.json") and not held() and C.now() - kiosk_at > kiosk_s:
+            save("asleep.json", True)
+            line("PowerManagerService", "Going to sleep due to device_admin (uid 1000)...", pid=1919)
 
 
 def logcat():

@@ -144,15 +144,18 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
 - **The screen stays on** through the kiosk's test hold (#240): `--ez test_hold true --ei
   test_hold_s 1800`. While it lasts, the kiosk's idle timeout doesn't turn the screen off. It changes
   nothing else: brightness and night dimming stay what the panel shows without it, so a run at night
-  is measured at the night's brightness, as before #240. The hold lives in the app's memory only: it changes no setting,
-  Home Assistant sees no setting change, and it ends after its time, when the app stops, or at
-  `--ez test_hold false`. The runner sets it first and checks the kiosk's log for its answer
+  is measured at the night's brightness, as before #240. It changes no setting, and Home
+  Assistant sees no setting change. It outlives a restart of the app: the app keeps it in its memory
+  and in a file outside its settings and backups (`no_backup/test_hold`), so the new process holds
+  the screen from its start. In the S1's night run (2026-11-16) a hold that died with the process let
+  the new process's own 20 s night timeout turn the screen off in every graded restart. It ends after
+  its time, at `--ez test_hold false`, or at a reboot. The runner sets it first and checks the kiosk's log for its answer
   (`test hold on for 1800 s`). An app that doesn't answer within 15 s is refused, with no fallback.
-  It sets it again before each part and before each view opens (a restart ends it, and a long run
-  would outlast one), and ends it on exit. From the force-stop until the first view's hold (and
-  through a recovery's restart), the app is down or starting, so Android's own wake key (`input keyevent
-  KEYCODE_WAKEUP`) goes at the stop, at the relaunch and every 8 s: the kiosk's intent would launch
-  the stopped app and change the restart being measured. In s1rtc7 run 2 (2026-11-14, 01:12) the
+  It sets it again before each part and before each view opens, so a long run never outlasts it,
+  and ends it on exit. From the force-stop until the next view's hold (and through a recovery's
+  restart), Android's own wake key (`input keyevent KEYCODE_WAKEUP`) goes at the stop, at the
+  relaunch and every 8 s, for the time the app is down: the kiosk's intent would launch the stopped
+  app and change the restart being measured. In s1rtc7 run 2 (2026-11-14, 01:12) the
   screen went off 20.4 s after the stop, before the kiosk's first frame, which then waited 280 s
   for the screen. If the screen goes off anyway during a graded run (Android's
   `PowerManagerService: Going to sleep` in logcat), that run is an error: with the screen off Gecko

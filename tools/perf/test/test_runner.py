@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
 
@@ -816,11 +817,15 @@ class Restart(unittest.TestCase):
         self.assertEqual(sorted(c["tiers"]), ["heavy", "light", "typical", "typical-nocam"])
         self.assertIsNone(self.build(tmp)["graded"]["reference"]["per_run"][0]["start_error"])
 
-    def run_short(self, timeout, fallback="", **env):
+    def run_short(self, timeout, fallback="", held_s=None, **env):
         with FakeHA() as ha:
             tmp = tempfile.mkdtemp()
             env.setdefault("FAKE_SAVED_URL", ha.url + "/clarity-ref/start")
             e, state = fake_env(tmp, GW_PERF_COLD_SETTLE="0", FAKE_HA_URL=ha.url, **env)
+            if held_s:
+                # The test hold run.sh sets before the graded part, on the fake's (scaled) clock.
+                with open(os.path.join(state, "test_hold.json"), "w") as f:
+                    json.dump(time.time() / float(e["GW_PERF_TIME_SCALE"]) + held_s, f)
             p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "perfrun.py"), "refstart", "--out", tmp,
                                 "--run", "1", "--settle", "0", "--url", ha.url, "--taps", "0", "--timeout", str(timeout),
                                 "--between-quiet", "0.3", "--fallback", fallback], env=e, capture_output=True, text=True,
@@ -948,6 +953,18 @@ class Restart(unittest.TestCase):
         p, c, _ = self.run_short(90, **dict(nudged, FAKE_NO_TEST_HOLD="1"))
         self.assertNotIn("the restart", {x["during"] for x in c.get("screen_off", [])}, c.get("screen_off"))
         self.assertIn("the screen went off during the graded run", c["error"])
+
+    def test_a_hold_from_before_the_restart_keeps_the_screen_on_through_it(self):
+        """The S1's night run (2026-11-16): in each graded restart the new process's own 20 s idle
+        timer turned the screen off before the runner sent the hold again, and the wake key doesn't
+        reset that timer. The hold run.sh set now outlives the restart."""
+        night = dict(FAKE_SCREEN_SLEEP_S="100", FAKE_KIOSK_IDLE_S="4", FAKE_RESTART_SLOW="9", GW_PERF_RESTART_WAKE_S="1")
+        p, c, _ = self.run_short(90, held_s=1800, **night)
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertNotIn("screen_off", c)
+        # A hold that died with the process, as in that run: the screen goes off in the restart.
+        p, c, _ = self.run_short(90, held_s=1800, **dict(night, FAKE_HOLD_DIES="1"))
+        self.assertEqual(c["screen_off"][0]["during"], "the restart", c.get("screen_off"))
 
     def test_a_slow_view_that_keeps_going_isnt_cut_off(self):
         """Protocol 8 (#202, s1rtc4): heavy was usable after 43 s and still working at 300 s, before its

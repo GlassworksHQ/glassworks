@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import java.io.File
 import java.util.Calendar
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.log10
@@ -98,6 +99,14 @@ class ScreenPolicy(
     var testHeld = false; private set
     /** When it ends, on [SystemClock.elapsedRealtime], which counts deep sleep too. */
     private var testHoldUntil = 0L
+    /** Keeps the hold through a restart of the app; set once a context is known. */
+    private var testHoldFile: TestHoldFile? = null
+
+    private fun testHoldFile(c: Context): TestHoldFile =
+        testHoldFile ?: TestHoldFile(File(c.applicationContext.noBackupFilesDir, "test_hold")).also { testHoldFile = it }
+
+    /** Which boot this is: a hold saved in another boot is not this one's. Android 7 added the count (-1 before). */
+    private fun boot(c: Context): Long = android.provider.Settings.Global.getInt(c.contentResolver, "boot_count", -1).toLong()
 
     /** Activity hooks: keep-screen-on flag and window brightness (0..1, or -1 = system). */
     var onKeepScreenOn: ((Boolean) -> Unit)? = null
@@ -144,6 +153,13 @@ class ScreenPolicy(
         })
         applyPresenceRange()
         handler.post(tick)
+        // A test restarted the app inside its hold: the new process holds the screen from its start,
+        // before the kiosk's idle timeout (20 s at night) can turn it off.
+        if (!testHeld) testHoldFile(ctx).read(SystemClock.elapsedRealtime(), boot(ctx), TEST_HOLD_MAX_S * 1000L)?.let { end ->
+            testHeld = true
+            testHoldUntil = end
+            Log.i(logTag, "test hold resumed for ${(end - SystemClock.elapsedRealtime() + 999) / 1000} s")
+        }
         // A test hold from before start() (the intent that launched the activity) hasn't woken it yet.
         if (testHeld) wake(TEST_HOLD)
     }
@@ -230,11 +246,14 @@ class ScreenPolicy(
      * Keeps the screen on past the idle timeout for a test run, such as Clarity's (#240), for [seconds]
      * from now, or ends that at once when [seconds] is 0 or less. A new one while it is on moves the end.
      * Brightness and night dimming stay as they are, so a test measures the panel as it would be. It
-     * lives in memory only, so it changes no setting, and it ends with the process, at [stop], and by
-     * itself, so a test that crashed can't leave the screen on.
+     * changes no setting: it lives in memory and in [TestHoldFile], which carries it through a restart
+     * of the app (a test restarts it) and not past a reboot. It ends by itself, so a test that crashed
+     * can't leave the screen on, and at [stop].
      */
-    fun testHold(seconds: Int) {
+    fun testHold(context: Context, seconds: Int) {
+        val file = testHoldFile(context)
         if (seconds <= 0) {
+            file.clear()
             if (testHeld) endTestHold("ended")
             return
         }
@@ -242,6 +261,7 @@ class ScreenPolicy(
         Log.i(logTag, "test hold ${if (testHeld) "renewed" else "on"} for $s s")
         testHeld = true
         testHoldUntil = SystemClock.elapsedRealtime() + s * 1000L
+        file.write(testHoldUntil, boot(context))
         if (started) wake(TEST_HOLD)
     }
 
@@ -249,14 +269,15 @@ class ScreenPolicy(
      * An intent's [TEST_HOLD_EXTRA]: `true` holds for [TEST_HOLD_S_EXTRA] seconds (1800 without it),
      * `false` ends it. Removed once applied, so a recreated activity doesn't apply it again.
      */
-    fun applyTestHoldExtra(intent: Intent) {
+    fun applyTestHoldExtra(context: Context, intent: Intent) {
         if (!intent.hasExtra(TEST_HOLD_EXTRA)) return
-        testHold(if (intent.getBooleanExtra(TEST_HOLD_EXTRA, false)) intent.getIntExtra(TEST_HOLD_S_EXTRA, 1800) else 0)
+        testHold(context, if (intent.getBooleanExtra(TEST_HOLD_EXTRA, false)) intent.getIntExtra(TEST_HOLD_S_EXTRA, 1800) else 0)
         intent.removeExtra(TEST_HOLD_EXTRA)
     }
 
     /** The idle timeout counts from now, so the screen doesn't go dark at once. */
     private fun endTestHold(why: String) {
+        testHoldFile?.clear()
         testHeld = false
         Log.i(logTag, "test hold off ($why)")
         lastActivity = SystemClock.elapsedRealtime()

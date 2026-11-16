@@ -14,10 +14,10 @@
 #   - Sets the kiosk's test hold (`--ez test_hold true --ei test_hold_s 1800`, #240) at the start,
 #     before each part and each view, and ends it on exit (`--ez test_hold false`): the screen stays
 #     on past the idle timeout, at the brightness it would have anyway, without changing a setting.
-#     The hold lives in the app's memory and expires by itself.
+#     The hold outlives a restart of the app and expires by itself.
 #     Refuses to run if the kiosk doesn't say in its log that it took the hold.
 #   - Sends Android's wake key (`input keyevent KEYCODE_WAKEUP`) through each restart, while the app
-#     is down or starting and has no hold.
+#     is down or starting.
 #   - Taps each reference dashboard's "Living room" toggle (`input tap`) and swipes it (`input swipe`),
 #     only where and when the page asks, to measure taps and scrolling.
 #   - Force-stops the app for each cold start (KEYCODE_WAKEUP first, so the screen is on); the app
