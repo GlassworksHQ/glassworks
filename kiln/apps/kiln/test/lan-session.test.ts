@@ -15,13 +15,23 @@ function fakePanel({ open = true } = {}) {
   };
   const panel = {
     paired: false,
+    /** Every channel the page opens fails its first request (it opens, then nothing answers). */
+    channelDead: false,
+    /** The panel refuses to end the session (a network error on /setup/done). */
+    doneFails: false,
+    closedChannels: 0,
+    sleep: async () => {},
     shown: false,
     calls: [] as string[],
     asked: [] as string[],
     async fetch(path: string, init?: { method: 'POST'; body?: string }) {
       panel.calls.push(`${init?.method ?? 'GET'} ${path}${init?.body ? ` ${init.body}` : ''}`);
       const reply = (status: number, body: Record<string, unknown>) => ({ status, json: async () => body });
-      if (path === '/setup/done') { panel.paired = false; return reply(200, { ok: true }); }
+      if (path === '/setup/done') {
+        if (panel.doneFails) throw new TypeError('Failed to fetch');
+        panel.paired = false;
+        return reply(200, { ok: true });
+      }
       if (!init) return reply(200, { ok: true, paired: panel.paired, open });
       if (!open) return reply(403, { ok: false, error: 'Home Assistant has added this panel, so pairing over the network is off.' });
       if (!init.body) { panel.shown = true; return reply(200, { ok: true, shown: true }); }
@@ -37,8 +47,9 @@ function fakePanel({ open = true } = {}) {
       let cb: (c: Uint8Array) => void = () => {};
       return {
         onData: (f) => { cb = f; },
-        close: async () => {},
+        close: async () => { panel.closedChannels++; },
         write: async (d) => {
+          if (panel.channelDead) throw new Error('the connection dropped');
           for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
             const m = JSON.parse(line);
             panel.asked.push(m.op);
@@ -119,5 +130,34 @@ describe('the panel\'s setup page', () => {
     await lan.enterCode('4829');
     expect(lan.state.view).toMatchObject({ at: 'pair', error: 'The code has 6 digits.' });
     expect(panel.calls.filter((c) => c.includes('code='))).toEqual([]);
+  });
+
+  it('a channel that never answers is an error to retry, not Done, and no try leaves a socket open', async () => {
+    const panel = fakePanel();
+    panel.paired = true;
+    panel.channelDead = true;
+    const lan = new LanSession(panel);
+    await lan.start();
+    expect(lan.state.view).toMatchObject({ at: 'lost', again: 'start', error: expect.stringMatching(/didn't open its setup channel/) });
+    expect(panel.calls).not.toContain('POST /setup/done');
+    expect(panel.closedChannels).toBe(5); // every try's socket, once its first request failed
+    panel.channelDead = false;
+    await lan.retry();
+    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha' } });
+  });
+
+  it('says Done only once the panel has ended the pairing, and Try again ends it', async () => {
+    const panel = fakePanel();
+    panel.paired = true;
+    const lan = new LanSession(panel);
+    await lan.start();
+    panel.doneFails = true;
+    lan.finish();
+    await vi.waitFor(() => expect(lan.state.view).toMatchObject({ at: 'lost', again: 'done' }));
+    expect(panel.paired).toBe(true);
+    panel.doneFails = false;
+    await lan.retry();
+    expect(lan.state.view).toEqual({ at: 'done' });
+    expect(panel.paired).toBe(false);
   });
 });

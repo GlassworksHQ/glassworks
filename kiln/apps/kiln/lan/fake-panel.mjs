@@ -5,7 +5,8 @@
 //   node kiln/apps/kiln/lan/fake-panel.mjs [--port 8099] [--closed]
 //   then open http://localhost:8099/setup; the code the "panel" shows is printed here (482913).
 //
-// --closed: Home Assistant has adopted the panel, so pairing is off.
+// --closed: Home Assistant has adopted the panel, so pairing is off. Sign in on the Home Assistant step
+// opens this fake's /signin, which signs the "panel" in at once.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -25,7 +26,8 @@ const files = {
 
 const state = {
   ip: '192.0.2.10',
-  ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: 'http://192.0.2.10:8099/signin' },
+  // the sign-in link is this fake's own /signin, which signs the "panel" in at once
+  ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: `http://localhost:${port}/signin` },
   radio: {
     mode: 'off', status: 'Off', helper: true, answered: false, allowed: '',
     options: [
@@ -65,6 +67,11 @@ const server = createServer((req, res) => {
       const token = `session-${sessions.size + 1}`;
       sessions.add(token);
       return json(res, 200, { ok: true, paired: true }, token);
+    }
+    if (path === '/signin') {
+      state.ha.signedIn = true;
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end('<!doctype html><title>Signed in</title><p>The fake panel is signed in to Home Assistant. Close this tab: the setup page notices within 3 seconds.</p>');
     }
     if (path === '/setup/done' && req.method === 'POST') { sessions.delete(cookieOf(req)); return json(res, 200, { ok: true }); }
     res.writeHead(404).end();

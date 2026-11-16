@@ -55,9 +55,9 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
     case 'lost':
       return (
         <section className="card err" aria-labelledby="h">
-          <h2 id="h">The panel stopped answering.</h2>
+          <h2 id="h">{v.again === 'done' ? 'Almost done.' : 'The panel stopped answering.'}</h2>
           <p className="lede">{v.error}</p>
-          <div className="foot"><span /><button type="button" className="btn ember" disabled={busy} onClick={() => void lan.click('retry', () => lan.start())}>Try again</button></div>
+          <div className="foot"><span /><button type="button" className="btn ember" disabled={busy} onClick={() => void lan.click('retry', () => lan.retry())}>Try again</button></div>
         </section>
       );
     case 'done':

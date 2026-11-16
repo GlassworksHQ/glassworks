@@ -83,7 +83,7 @@ class LanSetup(
         return when (req.path) {
             CHANNEL -> channel(req)
             PAIR -> when (req.method) {
-                "GET" -> json(200, JSONObject().put("ok", true).put("paired", sessions.valid(req.cookies[COOKIE], touch = false)).put("open", pairingOpen()))
+                "GET" -> json(200, JSONObject().put("ok", true).put("paired", sessions.valid(req.cookies[COOKIE], req.remote, touch = false)).put("open", pairingOpen()))
                 "POST" -> if (ManageServer.sameOrigin(req.headers)) pair(req) else notOwnPage()
                 else -> HttpResponse.text(405, "Not allowed.")
             }
@@ -122,7 +122,7 @@ class LanSetup(
         return when (val c = code.check(PURPOSE, id, typed)) {
             PanelCode.Check.Ok -> {
                 event("A browser paired with the panel to set it up over the network (${req.remote ?: "unknown address"})")
-                json(200, JSONObject().put("ok", true).put("paired", true), cookie(sessions.create()))
+                json(200, JSONObject().put("ok", true).put("paired", true), cookie(sessions.create(req.remote)))
             }
             is PanelCode.Check.Wrong -> {
                 event("Wrong code typed to set the panel up over the network")
@@ -140,7 +140,8 @@ class LanSetup(
         val origin = req.headers["origin"]
         if (origin == null || !ManageServer.sameOrigin(req.headers)) return notOwnPage()
         // The session this channel runs under, when the browser has paired; an unpaired channel has none.
-        val token = req.cookies[COOKIE]?.takeIf { sessions.valid(it, touch = false) }
+        val remote = req.remote
+        val token = req.cookies[COOKIE]?.takeIf { sessions.valid(it, remote, touch = false) }
         if (token == null && unpaired.get() >= 1) return HttpResponse.text(503, "Another browser is reading this panel's setup. Try again in a moment.")
         return HttpResponse.webSocket(key, if (token != null) idleMs.toInt() else unpairedIdleMs) { ws ->
             val mine = token?.let { Held(it, ws) }
@@ -152,7 +153,7 @@ class LanSetup(
                 return@webSocket
             }
             try {
-                serve(ws.input, ws.output) { token != null && sessions.valid(token, touch = true) }
+                serve(ws.input, ws.output) { token != null && sessions.valid(token, remote, touch = true) }
             } catch (_: IOException) {
                 // The browser went away mid-write, or a newer paired channel took over.
             } finally {
@@ -183,27 +184,34 @@ class LanSetup(
         return HttpResponse(200, headers, bytes)
     }
 
-    /** The paired browsers. Only the SHA-256 of each cookie is kept; nothing is written to disk. Thread-safe. */
+    /**
+     * The paired browsers. Only the SHA-256 of each cookie is kept; nothing is written to disk. Thread-safe.
+     *
+     * A session counts only from the address that paired ([Paired.remote]). The page is plain HTTP on the LAN, as
+     * the Manage page is (no certificate a browser trusts for a LAN address), so another device that copies the
+     * cookie off the network can't use it from its own address (CodeRabbit on PR 386).
+     */
     private inner class Sessions {
-        private inner class Paired(val createdMs: Long, var usedMs: Long)
+        private inner class Paired(val createdMs: Long, var usedMs: Long, val remote: String?)
 
         private val byKey = LinkedHashMap<String, Paired>()
 
         @Synchronized
-        fun create(): String {
+        fun create(remote: String?): String {
             val t = token(32)
             val now = monoMs()
-            byKey[SessionStore.hash(t)] = Paired(now, now)
+            byKey[SessionStore.hash(t)] = Paired(now, now, remote)
             while (byKey.size > maxSessions) byKey.remove(byKey.entries.minByOrNull { it.value.usedMs }!!.key)
             return t
         }
 
-        /** A paired browser's cookie, good now. [touch] counts it as used (an op that changes something). */
+        /** A paired browser's cookie, good now and from [remote]. [touch] counts it as used (an op that changes something). */
         @Synchronized
-        fun valid(token: String?, touch: Boolean): Boolean {
+        fun valid(token: String?, remote: String?, touch: Boolean): Boolean {
             if (token.isNullOrEmpty() || token.length > 100) return false
             val k = SessionStore.hash(token)
             val p = byKey[k] ?: return false
+            if (p.remote != remote) return false
             val now = monoMs()
             if (now - p.usedMs >= idleMs || now - p.createdMs >= maxMs) { byKey.remove(k); return false }
             if (touch) p.usedMs = now

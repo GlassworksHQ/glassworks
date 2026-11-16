@@ -12,7 +12,8 @@ export type LanView =
   | { at: 'pair'; open: boolean; shown: boolean; error?: string; note?: string }
   | { at: 'setup'; setup: Setup }
   | { at: 'done' }
-  | { at: 'lost'; error: string };
+  /** `again`: what Try again does (the start, or ending the session once more). */
+  | { at: 'lost'; error: string; again?: 'start' | 'done' };
 
 export interface LanState { view: LanView; busy?: string }
 
@@ -25,6 +26,8 @@ export interface LanDeps {
   /** Opens the panel's setup channel WebSocket. */
   openStream(): Promise<ChannelStream>;
   openTab?: (url: string) => Window | null;
+  /** The pause between tries to open the channel (tests skip it). */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export const PAIR = '/setup/pair';
@@ -43,15 +46,23 @@ export class LanSession implements SetupSteps {
 
   constructor(private readonly d: LanDeps) {
     this.steps = new ChannelSetup({
+      // This page comes from the app, so it always has a channel: running out of tries is an error here,
+      // never the wizard's "older app without one" (which would show Done).
       open: async (tries) => {
+        let last: unknown;
         for (let i = 0; i < tries; i++) {
+          let c: SetupChannel | undefined;
           try {
-            const c = new SetupChannel(await d.openStream());
+            c = new SetupChannel(await d.openStream());
             await c.getState();
             return c;
-          } catch { await new Promise((r) => setTimeout(r, 1000)); }
+          } catch (e) {
+            last = e;
+            void c?.close().catch(() => {}); // a socket that opened but didn't answer
+            await (d.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(1000);
+          }
         }
-        return undefined;
+        throw new Error(`The panel didn't open its setup channel${last instanceof Error ? ` (${last.message})` : ''}. Try again in a moment.`);
       },
       phase: () => (this.state.view.at === 'setup' ? this.state.view.setup : { phase: 'waiting', note: '' }),
       show: (setup) => this.showStep(setup),
@@ -91,7 +102,7 @@ export class LanSession implements SetupSteps {
     this.set({ busy: name });
     let p: Promise<void>;
     try { p = Promise.resolve(run()); } catch (e) { p = Promise.reject(e); }
-    return p.catch((e) => this.set({ view: { at: 'lost', error: (e as Error).message } })).finally(() => {
+    return p.catch((e) => this.lose(e)).finally(() => {
       this.running = undefined;
       this.set({ busy: undefined });
     });
@@ -105,7 +116,7 @@ export class LanSession implements SetupSteps {
       this.set({ view: { at: 'lost', error: 'The panel didn\'t answer. Is it on, and on this network?' } });
       return;
     }
-    if (r.paired === true) return this.begin();
+    if (r.paired === true) return this.begin().catch((e) => this.lose(e));
     this.set({ view: { at: 'pair', open: r.open !== false, shown: false } });
   }
 
@@ -132,7 +143,17 @@ export class LanSession implements SetupSteps {
       this.set({ view: { ...v, shown: res.status === 401 && !/last try/.test(String(r.error)), error: String(r.error ?? 'That didn\'t work.') } });
       return;
     }
-    await this.begin();
+    await this.begin().catch((e) => this.lose(e));
+  }
+
+  private lose(e: unknown, again: 'start' | 'done' = 'start') {
+    this.set({ view: { at: 'lost', error: e instanceof Error ? e.message : String(e), again } });
+  }
+
+  /** Try again on the error card: start over, or end the session once more. */
+  retry(): Promise<void> {
+    const v = this.state.view;
+    return v.at === 'lost' && v.again === 'done' ? this.done() : this.start();
   }
 
   /** Paired: the channel opens with this browser's session, and the steps start (or carry on). */
@@ -151,10 +172,16 @@ export class LanSession implements SetupSteps {
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
   finish(): void { void this.done(); }
 
-  /** Setup is over: the panel ends this browser's session, and the page says so. */
+  /** Setup is over: the panel ends this browser's session, and only then does the page say Done. */
   private async done(): Promise<void> {
     this.steps.close();
-    await this.d.fetch(DONE, { method: 'POST' }).catch(() => undefined);
+    try {
+      const res = await this.d.fetch(DONE, { method: 'POST' });
+      if (res.status !== 200 || (await res.json()).ok !== true) throw new Error(`the panel answered ${res.status}`);
+    } catch (e) {
+      this.lose(new Error(`Setup is done, but the panel didn't end this browser's pairing (${(e as Error).message}). Try again.`), 'done');
+      return;
+    }
     this.set({ view: { at: 'done' } });
   }
 }

@@ -202,6 +202,13 @@ class LanSetupTest {
         }
     }
 
+    @Test fun aSessionCountsOnlyFromTheAddressThatPaired() {
+        val session = pair()
+        assertTrue(JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+        assertFalse("a copied cookie from another device", JSONObject(get(LanSetup.PAIR, session, remote = "192.0.2.99").text()).getBoolean("paired"))
+        assertTrue("and it stays good for the browser that paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+    }
+
     @Test fun otherPathsGoToTheManagePage() {
         for (p in listOf("/", "/setupx", "/setup/other.js", "/setup/../manage")) assertEquals(p, null, lan.handle(HttpRequest("GET", p, emptyMap(), mapOf("host" to host))))
     }
@@ -256,11 +263,13 @@ class LanSetupTest {
         cookie?.let { put("cookie", "${LanSetup.COOKIE}=$it") }
     }
 
+    /** As a browser on this machine: the address the WebSocket connections come from too. */
     private fun post(path: String, form: String = "", cookie: String? = null, origin: String? = "http://$host"): HttpResponse =
         lan.handle(HttpRequest("POST", path, emptyMap(), headers(cookie, origin) + ("content-type" to "application/x-www-form-urlencoded"),
-            form.toByteArray()))!!
+            form.toByteArray(), remote = LOOPBACK))!!
 
-    private fun get(path: String, cookie: String?): HttpResponse = lan.handle(HttpRequest("GET", path, emptyMap(), headers(cookie, null)))!!
+    private fun get(path: String, cookie: String?, remote: String = LOOPBACK): HttpResponse =
+        lan.handle(HttpRequest("GET", path, emptyMap(), headers(cookie, null), remote = remote))!!
 
     /** A WebSocket handshake on a real connection: the status, and the socket. */
     private fun handshake(cookie: String? = null, origin: String? = "http://$host", hostHeader: String = host): Pair<Int, Socket> {
@@ -342,5 +351,9 @@ class LanSetupTest {
             runCatching { s.getOutputStream().write(clientFrame(0x8, ByteArray(0))) }
             s.close()
         }
+    }
+
+    private companion object {
+        const val LOOPBACK = "127.0.0.1"
     }
 }
