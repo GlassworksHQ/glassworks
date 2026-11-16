@@ -6,7 +6,9 @@ package dev.glassworks.web
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -69,6 +71,25 @@ class WebSocketTest {
         val (ws, out) = streams(head + byteArrayOf(1, 2, 3, 4))
         assertEquals(-1, ws.input.read())
         assertArrayEquals(byteArrayOf(0x88.toByte(), 2, 0x03, 0xf1.toByte()), out.toByteArray())
+    }
+
+    @Test fun abortDoesntWaitForAWriteThatIsStuck() {
+        val writing = java.util.concurrent.CountDownLatch(1)
+        val released = java.util.concurrent.CountDownLatch(1)
+        // A browser that stopped reading: a write blocks until the transport is closed.
+        val stuck = object : java.io.OutputStream() {
+            override fun write(b: Int) { writing.countDown(); released.await() }
+            override fun write(b: ByteArray, off: Int, len: Int) { writing.countDown(); released.await() }
+            override fun close() = released.countDown()
+        }
+        val ws = WebSocketStreams(ByteArrayInputStream(ByteArray(0)), stuck)
+        val writer = Thread { ws.output.write("x\n".toByteArray()); runCatching { ws.output.flush() } }.apply { isDaemon = true; start() }
+        assertTrue(writing.await(2, java.util.concurrent.TimeUnit.SECONDS))
+        val aborter = Thread { ws.abort() }.apply { isDaemon = true; start() }
+        aborter.join(2_000)
+        assertFalse("abort returned", aborter.isAlive)
+        writer.join(2_000)
+        assertFalse("the stuck write ended", writer.isAlive)
     }
 
     private fun streams(input: ByteArray): Pair<WebSocketStreams, ByteArrayOutputStream> {

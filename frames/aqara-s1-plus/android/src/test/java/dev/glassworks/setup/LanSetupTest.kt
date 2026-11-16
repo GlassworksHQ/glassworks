@@ -148,7 +148,7 @@ class LanSetupTest {
             ws(session).use { b ->
                 assertTrue(b.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok"))
                 ws(session).use { c ->
-                    assertEquals("the newer paired channel takes over", 0x88, b.nextFrameByte())
+                    assertTrue("the newer paired channel takes over", b.ended())
                     assertTrue(c.ask("""{"id":3,"op":"pairing.arm"}""").getBoolean("ok"))
                 }
             }
@@ -160,7 +160,7 @@ class LanSetupTest {
         ws(first).use { a ->
             a.ask("""{"id":1,"op":"state"}""")
             assertEquals(200, post(LanSetup.DONE, cookie = first).status)
-            assertEquals("setup done closes its channel", 0x88, a.nextFrameByte())
+            assertTrue("setup done closes its channel", a.ended())
             ws(pair()).use { b -> assertTrue(b.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok")) }
         }
     }
@@ -171,7 +171,7 @@ class LanSetupTest {
         server.front = quick::handle
         ws().use { c ->
             c.ask("""{"id":1,"op":"state"}""")
-            assertEquals("closed by the panel", 0x88, c.nextFrameByte())
+            assertTrue("closed by the panel", c.ended())
         }
     }
 
@@ -268,14 +268,18 @@ class LanSetupTest {
             }
         }
 
-        /** The first byte of the next frame from the panel. */
-        fun nextFrameByte(): Int {
-            while (true) {
-                val b0 = inp.readUnsignedByte()
-                var len = inp.readUnsignedByte()
-                if (len == 126) len = inp.readUnsignedShort()
-                inp.skipBytes(len)
-                if (b0 != 0x81) return b0
+        /** The panel ended the channel: a close frame, or the connection dropped, before any other frame but text. */
+        fun ended(): Boolean {
+            try {
+                while (true) {
+                    val b0 = inp.readUnsignedByte()
+                    var len = inp.readUnsignedByte()
+                    if (len == 126) len = inp.readUnsignedShort()
+                    inp.skipBytes(len)
+                    if (b0 != 0x81) return b0 == 0x88
+                }
+            } catch (_: java.io.IOException) {
+                return true
             }
         }
 
