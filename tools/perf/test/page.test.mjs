@@ -679,3 +679,73 @@ test("the settle's limits are untimed waits within the runner's idle deadline (#
   const silent = D.closeWaitMs + D.stillMs + P.endStreamWaitMs + 2 * D.settleMs + D.beforeMs + navAllowanceMs;
   assert.ok(silent < 180000, `${silent} ms`);
 });
+
+test("dialogEvent: a late show of an earlier dialog, opening while the next one is measured, isn't the next one's (#410's CodeRabbit)", () => {
+  const sheetA = { id: "a" }, sheetB = { id: "b" }, empty = { opened: null, shown: null, closed: null, el: null };
+  // s1v3a's shape: the thermostat's show, held by HA past its own wait, opens while the sensor is measured.
+  let ev = S.dialogEvent(empty, "opened", { el: sheetA, entity: "climate.clarity_0", at: 100 }, "sensor.clarity_10");
+  assert.deepEqual(ev, empty);
+  ev = S.dialogEvent(ev, "shown", { el: sheetA, entity: "climate.clarity_0", at: 400 }, "sensor.clarity_10");
+  ev = S.dialogEvent(ev, "closed", { el: sheetA, entity: "climate.clarity_0", at: 900 }, "sensor.clarity_10");
+  assert.deepEqual(ev, empty);
+  // The sensor's own dialog: its marks, its element.
+  ev = S.dialogEvent(ev, "opened", { el: sheetB, entity: "sensor.clarity_10", at: 1000 }, "sensor.clarity_10");
+  ev = S.dialogEvent(ev, "shown", { el: sheetB, entity: "sensor.clarity_10", at: 1300 }, "sensor.clarity_10");
+  // A second opening doesn't move the first mark, nor another element's show or close count.
+  ev = S.dialogEvent(ev, "opened", { el: sheetB, entity: "sensor.clarity_10", at: 1100 }, "sensor.clarity_10");
+  ev = S.dialogEvent(ev, "closed", { el: sheetA, entity: "sensor.clarity_10", at: 1400 }, "sensor.clarity_10");
+  assert.deepEqual(ev, { opened: 1000, shown: 1300, closed: null, el: sheetB });
+  ev = S.dialogEvent(ev, "closed", { el: sheetB, entity: "sensor.clarity_10", at: 2000 }, "sensor.clarity_10");
+  assert.equal(ev.closed, 2000);
+  // A show or close before this dialog's own `opened` isn't its; nor one from no element.
+  assert.deepEqual(S.dialogEvent(empty, "shown", { el: sheetB, entity: "sensor.clarity_10", at: 5 }, "sensor.clarity_10"), empty);
+  assert.deepEqual(S.dialogEvent(empty, "opened", null, "sensor.clarity_10"), empty);
+});
+
+test("carriedShows: a view refused for a dialog HA hasn't shown carries it to the next check, for one wait and one settle (#410's CodeRabbit)", () => {
+  const D = T.DIALOG, keep = D.waitMs + D.settleMs;
+  const fired = [{ entity: "light.clarity_2", t0: 0, opened: true },
+                 { entity: "climate.clarity_0", t0: 21000, opened: false },
+                 { entity: "sensor.clarity_10", t0: 42000, opened: false }];
+  // HA was done: nothing carried.
+  assert.deepEqual(S.carriedShows(fired, [], 150000, true, keep), []);
+  // Not done, the thermostat shown since (HA asked for it): only the sensor carried, to now + keep.
+  const carried = S.carriedShows(fired, [{ entity: "climate.clarity_0", at: 140000 }], 150000, false, keep);
+  assert.deepEqual(carried.map((f) => [f.entity, f.expires]), [["sensor.clarity_10", 150000 + keep]]);
+  // The next view's check waits for it while it lasts...
+  assert.deepEqual(S.pendingShows(carried, [], 150000 + keep - 1), ["sensor.clarity_10"]);
+  // ...and catches it if HA shows it late, during the next view's check.
+  assert.deepEqual(S.pendingShows(carried, [{ entity: "sensor.clarity_10", at: 160000 }], 165000), []);
+  // Carried again by another refused view: its expiry stays the first one's, so it ends.
+  const again = S.carriedShows(carried, [], 170000, false, keep);
+  assert.equal(again[0].expires, 150000 + keep);
+  // Once it has expired, a show HA never makes poisons no later view.
+  assert.deepEqual(S.pendingShows(again, [], 150000 + keep + 1), []);
+  assert.deepEqual(S.carriedShows(again, [], 150000 + keep + 1, false, keep), []);
+  // Without a clock, nothing expires (the view's own wait never drops its dialogs).
+  assert.deepEqual(S.pendingShows(again, []), ["sensor.clarity_10"]);
+});
+
+test("settleLoop: closes one open at the limit before it stops, and counts dialogs, not looks (#410's verifier)", async () => {
+  // A fake clock and looks, one per 100 ms.
+  const run = async (looks, limitMs) => {
+    let t = 0, i = 0, closes = 0;
+    const r = await S.settleLoop(() => looks[Math.min(i, looks.length - 1)], () => { closes++; }, limitMs,
+                                 () => t, async () => { t += 100; i++; });
+    return Object.assign(r, { closes });
+  };
+  const open = { pending: [], open: true, history: true }, gone = { pending: [], open: false, history: true };
+  const idle = { pending: [], open: false, history: false };
+  // Open throughout to the limit: asked to close at every look, the last at the limit too; one dialog.
+  let r = await run([open], 300);
+  assert.deepEqual([r.clean, r.closed, r.closes, r.ms, r.open], [false, 1, 4, 300, true]);
+  // Open, closed, opened again (a held show landing), closed, then idle: two dialogs.
+  r = await run([open, open, gone, open, gone, idle], 10000);
+  assert.deepEqual([r.clean, r.closed, r.closes, r.ms], [true, 2, 3, 500]);
+  // Idle at once: clean, nothing closed, no wait.
+  r = await run([idle], 10000);
+  assert.deepEqual([r.clean, r.closed, r.ms], [true, 0, 0]);
+  // A show HA holds to the limit: not clean, its entity said.
+  r = await run([{ pending: ["climate.clarity_0"], open: false, history: true }], 200);
+  assert.deepEqual([r.clean, r.pending, r.closed], [false, ["climate.clarity_0"], 0]);
+});

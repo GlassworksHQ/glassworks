@@ -629,6 +629,20 @@ def dashboard():
         C.sleep(0.2)
         if not os.environ.get("FAKE_NO_RESTART_DONE"):     # F8: the done line lost (logcat dropped it)
             page_log({"t": "done", "stage": "restart", "run": 1, "nonce": ""}, record=False)
+        if os.environ.get("FAKE_SETTLE_VIA") == "warmup":
+            # #410: the warm-up's dialogs (no nonce, after the restart's done), the last one held by HA
+            # past the page's wait on the start view and after the move too. The runner may have
+            # opened the first view by then (the real warm-up takes 20 s a held dialog): the lines
+            # are still the restart's.
+            C.sleep(2.0)
+            for i, d in enumerate(DIALOGS):
+                page_log({"t": "dialog", "stage": "warmup", "n": i, "of": len(DIALOGS), "entity": d["entity"],
+                          "opened": i < len(DIALOGS) - 1, "run": 1, "nonce": ""}, record=False)
+            first = {"ms": 30000, "clean": False, "closed": 0, "pending": [DIALOGS[-1]["entity"]], "open": False, "history": True}
+            page_log(dict({"t": "settle", "stage": "warmup", "run": 1, "nonce": ""}, **first), record=False)
+            page_log(dict({"t": "settle", "stage": "warmup", "run": 1, "nonce": ""}, ms=60000, clean=False, closed=0,
+                          pending=[DIALOGS[-1]["entity"]], open=False, history=True, via="start", first=first, at="start"),
+                     record=False)
         return
     # Stamped on the page's own timeline (load event at 0.8 s, frames until 1.2 s), not when printed:
     # on the 0.2 clock, a fake 80 ms late on a busy CI machine put PageStop after the last frame, and

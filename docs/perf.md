@@ -952,7 +952,10 @@ is on no card: the fixed home has it for its dialog only.
 frontend can't tell it from a tile (no touch: the tap's own cost is the tap task's, as opening a view
 is HA's `navigate()` without a touch). From that moment (`t0`) it follows every animation frame
 (`stats.js` `dialogStep`, `dialogTimes`, with a node test for each timing point against a fake
-dialog):
+dialog). HA's `opened`, `after-show` and `closed` count only when the dialog shows the entity
+measured (`ha-more-info-dialog`'s `_entityId`), and the show and the close only from the element whose
+`opened` counted (`stats.js` `dialogEvent`, #410): an earlier dialog HA shows late, while this one is
+measured, isn't this one's.
 
 | Point | What |
 |---|---|
@@ -1001,7 +1004,12 @@ land and are closed, and waits as long again. The next view then opens from wher
 view, or the view again when HA's held `history.back()` lands after the move and takes it back (Chrome,
 2026-11-16). Before each view's navigation the harness checks the same, for at most `DIALOG.beforeMs`
 (10 s). A view that would start on a dialog HA still holds isn't measured: it logs an `error` line
-with its nonce, and none of its tasks is graded in that run.
+with its nonce, and none of its tasks is graded in that run. The dialogs HA still hadn't shown then
+are carried to the next view's check, each for one dialog's wait and one settle (`waitMs` +
+`settleMs`, 50 s) from when it was first carried (`stats.js` `carriedShows`). One HA shows late is
+still caught; one it never shows refuses only the views in that time, not every view after it. The
+wait itself is `stats.js` `settleLoop`: a dialog still open at the limit is closed before it stops,
+and `closed` counts dialogs, not looks.
 
 None of these waits is in any time. What a dialog did within its 20 s stays its own view's result:
 heavy's dialogs that never opened stay heavy's failures. The `done` line's `settle` and the refdash's

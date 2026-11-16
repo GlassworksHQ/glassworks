@@ -63,12 +63,13 @@ class Device:
                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
 
     def nudged(self, timeout=10):
-        """Waits (at most `timeout` s) until every wake key sent is through adb, so none lands after
-        what is sent next (#410's CI: a wake key sent just before a view's hold reached the device
-        after it)."""
+        """Waits (at most `timeout` s in all) until every wake key sent is through adb, so none lands
+        after what is sent next (#410's CI: a wake key sent just before a view's hold reached the
+        device after it)."""
+        end = time.monotonic() + timeout
         for p in self.nudges:
             try:
-                p.wait(timeout=timeout)
+                p.wait(timeout=max(0.0, end - time.monotonic()))
             except subprocess.TimeoutExpired:
                 pass
         self.nudges = [p for p in self.nudges if p.poll() is None]
@@ -682,7 +683,8 @@ def cmd_coldstart(dev, a):
             return False
         pl = page_lines.feed(msg)
         res["bad_page_lines"] = page_lines.bad
-        if ref and cur is None and pl and pl.get("nonce") == "":
+        if ref and pl and pl.get("nonce") == "" and (cur is None or pl.get("t") == "settle"):
+            # A warm-up's settle (#410) can come after the first view was opened: still the restart's.
             return handle_restart(pl, rec)
         if cur and pl and pl.get("nonce") == cur[1]:
             return handle_page(cur[0], pl, rec)

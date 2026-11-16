@@ -474,15 +474,45 @@
     };
   }
 
+  // HA's more-info dialog's events for one dialog the harness measures (#410's CodeRabbit). ev: the
+  // record so far ({opened, shown, closed, el}, nulls at first); kind: "opened", "shown" (HA's
+  // after-show) or "closed"; seen: {el, entity, at}, the ha-more-info-dialog the event came from, the
+  // entity it shows then and when. An event counts only if the dialog shows the measured entity: a
+  // late show of an earlier dialog, opening while this one is measured, is not this one's. Its show
+  // and close count only from the element whose `opened` counted, after it. Each mark is the first.
+  function dialogEvent(ev, kind, seen, entity) {
+    if (!seen || !seen.el || seen.entity !== entity) return ev;
+    if (kind !== "opened" && (ev.opened === null || seen.el !== ev.el)) return ev;
+    if (ev[kind] !== null) return ev;
+    const out = Object.assign({}, ev);
+    out[kind] = seen.at;
+    if (kind === "opened") out.el = seen.el;
+    return out;
+  }
+
   // The more-info dialogs the harness asked for that HA hasn't shown yet (#410). fired: [{entity, t0,
-  // opened}], one per tile event; asks: [{entity, at}], HA's registry asks for those entities (its
-  // more-info dialog loads the entity's entry each time it shows one, ha-more-info-dialog.ts
+  // opened, expires}], one per tile event; asks: [{entity, at}], HA's registry asks for those entities
+  // (its more-info dialog loads the entity's entry each time it shows one, ha-more-info-dialog.ts
   // showDialog). One counts as shown once it opened or HA asked for its entity at or after its event:
-  // HA can show it without an `opened` (a sheet already open just changes entity). Returns the
-  // entities still waiting in HA.
-  function pendingShows(fired, asks) {
-    return (fired || []).filter((f) => !f.opened && !(asks || []).some((a) => a.entity === f.entity && a.at >= f.t0))
+  // HA can show it without an `opened` (a sheet already open just changes entity). One carried past
+  // a refused view (carriedShows) is no longer waited for after `expires`. Returns the entities still
+  // waiting in HA at `now`.
+  function pendingShows(fired, asks, now) {
+    return (fired || []).filter((f) => !f.opened && !(asks || []).some((a) => a.entity === f.entity && a.at >= f.t0)
+                                       && !(f.expires !== undefined && now !== undefined && now > f.expires))
       .map((f) => f.entity);
+  }
+
+  // What the next view's check still waits for after a view's check (#410's CodeRabbit). clean: HA
+  // was done; then nothing. Else the view isn't measured, and the dialogs HA still hadn't shown are
+  // carried to the next view's check, each for keepMs more (one dialog's wait and one settle) from
+  // when it was first carried: one HA shows by then is caught there; one it never shows is dropped
+  // then, so it refuses at most the views in that time, not every view after it.
+  function carriedShows(fired, asks, now, clean, keepMs) {
+    if (clean) return [];
+    const left = new Set(pendingShows(fired, asks, now));
+    return (fired || []).filter((f) => left.has(f.entity) && !f.opened)
+      .map((f) => Object.assign({}, f, { expires: f.expires !== undefined ? f.expires : now + keepMs }));
   }
 
   // Waiting for HA's dialogs to be done with (#410), one look at a time: obs {pending (dialogs asked
@@ -503,9 +533,32 @@
     return s;
   }
 
+  // The wait itself (#410): look() -> {pending: [entities], open, history} each time; close() closes
+  // the dialog open now; now() the clock; wait() until the next look. A dialog open at the limit is
+  // still closed before it stops. `closed` counts dialogs, one per opening (looks in a row that find
+  // one open are one dialog). Returns {ms, clean, closed, pending, open, history}.
+  async function settleLoop(look, close, limitMs, now, wait) {
+    const t0 = now();
+    let st = { start: t0 }, closed = 0, closing = false, o = { pending: [], open: false, history: false };
+    for (;;) {
+      o = look();
+      st = settleStep({ pending: o.pending.length, open: !!o.open, history: !!o.history }, now(), st, limitMs);
+      if (st.close) {
+        if (!closing) closed++;
+        closing = true;
+        close();
+      } else {
+        closing = false;
+      }
+      if (st.done) break;
+      await wait();
+    }
+    return { ms: Math.round(now() - t0), clean: st.clean, closed, pending: o.pending, open: !!o.open, history: !!o.history };
+  }
+
   const api = { BUDGET_MS, FROZEN_MS, LINE_MAX, frameStats, intervals, nearestRank, band, frameBand, measureMs, consoleLines,
                 skyToViolet, usableStep, freeStep, hlsFetches, cardRendered, videoGaps, webrtcWindow, shownFrames,
-                pacedSleep, frameBlocking, dialogStep, missedRefreshes, dialogTimes, pendingShows, settleStep };
+                pacedSleep, frameBlocking, dialogStep, missedRefreshes, dialogTimes, dialogEvent, pendingShows, carriedShows, settleStep, settleLoop };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.GWStats = api;
 })(this);

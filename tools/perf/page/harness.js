@@ -802,16 +802,20 @@
   // sheet or the dialog inside ha-more-info-dialog; nothing else counts.
   const SHEETS = ["ha-bottom-sheet", "ha-dialog"];
 
-  function dialogEvents() {
-    const ev = { opened: null, shown: null, closed: null, el: null };
+  // `entity`: the dialog measured. Only its own dialog's events count (stats.js dialogEvent): HA can
+  // still show an earlier dialog late, while this one is measured (#410). The entity a dialog shows is
+  // ha-more-info-dialog's own (`_entityId`, set by showDialog and cleared by its own `closed` handler,
+  // which runs after this capture-phase listener).
+  function dialogEvents(entity) {
+    const ev = { rec: { opened: null, shown: null, closed: null, el: null } };
     const on = (k) => (e) => {
       const p = e.composedPath ? e.composedPath() : [];
       if (!p[0] || !SHEETS.includes(p[0].localName)) return;
       const mi = p.find((n) => n && n.localName === "ha-more-info-dialog");
       if (!mi) return;
-      ev.el = mi;
-      if (ev[k] === null) ev[k] = performance.now();
+      ev.rec = S.dialogEvent(ev.rec, k, { el: mi, entity: mi._entityId, at: performance.now() }, entity);
     };
+    for (const k of ["opened", "shown", "closed", "el"]) Object.defineProperty(ev, k, { get: () => ev.rec[k] });
     const hs = [["opened", on("opened")], ["after-show", on("shown")], ["closed", on("closed")]];
     for (const [k, h] of hs) addEventListener(k, h, true);
     ev.off = () => { for (const [k, h] of hs) removeEventListener(k, h, true); };
@@ -851,7 +855,7 @@
   // once it is dispatched (#410: HA may still show one that didn't open in time, after the wait; one
   // that threw before its event was never asked for, so nothing is waited for).
   async function moreInfo(spec, n, of, stage, fired) {
-    const D = C.DIALOG, ev = dialogEvents();
+    const D = C.DIALOG, ev = dialogEvents(spec.entity);
     const rec = { entity: spec.entity, t0: null, opened: false };
     try {
       const frames = [];
@@ -945,24 +949,12 @@
   // Returns { ms, clean, closed (dialogs found open and closed: one per opening, however many looks
   // it stays open), pending, open, history } (detail).
   async function settleDialogs(fired, limitMs) {
-    const t0 = performance.now();
-    let st = { start: t0 }, closed = 0, closing = false, pending = [], open = null, hist = false;
-    for (;;) {
-      pending = S.pendingShows(fired, dialogAsks);
+    let open = null;
+    return S.settleLoop(() => {
       open = openDialog();
-      hist = !!(history.state && history.state.dialog);
-      st = S.settleStep({ pending: pending.length, open: !!open, history: hist }, performance.now(), st, limitMs);
-      if (st.close) {
-        if (!closing) closed++;
-        closing = true;
-        open.closeDialog();
-      } else {
-        closing = false;
-      }
-      if (st.done) break;
-      await sleep(100);
-    }
-    return { ms: Math.round(performance.now() - t0), clean: st.clean, closed, pending, open: !!open, history: hist };
+      return { pending: S.pendingShows(fired, dialogAsks, performance.now()), open: !!open,
+               history: !!(history.state && history.state.dialog) };
+    }, () => open.closeDialog(), limitMs, () => performance.now(), () => sleep(100));
   }
 
   // The view's own wait, then, if HA still holds a dialog: leave the view for the start view
@@ -988,7 +980,10 @@
   // ---- one reference view, as the runner asked
 
   // The dialogs the last view (or the restart's warm-up) fired: the next view starts only once HA is
-  // done with them.
+  // done with them. When a view's check finds HA not done, that view isn't measured, and the dialogs
+  // HA still hasn't shown are carried to the next view's check, each until one dialog's wait and one
+  // settle (DIALOG.waitMs + settleMs) after it was first carried (stats.js carriedShows): one HA shows
+  // late is still caught; one it never shows refuses only the views in that time.
   let lastFired = [];
 
   async function openView(cmd) {
@@ -1001,7 +996,7 @@
     // view that would start on a dialog HA still holds isn't measured (an `error` line), rather than
     // measured on it.
     const before = await settleDialogs(lastFired, C.DIALOG.beforeMs);
-    lastFired = [];                 // a show HA never makes fails one view, not every view after it
+    lastFired = S.carriedShows(lastFired, dialogAsks, performance.now(), before.clean, C.DIALOG.waitMs + C.DIALOG.settleMs);
     // Detail on the refdash line when HA wasn't done at once (the wait isn't in any time).
     V.before = before.ms > 0 || before.closed ? before : null;
     if (!before.clean) {

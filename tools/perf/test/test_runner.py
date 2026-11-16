@@ -1171,6 +1171,18 @@ class MoreInfoDialogs(unittest.TestCase):
         self.assertIn("heavy: HA still held climate.clarity_0, sensor.clarity_10 after the view's own wait in 1 of 1 run(s)",
                       report.markdown(rep))
 
+    def test_the_warm_ups_settle_is_kept_even_after_the_first_view_opened(self):
+        """#410's verifier: the restart's warm-up settles as a view does. Its lines have no nonce and can
+        come after the runner opened the first view; they are still the restart's (warmup_settle), and
+        the views are measured as usual."""
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SETTLE_VIA="warmup")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        ws = c["warmup_settle"]
+        self.assertEqual([(w["stage"], w["clean"], w.get("via")) for w in ws], [("warmup", False, None), ("warmup", False, "start")])
+        self.assertEqual(ws[-1]["pending"], ["sensor.clarity_10"])
+        self.assertTrue(all(c["tiers"][t].get("done") for t in ("light", "typical-nocam", "typical", "heavy")))
+
     def test_a_view_that_would_start_on_a_held_dialog_is_not_measured(self):
         """#410: HA still held the view before's dialogs at a view's check before its navigation. The page
         logs an `error` for that view (its nonce), and nothing of it is graded in that run."""
