@@ -22,7 +22,14 @@ Mirror (Android 6.0, our image, the app privileged).
 ## What a phone needs for the sign-in sheet
 
 A phone shows the sheet when its connectivity check over the new network gets an answer other than the one it
-expects (**read**, AOSP `NetworkMonitor`; Apple's captive network assistant):
+expects. Sources (**read**, 2026-11-16):
+- Android: [`NetworkMonitor.java`](https://cs.android.com/android/platform/superproject/+/android10-release:packages/modules/NetworkStack/src/com/android/server/connectivity/NetworkMonitor.java)
+  (`isCaptivePortal`, `sendHttpProbe`: a 204 is valid, a 3xx or a 200 with content is a portal) and the probe URLs in
+  [`NetworkStack/res/values/config.xml`](https://cs.android.com/android/platform/superproject/+/android10-release:packages/modules/NetworkStack/res/values/config.xml)
+  (`config_captive_portal_http_url`, `config_captive_portal_fallback_urls`).
+- iOS: Apple doesn't document its check. `captive.apple.com/hotspot-detect.html` answering a page with `Success`
+  is what iOS fetches, as seen from any network that logs it. Treat that row as **read from observed behaviour**,
+  not from a specification.
 
 | Phone | Check | Expects | Sheet when |
 |---|---|---|---|
@@ -47,7 +54,8 @@ address part is **verified**):
 | Device | Captive portal | Named `Glassworks-XXXX` |
 |---|---|---|
 | **S1** (root) | **Possible**: root redirects UDP 53 and TCP 80 on `wlan0` to ports the app listens on | **Possible, untested**: a resource overlay of Android's default name, shipped with the root side |
-| **Generic Android 8+** (no root) | **No**: an app can't listen below port 1024 or change the DHCP's DNS | **No**: the public API takes no name |
+| **Generic Android 8–15** (no root) | **No**: an app can't listen below port 1024 or change the DHCP's DNS | **No**: the public API takes no name |
+| **Generic Android 16+** (no root) | **No**, as above | **Yes**: `startLocalOnlyHotspotWithConfiguration` (public, API 36) takes our `SoftApConfiguration` |
 | **Mirror** (Android 6.0, our image) | **Possible with the image**: the same redirect as the S1, from an init script in our image | **Already**: the hidden `setWifiApEnabled` takes our own config (`HiddenApHotspot`, #413) |
 
 ### S1: the captive portal (read, untested)
@@ -75,9 +83,9 @@ address part is **verified**):
 - Android 10 makes a new local-only network on every start: `<name>_<4 random digits>`, with a random WPA2 key
   (**read**, `WifiApConfigStore.generateLocalOnlyHotspotConfig`). `<name>` is the framework string
   `wifi_localhotspot_configure_ssid_default` ("AndroidShare"). The S1 run saw `AndroidShare_NNNN`.
-- No public or hidden call takes our own name for a local-only hotspot on Android 10. From Android 11,
-  `startLocalOnlyHotspot(SoftApConfiguration, …)` does, but it is a system API that needs `NETWORK_SETTINGS` or
-  `NETWORK_SETUP_WIZARD`, signature permissions an app doesn't get (**read**, `WifiManager`).
+- No public or hidden call takes our own name for a local-only hotspot on Android 10. From Android 11 a system
+  API does (`NETWORK_SETTINGS` or `NETWORK_SETUP_WIZARD`, signature permissions an app doesn't get), and from
+  Android 16 a public one does (below). Neither reaches the S1's Android 10.
 - With root: a static resource overlay of that string ("Glassworks") would give `Glassworks_NNNN`. On Android 10,
   an overlay of a framework string that isn't declared overlayable must sit on a system partition. The boot
   patch's Magisk side can add it without writing `system`. That is root-side work too (rule 5), and it changes the
@@ -87,8 +95,19 @@ address part is **verified**):
 
 ### Generic Android (read)
 
-Neither is possible for an app without root or a platform signature. The hotspot keeps Android's (or the maker's)
-name, and the phone reaches the page through the QR code and the address, as on the S1 today.
+- **Captive portal:** not possible without root: the app can't take ports 53 and 80, nor change the DNS Android's
+  DHCP gives out.
+- **The name, Android 8 to 15:** not possible. The hotspot keeps Android's (or the maker's) name.
+- **The name, Android 16+:** possible. `WifiManager.startLocalOnlyHotspotWithConfiguration(SoftApConfiguration,
+  Executor, LocalOnlyHotspotCallback)`, added in API 36, is a public method that needs `CHANGE_WIFI_STATE` and
+  `NEARBY_WIFI_DEVICES`, the permissions the hotspot already asks for
+  ([`WifiManager` reference](https://developer.android.com/reference/android/net/wifi/WifiManager#startLocalOnlyHotspotWithConfiguration(android.net.wifi.SoftApConfiguration,%20java.util.concurrent.Executor,%20android.net.wifi.WifiManager.LocalOnlyHotspotCallback)),
+  read 2026-11-16; CodeRabbit on #420). With a `SoftApConfiguration` named `Glassworks-XXXX` and our own WPA2 key,
+  the generic app on Android 16 can name it. Which fields Android honours isn't stated there (**untested**). This
+  is a small change behind a `Platform` query, and gets its own PR.
+
+In every case without the portal, the phone reaches the page through the QR code and the address, as on the S1
+today.
 
 ### Mirror (read)
 
@@ -102,7 +121,7 @@ name, and the phone reaches the page through the QR code and the address, as on 
 | | S1 | Generic | Mirror |
 |---|---|---|---|
 | Captive portal | Root redirect plus a DNS responder in the app: its own PR, needs a panel run | Not possible | With its image |
-| `Glassworks` name | Root-side resource overlay: possible, untested, its own PR | Not possible | Done |
+| `Glassworks` name | Root-side resource overlay: possible, untested, its own PR | Android 16+: the public `startLocalOnlyHotspotWithConfiguration`, its own PR. Below 16: not possible | Done |
 
 ## Open questions
 
