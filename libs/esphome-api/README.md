@@ -75,7 +75,9 @@ ESPHome device. Package `dev.glassworks.esphome`, MIT licensed.
   advertisement subscription (one client at a time; a newer one replaces it, as in ESPHome) and
   batched raw advertisements, through `BluetoothProxyHandler` and `sendBluetoothAdvertisements`.
   Active connections (GATT) go through `BluetoothConnectionHandler`: requests arrive as `GattRequest`,
-  and you answer with `sendBluetoothEvent(GattEvent…)`. The Android side of both is
+  and you answer with `sendBluetoothEvent(GattEvent…)`. Threads: the handler's calls come on the
+  requesting client's reader thread, under the server's Bluetooth lock. Queue the work and return;
+  never wait inside `onRequest` for a thread that answers, or it deadlocks. The Android side of both is
   [bluetooth-proxy](../bluetooth-proxy/README.md).
 - **Sendspin pairing-token hand-off:** for HA → Music Assistant, through `SendspinTokenSource`.
   Leave it unset if you don't have a Sendspin player.

@@ -158,5 +158,6 @@ internal class AndroidGattLink(private val listener: GattLink.Listener) : GattLi
     override fun close() { try { gatt?.close() } catch (_: RuntimeException) {} }
 }
 
-/** The 48-bit number as `AA:BB:CC:DD:EE:FF`, for `getRemoteDevice`. */
-internal fun formatAddress(address: Long): String = (5 downTo 0).joinToString(":") { "%02X".format((address ushr (it * 8)) and 0xFF) }
+/** The 48-bit number as `AA:BB:CC:DD:EE:FF`, for `getRemoteDevice`. Locale.ROOT: an Arabic or Persian locale would write other digits. */
+internal fun formatAddress(address: Long): String =
+    (5 downTo 0).joinToString(":") { String.format(java.util.Locale.ROOT, "%02X", (address ushr (it * 8)) and 0xFF) }

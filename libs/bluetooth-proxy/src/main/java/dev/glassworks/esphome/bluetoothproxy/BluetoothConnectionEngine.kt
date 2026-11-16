@@ -86,7 +86,11 @@ class BluetoothConnectionEngine internal constructor(
 
     override fun connectionsFree(): GattEvent.ConnectionsFree = free
 
-    override fun onRequest(request: GattRequest) = loop.execute { if (!closed) handle(request) }
+    override fun onRequest(request: GattRequest) = loop.execute {
+        if (closed) return@execute
+        // A throw (Android's or a send's) must not end the loop's task with the request unanswered.
+        try { handle(request) } catch (e: RuntimeException) { EspHomeLog.w("Bluetooth proxy: a GATT request failed", e) }
+    }
 
     override fun onSubscriberChanged() = loop.execute { if (!closed) closeAll() }
 
@@ -127,8 +131,13 @@ class BluetoothConnectionEngine internal constructor(
 
     private fun connect(address: Long, existing: Link?) {
         if (existing != null) {
-            // As ESPHome: connected already, say so again; still on its way, wait for it.
-            if (existing.state == State.READY) send(GattEvent.Connection(address, true, existing.mtu, 0))
+            // As ESPHome: connected already, say so again; still on its way, wait for it. A link that is
+            // closing can't be reused: say not connected, and Home Assistant tries again once it's gone.
+            when (existing.state) {
+                State.READY -> send(GattEvent.Connection(address, true, existing.mtu, 0))
+                State.CLOSING -> send(GattEvent.Connection(address, false, 0, 0))
+                else -> Unit
+            }
             return
         }
         if (links.size >= limit) {
@@ -139,7 +148,10 @@ class BluetoothConnectionEngine internal constructor(
         val link = Link(address)
         links[address] = link
         publishFree()
-        val gatt = radio.connect(address, link.listener)
+        val gatt = try { radio.connect(address, link.listener) } catch (e: RuntimeException) {
+            EspHomeLog.w("Bluetooth proxy: connecting failed: ${e.message}")
+            null
+        }
         if (gatt == null) {
             drop(link, GattEvent.CONN_FAIL_ESTABLISH)
             return

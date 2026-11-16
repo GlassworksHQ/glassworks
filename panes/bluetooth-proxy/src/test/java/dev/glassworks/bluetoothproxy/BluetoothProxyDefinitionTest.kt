@@ -43,7 +43,7 @@ class BluetoothProxyDefinitionTest {
     @Test fun onButStoppedReadsCantRunWithWhy() {
         assertEquals(PaneState(PaneState.Kind.CANT_RUN, "Bluetooth is off"), state(ScanFailure.BLUETOOTH_OFF))
         assertEquals(PaneState(PaneState.Kind.CANT_RUN, "Location is off"), state(ScanFailure.LOCATION_OFF))
-        assertEquals(PaneState(PaneState.Kind.CANT_RUN, "The app lacks the location permission"), state(ScanFailure.NO_PERMISSION))
+        assertEquals(PaneState(PaneState.Kind.CANT_RUN, "A permission is missing"), state(ScanFailure.NO_PERMISSION))
     }
 
     @Test fun theSwitchAndTheTurnOnCardStayWhileItCantRun() {

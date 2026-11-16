@@ -99,7 +99,7 @@ class BluetoothProxyPageTest {
                     is SettingsItem.Info -> listOf(i.title(), i.detail())
                     is SettingsItem.Action -> listOf(i.title, i.detail(), i.label)
                     is SettingsItem.Tiles -> i.tiles().flatMap { listOf(it.name, it.value, it.unit, it.detail) }
-                    is SettingsItem.Choice -> listOf(i.title) + i.options().flatMap { (id, name) -> listOf(name, i.line!!(id)) }
+                    is SettingsItem.Choice -> listOf(i.title) + i.options().map { it.second }
                     is SettingsItem.Note -> listOf(i.text())
                     is SettingsItem.States -> listOf(i.title) + i.rows().flatMap { listOf(it.name, it.value) }
                     else -> error("$phase: no ${i::class.simpleName} on this page")

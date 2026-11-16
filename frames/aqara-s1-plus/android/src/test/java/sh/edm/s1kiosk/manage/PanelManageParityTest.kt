@@ -133,7 +133,11 @@ class PanelManageParityTest {
 
     @Test fun everySettingOnThePanelIsOnTheManagePageAndChangesThere() {
         val (natives, drawnOnlyThere) = parity(panes.all())
-        assertTrue("the panes with native views ran: $natives", natives.containsAll(listOf("radio", "time-zone", "wall-base")))
+        assertTrue("the panes with native views ran: $natives", natives.containsAll(listOf("radio", "time-zone", "wall-base", "bluetooth-proxy")))
+        // The proxy's page was walked listening, in listen and connect: its tiles and both modes, not the no-BLE line.
+        val proxyTwin = twinWords(SettingsChange.twinOf(panes.bluetoothProxyDefinition.settings().single().items.filterIsInstance<SettingsItem.Native>().single()))
+        assertTrue("the Bluetooth proxy page listening with connections: $proxyTwin",
+            proxyTwin.containsAll(listOf("Listening for Home Assistant", "Connections", "of 3", "Listen only", "Listen and connect")))
         assertEquals("panelOnly lists exactly the views with no twin yet: it shrinks as twins land (#269)", panelOnly.keys, drawnOnlyThere)
     }
 

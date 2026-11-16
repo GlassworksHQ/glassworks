@@ -31,7 +31,7 @@ enum class ProxyPhase(val entityText: String?) {
     /** The pane's state while it is on but this phase stops it: Can't run, with the reason. Null otherwise. */
     val cantRun: String?
         get() = when (this) {
-            NO_PERMISSION -> "The app lacks the location permission"
+            NO_PERMISSION -> "A permission is missing"
             BLUETOOTH_OFF -> "Bluetooth is off"
             LOCATION_OFF -> "Location is off"
             else -> null

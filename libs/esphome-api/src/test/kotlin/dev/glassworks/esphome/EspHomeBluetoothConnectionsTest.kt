@@ -141,6 +141,11 @@ class EspHomeBluetoothConnectionsTest {
             val free = r.getJSONArray("free").toString()
             assertEquals("the slot table HA keeps: 3 free, 2 while linked, 3 again", "[[3,3,0,false],[2,3,1,true],[3,3,0,false],[2,3,1,true],[3,3,0,false]]", free)
 
+            assertEquals("pair: failed, not connected (85)", "[false,-1]", r.getJSONArray("pair").toString())
+            assertEquals("unpair: failed (86)", "[false,-1]", r.getJSONArray("unpair").toString())
+            assertEquals("clear cache: failed (88)", "[false,-1]", r.getJSONArray("clear_cache").toString())
+            assertEquals("a client without the subscription: GATT error 82, not connected", "[-1,\"Not connected\"]", r.getJSONArray("other_read").toString())
+
             val connects = device.requests.filterIsInstance<GattRequest.Connect>()
             assertEquals(listOf(false, true), connects.map { it.withCache })
             assertTrue(connects.all { it.address == ADDRESS && it.addressType == 0 })

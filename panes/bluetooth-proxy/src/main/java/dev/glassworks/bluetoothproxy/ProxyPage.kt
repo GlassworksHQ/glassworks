@@ -145,11 +145,13 @@ object ProxyPage {
             MODE,
             value = { if (model.connect) CONNECT else LISTEN },
             options = { MODES.map { (id, name, _) -> id to name } },
-            line = { id -> MODES.first { it.first == id }.third },
         ) { id, done ->
             model.connect = id == CONNECT
             done(null)
         }
+        // The panel draws both modes with their lines; the Choice's row names the picked one. These rows say
+        // what each does, so a browser explains both too.
+        if (mode(phase)) for ((_, name, line) in MODES) items += SettingsItem.Info({ name }, { line })
         note(phase)?.let { n -> items += SettingsItem.Note { n } }
         if (inHomeAssistant(phase)) {
             items += SettingsItem.States(IN_HOME_ASSISTANT) { entities(model.phase(), model.status()).map { (k, v) -> SettingsItem.StateRow(k, v) } }
