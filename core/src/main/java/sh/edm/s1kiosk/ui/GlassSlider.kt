@@ -8,6 +8,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
 import android.os.Bundle
+import dev.glassworks.platform.Platform
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -124,7 +125,7 @@ class GlassSlider(
         if (isEnabled) {
             if (value > min) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD)
             if (value < max) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD)
-            info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS)
+            if (Platform.hasSetProgressAction) info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS)
         }
     }
 

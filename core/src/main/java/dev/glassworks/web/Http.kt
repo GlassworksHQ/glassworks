@@ -309,7 +309,8 @@ class HttpServer(
             for (part in query.split('&')) {
                 if (part.isEmpty()) continue
                 val i = part.indexOf('=')
-                out.putIfAbsent(dec(if (i < 0) part else part.substring(0, i)), if (i < 0) "" else dec(part.substring(i + 1)))
+                val k = dec(if (i < 0) part else part.substring(0, i))
+                if (k !in out) out[k] = if (i < 0) "" else dec(part.substring(i + 1)) // the first wins (putIfAbsent is API 24)
             }
             return out
         }
@@ -320,7 +321,8 @@ class HttpServer(
             for (part in header.split(';')) {
                 val i = part.indexOf('=')
                 if (i <= 0) continue
-                out.putIfAbsent(part.substring(0, i).trim(), part.substring(i + 1).trim())
+                val k = part.substring(0, i).trim()
+                if (k !in out) out[k] = part.substring(i + 1).trim() // the first wins (putIfAbsent is API 24)
             }
             return out
         }

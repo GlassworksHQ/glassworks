@@ -113,7 +113,8 @@ class OnvifServer(
     /** Glassworks: was the constant "AndroidIPCamera". */
     private val realm = name.replace("\"", "")
     @Volatile private var motion = false
-    private val openSockets = ConcurrentHashMap.newKeySet<Socket>()
+    // A Set, not ConcurrentHashMap.KeySetView, so clear() is Set's: KeySetView's own methods are API 24 (#198).
+    private val openSockets: MutableSet<Socket> = ConcurrentHashMap.newKeySet()
 
     /** Actual bound TCP port (useful when constructed with port 0). */
     val localPort: Int get() = serverSocket?.localPort ?: port

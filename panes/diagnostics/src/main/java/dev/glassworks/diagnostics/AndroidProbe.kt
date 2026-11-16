@@ -62,10 +62,16 @@ class AndroidProbe(
             storageFreeBytes = runCatching { StatFs(Environment.getDataDirectory().path).availableBytes }.getOrNull(),
             wifiRssi = wifi?.rssi,
             wifiLinkSpeed = wifi?.linkSpeedMbps,
-            appStartElapsedMs = Process.getStartElapsedRealtime(),
+            appStartElapsedMs = appStartElapsedMs(),
             storageTotalBytes = runCatching { StatFs(Environment.getDataDirectory().path).totalBytes }.getOrNull(),
         )
     }
+
+    /** When this process started, on the elapsed-realtime clock: from Android 7 Android says; below, `/proc/self/stat`. */
+    private fun appStartElapsedMs(): Long =
+        if (Platform.hasProcessStartTime) Process.getStartElapsedRealtime()
+        else read(File(proc, "self/stat"))?.let(::parseProcessStartTicks)?.let { it * 1000 / ticksPerSecond }
+            ?: SystemClock.elapsedRealtime()
 
     override fun lastExitReason(): Int? = runCatching { Platform.lastExitReason(context, context.packageName) }.getOrNull()
 

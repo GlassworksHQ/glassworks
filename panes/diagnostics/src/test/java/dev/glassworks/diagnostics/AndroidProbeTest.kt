@@ -89,3 +89,19 @@ class AndroidProbeTest {
         assertEquals(47.999f, s.cpuTemperature!!, 0.0005f)
     }
 }
+
+/** The probe on Android 6 (#198): the app's start time comes from `/proc/self/stat`, as Android 6 has no API for it. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [23], application = Application::class)
+class AndroidProbeApi23Test {
+    @get:Rule val tmp = TemporaryFolder()
+
+    @Test fun appStartComesFromProcSelfStat() {
+        val proc = tmp.newFolder("proc")
+        File(proc, "self").mkdirs()
+        File(proc, "self/stat").writeText("4242 (sh.edm.s1kiosk) S 1 1 0 0 -1 4194624 1 0 0 0 7 3 0 0 20 0 50 0 360000 1000 200\n")
+        val ticks = android.system.Os.sysconf(android.system.OsConstants._SC_CLK_TCK)
+        val probe = AndroidProbe(RuntimeEnvironment.getApplication(), null, { false }, proc = proc, thermal = tmp.newFolder("thermal"))
+        assertEquals(360000L * 1000 / ticks, probe.sample().appStartElapsedMs)
+    }
+}

@@ -63,6 +63,16 @@ fun parseProcessTicks(procPidStat: String): Long? {
     return utime + stime
 }
 
+/**
+ * `starttime` from `/proc/<pid>/stat` (field 22): when the process started, in clock ticks since boot. Android 6 has
+ * no `Process.getStartElapsedRealtime` (#198). Counted from the last `)`, as [parseProcessTicks].
+ */
+fun parseProcessStartTicks(procPidStat: String): Long? {
+    val f = procPidStat.substringAfterLast(')', "").trim().split(Regex("\\s+"))
+    if (f.size < 20) return null
+    return f[19].toLongOrNull()
+}
+
 /** The `Pss:` line of `/proc/<pid>/smaps_rollup`, in bytes. */
 fun parsePss(smapsRollup: String): Long? = smapsRollup.lineSequence()
     .firstOrNull { it.startsWith("Pss:") }

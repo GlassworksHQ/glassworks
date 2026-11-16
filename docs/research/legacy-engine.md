@@ -304,7 +304,7 @@ and in the baseline; remove a line only when lint stops reporting the call (the 
 `SDK_INT` check lint understands). A lint detector that fails (`LintError`) fails the report too. Generated
 sources are checked: `:engine-gecko-legacy` compiles the shared `GeckoEngine.kt` from `build/generated`.
 
-The run of 2026-11-16 (main at 21196149): 111 calls, 46 of them desugared, so **65 to port**:
+The run of 2026-11-16, after the first fixes (#198 Phase A): 102 calls, 45 of them desugared:
 
 | Module | Calls above API 23 | Of them desugared |
 |---|---|---|
@@ -313,12 +313,12 @@ The run of 2026-11-16 (main at 21196149): 111 calls, 46 of them desugared, so **
 | `:bluetooth-proxy` | 0 | 0 |
 | `:sendspin` | 0 | 0 |
 | `:voice` | 0 | 0 |
-| `:glassworks-pane-api` | 9 | 0 |
-| `:glassworks-core` | 84 | 37 |
+| `:glassworks-pane-api` | 10 | 0 |
+| `:glassworks-core` | 77 | 37 |
 | `:engine-gecko-legacy` | 0 | 0 |
 | `:pane-diagnostics` | 1 | 0 |
 | `:pane-bluetooth-proxy` | 0 | 0 |
-| `:pane-camera` | 6 | 4 |
+| `:pane-camera` | 3 | 3 |
 | `:pane-notifications` | 0 | 0 |
 | `:pane-assist` | 0 | 0 |
 | `:pane-timers` | 0 | 0 |
@@ -327,7 +327,7 @@ The run of 2026-11-16 (main at 21196149): 111 calls, 46 of them desugared, so **
 | `:pane-zigbee-thread` | 3 | 0 |
 
 Lint can't see a `Platform` check (`Platform.hasX` is a property, not an `SDK_INT` comparison), so many of these
-are already guarded. Read at each call site (2026-11-16), the 65 split like this:
+are already guarded. Read at each call site (2026-11-16), they split like this (Phase A's fixes marked):
 
 | Where | Calls (level) | State |
 |---|---|---|
@@ -337,21 +337,22 @@ are already guarded. Read at each call site (2026-11-16), the 65 split like this
 | core: `update/UpdateManager` | `signingInfo`, `getLongVersionCode` (28); `setRequireUserAction` (31) | Guarded: `Platform.hasSigningInfo`, `hasLongVersionCode`, `canInstallWithoutUserAction` |
 | core: `frame/GenericAndroid` | `canRequestPackageInstalls` (26) | Guarded: `Platform.canInstallWithoutUserAction` |
 | pane-api: `platform/Platform` | 9 calls (26–34) | Guarded: `Platform`'s own queries |
-| core: `setup/WifiSetupStatus`, `improv/ImprovController` | `registerDefaultNetworkCallback` (24) | **Open.** The first crash on API 23 (step 9) |
-| core: `SystemLocale` | `Configuration.getLocales`/`setLocales`, `LocaleList` (24) | **Open.** Inside a `try`, but a missing method is an `Error`, which it doesn't catch |
-| core: `ui/GlassSlider` | `AccessibilityAction.ACTION_SET_PROGRESS` (24) | **Open** |
-| core: `web/Http`, `auth/OAuth` | `HashMap.putIfAbsent` (24) | **Open** (desugaring doesn't cover it) |
-| `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size` (24) | **Open** |
-| `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | **Open** |
+| core: `setup/WifiSetupStatus`, `improv/ImprovController` | `registerDefaultNetworkCallback` (24) | Fixed: `Platform.registerDefaultNetworkCallback`, an internet request below 24. Was the first crash on API 23 (step 9) |
+| core: `SystemLocale` | `Configuration.getLocales`/`setLocales`, `LocaleList` (24); `ActivityManager.getService` (26, hidden) | Fixed: `Platform.hasLocaleList` (`Configuration.locale` below), `hasActivityManagerGetService` (`ActivityManagerNative` below) |
+| core: `ui/GlassSlider` | `AccessibilityAction.ACTION_SET_PROGRESS` (24) | Fixed: `Platform.hasSetProgressAction`; below it the slider steps |
+| core: `web/Http`, `auth/OAuth` | `HashMap.putIfAbsent` (24) | Fixed: plain Kotlin |
+| `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size`, `.remove` (24) | Fixed: the sets are typed `MutableSet` |
+| `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | Fixed: `Platform.hasProcessStartTime`; below it `/proc/self/stat`'s start time |
 | core: `MainActivity` | `Process.getStartElapsedRealtime` (24) | **Open**; waits for #364/#332, which own the file |
 | core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | **Open**; waits for #365, which owns the file |
 | `pane-zigbee-thread`, `aqara-s1-plus-wall-base` | `Process.waitFor(timeout)`, autofill (26) | Open, but S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered on a legacy device |
 | The libraries, `pane-assist`, `-bluetooth-proxy`, `-notifications`, `-timers`, `-sendspin`, `engine-gecko-legacy` | None (`pane-sendspin`'s five are desugared) | Ready as far as API levels go; untested on a device |
 
-So the app's own start on API 23 needs the open calls in core, the camera and diagnostics fixed (#198 Phase A),
-then `MainActivity`'s and `UpdateManager`'s two (after #364/#365).
+Each fix has a test on Robolectric's Android 6 framework (`Api23FallbacksTest`, `PlatformApi23Test`,
+`AndroidProbeApi23Test`), where the old call throws `NoSuchMethodError` or `NoSuchFieldError`. Left for the app's
+own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#365).
 
-<details><summary>The full list (111 calls)</summary>
+<details><summary>The full list (102 calls)</summary>
 
 | Module | File | Line | Call | API | Desugared |
 |---|---|---|---|---|---|
@@ -387,8 +388,6 @@ then `MainActivity`'s and `UpdateManager`'s two (after #364/#365).
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64#getDecoder` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64.Decoder#decode` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/web/Http.kt` | 100 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
-| `:glassworks-core` | `dev/glassworks/web/Http.kt` | 282 | `java.util.HashMap#putIfAbsent` | 24 |  |
-| `:glassworks-core` | `dev/glassworks/web/Http.kt` | 293 | `java.util.HashMap#putIfAbsent` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 141 | `android.app.NotificationManager#createNotificationChannel` | 26 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 142 | `android.app.NotificationChannel()` | 26 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 143 | `android.app.NotificationChannel#setShowBadge` | 26 |  |
@@ -404,14 +403,11 @@ then `MainActivity`'s and `UpdateManager`'s two (after #364/#365).
 | `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.WindowInsetsController#hide` | 30 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 730 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 730 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.content.res.Configuration#getLocales` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.content.res.Configuration#getLocales` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.os.LocaleList#get` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.os.LocaleList#get` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 32 | `android.os.LocaleList#size` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 33 | `android.content.res.Configuration#setLocales` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 33 | `android.os.LocaleList()` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 86 | `java.util.HashMap#putIfAbsent` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 35 | `android.content.res.Configuration#getLocales` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 35 | `android.os.LocaleList#get` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 35 | `android.os.LocaleList#size` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 40 | `android.content.res.Configuration#setLocales` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 40 | `android.os.LocaleList()` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
@@ -421,9 +417,7 @@ then `MainActivity`'s and `UpdateManager`'s two (after #364/#365).
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 110 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 110 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 111 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
-| `:glassworks-core` | `sh/edm/s1kiosk/improv/ImprovController.kt` | 500 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/setup/WifiSetupStatus.kt` | 72 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/ui/GlassSlider.kt` | 127 | `android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction#ACTION_SET_PROGRESS` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/ui/GlassSlider.kt` | 128 | `android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction#ACTION_SET_PROGRESS` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder#setSlant` | 29 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder#setWeight` | 29 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder()` | 29 |  |
@@ -442,22 +436,20 @@ then `MainActivity`'s and `UpdateManager`'s two (after #364/#365).
 | `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 359 | `android.content.pm.SigningInfo#getApkContentsSigners` | 28 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 364 | `android.content.pm.PackageInfo#getLongVersionCode` | 28 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 493 | `android.content.pm.PackageInstaller.SessionParams#setRequireUserAction` | 31 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 108 | `android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode` | 34 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 117 | `android.content.Context#registerReceiver` | 26 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 127 | `android.app.Service#startForeground` | 29 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 138 | `android.app.ActivityManager#getHistoricalProcessExitReasons` | 30 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 139 | `android.app.ApplicationExitInfo#getProcessName` | 30 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 139 | `android.app.ApplicationExitInfo#getReason` | 30 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 149 | `TransportInfo` | 29 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 149 | `android.net.NetworkCapabilities#getTransportInfo` | 29 |  |
-| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 154 | `android.content.Intent#getParcelableExtra` | 33 |  |
-| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 116 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
-| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 157 | `java.util.concurrent.ConcurrentHashMap.KeySetView#clear` | 24 |  |
-| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 359 | `java.util.Collection#removeIf` | 24 | yes |
-| `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 58 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
-| `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 166 | `java.util.concurrent.ConcurrentHashMap.KeySetView#size` | 24 |  |
-| `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 374 | `java.util.concurrent.ConcurrentHashMap.KeySetView#remove` | 24 | yes |
-| `:pane-diagnostics` | `dev/glassworks/diagnostics/AndroidProbe.kt` | 65 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 131 | `android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode` | 34 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 141 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 152 | `android.content.Context#registerReceiver` | 26 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 162 | `android.app.Service#startForeground` | 29 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 173 | `android.app.ActivityManager#getHistoricalProcessExitReasons` | 30 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 174 | `android.app.ApplicationExitInfo#getProcessName` | 30 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 174 | `android.app.ApplicationExitInfo#getReason` | 30 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 184 | `TransportInfo` | 29 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 184 | `android.net.NetworkCapabilities#getTransportInfo` | 29 |  |
+| `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 189 | `android.content.Intent#getParcelableExtra` | 33 |  |
+| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 117 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 360 | `java.util.Collection#removeIf` | 24 | yes |
+| `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 59 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
+| `:pane-diagnostics` | `dev/glassworks/diagnostics/AndroidProbe.kt` | 72 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
 | `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
 | `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |

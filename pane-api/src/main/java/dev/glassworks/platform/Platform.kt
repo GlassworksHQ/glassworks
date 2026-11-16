@@ -13,7 +13,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -31,6 +33,27 @@ open class PlatformApi(
     /** The API level this instance answers for. Use it for logs, not for decisions. */
     val apiLevel: Int,
 ) {
+    /**
+     * `ConnectivityManager.registerDefaultNetworkCallback` exists (Android 7). Below it,
+     * [registerDefaultNetworkCallback] asks for every network with internet instead.
+     */
+    val hasDefaultNetworkCallback: Boolean get() = apiLevel >= 24
+
+    /** `LocaleList` and `Configuration.getLocales`/`setLocales` exist (Android 7). Below it, `Configuration.locale`. */
+    val hasLocaleList: Boolean get() = apiLevel >= 24
+
+    /** `AccessibilityAction.ACTION_SET_PROGRESS` exists (Android 7): a slider can be set to a value, not only stepped. */
+    val hasSetProgressAction: Boolean get() = apiLevel >= 24
+
+    /** `Process.getStartElapsedRealtime` exists (Android 7). Below it, `/proc/self/stat` has the start time. */
+    val hasProcessStartTime: Boolean get() = apiLevel >= 24
+
+    /**
+     * The hidden `ActivityManager.getService()` exists (Android 8). Below it, the same service is
+     * `ActivityManagerNative.getDefault()`. Only reflection reaches either.
+     */
+    val hasActivityManagerGetService: Boolean get() = apiLevel >= 26
+
     /** `NotificationChannel` exists, and a notification must name one (Android 8). */
     val hasNotificationChannels: Boolean get() = apiLevel >= 26
 
@@ -108,6 +131,18 @@ open class PlatformApi(
             .setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED)
             .toBundle()
         else null
+
+    /**
+     * Calls [callback] as the default network comes, goes and changes. Below Android 7 there is no
+     * default-network callback, so it hears every network with internet: callers that only react to
+     * "something changed" get the same signal.
+     */
+    fun registerDefaultNetworkCallback(cm: ConnectivityManager, callback: ConnectivityManager.NetworkCallback) {
+        if (hasDefaultNetworkCallback) cm.registerDefaultNetworkCallback(callback)
+        else cm.registerNetworkCallback(
+            NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), callback,
+        )
+    }
 
     /**
      * Registers a receiver for a system broadcast that apps outside this one may also send. From

@@ -497,7 +497,7 @@ object ImprovController {
                 }
             }
         }
-        runCatching { app.getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(cb) }
+        runCatching { Platform.registerDefaultNetworkCallback(app.getSystemService(ConnectivityManager::class.java), cb) }
             .onSuccess { netCallback = cb }
     }
 

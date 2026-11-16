@@ -4,10 +4,7 @@
 # stops reporting the call (the call is gone, or behind an SDK_INT check lint understands).
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.Collection#removeIf
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
-dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap.KeySetView#clear
 dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
-dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap.KeySetView#remove
-dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap.KeySetView#size
 dev/glassworks/diagnostics/AndroidProbe.kt|android.os.Process#getStartElapsedRealtime
 dev/glassworks/frame/GenericAndroid.kt|android.content.pm.PackageManager#canRequestPackageInstalls
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64#getUrlEncoder
@@ -28,13 +25,13 @@ dev/glassworks/platform/Platform.kt|android.app.ApplicationExitInfo#getReason
 dev/glassworks/platform/Platform.kt|android.app.Service#startForeground
 dev/glassworks/platform/Platform.kt|android.content.Context#registerReceiver
 dev/glassworks/platform/Platform.kt|android.content.Intent#getParcelableExtra
+dev/glassworks/platform/Platform.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
 dev/glassworks/platform/Platform.kt|android.net.NetworkCapabilities#getTransportInfo
 dev/glassworks/secrets/SecretPrefs.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getDecoder
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getEncoder
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64.Decoder#decode
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64.Encoder#encodeToString
-dev/glassworks/web/Http.kt|java.util.HashMap#putIfAbsent
 dev/glassworks/web/Http.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 sh/edm/s1kiosk/KioskService.kt|android.app.Notification.Builder()
 sh/edm/s1kiosk/KioskService.kt|android.app.NotificationChannel#setShowBadge
@@ -57,11 +54,9 @@ sh/edm/s1kiosk/SystemLocale.kt|android.os.LocaleList()
 sh/edm/s1kiosk/auth/OAuth.kt|java.util.Base64#getUrlEncoder
 sh/edm/s1kiosk/auth/OAuth.kt|java.util.Base64.Encoder#encodeToString
 sh/edm/s1kiosk/auth/OAuth.kt|java.util.Base64.Encoder#withoutPadding
-sh/edm/s1kiosk/auth/OAuth.kt|java.util.HashMap#putIfAbsent
 sh/edm/s1kiosk/base/LocalServiceLink.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/base/UartBaseLink.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/frame/AqaraCloud.kt|java.lang.Process#waitFor
-sh/edm/s1kiosk/improv/ImprovController.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
 # The two AppManage.kt lines come with #364 (the #23 stack, open on 2026-11-16): keep them until it merges.
 sh/edm/s1kiosk/manage/AppManage.kt|android.app.admin.DevicePolicyManager#reboot
 sh/edm/s1kiosk/manage/AppManage.kt|android.os.Process#getStartElapsedRealtime
@@ -72,7 +67,6 @@ sh/edm/s1kiosk/sendspin/PrefsSsStore.kt|java.util.Base64#getUrlEncoder
 sh/edm/s1kiosk/sendspin/PrefsSsStore.kt|java.util.Base64.Decoder#decode
 sh/edm/s1kiosk/sendspin/PrefsSsStore.kt|java.util.Base64.Encoder#encodeToString
 sh/edm/s1kiosk/sendspin/PrefsSsStore.kt|java.util.Base64.Encoder#withoutPadding
-sh/edm/s1kiosk/setup/WifiSetupStatus.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
 sh/edm/s1kiosk/ui/GlassSlider.kt|android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction#ACTION_SET_PROGRESS
 sh/edm/s1kiosk/ui/Inter.kt|android.graphics.Typeface.CustomFallbackBuilder#build
 sh/edm/s1kiosk/ui/Inter.kt|android.graphics.Typeface.CustomFallbackBuilder#setStyle

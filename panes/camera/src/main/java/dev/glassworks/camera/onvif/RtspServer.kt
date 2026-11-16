@@ -55,7 +55,8 @@ class RtspServer(
     @Volatile private var serverSocket: ServerSocket? = null
     private var rtpSocket: DatagramSocket? = null
     private var rtcpSocket: DatagramSocket? = null
-    private val connections = ConcurrentHashMap.newKeySet<Connection>()
+    // A Set, not ConcurrentHashMap.KeySetView, so size is Set's: KeySetView's own methods are API 24 (#198).
+    private val connections: MutableSet<Connection> = ConcurrentHashMap.newKeySet()
     private val sessions = ConcurrentHashMap<String, Session>()
     private val auth = RtspAuth(name.replace("\"", ""))
     private val cname = name.lowercase().filter { it.isLetterOrDigit() }.ifEmpty { "glassworks" }
