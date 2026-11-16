@@ -1,10 +1,14 @@
 # Kiln licence audit: which code in the MIT installer comes from GPL projects
 
-**Status (2026-11-15): decided, being rewritten (#355).** Kiln's page holds code taken from two GPL
-projects. In `kiln/packages/fel`, four small ARM routines are copied from sunxi-tools
-(GPL-2.0-or-later) and the SPL loader is translated from it. In `kiln/packages/bootpatch`, parts are
-translated or copied from Magisk v31.1 (GPL-3.0-only). Both packages say `"license": "MIT"`, and
-both run on kiln.glassworks.dev and s1.edm.sh today.
+**Status (2026-11-16): done (#355).** Both rewrites have landed, written in a clean room from the specs
+in [kiln-cleanroom/](kiln-cleanroom/README.md): `kiln/packages/fel` in #372 and `kiln/packages/bootpatch`
+in #373. Kiln holds no GPL code now. The FEL rewrite booted U-Boot on a real S1 on 2026-11-16. The
+boot patcher's output is byte-identical to the old patcher's on the S1's own stock boot image and on
+all 8 recorded S1 cases. The rest of this note describes the code as it was before the rewrite: until
+then, Kiln's page held code taken from two GPL projects. In `kiln/packages/fel`, four small ARM
+routines were copied from sunxi-tools (GPL-2.0-or-later) and the SPL loader was translated from it.
+In `kiln/packages/bootpatch`, parts were translated or copied from Magisk v31.1 (GPL-3.0-only). Both
+packages said `"license": "MIT"`.
 
 **Decision (maintainer, 2026-11-15):** a clean-room rewrite of the GPL-derived parts of both
 packages, the wasm included, so Kiln and both packages stay MIT and hard rule 4 holds. One person
