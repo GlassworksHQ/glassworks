@@ -83,7 +83,24 @@ function rememberBackup(base: string, b: SavedBackup) {
   try { sessionStorage.setItem(backupKey(base), JSON.stringify(b)); } catch { /* this page load still has `backups` */ }
 }
 
+/**
+ * A frame whose session isn't this wizard's InstallFlow (the Mirror's, src/mirror): what the picker
+ * and LeaveGuard need of it. It is kept beside `current`, one per frame base, so it outlives route
+ * changes too, and an S1 session and a Mirror session never close each other.
+ */
+export interface Activity {
+  base: string;
+  name: string;
+  /** writes to the device now: leaving or reloading the page asks first */
+  writing(): boolean;
+  /** busy: the route back to it, for the picker; undefined when there is nothing to come back to */
+  running(): string | undefined;
+  subscribe(l: () => void): () => void;
+}
+
 let current: Entry | undefined;
+const activities = new Map<string, Activity>();
+let activityList: Activity[] = [];
 let lastFailure: LastFailure | undefined;
 let unwatch: (() => void) | undefined;
 const listeners = new Set<() => void>();
@@ -125,6 +142,17 @@ export const registry = {
     notify();
     return e;
   },
+  /** Another frame's session, by its base. */
+  activity: (base: string): Activity | undefined => activities.get(base),
+  /** Every other frame's session; the same array until one is kept, for useSyncExternalStore. */
+  activities: (): readonly Activity[] => activityList,
+  /** Keeps `a` as its frame's session, in place of an earlier one. */
+  keep<A extends Activity>(a: A): A {
+    activities.set(a.base, a);
+    activityList = [...activities.values()];
+    notify();
+    return a;
+  },
   lastFailure: (): LastFailure | undefined => lastFailure,
   subscribe(l: () => void) {
     listeners.add(l);
@@ -133,6 +161,7 @@ export const registry = {
   /** Tests only. */
   clear() {
     unwatch?.(); unwatch = undefined; current = undefined; lastFailure = undefined; seen.clear();
+    activities.clear(); activityList = [];
     for (const base of history.keys()) remember(base, undefined);
     backups.clear();
     try { for (const k of Object.keys(sessionStorage)) if (/^kiln:(changed|backup):/.test(k)) sessionStorage.removeItem(k); } catch { /* none */ }

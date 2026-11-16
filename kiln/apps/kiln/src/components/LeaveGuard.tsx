@@ -1,20 +1,23 @@
 'use client';
-// While a frame's session writes to the panel, leaving or reloading the page asks first, and the
+// While a frame's session writes to the panel (the S1's, or another frame's kept beside it), leaving or reloading the page asks first, and the
 // screen stays awake. It sits in the root layout and reads the registry, so it holds on every route:
 // the session keeps writing when someone goes to the picker (wizard/registry.ts).
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { registry } from '../wizard/registry';
 import { busyWriting } from '../wizard/state';
 
+const NONE: readonly never[] = [];
+
 export function useWriting(): boolean {
   const entry = useSyncExternalStore(registry.subscribe, registry.get, () => undefined);
+  const others = useSyncExternalStore(registry.subscribe, registry.activities, () => NONE);
   const [writing, setWriting] = useState(false);
   useEffect(() => {
-    if (!entry) { setWriting(false); return; }
-    const check = () => setWriting(busyWriting(entry.session.store.state));
+    const check = () => setWriting((!!entry && busyWriting(entry.session.store.state)) || others.some((a) => a.writing()));
     check();
-    return entry.session.store.subscribe(check);
-  }, [entry]);
+    const offs = [...(entry ? [entry.session.store.subscribe(check)] : []), ...others.map((a) => a.subscribe(check))];
+    return () => { for (const off of offs) off(); };
+  }, [entry, others]);
   return writing;
 }
 
