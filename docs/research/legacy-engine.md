@@ -299,8 +299,10 @@ engine, API 26; the legacy build lints its sources inside `:engine-gecko-legacy`
 
 CI runs it on every PR that touches Android code (`api23` in `pr.yml`) against `tools/legacy/api23-baseline.txt`,
 and fails on a call above API 23 that the baseline doesn't list. Desugared calls never fail it: the legacy build
-enables core library desugaring. Remove a baseline line when its call gets a `Platform` query with an API 23
-fallback.
+enables core library desugaring. Lint can't see a `Platform` check, so a call behind one stays in lint's findings
+and in the baseline; remove a line only when lint stops reporting the call (the call is gone, or behind an
+`SDK_INT` check lint understands). A lint detector that fails (`LintError`) fails the report too. Generated
+sources are checked: `:engine-gecko-legacy` compiles the shared `GeckoEngine.kt` from `build/generated`.
 
 The run of 2026-11-16 (main at 21196149): 111 calls, 46 of them desugared, so **65 to port**:
 

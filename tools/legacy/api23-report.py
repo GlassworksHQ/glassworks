@@ -74,6 +74,10 @@ def findings(mods):
         if not os.path.isfile(report):
             sys.exit(f"api23-report: no lint report for {path} ({os.path.relpath(report, ROOT)})")
         for issue in ET.parse(report).getroot().iter("issue"):
+            if issue.get("id") == "LintError":  # a detector failed: the file it was on went unchecked
+                loc = issue.find("location")
+                where = os.path.relpath(loc.get("file"), ROOT) if loc is not None else "?"
+                sys.exit(f"api23-report: lint failed on {path} ({where}): {issue.get('message', '')[:300]}")
             if issue.get("id") != "NewApi":
                 continue
             msg = issue.get("message", "")
@@ -129,8 +133,9 @@ def main():
             keys |= {l.strip() for l in read(a.merge).splitlines() if l.strip() and not l.startswith("#")}
         with open(a.write_baseline, "w") as out:
             out.write("# API 24+ calls the Glassworks modules already make (tools/legacy/api23-report.py). One line\n"
-                      "# per <package path>|<API>. CI fails on a call not listed here. Remove lines as calls get a\n"
-                      "# Platform query with an API 23 fallback; add one only on purpose.\n")
+                      "# per <package path>|<API>. CI fails on a call not listed here; add one only on purpose. Lint\n"
+                      "# can't see a Platform check, so a call behind one stays listed: remove a line only when lint\n"
+                      "# stops reporting the call (the call is gone, or behind an SDK_INT check lint understands).\n")
             out.writelines(k + "\n" for k in sorted(keys))
         print(f"api23-report: wrote {len(keys)} lines to {a.write_baseline}", file=sys.stderr)
         return

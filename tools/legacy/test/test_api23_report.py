@@ -112,6 +112,16 @@ class Api23ReportTest(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertIn("no lint report for :pane-3", err)
 
+    def test_a_lint_error_fails_instead_of_passing(self):
+        src = os.path.join(self.root, "panes/p2/src/main/java/dev/glassworks/y")
+        write(os.path.join(self.root, "panes/p2/build/reports/lint-results-debug.xml"),
+              '<?xml version="1.0"?><issues format="6"><issue id="LintError" message="Unexpected failure during lint analysis">'
+              f'<location file="{src}/B.kt"/></issue></issues>')
+        code, _, err = self.run_main("--check", self.baseline(
+            "dev/glassworks/x/A.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback"))
+        self.assertEqual(1, code)
+        self.assertIn("lint failed on :pane-2", err)
+
     def test_the_table_counts_each_module(self):
         code, out, _ = self.run_main()
         self.assertEqual(0, code)

@@ -1,6 +1,7 @@
 # API 24+ calls the Glassworks modules already make (tools/legacy/api23-report.py). One line
-# per <package path>|<API>. CI fails on a call not listed here. Remove lines as calls get a
-# Platform query with an API 23 fallback; add one only on purpose.
+# per <package path>|<API>. CI fails on a call not listed here; add one only on purpose. Lint
+# can't see a Platform check, so a call behind one stays listed: remove a line only when lint
+# stops reporting the call (the call is gone, or behind an SDK_INT check lint understands).
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.Collection#removeIf
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap.KeySetView#clear
