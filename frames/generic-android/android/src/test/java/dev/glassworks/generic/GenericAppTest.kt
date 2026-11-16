@@ -157,6 +157,47 @@ class GenericAppTest {
         }
     }
 
+    /** #198: the legacy build (its own id) updates from its own line, and this build never from that one. */
+    @Test fun theLegacyBuildUpdatesFromItsOwnLine() {
+        assertSame(ReleaseLine.GENERIC_ANDROID_LEGACY, GenericApp.releaseLine("dev.glassworks.generic_android.legacy"))
+        assertSame(ReleaseLine.GENERIC_ANDROID, GenericApp.releaseLine(BuildConfig.APPLICATION_ID))
+        assertSame("only the exact id", ReleaseLine.GENERIC_ANDROID, GenericApp.releaseLine("dev.glassworks.generic_android.legacy.debug"))
+    }
+
+    /** #198: the legacy engine stays on the dashboard's origin, which it takes once, at the first open. */
+    @Test fun theEngineStartsWithTheDashboard() {
+        val prefs = KioskPrefs(app)
+        prefs.url = "http://192.0.2.10:8123/lovelace/0"
+        assertEquals("http://192.0.2.10:8123/lovelace/0", GenericApp.engineSettings(app, build).dashboard)
+        prefs.url = ""
+        assertNull("none set up yet", GenericApp.engineSettings(app, build).dashboard)
+    }
+
+    /**
+     * #198: on the Mirror, Kiln flashes the app into /system/priv-app, where Android 6 grants these. An update
+     * gets only the privileged permissions its /system copy asked for, so every build asks for them. And Kiln
+     * makes it the Mirror's home screen only with MAIN, HOME and DEFAULT in one intent filter (#385).
+     */
+    @Test fun everyBuildAsksForThePrivilegedPermissionsAndHasOneHomeFilter() {
+        val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
+        for (p in listOf("android.permission.INSTALL_PACKAGES", "android.permission.REBOOT", "android.permission.WRITE_SECURE_SETTINGS")) {
+            assertTrue(p, p in requested)
+        }
+        val manifest = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(RepoFiles.file("frames/generic-android/android/src/main/AndroidManifest.xml"))
+        val ns = "http://schemas.android.com/apk/res/android"
+        fun names(filter: org.w3c.dom.Element, tag: String) = filter.getElementsByTagName(tag).let { l ->
+            (0 until l.length).map { (l.item(it) as org.w3c.dom.Element).getAttributeNS(ns, "name").substringAfterLast('.') }
+        }
+        val filters = manifest.getElementsByTagName("intent-filter").let { l -> (0 until l.length).map { l.item(it) as org.w3c.dom.Element } }
+        val home = filters.filter { "HOME" in names(it, "category") }
+        assertEquals("one home filter", 1, home.size)
+        assertEquals(listOf("MAIN"), names(home.single(), "action"))
+        assertEquals(setOf("HOME", "DEFAULT"), names(home.single(), "category").toSet())
+        assertEquals("no <data>: the HOME intent carries none", 0, home.single().getElementsByTagName("data").length)
+        assertEquals(GenericParts.LAUNCHER, (home.single().parentNode as org.w3c.dom.Element).getAttributeNS(ns, "name"))
+    }
+
     @Test fun theFrameReadsAndroidsStandardSensors() {
         val frame = GenericApp.frame(app)
         assertEquals("generic-android", frame.board)

@@ -5,6 +5,7 @@
 package dev.glassworks.generic
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import dev.glassworks.engine.Engine
 import dev.glassworks.engine.EngineSettings
@@ -37,17 +38,34 @@ class GenericApp : Application(), GlassworksApp {
         const val PRODUCT = "Glassworks"
         const val TAG = "S1Kiosk"
 
+        /**
+         * The legacy build's id (#198): Android 6-7 on GeckoView 144, for older tablets and the lululemon Mirror.
+         * Its own app next to this one, so neither ever installs over or updates the other.
+         */
+        const val LEGACY_APPLICATION_ID = "dev.glassworks.generic_android.legacy"
+
         /** The device as this app sees it: [GenericAndroid], with Android's standard proximity and light sensors. */
         fun frame(app: Application): GenericAndroid =
             GenericAndroid(app, presence = ProximityPresence("S1Kiosk.Screen"), light = AmbientLight("S1Kiosk.Screen"))
 
         /** The runtime on [frame]: GeckoView with the kiosk's extension, and this app's panes ([GenericParts]). */
         internal fun runtime(frame: Frame, build: AppBuild): GlassworksRuntime =
-            GlassworksRuntime(frame, build, engine(build), GenericParts(), releases = ReleaseLine.GENERIC_ANDROID)
+            GlassworksRuntime(frame, build, engine(build), GenericParts(), releases = releaseLine(BuildConfig.APPLICATION_ID))
+
+        /** The releases this build updates from: the legacy build's own line (#198), else the generic app's. */
+        internal fun releaseLine(applicationId: String): ReleaseLine =
+            if (applicationId == LEGACY_APPLICATION_ID) ReleaseLine.GENERIC_ANDROID_LEGACY else ReleaseLine.GENERIC_ANDROID
+
+        /**
+         * What the engine starts with, from the settings: read once, at the first open. The dashboard is the
+         * origin the legacy engine stays on (#198); the current engine doesn't read it. As S1 Kiosk's (KioskApp).
+         */
+        internal fun engineSettings(context: Context, build: AppBuild): EngineSettings =
+            KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug), dashboard = url.ifEmpty { null }) }
 
         /** GeckoView with the kiosk's helper extension: the same engine, extension and page API as S1 Kiosk's. */
         private fun engine(build: AppBuild): Engine = GeckoEngine(
-            settings = { context -> KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug)) } },
+            settings = { context -> engineSettings(context, build) },
             extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
             logTag = TAG,
             generatedBy = PRODUCT,

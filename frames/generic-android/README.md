@@ -73,6 +73,15 @@ The two are separate apps with their own data and keys, so both can be installed
 can run at a time: both serve Home Assistant on port 6053 and the Manage page on 8099. Stop the other
 first (`adb shell am force-stop <id>`).
 
+### The legacy build (Android 6 and 7)
+
+Android 6 and 7 (API 23-25) get a legacy build of this app (#198): GeckoView 144, locked to the panel's Home
+Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a separate app,
+`dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
+updates the other. The same APK serves older tablets and the lululemon Mirror, where Kiln flashes it into
+`/system/priv-app`. Status: the code is in; the build itself (its Gradle variant) and its release come next.
+Why one legacy app and not a Mirror app of its own: [The legacy build's id](#the-legacy-builds-id).
+
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
 
 ## Hardware
@@ -99,9 +108,10 @@ repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
 | App | Release tag | APK, per ABI, with its `.sha256` |
 |---|---|---|
 | Glassworks for generic Android | `generic-android-v1.2.3` | `glassworks-generic-android-arm64-v8a-1.2.3.apk`, `glassworks-generic-android-armeabi-v7a-1.2.3.apk` |
+| Its legacy build (Android 6-7) | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-arm64-v8a-1.2.3.apk`, `…-armeabi-v7a-…` |
 | S1 Kiosk | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
 
-So neither app ever offers itself the other's APK.
+So no app ever offers itself another's APK.
 
 The check reads the repo's 30 newest releases (`Releases.LIST_URL`, `per_page=30`), all apps and libraries
 together, and takes the newest of its own among them. So if more than 30 releases of other parts come
@@ -121,6 +131,7 @@ PackageInstaller. Two routes install it without anyone touching the screen:
 |---|---|---|
 | Silent self-update | 12 or newer | Allow "Install unknown apps" for the app |
 | Device owner | 8.0 or newer | `dpm set-device-owner` over adb, on a device with no accounts |
+| Privileged system app | 6.0 or newer | Nothing: Kiln flashes the app into `/system/priv-app` (the Mirror), where Android grants `INSTALL_PACKAGES` |
 
 Without either, Android asks for a tap on the screen before it installs. The *Update status* sensor
 says which one happens: "Installing 1.2.3 without a tap", or "Installing 1.2.3: waiting for a tap on
@@ -172,6 +183,23 @@ While it is device owner, the app can't be uninstalled until you undo it. The de
 [docs/onboarding.md](../../docs/onboarding.md#device-owner-optional). Silent installs as device owner
 are Android's documented behaviour (Android 6.0 and later); they haven't been tried on a generic
 device yet.
+
+### The legacy build's id
+
+The legacy build is `dev.glassworks.generic_android.legacy` on every Android 6-7 device, the Mirror included.
+The choice is permanent for a Mirror: the app in `/system` keeps its id, and an update gets only the privileged
+permissions that copy asked for. What was weighed (2026-11-15):
+
+| | One legacy app (chosen) | A Mirror app of its own |
+|---|---|---|
+| Release lines | Two: current and legacy | Three: current, legacy, Mirror, with the same engine and floor |
+| A fix for Android 6-7 | One release | Two releases of the same code, which can drift apart |
+| Mirror-only behaviour (portrait, no touchscreen, camera presence) | To be chosen on the device, as for any device (not built yet): the screen's size, its input, its sensors, the permissions it holds | Built in |
+| Kiln's Mirror recipe | Checks for the legacy id | Checks for the Mirror id, so a tablet build can't be flashed |
+| What the Mirror build must keep | Every legacy build asks for `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` and keeps MAIN, HOME and DEFAULT in one filter (`GenericAppTest`) | The same, in its own build |
+
+A tablet build on the Mirror would be the same APK, so the second app's guard buys nothing. Kiln's Mirror
+recipe takes `sh.edm.s1kiosk` today; it moves to the legacy id with the build.
 
 ## Signing
 
