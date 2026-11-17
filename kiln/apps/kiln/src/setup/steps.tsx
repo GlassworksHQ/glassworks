@@ -41,6 +41,16 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
   const secure = isOther || !!chosen?.secure;
   const j = setup.joining;
 
+  // On the panel's own page the join closes the setup Wi-Fi, and this page's connection with it, within moments: no
+  // step can follow, so the page says so once and stops (issue 460). The 45 s check can still turn it into an error.
+  if (j && setup.over === 'lan' && j.step !== 'err') {
+    return (
+      <section className="card" aria-labelledby="h">
+        <h2 id="h">{j.step === 'sent' ? 'Sending to the panel…' : 'Sent to the panel.'}</h2>
+        {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
+      </section>
+    );
+  }
   if (j) {
     const order = ['sent', 'join', 'ok'] as const;
     const at = j.step === 'err' ? 1 : order.indexOf(j.step);
@@ -48,7 +58,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       <section className="card" aria-labelledby="h">
         <h2 id="h">{j.step === 'ok' ? `On ${j.ssid}.` : j.step === 'err' ? `Couldn't join ${j.ssid}.` : `Joining ${j.ssid}…`}</h2>
         <ol className="join" aria-live="polite">
-          {[setup.over === 'lan' ? 'Sent to the panel' : 'Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
+          {['Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
             <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
           ))}
         </ol>

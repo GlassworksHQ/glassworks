@@ -122,7 +122,7 @@ describe('the panel\'s setup page', () => {
     expect(panel.joined).toEqual({ ssid: 'Example-Home', password: 'correct horse' });
     expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { ssid: 'Example-Home', step: 'join' } } });
     const v = lan.state.view as { setup: { joinNote?: string } };
-    expect(v.setup.joinNote).toMatch(/screen shows how it goes/);
+    expect(v.setup.joinNote).toMatch(/can't follow it from here/);
     expect(panel.asked).toEqual(['state', 'wifi.scan', 'wifi.join']);
   });
 
