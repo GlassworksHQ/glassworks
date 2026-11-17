@@ -121,9 +121,9 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
 
 ## GATT connections (#246)
 
-**Status (2026-11-15): read, untested on the panel.** The connection engine
-(`libs/bluetooth-proxy` `BluetoothConnectionEngine`, `AndroidGattRadio`) is built from what is read
-below. The panel plan in the #246 pane PR runs it with a real device.
+**Status (2026-11-17): one real GATT device verified on the S1** ([below](#verified-on-the-s1-2026-11-17)).
+The connection engine (`libs/bluetooth-proxy` `BluetoothConnectionEngine`, `AndroidGattRadio`) is
+built from what is read below. The link limit and the other open points are still untested.
 
 ### What Home Assistant needs (read)
 
@@ -150,10 +150,35 @@ below. The panel plan in the #246 pane PR runs it with a real device.
 Read-only facts from the dev panel (2026-11-15): Android 10, S1 Kiosk 0.4.3 targets SDK 35, chip
 "8821CS or 8821CSH or 8821CS-VB", `dumpsys bluetooth_manager` lists no GATT clients and no link limit.
 
+### Verified on the S1 (2026-11-17)
+
+**Verified** on 2026-11-17, 09:03–09:14 UTC, the root's run on #396. Setup:
+- S1 Plus on the test build `s1-kiosk-test-1db558a` (the whole #246 stack on `main`), radio `thread_router`;
+- the device: a GATT thermostat on a custom integration. HA reaches it over GATT through a proxy, and the integration reports which proxy in an *Active proxy* sensor;
+- addresses were compared in the shell only; none is recorded here.
+
+| What | Result |
+|---|---|
+| Before | The thermostat was off. Its active proxy was an ESP32 proxy next to it, at RSSI -31 |
+| Proxy on, *Listen and connect* | The page: "Listening for Home Assistant", Scanner **On**, Connections **0 of 3** |
+| The S1 becomes the active proxy | The nearer ESP32 was taken out (its ESPHome entry disabled; HA's Bluetooth entry untouched). **Two seconds later** *Active proxy* named the S1, at RSSI **-62**. No reconfiguration in HA. The page read **"1 of 3 · In use now"**. Android's GATT Client Map held one connection, owned by `sh.edm.s1kiosk` |
+| Reads | The integration polled through the S1. Poll latency was **307 ms** through the S1 at -62, against **179 ms** through the ESP32 at -31 |
+| A write | Setting a mode: HA showed the new mode **140 ms** after the call. Setting it back to off straight away was confirmed by the next poll. The thermostat reports no target temperature while off, so that write wasn't tried |
+| Logs and screen | No "didn't come up" or "got no answer" lines, no address in any "Bluetooth proxy" log line, and no pairing dialog over the kiosk |
+| *Listen only* | The link closed at once: no GATT client left, and the page read "— · None in listen only" |
+| Put back | The ESP32's entry was re-enabled; the thermostat was off as found; the pane was off; the baseline build was reinstalled (same hash); radio `ok thread_router`, Bluetooth on |
+
+What it shows:
+- The S1 works as a connectable proxy for a real GATT device.
+- HA moved the connection to the S1 as soon as it was the best connectable proxy left.
+- At -62 against -31, a poll took 307 ms against 179 ms; the RSSI and the radio both differ, so this doesn't separate the two.
+- **One link only, so the link limit is still untested.** There was one GATT device.
+- Whether the integration keeps its link open between polls wasn't measured long enough to say. The link stayed up through the 4 minutes of the test.
+
 ### Still open (untested)
 
 - **The link limit.** Android's stack allows 7 GATT links (believed, not checked). The RTL8821CS
-  may hold fewer. The engine starts at 3, like ESPHome. Record what the panel run finds here.
+  may hold fewer. The engine starts at 3, like ESPHome. Only one link has been tried (2026-11-17).
 - **Handles against an ESP32 proxy.** Connect the same device through both and compare the services
   HA caches. A mismatch breaks a cache HA built from the other proxy.
 - **`refresh()` on the panel.** Whether reflection reaches it with target SDK 35, and whether it
