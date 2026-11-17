@@ -195,7 +195,7 @@ class SetupOverlay(
 
     // ---- the Wi-Fi step's other ways (#468): one quiet row under the way it leads with
     private val waysLabel = g.text(15f, FA).apply { text = "Other ways" }
-    private val wayButtons = List(2) { g.plain("").apply { setPadding(px(12f), px(14f), px(12f), px(14f)) } }
+    private val wayButtons = List(2) { g.plain("").apply { setSingleLine(); setPadding(px(10f), px(14f), px(10f), px(14f)) } }
     /** Layout B: the row folded behind this link until it is tapped. */
     private val waysToggle = g.plain("Other ways to set up ›").apply { setPadding(0, px(14f), px(12f), px(14f)) }
     private val waysRow = LinearLayout(context).apply {
@@ -307,6 +307,11 @@ class SetupOverlay(
         railSpacer.visibility = if (on) View.GONE else View.VISIBLE
         stretch.visibility = if (below) View.GONE else View.VISIBLE
         railStack.visibility = if (on) View.GONE else View.VISIBLE
+        // The Wi-Fi step's other ways get a line of their own above the buttons: the screen is too narrow for both (#468).
+        (waysRow.parent as? ViewGroup)?.removeView(waysRow)
+        if (on) column.addView(waysRow, column.indexOfChild(buttonRow), LinearLayout.LayoutParams(-1, -2))
+        else buttonRow.addView(waysRow, 0, LinearLayout.LayoutParams(-2, -2))
+        if (on) waysLabel.visibility = View.GONE else if (!otherWaysFolded) waysLabel.visibility = View.VISIBLE
     }
 
     // ---- Done: the lit stack on its own
@@ -666,7 +671,8 @@ class SetupOverlay(
         val open = !otherWaysFolded || waysOpen
         waysToggle.visibility = if (open) View.GONE else View.VISIBLE
         waysToggle.setOnClickListener { waysOpen = true; bind(m, false) }
-        waysLabel.visibility = if (open && !otherWaysFolded) View.VISIBLE else View.GONE
+        // Portrait has no room for the label: the quiet row under the card says it by itself.
+        waysLabel.visibility = if (open && !otherWaysFolded && !portrait) View.VISIBLE else View.GONE
         wayButtons.forEachIndexed { i, b ->
             val way = others.getOrNull(i)
             b.visibility = if (open && way != null) View.VISIBLE else View.GONE
@@ -917,7 +923,7 @@ class SetupOverlay(
         private val dot = View(context)
         private val halo = FrameLayout(context).apply { addView(dot, LayoutParams(px(9f), px(9f), Gravity.CENTER)) }
         private val title = g.text(16.5f, TX, Inter.MEDIUM).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
-        private val detail = g.text(15f, MU).apply { setLineSpacing(0f, 1.2f); maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+        private val detail = g.text(15f, MU).apply { setLineSpacing(0f, 1.2f); maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
         private val action = g.primary("").apply { setPadding(px(26f), px(12f), px(26f), px(12f)) }
         val view = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL

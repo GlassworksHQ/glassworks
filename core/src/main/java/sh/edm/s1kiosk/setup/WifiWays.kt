@@ -21,8 +21,8 @@ object WifiWays {
 
     /**
      * [improv]: Bluetooth setup as the step shows it. It can lead while it runs, in any state but one that couldn't
-     * start; switched off (Not now, or its window ended) it is only an alternative ("Use Bluetooth"), and missing or
-     * refused it is no way at all. [hotspot]: the setup hotspot's line, null where the app has none. It counts while
+     * start; switched off (Not now, or its window ended) it leads only when the hotspot can't open, and is otherwise an
+     * alternative ("Use Bluetooth"); missing or refused it is no way at all. [hotspot]: the setup hotspot's line, null where the app has none. It counts while
      * one tap opens it ([HotspotStep.Action.OPEN], [HotspotStep.Action.ALLOW] for Android's permission, or
      * [HotspotStep.Action.RETRY]); off with Wi-Fi off, or with the permission refused for good, it doesn't. Waiting on
      * Android's permission ([HotspotStep.Action.ALLOW]), it leads: the person chose it.
@@ -36,6 +36,8 @@ object WifiWays {
             hotspot?.action == HotspotStep.Action.ALLOW -> Way.HOTSPOT
             improvRuns -> Way.IMPROV
             hotspotOpens -> Way.HOTSPOT
+            // Switched off (Not now) it gives way to the hotspot, but one tap still beats typing it.
+            improvStartable -> Way.IMPROV
             else -> Way.MANUAL
         }
         val can = buildList {

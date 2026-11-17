@@ -42,6 +42,12 @@ class WifiWaysTest {
     }
 
     @Test
+    fun `Bluetooth switched off and no hotspot to open, one tap on Use Bluetooth still beats typing it`() {
+        assertEquals(Plan(IMPROV, listOf(MANUAL)), WifiWays.plan(improv(running = false), wifiOff))
+        assertEquals(Plan(IMPROV, listOf(MANUAL)), WifiWays.plan(improv(running = false), null))
+    }
+
+    @Test
     fun `the hotspot counts while one tap opens it, Android's permission included`() {
         val explain = HotspotStep.card(SetupHotspot.View.Off(null, HotspotFailure.NO_PERMISSION),
             HotspotPermission.Step.Explain("android.permission.NEARBY_WIFI_DEVICES", "why"), null)

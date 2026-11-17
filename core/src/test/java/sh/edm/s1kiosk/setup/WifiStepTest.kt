@@ -36,12 +36,12 @@ class WifiStepTest {
     }
 
     @Test
-    fun readySaysWhereToFindItInHomeAssistant() {
+    fun readySaysToAddItInHomeAssistantThenAllow() {
+        // Where in Home Assistant (its app on a phone, or Discovered) is the card's line above the tile (#468).
         val l = WifiStep.improv(on)
         assertEquals(Phase.READY, l.phase)
         assertEquals("Bluetooth setup is on", l.title)
-        assertTrue(l.detail.contains("Settings → Devices & services → Discovered"))
-        assertTrue(l.detail.contains("Improv via BLE"))
+        assertEquals("Add the panel in Home Assistant, then tap Allow here.", l.detail)
         assertEquals(listOf(Action.ALLOW, Action.NOT_NOW), l.actions)
     }
 
