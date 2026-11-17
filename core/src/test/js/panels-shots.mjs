@@ -70,6 +70,8 @@ const hellos = { 'kitchen-panel.local:8099': S1, 'bedroom-panel.local:8099': S1,
 const tokenTo = new Set();
 /** Every host the page sent anything to. */
 const contacted = new Set();
+/** Every request, as `METHOD host/path`. */
+const requests = [];
 let challenge = null;
 const initial = JSON.stringify(panels);
 const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }, { area_id: 'garage', name: 'Garage' }, { area_id: 'office', name: 'Office' }];
@@ -86,6 +88,7 @@ async function handle(req, res) {
   if (req.method === 'OPTIONS') return send(res, 204, '');
   if (req.headers.authorization) tokenTo.add(u.host);
   contacted.add(u.host);
+  requests.push(req.method + ' ' + u.host + u.pathname);
   if (u.host === HA) {
     if (u.pathname === '/auth/authorize') {
       assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
@@ -182,7 +185,7 @@ cdp.addEventListener('message', (e) => {
 });
 const call = (method, params = {}) => new Promise((ok, no) => { pending.set(++id, (m) => (m.error ? no(new Error(method + ': ' + m.error.message)) : ok(m.result))); cdp.send(JSON.stringify({ id, method, params })); });
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
-const js = async (expr) => (await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.value;
+const js = async (expr, userGesture = false) => (await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true, userGesture })).result.value;
 const until = async (expr, what) => { for (let i = 0; i < 100; i++) { if (await js(expr)) return; await sleep(100); } throw new Error('never: ' + what + ': ' + (await js('location.href + " | " + document.getElementById("gw-panels")?.textContent'))); };
 
 let viewport = { width: 1440, mobile: false };
@@ -226,6 +229,28 @@ try {
   await js("document.querySelector('.cpa button').click()");
   await until("!document.querySelector('.cpa')", 'the confirmed change');
   await shot('04-confirmed');
+
+  // The guards at the call sites, not only readPanel: a Manage button forced on for Garage (not a panel) and
+  // Office (off the LAN) sends nothing.
+  const sent = requests.length;
+  // As a click (a user gesture), so the new tab a Manage opens isn't blocked as a popup.
+  await js("for (const r of document.querySelectorAll('#gw-list .row')) if (/Garage|Office/.test(r.textContent)) { const b = r.querySelector('button.pill'); b.disabled = false; b.click(); }", true);
+  await sleep(1000);
+  assert.deepEqual(requests.slice(sent), [], 'a Manage forced on for a panel that is not usable sent nothing');
+  // A To picker tampered with to name the Office panel: the card says why, offers no Copy, and nothing goes to it.
+  await js("const s = document.querySelector('#gw-copy select[name=to]'); const o = document.createElement('option'); o.value = 'http://203.0.113.7:8099'; s.append(o); s.value = o.value; s.dispatchEvent(new Event('change'))");
+  await until("document.querySelector('#gw-copy .note')?.textContent.includes('Office panel')", 'the copy card saying why it stopped');
+  assert.equal(await js("document.querySelector('#gw-copy button[type=submit]')"), null);
+  await shot('08-copy-to-a-panel-off-the-network');
+  // A target that stops answering as a panel during a copy: the card says what was copied and why it stopped.
+  Object.assign(panels, JSON.parse(initial));
+  await call('Page.navigate', { url: PAGE });
+  await until(listed + " && !document.getElementById('gw-copy').hidden", 'the panels again');
+  hellos['bedroom-panel.local:8099'] = 'ESP32-CAM';
+  await js("document.querySelector('#gw-copy button[type=submit]').click()");
+  await until("document.querySelector('#gw-copy .note')?.textContent.includes('Nothing more goes to Bedroom panel')", 'the copy stopping with why');
+  await shot('09-copy-target-stopped');
+  hellos['bedroom-panel.local:8099'] = S1;
   Object.assign(panels, JSON.parse(initial));
   await look(390, 'dark');
   await call('Page.navigate', { url: PAGE });

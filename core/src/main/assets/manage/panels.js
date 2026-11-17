@@ -180,6 +180,13 @@ function options(selected, skip) {
 }
 
 function drawCopy(fromP, toP, result) {
+  // A panel that isn't usable now (a picker tampered with, or one that stopped answering as a panel): say why, send nothing.
+  const bad = [fromP, toP].find((p) => p && !usable(p));
+  if (bad) {
+    copyCard.hidden = false;
+    return copyCard.replaceChildren(head('Copy settings'), h('div', { class: 'row static note' },
+      h('span', {}, copied(result, bad) + stopped(bad)), h('button', { class: 'pill', type: 'button', onclick: () => drawCopy() }, 'Start again')));
+  }
   const up = panels.filter(usable);
   if (up.length < 2) {
     copyCard.hidden = true;
@@ -223,6 +230,11 @@ function drawCopy(fromP, toP, result) {
   );
 }
 
+/** Why nothing (more) goes to [p]: it isn't a local, trusted panel with settings now. */
+function stopped(p) {
+  return 'Nothing more goes to ' + p.name + '. ' + ((p.reach && p.reach.state !== 'up' && p.reach.why) || "it isn't reachable as a Glassworks panel now.");
+}
+
 /** "Copied 4 settings to Bedroom panel. ", once a copy has run. */
 function copied(result, toP) {
   if (!result) return '';
@@ -235,7 +247,10 @@ function copied(result, toP) {
  * person agreed to its questions: each row goes again with its question's one-shot id.
  */
 async function apply(fromP, toP, rows, asked) {
-  if (!usable(toP)) return;
+  // The panel as the list has it now, not as the card was drawn: what reads it last decides.
+  const current = panels.find((p) => p.origin === toP.origin);
+  if (!usable(current)) return drawCopy(fromP, current || toP);
+  toP = current;
   const result = new Map();
   const access = await token().catch(() => null);
   if (!access) return start();
@@ -256,7 +271,8 @@ async function apply(fromP, toP, rows, asked) {
   panels = panels.map((p) => (p.origin === toP.origin ? again : p));
   drawList(stored()?.user || '');
   const to = panels.find((p) => p.origin === toP.origin);
-  if (usable(to)) drawCopy(fromP, to, result);
+  // Usable or not, the card says what happened; one that stopped answering as a panel says why.
+  drawCopy(fromP, to, result);
 }
 
 // ------------------------------------------------------------------ start

@@ -207,8 +207,9 @@ export const MAX_WAIT_S = 5;
 
 /**
  * [call] again while it answers 503 with Retry-After (a panel still asking Home Assistant about other sign-ins),
- * at most [TRIES] times in all, waiting what it asks, but [MAX_WAIT_S] s at most in all: one busy panel can't hold
- * the page (it waits for every panel) much past its own timeouts. The last answer otherwise.
+ * at most [TRIES] times in all, waiting what it asks, but [MAX_WAIT_S] s at most in all per request: one busy panel
+ * can't hold the page (it waits for every panel) much past its own timeouts. A copy of N settings makes N requests,
+ * so it can wait up to N × [MAX_WAIT_S] s. The last answer otherwise.
  */
 export async function retrying(call, sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))) {
   let left = MAX_WAIT_S;
@@ -252,6 +253,8 @@ export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = 
   };
   let hi;
   try {
+    // Hello never answers 503 (it asks Home Assistant nothing), so only the settings read can wait: one read stays
+    // within its timeouts plus [MAX_WAIT_S] s.
     hi = await get('/manage/api/hello', {});
   } catch {
     return { ...p, trusted: false, reach: { state: 'down', why: DOWN }, settings: null };
