@@ -13,6 +13,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URI
+import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -41,7 +42,7 @@ object AuthLog {
  *    the refresh token. The phone sees "Panel signed in ✓".
  *
  * The setup page (`/setup`, #453) starts the same flow in its own tab with `[CONTINUE]?then=setup`. That
- * sign-in is bound to the browser with a cookie named for its state ([handOffCookie]), and its callback sends
+ * sign-in is bound to the browser with a cookie holding its state ([HANDOFF] and a slot), and its callback sends
  * the browser back to the setup page ([SETUP_RETURN]) instead of showing the done page. A callback for it
  * without that cookie is refused before the code is used. The QR code's own sign-in is not bound, as before.
  *
@@ -156,10 +157,11 @@ class SignInServer(
         val toSetup = req.query["then"] == THEN_SETUP
         val sign = states.create(clientId, redirect, ha, toSetup = toSetup)
         val location = OAuth.authorizeUrl(ha, clientId, redirect, sign.state, sign.codeChallenge)
-        // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. One per
-        // sign-in, so starting another (or a cross-site GET starting one) never replaces it. It outlives the state
-        // (10 minutes), so a sign-in that ran out still shows the way back to setup.
-        val bind = if (toSetup) mapOf("Set-Cookie" to "${handOffCookie(sign.state)}=1; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
+        // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. Its slot is
+        // one no other pending sign-in holds, so starting another (or a cross-site GET starting one) never replaces
+        // it, and there are at most a few. It outlives the state (10 minutes), so a sign-in that ran out still shows
+        // the way back to setup.
+        val bind = if (toSetup) mapOf("Set-Cookie" to "$HANDOFF${sign.slot}=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
         return Response(
             302, "Found",
             mapOf("Location" to location, "Cache-Control" to "no-store", "Content-Type" to "text/plain; charset=utf-8") + bind,
@@ -169,12 +171,12 @@ class SignInServer(
 
     /** Every way out of a callback lets its binding cookie go: the sign-in it binds is over. */
     private fun callback(req: Request): Response {
-        val state = req.query["state"]?.takeIf { it.isNotEmpty() }
-        val bound = state != null && cookie(req, handOffCookie(state)) != null
+        val state = req.query["state"]?.takeIf { STATE.matches(it) }
+        val binding = state?.let { s -> bindings(req).firstOrNull { (_, v) -> MessageDigest.isEqual(v.toByteArray(), s.toByteArray()) }?.first }
         val pending = states.consume(state, PendingSignIn.PURPOSE_SIGNIN)
-        val r = callback(req.query, pending, bound)
-        if (!bound) return r
-        val clear = "${handOffCookie(state!!)}=; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=0"
+        val r = callback(req.query, pending, binding != null)
+        binding ?: return r
+        val clear = "$binding=; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=0"
         return Response(r.status, r.reason, r.headers + ("Set-Cookie" to clear), r.body)
     }
 
@@ -348,13 +350,19 @@ class SignInServer(
         /** Where a sign-in from the setup page ends: the page, which carries on after Home Assistant. */
         const val SETUP_RETURN = "/setup#signed-in"
 
-        /** The cookie that binds a setup page's sign-in to its browser, named for the sign-in's state (base64url). */
-        fun handOffCookie(state: String) = "gw_signin_$state"
+        /** The cookies that bind a setup page's sign-in to its browser: this and its slot, holding the sign-in's state. */
+        const val HANDOFF = "gw_signin_"
+
+        /** What [OAuth.randomState] makes. Anything else is no state, and never reaches the store or a header. */
+        private val STATE = Regex("^[A-Za-z0-9_-]{1,64}$")
+        private val BINDING = Regex("^$HANDOFF[0-9]{1,2}$")
+
+        /** The binding cookies the browser sent, by name. */
+        private fun bindings(req: Request): List<Pair<String, String>> =
+            req.headers["cookie"]?.split(';').orEmpty().map { it.trim().split('=', limit = 2) }
+                .filter { it.size == 2 && BINDING.matches(it[0]) }.map { it[0] to it[1] }
 
         private const val BACK_TO_SETUP = """<a class="btn" href="/setup">Back to setup</a>"""
-
-        private fun cookie(req: Request, name: String): String? =
-            req.headers["cookie"]?.split(';')?.map { it.trim() }?.firstOrNull { it.startsWith("$name=") }?.substringAfter('=')?.takeIf { it.isNotEmpty() }
 
         fun esc(s: String) = PageShell.esc(s)
 
