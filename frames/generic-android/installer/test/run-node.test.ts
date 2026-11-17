@@ -14,9 +14,11 @@ describe('run-node.ts --dry-run', () => {
     expect(text).toMatch(/"model": "Pixel Tablet"/);
   });
 
-  it('--install reports the grants, the home screen and the setup page', async () => {
+  it('--install reports the grants, silent updates, the home screen and the setup page', async () => {
     const { code, text } = await run(['--install']);
     expect(code).toBe(0);
+    // a tested device's run record takes silentUpdates.state from here (frames/README.md#a-tested-devices-run)
+    expect(JSON.parse(text.slice(text.lastIndexOf('\n{') + 1)).silentUpdates.state).toMatch(/^(allowed|declined|refused|old-android|not-asked)$/);
     expect(text).toMatch(/"how": "set-home-activity"/);
     expect(text).toMatch(/"setupPage": "http:\/\/192\.0\.2\.10:8099\/setup"/);
   });

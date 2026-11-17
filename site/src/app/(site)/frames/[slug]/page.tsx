@@ -8,11 +8,12 @@ import { Chip, FactRow, ListCard, Row, Sq, StageChip, Tile, Tiles, manage as m }
 import { BookGlyph, CreditGlyph, KilnGlyph } from "@/components/Glyphs";
 import { ClarityPanel } from "@/components/clarity/Clarity";
 import { ClarityChipLink } from "@/components/clarity/ClarityChipLink";
+import { CompletenessPanel } from "@/components/completeness/Completeness";
 import { CLARITY, clarityFor } from "@/lib/clarity";
 import { frameById, frames, installLink } from "@/lib/frames";
 import { getDocs } from "@/lib/docs";
 import { researchUrl } from "@/lib/docs/research";
-import { KIND_TEXT } from "@glassworks/frame-card";
+import { KIND_TEXT, completeness } from "@glassworks/frame-card";
 import { frameSeo, ratingKeys, ratingText, ships, type Support } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
@@ -58,6 +59,7 @@ async function Device({ params }: { params: Params }) {
   const base = d.base ? frameById(d.base) : undefined;
   const c = clarityFor(d.id);
   const live = ships(d.status);
+  const done = completeness(d, { base, clarity: c.state === "graded" ? (c.grade.grade ?? undefined) : undefined });
 
   const rows = panes
     .map((p) => ({ p, ...support(d, p.id) }))
@@ -181,6 +183,8 @@ async function Device({ params }: { params: Params }) {
         <ClarityPanel frameId={d.id} />
       </div>
 
+      <CompletenessPanel c={done} />
+
       {d.unverified && <p className={s.notice}>These details come from public writeups. Nobody has checked them on hardware yet.</p>}
 
       <div className={m.cols2}>
@@ -236,7 +240,8 @@ async function Device({ params }: { params: Params }) {
             </div>
           ))}
         </dl>
-        {(!live || d.unverified) && <p className={s.expected}>Expected. Nothing has run on this device yet.</p>}
+        {/* a tested device's dated run on a real unit is the install these ratings describe */}
+        {((!live && !d.run?.on) || d.unverified) && <p className={s.expected}>Expected. Nothing has run on this device yet.</p>}
       </section>
 
       <p className={s.back}>
