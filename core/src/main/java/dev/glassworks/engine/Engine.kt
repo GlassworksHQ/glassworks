@@ -64,6 +64,13 @@ interface Page {
 
     /** Sends [message] to every connected [PagePort]. A port that fails is skipped. */
     fun post(message: JSONObject)
+
+    /**
+     * A still picture of what the page shows now, at the view's size, or null when the engine can't
+     * take one. [done] runs on the main thread. A notification's half-screen view (#230) shows the
+     * dashboard behind it this way, with one page and no second engine.
+     */
+    fun capture(done: (android.graphics.Bitmap?) -> Unit) = done(null)
 }
 
 /** A page script's connection to the app (the web extension's native port). */

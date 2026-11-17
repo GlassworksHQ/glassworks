@@ -1,32 +1,47 @@
 package sh.edm.s1kiosk.notifications
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Matrix
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.text.TextUtils
+import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.glassworks.engine.PageCapture
+import dev.glassworks.frame.Input
 import dev.glassworks.notifications.ImageFetch
 import dev.glassworks.notifications.NotificationImages
 import dev.glassworks.notifications.NotificationStore.Entry
 import dev.glassworks.notifications.NotificationsDefinition
 import dev.glassworks.notifications.NotificationsHub
 import dev.glassworks.notifications.Priority
+import dev.glassworks.notifications.ViewButton
+import dev.glassworks.notifications.ViewSize
 import sh.edm.s1kiosk.setup.Backdrop
 import sh.edm.s1kiosk.ui.Glass
 import sh.edm.s1kiosk.ui.Glass.Companion.AMBER
@@ -42,11 +57,13 @@ import sh.edm.s1kiosk.voice.OrbArt
 import sh.edm.s1kiosk.voice.OrbBakes
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.ceil
 
 /**
  * The notifications over the dashboard (#118, the approved design): cards at top right, the stack and
  * its "N notifications · Show all" pill, Do not disturb's pill, the list as a sheet from the right, the
- * critical alert on the timer-done stage, and the bar that leads back from a full-screen page.
+ * critical alert on the timer-done stage, and a notification's view: full screen with its bar, or half
+ * screen as a dialog over a still picture of the dashboard (#230).
  *
  * It draws what [NotificationsHub] holds ([update]) and sends taps back to it. Which cards are in view
  * is [Folds]'. Pictures come from [images] on a worker thread. Above the timers (12 dp) and under
@@ -64,8 +81,20 @@ class NotificationOverlay(
     /** Whether the screen is on: a card's fold time counts only then. */
     var screenOn: () -> Boolean = { true }
 
-    /** A full-screen page opened ([url]) or closed (null). The activity moves the dashboard. */
+    /** A view opened ([url]) or closed (null). The activity moves the dashboard. */
     var onPage: ((url: String?) -> Unit)? = null
+
+    /** Where the page goes: into a half view's dialog ([Rect], px), or back to full screen (null). */
+    var onPageArea: ((area: Rect?) -> Unit)? = null
+
+    /** Takes the dashboard's picture before a half view covers it; null, or a null picture: the scrim alone. */
+    var capturePage: ((done: (Bitmap?) -> Unit) -> Unit)? = null
+
+    /**
+     * Whether the screen takes a tap ([dev.glassworks.frame.Frame.input]). Without ([Input.NONE]) a view has
+     * no button, nothing outside a half view takes a tap, and the critical stage has no "Open the view".
+     */
+    var input: Input = Input.TOUCH
 
     private val g = Glass(context)
     private val dp = g.dp
@@ -74,17 +103,32 @@ class NotificationOverlay(
     private val folds = Folds()
     private var state = NotificationsHub.State()
     private var shownPage: Long? = null
+    /** The open view is drawn as a half dialog, and the page sits in it. */
+    private var shownHalf = false
+    /** A half view waiting for the dashboard's picture before it opens. */
+    private var capturing: Long? = null
+    /** The dashboard's still picture behind a half view. */
+    private var behind: Bitmap? = null
+    /** Where the page was last put for a half view. */
+    private var placed: Rect? = null
     private val pictures = HashMap<Long, Picture>()
     private val loading = HashSet<Long>()
     private val worker: ExecutorService by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "s1-notify-img").apply { isDaemon = true } } }
     private var detached = false
+    /** The window is on screen: false while the activity is stopped, as it is with the screen off. */
+    private var windowShown = false
     private val refold = Runnable { render() }
-    private val pageTick = Runnable { renderPage(state.page) }
+    private val pageTick = Runnable { tickPage() }
+    /** The open view's bar, for the tick: its line of text and its time left. */
+    private var pageLine: TextView? = null
+    private var pageTime: TimeLeft? = null
 
     private val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END; clipChildren = false }
     private val stack = FrameLayout(context).apply { clipChildren = false; clipToPadding = false }
     private val pill = pill()
     private val pageBar = FrameLayout(context)
+    private val dialog = HalfDialog(context)
+    private val footer = FrameLayout(context)
     private val stage = FrameLayout(context)
     /** The critical alert's animated orb: one, kept while the stage's text is rebuilt, so its motion runs on. Public for tests. */
     val criticalOrb = CriticalOrb(context, orbs)
@@ -98,6 +142,9 @@ class NotificationOverlay(
     init {
         clipChildren = false
         elevation = 14 * dp
+        // Under the cards: a card that arrives over a half view sits on top of it, as over the dashboard.
+        addView(dialog, LayoutParams(-1, -1))
+        addView(footer, LayoutParams(0, 0))
         addView(column, LayoutParams(px(CARD_DP), -2, Gravity.TOP or Gravity.END).apply { topMargin = px(MARGIN_DP); marginEnd = px(MARGIN_DP) })
         column.addView(stack, LinearLayout.LayoutParams(-1, -2))
         column.addView(pill, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(12f) })
@@ -125,7 +172,7 @@ class NotificationOverlay(
     fun openList() {
         sheetLayer.removeAllViews()
         sheetLayer.addView(View(context).apply {
-            setBackgroundColor(Color.argb(110, 10, 11, 15))
+            setBackgroundColor(SCRIM)
             setOnClickListener { closeList() }
         }, LayoutParams(-1, -1))
         sheetLayer.addView(sheet(), LayoutParams(px(SHEET_DP), -1, Gravity.END))
@@ -147,6 +194,13 @@ class NotificationOverlay(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         detached = false
+        windowShown = windowVisibility == VISIBLE
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        windowShown = visibility == VISIBLE
+        if (windowShown) armDeadline() else main.removeCallbacks(captureDeadline)
     }
 
     override fun onDetachedFromWindow() {
@@ -154,6 +208,11 @@ class NotificationOverlay(
         detached = true
         main.removeCallbacks(refold)
         main.removeCallbacks(pageTick)
+        main.removeCallbacks(captureDeadline)
+        capturing = null
+        // Nothing draws it any more.
+        behind?.recycle()
+        behind = null
         super.onDetachedFromWindow()
     }
 
@@ -166,6 +225,7 @@ class NotificationOverlay(
         val critical = state.cards.firstOrNull { it.notification.priority == Priority.CRITICAL }
         val view = folds.update(state.cards.filter { it !== critical }, screenOn(), now(), covered = critical != null)
         view.nextFoldAt?.takeIf { !detached }?.let { main.postDelayed(refold, (it - now()).coerceAtLeast(0) + 50) }
+        if (state.page?.id != shownPage) switchPage(state.page)
 
         val cards = view.cards
         renderStack(cards.take(Folds.IN_VIEW))
@@ -173,12 +233,6 @@ class NotificationOverlay(
         renderStage(critical)
         renderPage(state.page)
         if (listOpen) (sheetLayer.getChildAt(1) as? LinearLayout)?.let { fillSheet(it) }
-
-        val page = state.page?.id
-        if (page != shownPage) {
-            shownPage = page
-            onPage?.invoke(state.page?.notification?.url)
-        }
         visibility = if (state.list.isEmpty() && state.page == null && !state.doNotDisturb && !listOpen) View.GONE else View.VISIBLE
     }
 
@@ -204,8 +258,8 @@ class NotificationOverlay(
 
     private fun renderPill(inView: Int) {
         val held = state.list.count { it.held }
-        // The open page has its own bar: it isn't one more to show.
-        val count = state.list.count { it.id != state.page?.id }
+        // The open view and the ones waiting behind it have their own bar: they aren't more to show.
+        val count = state.list.count { it.id != state.page?.id && !it.queued }
         val text = when {
             state.doNotDisturb -> "Do not disturb" to if (held > 0) "  ·  $held held" else ""
             count > 1 || count > inView -> "$count notification${if (count == 1) "" else "s"}" to "  ·  Show all"
@@ -245,51 +299,291 @@ class NotificationOverlay(
             if (n.title.isNotEmpty() && n.message.isNotEmpty()) addView(g.text(17f, MU).apply { this.text = n.message; gravity = Gravity.CENTER },
                 LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(8f) })
         }
-        stageContent.addView(ScrollView(context).apply {
+        // The text above, the buttons below; on a narrow screen the buttons take more rows and the text the rest.
+        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(ScrollView(context).apply {
             isVerticalFadingEdgeEnabled = true
             setFadingEdgeLength(px(20f))
             addView(text, LayoutParams(-1, -2))
-        }, LayoutParams(px(860f), -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+        }, LinearLayout.LayoutParams(minOf(px(860f), screenW() - 2 * px(STAGE_SIDE_DP)), 0, 1f).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
             topMargin = px(STAGE_TEXT_TOP_DP)
-            bottomMargin = px(STAGE_BUTTONS_BOTTOM_DP + STAGE_BUTTONS_DP + 16f)
+            bottomMargin = px(16f)
         })
-        stageContent.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            n.actions.forEachIndexed { i, a ->
-                val b = if (i == 0) g.primary(a.title) else g.ghost(a.title)
-                b.setOnClickListener { tap(e, a.id, a.uri) }
-                addView(b, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = px(12f) })
+        column.addView(ButtonRows(context, px(12f)).apply {
+            // A critical one's view opens from here, never by itself (#230): the stage is what can't be missed.
+            val buttons = listOfNotNull(
+                n.url?.takeIf { input == Input.TOUCH }?.let { OPEN_THE_VIEW to { hub.openView(e.id) } },
+            ) + n.actions.map { a -> a.title to { tap(e, a.id, a.uri) } }
+            buttons.forEachIndexed { i, (title, onTap) ->
+                addView((if (i == 0) g.primary(title) else g.ghost(title)).apply { setOnClickListener { onTap() } })
             }
-            addView(g.ghost("Dismiss").apply { setOnClickListener { hub.dismiss(e.id) } },
-                LinearLayout.LayoutParams(-2, -2).apply { if (n.actions.isNotEmpty()) marginStart = px(12f) })
-        }, LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(STAGE_BUTTONS_BOTTOM_DP) })
+            addView(g.ghost("Dismiss").apply { setOnClickListener { hub.dismiss(e.id) } })
+        }, LinearLayout.LayoutParams(-1, -2).apply {
+            marginStart = px(STAGE_SIDE_DP)
+            marginEnd = px(STAGE_SIDE_DP)
+            bottomMargin = px(STAGE_BUTTONS_BOTTOM_DP)
+        })
+        stageContent.addView(column, LayoutParams(-1, -1))
+    }
+
+    /**
+     * The stage's buttons in one centred row, as on the S1. When they don't fit (a narrow portrait screen, or many
+     * actions), they go on as many centred rows as it takes, in the same order, so Dismiss keeps its natural width.
+     */
+    private class ButtonRows(context: Context, private val gap: Int) : ViewGroup(context) {
+        private fun rows(max: Int): List<List<View>> {
+            val rows = mutableListOf<MutableList<View>>()
+            var x = 0
+            for (c in (0 until childCount).map(::getChildAt).filter { it.visibility != GONE }) {
+                if (rows.isEmpty() || x + gap + c.measuredWidth > max) { rows += mutableListOf(c); x = c.measuredWidth }
+                else { rows.last() += c; x += gap + c.measuredWidth }
+            }
+            return rows
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val max = MeasureSpec.getSize(widthMeasureSpec)
+            for (i in 0 until childCount) getChildAt(i).measure(
+                MeasureSpec.makeMeasureSpec(max, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+            val rows = rows(max)
+            val h = rows.sumOf { r -> r.maxOf { it.measuredHeight } } + gap * (rows.size - 1).coerceAtLeast(0)
+            setMeasuredDimension(max, h)
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            var y = 0
+            for (row in rows(r - l)) {
+                val rowH = row.maxOf { it.measuredHeight }
+                var x = (r - l - (row.sumOf { it.measuredWidth } + gap * (row.size - 1))) / 2
+                for (c in row) {
+                    val top = y + (rowH - c.measuredHeight) / 2
+                    c.layout(x, top, x + c.measuredWidth, top + c.measuredHeight)
+                    x += c.measuredWidth + gap
+                }
+                y += rowH + gap
+            }
+        }
+    }
+
+    /**
+     * The open view changed. A full one: the page goes to it. A half one opening over the dashboard: the
+     * dashboard's picture first, while the page still shows it, then the page moves into the dialog and goes
+     * to the view. From a full view to a half one there is no dashboard to take: the scrim alone.
+     */
+    private fun switchPage(p: Entry?) {
+        val was = shownPage
+        shownPage = p?.id
+        capturing = null
+        main.removeCallbacks(captureDeadline)
+        val half = p?.notification?.size == ViewSize.HALF
+        val capture = capturePage
+        when {
+            p == null || !half -> {
+                if (shownHalf) closeHalf()
+                onPage?.invoke(p?.notification?.url)
+            }
+            shownHalf -> onPage?.invoke(p.notification.url)
+            was == null && capture != null -> {
+                capturing = p.id
+                armDeadline()
+                capture { b ->
+                    if (!detached && capturing == p.id) {
+                        capturing = null
+                        main.removeCallbacks(captureDeadline)
+                        openHalf(p, b)
+                        render()
+                    } else {
+                        b?.recycle()
+                    }
+                }
+            }
+            else -> openHalf(p, null)
+        }
+    }
+
+    /**
+     * A picture that is late isn't worth the wait: past the deadline the view opens over the dark backdrop. It counts
+     * only while the window is shown. With the screen off GeckoView holds the capture until the screen is back on
+     * (S1, 2026-11-16: 5.8 s, of which 0.45 s from the activity's resume to the picture; 58-86 ms with the screen on).
+     */
+    private fun armDeadline() {
+        main.removeCallbacks(captureDeadline)
+        if (capturing != null && windowShown) main.postDelayed(captureDeadline, CAPTURE_DEADLINE_MS)
+    }
+
+    private val captureDeadline = Runnable {
+        val p = state.page?.takeIf { it.id == capturing } ?: return@Runnable
+        capturing = null
+        if (Log.isLoggable(PageCapture.TAG, Log.DEBUG)) Log.d(PageCapture.TAG, "capture: past $CAPTURE_DEADLINE_MS ms, the view opens without the picture")
+        openHalf(p, null)
+        render()
+    }
+
+    private fun openHalf(p: Entry, picture: Bitmap?) {
+        dropPicture()
+        behind = picture
+        shownHalf = true
+        placePage()
+        onPage?.invoke(p.notification.url)
+    }
+
+    private fun closeHalf() {
+        shownHalf = false
+        dropPicture()
+        placed = null
+        onPageArea?.invoke(null)
+    }
+
+    /**
+     * Lets the dashboard's picture go (4 MB on the S1). It is recycled after the next frame, which no longer draws it:
+     * a frame already recorded with it must not meet a recycled bitmap.
+     */
+    private fun dropPicture() {
+        val old = behind ?: return
+        behind = null
+        dialog.invalidate()
+        if (isAttachedToWindow) postOnAnimation { main.post { old.recycle() } } else old.recycle()
+    }
+
+    /** Puts the page in the dialog, above its bar, when that moved (the first time, or the screen's size changed). */
+    private fun placePage() {
+        val area = dialogRect(screenW(), screenH()).apply { bottom -= px(FOOTER_DP) }
+        if (area == placed) return
+        placed = area
+        onPageArea?.invoke(area)
+    }
+
+    /** The overlay's size, or the screen's before its first layout. */
+    private fun screenW() = width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+    private fun screenH() = height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // The half dialog and the stage's text column follow the screen's size.
+        if (shownHalf || stage.visibility == View.VISIBLE) post { if (shownHalf || stage.visibility == View.VISIBLE) render() }
     }
 
     private fun renderPage(e: Entry?) {
         main.removeCallbacks(pageTick)
+        pageLine = null
+        pageTime = null
         pageBar.removeAllViews()
-        if (e == null) { pageBar.visibility = View.GONE; return }
-        pageBar.visibility = View.VISIBLE
+        footer.removeAllViews()
+        val half = e != null && shownHalf
+        pageBar.visibility = if (e != null && !half && capturing == null) View.VISIBLE else View.GONE
+        dialog.visibility = if (half) View.VISIBLE else View.GONE
+        footer.visibility = dialog.visibility
+        if (e == null || capturing != null) return
+        if (!half) {
+            pageBar.addView(bar(e, half = false))
+            return
+        }
+        placePage()
+        val side = side(screenW(), screenH())
+        dialog.isClickable = input == Input.TOUCH
+        footer.layoutParams = if (side) LayoutParams(screenW() / 2, px(FOOTER_DP), Gravity.BOTTOM or Gravity.END)
+        else LayoutParams(-1, px(FOOTER_DP), Gravity.BOTTOM)
+        footer.background = GradientDrawable().apply {
+            // The dialog's outer corner, at the foot of a side panel.
+            val r = SHEET_RADIUS_DP * dp
+            cornerRadii = if (side) floatArrayOf(0f, 0f, 0f, 0f, 0f, 0f, r, r) else FloatArray(8)
+            setColor(CARD)
+        }
+        footer.addView(View(context).apply { setBackgroundColor(Color.argb(30, 255, 255, 255)) }, LayoutParams(-1, px(1f).coerceAtLeast(1)))
+        footer.addView(bar(e, half = true), LayoutParams(-1, -1))
+    }
+
+    /**
+     * The open view's bar: its title, what comes next and when, the time left, and the one button
+     * ([ViewButton]), which closes the view so the next one opens. A pill at the foot of a full view; the
+     * dialog's own foot in a half one.
+     */
+    private fun bar(e: Entry, half: Boolean): View = LinearLayout(context).apply {
         val n = e.notification
-        val left = e.expiresAt?.let { (it - now()).coerceAtLeast(0) }
-        pageBar.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        val button = ViewButton.of(state.waiting, if (half) ViewSize.HALF else ViewSize.FULL, input)
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        if (half) {
+            setPadding(px(24f), 0, px(if (button != null) 16f else 24f), 0)
+        } else {
             background = glassBg(999f)
             elevation = 10 * dp
-            setPadding(px(20f), px(8f), px(8f), px(8f))
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(g.text(15f, TX, Inter.MEDIUM).apply { text = n.title.ifEmpty { n.message }; setSingleLine(); ellipsize = TextUtils.TruncateAt.END })
-                addView(g.text(13f, MU).apply { text = if (left != null) "Back to your dashboard in ${clock(left)}" else "Your dashboard is one tap away" })
-            }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(18f) })
-            if (left != null && n.timeoutS != null) {
-                addView(TimeLeft(context, left / (n.timeoutS * 1000f)), LinearLayout.LayoutParams(px(80f), px(3f)).apply { marginEnd = px(18f) })
-                if (!detached) main.postDelayed(pageTick, 1_000)
+            setPadding(px(20f), px(8f), px(if (button != null) 8f else 20f), px(8f))
+        }
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(g.text(15f, TX, Inter.MEDIUM).apply { text = n.title.ifEmpty { n.message }; setSingleLine(); ellipsize = TextUtils.TruncateAt.END })
+            addView(g.text(13f, MU).apply { text = barLine(e, half) }.also { pageLine = it })
+        }, if (half) LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(18f) } else LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(18f) })
+        val ends = e.expiresAt
+        if (ends != null && n.timeoutS != null) {
+            addView(TimeLeft(context, ends, n.timeoutS * 1000L).also { pageTime = it },
+                LinearLayout.LayoutParams(px(80f), px(3f)).apply { marginEnd = px(if (button != null) 18f else 0f) })
+            if (!detached) main.postDelayed(pageTick, 1_000)
+        }
+        button?.let { b -> addView(smallPill(b.label, white = true).apply { setOnClickListener { hub.dismiss(e.id) } }) }
+    }
+
+    /** The bar's line: what comes next and when. */
+    private fun barLine(e: Entry, half: Boolean): String {
+        val left = e.expiresAt?.let { (it - now()).coerceAtLeast(0) }
+        val waiting = state.waiting
+        return when {
+            waiting > 0 -> listOfNotNull(left?.let { "Next in ${clock(it)}" }, "$waiting more waiting").joinToString("  ·  ")
+            left != null -> if (half) "Closes in ${clock(left)}" else "Back to your dashboard in ${clock(left)}"
+            half -> "Open until you close it"
+            else -> "Your dashboard is one tap away"
+        }
+    }
+
+    /** Once a second: the bar's text, and its time left when it steps rather than slides. Nothing is rebuilt. */
+    private fun tickPage() {
+        val e = state.page ?: return
+        pageLine?.text = barLine(e, shownHalf)
+        pageTime?.step()
+        if (!detached && pageTime != null) main.postDelayed(pageTick, 1_000)
+    }
+
+    /**
+     * Behind a half view: the dashboard's still picture under the list's scrim, everywhere but the dialog, whose
+     * outer corners it rounds. A tap on it closes the view, as the button does; every tap inside the dialog goes
+     * through to the page.
+     */
+    private inner class HalfDialog(context: Context) : View(context) {
+        private val path = Path()
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        private val scale = Matrix()
+
+        override fun onDraw(c: Canvas) {
+            val r = SHEET_RADIUS_DP * dp
+            val radii = if (side(width, height)) floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r) else floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            path.reset()
+            path.fillType = Path.FillType.EVEN_ODD
+            path.addRect(0f, 0f, width.toFloat(), height.toFloat(), Path.Direction.CW)
+            path.addRoundRect(RectF(dialogRect(width, height)), radii, Path.Direction.CW)
+            val b = behind
+            if (b != null) {
+                paint.color = Color.WHITE
+                paint.shader = BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).apply {
+                    scale.setScale(width / b.width.toFloat(), height / b.height.toFloat())
+                    setLocalMatrix(scale)
+                }
+            } else {
+                paint.shader = null
+                paint.color = Glass.BG
             }
-            addView(smallPill("Back now", white = true).apply { setOnClickListener { hub.dismiss(e.id) } })
-        })
+            c.drawPath(path, paint)
+            paint.shader = null
+            paint.color = SCRIM
+            c.drawPath(path, paint)
+        }
+
+        override fun onTouchEvent(e: MotionEvent): Boolean {
+            if (input != Input.TOUCH || dialogRect(width, height).contains(e.x.toInt(), e.y.toInt())) return false
+            if (e.actionMasked == MotionEvent.ACTION_UP) state.page?.let { hub.dismiss(it.id) }
+            return true
+        }
     }
 
     // ------------------------------------------------------------------ the card
@@ -328,14 +622,15 @@ class NotificationOverlay(
             }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(14f) })
         val left = e.expiresAt?.let { (it - now()).coerceAtLeast(0) }
-        if (left != null && n.timeoutS != null && !compact) {
-            addView(TimeLeft(context, left / (n.timeoutS * 1000f)), LinearLayout.LayoutParams(-1, px(3f)).apply { topMargin = px(14f) })
+        val ends = e.expiresAt
+        if (ends != null && n.timeoutS != null && !compact) {
+            addView(TimeLeft(context, ends, n.timeoutS * 1000L), LinearLayout.LayoutParams(-1, px(3f)).apply { topMargin = px(14f) })
         }
     }
 
     private fun tap(e: Entry, actionId: String, uri: String?) {
         hub.tapAction(e.id, actionId)
-        uri?.let { hub.openPage(e.notification.title.ifEmpty { "Home Assistant" }, it) }
+        uri?.let { hub.openPage(e.notification.title.ifEmpty { "Home Assistant" }, it, e.notification.size) }
     }
 
     private fun picture(e: Entry): View {
@@ -489,16 +784,93 @@ class NotificationOverlay(
     }
 
     /** The time left: a thin line in the brand's gradient (not a status colour). */
-    private class TimeLeft(context: Context, private val left: Float) : View(context) {
-        private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        override fun onDraw(c: Canvas) {
-            val h = height.toFloat()
-            p.shader = null; p.color = Color.argb(20, 255, 255, 255)
-            c.drawRoundRect(0f, 0f, width.toFloat(), h, h / 2, h / 2, p)
-            // The track's colour set the paint's alpha: back to opaque before the gradient.
-            p.color = Color.WHITE
-            p.shader = LinearGradient(0f, 0f, width.toFloat(), 0f, SKY, VIOLET, Shader.TileMode.CLAMP)
-            c.drawRoundRect(0f, 0f, width * left.coerceIn(0f, 1f), h, h / 2, h / 2, p)
+    /**
+     * The time left until [endsAt], of [totalMs], as a bar that empties. It slides: one linear animation over the
+     * time left, which sets the fill's scaleX in whole pixels of its width. A scaleX that doesn't change doesn't
+     * invalidate, so the window redraws only when the bar moves a pixel (the S1's 120 px pill over 90 s: about one
+     * frame in 0.75 s), never a draw on every vsync; no onDraw or layout either way. Android has no public way to run
+     * it on the RenderThread (API 34's ViewPropertyAnimator has no RenderThread backend; RenderNodeAnimator is hidden).
+     * It runs only while the window is shown (not on a sleeping panel) and stops when the bar goes; a new bar
+     * starts from where the time really is. With the system's animations off (duration scale 0, which is also what
+     * Remove animations sets) there is no animation: the fill steps once a second with the text ([step]).
+     */
+    private inner class TimeLeft(context: Context, private val endsAt: Long, private val totalMs: Long) : FrameLayout(context) {
+        private val fill = View(context).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(SKY, VIOLET)).apply { cornerRadius = 999f }
+            pivotX = 0f
+        }
+        private var animator: ValueAnimator? = null
+
+        init {
+            background = GradientDrawable().apply { setColor(Color.argb(20, 255, 255, 255)); cornerRadius = 999f }
+            addView(fill, LayoutParams(-1, -1))
+            step()
+        }
+
+        private fun leftMs() = (endsAt - now()).coerceAtLeast(0)
+
+        /**
+         * The system's animator duration scale: Developer options, and 0 with Remove animations. From the setting
+         * the system copies into ValueAnimator, because ValueAnimator.getDurationScale is API 33 and
+         * areAnimatorsEnabled API 26 (the S1 is API 29; the legacy build API 23).
+         */
+        private fun animatorScale(): Float =
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+
+        /** [f] of the fill, rounded up to its next whole pixel: it reaches 0 only when the time does. */
+        private fun wholePixels(f: Float): Float {
+            val w = fill.width
+            return if (w > 0) ceil(f * w) / w else f
+        }
+
+        /** The fill where the time is, unless the animation is moving it. */
+        fun step() {
+            if (animator == null) fill.scaleX = (leftMs() / totalMs.toFloat()).coerceIn(0f, 1f)
+        }
+
+        private fun slide() {
+            stop()
+            step()
+            val left = leftMs()
+            val scale = animatorScale()
+            if (!windowShown || !isAttachedToWindow || left == 0L || scale <= 0f) return
+            animator = ValueAnimator.ofFloat(fill.scaleX, 0f).apply {
+                // The system scales every animator's duration; a countdown keeps real time.
+                duration = (left / scale).toLong()
+                interpolator = LinearInterpolator()
+                addUpdateListener { a -> fill.scaleX = wholePixels(a.animatedValue as Float) }
+                // Ended by itself: at the end of the time, or at once where the system turned animations off past
+                // the setting (Battery Saver on Android 10 keeps the setting at 1). The bar steps from where it is.
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(a: Animator) {
+                        if (a !== animator) return
+                        animator = null
+                        step()
+                    }
+                })
+                start()
+            }
+        }
+
+        private fun stop() {
+            val a = animator
+            animator = null
+            a?.cancel()
+        }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            slide()
+        }
+
+        override fun onDetachedFromWindow() {
+            stop()
+            super.onDetachedFromWindow()
+        }
+
+        override fun onWindowVisibilityChanged(visibility: Int) {
+            super.onWindowVisibilityChanged(visibility)
+            if (visibility == VISIBLE) slide() else stop()
         }
     }
 
@@ -536,9 +908,23 @@ class NotificationOverlay(
         /** The critical alert's layout: the text starts under the orb, the buttons end 28 dp above the bottom. */
         const val STAGE_TEXT_TOP_DP = 236f
         const val STAGE_BUTTONS_BOTTOM_DP = 28f
-        const val STAGE_BUTTONS_DP = 52f
+        /** The stage's text and buttons keep this far from a narrow screen's sides. */
+        const val STAGE_SIDE_DP = 24f
         const val LONG_TITLE = 32
         val CARD = Color.parseColor("#16171c")
+        /** The list's scrim, and the one behind a half view. */
+        val SCRIM = Color.argb(110, 10, 11, 15)
+        /** The half view's bar, at the dialog's foot. */
+        const val FOOTER_DP = 72f
+        const val SHEET_RADIUS_DP = 28f
+        const val OPEN_THE_VIEW = "Open the view"
+        /** How long a half view waits for the dashboard's picture, with the screen on, before it opens without it. */
+        const val CAPTURE_DEADLINE_MS = 750L
+
+        /** The half view's dialog on a [w] x [h] screen: the long side's half, on the right of a landscape one, at the bottom of a portrait one. */
+        fun dialogRect(w: Int, h: Int): Rect = if (side(w, h)) Rect(w / 2, 0, w, h) else Rect(0, h / 2, w, h)
+
+        private fun side(w: Int, h: Int) = w >= h
 
         fun clock(ms: Long): String {
             val s = (ms + 999) / 1000
