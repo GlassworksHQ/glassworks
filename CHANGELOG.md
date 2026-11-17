@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror, the Manage
+  page's **Security** section shows a computer that asks for USB debugging, with its fingerprint, and
+  **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
+  every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
+  records each, with the fingerprint. Needs a Mirror installed with this version.
 - **The Bluetooth proxy can connect to devices.** Its settings page has a new choice: *Listen only*,
   as before, or *Listen and connect*. With the second, Home Assistant can connect through the panel to
   BLE devices that need a connection, such as locks, SwitchBots and sensors with a key, up to 3 at
