@@ -151,6 +151,11 @@ class AdbComputers(
             event("$who allowed ${label(key)} over USB, for this connection")
             return Allowed.ONCE
         }
+        // Already listed (its automatic approval failed): the list stays as it is.
+        if (key.fingerprint in listed) {
+            event("$who allowed ${label(key)} over USB; it's on the allowed list already")
+            return Allowed.FROM_NOW_ON
+        }
         listed[key.fingerprint] = Listed(key, clock(), who)
         if (!save()) {
             listed.remove(key.fingerprint)
