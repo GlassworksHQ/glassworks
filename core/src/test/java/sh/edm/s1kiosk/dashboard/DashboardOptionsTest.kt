@@ -78,6 +78,16 @@ class DashboardOptionsTest {
         assertNull(DashboardOptions.urlFor("Tablet", "auto", null, "", list))
     }
 
+    /** #449: the base is an origin without a user and password; the new setting keeps the ones the setting had. */
+    @Test
+    fun aUserAndPasswordInTheSettingStayInIt() {
+        val set = "http://user:secret@homeassistant.local:8123/"
+        val base = "http://homeassistant.local:8123"
+        assertEquals("http://user:secret@homeassistant.local:8123/tablet-home", DashboardOptions.urlFor("Tablet", set, base, base, list))
+        assertEquals("not auto, which would drop them", "http://user:secret@homeassistant.local:8123/",
+            DashboardOptions.urlFor(DEFAULT, "$set" + "tablet-home", base, base, list))
+    }
+
     @Test
     fun roundTrip() {
         for (option in DashboardOptions.options(list, DEFAULT)) {

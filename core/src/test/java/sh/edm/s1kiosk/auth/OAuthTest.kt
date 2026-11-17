@@ -70,6 +70,10 @@ class OAuthTest {
         assertEquals("http://192.168.1.100:8123", OAuth.origin("http://192.168.1.100:8123/s1-panel/home"))
         assertEquals("https://ha.example.com", OAuth.origin("https://HA.example.com/"))
         assertEquals("a user and password aren't part of it", "http://192.0.2.10:8123", OAuth.origin("http://user:secret@192.0.2.10:8123/"))
+        // The dashboard-loaded check: a page loaded with them is on the base, which has none (#449).
+        assertTrue(FrontendUrls.sameOrigin("http://user:secret@192.0.2.10:8123/lovelace/0", "http://192.0.2.10:8123"))
+        assertTrue(FrontendUrls.sameOrigin("http://192.0.2.10:8123/lovelace/0", "http://user:secret@192.0.2.10:8123"))
+        assertFalse(FrontendUrls.sameOrigin("http://user:secret@192.0.2.11:8123/", "http://192.0.2.10:8123"))
         assertNull(OAuth.origin("ftp://x/"))
         assertNull(OAuth.origin("auto"))
     }
