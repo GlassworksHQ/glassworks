@@ -11,7 +11,8 @@ const plain = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<
 
 /**
  * The /research page's filter: words and how sure. With neither set, the page shows its frames and
- * topics (children); with either, one list of every note that matches, across frames.
+ * topics (children); with either, one list of every note that matches, across frames. The status line
+ * stays in the page, so a screen reader announces the count when the filter changes.
  */
 export function ResearchIndex({ notes, frameNames, children }: { notes: NoteItem[]; frameNames: Record<string, string>; children: ReactNode }) {
   const [q, setQ] = useState("");
@@ -43,6 +44,9 @@ export function ResearchIndex({ notes, frameNames, children }: { notes: NoteItem
           ))}
         </div>
       </div>
+      <p className="visually-hidden" role="status">
+        {active ? (hits.length === 0 ? "No note matches." : hits.length === 1 ? "1 note matches." : `${hits.length} notes match.`) : ""}
+      </p>
       {active ? (
         <ListCard id="matches" title={hits.length === 1 ? "1 note" : `${hits.length} notes`} aside={<button type="button" className={d.clear} onClick={() => (setQ(""), setEv(""))}>Clear</button>}>
           {hits.map((n) => (
