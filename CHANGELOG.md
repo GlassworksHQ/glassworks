@@ -19,8 +19,10 @@ below as the release notes.
   permission first, and says why.
 - **On the S1, the panel's own Wi-Fi is called Glassworks.** Its setup network is named `Glassworks_` and four
   digits instead of Android's `AndroidShare_`. Comes with the radio bundle, from the panel's next restart.
-- **On the S1, joining the panel's own Wi-Fi opens its setup page by itself.** As with a hotel's Wi-Fi, the
-  phone shows the panel's setup page as soon as it joins, with no address to type. Comes with the radio bundle.
+- **On the S1, joining the panel's own Wi-Fi brings up its setup page.** As with a hotel's Wi-Fi, an iPhone
+  shows the panel's setup page as soon as it joins, with no address to type, and so does an Android 11 or newer
+  phone that joined from its Wi-Fi settings. Android 10 shows a "Sign in to Wi-Fi network" notification to tap.
+  Comes with the radio bundle.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on

@@ -289,6 +289,7 @@ PAGE_TAG, PAGE_LINE_BYTES = "Isolated Web Content", 1023
 with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "page", "tiers.json")) as _f:
     _T = json.load(_f)
     PROTOCOL, CLARITY = _T["PROTOCOL"], _T["CLARITY"]
+    DIALOGS = _T["DIALOG"]["entities"]
 PAGE_LINE_MAX = 900     # stats.js LINE_MAX: longer lines are split, as the page does
 
 
@@ -404,6 +405,13 @@ def refdash(nonce, url):
             C.sleep(float(os.environ["FAKE_STAGE_DELAY"]))
         page_log(dict(obj, nonce=nonce, run=1), split=not os.environ.get("FAKE_NO_SPLIT"), at=at)
 
+    # FAKE_DIALOG_HELD=<view> (#410): HA still held the view before's more-info dialogs at this view's
+    # check, before its navigation; the page isn't measured on them and says so (harness.js openView).
+    if os.environ.get("FAKE_DIALOG_HELD") == tier:
+        C.sleep(0.5)
+        gw({"t": "error", "message": "Error: HA wasn't done with the view before's more-info dialogs after 10 s "
+                                     "(climate.clarity_0, sensor.clarity_10 not shown yet); this view isn't measured on them"})
+        return
     # FAKE_SLOW_VIEW: the view takes this long to be usable (the runner keeps the screen awake).
     C.sleep(float(os.environ.get("FAKE_SLOW_VIEW", "0")))
     if os.environ.get("FAKE_NEVER_USABLE") == tier:
@@ -445,6 +453,7 @@ def refdash(nonce, url):
         # Protocol 4: navigation at `nav`; the view's first screen rendered DRAWN_AFTER_MS later, the
         # main thread free 20 ms after that.
         "nav_ms": round(nav, 1), "video_caps": {"mse_h264": True, "native_hls": "", "rvfc": True},
+        "dialogs_before": None,                    # #410: HA was done with the view before's dialogs at once
         "usable": {"rendered_tick_ms": round(nav + drawn_after, 1), "first_screen_cards": 14, "head_cards": 10,
                    "interactive_ms": round(nav + drawn_after + 20, 1), "blocking_ms": 0.0, "long_frames": 0, "longest_frame_ms": 16.7}})
     C.sleep(1.0)
@@ -540,6 +549,27 @@ def refdash(nonce, url):
             "raf": {"n": 30, "median_ms": 16.67, "p95_ms": 16.67, "jank_pct": 0, "frozen_pct": 0, "fps": 60},
             "raf_intervals": [16.7] * 30})
         C.sleep(0.2)
+    # Protocol 3 (#211): HA's more-info dialogs, after the swipes (the runner sends dialogs=0 to the
+    # HLS copies and a warm-up). Each opens in 10 ms, its 300 ms sheet runs at 60 fps and it settles
+    # at 320 ms; the sensor's graph at 40 ms. FAKE_DIALOG_NEVER_OPENS=<view>: none opens there (HA
+    # never shows them); FAKE_DIALOG_SLOW_GRAPH=<ms>: the sensor's history graph is drawn that late.
+    m = re.search(r"dialogs=(\d+)", url)
+    asked = DIALOGS[:int(m.group(1)) if m else len(DIALOGS)]
+    for i, d in enumerate(asked):
+        never = os.environ.get("FAKE_DIALOG_NEVER_OPENS") == tier
+        graph = float(os.environ.get("FAKE_DIALOG_SLOW_GRAPH", "40")) if d["graph"] else None
+        settled = None if never else max(320.0, graph or 0)
+        anim = [] if never else [16.7] * 18
+        gw({"t": "dialog", "stage": tier, "n": i, "of": len(DIALOGS), "entity": d["entity"], "kind": d["kind"],
+            "graph": d["graph"], "mode": None if never else "bottom-sheet", "show_duration_ms": None if never else 300,
+            "reduced_motion": False, "opened": not never, "open_ms": None if never else 10.0,
+            "shown_ms": None if never else 320.0, "graph_ms": None if never else graph, "settled_ms": settled,
+            "anim": {"n": 0} if never else {"n": 18, "median_ms": 16.7, "p95_ms": 16.67, "p95_raw_ms": 16.7, "max_ms": 16.7,
+                                             "fps": 59.88, "jank_pct": 0, "frozen_pct": 0},
+            "anim_intervals": anim, "dropped": 0, "longest_frame_ms": None if never else 16.7,
+            "close_ms": None if never else 310.0, "close_longest_ms": None if never else 16.7,
+            "error": "it never opened within 20 s" if never else None, "close_error": None})
+        C.sleep(0.1)
     save("asked.json", {})
     mark(f"page done {tier}")
     if os.environ.get("FAKE_HA_URL"):
@@ -549,7 +579,18 @@ def refdash(nonce, url):
             urllib.request.urlopen(os.environ["FAKE_HA_URL"].rstrip("/") + f"/clarity/still?nonce={nonce}", timeout=10).read()
         except OSError:
             pass
-    gw({"t": "done", "stage": tier})
+    # #410: after its dialogs, HA done with them (none pending, open or in the history) at once; none
+    # asked for, no settle. FAKE_SETTLE_VIA=<view>: HA still held two there, so the view was left for
+    # the start view, where they came and were closed.
+    settle = None
+    if asked:
+        settle = {"ms": 0, "clean": True, "closed": 0, "pending": [], "open": False, "history": False}
+    if asked and os.environ.get("FAKE_SETTLE_VIA") == tier:
+        first = {"ms": 30000, "clean": False, "closed": 0, "pending": [d["entity"] for d in asked[1:]], "open": False, "history": True}
+        gw(dict({"t": "settle", "stage": tier}, **first))
+        settle = {"ms": 31200, "clean": True, "closed": 1, "pending": [], "open": False, "history": False,
+                  "via": "start", "first": first, "at": "start"}
+    gw({"t": "done", "stage": tier, "settle": settle})
     if foreign == "end":
         C.sleep(0.3)
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
@@ -588,6 +629,20 @@ def dashboard():
         C.sleep(0.2)
         if not os.environ.get("FAKE_NO_RESTART_DONE"):     # F8: the done line lost (logcat dropped it)
             page_log({"t": "done", "stage": "restart", "run": 1, "nonce": ""}, record=False)
+        if os.environ.get("FAKE_SETTLE_VIA") == "warmup":
+            # #410: the warm-up's dialogs (no nonce, after the restart's done), the last one held by HA
+            # past the page's wait on the start view and after the move too. The runner may have
+            # opened the first view by then (the real warm-up takes 20 s a held dialog): the lines
+            # are still the restart's.
+            C.sleep(2.0)
+            for i, d in enumerate(DIALOGS):
+                page_log({"t": "dialog", "stage": "warmup", "n": i, "of": len(DIALOGS), "entity": d["entity"],
+                          "opened": i < len(DIALOGS) - 1, "run": 1, "nonce": ""}, record=False)
+            first = {"ms": 30000, "clean": False, "closed": 0, "pending": [DIALOGS[-1]["entity"]], "open": False, "history": True}
+            page_log(dict({"t": "settle", "stage": "warmup", "run": 1, "nonce": ""}, **first), record=False)
+            page_log(dict({"t": "settle", "stage": "warmup", "run": 1, "nonce": ""}, ms=60000, clean=False, closed=0,
+                          pending=[DIALOGS[-1]["entity"]], open=False, history=True, via="start", first=first, at="start"),
+                     record=False)
         return
     # Stamped on the page's own timeline (load event at 0.8 s, frames until 1.2 s), not when printed:
     # on the 0.2 clock, a fake 80 ms late on a busy CI machine put PageStop after the last frame, and

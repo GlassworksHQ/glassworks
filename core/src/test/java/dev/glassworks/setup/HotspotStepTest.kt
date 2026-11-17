@@ -43,7 +43,7 @@ class HotspotStepTest {
 
     @Test
     fun `starting - a line under the Wi-Fi step, nothing to press`() {
-        assertEquals(Card(status = "Opening the panel's own Wi-Fi…", tone = Tone.AMBER), HotspotStep.card(SetupHotspot.View.Starting, ready, null))
+        assertEquals(Card(status = "Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…", tone = Tone.AMBER), HotspotStep.card(SetupHotspot.View.Starting, ready, null))
     }
 
     @Test

@@ -63,11 +63,11 @@ class SetupHotspotScreenTest {
 
     @Test fun opening_thenOnLeavesNoOpeningLineUnderTheCard() {
         val s = screen(HotspotStep.card(SetupHotspot.View.Starting, HotspotPermission.Step.Ready, null))
-        assertTrue("Opening the panel's own Wi-Fi…" in texts(s))
+        assertTrue("Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…" in texts(s))
         s.render(s.model!!.copy(hotspot = on))
         Mockup.idle()
         Mockup.layout(s)
-        assertTrue(texts(s).toString(), "Opening the panel's own Wi-Fi…" !in texts(s))
+        assertTrue(texts(s).toString(), "Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…" !in texts(s))
     }
 
     private val wifiOff = HotspotStep.card(SetupHotspot.View.Off(null, dev.glassworks.platform.HotspotFailure.WIFI_OFF), HotspotPermission.Step.Ready, null)

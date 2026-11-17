@@ -52,7 +52,7 @@ object HotspotStep {
             qr = view.network.qrText(),
             action = Action.STOP,
         )
-        SetupHotspot.View.Starting -> Card(status = "Opening the panel's own Wi-Fi…", tone = Tone.AMBER)
+        SetupHotspot.View.Starting -> Card(status = "Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…", tone = Tone.AMBER)
         is SetupHotspot.View.Off -> when {
             permission is HotspotPermission.Step.Blocked -> Card(status = permission.why, tone = Tone.ROSE)
             permission is HotspotPermission.Step.Explain -> Card(status = permission.why, tone = Tone.AMBER, action = Action.ALLOW)
