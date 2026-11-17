@@ -170,8 +170,9 @@ class SignInServer(
         val handOff = cookie(req, HANDOFF)
         // Started on the setup page: every way out of here leads back to it.
         val back = if (handOff != null) BACK_TO_SETUP else ""
+        val again = if (handOff != null) "Go back to setup and sign in again." else "Scan the code to try again."
         q["error"]?.let { err ->
-            return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. Scan the code to try again.", button = back)
+            return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. $again", button = back)
         }
         val pending = states.consume(q["state"], PendingSignIn.PURPOSE_SIGNIN)
             ?: return expired(back)
@@ -179,7 +180,7 @@ class SignInServer(
         if (pending.toSetup && handOff != q["state"]) return page(403, "Forbidden", "Can't sign in",
             "This sign-in was started in another browser. Start it again from the setup page, in this browser.")
         val code = q["code"]?.takeIf { it.isNotEmpty() }
-            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. Scan the code to try again.", button = back)
+            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. $again", button = back)
         return when (val r = tokens.exchangeCode(pending.haBase, pending.clientId, code, pending.codeVerifier)) {
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
@@ -201,9 +202,9 @@ class SignInServer(
                 when {
                     r.isInvalidCode -> expired(back)
                     r.httpStatus <= 0 -> page(502, "Bad Gateway", "Can't reach Home Assistant",
-                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and scan the code again.", button = back)
+                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${if (handOff != null) "sign in again from setup" else "scan the code again"}.", button = back)
                     else -> page(502, "Bad Gateway", "Can't sign in",
-                        "Home Assistant refused the sign-in (${esc(r.code)}). Scan the code to try again.", button = back)
+                        "Home Assistant refused the sign-in (${esc(r.code)}). $again", button = back)
                 }
             }
         }
@@ -225,8 +226,9 @@ class SignInServer(
     private fun notWaiting() = page(409, "Conflict", "Not waiting for a sign-in",
         "Start “Join Home Assistant's Thread network” on the panel first, then scan the code it shows.")
 
-    private fun expired(button: String = "") = page(400, "Bad Request", "This link has expired", "Scan the code on the panel again. It shows a new one.",
-        button = button, foot = "Codes last 10 minutes and work once.")
+    private fun expired(back: String = "") = page(400, "Bad Request", "This link has expired",
+        if (back.isEmpty()) "Scan the code on the panel again. It shows a new one." else "Go back to setup and sign in again.",
+        button = back, foot = "Codes last 10 minutes and work once.")
 
     /**
      * Signed in from the setup page: back to it, at the step after Home Assistant. HA sent the browser here from
