@@ -13,8 +13,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven("https://maven.mozilla.org/maven2/") {
-            content { includeGroup("org.mozilla.geckoview") }
+        // GeckoView comes from Mozilla's repository only. Without exclusiveContent Gradle asks Google and Maven
+        // Central for it first, and any error there other than a 404 drops GeckoView from the build (2026-11-17).
+        exclusiveContent {
+            forRepository { maven("https://maven.mozilla.org/maven2/") }
+            filter { includeGroup("org.mozilla.geckoview") }
         }
     }
 }
