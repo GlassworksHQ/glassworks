@@ -271,7 +271,7 @@ Read at `android-6.0.1_r81`, `services/usb/java/com/android/server/usb/UsbDebugg
 | Line | What it says | What the app does with it |
 |---|---|---|
 | 138 | `Slog.d(TAG, "Received public key: " + key)`, once per computer asking, before `MESSAGE_ADB_CONFIRM` | Reads the system log (`READ_LOGS`, `signature\|privileged\|development`): each line is a new request with the full key. No polling |
-| 139–141, 279 | The confirm message goes on the same handler, and sets `mFingerprints` | The app's `allowUsbDebugging` call comes after the log line, so Android has set the fingerprint first |
+| 139–141, 279 | The log line is written first, then the confirm message is queued on the handler that sets `mFingerprints` | An approval sent as soon as the line is read can reach the handler before that message and be refused. The app sends a listed computer's approval once more after a refusal, then shows it as asking |
 | 240–243 | A key that isn't the one asking: logs `Fingerprints do not match. Got <fp>, expected <fp>` and does nothing. A match logs nothing | Allow waits 3 s for that line: only without it does the page say the computer is in and save it to the list |
 | 246 | `writeKey` only when `alwaysAllow` is set | The app passes `false`: `adb_keys` doesn't grow, and Remove takes a computer out for good |
 | 458 | `dump` prints "Last key received" as the fingerprint only | Not used: it can't supply the key, and it doesn't change when the same computer asks again |

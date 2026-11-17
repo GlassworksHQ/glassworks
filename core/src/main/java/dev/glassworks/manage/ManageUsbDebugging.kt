@@ -76,6 +76,7 @@ class ManageUsbDebugging(
             AdbComputers.Allowed.FULL -> Result.FULL
             AdbComputers.Allowed.FAILED -> Result.FAILED
             AdbComputers.Allowed.REFUSED -> Result.REFUSED
+            AdbComputers.Allowed.UNCONFIRMED -> Result.UNCONFIRMED
             AdbComputers.Allowed.NOT_REMEMBERED -> Result.NOT_REMEMBERED
         })
     }
@@ -92,6 +93,7 @@ class ManageUsbDebugging(
         FULL("full", false, "The list is full. Remove a computer first."),
         GONE("gone", false, "That computer isn't on the list."),
         FAILED("failed", false, "That didn't work. The Log says why."),
+        UNCONFIRMED("unconfirmed", false, "The panel can't see Android's answer right now, so nothing was saved. Try again in a few seconds."),
         REFUSED("refused", false, "Android didn't let it in: another computer is the one waiting. Plug this one in again, then reload this page."),
         NOT_REMEMBERED("unsaved", false, "Allowed for this connection only: the panel couldn't save the list. The computer asks again next time."),
         NOT_REMOVED("notremoved", false, "Not removed: the panel couldn't save the list. The computer is still allowed. Try again."),

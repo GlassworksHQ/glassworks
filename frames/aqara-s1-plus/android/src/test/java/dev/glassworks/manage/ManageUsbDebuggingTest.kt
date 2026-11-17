@@ -151,6 +151,16 @@ class ManageUsbDebuggingTest {
         assertFalse(events.any { it.contains("allowed adb key") })
     }
 
+    @Test fun `while the panel can't read Android's log, Allow says so`() {
+        val quiet = AdbComputers(File(file.parentFile, "quiet.json"), allow = { allowed += it.base64; null }, event = { events += it }, listening = { false })
+        quiet.asked(a)
+        val g = ManageFixture(usb = ManageUsbDebugging(quiet, { "09:41" }, { events += it }))
+        val br = g.Browser().apply { signInWithHa() }
+        assertEquals("/security?usb=unconfirmed", br.post(ManageUsbDebugging.ALLOW, mapOf("csrf" to br.csrf(), "fingerprint" to a.fingerprint, "remember" to "1")).headers["Location"])
+        assertTrue(allowed.isEmpty())
+        assertTrue(br.get("/security?usb=unconfirmed").text().contains(ManageUsbDebugging.Result.UNCONFIRMED.text))
+    }
+
     @Test fun `forms without the session's token, from another site, or without a fingerprint are refused`() {
         computers.asked(a)
         val br = ha()

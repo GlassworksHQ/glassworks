@@ -21,15 +21,16 @@ import java.lang.reflect.InvocationTargetException
  * - The hidden `IUsbManager.allowUsbDebugging` (`MANAGE_USB`) lets a key in only when its fingerprint is the one
  *   asking (`:240`). With `alwaysAllow` false it writes nothing to `adb_keys` (`:246`).
  *
- * Android 11 moved this to `IAdbManager` behind another permission; the app answers on Android 6 to 10 only.
+ * Android 10 moved this to `IAdbManager` and `AdbDebuggingManager` (`IUsbManager.aidl:117` at `android-9.0.0_r1`
+ * has it; 10.0.0_r1 has neither the method nor this log tag), so the app answers on Android 6 to 9 only.
  */
 object UsbDebugging {
     private const val MANAGE_USB = "android.permission.MANAGE_USB"
     private const val READ_LOGS = "android.permission.READ_LOGS"
 
-    /** Whether this app can see who asks and answer: Android 6 to 10, holding `MANAGE_USB` and `READ_LOGS` (a privileged app). */
+    /** Whether this app can see who asks and answer: Android 6 to 9, holding `MANAGE_USB` and `READ_LOGS` (a privileged app). */
     fun available(context: Context): Boolean =
-        Build.VERSION.SDK_INT <= 29 && listOf(MANAGE_USB, READ_LOGS).all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+        Build.VERSION.SDK_INT <= 28 && listOf(MANAGE_USB, READ_LOGS).all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
 
     /**
      * Lets the computer with [publicKey] (its base64 key) in for this connection, if it is the one asking. Null when
@@ -91,6 +92,10 @@ object UsbDebugging {
         private var generation = 0
         private var process: Process? = null
 
+        /** True while a reader is following the log: without one, nobody sees Android's refusals. */
+        @Volatile var following = false
+            private set
+
         @Synchronized
         fun start() {
             if (running) return
@@ -103,11 +108,21 @@ object UsbDebugging {
                             val p = logcat()
                             val keep = synchronized(this) { if (running && generation == mine) { process = p; true } else false }
                             if (!keep) { p.destroy(); return@Thread }
+                            following = true
                             BufferedReader(InputStreamReader(p.inputStream)).useLines { lines ->
-                                for (l in lines) heard(l)?.let { h -> runCatching { onHeard(h) }.onFailure { onError("adb request: ${it.message}") } }
+                                for (l in lines) {
+                                    val h = heard(l) ?: continue
+                                    // Under the lock, so a line an old reader had buffered never reaches the app after stop().
+                                    val current = synchronized(this) {
+                                        if (running && generation == mine) { runCatching { onHeard(h) }.onFailure { onError("adb request: ${it.message}") }; true } else false
+                                    }
+                                    if (!current) return@Thread
+                                }
                             }
                         } catch (e: Exception) {
                             onError("system log: ${e.message}")
+                        } finally {
+                            synchronized(this) { if (generation == mine) following = false }
                         }
                         Thread.sleep(retryMs)
                     }
@@ -118,6 +133,7 @@ object UsbDebugging {
         @Synchronized
         fun stop() {
             running = false
+            following = false
             generation++
             process?.destroy()
             process = null

@@ -54,6 +54,19 @@ class UsbDebuggingHeardTest {
         override fun destroy() {}
     }
 
+    @Test fun `after stop, lines a reader had already read never reach the app`() {
+        val heard = ArrayList<UsbDebugging.Heard>()
+        val first = CountDownLatch(1)
+        val lines = (1..200).joinToString("") { "D/UsbDebuggingManager(  873): Received public key: QUFB n$it@host\n" }
+        lateinit var r: UsbDebugging.Requests
+        r = UsbDebugging.Requests(onHeard = { synchronized(heard) { heard += it }; r.stop(); first.countDown() }, retryMs = 10, logcat = { FakeProcess(lines) })
+        r.start()
+        assertTrue(first.await(5, TimeUnit.SECONDS))
+        Thread.sleep(100)
+        assertEquals(1, synchronized(heard) { heard.size })
+        assertFalse(r.following)
+    }
+
     @Test fun `each request reaches the app, and the log is followed again when logcat ends`() {
         val heard = ArrayList<UsbDebugging.Heard>()
         val twice = CountDownLatch(2)
@@ -85,9 +98,9 @@ class UsbDebuggingAvailableTest {
 }
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30], application = Application::class)
-class UsbDebuggingAndroid11Test {
-    @Test fun `Android 11 moved it, so the app doesn't offer it`() {
+@Config(sdk = [29], application = Application::class)
+class UsbDebuggingAndroid10Test {
+    @Test fun `Android 10 moved it, so the app doesn't offer it`() {
         val app = RuntimeEnvironment.getApplication()
         shadowOf(app).grantPermissions("android.permission.MANAGE_USB", "android.permission.READ_LOGS")
         assertFalse(UsbDebugging.available(app))
