@@ -637,6 +637,9 @@ the engine starts. Nothing in the session moves or widens it, not even the app's
 another origin, which is refused. A new dashboard address restarts the process: the settings menu's
 field does, and so does the installer when `KioskPrefs.engineStart()` changes.
 
+`engine.lockedDown` is true for the legacy engine. The core then lists the *Web engine* diagnostic entity in
+Home Assistant and ignores the `remote_debug` extra (#29).
+
 | What the page tries | Legacy engine |
 |---|---|
 | A page, iframe, image, fetch or WebSocket from the dashboard's origin | Loads |

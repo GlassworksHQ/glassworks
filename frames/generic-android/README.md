@@ -120,6 +120,11 @@ the system permissions both builds ask for (`INSTALL_PACKAGES`, `REBOOT`, `WRITE
 either.
 Why one legacy app and not a Mirror app of its own: [The legacy build's id](#the-legacy-builds-id).
 
+Home Assistant sees the lock: the legacy build adds a *Web engine* diagnostic sensor that reads *Frozen, loads only
+Home Assistant* (#29). No other build lists it. Remote debugging stays off on the legacy build: it ignores
+`--ez remote_debug true`, and logs why, and it starts the engine without remote debugging even if the setting was
+left on.
+
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
 
 ## Hardware

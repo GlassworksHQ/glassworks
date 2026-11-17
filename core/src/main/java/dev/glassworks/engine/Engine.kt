@@ -31,6 +31,12 @@ interface Engine {
 
     /** The engine and its version in words, for the Manage page ("GeckoView 159.0"). */
     val name: String get() = ""
+
+    /**
+     * True for the legacy engine (#198): a frozen GeckoView that loads only the dashboard's origin. Home Assistant
+     * gets a diagnostic entity that says so, and the app never turns on remote debugging for it (#29).
+     */
+    val lockedDown: Boolean get() = false
 }
 
 /** What an engine starts with. */
