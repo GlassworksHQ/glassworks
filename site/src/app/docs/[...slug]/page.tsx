@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { DocArticle } from "@/components/docs/DocArticle";
-import { NotesList } from "@/components/docs/NotesList";
+import { ResearchLink } from "@/components/docs/NoteBits";
 import { JsonLd } from "@/components/JsonLd";
 import { apiReferenceOf } from "@/lib/apiDocs";
 import { getDoc, getDocs } from "@/lib/docs";
@@ -55,6 +55,8 @@ async function Doc({ params }: { params: PageProps<"/docs/[...slug]">["params"] 
         <span aria-hidden="true">/</span>
         <Link href={researchUrl(frame.id)}>Research</Link>
       </>
+    ) : note || doc.url === "/docs/notes" ? (
+      <Link href="/research">Research</Link>
     ) : undefined;
   return (
     <>
@@ -71,7 +73,7 @@ async function Doc({ params }: { params: PageProps<"/docs/[...slug]">["params"] 
         doc={note ?? doc}
         prev={same[i - 1]}
         next={same[i + 1]}
-        after={doc.url === "/docs/notes" ? <NotesList /> : undefined}
+        after={doc.url === "/docs/notes" ? <ResearchLink /> : undefined}
         api={apiReferenceOf(doc.file)}
         tabs={tabs}
         crumbs={crumbs}

@@ -499,7 +499,14 @@ public class WifiProvisioner(
         public const val RADIO_DIDNT_COME_BACK: String = "The Wi-Fi radio didn't come back. Try again"
 
         /** Android refused the password for the network's security (a non-ASCII WPA2 or WPA3 password, CodeRabbit on #418). */
-        internal const val UNUSABLE_PASSWORD = "Android can't use that password for this network. Check it, and send it again"
+        public const val UNUSABLE_PASSWORD: String = "Android can't use that password for this network. Check it, and send it again"
+
+        /**
+         * True when a [Outcome.Failed] reason already says what to do ([RADIO_DIDNT_COME_BACK], the unusable password), so a
+         * caller adds no "check the password" of its own (#418 verifier).
+         */
+        public fun saysWhatToDo(reason: String): Boolean =
+            reason.startsWith(RADIO_DIDNT_COME_BACK) || reason.startsWith(UNUSABLE_PASSWORD)
     }
 }
 
@@ -520,7 +527,13 @@ internal fun wifiSwitchOn(ctx: Context): Boolean =
  * for a WPA2 or WPA3 password that isn't ASCII, and the join runs on the main thread, where a throw is a crash
  * (CodeRabbit on #418). Neither the password nor the reason is logged. WEP and EAP never come here.
  */
-internal fun suggestion(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion? = runCatching {
+internal fun suggestion(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion? {
+    if (!Compat.hasNetworkSuggestions) return null // Android 10+, as its caller checks too; lint reads this one
+    return runCatching { suggestionOrThrow(ssid, security, password, hidden) }.getOrNull()
+}
+
+@androidx.annotation.RequiresApi(29)
+private fun suggestionOrThrow(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion {
     val b = WifiNetworkSuggestion.Builder().setSsid(ssid).setIsHiddenSsid(hidden)
     when (security) {
         WifiSecurity.PSK -> b.setWpa2Passphrase(password)
@@ -528,5 +541,5 @@ internal fun suggestion(ssid: String, security: WifiSecurity, password: String, 
         WifiSecurity.OWE -> b.setIsEnhancedOpen(true)
         WifiSecurity.OPEN, WifiSecurity.WEP, WifiSecurity.EAP -> {}
     }
-    b.build()
-}.getOrNull()
+    return b.build()
+}

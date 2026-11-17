@@ -110,6 +110,20 @@ class NotificationsPaneTest {
         assertEquals(listOf("hold", "release"), screen)
     }
 
+    /** CodeRabbit on #429: a high view that waits behind a normal one holds the screen when its turn comes. */
+    @Test
+    fun aQueuedHighViewHoldsTheScreenWhenItOpens() {
+        pane.start()
+        notify("Door", data = """{"tag":"door","url":"/door/0"}""")
+        notify("Garage open", data = """{"priority":"high","url":"/garage/0"}""")
+        assertEquals("the normal view keeps the screen; the waiting high one doesn't hold it", listOf("hold", "release"), screen)
+        notify("clear_notification", data = """{"tag":"door"}""")
+        assertEquals("/garage/0", hub.state.page?.notification?.url?.substringAfter("8123"))
+        assertEquals(listOf("hold", "release", "hold"), screen)
+        hub.dismiss(hub.state.page!!.id)
+        assertEquals(listOf("hold", "release", "hold", "release"), screen)
+    }
+
     @Test
     fun aHoldNobodyAnswersEndsAfterTenMinutes() {
         pane.start()
