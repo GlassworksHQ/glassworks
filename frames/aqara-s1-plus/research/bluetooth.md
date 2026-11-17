@@ -113,9 +113,20 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
   would be lost. Compare a known sensor's data on the panel with an ESP32 proxy's. Untested.
 - **GATT connections:** how many links the RTL8821CS holds at once, and whether the handles match an
   ESP32 proxy's. See [GATT connections](#gatt-connections-246) below. Untested.
-- **The scanner's source.** The proxy doesn't send `bluetooth_mac_address` (field 18), so HA keys
-  the scanner on the panel's ESPHome MAC (the Wi-Fi MAC, or one derived from the serial). Android 10
-  hides the Bluetooth MAC from apps. Fine for listening; to decide before GATT connections.
+- **The scanner's source: decided (maintainer, 2026-11-15).** The proxy sends the real Bluetooth MAC
+  as `bluetooth_mac_address`, like ESPHome proxies. Android 10 hides it from apps (`getAddress()`
+  answers `02:00:00:00:00:00`), so the root helper reads `settings get secure bluetooth_address` and
+  publishes it in `/data/s1kiosk-pub/bluetooth-address`. Any failure falls back to the panel's ESPHome
+  MAC (the Wi-Fi MAC, or one derived from the serial); the first real one is kept.
+  **Verified on the S1 (2026-11-16, test build `s1-kiosk-test-6c948ce`, the root's run for #399):**
+  - `settings get secure bluetooth_address` (as root) holds the adapter's address, and the helper's
+    file matched it;
+  - after the app restarted with the file in place, HA **re-keyed the panel's existing scanner entry in
+    place** to the adapter's address: no second entry;
+  - a second restart changed nothing; with the file deleted and the app restarted, HA kept the
+    adapter's address (the app's kept copy): no flip back.
+- **`svc bluetooth disable` needs root on this Android 10 build** (2026-11-16): as the adb shell it
+  does nothing; as root it turns Bluetooth off.
 - **Next to the Matter pane's BLE advertising (#47).** Android allows a scan and an advertiser at
   once; the chip doing both was not tried.
 

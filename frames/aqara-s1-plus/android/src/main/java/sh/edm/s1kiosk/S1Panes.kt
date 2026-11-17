@@ -82,7 +82,12 @@ class S1Panes : AppParts {
         )
         // It requires a camera: without one in the frame's hardware it is CantRun, as every pane that lacks its own.
         val camera = CameraWiring.definition(context, runtime, panePrefs.paneFile("camera"))
-        val bluetoothProxy = BluetoothProxyDefinition(panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(context), ::BluetoothProxyPage)
+        // The Bluetooth adapter's MAC comes from the root helper (#246); without the helper there is no
+        // file, and Home Assistant keys the proxy on the panel's ESPHome MAC, as before.
+        val bluetoothProxy = BluetoothProxyDefinition(
+            panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(context),
+            readAdapterMac = { java.io.File(BLUETOOTH_ADDRESS_FILE).readText() }, page = ::BluetoothProxyPage,
+        )
         return listOf(AssistDefinition(panePrefs.paneFile("assist")), SendspinDefinition(panePrefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
             frameDefinitions + camera + DiagnosticsDefinition(panePrefs.paneFile("diagnostics"))
     }
@@ -252,3 +257,11 @@ class S1Panes : AppParts {
     }
 }
 
+/** The root helpers' app-readable directory (`PUB_DIR` in `s1kiosk_radio.sh` and `s1kiosk_bundle.sh`). */
+internal const val PUB_DIR = "/data/s1kiosk-pub"
+
+/**
+ * The Bluetooth adapter's MAC, as the root helper publishes it (`s1kiosk_radio.sh` `bt_publish`, root
+ * 0644): Android 10 hides it from apps (#246).
+ */
+internal const val BLUETOOTH_ADDRESS_FILE = "$PUB_DIR/bluetooth-address"

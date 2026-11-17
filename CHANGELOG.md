@@ -154,6 +154,12 @@ below as the release notes.
   generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **The S1's Bluetooth proxy goes by the panel's Bluetooth address.** The proxy now tells Home
+  Assistant the panel's own Bluetooth address, as ESPHome proxies do, instead of its network address.
+  Home Assistant moves the panel's scanner to the new address by itself, once, with nothing for you to
+  do. If the panel can't read its Bluetooth address (Bluetooth never turned on yet), nothing changes
+  until it can. Going back to an older version moves the scanner back to the network address. Comes
+  with the radio bundle.
 - **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
   window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
   Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel

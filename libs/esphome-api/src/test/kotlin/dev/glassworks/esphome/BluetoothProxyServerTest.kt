@@ -74,6 +74,36 @@ class BluetoothProxyServerTest {
         }
     }
 
+    /** #246: without the adapter's MAC, HA keys the scanner on the device MAC, as before: neither field goes out. */
+    @Test fun withoutTheAdaptersMacNeitherFieldIsSent() {
+        start()
+        PlainClient(server.localPort).use { c ->
+            c.send(Msg.DEVICE_INFO_REQUEST)
+            assertFalse(c.await(Msg.DEVICE_INFO_RESPONSE).has(18))
+            c.send(Msg.DEVICE_CAPABILITIES_REQUEST)
+            assertFalse(ProtoMessage(c.await(Msg.DEVICE_CAPABILITIES_RESPONSE).bytes(1)).has(2))
+        }
+    }
+
+    /** #246: with it, `bluetooth_mac_address` (DeviceInfo 18) and the capabilities' `mac_address` (2), as ESPHome sends them. */
+    @Test fun theAdaptersMacGoesOutInBothPlaces() {
+        server.bluetooth = handler
+        server.bluetoothMacAddress = "02:00:00:00:00:02"
+        server.start()
+        PlainClient(server.localPort).use { c ->
+            c.send(Msg.DEVICE_INFO_REQUEST)
+            val info = c.await(Msg.DEVICE_INFO_RESPONSE)
+            assertEquals("02:00:00:00:00:02", info.string(18))
+            assertEquals("the device MAC stays", identity.macAddress, info.string(3))
+            c.send(Msg.DEVICE_CAPABILITIES_REQUEST)
+            assertEquals("02:00:00:00:00:02", ProtoMessage(c.await(Msg.DEVICE_CAPABILITIES_RESPONSE).bytes(1)).string(2))
+
+            server.bluetooth = null
+            c.send(Msg.DEVICE_INFO_REQUEST)
+            assertFalse("only with the proxy", c.await(Msg.DEVICE_INFO_RESPONSE).has(18))
+        }
+    }
+
     @Test fun noProxyNoFlagsAndSubscriptionsAreIgnored() {
         start(withProxy = false)
         PlainClient(server.localPort).use { c ->

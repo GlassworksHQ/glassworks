@@ -53,7 +53,8 @@ one long-running scan, only while HA listens, within Android's limits. This pane
 | `ProxyPhase` | What the proxy is doing, from the switch, Android's state and the engine's status. The page's line and card, and the status entity, all read it. |
 | `ProxyPage` | The page's words, once: its line, card, tiles, note and entities. The frame's view draws them, and `twin` gives the same page as typed items for the Manage page (#269). |
 | `ProxyRadio`, `AndroidProxyRadio` | The device's Bluetooth: the scanners and the GATT radio (sharing the devices heard), why it can't scan, and turning Bluetooth and location on. |
-| `BluetoothProxyPrefs` | The pane's keys: on/off, and `bluetooth_proxy_connect` ("Listen and connect", off by default). |
+| `BluetoothProxyPrefs` | The pane's keys: on/off, `bluetooth_proxy_connect` ("Listen and connect", off by default), and `bluetooth_proxy_adapter_mac` (the adapter's MAC first sent, kept). |
+| `AdapterMac` | The Bluetooth adapter's MAC for Home Assistant (`bluetooth_mac_address`, #246), from where the frame says (the S1: its root helper's file). Settled once per process, the first valid one kept for good; any failure (none, an error, no answer in 2 s, a placeholder) sends none, and HA keys the scanner on the device's ESPHome MAC. |
 
 The page is the frame's to draw: the definition takes a factory and hands it a
 `BluetoothProxyModel`. On the S1 that is `sh.edm.s1kiosk.settings.BluetoothProxyPage`, as approved on
