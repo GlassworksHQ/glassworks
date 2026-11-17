@@ -6,8 +6,8 @@ key, and an update of that app keeps them while it is signed with the same key. 
 ([tools/mirror/probe-app](../../../tools/mirror/probe-app/README.md)) showed it on the Mirror on
 2026-11-16 (the root's run, on #395): privileged, `INSTALL_PACKAGES`, `REBOOT` and
 `WRITE_SECURE_SETTINGS` granted, a silent update with all three kept, a secure setting written, and a
-reboot back into the app. Whether such an app can approve a computer's adb key is
-[below](#can-a-privileged-app-approve-an-adb-key) (read, untested on the unit).
+reboot back into the app. Such an app can approve the computer that is asking, for that one
+connection: [below](#can-a-privileged-app-approve-an-adb-key) (verified on the unit 2026-11-16).
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (Android 6.0.1,
 `MMB29M`, `userdebug`, `test-keys`). Source: AOSP tag `android-6.0.1_r81`
@@ -186,8 +186,8 @@ ask for all three.
 
 ## Can a privileged app approve an adb key?
 
-**Status (2026-11-16): read; the permission and the service verified on the unit (read-only); the
-approval itself untested.** The Mirror has no touchscreen, so its "Allow USB debugging?" dialog can't
+**Status (2026-11-16): verified on the unit.** The approval works for the computer that is asking, and
+doesn't last on this image ([the run](#the-run-on-the-unit-2026-11-16)). The Mirror has no touchscreen, so its "Allow USB debugging?" dialog can't
 be answered on the glass. If Glassworks could answer it, a Manage page "Allow
 a new computer over USB" would be possible.
 
@@ -224,6 +224,27 @@ computer's full public key. A fingerprint can only confirm a key, not supply it.
 key, since it holds the browser's key, and the page can show its fingerprint to confirm. It can't
 pre-approve keys. The probe's step 6 tests both cases: no computer asking, and with a second computer asking.
 
+### The run on the unit (2026-11-16)
+
+The root ran the probe's step 6 on the Mirror (Glass Panes image 2, the probe in `/system/priv-app`), with
+the method now in the probe's README: a throwaway key pair, the approval queued on the Mirror with
+`nohup sh -c "sleep 20; am start … allow-adb-key …"`, then adb's server restarted with only the test
+key (`HOME=<dir> adb start-server --one-device <serial>`), then the normal server again. In that
+order adb ignores `--one-device` (it parses global options only before the command), and the server
+did see the S1 too. The right form is `HOME=<dir> adb --one-device <serial> start-server`.
+
+| What | Result |
+|---|---|
+| The approval while the test key's computer was asking | `unauthorized` to `device` within about 1 s of the queued call. One-time approval works |
+| The key afterwards | Written to `/data/misc/adb/adb_keys` (`dumpsys usb` lists it) |
+| The next connection with the same key | `unauthorized` again: **it doesn't last**. This image's adbd ignores `adb_keys` ([image-patch.md](image-patch.md#who-the-image-lets-in-over-adb)) |
+| Reconnecting the root's own computer between queueing and switching | Resets "the last computer asked about" to that computer: every connection sets `mFingerprints` (the image's `MESSAGE_ADB_CONFIRM`, case 5), its own included. Hence the queued call |
+| `adb shell cat /data/misc/adb/adb_keys` | Not readable by the shell here. `dumpsys usb` lists the keys instead |
+
+What it means for Glassworks: an "Allow a new computer" page could let a computer in for one
+connection. A lasting one needs the key where this image looks, which is `services.jar`'s constant
+(what Kiln's flash now writes), or a fix in adbd.
+
 ## How to reproduce
 
 Off-device: fetch the files above at `android-6.0.1_r81` from android.googlesource.com
@@ -237,6 +258,6 @@ APK back, flash again with the APK the unit had, or the way back. Neither brings
 ## Open questions
 
 - ~~All of the above, on the unit: the probe's steps 1 to 5.~~ Done, 2026-11-16: all passed.
-- The adb key approval above, on the unit: the probe's step 6.
+- ~~The adb key approval above, on the unit: the probe's step 6.~~ Done, 2026-11-16: works for one connection, doesn't last.
 - Whether CAF's package manager in this image differs from AOSP's in these paths.
 - Whether the Mirror's vendor SELinux policy lets `untrusted_app` read `/data/local/tmp` (read 7).

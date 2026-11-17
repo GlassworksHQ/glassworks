@@ -102,7 +102,7 @@ Not available yet. **Test only, today**, at `/lululemon-mirror?apk=local` in Kil
 **Over fastboot, from lululemon's software or the community image (#40):**
 
 1. Kiln downloads `system.img`, the [Glass Panes](https://github.com/git-nimrod/glass-panes) community image by [git-nimrod](https://github.com/git-nimrod), from its release through Refract, Kiln's download proxy (a Cloudflare Worker that stores nothing, #347), resuming if the connection drops, and checks its SHA-256 as it arrives. If the proxy can't serve it, you download it from the release yourself and select it.
-2. Kiln adds the legacy build of Glassworks (as a privileged app in `/system/priv-app/Glassworks`), the Glassworks boot animation and the screen's rotation to the image, in your browser, and makes a fresh userdata that lets only your browser's adb key in. Nothing is uploaded. What changes, and why: [image-patch.md](research/image-patch.md).
+2. Kiln adds the legacy build of Glassworks (as a privileged app in `/system/priv-app/Glassworks`), the Glassworks boot animation and the screen's rotation to the image, in your browser, and lets only your browser's adb key in without asking, in place of the Glass Panes project key, which is published with its private half. It also makes a fresh userdata. Nothing is uploaded. What changes, and why: [image-patch.md](research/image-patch.md).
 3. You open the Mirror's back and hold its button as it powers on: fastboot. Kiln checks the partition sizes the image is made for, and stops if they differ.
 4. Kiln writes system and userdata, restarts the Mirror, and finishes over adb: Home Assistant's address, the Wi-Fi, Glassworks as the only home screen.
 
