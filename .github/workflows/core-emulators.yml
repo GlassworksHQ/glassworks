@@ -71,6 +71,9 @@ jobs:
             target: default
           - api: 34
             target: google_apis
+            # swiftshader_indirect crashes this image's emulator (qemu SIGSEGV) when an app window draws.
+            # Probe on 2026-11-17: 11 of 12 copies passed with it, 7 of 7 with swangle_indirect.
+            gpu: swangle_indirect
     name: conformance (API ${{ matrix.api }})
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -106,6 +109,7 @@ jobs:
           arch: x86_64
           target: ${{ matrix.target }}
           disable-animations: true
+          emulator-options: -no-window -gpu ${{ matrix.gpu || 'swiftshader_indirect' }} -no-snapshot -noaudio -no-boot-anim
           script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest
 
       - name: Test report
