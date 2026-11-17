@@ -215,6 +215,51 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    /**
+     * #449: a frame with no presence sensor through setup. Past a 20 s idle timeout, under the brightness limit,
+     * with no wake; the countdown starts when it ends.
+     */
+    @Test fun stayOnPausesTheIdleTimeoutAndChangesNothingElse() {
+        val light = FakeSource()
+        val settings = Settings().apply { idleOffSec = 20; maxBrightness = 0.2f }
+        val screen = policy(light = light, settings = settings)
+        screen.start(context)
+        light.lux!!(1000f)
+        advance(10)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+
+        screen.stayOn("not ready", true)
+        screen.stayOn("not ready", true)
+        advance(600_000)
+        assertEquals("on far past the 20 s idle timeout", emptyList<Boolean>(), keepOn.filter { !it })
+        assertEquals("the brightness limit stays", 0.2f, screen.brightness, 0.001f)
+        assertFalse("not a hold", screen.held)
+        assertEquals("no wake", null, ShadowPowerManager.getLatestWakeLock())
+
+        screen.stayOn("not ready", false)
+        advance(19_000)
+        assertEquals(emptyList<Boolean>(), keepOn.filter { !it })
+        advance(2_000)
+        assertEquals("the idle timeout counts from the end", listOf(false), keepOn.filter { !it })
+        screen.stop()
+    }
+
+    @Test fun stayOnLeavesAScreenThatIsOffAlone() {
+        val screen = policy()
+        screen.start(context)
+        screen.sleep("test")
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        advance(10)
+        ShadowPowerManager.reset()
+        screen.stayOn("not ready", true)
+        advance(10_000)
+        assertFalse(screen.screenOn)
+        assertEquals("nothing turned it on", null, ShadowPowerManager.getLatestWakeLock())
+        screen.stop()
+    }
+
     /** Clarity's test hold (#240): the screen on past a 20 s night timeout, at the night's brightness limit. */
     @Test fun aTestHoldKeepsTheScreenOnAndLeavesTheBrightnessLimitAlone() {
         ShadowLog.clear()
