@@ -291,8 +291,9 @@ So on a panel HA already has:
 
 The screen's entities follow the device's hardware (#476), from the same facts as the panel's **Settings → Screen**
 and the Manage page: an entity the device can't back isn't listed. A device lists them when the app starts. A light
-sensor that Android lists only later (a sensor service that starts late) adds its three entities with its first
-reading, and Home Assistant lists them again.
+sensor that Android lists only later (a sensor service that starts late) is looked for every 30 s for 5 minutes
+after the app starts: once found, its first reading adds its three entities, and Home Assistant lists them again.
+This is the generic app's light sensor; the S1 lists its own from the start.
 
 | Entity | object_id | Needs | S1 | Pixel Tablet | Mirror | Other Android devices |
 |---|---|---|---|---|---|---|

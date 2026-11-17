@@ -9,6 +9,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
 /**
@@ -52,19 +54,43 @@ class ProximityPresence(private val logTag: String) : PresenceSource {
     }
 }
 
-/** Ambient light in lux from Android's standard light sensor (`TYPE_LIGHT`), for the brightness curve (#23). */
+/**
+ * Ambient light in lux from Android's standard light sensor (`TYPE_LIGHT`), for the brightness curve (#23). A sensor
+ * Android doesn't list at [start] is looked for again every [RETRY_MS], [RETRIES] times: a sensor service can start
+ * late after boot, and its first reading then adds the light's Home Assistant entities (#476). Main thread.
+ */
 class AmbientLight(private val logTag: String) : LightSource {
     private var registered: SensorEventListener? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var retry: Runnable? = null
 
-    override fun start(context: Context, onLux: (Float) -> Unit) {
-        val s = sensor(context, Sensor.TYPE_LIGHT) ?: return
+    override fun start(context: Context, onLux: (Float) -> Unit) = attach(context, onLux, RETRIES)
+
+    private fun attach(context: Context, onLux: (Float) -> Unit, retries: Int) {
+        retry = null
+        val s = sensor(context, Sensor.TYPE_LIGHT)
+        if (s == null) {
+            if (retries > 0) retry = Runnable { attach(context, onLux, retries - 1) }.also { handler.postDelayed(it, RETRY_MS) }
+            return
+        }
         Log.i(logTag, "light: ${s.name} vendor=${s.vendor} max=${s.maximumRange}")
         registered = register(context, s, onLux)
     }
 
-    override fun stop(context: Context) = unregister(context, registered).also { registered = null }
+    override fun stop(context: Context) {
+        retry?.let(handler::removeCallbacks)
+        retry = null
+        unregister(context, registered)
+        registered = null
+    }
 
     override fun available(context: Context): Boolean = sensor(context, Sensor.TYPE_LIGHT) != null
+
+    companion object {
+        const val RETRY_MS = 30_000L
+        /** 5 minutes after start in all. */
+        const val RETRIES = 10
+    }
 }
 
 private fun sensor(context: Context, type: Int): Sensor? =

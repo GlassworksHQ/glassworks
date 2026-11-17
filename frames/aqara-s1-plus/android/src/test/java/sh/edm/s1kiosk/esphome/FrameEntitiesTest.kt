@@ -32,6 +32,7 @@ import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.net.InetAddress
+import java.time.Duration
 
 /**
  * #476: Home Assistant gets the screen entities a device can back, from the same facts as its Screen settings
@@ -110,10 +111,12 @@ class FrameEntitiesTest {
             val before = device.entityList().map { it.objectId }
             assertEquals(listOf("screen", "screen_mode", "idle_timeout"), before.filter { it in screenIds })
 
+            // As KioskService: the screen starts first, with no light sensor listed yet.
+            runtime.screen.start(app)
             val sensors = app.getSystemService(SensorManager::class.java)
             val light = ShadowSensor.newInstance(Sensor.TYPE_LIGHT)
             shadowOf(sensors).addSensor(light)
-            runtime.screen.start(app)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AmbientLight.RETRY_MS))
             fun reading(lux: Float) {
                 shadowOf(sensors).sendSensorEventToListeners(SensorEventBuilder.newBuilder().setSensor(light).setValues(floatArrayOf(lux)).setTimestamp(0).build())
                 shadowOf(Looper.getMainLooper()).idle()
