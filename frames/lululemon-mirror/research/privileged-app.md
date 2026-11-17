@@ -229,7 +229,9 @@ pre-approve keys. The probe's step 6 tests both cases: no computer asking, and w
 The root ran the probe's step 6 on the Mirror (Glass Panes image 2, the probe in `/system/priv-app`), with
 the method now in the probe's README: a throwaway key pair, the approval queued on the Mirror with
 `nohup sh -c "sleep 20; am start … allow-adb-key …"`, then adb's server restarted with only the test
-key (`HOME=<dir> adb start-server --one-device <serial>`), then the normal server again.
+key (`HOME=<dir> adb start-server --one-device <serial>`), then the normal server again. In that
+order adb ignores `--one-device` (it parses global options only before the command), and the server
+did see the S1 too. The right form is `HOME=<dir> adb --one-device <serial> start-server`.
 
 | What | Result |
 |---|---|

@@ -8,6 +8,7 @@ import { GLASSWORKS, type MirrorApp } from './app';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
 import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
+import { adbKeyLines } from './services';
 import type { Check } from './recipe';
 
 /** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
@@ -106,6 +107,7 @@ export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: str
   wifi?: { ssid: string; password: string } },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
   onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
+  adbKeyLines(o.adbKey); // every line, before the system image is touched
   onProgress('patch', 0);
   const sys = await Ext4.open(loaded.disk);
   await patchSystem(sys, o);

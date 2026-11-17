@@ -68,7 +68,7 @@ T=$(mktemp -d); mkdir "$T/.android"
 tools/mirror/probe-app/adbkey.py new "$T/.android"     # adbkey and adbkey.pub; prints only fingerprints
 adb reboot bootloader                                   # with the normal server, while it still gets in
 adb kill-server
-HOME="$T" adb start-server --one-device "$(cat /tmp/mirror-serial)"
+HOME="$T" adb --one-device "$(cat /tmp/mirror-serial)" start-server   # --one-device before start-server: after it, adb ignores it
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk <apk> --adb-key "$T/.android/adbkey.pub"
 # … and afterwards, the normal server again:
 adb kill-server; adb start-server

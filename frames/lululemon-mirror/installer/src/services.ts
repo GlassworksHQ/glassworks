@@ -61,6 +61,18 @@ export function adbFingerprint(line: string): string {
   return [...md5(Uint8Array.from(raw, (c) => c.charCodeAt(0)))].map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(':');
 }
 
+/**
+ * The adb_keys lines in `text`, each checked as an adb key, in order: the first is the one the image
+ * lets in. Throws, naming the line, for any line that isn't one, so a caller can stop before anything
+ * is written or restarted.
+ */
+export function adbKeyLines(text: string): string[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) throw new Error(`no adb key given.${done}`);
+  lines.forEach((l, i) => { try { adbFingerprint(l); } catch (e) { throw new Error(`adb key ${i + 1} of ${lines.length}: ${(e as Error).message}`); } });
+  return lines;
+}
+
 // ---- dex (format 035, the only one Android 6 reads) ----
 
 /** How a string index is stored where the dex refers to it. `key`: the place is sorted by it, so the moved string mustn't be there. */
@@ -386,8 +398,13 @@ export async function trustFingerprint(jar: Uint8Array, to: string): Promise<Uin
   if (e.flags & 0x9 || (e.method !== 0 && e.method !== 8) || e.csize === 0xffffffff) throw new Error(`services.jar stores classes.dex in a way Kiln doesn't rewrite.${done}`);
   const dex = await zipEntry(jar, 'classes.dex');
   if (!dex || crc32(dex) !== e.crc) throw new Error(`services.jar's classes.dex doesn't match its CRC.${done}`);
+  await checkHeader(dex);
   const enc = new TextEncoder();
-  if (count(dex, enc.encode(GLASS_PANES_KEY_FINGERPRINT)) === 0 && count(dex, enc.encode(to)) === 1) return undefined;
+  // a second run: the dex already names this key, as a string of its own, once
+  if (count(dex, enc.encode(GLASS_PANES_KEY_FINGERPRINT)) === 0 && count(dex, enc.encode(to)) === 1) {
+    if (!dexStrings(dex).text.includes(to)) throw new Error(`services.jar's classes.dex has this key's fingerprint only inside a longer string.${done}`);
+    return undefined;
+  }
   const next = await replaceDexString(dex, GLASS_PANES_KEY_FINGERPRINT, to);
   const out = await replaceEntry(jar, 'classes.dex', next);
   const back = await zipEntry(out, 'classes.dex');

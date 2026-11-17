@@ -175,7 +175,7 @@ left out below. `PROBE` is the output folder of `build.sh`.
    3. At once, switch to a server that has only the test key, for the Mirror only:
       ```sh
       adb kill-server
-      HOME="$T" adb start-server --one-device "$(cat /tmp/mirror-serial)"
+      HOME="$T" adb --one-device "$(cat /tmp/mirror-serial)" start-server   # --one-device first: after start-server, adb ignores it
       adb devices   # unauthorized: the Mirror asks about the test key now
       ```
    4. Within the 20 s, nothing to do. Then:
@@ -185,7 +185,7 @@ left out below. `PROBE` is the output folder of `build.sh`.
       adb logcat -d -s GwProbe UsbDebuggingManager | grep -E 'RESULT allow-adb-key|Fingerprints'
       ```
       It went from `unauthorized` to `device` within about a second of the call, with a shell.
-   5. Unplug and plug the Mirror back in, or `adb kill-server; HOME="$T" adb start-server --one-device …`
+   5. Unplug and plug the Mirror back in, or `adb kill-server; HOME="$T" adb --one-device … start-server`
       again: `adb devices` shows `unauthorized`. **The approval doesn't last on this image.** The
       key was written to `adb_keys`, but this image's adbd doesn't read that file
       ([image-patch.md](../../../frames/lululemon-mirror/research/image-patch.md#who-the-image-lets-in-over-adb)).

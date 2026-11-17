@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { zipEntry } from '@glassworks/app-adb';
-import { GLASS_PANES_KEY_FINGERPRINT as FROM, adbFingerprint, md5, replaceDexString, trustAdbKey, trustFingerprint } from '../src';
+import { GLASS_PANES_KEY_FINGERPRINT as FROM, adbFingerprint, adbKeyLines, md5, replaceDexString, trustAdbKey, trustFingerprint } from '../src';
 import { DEXDUMP, disassemble } from './dexdump';
 import { SERVICES_STRINGS, fakeAdbKey, fakeDex, fakeServicesJar } from './fakes';
 
@@ -44,6 +44,12 @@ describe('the key fingerprint Android 6 makes', () => {
     const want = createHash('md5').update(Buffer.from(key.split(' ')[0]!, 'base64')).digest('hex').toUpperCase().match(/../g)!.join(':');
     expect(adbFingerprint(key)).toBe(want);
     expect(adbFingerprint(`${key.split(' ')[0]} someone@else\n`)).toBe(want);
+  });
+  it('adbKeyLines takes every line, in order, and names the one that isn\'t a key (#426 review)', () => {
+    const [a, b] = [fakeAdbKey(1), fakeAdbKey(2)];
+    expect(adbKeyLines(`${a}\r\n\n${b}\n`)).toEqual([a, b]);
+    expect(() => adbKeyLines(`${a}\nQAAA= x@y`)).toThrow(/^adb key 2 of 2: that isn't an adb public key/);
+    expect(() => adbKeyLines('\n')).toThrow(/no adb key given/);
   });
   it('refuses a line that isn\'t a 524-byte adb key', () => {
     for (const line of ['QAAA= kiln@glassworks', 'not base64!', '', fakeAdbKey().slice(0, 100)]) expect(() => adbFingerprint(line)).toThrow(/isn't an adb public key.*Nothing was changed/);
@@ -129,6 +135,20 @@ describe('trustAdbKey: services.jar that lets in the installer\'s key, not the p
     // a second run with the same key changes nothing; with another key, Kiln doesn't know the jar
     expect(await trustAdbKey(out, key)).toBeUndefined();
     await expect(trustAdbKey(out, fakeAdbKey(4))).rejects.toThrow(/nowhere.*Nothing was changed/);
+  });
+
+  it('accepts "already patched" only from a valid dex that names the key as a string of its own (#426 review)', async () => {
+    const key = fakeAdbKey(6), fp = adbFingerprint(key);
+    // a CRC-correct classes.dex that is only the fingerprint's bytes: no dex at all
+    await expect(trustAdbKey(await fakeServicesJar({ dex: enc(fp) }), key)).rejects.toThrow(/isn't dex 035.*Nothing was changed/);
+    // a valid dex without the project key, the fingerprint only inside a longer string
+    const inside = await fakeServicesJar({ dex: await fakeDex([...SERVICES_STRINGS.filter((x) => x !== FROM), `owner ${fp}`]) });
+    await expect(trustAdbKey(inside, key)).rejects.toThrow(/only inside a longer string.*Nothing was changed/);
+    // a damaged dex that names it properly
+    const named = await fakeDex([...SERVICES_STRINGS.filter((x) => x !== FROM), fp]);
+    const bad = named.slice(); bad[bad.length - 1]! ^= 1;
+    await expect(trustAdbKey(await fakeServicesJar({ dex: bad }), key)).rejects.toThrow(/fails its own checksum/);
+    expect(await trustAdbKey(await fakeServicesJar({ dex: named }), key)).toBeUndefined();
   });
 
   it('refuses the published project key itself', async () => {

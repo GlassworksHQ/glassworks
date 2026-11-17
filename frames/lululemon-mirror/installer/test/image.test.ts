@@ -297,6 +297,16 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(debugfs(img, 'ea_get / security.selinux')).toContain('u:object_r:system_data_file:s0');
     expect(debugfs(img, 'ls /')).toMatch(/lost\+found/);
     await expect(buildUserdata(disk, { adbKey: 'not a key; rm -rf /' })).rejects.toThrow(/adb public key/);
+    await expect(buildUserdata(disk, { adbKey: `${key}\nnot a key; rm -rf /` })).rejects.toThrow(/adb public key/);
+  }, 60_000);
+
+  it('writes every key line into adb_keys (repeated --adb-key, #426 review)', async () => {
+    const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
+    const [a, b] = [fakeAdbKey(1, 'one@host'), fakeAdbKey(2, 'two@host')];
+    await buildUserdata(disk, { adbKey: `${a}\n${b}\n`, time: T });
+    const img = join(dir, 'userdata-two.img');
+    await dump(disk, img);
+    expect(new TextDecoder().decode(debugfsCat(img, '/misc/adb/adb_keys'))).toBe(`${a}\n${b}\n`);
   }, 60_000);
 
   it('saves the person\'s Wi-Fi where Android 6\'s Wi-Fi expects it, owned and labelled as init and file_contexts make it', async () => {

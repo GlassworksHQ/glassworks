@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
 import type { Store } from '@glassworks/ext4';
 import {
-  GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASS_PANES_USERDATA, GLASSWORKS, adbFingerprint, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
+  GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASS_PANES_USERDATA, GLASSWORKS, adbFingerprint, adbKeyLines, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
   type MirrorApp,
   type FastbootLike, type FirstBoot,
 } from '@glassworks/lululemon-mirror-installer';
@@ -113,7 +113,8 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         // the APK first: one the Mirror can't run as its home screen stops here, before anything is read or written
         const apk = await checkMirrorApk(o.apk, ours);
         d.log(`    APK: ${apk.package}, minSdk ${apk.minSdk ?? 1}, home screen on`);
-        const trusted = adbFingerprint(o.adbKey.split('\n')[0]!);
+        // every key line, before anything restarts: a bad second key would otherwise stop the build in fastboot
+        const trusted = adbFingerprint(adbKeyLines(o.adbKey)[0]!);
         if (trusted === GLASS_PANES_KEY_FINGERPRINT) throw new Error('the adb key is the Glass Panes project key, published with its private half: the Mirror would let anyone in. Pass your own (--adb-key). Nothing was changed.');
         d.log(`    adb key the image will let in: ${trusted}`);
         const p = await d.adb();

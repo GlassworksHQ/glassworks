@@ -9,7 +9,7 @@
 import { ManifestError, apkHome, apkInfo, apkPermissions, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
 import { APP_DIRS, GLASSWORKS, PRIVILEGED, type MirrorApp } from './app';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
-import { SERVICES_JAR, trustAdbKey } from './services';
+import { SERVICES_JAR, adbKeyLines, trustAdbKey } from './services';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
 export const GLASS_PANES = {
@@ -157,7 +157,7 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     payloads.push([dest, data]);
   }
   if (!(await fs.exists(SERVICES_JAR))) throw new Error(`this image has no /system${SERVICES_JAR}. Nothing was changed.`);
-  const services = await trustAdbKey(await fs.readFile(SERVICES_JAR), o.adbKey.split('\n')[0]!);
+  const services = await trustAdbKey(await fs.readFile(SERVICES_JAR), adbKeyLines(o.adbKey)[0]!);
 
   // one app of ours per image: any earlier one (Glassworks or the probe) goes first
   for (const dir of APP_DIRS) if (await fs.exists(dir)) { await fs.remove(dir, { recursive: true, time }); log(`replaced ${dir}`); }
@@ -199,15 +199,16 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
 
 /**
  * A new, empty userdata with /data/misc/adb/adb_keys, owned and labelled as Android 6's init and
- * file_contexts make them. Init creates everything else on first boot. `adbKey`: the line adb_keys
- * takes, e.g. Kiln's AdbKey.publicKey. adbd on the Glass Panes image ignores this file (verified
+ * file_contexts make them. Init creates everything else on first boot. `adbKey`: the line(s) adb_keys
+ * takes, e.g. Kiln's AdbKey.publicKey; every line goes in. adbd on the Glass Panes image ignores this file (verified
  * 2026-11-16): the key gets in through services.jar (patchSystem). The file is kept because Android
  * writes keys there itself and a stock adbd would read it.
  */
 export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: number; uuid?: Uint8Array;
   /** the person's network, saved for Android's Wi-Fi; `template` is the image's /etc/wifi/wpa_supplicant.conf */
   wifi?: { ssid: string; password: string; template: string } }): Promise<Ext4> {
-  if (!/^[A-Za-z0-9+/=]+( \S+)?$/.test(o.adbKey)) throw new Error('that isn\'t an adb public key line');
+  const keys = o.adbKey.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!keys.length || !keys.every((k) => /^[A-Za-z0-9+/=]+( \S+)?$/.test(k))) throw new Error('that isn\'t an adb public key line');
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const fs = await mkfs(disk, {
     label: 'userdata', time, uuid: o.uuid,
@@ -217,7 +218,7 @@ export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: numb
   // init.rc (Android 6): mkdir /data/misc 01771 system misc; mkdir /data/misc/adb 02750 system shell
   await fs.mkdir('/misc', { mode: 0o1771, uid: AID.system, gid: AID.misc, label: LABELS.data, time });
   await fs.mkdir('/misc/adb', { mode: 0o2750, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
-  await fs.writeFile('/misc/adb/adb_keys', new TextEncoder().encode(`${o.adbKey}\n`), { mode: 0o640, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
+  await fs.writeFile('/misc/adb/adb_keys', new TextEncoder().encode(`${keys.join('\n')}\n`), { mode: 0o640, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
   if (o.wifi) {
     // init.rc: mkdir /data/misc/wifi 0770 wifi wifi; the Wi-Fi HAL uses an existing wpa_supplicant.conf
     // as it is (copying the template only when there is none), system:wifi 0660 (AOSP 6.0.1 wifi.c)
