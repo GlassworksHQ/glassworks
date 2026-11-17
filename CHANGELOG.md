@@ -273,6 +273,9 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
+  setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
+  radio step there and goes to Done.
 - **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
   pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
   said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
