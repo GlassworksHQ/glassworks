@@ -282,6 +282,8 @@ below as the release notes.
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
   own icon, and every icon the app shows has a version Android 6 can draw.
+- **The Manage code shows on Android 6 and 7.** On panels older than Android 8, the code a phone asks
+  for on the setup page never appeared, so setup couldn't go on. It does now.
 - **A screen without touch stays on setup when it has no network.** A Mirror with no Wi-Fi saved used to
   leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
   button that nobody could press. It now stays on the setup screen, which says how to set it up from a
