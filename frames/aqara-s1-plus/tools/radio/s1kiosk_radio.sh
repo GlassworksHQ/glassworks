@@ -68,6 +68,13 @@
 # sys.s1kiosk.timezone.status = "<ok|error|none> [<id>][: detail]". The loop runs whatever the radio
 # mode does (also after "giving up"), and is restarted with the helper.
 #
+# Bluetooth address (#246): Android 10 hides the Bluetooth adapter's address from apps, and the app's
+# Bluetooth proxy sends it to Home Assistant (bluetooth_mac_address), as an ESPHome proxy does. Once
+# Android knows a real one (settings secure bluetooth_address, after Bluetooth was first on), it is
+# written to $PUB_DIR/bluetooth-address (root 0644, the app reads it). Tried at most once a minute until
+# then, because `settings` starts a JVM, and given 10 s each time. Never logged. Placeholders (all zero, 02:00:00:00:00:00,
+# broadcast) are never written.
+#
 # Who is connected (#217): in the coordinator modes, sys.s1kiosk.radio.peer = "none" | "<address> <epoch
 # first seen>", the EZSP bridge's client from /proc/net/tcp and tcp6 (see peer_report); "" in other modes.
 #
@@ -1183,6 +1190,34 @@ thread_stored() {
 }
 TSTORED=""
 
+PUB_DIR=${S1R_PUB:-/data/s1kiosk-pub}   # as s1kiosk_bundle.sh: root 0755, app-readable
+BT_DONE=""; BT_NEXT=0
+bt_valid() { # AA:BB:CC:DD:EE:FF, and not a placeholder Android hands out
+  h_='[0-9A-Fa-f][0-9A-Fa-f]'
+  case "$1" in $h_:$h_:$h_:$h_:$h_:$h_) ;; *) return 1 ;; esac
+  case "$(echo "$1" | tr a-f A-F)" in 00:00:00:00:00:00|02:00:00:00:00:00|FF:FF:FF:FF:FF:FF) return 1 ;; esac
+  return 0
+}
+bt_publish() {
+  [ -n "$BT_DONE" ] && return 0
+  now_=$(date +%s); [ "$now_" -lt "$BT_NEXT" ] && return 0
+  BT_NEXT=$((now_ + ${S1R_BT_EVERY:-60}))
+  # Bounded: this runs before enforce, so a `settings` that never returns must not stall supervision.
+  # Its own exit status decides: what a failed or timed-out lookup printed is dropped.
+  a_=$(timeout ${S1R_BT_TIMEOUT:-10} settings get secure bluetooth_address 2>/dev/null) || a_=""
+  a_=$(printf '%s' "$a_" | tr -d '\r')
+  bt_valid "$a_" || return 0
+  a_=$(echo "$a_" | tr a-f A-F)
+  if [ -L "$PUB_DIR" ] || { [ -e "$PUB_DIR" ] && [ ! -d "$PUB_DIR" ]; }; then rm -rf "$PUB_DIR"; fi
+  mkdir -p "$PUB_DIR" && chown root:root "$PUB_DIR" && chmod 755 "$PUB_DIR" || return 0
+  if [ -L "$PUB_DIR/bluetooth-address" ] || [ "$(cat "$PUB_DIR/bluetooth-address" 2>/dev/null)" != "$a_" ]; then
+    rm -f "$PUB_DIR/.bluetooth-address.tmp" "$PUB_DIR/bluetooth-address"
+    { echo "$a_" > "$PUB_DIR/.bluetooth-address.tmp" && chmod 644 "$PUB_DIR/.bluetooth-address.tmp" &&
+      mv -f "$PUB_DIR/.bluetooth-address.tmp" "$PUB_DIR/bluetooth-address"; } || return 0
+  fi
+  BT_DONE=1; say "bluetooth address published for the app"
+}
+
 # --- main ------------------------------------------------------------------------------------
 status applying
 zstate
@@ -1193,6 +1228,7 @@ while true; do
   fw_request   # an explicit firmware request runs first (and restarts the helper when done)
   thread_leave # "Leave Thread network", in every mode
   thread_stored
+  bt_publish   # the Bluetooth adapter's address for the app (#246), in every mode
   peer_report
   if [ -n "$FW_HOLD" ]; then
     # radio without a trusted application after an interrupted flash: everything stays off

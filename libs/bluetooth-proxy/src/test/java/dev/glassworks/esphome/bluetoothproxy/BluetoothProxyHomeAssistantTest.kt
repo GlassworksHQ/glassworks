@@ -88,7 +88,7 @@ class BluetoothProxyHomeAssistantTest {
             assertTrue("and subscribes to raw advertisements", r.getBoolean("raw"))
             assertFalse("passive: not connectable", r.getBoolean("connectable"))
             assertFalse("no scanner state or mode (Android can't switch to a passive scan)", r.getBoolean("state_and_mode"))
-            assertEquals("the scanner's source is the device's MAC", identity.macAddress, r.getString("source"))
+            assertEquals("without the adapter's MAC, the scanner's source is the device's MAC", identity.macAddress, r.getString("source"))
 
             val advs = r.getJSONArray("advertisements")
             assertEquals(COUNT, advs.length())
@@ -169,6 +169,7 @@ class BluetoothProxyHomeAssistantTest {
         val links = BluetoothConnectionEngine(server, radio)
         server.bluetooth = scan
         server.bluetoothConnections = links
+        server.bluetoothMacAddress = "02:00:00:00:00:02" // made up, as the pane would set the adapter's
         server.start()
         try {
             // Shared with esphome-api, whose own test drives the protocol with a stand-in handler.
@@ -184,6 +185,7 @@ class BluetoothProxyHomeAssistantTest {
             assertEquals("client failed:\n$out", 0, proc.exitValue())
             val r = JSONObject(out.lines().first { it.startsWith("RESULT ") }.removePrefix("RESULT "))
 
+            assertEquals("HA keys the scanner on the adapter's MAC (#246)", "02:00:00:00:00:02", r.getString("source"))
             assertTrue("connectable", r.getBoolean("connectable"))
             assertTrue(r.getBoolean("remote_caching"))
             assertFalse(r.getBoolean("pairing"))
