@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror, the Manage
+  page's **Security** section shows a computer that asks for USB debugging, with its fingerprint, and
+  **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
+  every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
+  records each, with the fingerprint. Needs a Mirror installed with this version.
 - **Glassworks for generic Android gets the Diagnostics pane.** The app on tablets and the lululemon Mirror, in
   both of its builds, now sends its CPU, RAM, storage, Wi-Fi and uptime to Home Assistant, as S1 Kiosk does, and
   shows them on its Diagnostics page on the panel and on the Manage page. These devices have no CPU temperature

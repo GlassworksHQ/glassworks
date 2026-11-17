@@ -250,6 +250,24 @@ What it means for Glassworks: an "Allow a new computer" page could let a compute
 connection. A lasting one needs the key where this image looks, which is `services.jar`'s constant
 (what Kiln's flash now writes), or a fix in adbd.
 
+### How the app sees who asks (#435, read 2026-11-17)
+
+The app keeps its own list and approves a listed computer each time it connects (the plan in #435,
+verified with a shell loop on the unit 2026-11-17). It needs the asking computer's **full key**: Android
+checks the fingerprint, but `allowUsbDebugging` takes the key. `dumpsys usb` gives only the fingerprint.
+Read at `android-6.0.1_r81`, `services/usb/java/com/android/server/usb/UsbDebuggingManager.java`:
+
+| Line | What it says | What the app does with it |
+|---|---|---|
+| 138 | `Slog.d(TAG, "Received public key: " + key)`, once per computer asking, before `MESSAGE_ADB_CONFIRM` | Reads the system log (`READ_LOGS`, `signature\|privileged\|development`): each line is a new request with the full key. No polling |
+| 139–141, 279 | The confirm message goes on the same handler, and sets `mFingerprints` | The app's `allowUsbDebugging` call comes after the log line, so Android has set the fingerprint first |
+| 246 | `writeKey` only when `alwaysAllow` is set | The app passes `false`: `adb_keys` doesn't grow, and Remove takes a computer out for good |
+| 458 | `dump` prints "Last key received" as the fingerprint only | Not used: it can't supply the key, and it doesn't change when the same computer asks again |
+
+**Untested on the unit:** that the Glass Panes image's `services.jar` still logs line 138 (its
+`handleMessage` was changed, [image-patch.md](image-patch.md#what-the-image-does); `listenToSocket` wasn't
+read), and that the `/system` copy gets `READ_LOGS`. The panel plan for #435 checks both first.
+
 ## How to reproduce
 
 Off-device: fetch the files above at `android-6.0.1_r81` from android.googlesource.com
@@ -264,5 +282,6 @@ APK back, flash again with the APK the unit had, or the way back. Neither brings
 
 - ~~All of the above, on the unit: the probe's steps 1 to 5.~~ Done, 2026-11-16: all passed.
 - ~~The adb key approval above, on the unit: the probe's step 6.~~ Done, 2026-11-16: works for one connection, doesn't last.
+- Whether this image logs "Received public key" (above, #435's panel run).
 - Whether CAF's package manager in this image differs from AOSP's in these paths.
 - Whether the Mirror's vendor SELinux policy lets `untrusted_app` read `/data/local/tmp` (read 7).
