@@ -242,6 +242,18 @@ describe('silent updates (#422)', () => {
     expect(p.cmds).toContain(OP(GENERIC.package, 'default'));
   });
 
+  it('keeping a tap when the app-op can\'t be read: refused with why, not declined, and the install goes on', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, installOpGetFailsAfter: 0 }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.off, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+    expect(p.installOp).toBe('allow');
+    expect(res.home.state).toBe('set');
+  });
+
+  it('keeping a tap when the readback after the reset fails: refused, and the line says it may still be silent', async () => {
+    const { res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, installOpGetFailsAfter: 1 }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.allowed, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+  });
+
   it('undo throws when the device refuses the reset or its readback', async () => {
     const p = new FakeAndroid({ ...LEVELS.api34!, installed: 700, installOpAllowed: true, installOpFails: true });
     await expect(undoSilentUpdates(p)).rejects.toThrow(/panel command failed \(255\): appops set/);

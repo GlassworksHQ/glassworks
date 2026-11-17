@@ -238,6 +238,13 @@ export const SILENT_LINES = {
   old: (release: string) => `No: Android ${release} asks for a tap on each update`,
 } as const;
 
+/** "Install unknown apps" for the app, as `appops get` answers; `failed` when it doesn't. */
+async function readInstallOp(p: PanelShell, app: GenericApp): Promise<'allow' | 'off' | { failed: string }> {
+  const res = await p.run(`appops get ${app.package} ${INSTALL_OP}`);
+  if (res.code !== 0) return { failed: `couldn't read it: ${firstLine(res.out) || `exit ${res.code}`}` };
+  return new RegExp(`${INSTALL_OP}: allow`).test(res.out) ? 'allow' : 'off';
+}
+
 /**
  * Silent updates (#422): on Android 12+, `appops set <app> REQUEST_INSTALL_PACKAGES allow`, read back. The app asks
  * Android for no user action on its own updates (core UpdateManager), and Android allows it only with this on.
@@ -251,12 +258,16 @@ async function silentUpdates(r: Steps, app: GenericApp, apk: Uint8Array, device:
   }
   if (!want) {
     // Android keeps the op across an in-place update: an earlier install's "allow" would stay (CodeRabbit on #432).
-    if (new RegExp(`${INSTALL_OP}: allow`).test(await r.try(`appops get ${app.package} ${INSTALL_OP}`))) {
+    // A read that fails leaves it unknown, so the result says so rather than "declined".
+    const before = await readInstallOp(r.p, app);
+    if (before !== 'off') {
+      if (before !== 'allow') return { state: 'refused', line: SILENT_LINES.off, detail: before.failed };
       r.step('Updates ask for a tap');
       await r.p.run(`appops set ${app.package} ${INSTALL_OP} default`);
-      if (new RegExp(`${INSTALL_OP}: allow`).test(await r.try(`appops get ${app.package} ${INSTALL_OP}`))) {
-        r.detail('Install unknown apps: still allowed');
-        return { state: 'refused', line: SILENT_LINES.allowed, detail: 'Android still allows it from an earlier install' };
+      const after = await readInstallOp(r.p, app);
+      if (after !== 'off') {
+        r.detail('Install unknown apps: not taken back');
+        return { state: 'refused', line: SILENT_LINES.allowed, detail: after === 'allow' ? 'Android still allows it from an earlier install' : after.failed };
       }
     }
     r.detail('silent updates: kept a tap per update');

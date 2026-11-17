@@ -48,6 +48,8 @@ export interface FakeAndroidOptions {
   installOpAllowed?: boolean;
   /** `appops set` and `appops get` for REQUEST_INSTALL_PACKAGES fail (a vendor build) */
   installOpFails?: boolean;
+  /** `appops get` for REQUEST_INSTALL_PACKAGES fails after this many reads (0: every one) */
+  installOpGetFailsAfter?: number;
   /** `appops set … default` answers 0 but the op stays allowed */
   keepInstallOpOn?: boolean;
   refuseAdmin?: boolean;
@@ -71,6 +73,7 @@ export class FakeAndroid implements PanelShell {
   overlay = false;
   /** "Install unknown apps" for the app: Android's default until set */
   installOp: 'allow' | 'default' = 'default';
+  private installOpReads = 0;
   admins = new Set<string>();
   /** the home app Android opens; RESOLVER while it would ask */
   home = LAUNCHER;
@@ -130,7 +133,8 @@ export class FakeAndroid implements PanelShell {
       return ok();
     }
     if (cmd === `appops get ${PKG} REQUEST_INSTALL_PACKAGES`) {
-      if (o.installOpFails) return { out: 'Error: java.lang.SecurityException\n', code: 255 };
+      const n = this.installOpReads++;
+      if (o.installOpFails || (o.installOpGetFailsAfter !== undefined && n >= o.installOpGetFailsAfter)) return { out: 'Error: java.lang.SecurityException\n', code: 255 };
       return ok(`REQUEST_INSTALL_PACKAGES: ${this.installOp}\n`);
     }
     if (this.app.admin && cmd === `dpm set-active-admin ${this.app.admin}`) {
