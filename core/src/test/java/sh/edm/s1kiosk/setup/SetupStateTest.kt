@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.setup
 
+import dev.glassworks.frame.Input
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -339,5 +340,23 @@ class SetupStateTest {
         // Online: Improv running on demand doesn't bring the screen up on a set-up panel.
         val desk = deskPanel(10 * min, haSeen = true, apiKey = true, hello = true)
         assertFalse(SetupState.decide(desk.copy(improv = improv.copy(advertising = true))).show)
+    }
+
+    @Test
+    fun withoutTouchAnOfflinePanelWithNothingToJoinShowsWifiAtOnce() {
+        // #448: the Mirror, its Home Assistant set by Kiln, no network saved. The loading screen's offline text
+        // pointed at a button nobody can press; the Wi-Fi step says how to set it up from a computer.
+        val mirror = deskPanel(5_000, haSeen = false, apiKey = false, hello = false)
+            .copy(online = false, offlineForMs = 5_000, input = Input.NONE)
+        val d = SetupState.decide(mirror)
+        assertTrue(d.reasons.toString(), d.show)
+        assertEquals(SetupFlow.WIFI, d.step)
+        // A join underway or expected (a reboot with a saved network): "Connecting to Wi-Fi…" for the grace, as before.
+        assertFalse(SetupState.decide(mirror.copy(joinExpected = true)).show)
+        assertTrue(SetupState.decide(mirror.copy(joinExpected = true, offlineForMs = 30_000)).show)
+        // With touch, nothing changes: the grace, then the screen.
+        assertFalse(SetupState.decide(mirror.copy(input = Input.TOUCH)).show)
+        // Online, the rule says nothing.
+        assertFalse(SetupState.decide(deskPanel(10 * min, haSeen = true, apiKey = true, hello = true).copy(input = Input.NONE)).show)
     }
 }

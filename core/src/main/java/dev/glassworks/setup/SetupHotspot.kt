@@ -34,9 +34,10 @@ class SetupHotspot(
      */
     private val checkMs: Long = 30_000L,
     /**
-     * Why the hotspot can't do its job now, or null when it can. While set it doesn't start, and stops if it runs: on
-     * Android 10+ an app can't turn a Wi-Fi radio on, so with the radio off the panel couldn't join what the phone
-     * sends (S1 panel run on e7d2d49d). Read on every refresh, and at least every [checkMs] while set.
+     * Why the hotspot can't do its job now, or null when it can. While set it doesn't start: on Android 10+ an app
+     * can't turn a Wi-Fi radio on, so with Wi-Fi switched off the panel couldn't join what the phone sends (S1 panel
+     * run on e7d2d49d). Read before a start only (never while ours is starting or on), and at least every [checkMs]
+     * while set.
      */
     private val blocked: () -> HotspotFailure? = { null },
     /**
@@ -92,11 +93,13 @@ class SetupHotspot(
     /** Connectivity changed, or a wake is due. */
     fun refresh() {
         if (closed) return
-        val block = blocked()
+        // Only before a start. Once ours is starting or on, nothing here stops it: on a device without STA+AP
+        // concurrency Android parks the Wi-Fi client while our AP runs, which can read like Wi-Fi off (S1 retest on
+        // b8f827fe: our own hotspot was stopped 25 s in).
+        val block = if (run == null) blocked() else null
         if (block != null) {
-            // The rule waits: nothing starts, a running hotspot stops, and the screen says why. Read again soon.
+            // The rule waits: nothing starts, and the screen says why. Read again soon.
             wasBlocked = true
-            if (run != null) stopHotspot("blocked: ${block.name.lowercase()}")
             error = block
             cancelWake?.invoke()
             cancelWake = schedule(checkMs) { cancelWake = null; refresh() }
@@ -104,10 +107,11 @@ class SetupHotspot(
             return
         }
         if (wasBlocked) {
-            // Back (Wi-Fi turned on): as after new Wi-Fi details, the saved network gets its minutes first.
+            // Back (Wi-Fi turned on): as after new Wi-Fi details, the saved network gets its minutes first. Only for a
+            // rule that was counting or on: one Close it (or setup's end) left Idle stays closed (#418 verifier, A-N1).
             wasBlocked = false
             error = null
-            policy.configured(clock())
+            if (policy.state != SetupHotspotPolicy.State.Idle) policy.configured(clock())
         }
         val d = policy.update(connected(), clock())
         apply(d)
@@ -117,7 +121,8 @@ class SetupHotspot(
     fun ask(): Boolean {
         if (closed) return false
         error = null
-        blocked()?.let { error = it; onChange(); return false }
+        // As in refresh: while ours runs the parked client isn't Wi-Fi off, so don't read it then.
+        if (run == null) blocked()?.let { error = it; onChange(); return false }
         if (!policy.ask(connected(), clock())) return false
         refresh()
         return true

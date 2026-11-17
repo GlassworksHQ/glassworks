@@ -18,7 +18,7 @@ changes them the same way.
 |---|---|
 | Overview | Running or not, the app's version ("· test build <commit>" on a test build) and how long the app has run; Home Assistant, Wi-Fi (connected or not from Android's connectivity service; the network's name and signal where Android gives them to the app), the web engine, memory; every pane the panel can run, with its state (running, off, or can't run now and why). A pane the device has no hardware for isn't listed, here or on the panel. Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
 | Home Assistant & dashboard, Screen, each pane | Every setting the panel's own menu has, in the same order and words, and you can change each one here. A pane's page has its on/off at the top right and shows what it's doing; a pane that's off says what that means. The radio's page links to the Thread join |
-| The device's page (S1 Plus, or the device's model) | What belongs to the device and to no pane. On the S1: **Block Aqara cloud**, the cloud daemon's state, which of Aqara's apps are turned off, and the radio's mode (it opens the Radio page). Elsewhere: whether app updates install without a tap, whether the app is the device owner, the model and the Android version |
+| The device's page (S1 Plus, or the device's model) | What belongs to the device and to no pane. On the S1: **Block Aqara cloud**, the cloud daemon's state, which of Aqara's apps are turned off, the radio's mode (it opens the Radio page) and **Silent updates**. Elsewhere: **Silent updates**, whether the app is the device owner, the model and the Android version. **Silent updates** says whether an update from Home Assistant installs with nobody at the panel, and why; where it can't, how to change that on this kind of device, in amber ([Silent updates](esphome.md#silent-updates)) |
 | Log | The last 7 days, kept across reboots. Filter by warnings or errors, search, and **Download diagnostics** |
 | Security | The browsers signed in, each with **Sign out** |
 | About | Versions, frame, licences |
@@ -61,8 +61,12 @@ too, in **Allow setup over the network**.
 
 The page is plain HTTP on your local network. While you pair, others on the same network can see the code
 you type and the session cookie. The session only works from the address that paired, which limits replay.
-A Wi-Fi password crosses the page only on the panel's own setup Wi-Fi, which is WPA2 with a key shown on the
-panel's screen; the panel refuses one while it is on a network, so it never crosses your network as plain HTTP.
+A Wi-Fi password is no exception: the page sends it in plain text over its WebSocket (`ws://`), like everything
+else. The panel takes one only while it is on no network, which in practice means over its own setup Wi-Fi. That
+link is WPA2, with a key shown only on the panel's screen, so the password is encrypted on the air; anyone else who
+joined the setup Wi-Fi (with the key from the screen) could still read it. On your own network the page doesn't ask
+for a password and the panel refuses one, but nothing encrypts the page there either: it is plain `ws://`, as Home
+Assistant is over `http://`.
 
 | | |
 |---|---|

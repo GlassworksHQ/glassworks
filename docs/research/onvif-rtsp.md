@@ -1,3 +1,8 @@
+---
+topic: panes
+evidence: verified
+---
+
 # ONVIF and RTSP: what HA and UniFi Protect need from a panel's camera, and what to build it on
 
 **Status (2026-11-14): ported; met Home Assistant on a tablet** ([its pull loop](#home-assistants-pull-loop-on-a-refused-sign-in-2026-11-14)). First desk research for the camera pane's

@@ -33,9 +33,11 @@ import java.util.concurrent.TimeUnit
  * has paired: then every request but `state` is refused. Over USB it is always true.
  * While a client is connected, `{"event":"state","state":{…}}` is pushed whenever the serialized
  * state changes (checked every [SetupChannel.POLL_MS]). No tokens or API key cross it. One secret does: the
- * Wi-Fi password `wifi.join` carries, which is never logged nor sent back. `wifi.join` is refused while the panel
- * is on a network ([ChannelState.online]), so the password never crosses a working LAN as plain HTTP: it comes
- * over the panel's own WPA2 setup hotspot, or over USB. Kiln's USB wizard keeps Improv Serial for Wi-Fi.
+ * Wi-Fi password `wifi.join` carries, which is never logged nor sent back. It goes in plain text over the WebSocket
+ * (`ws://`), like everything else here. `wifi.join` is refused while the panel is on a network ([ChannelState.online]),
+ * so in practice it comes over the panel's own setup hotspot (WPA2, so encrypted on the air, but readable by anyone
+ * else who joined it with the key from the screen) or over USB. Nothing encrypts this channel on a LAN either
+ * (docs/manage.md). Kiln's USB wizard keeps Improv Serial for Wi-Fi.
  */
 data class ChannelState(
     val ip: String?,
@@ -198,7 +200,8 @@ class SetupChannel(
             ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name is 1 to 32 bytes long (an accented letter takes 2)."
             !validPassword(password) -> "A Wi-Fi password is at most 63 bytes long (an accented letter takes 2), or a 64-digit hex key."
             backend.state().online -> ON_A_NETWORK
-            // Before the reply, not after: the page hears it instead of "Joining…" (S1 panel run on e7d2d49d).
+            // A refusal in the reply, not a join after it: the page swaps its brief "Joining…" for this as soon as the
+            // reply comes (S1 panel run on e7d2d49d).
             backend.wifiRadioLocked() -> WIFI_OFF
             else -> null
         }

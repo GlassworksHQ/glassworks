@@ -115,6 +115,22 @@ class LocalOnlyHotspotTest {
     }
 
     @Test
+    fun `a stop Android queued for an earlier request never reaches a later one`() {
+        hotspot.start { events += it }
+        val a = ap.listeners.single()
+        a.onStarted(Res { net })
+        hotspot.stop() // the app moves on while A's stop is still queued
+        val later = mutableListOf<Hotspot.Event>()
+        hotspot.start { later += it }
+        assertEquals("a new request for the new start", 2, ap.listeners.size)
+        a.onStopped()
+        a.onFailed(WifiManager.LocalOnlyHotspotCallback.ERROR_GENERIC)
+        assertEquals("nothing from request A reaches start B", emptyList<Hotspot.Event>(), later)
+        ap.listeners.last().onStarted(Res { net })
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Started(net)), later)
+    }
+
+    @Test
     fun `a device without Wi-Fi is a clear refusal`() {
         val none = LocalOnlyHotspot(app, handler, PlatformApi(33), object : LocalOnlyAp {
             override fun start(listener: LocalOnlyAp.Listener, handler: Handler) = false

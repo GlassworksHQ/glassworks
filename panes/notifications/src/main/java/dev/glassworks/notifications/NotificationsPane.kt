@@ -52,12 +52,16 @@ class NotificationsPane(
     private val schedule: (delayMs: Long, action: () -> Unit) -> Future<*>,
     private val haBase: () -> String?,
     private val now: () -> Long,
+    /** Whether the panel's screen takes a tap (the frame's input). */
+    private val touch: () -> Boolean = { true },
 ) : Pane {
     override val id = "notifications" // ID; tools/size reads this literal
 
     private val lock = Any()
     private var center: NotificationCenter? = null
     private var holding = false
+    /** The open view that holds the screen, so a view that waited in the queue takes the hold when it opens. */
+    private var heldView: Long? = null
     private var holdTimer: Future<*>? = null
     private var alertTimer: Future<*>? = null
     private var alertUntil = 0L
@@ -90,12 +94,15 @@ class NotificationsPane(
     private val outputs = object : NotificationOutputs {
         override fun render(cards: List<NotificationStore.Entry>, page: NotificationStore.Entry?, list: List<NotificationStore.Entry>) {
             val urgent = (cards + listOfNotNull(page)).any { it.delivery.overNight }
-            val critical = cards.any { it.notification.priority == Priority.CRITICAL } ||
-                page?.notification?.priority == Priority.CRITICAL
+            val urgentView = page?.takeIf { it.delivery.overNight }?.id
+            val critical = cards.any { it.notification.priority == Priority.CRITICAL }
             val silenced = synchronized(lock) {
                 // Under the pane's lock, as Do not disturb's publish: neither overwrites the other with an older state.
                 hub.publish(NotificationsHub.State(cards, page, list, prefs.doNotDisturb))
                 criticalUp = critical
+                // A high view that waited behind another opens now: it holds the screen, as it would have on arrival.
+                if (urgentView != null && urgentView != heldView) holdScreen()
+                heldView = urgentView
                 if (!urgent) releaseScreen()
                 !critical && stopAlert()
             }
@@ -150,7 +157,7 @@ class NotificationsPane(
         val c = NotificationCenter(
             NotificationStore(now), outputs,
             report = { r -> ctx.fireEvent(HomeAssistantEvent(ActionReport.EVENT, r.data)) },
-            doNotDisturb = { prefs.doNotDisturb }, haBase = haBase, now = now, schedule = schedule,
+            doNotDisturb = { prefs.doNotDisturb }, haBase = haBase, now = now, schedule = schedule, touch = touch,
         )
         synchronized(lock) { center = c }
         hub.attach(c)
@@ -166,6 +173,7 @@ class NotificationsPane(
             criticalUp = false
             stopAlert()
             releaseScreen()
+            heldView = null // ids restart with the next center: a stale one must not skip a hold (#429 verifier)
         }
         releaseSpeaker()
         hub.detach(c)

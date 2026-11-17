@@ -1,3 +1,8 @@
+---
+topic: perf
+evidence: verified
+---
+
 # Idle CPU: why the kiosk uses ~40% of a core with nothing on screen
 
 **Status (2026-11-12): working (the microphone path confirmed on the panel), fix not chosen.** Muting

@@ -91,4 +91,22 @@ class WifiStepTest {
         assertEquals("0:01", WifiStep.clock(1))
         assertEquals("1:05", WifiStep.clock(65_000))
     }
+
+    @Test
+    fun aRadioThatDidntComeBackIsNotThePasswordsFault() {
+        val radio = WifiStep.improv(ImprovFacts(running = true, advertising = true, state = ImprovState.AUTHORIZED,
+            ssid = "Example-WiFi", failure = dev.glassworks.improv.WifiProvisioner.RADIO_DIDNT_COME_BACK))
+        assertTrue(radio.detail, "didn't come back" in radio.detail && "password" !in radio.detail)
+        val wrong = WifiStep.improv(ImprovFacts(running = true, advertising = true, state = ImprovState.AUTHORIZED,
+            ssid = "Example-WiFi", failure = "Wrong password"))
+        assertTrue(wrong.detail, "Check the password" in wrong.detail)
+    }
+
+    @Test
+    fun anUnusablePasswordSaysWhatToDoOnce() {
+        val line = WifiStep.improv(ImprovFacts(running = true, advertising = true, state = ImprovState.AUTHORIZED,
+            ssid = "Example-WiFi", failure = dev.glassworks.improv.WifiProvisioner.UNUSABLE_PASSWORD))
+        assertEquals(line.detail, 1, Regex("send it again").findAll(line.detail).count())
+        assertTrue(line.detail, "Check the password" !in line.detail)
+    }
 }

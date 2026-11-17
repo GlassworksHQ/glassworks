@@ -569,7 +569,7 @@ class SetupOverlay(
             }
             inst?.phase == InstallerWifi.Phase.CONNECTING -> {
                 cardTitle.text = "Connecting to ${inst.ssid}…"
-                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This takes up to 30 seconds.")
+                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This can take up to a minute.")
             }
             else -> {
                 cardTitle.text = if (w.state == WifiSetupStatus.State.CONNECTING) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
@@ -577,8 +577,14 @@ class SetupOverlay(
                 tile = true
             }
         }
-        if (!w.online && inst?.phase == InstallerWifi.Phase.FAILED) showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
-        else w.message?.let { showStatus(it, AMBER) } ?: spot?.status?.let { showStatus(it, tone(spot.tone)) }
+        // The hotspot's line goes with its button (Allow, Try again, Turn on Wi-Fi), so it wins over an older line
+        // (CodeRabbit on #418): a failed installer join, then the Wi-Fi status.
+        val spotStatus = spot?.status
+        when {
+            spotStatus != null -> showStatus(spotStatus, tone(spot.tone))
+            !w.online && inst?.phase == InstallerWifi.Phase.FAILED -> showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
+            else -> w.message?.let { showStatus(it, AMBER) }
+        }
         spot?.action?.let { a ->
             plain.text = a.label
             plain.visibility = View.VISIBLE
@@ -601,7 +607,7 @@ class SetupOverlay(
     /** The setup hotspot is on: the card says how to join it, with its QR code, and Close it. */
     private fun bindHotspotOn(spot: dev.glassworks.setup.HotspotStep.Card): View? {
         spot.label?.let { cardLabel.text = it }
-        status.visibility = View.GONE // "Opening…" from a moment ago, on the same step (CodeRabbit on #418)
+        status.visibility = View.GONE // the "Looking for Wi-Fi networks…" line from a moment ago, on the same step (CodeRabbit on #418)
         cardTitle.text = spot.title
         cardBody.text = spot.body
         showQr(spot.qr!!)
@@ -737,6 +743,8 @@ class SetupOverlay(
         if (ip == null) {
             cardTitle.text = "Waiting for Wi-Fi."
             cardBody.text = "Put the panel on Wi-Fi with Kiln on a computer, over USB. Then this screen shows where to set it up."
+            // Why the panel's own Wi-Fi isn't up (Wi-Fi off, Android closed it): nothing to press here, but said (A-N3).
+            m.hotspot?.status?.let { showStatus(it, tone(m.hotspot.tone)) }
             return
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"

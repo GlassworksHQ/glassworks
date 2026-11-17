@@ -43,6 +43,7 @@ class Device:
         self.adb = [os.environ.get("ADB", "adb")] + (["-s", serial] if serial else [])
         self.package = package
         self.component = f"{package}/{activity}"
+        self.nudges = []                  # wake keys sent and maybe not yet through adb (nudge, nudged)
 
     def sh(self, cmd, timeout=60):
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
@@ -57,8 +58,21 @@ class Device:
     def nudge(self):
         """Android's own wake key, for while the kiosk is stopped or starting: the kiosk's intent
         (wake) would launch it, and change the restart being measured."""
-        subprocess.Popen(self.adb + ["shell", "input keyevent KEYCODE_WAKEUP"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.nudges = [p for p in self.nudges if p.poll() is None]
+        self.nudges.append(subprocess.Popen(self.adb + ["shell", "input keyevent KEYCODE_WAKEUP"],
+                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+
+    def nudged(self, timeout=10):
+        """Waits (at most `timeout` s in all) until every wake key sent is through adb, so none lands
+        after what is sent next (#410's CI: a wake key sent just before a view's hold reached the
+        device after it)."""
+        end = time.monotonic() + timeout
+        for p in self.nudges:
+            try:
+                p.wait(timeout=max(0.0, end - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                pass
+        self.nudges = [p for p in self.nudges if p.poll() is None]
 
     def logcat(self):
         p = subprocess.Popen(self.adb + ["logcat", "-v", "monotonic", "-T", "1"],
@@ -469,20 +483,25 @@ def cmd_coldstart(dev, a):
                     presents.update(ts)
             stop.wait(C.real(1.0))
 
+    # keep_awake's look at `held` and its wake key, against hold()'s: one at a time, so no wake key
+    # is sent after a hold.
+    wake_lock = threading.Lock()
+
     def keep_awake():
         """Android's wake key from the force-stop (and a recovery's) until the next view's test hold."""
         last_nudge = 0.0
         relaunch_seen = False
         while not stop.wait(C.real(min(1.0, RESTART_WAKE_S / 2))):
-            if st.get("held"):
-                continue
-            # The wake key at once when the app comes back up, and every RESTART_WAKE_S.
-            relaunched = res["proc_mono"] is not None and not relaunch_seen
-            relaunch_seen = relaunch_seen or relaunched
-            if relaunched or C.now() - last_nudge >= RESTART_WAKE_S:
-                last_nudge = C.now()
-                dev.nudge()
-                res["restart_wakes"] = res.get("restart_wakes", 0) + 1
+            with wake_lock:
+                if st.get("held"):
+                    continue
+                # The wake key at once when the app comes back up, and every RESTART_WAKE_S.
+                relaunched = res["proc_mono"] is not None and not relaunch_seen
+                relaunch_seen = relaunch_seen or relaunched
+                if relaunched or C.now() - last_nudge >= RESTART_WAKE_S:
+                    last_nudge = C.now()
+                    dev.nudge()
+                    res["restart_wakes"] = res.get("restart_wakes", 0) + 1
 
     def cpu_clock():
         """[view, time, [kHz per core]] every CPU_CLOCK_S while a view is open, from its open to its
@@ -504,7 +523,9 @@ def cmd_coldstart(dev, a):
     def hold():
         """The test hold, for TEST_HOLD_S from now, before each view opens, so a long run never outlasts
         it. Not in a timed window: the view's open starts after it."""
-        st["held"] = True                      # keep_awake's wake key stops now
+        with wake_lock:
+            st["held"] = True                  # keep_awake's wake key stops now
+            dev.nudged()                       # and the last one sent is through adb before the hold
         dev.hold()
         res["holds"] = res.get("holds", 0) + 1
 
@@ -592,11 +613,12 @@ def cmd_coldstart(dev, a):
         st["line_at"], st["last_line"] = None, None
         paused.clear()
         if slot == "warmup":
-            tier, extra = a.warmup_tier, {"taps": 0, "swipes": 0, "warmup": 1}
+            tier, extra = a.warmup_tier, {"taps": 0, "swipes": 0, "dialogs": 0, "warmup": 1}
             res["warmup"] = {"tier": tier, "nonce": nonce, "swipes": []}
         elif slot in fallback:
-            # As a graded view, taps included, so the camera window is the same; no swipes.
-            tier, extra = slot, {"taps": a.taps, "swipes": 0}
+            # As a graded view, taps included, so the camera window is the same; no swipes, no
+            # more-info dialogs (protocol 3: they come after the camera window, and aren't the copy's).
+            tier, extra = slot, {"taps": a.taps, "swipes": 0, "dialogs": 0}
             res["fallback"][slot] = {"nonce": nonce, "swipes": []}
         else:
             tier, extra = slot, {"taps": a.taps}
@@ -661,7 +683,8 @@ def cmd_coldstart(dev, a):
             return False
         pl = page_lines.feed(msg)
         res["bad_page_lines"] = page_lines.bad
-        if ref and cur is None and pl and pl.get("nonce") == "":
+        if ref and pl and pl.get("nonce") == "" and (cur is None or pl.get("t") == "settle"):
+            # A warm-up's settle (#410) can come after the first view was opened: still the restart's.
             return handle_restart(pl, rec)
         if cur and pl and pl.get("nonce") == cur[1]:
             return handle_page(cur[0], pl, rec)
@@ -707,6 +730,10 @@ def cmd_coldstart(dev, a):
         elif t == "error":
             res["restart_page_error"] = pl.get("message")
             st["restart_done_at"] = C.now()
+        elif t == "settle":
+            # #410: HA still held a warm-up dialog after the page's wait (detail; the first view's
+            # check before its navigation decides whether it is measured).
+            res.setdefault("warmup_settle", []).append(pl)
         return False
 
     def handle_page(tier, pl, rec):
@@ -754,6 +781,13 @@ def cmd_coldstart(dev, a):
             entry["input"] = pl
         elif t == "camera":
             entry["camera"] = pl
+        elif t == "dialog":
+            # Protocol 3 (#211): one line per more-info dialog, after the swipes.
+            entry.setdefault("dialogs", []).append(pl)
+        elif t == "settle":
+            # #410: HA still held one of the view's dialogs after its own wait; the page leaves the view
+            # for the start view next (detail; its done line says how that ended).
+            entry["settle_first"] = pl
         elif t in ("done", "error"):
             st["live"] = st["view_open"] = False
             # Stop the view's stream at the fake (protocol 8: the page asks too, but doesn't wait on a
@@ -763,6 +797,8 @@ def cmd_coldstart(dev, a):
                 entry["error"] = pl.get("message")
             else:
                 entry["done"] = True
+                if pl.get("settle") is not None:
+                    entry["settle"] = pl["settle"]     # #410: HA done with its dialogs (detail, untimed)
             # Anything of this page's that didn't arrive whole is lost: a line cut into parts that
             # never all came, and a swipe answered with no scroll step back.
             entry["lost_lines"] = page_lines.close(pl.get("nonce"))

@@ -52,6 +52,17 @@ class KioskService : Service() {
     private lateinit var foreground: KioskForeground
     private var hotspotNetworks: ConnectivityManager.NetworkCallback? = null
 
+    /** The scan before each hotspot start, into the runtime's list the setup page reads. */
+    private val scanFirst = sh.edm.s1kiosk.setup.HotspotScanStep(
+        scan = { done ->
+            ImprovController.scanFromInstaller { nets ->
+                done(nets.map { sh.edm.s1kiosk.setup.WifiNetwork(it.ssid, it.rssi, secure = it.auth != "NO") })
+            }
+        },
+        store = { glassworks.hotspotScan = it },
+        log = { Log.i(HOTSPOT_TAG, it) },
+    )
+
     override fun onCreate() {
         super.onCreate()
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
@@ -112,12 +123,10 @@ class KioskService : Service() {
             blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
             // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.
             beforeStart = { start ->
-                val asked = ImprovController.scanFromInstaller { nets ->
-                    glassworks.hotspotScan = nets.map { sh.edm.s1kiosk.setup.WifiNetwork(it.ssid, it.rssi, secure = it.auth != "NO") }
-                    Log.i(HOTSPOT_TAG, "scanned before the hotspot: ${nets.size} networks")
-                    start()
-                }
-                if (!asked) start()
+                // Where the app may turn the radio on (Android 9 and older, the device owner), it does: an off radio
+                // couldn't scan nor join. Where it may not, the hotspot is blocked before it gets here.
+                if (!WifiRadio.ensureOn(this)) Log.w(HOTSPOT_TAG, "Wi-Fi is off, and it didn't come on")
+                scanFirst(start)
             },
         )
         glassworks.setupHotspot = hs
@@ -218,8 +227,13 @@ class KioskService : Service() {
         return b.build()
     }
 
-    /** The app's icon, from its manifest; Android's default app icon for an APK without one, so the service still starts. */
-    private fun notificationIcon(): Int = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
+    /**
+     * The app's notification icon ([dev.glassworks.platform.AppBuild.notificationIcon]), else its icon from its manifest;
+     * Android's default app icon for an APK without one, so the service still starts. An icon Android can't load
+     * crashes the app (RemoteServiceException "Couldn't create icon": the Mirror's first start, #198).
+     */
+    private fun notificationIcon(): Int = glassworks.build.notificationIcon.takeIf { it != 0 }
+        ?: applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
         private const val HOTSPOT_TAG = "S1Kiosk.Hotspot"

@@ -89,7 +89,7 @@ export default async function DocsHome() {
       </Card>
       <Card id="notes" icon="kiln" title="Engineering notes" lede="How each device was opened up, what failed, and how sure we are." wide>
         {rows(notes.filter((n) => !n.frame).slice(0, 5))}
-        <Row href="/docs/notes" title={`All ${notes.length} notes`} />
+        <Row href="/research" title={`All ${notes.length} notes, by frame and topic`} />
       </Card>
     </>
   );

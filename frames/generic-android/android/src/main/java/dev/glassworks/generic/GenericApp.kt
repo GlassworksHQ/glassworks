@@ -13,6 +13,7 @@ import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.generic_android.BuildConfig
+import dev.glassworks.generic_android.R
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.screen.AmbientLight
 import dev.glassworks.screen.ProximityPresence
@@ -24,8 +25,9 @@ import sh.edm.s1kiosk.update.ReleaseLine
 /** Glassworks for generic Android (#23): the core on any Android 8+ device, as its own app. */
 class GenericApp : Application(), GlassworksApp {
 
-    /** This APK's build, from its BuildConfig, under its own name. */
-    val build = AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD, product = PRODUCT)
+    /** This APK's build, from its BuildConfig, under its own name and with the mark in its notification. */
+    val build = AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD, product = PRODUCT,
+        notificationIcon = R.drawable.ic_notification)
 
     override val glassworks: GlassworksRuntime by lazy {
         val frame = frame(this)

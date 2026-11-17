@@ -52,4 +52,15 @@ class OriginTest {
         assertEquals("192.0.2.10:8124", Origin.host("http://192.0.2.10:8124/"))
         assertEquals("", Origin.host("data:text/html,x"))
     }
+
+    /** A note names Home Assistant's host and port on another scheme with that scheme (#455), as policy.js does. */
+    @Test fun `hosts next to the allowed origin`() {
+        val ha = "http://192.0.2.10:8123"
+        assertEquals("https://192.0.2.10:8123", Origin.host("https://192.0.2.10:8123/api/image_proxy/image.x?token=t", ha))
+        assertEquals("https://192.0.2.10:8123", Origin.host("wss://192.0.2.10:8123/api/websocket", ha))
+        assertEquals("192.0.2.10:8124", Origin.host("https://192.0.2.10:8124/x.png", ha))
+        assertEquals("192.0.2.11:8123", Origin.host("https://192.0.2.11:8123/x.png", ha))
+        assertEquals("www.example.com", Origin.host("https://www.example.com/x.png", ha))
+        assertEquals("", Origin.host("data:text/html,x", ha))
+    }
 }

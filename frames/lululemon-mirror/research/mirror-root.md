@@ -1,3 +1,8 @@
+---
+topic: boot
+evidence: verified
+---
+
 # Mirror root: can we get root on the lululemon Mirror dev unit, and what's the cheapest safe route?
 
 **Status (2026-11-15, second pass): answered — root works, within narrow limits.** The planned `su`

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The launcher icon: the Glassworks stack on flat night (docs/branding.md: the panel's screens are always
-     night). The mark is the launch splash's (branding/boot/splash_mark.py), which keeps the stack inside the
-     middle two thirds, the same safe zone an adaptive icon's 72 of 108 dp is. Android 8+ only: minSdk 26. -->
+<!-- Made by branding/boot/app_icon.py from site/public/brand/app-icon.svg; don't edit. -->
+<!-- The launcher icon on Android 8+: the brand's app icon (site/public/brand/app-icon.svg), the mark on night. The
+     monochrome layer is Android 13's themed icon. Android 6-7 show the same icon as PNGs (mipmap-*dpi). -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/night" />
-    <foreground android:drawable="@drawable/glassworks_mark" />
-    <monochrome android:drawable="@drawable/glassworks_mark" />
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>

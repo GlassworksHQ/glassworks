@@ -6,27 +6,29 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
+import { zipEntry } from '@glassworks/app-adb';
+import { adbFingerprint } from '@glassworks/lululemon-mirror-installer';
 import { clean, debugfs, debugfsCat, fsck, haveTools } from '@glassworks/ext4/testing';
-import { FakeMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FakeMirror, fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb } from '../src/adb';
 import { UsageError, cli } from '../src/cli';
 import { DRY_USERDATA, dryDevices, dryImage } from '../src/dry';
 import { runInstall, runWayBack } from '../src/run';
 
-const KEY = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= root@host';
+const KEY = fakeAdbKey(9, 'root@host');
 const APK = fakeMirrorApk({ libs: { 'arm64-v8a': { 'libgecko.so': new Uint8Array(5000).fill(7) } } });
 
 let work: string;
 beforeEach(() => { work = mkdtempSync(join(tmpdir(), 'gw-mirror-test-')); });
 afterEach(() => rmSync(work, { recursive: true, force: true }));
 
-async function install(o: { hideFails?: boolean; confirm?: (q: string) => boolean; stockAtStart?: boolean } = {}) {
+async function install(o: { hideFails?: boolean; confirm?: (q: string) => boolean; stockAtStart?: boolean; adbKey?: string } = {}) {
   const img = await dryImage(work, APK.length);
   const lines: string[] = [];
   const d = dryDevices(img.bytes, (l) => lines.push(l), o);
   const asked: string[] = [];
   if (o.confirm) d.deps.confirm = async (q) => { asked.push(q); return o.confirm!(q); };
-  const run = runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, haUrl: 'http://homeassistant.local:8123', work }, d.deps);
+  const run = runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: o.adbKey ?? KEY, haUrl: 'http://homeassistant.local:8123', work }, d.deps);
   return { d, img, lines, asked, run };
 }
 
@@ -50,6 +52,29 @@ describe('the headless install on a fake Mirror', () => {
     for (const f of [sys, ud]) { const c = fsck(f); expect(clean(c), c.out).toBe(true); }
     expect(debugfs(sys, 'ls /priv-app')).toContain('Glassworks');
     expect(new TextDecoder().decode(debugfsCat(ud, '/misc/adb/adb_keys'))).toBe(`${KEY}\n`);
+  }, 60_000);
+
+  it('takes repeated --adb-key: every line in adb_keys, only the first trusted in services.jar (#426 review)', async () => {
+    const second = fakeAdbKey(10, 'second host');
+    const { d, lines, run } = await install({ adbKey: `${KEY}\n${second}` });
+    await run;
+    expect(d.lk.commands.filter((c) => c.startsWith('flash:'))).toEqual(['flash:system', 'flash:userdata']);
+    expect(lines.join('\n')).toContain(`adb key the image will let in: ${adbFingerprint(KEY)}`);
+    if (!haveTools) return;
+    const sys = join(work, 'flashed-system.raw'), ud = join(work, 'flashed-userdata.raw');
+    writeFileSync(sys, d.lk.parts.get('system')!);
+    writeFileSync(ud, d.lk.parts.get('userdata')!);
+    expect(new TextDecoder().decode(debugfsCat(ud, '/misc/adb/adb_keys'))).toBe(`${KEY}\n${second}\n`);
+    const dex = Buffer.from((await zipEntry(new Uint8Array(debugfsCat(sys, '/framework/services.jar')), 'classes.dex'))!).toString('latin1');
+    expect(dex).toContain(adbFingerprint(KEY));
+    expect(dex).not.toContain(adbFingerprint(second));
+  }, 60_000);
+
+  it('refuses a bad second --adb-key at the checks, before the Mirror restarts (#426 review)', async () => {
+    const { d, run } = await install({ adbKey: `${KEY}\nQAAA= not@a-key` });
+    await expect(run).rejects.toThrow(/adb key 2 of 2: that isn't an adb public key/);
+    expect(d.state()).toBe('android');
+    expect(d.lk.commands).toEqual([]);
   }, 60_000);
 
   it('stops where the person says no, and writes nothing before the flash step', async () => {

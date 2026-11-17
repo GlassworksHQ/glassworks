@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: read
+---
+
 # Mirror home app: how can adb, without root, make S1 Kiosk the Mirror's home screen on Android 6?
 
 > Since #411 the Mirror's app is Glassworks' legacy build (`dev.glassworks.generic_android.legacy`), not S1 Kiosk. The mechanism below is the same for either app.

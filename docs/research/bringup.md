@@ -1,3 +1,8 @@
+---
+topic: method
+evidence: verified
+---
+
 # Breaking into a device: the playbook
 
 How we got from a sealed retail panel to an open one, written as a method you can use on the next

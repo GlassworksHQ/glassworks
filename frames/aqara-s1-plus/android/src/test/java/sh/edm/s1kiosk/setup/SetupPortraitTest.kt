@@ -89,4 +89,20 @@ class SetupPortraitTest {
         val body = views(s).filterIsInstance<TextView>().first { it.isShown && it.text.contains("http://$ip:8099/setup") }
         assertTrue("body ${body.width}px wide", body.width > 1080 / 2)
     }
+
+    /** A tablet that turns: the same screen restacks on its next layout, both ways. */
+    @Test fun aLiveRotationRestacksTheCard() {
+        val s = screen(SetupFlow.HA)
+        val body = views(s).filterIsInstance<TextView>().first { it.isShown && it.text.contains("http://$ip:8099/setup") }
+        fun at(v: View) = IntArray(2).also(v::getLocationInWindow)
+        fun qrUnderText() = at(qrTile(s))[1] >= at(body)[1] + body.height
+        fun qrBesideText() = at(qrTile(s))[0] >= at(body)[0] + body.width
+        assertTrue("portrait: the QR code under the text", qrUnderText())
+        Mockup.layout(s, 1920, 1080)
+        assertTrue("landscape: the QR code beside the text", qrBesideText())
+        assertTrue("landscape: the QR code is clipped", whole(qrTile(s), s))
+        Mockup.layout(s, 1080, 1920)
+        assertTrue("portrait again: the QR code under the text", qrUnderText())
+        assertTrue("portrait again: the QR code is clipped", whole(qrTile(s), s))
+    }
 }

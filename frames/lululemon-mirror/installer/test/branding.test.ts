@@ -15,8 +15,8 @@ const sha = (p: string) => createHash('sha256').update(readFileSync(p)).digest('
 
 describe('the Mirror\'s bootanimation.zip', () => {
   it('plays in the panel\'s own 1920x1080 framebuffer at 30 fps, full frames (Android 6 reads no trim.txt)', async () => {
-    // ro.sf.hwrotation turns Android's UI, not the boot animation (seen on the unit, 2026-11-16): the
-    // portrait art is turned into the landscape panel, frame by frame
+    // nothing on the image turns the boot animation (seen on the unit, 2026-11-16): the portrait art
+    // is turned into the landscape panel, frame by frame
     const desc = new TextDecoder().decode(await zipEntry(ZIP, 'desc.txt'));
     expect(desc.split('\n')[0]).toBe('1920 1080 30');
     for (const n of zipNames(ZIP).filter((x) => x.endsWith('.png')).slice(0, 3)) {

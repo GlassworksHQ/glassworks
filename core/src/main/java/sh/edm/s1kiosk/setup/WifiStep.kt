@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.setup
 
 import dev.glassworks.improv.ImprovState
+import dev.glassworks.improv.WifiProvisioner
 
 /**
  * Improv (Wi-Fi over Bluetooth) as the setup screen sees it: a plain snapshot that
@@ -97,7 +98,9 @@ object WifiStep {
                 if (fail != null) ImprovLine(
                     Phase.FAILED, "$label · allowed for ${clock(f.authLeftMs)}",
                     "Couldn't connect to ${ssid ?: "the network"}",
-                    "${sentence(fail)} Check the password and send it again.", Tone.ROSE, listOf(Action.STOP),
+                    // A reason that says what to do gets no password advice on top (#418 verifier).
+                    "${sentence(fail)}" + if (WifiProvisioner.saysWhatToDo(fail)) "" else " Check the password and send it again.",
+                    Tone.ROSE, listOf(Action.STOP),
                 ) else ImprovLine(
                     Phase.AUTHORIZED, "$label · allowed for ${clock(f.authLeftMs)}", "Waiting for Wi-Fi details",
                     "Enter your Wi-Fi in Home Assistant's “Improv via BLE” dialog." +
@@ -107,7 +110,8 @@ object WifiStep {
             }
             ImprovState.PROVISIONING -> ImprovLine(
                 Phase.CONNECTING, "$label · connecting", "Connecting to ${ssid ?: "Wi-Fi"}…",
-                f.progress ?: "This takes up to 30 seconds.", Tone.AMBER, emptyList(),
+                // Up to 15 s for the Wi-Fi client, 6 s for a first scan, then 30 s to join: about 51 s at worst.
+                f.progress ?: "This can take up to a minute.", Tone.AMBER, emptyList(),
             )
             ImprovState.PROVISIONED -> ImprovLine(
                 Phase.CONNECTED, "$label · done", if (ssid != null) "Connected to $ssid" else "The panel is online",

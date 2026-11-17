@@ -83,6 +83,29 @@ test("map tiles, web cards and other origins are blocked", () => {
   assert.equal(P.decide(req("http://192.0.2.10:8124/x", "script"), HA).allow, false, "another port is another origin");
 });
 
+test("Home Assistant's address on https stays blocked, and the note names its scheme (#455)", () => {
+  // What GeckoView 144 asked for before the lockdown turned off its display upgrade: HA's http image as https.
+  // Still another origin: only the pref keeps it from happening, and the lockdown fails closed if it ever does.
+  for (const type of ["image", "media", "script", "xmlhttprequest", "sub_frame", "main_frame"]) {
+    const v = P.decide(req("https://192.0.2.10:8123/api/image_proxy/image.door?token=t", type), HA);
+    assert.equal(v.allow, false, type);
+    assert.equal(v.host, "https://192.0.2.10:8123", `${type}: named with its scheme, not as HA's own address`);
+  }
+  assert.deepEqual(decide(req("wss://192.0.2.10:8123/api/websocket", "websocket"), HA),
+    { allow: false, host: "https://192.0.2.10:8123", frame: false });
+  for (const [url, host] of [
+    ["https://192.0.2.10:8124/api/image_proxy/image.door", "192.0.2.10:8124"],
+    ["http://192.0.2.10:8124/api/image_proxy/image.door", "192.0.2.10:8124"],
+    ["https://192.0.2.11:8123/api/image_proxy/image.door", "192.0.2.11:8123"],
+    ["https://192.0.2.10/api/image_proxy/image.door", "192.0.2.10"],
+    ["https://homeassistant.local:8123/x.png", "homeassistant.local:8123"],
+  ]) {
+    assert.deepEqual(decide(req(url, "image"), HA), { allow: false, host, frame: false }, url);
+  }
+  const before = P.decide({ url: "https://192.0.2.10:8123/x.png", type: "image", documentUrl: `${HA}/lovelace/0` }, null);
+  assert.deepEqual({ ...before }, { allow: false, host: "https://192.0.2.10:8123", frame: false }, "the document's origin stands in");
+});
+
 test("the app's Unicode dashboard URL matches Gecko's punycode requests", () => {
   const ha = P.origin("http://ält.example.org:8123/");
   assert.equal(P.decide(req("http://xn--lt-uia.example.org:8123/frontend_latest/app.js", "script"), ha).allow, true);

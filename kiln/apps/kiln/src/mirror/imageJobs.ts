@@ -44,7 +44,7 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
       const pos = { system: 0, userdata: 0 };
       const sink = (k: 'system' | 'userdata') => (b: Uint8Array) => { out[k].write(b, { at: pos[k] }); pos[k] += b.length; };
       try {
-        await buildImages(loaded, { ...o, hwrotation: 270 }, { system: sink('system'), userdata: sink('userdata') }, onProgress);
+        await buildImages(loaded, o, { system: sink('system'), userdata: sink('userdata') }, onProgress);
       } catch (e) {
         loaded = undefined;
         throw e;
