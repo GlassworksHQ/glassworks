@@ -133,8 +133,8 @@ class AdbComputersTest {
         val c = computers()
         c.asked(a)
         c.allowAsking(a.fingerprint, remember = true, who = "Alex")
-        assertTrue(c.remove(a.fingerprint, "Alex"))
-        assertFalse("not on it twice", c.remove(a.fingerprint, "Alex"))
+        assertEquals(AdbComputers.Removed.DONE, c.remove(a.fingerprint, "Alex"))
+        assertEquals("not on it twice", AdbComputers.Removed.NOT_LISTED, c.remove(a.fingerprint, "Alex"))
         assertTrue(computers().list().isEmpty())
         allowed.clear()
         c.asked(a)
@@ -159,6 +159,30 @@ class AdbComputersTest {
         c.asked(a)
         assertEquals(AdbComputers.Allowed.FULL, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
         assertEquals("once still works", AdbComputers.Allowed.ONCE, c.allowAsking(a.fingerprint, remember = false, who = "Alex"))
+    }
+
+    /** Makes the list's file unwritable: a folder with something in it where the file goes. */
+    private fun breakTheFile() {
+        file.delete()
+        File(file, "x").apply { parentFile.mkdirs(); writeText("x") }
+    }
+
+    @Test fun `let in but not saved, it says so and the computer is not listed`() {
+        val c = computers()
+        c.asked(a)
+        breakTheFile()
+        assertEquals(AdbComputers.Allowed.NOT_REMEMBERED, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
+        assertEquals("Android let it in", listOf(a.base64), allowed)
+        assertTrue(c.list().isEmpty())
+    }
+
+    @Test fun `a removal that can't be saved leaves the computer on the list`() {
+        val c = computers()
+        c.asked(a)
+        c.allowAsking(a.fingerprint, remember = true, who = "Alex")
+        breakTheFile()
+        assertEquals(AdbComputers.Removed.NOT_SAVED, c.remove(a.fingerprint, "Alex"))
+        assertEquals(listOf(a), c.list().map { it.key })
     }
 
     @Test fun `a damaged list lets no extra computer in`() {
