@@ -63,7 +63,11 @@ class ManageUsbDebugging(
             event("$who tried to $what: refused, that needs a Home Assistant sign-in")
             return done(Result.SIGN_IN)
         }
-        if (path == REMOVE) return done(if (computers.remove(fingerprint, who)) Result.REMOVED else Result.GONE)
+        if (path == REMOVE) return done(when (computers.remove(fingerprint, who)) {
+            AdbComputers.Removed.DONE -> Result.REMOVED
+            AdbComputers.Removed.NOT_LISTED -> Result.GONE
+            AdbComputers.Removed.NOT_SAVED -> Result.NOT_REMOVED
+        })
         return done(when (computers.allowAsking(fingerprint, form["remember"] == "1", who)) {
             AdbComputers.Allowed.ONCE -> Result.ONCE
             AdbComputers.Allowed.FROM_NOW_ON -> Result.FROM_NOW_ON
@@ -71,6 +75,7 @@ class ManageUsbDebugging(
             AdbComputers.Allowed.NONE -> Result.NONE
             AdbComputers.Allowed.FULL -> Result.FULL
             AdbComputers.Allowed.FAILED -> Result.FAILED
+            AdbComputers.Allowed.NOT_REMEMBERED -> Result.NOT_REMEMBERED
         })
     }
 
@@ -86,6 +91,8 @@ class ManageUsbDebugging(
         FULL("full", false, "The list is full. Remove a computer first."),
         GONE("gone", false, "That computer isn't on the list."),
         FAILED("failed", false, "That didn't work. The Log says why."),
+        NOT_REMEMBERED("unsaved", false, "Allowed for this connection only: the panel couldn't save the list. The computer asks again next time."),
+        NOT_REMOVED("notremoved", false, "Not removed: the panel couldn't save the list. The computer is still allowed. Try again."),
         SIGN_IN("signin", false, NEEDS_HA),
     }
 
