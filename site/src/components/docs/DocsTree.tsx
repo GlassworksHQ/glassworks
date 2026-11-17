@@ -11,12 +11,13 @@ export function DocsTree({ groups }: { groups: NavGroup[] }) {
   const within = (href: string) => path === href || path.startsWith(`${href}/`);
   const link = (it: NavItem, sub = false) => {
     const A = it.plain ? "a" : Link;
+    const on = path === it.href || (!!it.also && path.startsWith(it.also));
     return (
       <A
         key={it.href}
         href={it.href}
-        className={`${s.ni} ${sub ? s.sub : ""} ${it.deep ? s.deep : ""} ${path === it.href ? s.on : ""}`}
-        aria-current={path === it.href ? "page" : undefined}
+        className={`${s.ni} ${sub ? s.sub : ""} ${it.deep ? s.deep : ""} ${on ? s.on : ""}`}
+        aria-current={path === it.href ? "page" : on ? "true" : undefined}
       >
         {it.label}
         {it.aside && <small>{it.aside}</small>}

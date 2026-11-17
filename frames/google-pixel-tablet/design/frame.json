@@ -1,0 +1,92 @@
+{
+  "id": "google-pixel-tablet",
+  "kind": "tested",
+  "base": "generic-android",
+  "name": "Google Pixel Tablet",
+  "brand": "Google",
+  "status": "planned",
+  "summary": "A common 11-inch tablet that runs Glassworks for generic Android as it is.",
+  "model": {
+    "body": {
+      "shape": "rect",
+      "width": 258,
+      "height": 169,
+      "depth": 8.1,
+      "radius": 12
+    },
+    "bezel": 11,
+    "screen": {
+      "radius": 4
+    },
+    "sides": {
+      "dark": "#2b2d2a",
+      "light": "#9a9d96"
+    },
+    "finish": "glass",
+    "mount": "wall"
+  },
+  "render": "render.webp",
+  "display": {
+    "width": 2560,
+    "height": 1600
+  },
+  "abis": ["arm64-v8a"],
+  "specs": [
+    {
+      "label": "Size",
+      "value": "258 × 169 × 8.1 mm"
+    },
+    {
+      "label": "SoC",
+      "value": "Google Tensor G2"
+    },
+    {
+      "label": "Android",
+      "value": "13 at launch (2023), updated by Google"
+    },
+    {
+      "label": "Screen",
+      "value": "10.95-inch, 2560 × 1600"
+    },
+    {
+      "label": "Root",
+      "value": "Not needed"
+    }
+  ],
+  "panes": {},
+  "install": {
+    "how": "It installs as a normal app."
+  },
+  "ratings": {
+    "difficulty": {
+      "value": "easy",
+      "detail": "Install an app"
+    },
+    "reversible": {
+      "value": "yes",
+      "detail": "Uninstall the app"
+    },
+    "modifiesAndroid": {
+      "value": "no"
+    },
+    "root": {
+      "value": "none"
+    },
+    "opensDevice": {
+      "value": "no"
+    },
+    "vendorApps": {
+      "value": "kept"
+    },
+    "wipes": {
+      "value": "no"
+    },
+    "backup": {
+      "value": "none"
+    },
+    "updates": {
+      "value": "planned"
+    }
+  },
+  "unverified": true
+}

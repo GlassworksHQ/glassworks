@@ -4,11 +4,11 @@
 # stops reporting the call (the call is gone, or behind an SDK_INT check lint understands).
 # The key is per file and call, not per line, on purpose: lines move with every edit, and a listed call
 # that a file makes again is already known there. A new call, or a known one in a new file, fails.
+# AppManage.kt: DevicePolicyManager.reboot behind Platform.hasDeviceOwnerReboot (#198 Phase B).
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.Collection#removeIf
 dev/glassworks/camera/onvif/OnvifServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/camera/onvif/RtspServer.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/diagnostics/AndroidProbe.kt|android.os.Process#getStartElapsedRealtime
-dev/glassworks/frame/GenericAndroid.kt|android.content.pm.PackageManager#canRequestPackageInstalls
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64#getUrlEncoder
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64.Encoder#encodeToString
 dev/glassworks/manage/HaSignIn.kt|java.util.Base64.Encoder#withoutPadding
@@ -19,6 +19,15 @@ dev/glassworks/manage/ManageServer.kt|java.util.Collection#removeIf
 dev/glassworks/manage/Sessions.kt|java.util.Base64#getUrlEncoder
 dev/glassworks/manage/Sessions.kt|java.util.Base64.Encoder#encodeToString
 dev/glassworks/manage/Sessions.kt|java.util.Base64.Encoder#withoutPadding
+dev/glassworks/platform/LocalOnlyHotspot.kt|LocalOnlyHotspotCallback
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.SoftApConfiguration#getPassphrase
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.SoftApConfiguration#getSsid
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager#startLocalOnlyHotspot
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotCallback
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotCallback()
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotReservation#close
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotReservation#getSoftApConfiguration
+dev/glassworks/platform/LocalOnlyHotspot.kt|android.net.wifi.WifiManager.LocalOnlyHotspotReservation#getWifiConfiguration
 dev/glassworks/platform/Platform.kt|TransportInfo
 dev/glassworks/platform/Platform.kt|android.app.ActivityManager#getHistoricalProcessExitReasons
 dev/glassworks/platform/Platform.kt|android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode
@@ -29,18 +38,19 @@ dev/glassworks/platform/Platform.kt|android.content.Context#registerReceiver
 dev/glassworks/platform/Platform.kt|android.content.Intent#getParcelableExtra
 dev/glassworks/platform/Platform.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
 dev/glassworks/platform/Platform.kt|android.net.NetworkCapabilities#getTransportInfo
+dev/glassworks/platform/Platform.kt|android.os.Process#getStartElapsedRealtime
 dev/glassworks/secrets/SecretPrefs.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getDecoder
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getEncoder
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64.Decoder#decode
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64.Encoder#encodeToString
+dev/glassworks/update/SilentUpdates.kt|android.content.pm.PackageManager#canRequestPackageInstalls
 dev/glassworks/web/Http.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 sh/edm/s1kiosk/KioskService.kt|android.app.Notification.Builder()
 sh/edm/s1kiosk/KioskService.kt|android.app.NotificationChannel#setShowBadge
 sh/edm/s1kiosk/KioskService.kt|android.app.NotificationChannel()
 sh/edm/s1kiosk/KioskService.kt|android.app.NotificationManager#createNotificationChannel
 sh/edm/s1kiosk/KioskService.kt|android.content.Context#startForegroundService
-sh/edm/s1kiosk/MainActivity.kt|android.os.Process#getStartElapsedRealtime
 sh/edm/s1kiosk/MainActivity.kt|android.view.Window#getInsetsController
 sh/edm/s1kiosk/MainActivity.kt|android.view.Window#setDecorFitsSystemWindows
 sh/edm/s1kiosk/MainActivity.kt|android.view.WindowInsets.Type#navigationBars
@@ -59,9 +69,7 @@ sh/edm/s1kiosk/auth/OAuth.kt|java.util.Base64.Encoder#withoutPadding
 sh/edm/s1kiosk/base/LocalServiceLink.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/base/UartBaseLink.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/frame/AqaraCloud.kt|java.lang.Process#waitFor
-# The two AppManage.kt lines come with #364 (the #23 stack, open on 2026-11-16): keep them until it merges.
 sh/edm/s1kiosk/manage/AppManage.kt|android.app.admin.DevicePolicyManager#reboot
-sh/edm/s1kiosk/manage/AppManage.kt|android.os.Process#getStartElapsedRealtime
 sh/edm/s1kiosk/radio/RadioController.kt|java.lang.Process#waitFor
 sh/edm/s1kiosk/radio/ui/RadioSectionView.kt|android.view.View#setImportantForAutofill
 sh/edm/s1kiosk/sendspin/PrefsSsStore.kt|java.util.Base64#getUrlDecoder
@@ -86,5 +94,3 @@ sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.PackageInfo#getLongVer
 sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.PackageInfo#signingInfo
 sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.PackageInstaller.SessionParams#setRequireUserAction
 sh/edm/s1kiosk/update/UpdateManager.kt|android.content.pm.SigningInfo#getApkContentsSigners
-sh/edm/s1kiosk/update/UpdateManager.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
-sh/edm/s1kiosk/update/UpdateManager.kt|java.net.URLConnection#getContentLengthLong

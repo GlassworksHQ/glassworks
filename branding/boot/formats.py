@@ -133,13 +133,28 @@ def trim(frame):
     return frame.crop((x0, y0, x1, y1)), f"{x1 - x0}x{y1 - y0}+{x0}+{y0}"
 
 
+def to_panel(target, img):
+    """An upright frame as the panel's framebuffer holds it (Target.rotate, counter-clockwise)."""
+    if not target.rotate:
+        return img
+    return img.transpose(Image.Transpose.ROTATE_90 if target.rotate == 90 else Image.Transpose.ROTATE_270)
+
+
+def upright(target, img):
+    """A frame from the panel's framebuffer, turned back the way people see it."""
+    if not target.rotate:
+        return img
+    return img.transpose(Image.Transpose.ROTATE_270 if target.rotate == 90 else Image.Transpose.ROTATE_90)
+
+
 def desc_txt(target):
     """part0 plays once and finishes even if boot completes. The loop is a count-1 'p' part named
     LOOP_REPEATS times, so its frames are decoded as they play and never held as textures (a
     count-0 part would keep all 216 frames as GPU textures). part2, the loop's first
     frame, holds after that."""
     bg = "#%02x%02x%02x" % BG
-    lines = [f"{target.width} {target.height} {FPS}", f"c 1 0 part0 {bg}"]
+    w, h = target.panel
+    lines = [f"{w} {h} {FPS}", f"c 1 0 part0 {bg}"]
     lines += [f"p 1 0 part1 {bg}"] * LOOP_REPEATS
     lines += [f"p 0 0 part2 {bg}"]
     return "\n".join(lines) + "\n"
@@ -173,6 +188,7 @@ class AnimationZip:
         self._add(part + "/", b"", is_dir=True)
 
     def frame(self, img):
+        img = to_panel(self.target, img)
         if self.target.trim:
             img, rect = trim(img)
             self.rects.append(rect)
@@ -254,7 +270,8 @@ def build(target, out, render, n_intro, n_loop, splash_name):
     # inside `out`, so on its filesystem even when `out` is a mount or a symlink: each file is
     # published with an atomic os.replace, and only `out` needs to be writable
     stage = tempfile.mkdtemp(prefix=".boot-build-", dir=out)
-    print(f"{target.name}: {target.width}x{target.height}, "
+    turned = f", played turned {target.rotate} degrees in a {target.panel[0]}x{target.panel[1]} panel" if target.rotate else ""
+    print(f"{target.name}: {target.width}x{target.height}{turned}, "
           f"{'trimmed' if target.trim else 'full'} frames, splash {target.splash or 'none'}", flush=True)
     print(f"rendering {n_intro}+{n_loop} frames ...", flush=True)
     # One frame at a time: a frame is rendered, compressed into the zip and shrunk for the preview,
@@ -314,9 +331,11 @@ def build(target, out, render, n_intro, n_loop, splash_name):
 TRIM_RE = re.compile(r"^(\d+)x(\d+)\+(\d+)\+(\d+)$")
 
 
-def frames_on_screen(target, z, part):
+def frames_on_screen(target, z, part, turn_upright=True):
     """A part's frames as Android draws them: each trimmed PNG placed at its rect, BG around it;
-    without trim.txt, each frame at full size."""
+    without trim.txt, each frame at full size. In the panel's framebuffer, turned back upright
+    unless turn_upright is False."""
+    pw, ph = target.panel
     names = sorted(n for n in z.namelist() if n.startswith(part + "/") and n.endswith(".png"))
     if target.trim:
         rects = z.read(part + "/trim.txt").decode().split()
@@ -325,18 +344,18 @@ def frames_on_screen(target, z, part):
     else:
         if part + "/trim.txt" in z.namelist():
             raise ValueError(f"{part}/trim.txt in a zip for a player that doesn't read it")
-        rects = [f"{target.width}x{target.height}+0+0"] * len(names)
+        rects = [f"{pw}x{ph}+0+0"] * len(names)
     for n, r in zip(names, rects):
         m = TRIM_RE.match(r)
         if not m:
             raise ValueError(f"{part}/trim.txt: bad line {r!r}")
         w, h, x, y = map(int, m.groups())
         im = Image.open(io.BytesIO(z.read(n))).convert("RGB")
-        if im.size != (w, h) or x + w > target.width or y + h > target.height:
+        if im.size != (w, h) or x + w > pw or y + h > ph:
             raise ValueError(f"{n}: {im.size} doesn't match trim {r}")
-        full = Image.new("RGB", target.screen, BG)
+        full = Image.new("RGB", target.panel, BG)
         full.paste(im, (x, y))
-        yield n, full
+        yield n, (upright(target, full) if turn_upright else full)
 
 
 def validate(target, out):

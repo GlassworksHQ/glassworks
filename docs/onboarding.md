@@ -192,6 +192,9 @@ organization". `adb install -r` updates keep working.
 
 ### From the web installer: Improv Serial + setup channel (over adb) ✅
 
+The same setup channel also runs over the network, from the panel's own page at `http://<panel>:8099/setup`,
+paired with a code the panel shows: see [Set up over the network](manage.md#set-up-over-the-network) (#34).
+
 After installing the app, the web installer (kiln/, Tango over WebUSB) does the rest of onboarding
 from the computer through two byte streams it opens with adb's `localabstract:<name>` service. Both
 are abstract Unix sockets in the app, started by `KioskService` (`AdbSocketServer`, in the
@@ -242,7 +245,7 @@ line, both ways:
   send `answered` restarts the radio on a same-mode request). Unknown optional fields are left out.
 - `ha.set_url` (first name `set_ha`, which still works) with `url` (http/https only): applied on the main thread exactly as the `url` intent extra
   (dashboard URL setting saved, then the dashboard reloads, or the process restarts when the
-  secure-context hosts change, after the reply). The panel's setup screen moves on by itself.
+  secure-context hosts or the dashboard's origin (scheme, host or port) change, after the reply). The panel's setup screen moves on by itself.
 - `radio.set_mode` (first name `set_radio`) with `mode`: through `RadioController.request`, like the
   radio card on the panel's Panes step. Only the ids in `radio.options` (the radio step's options, `RadioStep.OPTIONS`)
   are accepted. Any other id, also a `RadioMode` id the step doesn't offer, is `ok:false` with
@@ -480,7 +483,8 @@ on the way:
 to violet for "on", green/amber/rose for status only). Left: the Glassworks mark, the four steps (a
 green dot when done, sky to violet for the current one, a dashed ring for the rest) and the stack,
 whose plates set one per step (`ui/StackView.kt`). Right: a card for the current step.
-Laid out for 960×480 dp.
+Laid out for 960×480 dp. On a screen taller than wide (`onMeasure`, #415) it stacks into one column: the
+rail above the card, without the stack art, and the QR code under the card's text at full size.
 
 The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Add it, Sign
 in), **Panes** (Choose, then each pane's own steps while that pane is on), Done. A group shows its rows
@@ -549,7 +553,9 @@ in."), with the way to change it second ("Use another network", "Add it by hand"
 that already works (the desk panel: Wi-Fi, ESPHome connection from HA, a saved URL, a cookie
 session without a refresh token):
 - offline for 30 s (boot grace; a short Wi-Fi dropout doesn't trigger it), or offline at all on a panel
-  that was never set up (no grace there: a fresh panel goes straight to the Wi-Fi step);
+  that was never set up (no grace there: a fresh panel goes straight to the Wi-Fi step). On a screen
+  without touch (the Mirror), no grace either unless Wi-Fi is joining or has a network to join: the
+  loading screen's offline text would point at a button nobody can press (#448);
 - online but HA isn't known at all (no saved URL, nothing discovered);
 - HA never added the panel: no HA client connected within 2 min of startup *and* no `ha_seen`, no
   API key, not skipped;

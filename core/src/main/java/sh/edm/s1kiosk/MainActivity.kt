@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.os.Bundle
@@ -27,6 +28,8 @@ import dev.glassworks.pane.intentExtras
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
+import dev.glassworks.frame.Input
+import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
 import sh.edm.s1kiosk.dashboard.DashboardOptions
@@ -165,7 +168,11 @@ class MainActivity : Activity() {
         prefs = KioskPrefs(this)
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
+        intent?.let { screenExtras(it, runtime.app::trustsExtras) }
         applyIntent(intent, fromNewIntent = false)
+        // The frame's orientation. The S1's manifest already asks for landscape: no change there.
+        val orientation = glassworks.frame.orientation
+        screenOrientation(orientation).let { if (requestedOrientation != it) requestedOrientation = it }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // 8 bits per channel: the dithered backdrop/voice glows would band again on an RGB565 surface.
@@ -176,10 +183,15 @@ class MainActivity : Activity() {
             }
         }
 
-        // Bake the dithered backdrop now, before the first frame (the overlays fill this landscape,
-        // full-screen window); until it is ready the loading screen draws 8-bit gradients.
+        // Bake the dithered backdrop now, before the first frame (the overlays fill this full-screen window, in the
+        // frame's orientation); until it is ready the loading screen draws 8-bit gradients.
         val real = android.graphics.Point().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealSize(it) }
-        Backdrop.prewarm(maxOf(real.x, real.y), minOf(real.x, real.y))
+        val (long, short) = maxOf(real.x, real.y) to minOf(real.x, real.y)
+        when (orientation) {
+            Orientation.LANDSCAPE -> Backdrop.prewarm(long, short)
+            Orientation.PORTRAIT -> Backdrop.prewarm(short, long)
+            Orientation.ANY -> Backdrop.prewarm(real.x, real.y)
+        }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
@@ -313,6 +325,9 @@ class MainActivity : Activity() {
 
     // ---- first-boot setup screen (docs/onboarding.md step 4; rules in setup/SetupState.kt)
 
+    /** When this activity was made: the app's start where Android 6 can't say it (#198). */
+    private val createdAt = SystemClock.elapsedRealtime()
+
     private fun setupInputs(): SetupInputs {
         val w = wifiStatus.snapshot()
         val now = SystemClock.elapsedRealtime()
@@ -327,7 +342,7 @@ class MainActivity : Activity() {
             apiKeySet = prefs.apiEncryption,
             haSkipped = prefs.haSetupSkipped,
             haHelloThisProcess = SetupSignals.haHello,
-            uptimeMs = now - android.os.Process.getStartElapsedRealtime(),
+            uptimeMs = now - (Platform.processStartElapsedMs() ?: createdAt),
             signedIn = HaAuth.signedIn,
             onAuthPage = FrontendUrls.isAuthorizePage(currentUrl, prefs.haBase),
             signedOut = signedOutHere,
@@ -338,6 +353,9 @@ class MainActivity : Activity() {
             dashboardLoaded = currentUrl.let { u -> u != null && FrontendUrls.sameOrigin(u, prefs.haBase) && !FrontendUrls.isAuthorizePage(u, prefs.haBase) },
             improv = ImprovController.setupFacts,
             installer = ImprovController.installerWifi,
+            input = setupOverlay.input,
+            // Read only where it counts (a frame without touch, offline): the S1 makes no extra Wi-Fi calls.
+            joinExpected = !w.online && setupOverlay.input == Input.NONE && OfflineText.expectsJoin(offlineFacts()),
             neverSetUp = SetupState.neverSetUp(
                 haKnown = prefs.haBase != null, haSeen = prefs.haSeen || SetupSignals.haSubscribed,
                 apiKeySet = prefs.apiEncryption, haSkipped = prefs.haSetupSkipped, paneStepDone = steps.any { it.done },
@@ -492,11 +510,11 @@ class MainActivity : Activity() {
 
     /** A failed load without a network: "Connecting to Wi-Fi…" while a join is underway or expected. */
     private fun showOffline() {
-        val t = OfflineText.decide(offlineFacts(), ImprovController.BOOT_GRACE_MS)
+        val t = OfflineText.decide(offlineFacts(), ImprovController.BOOT_GRACE_MS, setupOverlay.input)
         offlineShown = true
         loadingOverlay.show(
             if (t.connecting) LoadingOverlay.State.Connecting(t.title, t.detail, host = false)
-            else LoadingOverlay.State.Offline(t.title, t.detail, OfflineText.SETUP_ACTION),
+            else LoadingOverlay.State.Offline(t.title, t.detail, t.action),
         )
     }
 
@@ -528,14 +546,24 @@ class MainActivity : Activity() {
         }
         val supplicant = runCatching { wm?.connectionInfo?.supplicantState?.name }.getOrNull()
         val detailed = runCatching { cm?.getNetworkInfo(android.net.ConnectivityManager.TYPE_WIFI)?.detailedState?.name }.getOrNull()
+        // A failed read is "can't tell", never "off" (#448: a Mirror with Wi-Fi on said "Wi-Fi is off").
+        val wifiState = runCatching { wm?.wifiState }
+        val wifiRead = wifiState.exceptionOrNull()?.toString() ?: "state ${wifiState.getOrNull()}"
+        if (wifiRead != lastWifiRead) {
+            lastWifiRead = wifiRead
+            Log.i(TAG, "Offline: Wi-Fi $wifiRead")
+        }
         return OfflineText.Facts(
-            wifiEnabled = runCatching { wm?.isWifiEnabled == true }.getOrDefault(false),
+            wifiEnabled = OfflineText.wifiEnabled(wifiState.getOrNull()),
             savedNetwork = saved,
             joining = OfflineText.joining(supplicant, detailed),
             wasOnlineBefore = prefs.wifiSeen || prefs.haSeen,
             offlineForMs = if (offlineSince == 0L) 0L else now - offlineSince,
         )
     }
+
+    /** The last Wi-Fi read [offlineFacts] logged: a line when it changes, not every tick. */
+    private var lastWifiRead: String? = null
 
     private fun isDeviceOwner(): Boolean = runCatching {
         getSystemService(android.app.admin.DevicePolicyManager::class.java).isDeviceOwnerApp(packageName)
@@ -611,8 +639,10 @@ class MainActivity : Activity() {
         Log.i(TAG, "Home Assistant at $url (dashboard setting: ${prefs.urlSetting})")
         refreshSetup()
         if (!prefs.isAutoUrl) return
-        if (prefs.secureHosts() != glassworks.engine.started?.secureHosts.orEmpty()) {
-            // The HA host must be in dom.securecontext.allowlist (mic), which Gecko reads at startup.
+        val started = glassworks.engine.started
+        if (prefs.engineStart() != KioskPrefs.engineStart(started?.secureHosts.orEmpty(), started?.dashboard)) {
+            // The HA host must be in dom.securecontext.allowlist (mic), which Gecko reads at startup, and the legacy
+            // engine holds every page to the dashboard's origin, which it takes once (#198).
             restartProcess()
             return
         }
@@ -634,6 +664,7 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        screenExtras(intent, runtime.app::trustsExtras)
         applyIntent(intent, fromNewIntent = true)
     }
 
@@ -641,9 +672,9 @@ class MainActivity : Activity() {
         intent ?: return
         var needsRestart = false
         intent.getStringExtra("url")?.takeIf { it.isNotBlank() }?.let {
-            val oldHosts = prefs.secureHosts()
+            val oldStart = prefs.engineStart()
             prefs.urlSetting = it // a URL, or "auto"
-            needsRestart = needsRestart || prefs.secureHosts() != oldHosts
+            needsRestart = needsRestart || prefs.engineStart() != oldStart // hosts, or the dashboard's origin (#198)
             if (fromNewIntent) loadDashboard()
         }
         intent.getStringExtra("ha_discovered")?.let { if (fromNewIntent) onHaFound(it) }
@@ -693,6 +724,7 @@ class MainActivity : Activity() {
             "off" -> glassworks.screen.sleep("intent")
             "on" -> glassworks.screen.wake("intent")
         }
+        glassworks.screen.applyTestHoldExtra(this, intent)
         if (intent.getBooleanExtra("remove_admin", false)) glassworks.screen.removeAdmin()
         // The kiosk settings menu: the notification, or `--ez kiosk_settings true` (also from a cold start).
         if (SettingsMenu.requested { k -> if (intent.hasExtra(k)) intent.getBooleanExtra(k, false) else null }) {
@@ -1084,6 +1116,24 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        /**
+         * Drops [intent]'s extras unless [trusted] (AppParts.trustsExtras), so an entry point other apps can use
+         * changes no setting (#23). Returns whether it dropped any. Public for tests.
+         */
+        fun screenExtras(intent: Intent, trusted: (Intent) -> Boolean): Boolean {
+            if (intent.extras == null || trusted(intent)) return false
+            Log.w("S1Kiosk", "ignored the extras of a start through ${intent.component?.shortClassName}: settings change only through adb")
+            intent.replaceExtras(null as Bundle?)
+            return true
+        }
+
+        /** The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]). Public for tests. */
+        fun screenOrientation(orientation: Orientation): Int = when (orientation) {
+            Orientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            Orientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            Orientation.ANY -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        }
+
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()
         private const val TAG = "S1Kiosk"

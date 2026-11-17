@@ -107,6 +107,12 @@ def states():
         add(cam, "streaming", {"friendly_name": f"Camera {profile}", "access_token": f"clarity-{cam.split('.')[1]}",
                                "entity_picture": f"/api/camera_proxy/{cam}?token=clarity-{cam.split('.')[1]}",
                                "frontend_stream_type": "hls", "supported_features": 2})
+    # Protocol 3 (#211): a thermostat for the more-info dialog's climate controls (tiers.json DIALOG).
+    # On no card, and added last, so the seeded states above are as before. HA's climate entity with a
+    # target temperature, turn on and off (ClimateEntityFeature 1, 128, 256), heating now.
+    add("climate.clarity_0", "heat", {"friendly_name": "Hall thermostat", "hvac_modes": ["off", "heat", "cool", "auto"],
+                                      "min_temp": 7, "max_temp": 35, "target_temp_step": 0.5, "current_temperature": 20.5,
+                                      "temperature": 21, "hvac_action": "heating", "supported_features": 385})
     return out
 
 
@@ -129,7 +135,7 @@ def config():
             "unit_system": {"length": "km", "accumulated_precipitation": "mm", "area": "m²", "mass": "g",
                             "pressure": "Pa", "temperature": "°C", "volume": "L", "wind_speed": "m/s"},
             "location_name": "Clarity", "time_zone": "UTC", "components": ["frontend", "lovelace", "history",
-                                                                         "sensor", "light", "switch", "binary_sensor",
+                                                                         "sensor", "light", "switch", "binary_sensor", "climate",
                                                                          # ha-hls-player plays only when HA has `stream`
                                                                          "camera", "stream"],
             "config_dir": "/config", "allowlist_external_dirs": [], "allowlist_external_urls": [],

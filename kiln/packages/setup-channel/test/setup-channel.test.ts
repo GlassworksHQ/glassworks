@@ -23,6 +23,9 @@ function fakeApp(): ByteStream & { sent: object[]; push(o: object): void } {
         self.sent.push(m);
         if (m.op === 'set_radio' && !state.radio.helper && m.mode !== 'off') { queueMicrotask(() => self.push({ id: m.id, ok: false, error: 'needs the root helper' })); continue; }
         if (m.op === 'set_ha') state.ha.url = m.url;
+        if (m.op === 'wifi.join' && state.online) { queueMicrotask(() => self.push({ id: m.id, ok: false, error: 'The panel is on a network already.' })); continue; }
+        if (m.op === 'wifi.scan') { queueMicrotask(() => self.push({ id: m.id, ok: true, state, networks: [{ ssid: 'Example-WiFi', rssi: -50, secure: true }] })); continue; }
+        if (m.op === 'set_online') { state.online = true; continue; }
         // reply split across two chunks, to exercise line reassembly
         const out = new TextEncoder().encode(`${JSON.stringify({ id: m.id, ok: true, state })}\n`);
         queueMicrotask(() => { cb(out.subarray(0, 7)); cb(out.subarray(7)); });
@@ -59,6 +62,16 @@ describe('setup channel', () => {
     expect(app.sent).toEqual([{ id: 1, op: 'radio.thread_join' }]);
     app.push({ event: 'state', state: { ...base, radio: { ...base.radio, mode: 'thread_router', threadJoin: { phase: 'joined', role: 'child' } } } });
     expect(c.state?.radio.threadJoin).toEqual({ phase: 'joined', role: 'child' });
+  });
+
+  it('wifi.scan answers with the networks; wifi.join sends the network and is refused while online', async () => {
+    const app = fakeApp();
+    const c = new SetupChannel(app);
+    expect(await c.scanWifi()).toEqual([{ ssid: 'Example-WiFi', rssi: -50, secure: true }]);
+    await c.joinWifi('Example-WiFi', 'correct horse');
+    expect(app.sent).toEqual([{ id: 1, op: 'wifi.scan' }, { id: 2, op: 'wifi.join', ssid: 'Example-WiFi', password: 'correct horse' }]);
+    await app.write(new TextEncoder().encode(`${JSON.stringify({ op: 'set_online' })}\n`));
+    await expect(c.joinWifi('Example-WiFi', 'correct horse')).rejects.toThrow(/on a network/);
   });
 
   it('validates addresses', () => {

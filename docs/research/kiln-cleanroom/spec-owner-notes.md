@@ -4,6 +4,8 @@ These notes quote the code being replaced, so the clean-room implementer must no
 [README.md](README.md)). They record how the spec owner checked that the vectors catch real changes.
 
 **Mutation checks** (2026-11-15, verified). Edit the old code in place, run the vectors, and restore the file each time.
+The edits target the code before the rewrite (`aeacaca0`). `src/protocol.ts` was removed in #372: the
+reset routine is now `warmReset64` in `src/routines.ts`, assembled from `src/routines.S`.
 
 | Edit (in the package directory) | `npx vitest run test/vectors.test.ts` |
 |---|---|

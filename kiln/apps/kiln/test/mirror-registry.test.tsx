@@ -2,9 +2,8 @@
 // The Mirror's sessions in Kiln's registry, as the S1's is: they outlive a trip to the picker, the
 // picker leads back to a running install, and LeaveGuard asks before the page is left mid-flash.
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { fakeApk } from '@glassworks/app-adb/fakes';
 import { GLASS_PANES, SYSTEM_BYTES, USERDATA_BYTES, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
-import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -56,7 +55,7 @@ async function midFlash() {
   const flash = new FlashSession({ images, imageUrl: 'https://proxy.test/system.img', requestFastboot: async () => fb, requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
   const kept = registry.keep(new MirrorActivity({ mirror, flash }, true));
   await flash.downloadImage();
-  await mirror.pickApk('kiosk.apk', fakeApk('sh.edm.s1kiosk'));
+  await mirror.pickApk('kiosk.apk', fakeMirrorApk());
   flash.toFastboot();
   await flash.connectFastboot();
   flash.understand(true);

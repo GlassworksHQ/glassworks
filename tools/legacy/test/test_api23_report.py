@@ -31,6 +31,8 @@ class Api23ReportTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = self.tmp.name
         report.ROOT = self.root
+        self.apps = report.APPS
+        report.APPS = [(":app", "apps/app", "legacy")]  # an app's legacy build: its own variant and report
         settings = []
         for i in range(10):
             self.module(f":pane-{i}", f"panes/p{i}", LIBRARY)
@@ -47,18 +49,22 @@ class Api23ReportTest(unittest.TestCase):
             issue(f"{src}/A.kt", 12, "Call requires API level 24 (current min is 23): `android.net.ConnectivityManager#registerDefaultNetworkCallback`"),
             issue(f"{src}/A.kt", 30, "Call requires API level 26, or core library desugaring (current min is 23): `java.util.Base64#getEncoder`"),
         ])
+        app = os.path.join(self.root, "apps/app/src/main/java/dev/glassworks/app")
+        self.lint("apps/app", [issue(f"{app}/App.kt", 7, "Call requires API level 24 (current min is 23): `android.os.Process#getStartElapsedRealtime`")],
+                  variant="legacy")
 
     def tearDown(self):
+        report.APPS = self.apps
         self.tmp.cleanup()
 
     def module(self, path, folder, build):
         os.makedirs(os.path.join(self.root, folder), exist_ok=True)
         write(os.path.join(self.root, folder, "build.gradle.kts"), build)
 
-    def lint(self, folder, issues):
+    def lint(self, folder, issues, variant="debug"):
         d = os.path.join(self.root, folder, "build", "reports")
         os.makedirs(d, exist_ok=True)
-        write(os.path.join(d, "lint-results-debug.xml"), '<?xml version="1.0"?><issues format="6">' + "".join(issues) + "</issues>")
+        write(os.path.join(d, f"lint-results-{variant}.xml"), '<?xml version="1.0"?><issues format="6">' + "".join(issues) + "</issues>")
 
     def run_main(self, *args):
         out, err = io.StringIO(), io.StringIO()
@@ -81,14 +87,16 @@ class Api23ReportTest(unittest.TestCase):
         write(p, "# comment\n" + "".join(l + "\n" for l in lines))
         return p
 
-    def test_reads_every_android_library_but_the_current_engine(self):
-        paths = [p for p, _ in report.modules()]
-        self.assertEqual([f":pane-{i}" for i in range(10)], paths)
+    def test_reads_every_android_library_but_the_current_engine_then_the_apps_legacy_builds(self):
+        self.assertEqual([(f":pane-{i}", "debug") for i in range(10)] + [(":app", "legacy")],
+                         [(p, v) for p, _, v in report.modules()])
+        self.assertEqual([":pane-0:lintDebug", ":app:lintLegacy"], [report.lint_task(":pane-0", "debug"), report.lint_task(":app", "legacy")])
 
     def test_findings_name_the_package_path_the_api_and_whether_desugaring_covers_it(self):
         found = report.findings(report.modules())
         self.assertEqual(
-            [("dev/glassworks/x/A.kt", 12, "android.net.ConnectivityManager#registerDefaultNetworkCallback", 24, False),
+            [("dev/glassworks/app/App.kt", 7, "android.os.Process#getStartElapsedRealtime", 24, False),
+             ("dev/glassworks/x/A.kt", 12, "android.net.ConnectivityManager#registerDefaultNetworkCallback", 24, False),
              ("dev/glassworks/x/A.kt", 30, "java.util.Base64#getEncoder", 26, True)],
             [(f["file"], f["line"], f["api"], f["level"], f["desugar"]) for f in found])
 
@@ -96,11 +104,13 @@ class Api23ReportTest(unittest.TestCase):
         code, _, err = self.run_main("--check", self.baseline())
         self.assertEqual(1, code)
         self.assertIn("dev/glassworks/x/A.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback", err)
+        self.assertIn("dev/glassworks/app/App.kt|android.os.Process#getStartElapsedRealtime", err, "the app's legacy build is checked too")
         self.assertNotIn("Base64", err, "a desugared call never fails the check")
 
     def test_check_passes_when_the_baseline_lists_it_wherever_the_line_is(self):
         code, _, err = self.run_main("--check", self.baseline(
             "dev/glassworks/x/A.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback",
+            "dev/glassworks/app/App.kt|android.os.Process#getStartElapsedRealtime",
             "dev/glassworks/x/Gone.kt|android.os.LocaleList#get"))
         self.assertEqual(0, code, err)
         self.assertIn("no longer found", err)
@@ -112,13 +122,20 @@ class Api23ReportTest(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertIn("no lint report for :pane-3", err)
 
+    def test_a_missing_legacy_report_of_an_app_fails_too(self):
+        os.remove(os.path.join(self.root, "apps/app/build/reports/lint-results-legacy.xml"))
+        code, _, err = self.run_main("--check", self.baseline())
+        self.assertEqual(1, code)
+        self.assertIn("no lint report for :app", err)
+
     def test_a_lint_error_fails_instead_of_passing(self):
         src = os.path.join(self.root, "panes/p2/src/main/java/dev/glassworks/y")
         write(os.path.join(self.root, "panes/p2/build/reports/lint-results-debug.xml"),
               '<?xml version="1.0"?><issues format="6"><issue id="LintError" message="Unexpected failure during lint analysis">'
               f'<location file="{src}/B.kt"/></issue></issues>')
         code, _, err = self.run_main("--check", self.baseline(
-            "dev/glassworks/x/A.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback"))
+            "dev/glassworks/x/A.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback",
+            "dev/glassworks/app/App.kt|android.os.Process#getStartElapsedRealtime"))
         self.assertEqual(1, code)
         self.assertIn("lint failed on :pane-2", err)
 
@@ -127,6 +144,7 @@ class Api23ReportTest(unittest.TestCase):
         self.assertEqual(0, code)
         self.assertIn("| `:pane-0` | 2 | 1 |", out)
         self.assertIn("| `:pane-1` | 0 | 0 |", out)
+        self.assertIn("| `:app` | 1 | 0 |", out)
 
 
 if __name__ == "__main__":

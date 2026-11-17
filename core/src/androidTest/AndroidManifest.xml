@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The conformance test's app: an Application that owns a runtime on a fake frame (ConformanceApp). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- What MainActivity asks for at start. The test grants them, as a frame's setup does. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <application android:name="sh.edm.s1kiosk.conformance.ConformanceApp">
+        <!-- The core's MainActivity on the fake frame and a blank engine (CoreConformanceTest, #198). -->
+        <activity
+            android:name="sh.edm.s1kiosk.MainActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation" />
+    </application>
+</manifest>

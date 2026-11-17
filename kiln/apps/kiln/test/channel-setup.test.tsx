@@ -6,7 +6,7 @@ import { NOT_PAIRED, SetupChannel, type SetupState } from '@glassworks/setup-cha
 import type { ByteStream } from 'improv-serial';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChannelSetup, type SetupSteps } from '../src/setup/channelSetup';
-import { HomeAssistant, Radio } from '../src/setup/steps';
+import { HomeAssistant, Radio, RadioNext } from '../src/setup/steps';
 import type { Setup } from '../src/wizard/state';
 
 afterEach(() => cleanup());
@@ -23,11 +23,14 @@ function lanPanel() {
   const st = structuredClone(panelState);
   const self = {
     paired: false,
+    /** The next write fails as a dropped connection would (no answer at all). */
+    failNext: false,
     asked: [] as string[],
     stream: {
       onData: (f: (c: Uint8Array) => void) => { cb = f; },
       close: async () => {},
       write: async (d: Uint8Array) => {
+        if (self.failNext) { self.failNext = false; throw new Error('the connection dropped'); }
         for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
           const m = JSON.parse(line);
           self.asked.push(m.op);
@@ -68,8 +71,8 @@ describe('the setup steps over the LAN', () => {
     expect(c.phase()).toMatchObject({ phase: 'ha', ha: { discovered: 'http://homeassistant.local:8123' } });
     await c.steps.saveHa('http://192.0.2.20:8123');
     expect(c.phase()).toMatchObject({ phase: 'ha', busy: false, error: NOT_PAIRED });
-    // as over USB, a refused change is tried once more on a fresh channel
-    expect(panel.asked).toEqual(['state', 'set_ha', 'state', 'set_ha']);
+    // a refusal is an answer: no second channel just to hear it again
+    expect(panel.asked).toEqual(['state', 'set_ha']);
     c.steps.close();
   });
 
@@ -83,6 +86,20 @@ describe('the setup steps over the LAN', () => {
     await c.steps.applyRadio('zigbee_tcp');
     expect(c.phase()).toMatchObject({ phase: 'radio-next', plan: { title: 'Use the radio in Home Assistant.' } });
     expect(panel.asked).toEqual(['state', 'set_ha', 'state', 'set_radio']);
+    c.steps.close();
+  });
+
+  it('a Thread router kept as it is, and already answered, sends nothing to the radio', async () => {
+    const panel = lanPanel();
+    panel.paired = true;
+    const c = controller(panel);
+    await c.steps.homeAssistant();
+    await c.steps.saveHa('');
+    (c.steps as unknown as { channel: SetupChannel }).channel.state!.radio = { ...panelState.radio, mode: 'thread_router', status: 'Running', answered: true };
+    expect(c.phase()).toMatchObject({ phase: 'radio' });
+    await c.steps.applyRadio('thread_router');
+    expect(panel.asked).not.toContain('set_radio');
+    expect(c.phase()).toMatchObject({ phase: 'radio-next' });
     c.steps.close();
   });
 
@@ -126,10 +143,42 @@ describe('the setup steps over the LAN', () => {
       },
       phase: () => phase, show: (st) => { phase = st; }, here: () => true, done: () => {}, unreachable: () => {}, app: async () => undefined,
     });
+    panel.paired = true;
     await steps.homeAssistant();
+    panel.failNext = true;
     await steps.saveHa('http://192.0.2.20:8123');
     expect(opened.map((o) => o.closed)).toEqual([true, false]);
+    expect(phase).toMatchObject({ phase: 'radio' });
     steps.close();
+  });
+
+  it('the next steps\' Finish waits while a button\'s work runs', () => {
+    const finished: string[] = [];
+    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => { finished.push('finish'); } };
+    const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [] };
+    const { rerender } = render(<RadioNext busy steps={steps} setup={{ phase: 'radio-next', plan }} />);
+    const finish = screen.getByRole('button', { name: 'Finish' });
+    expect(finish).toHaveProperty('disabled', true);
+    fireEvent.click(finish);
+    expect(finished).toEqual([]);
+    rerender(<RadioNext busy={false} steps={steps} setup={{ phase: 'radio-next', plan }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    expect(finished).toEqual(['finish']);
+  });
+
+  it('Copy works on the panel\'s plain-HTTP page, where there is no Clipboard API', async () => {
+    const copied: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    document.execCommand = ((cmd: string) => {
+      copied.push(`${cmd}:${document.querySelector('textarea')?.value ?? ''}`);
+      return true;
+    }) as typeof document.execCommand;
+    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} };
+    const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [{ title: 'Add the radio', body: '', kv: [['Serial path', 'socket://192.0.2.10:6638', true]] as [string, string, boolean][] }] };
+    render(<RadioNext busy={false} steps={steps} setup={{ phase: 'radio-next', plan }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await screen.findByRole('button', { name: 'Copied' });
+    expect(copied).toEqual(['copy:socket://192.0.2.10:6638']);
   });
 
   it('the step screens need only SetupSteps, not the wizard\'s session', () => {

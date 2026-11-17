@@ -30,7 +30,7 @@ class BootRestTest {
         assertEquals(x, AqaraS1Plus.BOOT_REST.left)
         assertEquals(y, AqaraS1Plus.BOOT_REST.top)
         // The launch window draws it too, in dp at the S1's density 1.5 (insets are truncated to px).
-        val xml = RepoFiles.inModule("src/main/res/drawable/launch_backdrop.xml").readText()
+        val xml = java.io.File(RepoFiles.s1App, "src/main/res/drawable/launch_backdrop.xml").readText() // the S1 app's; the generic app has its own (#23)
         val left = Regex("""android:left="([\d.]+)dp"""").find(xml)!!.groupValues[1].toFloat()
         val top = Regex("""android:top="([\d.]+)dp"""").find(xml)!!.groupValues[1].toFloat()
         assertEquals(x, (left * 1.5f).toInt())

@@ -4,13 +4,13 @@ import os
 import re
 
 
-# Where Gradle modules live, as RepoFiles.SEARCH (testing/kotlin): app/ before #21's split, the rest after it.
-MODULE_TOPS = ("app", "libs", "core", "pane-api", "engines", "panes", "frames")
+# Where Gradle modules live, as RepoFiles.SEARCH (testing/kotlin), by top folder.
+MODULE_TOPS = ("libs", "core", "pane-api", "engines", "panes", "frames")
 SKIP = {"build", ".gradle", ".kotlin", "node_modules", ".git", "test", "androidTest"}
 
 
 def main_sources(root):
-    """Every module's src/main/java and src/main/kotlin under [root], in either layout of #21."""
+    """Every module's src/main/java and src/main/kotlin under [root]."""
     found = []
     for top in MODULE_TOPS:
         for d, dirs, _ in os.walk(os.path.join(root, top)):
@@ -20,6 +20,21 @@ def main_sources(root):
                 dirs[:] = []
     assert found, f"no module sources under {root}"
     return found
+
+
+def supertypes(header):
+    """What a Kotlin class [header] (from its name to its body's brace) says it extends or implements: the text after
+    the primary constructor's parameters, so a parameter's type (`step: SetupStep`) isn't counted."""
+    h = header
+    paren, colon = h.find("("), h.find(":")
+    if paren != -1 and (colon == -1 or paren < colon):
+        depth = 0
+        for i in range(paren, len(h)):
+            depth += {"(": 1, ")": -1}.get(h[i], 0)
+            if depth == 0:
+                h = h[i + 1:]
+                break
+    return h.split(":", 1)[1] if ":" in h else ""
 
 
 def pane_ids_in(src):
@@ -34,13 +49,18 @@ def pane_ids_in(src):
                     texts.append(fh.read())
     consts = {}  # class name -> its companion's ID
     for t in texts:
-        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n\S[^\n]*\bclass \w|\Z)', t, re.S):
+        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n(?=\S)[^\n]*\bclass \w|\Z)', t, re.S):
             m = re.search(r'const val ID = "([a-z0-9-]+)"', body)
             if m:
                 consts[cls] = m.group(1)
     ids = set()
     for t in texts:
-        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n\S[^\n]*\bclass \w|\Z)', t, re.S):
+        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n(?=\S)[^\n]*\bclass \w|\Z)', t, re.S):
+            # A setup step's id names the step, not a pane (#422's SilentUpdatesStep); a pane's own step
+            # reuses the id its pane declares anyway (CameraSetupStep). The header ends at the brace that ends
+            # its line, so a constructor default such as `= {}` doesn't cut it short.
+            if re.search(r'\bSetupStep\b', supertypes(re.split(r'\{[ \t]*\n', body, maxsplit=1)[0])):
+                continue
             for ref in re.findall(r'override val id = ([^\n]+)', body):
                 ref = ref.split("//")[0].strip()
                 lit = re.fullmatch(r'"([a-z0-9-]+)"', ref)

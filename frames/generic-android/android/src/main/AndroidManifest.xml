@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Glassworks for generic Android (#23). The shell's components are the core's (package sh.edm.s1kiosk, kept
+     for the S1); this app names them in full. S1 Kiosk's manifest (frames/aqara-s1-plus/android) has the
+     reasons for each permission. Left out here: the camera (no camera pane), Aqara's packages and the S1's
+     direct-boot splash. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Updates through PackageInstaller (#277): silent on Android 12+ once "Install unknown apps" is allowed. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <!-- A privileged system app's (#198). Android grants these only to an app in /system/priv-app, as Kiln
+         flashes the legacy build onto the lululemon Mirror: updates without a tap (INSTALL_PACKAGES, used now),
+         a restart and secure settings (REBOOT, WRITE_SECURE_SETTINGS: for the Mirror's frame, not used yet).
+         An update gets only the ones its /system copy asked for, so they are here from the first build on
+         (frames/lululemon-mirror/research/privileged-app.md). Elsewhere Android doesn't grant them, and the
+         app does without. -->
+    <uses-permission android:name="android.permission.INSTALL_PACKAGES" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.REBOOT" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <!-- Improv Wi-Fi over BLE. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.proximity" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.light" android:required="false" />
+
+    <application
+        android:name="dev.glassworks.generic.GenericApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Kiosk"
+        android:usesCleartextTraffic="true"
+        android:hardwareAccelerated="true">
+
+        <!-- No screenOrientation: the frame gives it at start (GenericAndroid.orientation): the device's rotation,
+             landscape on a Pixel Tablet. A turn is a config change, so the page stays (OrientationTest).
+             Its intent extras change settings (the dashboard's address, the API key, remote debugging), and
+             on a device with other apps any of them could send some. So starting it directly takes
+             WRITE_SECURE_SETTINGS, which adb's shell holds and normal apps can't get; the app's own starts
+             need none. Launchers and the home screen start it through the alias below, whose extras the
+             app drops (AppParts.trustsExtras). -->
+        <activity
+            android:name="sh.edm.s1kiosk.MainActivity"
+            android:exported="true"
+            android:permission="android.permission.WRITE_SECURE_SETTINGS"
+            android:launchMode="singleTask"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation"
+            android:windowSoftInputMode="adjustResize"
+            android:stateNotNeeded="true" />
+
+        <!-- The launcher's and home screen's way in: no permission, no settings from extras. -->
+        <activity-alias
+            android:name="dev.glassworks.generic.Launcher"
+            android:targetActivity="sh.edm.s1kiosk.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Can be picked as the home app, for a device that is only a panel. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+
+        <service
+            android:name="sh.edm.s1kiosk.KioskService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|location|connectedDevice" />
+
+        <receiver
+            android:name="sh.edm.s1kiosk.AdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name="sh.edm.s1kiosk.improv.ImprovActivity"
+            android:exported="true"
+            android:permission="android.permission.WRITE_SECURE_SETTINGS"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+
+        <receiver
+            android:name="sh.edm.s1kiosk.update.UpdateInstallReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name="sh.edm.s1kiosk.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

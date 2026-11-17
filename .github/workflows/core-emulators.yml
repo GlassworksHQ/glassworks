@@ -1,0 +1,122 @@
+# The Glassworks core on Android emulators at API 23, 26, 29 and 34 (#23, #198): the conformance test
+# (core/src/androidTest, CoreConformanceTest) boots the core with a fake frame, a fake engine and one pane,
+# and checks what any frame relies on: the app owns the runtime, a pane the frame can't run is hidden, secrets
+# survive in Android's Keystore, the screen follows the frame's sensors, and the ESPHome device serves Home
+# Assistant with the frame's panes. API 23 is the legacy build's floor (#198): that job builds the test APK at
+# minSdk 23 with core library desugaring, as the legacy build runs the core (tools/legacy/api23-emulator.gradle, a
+# Gradle init script). pr.yml's libs-api23 runs the libraries there.
+#
+# Cost: four jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a
+# minute of tests). Only when Android code or this file changes, on pull requests and on pushes to main. No secrets; GeckoView isn't in it (the
+# runners' emulators are x86_64, and no frame builds an x86 GeckoView), so the engine is a fake.
+name: Core on emulators
+
+on:
+  pull_request:
+    paths:
+      - 'core/**'
+      - 'pane-api/**'
+      - 'libs/**'
+      - 'panes/**'
+      - 'engines/**'
+      - 'frames/*/android/**'
+      - 'frames/*/panes/**'
+      - 'testing/**'
+      - 'build-logic/**'
+      - '*.gradle.kts'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'tools/legacy/api23-emulator.gradle'
+      - '.github/workflows/core-emulators.yml'
+  push:
+    branches: [main]
+    # The same paths as pull_request's.
+    paths:
+      - 'core/**'
+      - 'pane-api/**'
+      - 'libs/**'
+      - 'panes/**'
+      - 'engines/**'
+      - 'frames/*/android/**'
+      - 'frames/*/panes/**'
+      - 'testing/**'
+      - 'build-logic/**'
+      - '*.gradle.kts'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'tools/legacy/api23-emulator.gradle'
+      - '.github/workflows/core-emulators.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-emulators-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 23
+            target: default
+            init: --init-script tools/legacy/api23-emulator.gradle
+          - api: 26
+            target: default
+          - api: 29
+            target: default
+          - api: 34
+            target: google_apis
+            # swiftshader_indirect crashes this image's emulator (qemu SIGSEGV) when an app window draws.
+            # Probe on 2026-11-17: 11 of 12 copies passed with it, 7 of 7 with swangle_indirect.
+            gpu: swangle_indirect
+    name: conformance (API ${{ matrix.api }})
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      - name: Build the conformance test APK
+        run: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:assembleDebugAndroidTest
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: The conformance test on an API ${{ matrix.api }} emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.target }}
+          disable-animations: true
+          emulator-options: -no-window -gpu ${{ matrix.gpu || 'swiftshader_indirect' }} -no-snapshot -noaudio -no-boot-anim
+          script: ./gradlew --no-daemon ${{ matrix.init }} :glassworks-core:connectedDebugAndroidTest
+
+      - name: Test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: core-conformance-api${{ matrix.api }}
+          path: core/build/reports/androidTests/connected/
+          retention-days: 7
+          if-no-files-found: ignore

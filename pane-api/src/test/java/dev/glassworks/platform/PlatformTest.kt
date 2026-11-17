@@ -44,7 +44,29 @@ class PlatformTest {
         Triple("canInstallWithoutUserAction", 31) { it.canInstallWithoutUserAction },
         Triple("hasApplicationExitInfo", 30) { it.hasApplicationExitInfo },
         Triple("foregroundServiceTypesNeedTheirPermission", 34) { it.foregroundServiceTypesNeedTheirPermission },
+        Triple("hasSoftApConfiguration", 30) { it.hasSoftApConfiguration },
     )
+
+    @Test
+    fun `the target a silent self-update needs, per Android`() {
+        val docs = mapOf(31 to 29, 32 to 29, 33 to 30, 34 to 31, 35 to 33, 36 to 34, 37 to 35)
+        for (level in 21..30) assertEquals("API $level", null, PlatformApi(level).silentInstallMinTarget)
+        docs.forEach { (level, target) -> assertEquals("API $level", target, PlatformApi(level).silentInstallMinTarget) }
+    }
+
+    @Test
+    fun `the setup hotspot - hidden API below Android 8, then local-only, and the permission each needs`() {
+        for (level in 21..40) {
+            assertEquals("kind at API $level", if (level >= 26) HotspotKind.LOCAL_ONLY else HotspotKind.HIDDEN_AP, PlatformApi(level).hotspotKind)
+            val permission = when {
+                level >= 33 -> android.Manifest.permission.NEARBY_WIFI_DEVICES
+                level >= 26 -> android.Manifest.permission.ACCESS_FINE_LOCATION
+                else -> null
+            }
+            assertEquals("permission at API $level", permission, PlatformApi(level).hotspotPermission)
+            assertEquals("location on at API $level", level in 26..32, PlatformApi(level).hotspotNeedsLocationOn)
+        }
+    }
 
     @Test
     fun `each query flips at its boundary and nowhere else`() {
@@ -105,5 +127,15 @@ class PlatformApi23Test {
         Platform.registerDefaultNetworkCallback(cm, cb)
         assertTrue(shadowOf(cm).networkCallbacks.contains(cb))
         cm.unregisterNetworkCallback(cb)
+    }
+
+    /** #198: Android 6 has no Process.getStartElapsedRealtime; the start comes from /proc/self/stat (ticks since boot). */
+    @Test
+    fun `the process start comes from proc self stat on Android 6`() {
+        val stat = "4242 (sh.edm.s1kiosk (x)) S 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 4200 20 21"
+        assertEquals("4200 ticks at 100 Hz", 42_000L, Platform.processStartElapsedMs({ stat }, { 100L }))
+        assertEquals("unknown, not a guess", null, Platform.processStartElapsedMs({ null }, { 100L }))
+        assertEquals(null, Platform.processStartElapsedMs({ "4242 (short) S 1 2" }, { 100L }))
+        assertEquals("no tick rate", null, Platform.processStartElapsedMs({ stat }, { 0L }))
     }
 }

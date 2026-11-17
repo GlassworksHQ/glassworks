@@ -63,7 +63,8 @@ install on a real panel. Until it has, s1.edm.sh keeps serving the page in
 | `/aqara-s1-plus/undo/connect`, `/undo/restore`, `/undo/done` | Undo's recovery mode, writing, and done | go to `/aqara-s1-plus/undo` |
 | `/aqara-s1-plus/resume` | An alias of `/set-up` (s1.edm.sh's `#/resume`) | as `/set-up`: connects to an installed panel; the address then becomes `/aqara-s1-plus/set-up` |
 | `/lululemon-mirror` | **Test only.** With `?apk=local`: Glassworks onto a Mirror over fastboot (#40). One button downloads the Glass Panes `system.img` through Refract, Kiln's release proxy (#347; `IMAGE_PROXY`, `NEXT_PUBLIC_KILN_PROXY` at build time; Range resume), with download-and-select as the fallback when the proxy fails. Kiln checks it as it reads it, builds the images in a worker on OPFS (`src/mirror/flash.ts`, `images.ts`), flashes them and finishes over adb with this browser's key. Its way back writes the plain Glass Panes images. With `&mode=app`: S1 Kiosk alone over adb onto a Mirror already on the community image, with undo. The APK is a file picked on this computer. Without `?apk=local`, the page says the Mirror doesn't install from Kiln yet. The picker shows the Mirror as a disabled card, not as installable (it is `planned`) | shows the test page or the "not yet" page |
-| `/api/release-asset` | Streams an S1 Kiosk release APK from GitHub Releases (no CORS there) | — |
+| `/api/release/<frame>?tag=…&name=…` | Streams a frame's release APK from this repo's GitHub Releases (no CORS there). Only allowlisted frames, tags and names pass (`RELEASES` in `src/app/api/release/[frame]/route.ts`): today `aqara-s1-plus`, `vX.Y.Z` or `aqara-s1-plus-vX.Y.Z` with `s1-kiosk-X.Y.Z.apk`. An unknown frame gets 404, any other tag or name 400, both before GitHub is asked | — |
+| `/api/release-asset` | The S1's address before #28: a 308 redirect to `/api/release/aqara-s1-plus` with the same query | — |
 
 The session is the truth and the address bar follows it (`src/wizard/routes.ts`, `useRouteSync.ts`).
 Moving forward through set-up adds a history entry, so Back (and the rail's set-up steps) go back to
@@ -117,7 +118,7 @@ From the repo root, the npm workspace root:
 
 ```sh
 npm install
-node kiln/scripts/stage-assets.mjs --remote --out apps/kiln/public/assets   # the pinned blobs, as on Vercel
+node kiln/scripts/stage-assets.mjs --remote --out apps/kiln/public/assets --release-route /api/release/aqara-s1-plus   # the pinned blobs, as on Vercel
 npm run dev -w @glassworks/kiln-app       # http://localhost:5174
 npm test -w @glassworks/kiln-app          # also part of npm test
 npm run build -w @glassworks/kiln-app     # next build
@@ -136,6 +137,41 @@ clicks through a simulated Mirror (`src/mirror/demo.ts`); `pick`, `pick-wrong` (
 (another app's defaults to clear first), `done`, `done-unconfirmed`, `undo-done`, `undo-pending` (undo again to
 finish) and `error` jump to one screen. They work in `next dev`,
 or in a build made with `NEXT_PUBLIC_KILN_DEMO=1`.
+
+## The panel's setup page
+
+The panel serves a small build of Kiln's setup steps at `http://<panel>:8099/setup` (#34), so a panel
+already on Wi-Fi can be set up from a laptop with no cable, and one on no network from a phone on the
+panel's own setup Wi-Fi (#197): then the page starts with the Wi-Fi step. The steps are the wizard's own
+(`src/setup/`: `ChannelSetup` and `steps.tsx`); the page adds pairing with the code on the panel's
+screen (`src/lan/`). It runs the setup channel over the panel's `/setup/channel` WebSocket.
+
+```sh
+npm run build:lan -w @glassworks/kiln-app          # writes core/src/main/assets/setup (committed)
+node kiln/apps/kiln/lan/fake-panel.mjs [--closed] [--offline]  # http://localhost:8099/setup against a fake panel; the code is 482913
+```
+
+CI rebuilds the page and fails when the committed files differ, so commit the build with its sources.
+The bundle carries React's licence headers, and THIRD-PARTY-NOTICES.md lists what it bundles.
+
+How it behaves:
+
+- Before pairing, the page asks the panel to show a code and checks the one typed (`/setup/pair`). The
+  panel's limits apply: 5 wrong tries kill a code, 10 in 15 minutes lock code entry.
+- A pairing lasts until Done, 30 minutes without a change, or 2 hours. Reading the state doesn't count
+  as a change. When the panel ends it, the page asks for a new code and carries on at the same step.
+- A pairing counts only from the address that paired. A browser whose source address changes (for
+  example a `.local` name that resolves to IPv4 one moment and IPv6 the next) has to pair again.
+- Wi-Fi (`wifi.scan`, `wifi.join`) comes first only when the panel says it is on no network
+  (`state.online` false). The same card as the wizard's Wi-Fi step (`Wifi` in `steps.tsx`). The panel
+  replies, then joins, which closes its setup Wi-Fi, so the page stays on "joining" and the panel's screen
+  gives the outcome. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
+  as plain HTTP.
+- Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
+  network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.
+- What is left: the panel has no write timeout on the WebSocket. A browser that stops reading while the
+  panel writes holds one of the panel's web workers until the OS gives up on the TCP send (minutes).
+  A newer paired browser or Done ends such a channel at once.
 
 ## Vercel
 

@@ -3,30 +3,32 @@
 // own --dry-run is the same code; the last tests run it from its arguments.
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
+import { zipEntry } from '@glassworks/app-adb';
+import { adbFingerprint } from '@glassworks/lululemon-mirror-installer';
 import { clean, debugfs, debugfsCat, fsck, haveTools } from '@glassworks/ext4/testing';
-import { FakeMirror } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FakeMirror, fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb } from '../src/adb';
 import { UsageError, cli } from '../src/cli';
 import { DRY_USERDATA, dryDevices, dryImage } from '../src/dry';
 import { runInstall, runWayBack } from '../src/run';
 
-const KEY = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= root@host';
-const APK = fakeApk('sh.edm.s1kiosk', { minSdk: 23, libs: { 'arm64-v8a': { 'libgecko.so': new Uint8Array(5000).fill(7) } } });
+const KEY = fakeAdbKey(9, 'root@host');
+const APK = fakeMirrorApk({ libs: { 'arm64-v8a': { 'libgecko.so': new Uint8Array(5000).fill(7) } } });
 
 let work: string;
 beforeEach(() => { work = mkdtempSync(join(tmpdir(), 'gw-mirror-test-')); });
 afterEach(() => rmSync(work, { recursive: true, force: true }));
 
-async function install(o: { hideFails?: boolean; confirm?: (q: string) => boolean; stockAtStart?: boolean } = {}) {
+async function install(o: { hideFails?: boolean; confirm?: (q: string) => boolean; stockAtStart?: boolean; adbKey?: string } = {}) {
   const img = await dryImage(work, APK.length);
   const lines: string[] = [];
   const d = dryDevices(img.bytes, (l) => lines.push(l), o);
   const asked: string[] = [];
   if (o.confirm) d.deps.confirm = async (q) => { asked.push(q); return o.confirm!(q); };
-  const run = runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, haUrl: 'http://homeassistant.local:8123', work }, d.deps);
+  const run = runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: o.adbKey ?? KEY, haUrl: 'http://homeassistant.local:8123', work }, d.deps);
   return { d, img, lines, asked, run };
 }
 
@@ -48,8 +50,31 @@ describe('the headless install on a fake Mirror', () => {
     writeFileSync(sys, d.lk.parts.get('system')!);
     writeFileSync(ud, d.lk.parts.get('userdata')!);
     for (const f of [sys, ud]) { const c = fsck(f); expect(clean(c), c.out).toBe(true); }
-    expect(debugfs(sys, 'ls /priv-app')).toContain('S1Kiosk');
+    expect(debugfs(sys, 'ls /priv-app')).toContain('Glassworks');
     expect(new TextDecoder().decode(debugfsCat(ud, '/misc/adb/adb_keys'))).toBe(`${KEY}\n`);
+  }, 60_000);
+
+  it('takes repeated --adb-key: every line in adb_keys, only the first trusted in services.jar (#426 review)', async () => {
+    const second = fakeAdbKey(10, 'second host');
+    const { d, lines, run } = await install({ adbKey: `${KEY}\n${second}` });
+    await run;
+    expect(d.lk.commands.filter((c) => c.startsWith('flash:'))).toEqual(['flash:system', 'flash:userdata']);
+    expect(lines.join('\n')).toContain(`adb key the image will let in: ${adbFingerprint(KEY)}`);
+    if (!haveTools) return;
+    const sys = join(work, 'flashed-system.raw'), ud = join(work, 'flashed-userdata.raw');
+    writeFileSync(sys, d.lk.parts.get('system')!);
+    writeFileSync(ud, d.lk.parts.get('userdata')!);
+    expect(new TextDecoder().decode(debugfsCat(ud, '/misc/adb/adb_keys'))).toBe(`${KEY}\n${second}\n`);
+    const dex = Buffer.from((await zipEntry(new Uint8Array(debugfsCat(sys, '/framework/services.jar')), 'classes.dex'))!).toString('latin1');
+    expect(dex).toContain(adbFingerprint(KEY));
+    expect(dex).not.toContain(adbFingerprint(second));
+  }, 60_000);
+
+  it('refuses a bad second --adb-key at the checks, before the Mirror restarts (#426 review)', async () => {
+    const { d, run } = await install({ adbKey: `${KEY}\nQAAA= not@a-key` });
+    await expect(run).rejects.toThrow(/adb key 2 of 2: that isn't an adb public key/);
+    expect(d.state()).toBe('android');
+    expect(d.lk.commands).toEqual([]);
   }, 60_000);
 
   it('stops where the person says no, and writes nothing before the flash step', async () => {
@@ -80,7 +105,7 @@ describe('the headless install on a fake Mirror', () => {
     const img = await dryImage(work);
     const bad = fakeApk('com.example.other', { minSdk: 23 });
     const first = dryDevices(img.bytes, () => {});
-    await expect(runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: bad, adbKey: KEY, work }, first.deps)).rejects.toThrow(/not S1 Kiosk/);
+    await expect(runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: bad, adbKey: KEY, work }, first.deps)).rejects.toThrow(/not Glassworks/);
     expect(first.lk.commands.some((c) => c.startsWith('flash:'))).toBe(false);
     const lines: string[] = [];
     const again = dryDevices(img.bytes, (l) => lines.push(l));
@@ -88,6 +113,27 @@ describe('the headless install on a fake Mirror', () => {
     expect(lines.some((l) => /read and checked 100%/.test(l))).toBe(true);
     expect(again.lk.commands.filter((c) => c.startsWith('flash:'))).toEqual(['flash:system', 'flash:userdata']);
   }, 60_000);
+
+  it('refuses an APK with no home screen at the first step, before the image is read or the Mirror restarted', async () => {
+    const img = await dryImage(work);
+    const d = dryDevices(img.bytes, () => {});
+    const off = fakeMirrorApk({ home: 'none' });
+    await expect(runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: off, adbKey: KEY, work }, d.deps)).rejects.toThrow(/can't be the Mirror's home screen/);
+    expect(d.state()).toBe('android');
+    expect(d.before.cmds).toEqual([]);
+    expect(d.lk.commands).toEqual([]);
+  });
+
+  it('refuses S1 Kiosk\'s id, or an APK without a privileged permission, before the Mirror is touched', async () => {
+    const img = await dryImage(work);
+    for (const [apk, why] of [[fakeApk('sh.edm.s1kiosk', { minSdk: 23 }), /is sh\.edm\.s1kiosk, not Glassworks/], [fakeMirrorApk({ without: ['android.permission.REBOOT'] }), /doesn't ask for REBOOT/]] as const) {
+      const d = dryDevices(img.bytes, () => {});
+      await expect(runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk, adbKey: KEY, work }, d.deps)).rejects.toThrow(why);
+      expect(d.state()).toBe('android');
+      expect(d.before.cmds).toEqual([]);
+      expect(d.lk.commands).toEqual([]);
+    }
+  });
 
   it('refuses a board that isn\'t the original Mirror, before anything else', async () => {
     const img = await dryImage(work);
@@ -117,6 +163,31 @@ describe('an APK with no home screen (the first real flash, 2026-11-16)', () => 
     expect(d.after.cmds.some((c) => c.startsWith('pm hide'))).toBe(false);
     expect(lines.join('\n')).toMatch(/NO HOME SCREEN IN THIS APK: .*com\.android\.launcher3 stays the home screen/);
     expect(lines.some((l) => /hiding again/.test(l))).toBe(false);
+  }, 60_000);
+});
+
+describe('a first boot with nothing to tap', () => {
+  it('flashes the settings overlay and lock-screen default into system, and the saved Wi-Fi into userdata', async () => {
+    const overlay = new Uint8Array(readFileSync(resolve(__dirname, '../../../frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
+    const img = await dryImage(work, APK.length + overlay.length);
+    const lines: string[] = [];
+    const d = dryDevices(img.bytes, (l) => lines.push(l));
+    await runInstall({ image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, apk: APK, adbKey: KEY, work,
+      settingsOverlay: overlay, wifi: { ssid: 'Home Net', password: 'not-a-real-password' } }, d.deps);
+    // the harness's log, shown and kept by whoever runs it: never the network's name or password (CLAUDE.md rule 2)
+    expect(lines).toContain('    Wi-Fi: the network you entered');
+    expect(lines.join('\n')).not.toContain('Home Net');
+    expect(lines.join('\n')).not.toContain('not-a-real-password');
+    if (!haveTools) return;
+    const sys = join(work, 'fb-system.raw'), ud = join(work, 'fb-userdata.raw');
+    writeFileSync(sys, d.lk.parts.get('system')!);
+    writeFileSync(ud, d.lk.parts.get('userdata')!);
+    for (const f of [sys, ud]) { const c = fsck(f); expect(clean(c), c.out).toBe(true); }
+    expect(Buffer.from(debugfsCat(sys, '/vendor/overlay/GlassworksSettings.apk')).equals(Buffer.from(overlay))).toBe(true);
+    expect(new TextDecoder().decode(debugfsCat(sys, '/build.prop'))).toContain('\nro.lockscreen.disable.default=true\n');
+    const conf = new TextDecoder().decode(debugfsCat(ud, '/misc/wifi/wpa_supplicant.conf'));
+    expect(conf).toMatch(/^update_config=1\n[\s\S]*\nnetwork=\{\n\tssid="Home Net"\n\tpsk=[0-9a-f]{64}\n/);
+    expect(conf).not.toContain('not-a-real-password');
   }, 60_000);
 });
 
@@ -160,8 +231,14 @@ describe('flash-node.ts --dry-run', () => {
     const text = out.join('\n');
     expect(text).toMatch(/^DRY RUN/);
     expect(text).toMatch(/LK got flash:system, flash:userdata, then reboot/);
-    expect(text).toMatch(/Done: S1 Kiosk 0\.5\.0-legacy, home set/);
+    expect(text).toMatch(/Done: Glassworks 0\.5\.0-legacy, home set/);
     expect(readFileSync(join(work, 'after.png')).subarray(1, 4).toString()).toBe('PNG');
+  }, 60_000);
+
+  it('--probe installs the Mirror probe under its own id', async () => {
+    const out: string[] = [];
+    expect(await cli(['--dry-run', '--yes', '--probe', '--no-boot-animation', '--work', work], (l) => out.push(l))).toBe(0);
+    expect(out.join('\n')).toMatch(/Done: the Mirror probe 0\.5\.0-legacy, home set/);
   }, 60_000);
 
   it('the way back too, and refuses a real run without its files', async () => {

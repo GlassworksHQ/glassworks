@@ -9,7 +9,10 @@ import {
 
 export interface JobHandle extends SyncHandle { truncate(n: number): void; flush(): void; close(): void }
 
-export interface BuildOptions { apk: Uint8Array; bootAnimation?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean }
+export interface BuildOptions {
+  apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
+  wifi?: { ssid: string; password: string };
+}
 
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,
   want: { name: string; size: number; sha256: string } = GLASS_PANES.system) {
@@ -41,7 +44,7 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
       const pos = { system: 0, userdata: 0 };
       const sink = (k: 'system' | 'userdata') => (b: Uint8Array) => { out[k].write(b, { at: pos[k] }); pos[k] += b.length; };
       try {
-        await buildImages(loaded, { ...o, hwrotation: 270 }, { system: sink('system'), userdata: sink('userdata') }, onProgress);
+        await buildImages(loaded, o, { system: sink('system'), userdata: sink('userdata') }, onProgress);
       } catch (e) {
         loaded = undefined;
         throw e;

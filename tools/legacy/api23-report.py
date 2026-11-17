@@ -3,8 +3,9 @@
 floor of the legacy build. The checklist for making the app run on Android 6-7, and a CI guard against new ones.
 
 It runs lint's NewApi check on every Android library module with minSdk lowered to 23 for this run only
-(tools/legacy/api23-lint.gradle, a Gradle init script: no build file changes), then reads lint's XML reports.
-Touches only build outputs.
+(tools/legacy/api23-lint.gradle, a Gradle init script: no build file changes), and on the apps' legacy builds
+(APPS: the generic app's `legacy` build type, minSdk 23 of its own), then reads lint's XML reports. Touches only
+build outputs.
 
   python3 tools/legacy/api23-report.py                         # the table, Markdown, on stdout
   python3 tools/legacy/api23-report.py --check BASELINE        # fail on calls BASELINE doesn't list (CI)
@@ -25,6 +26,9 @@ import xml.etree.ElementTree as ET
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 INIT = os.path.join("tools", "legacy", "api23-lint.gradle")
 SKIP = {":engine-gecko"}
+# The apps' legacy builds: (gradle path, folder, variant). Lint sees only the app's own sources there
+# (checkDependencies off); the libraries it uses are linted above.
+APPS = [(":generic-android", "frames/generic-android/android", "legacy")]
 
 
 def read(path):
@@ -33,7 +37,7 @@ def read(path):
 
 
 def modules():
-    """(gradle path, folder) of every Android library in settings.gradle.kts, but SKIP."""
+    """(gradle path, folder, variant) of every Android library in settings.gradle.kts (debug), but SKIP, then APPS."""
     text = read(os.path.join(ROOT, "settings.gradle.kts"))
     found = []
     for path, folder in re.findall(r'project\("(:[^"]+)"\)\.projectDir\s*=\s*file\("([^"]+)"\)', text):
@@ -41,18 +45,26 @@ def modules():
         if path in SKIP or not os.path.isfile(build):
             continue
         if 'id("com.android.library")' in read(build):
-            found.append((path, folder))
+            found.append((path, folder, "debug"))
     if len(found) < 10:
         sys.exit(f"api23-report: found only {len(found)} Android library modules in settings.gradle.kts")
-    return found
+    return found + APPS
+
+
+def report_path(folder, variant):
+    return os.path.join(ROOT, folder, "build", "reports", f"lint-results-{variant}.xml")
+
+
+def lint_task(path, variant):
+    return f"{path}:lint{variant[0].upper()}{variant[1:]}"
 
 
 def run_lint(mods):
-    for _, folder in mods:  # a stale report would read as this run's
-        report = os.path.join(ROOT, folder, "build", "reports", "lint-results-debug.xml")
+    for _, folder, variant in mods:  # a stale report would read as this run's
+        report = report_path(folder, variant)
         if os.path.exists(report):
             os.remove(report)
-    cmd = [os.path.join(ROOT, "gradlew"), "--init-script", INIT, "--continue"] + [f"{p}:lintDebug" for p, _ in mods]
+    cmd = [os.path.join(ROOT, "gradlew"), "--init-script", INIT, "--continue"] + [lint_task(p, v) for p, _, v in mods]
     print("api23-report: " + " ".join(cmd[:4]) + f" … ({len(mods)} modules)", file=sys.stderr)
     r = subprocess.run(cmd, cwd=ROOT, stdout=sys.stderr)  # the table owns stdout
     if r.returncode != 0:
@@ -69,8 +81,8 @@ def package_path(file):
 def findings(mods):
     """Every NewApi issue: dicts with module, file, line, api, level, desugar."""
     out = []
-    for path, folder in mods:
-        report = os.path.join(ROOT, folder, "build", "reports", "lint-results-debug.xml")
+    for path, folder, variant in mods:
+        report = report_path(folder, variant)
         if not os.path.isfile(report):
             sys.exit(f"api23-report: no lint report for {path} ({os.path.relpath(report, ROOT)})")
         for issue in ET.parse(report).getroot().iter("issue"):
@@ -108,7 +120,7 @@ def markdown(found, mods):
         c = counted.setdefault(f["module"], [0, 0])
         c[1 if f["desugar"] else 0] += 1
     summary = ["| Module | Calls above API 23 | Of them desugared |", "|---|---|---|"]
-    for path, _ in mods:
+    for path, _, _ in mods:
         n, d = counted.get(path, [0, 0])
         summary.append(f"| `{path}` | {n + d} | {d} |")
     return "\n".join(summary) + "\n\n" + "\n".join(lines) + "\n"

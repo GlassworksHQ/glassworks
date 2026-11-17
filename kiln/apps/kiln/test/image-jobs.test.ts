@@ -1,8 +1,8 @@
 // The worker's jobs on memory instead of OPFS: the system image is loaded once and stays until
 // discard(), so after a failed flash "install again" builds again without selecting the image again.
 import { createHash } from 'node:crypto';
+import { fakeAdbKey, fakeMirrorApk, fakeServicesJar } from '@glassworks/lululemon-mirror-installer/fakes';
 import { describe, expect, it } from 'vitest';
-import { fakeApk } from '@glassworks/app-adb/fakes';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { GLASS_PANES } from '@glassworks/lululemon-mirror-installer';
 import { imageJobs, type JobHandle } from '../src/mirror/imageJobs';
@@ -28,6 +28,8 @@ async function smallSystemImage(): Promise<Blob> {
   const dir = { mode: 0o755, uid: 0, gid: 0, label: 'u:object_r:system_file:s0', time: 1 };
   await fs.mkdir('/priv-app', dir);
   await fs.mkdir('/media', dir);
+  await fs.mkdir('/framework', dir);
+  await fs.writeFile('/framework/services.jar', await fakeServicesJar(), { ...dir, mode: 0o644 });
   await fs.writeFile('/build.prop', new TextEncoder().encode(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`), { ...dir, mode: 0o644 });
   await fs.flush();
   const parts: Uint8Array<ArrayBuffer>[] = [];
@@ -44,7 +46,7 @@ describe('the image worker\'s jobs', () => {
     let removed = 0;
     const jobs = imageJobs(async (name) => { const h = new MemHandle(); files.set(name, h); return h; }, async () => { removed++; }, want);
     await jobs.load(image, () => {});
-    const o = { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23 }), adbKey: 'QAAA= kiln@glassworks', userdataBytes: 64 * 1024 * 1024 };
+    const o = { apk: fakeMirrorApk(), adbKey: fakeAdbKey(), userdataBytes: 64 * 1024 * 1024 };
     await jobs.build(o, () => {});
     const first = files.get('system.sparse')!.buf.length;
     expect(first).toBeGreaterThan(28);
@@ -64,9 +66,9 @@ describe('the image worker\'s jobs', () => {
     const want = { name: 'system.img', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
     const jobs = imageJobs(async () => new MemHandle(), async () => {}, want);
     await jobs.load(image, () => {});
-    const o = { apk: fakeApk('sh.edm.s1kiosk', { minSdk: 26 }), adbKey: 'QAAA= kiln@glassworks', userdataBytes: 64 * 1024 * 1024 };
+    const o = { apk: fakeMirrorApk({ minSdk: 26 }), adbKey: fakeAdbKey(), userdataBytes: 64 * 1024 * 1024 };
     await expect(jobs.build(o, () => {})).rejects.toThrow(/needs Android API 26/);
     expect(jobs.isLoaded()).toBe(false);
-    await expect(jobs.build({ ...o, apk: fakeApk('sh.edm.s1kiosk', { minSdk: 23 }) }, () => {})).rejects.toThrow(/select the system image first/);
+    await expect(jobs.build({ ...o, apk: fakeMirrorApk() }, () => {})).rejects.toThrow(/select the system image first/);
   });
 });

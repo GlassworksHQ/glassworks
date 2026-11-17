@@ -1,11 +1,14 @@
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { describe, expect, it } from 'vitest';
 import { PREVIOUS_HOME, checkMirror, installMirror, parseDfFreeMb, parsePreferredHome, undoMirror, type MirrorPhase } from '../src';
-import { FakeMirror, LAUNCHER3, MIRROR_KIOSK } from './fakes';
+import { GLASSWORKS } from '../src/app';
+import { FakeMirror, LAUNCHER3, MIRROR_KIOSK, fakeMirrorApk } from './fakes';
 
-const OURS = 'sh.edm.s1kiosk/.MainActivity';
+/** the HOME component Android records for Glassworks: its Launcher alias */
+const OURS = GLASSWORKS.home;
+const PKG = GLASSWORKS.package;
 const noSleep = async () => {};
-const apk = fakeApk('sh.edm.s1kiosk');
+const apk = fakeMirrorApk();
 /** Commands that change the Mirror. Everything else the recipe runs only reads. */
 const WRITES = /^(push |pm (install|uninstall|grant|disable|enable|hide)|appops set|dpm |echo |rm |am (start|force-stop))/;
 
@@ -52,15 +55,15 @@ describe('reading the Mirror', () => {
 });
 
 describe('install', () => {
-  it('installs, grants, starts with the URL, then waits for S1 Kiosk + Always in the chooser', async () => {
+  it('installs, grants, starts with the URL, then waits for Glassworks + Always in the chooser', async () => {
     const p = new FakeMirror({ picks: () => OURS, pickAfter: 2 });
     const phases: MirrorPhase[] = [];
     const res = await installMirror(p, { apk, haUrl: 'http://homeassistant.local:8123', sleep: noSleep, onPhase: (ph) => phases.push(ph) });
     expect(res).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, home: 'set', previousHome: MIRROR_KIOSK });
-    expect(phases).toEqual([{ step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'start' }, { step: 'home', pick: 'S1 Kiosk' }]);
+    expect(phases).toEqual([{ step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'start' }, { step: 'home', pick: 'Glassworks' }]);
     const at = (c: string) => { const i = p.cmds.findIndex((x) => x.startsWith(c)); expect(i, c).toBeGreaterThanOrEqual(0); return i; };
-    const order = ['push /data/local/tmp/s1kiosk.apk', 'pm install -r -g /data/local/tmp/s1kiosk.apk', `echo '${MIRROR_KIOSK}' > ${PREVIOUS_HOME}`,
-      'pm grant sh.edm.s1kiosk android.permission.RECORD_AUDIO', 'dpm set-active-admin', `am start -n ${OURS} --es url 'http://homeassistant.local:8123'`,
+    const order = ['push /data/local/tmp/mirror-app.apk', 'pm install -r -g /data/local/tmp/mirror-app.apk', `echo '${MIRROR_KIOSK}' > ${PREVIOUS_HOME}`,
+      `pm grant ${PKG} android.permission.RECORD_AUDIO`, 'dpm set-active-admin', `am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`,
       'am start -a android.intent.action.MAIN -c android.intent.category.HOME'].map(at);
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(p.files.get(PREVIOUS_HOME)).toBe(`${MIRROR_KIOSK}\n`);
@@ -68,7 +71,7 @@ describe('install', () => {
     expect(p.cmds.some((c) => c.startsWith('cmd ') || c.includes('disable'))).toBe(false); // neither exists for adb's shell on Android 6
   });
 
-  it('says so, without failing, when nobody picks S1 Kiosk in time', async () => {
+  it('says so, without failing, when nobody picks Glassworks in time', async () => {
     const p = new FakeMirror();
     const res = await installMirror(p, { apk, sleep: noSleep, homeTimeoutMs: 0 });
     expect(res.home).toBe('unconfirmed');
@@ -87,13 +90,16 @@ describe('install', () => {
     expect(p.cmds.some((c) => c.startsWith('pm grant') || c.startsWith('am start'))).toBe(false);
     expect(p.files.has(PREVIOUS_HOME)).toBe(false); // "nothing was changed" holds: no undo record either
     expect((await checkMirror(p)).pendingHome).toBeUndefined();
-    expect(p.cmds).toContain('rm -f /data/local/tmp/s1kiosk.apk');
+    expect(p.cmds).toContain('rm -f /data/local/tmp/mirror-app.apk');
   });
 
-  it('refuses an APK that isn\'t S1 Kiosk before anything reaches the Mirror', async () => {
+  it('refuses an APK that isn\'t Glassworks before anything reaches the Mirror', async () => {
     const p = new FakeMirror();
-    await expect(installMirror(p, { apk: fakeApk('com.nimrod.mirrorkiosk'), sleep: noSleep })).rejects.toThrow(/is com\.nimrod\.mirrorkiosk, not S1 Kiosk.*Nothing was changed/);
+    await expect(installMirror(p, { apk: fakeApk('com.nimrod.mirrorkiosk'), sleep: noSleep })).rejects.toThrow(/is com\.nimrod\.mirrorkiosk, not Glassworks \(dev\.glassworks\.generic_android\.legacy\).*Nothing was changed/);
     await expect(installMirror(p, { apk: new TextEncoder().encode('not an apk'), sleep: noSleep })).rejects.toThrow(/isn't an APK/);
+    await expect(installMirror(p, { apk: fakeMirrorApk({ home: 'none' }), sleep: noSleep })).rejects.toThrow(/can't be the Mirror's home screen/);
+    // the old S1 Kiosk id is no longer the Mirror's app
+    await expect(installMirror(p, { apk: fakeApk('sh.edm.s1kiosk'), sleep: noSleep })).rejects.toThrow(/is sh\.edm\.s1kiosk, not Glassworks/);
     expect(p.cmds.filter((c) => WRITES.test(c))).toEqual([]);
   });
 
@@ -104,13 +110,13 @@ describe('install', () => {
     const res = await installMirror(p, { apk, sleep: noSleep, onPhase: (ph) => phases.push(ph) });
     expect(res.home).toBe('set');
     expect(phases.filter((ph) => ph.step === 'home')).toEqual([
-      { step: 'home', pick: 'S1 Kiosk' }, { step: 'home', pick: 'S1 Kiosk', clear: 'com.nimrod.mirrorkiosk' }, { step: 'home', pick: 'S1 Kiosk' },
+      { step: 'home', pick: 'Glassworks' }, { step: 'home', pick: 'Glassworks', clear: 'com.nimrod.mirrorkiosk' }, { step: 'home', pick: 'Glassworks' },
     ]);
     expect(p.cmds).toContain('am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:com.nimrod.mirrorkiosk');
     expect(p.preferred?.comp).toBe(OURS);
   });
 
-  it('an update keeps S1 Kiosk as home, and keeps the home app recorded the first time', async () => {
+  it('an update keeps Glassworks as home, and keeps the home app recorded the first time', async () => {
     const p = new FakeMirror({ installed: 500 });
     p.files.set(PREVIOUS_HOME, `${MIRROR_KIOSK}\n`);
     const res = await installMirror(p, { apk, sleep: noSleep, homeTimeoutMs: 0 });
@@ -121,7 +127,7 @@ describe('install', () => {
 });
 
 describe('undo', () => {
-  it('takes back the device admin, removes S1 Kiosk, and waits for the old home app to be picked', async () => {
+  it('takes back the device admin, removes Glassworks, and waits for the old home app to be picked', async () => {
     const p = new FakeMirror({ picks: (c) => c.find((x) => x === MIRROR_KIOSK), pickAfter: 2 });
     await installMirror(p, { apk, sleep: noSleep, homeTimeoutMs: 0 });
     p.pick(OURS);
@@ -130,13 +136,13 @@ describe('undo', () => {
     const res = await undoMirror(p, { sleep: noSleep, onPhase: (ph) => phases.push(ph) });
     expect(res).toEqual({ removed: true, home: 'set', previousHome: MIRROR_KIOSK });
     expect(phases).toEqual([{ step: 'admin' }, { step: 'remove' }, { step: 'home', pick: MIRROR_KIOSK }]);
-    expect(p.cmds.indexOf('pm uninstall sh.edm.s1kiosk')).toBeGreaterThan(p.cmds.lastIndexOf('dumpsys device_policy'));
+    expect(p.cmds.indexOf(`pm uninstall ${PKG}`)).toBeGreaterThan(p.cmds.lastIndexOf('dumpsys device_policy'));
     expect(p.installed).toBeUndefined();
     expect(p.preferred?.comp).toBe(MIRROR_KIOSK);
     expect(p.files.has(PREVIOUS_HOME)).toBe(false);
   });
 
-  it('fails loudly when S1 Kiosk keeps its device admin, and keeps the record', async () => {
+  it('fails loudly when Glassworks keeps its device admin, and keeps the record', async () => {
     const p = new FakeMirror({ installed: 600, keepsAdmin: true });
     p.files.set(PREVIOUS_HOME, `${MIRROR_KIOSK}\n`);
     await expect(undoMirror(p, { sleep: noSleep })).rejects.toThrow(/DELETE_FAILED_DEVICE_POLICY_MANAGER.*Device administrators/);
@@ -144,7 +150,7 @@ describe('undo', () => {
     expect(p.files.has(PREVIOUS_HOME)).toBe(true);
   });
 
-  it('without a record, any home app but S1 Kiosk will do', async () => {
+  it('without a record, any home app but Glassworks will do', async () => {
     const p = new FakeMirror({ installed: 600, picks: () => LAUNCHER3 });
     const res = await undoMirror(p, { sleep: noSleep });
     expect(res).toEqual({ removed: true, home: 'set' });

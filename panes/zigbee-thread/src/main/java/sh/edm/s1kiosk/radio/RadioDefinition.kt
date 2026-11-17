@@ -64,6 +64,9 @@ interface RadioReadout {
 
     /** Who the helper's firewall lets in now; null when no firewall is active. */
     fun allowedNow(): String? = controller()?.allowedNow()
+
+    /** "Connected now" read afresh (#217), for the page's live row; null without a controller. */
+    fun connectedNow(): String? = controller()?.connectedNow()
 }
 
 /**
@@ -372,15 +375,16 @@ class RadioDefinition(
     }
 
     /**
-     * The same section and, while the radio's pane is built, "The radio": its firmware and the root
-     * helper, as Home Assistant has them (#212). "Connected now" waits for the helper to report the live
-     * peer (#217).
+     * The same section and, while the radio's pane is built, "The radio": who is connected now (#217), its
+     * firmware and the root helper, as Home Assistant has them (#212).
      */
     override fun settings(running: Pane?): List<SettingsSection> {
         val own = settings()
         val entities = running?.entities().orEmpty().associateBy { it.objectId }
-        val rows = listOf("radio_firmware" to "Firmware", "radio_helper" to "Radio helper").mapNotNull { (objectId, title) ->
-            entities[objectId]?.let { e -> SettingsItem.Info({ title }, { e.shownState() ?: dev.glassworks.pane.UNKNOWN }) }
+        val rows = listOf("radio_connected" to "Connected now", "radio_firmware" to "Firmware", "radio_helper" to "Radio helper").mapNotNull { (objectId, title) ->
+            // Connected now is read afresh while the page is open; Home Assistant's sensor lags up to 15 s.
+            val live: () -> String? = if (objectId == "radio_connected") readout::connectedNow else { -> null }
+            entities[objectId]?.let { e -> SettingsItem.Info({ title }, { live() ?: e.shownState() ?: dev.glassworks.pane.UNKNOWN }) }
         }
         if (rows.isEmpty()) return own
         return own.map { s -> SettingsSection(s.id, s.title, s.items + SettingsItem.Group("The radio", rows), s.heading, s.master, s.status, s.unavailable) }

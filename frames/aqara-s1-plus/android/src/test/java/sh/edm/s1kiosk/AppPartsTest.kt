@@ -15,6 +15,7 @@ import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -61,7 +62,7 @@ class AppPartsTest {
     }
 
     private val parts = Parts()
-    private val runtime = GlassworksRuntime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false), NoEngine, parts)
+    private val runtime = GlassworksRuntime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false), NoEngine, parts, releases = sh.edm.s1kiosk.update.ReleaseLine.S1_KIOSK)
 
     @Test fun theRuntimeRunsTheAppsPanesInItsOrderAndMarksTheOnesTheFrameCantRun() {
         val defs = runtime.paneDefinitions(app)
@@ -76,6 +77,9 @@ class AppPartsTest {
     @Test fun theS1AppsRuntimeRunsTheS1Panes() {
         val s1 = KioskApp.runtime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))
         assertTrue("the S1 app's overlays and hooks are the S1 panes'", s1.app is S1Panes)
+        // adb, Kiln, Clarity and the root helper drive S1 Kiosk with MainActivity's extras; the launcher's alias can't (#374).
+        assertTrue(s1.app.trustsExtras(android.content.Intent().setClassName(app, "sh.edm.s1kiosk.MainActivity").putExtra("url", "http://192.0.2.1/")))
+        assertFalse(s1.app.trustsExtras(android.content.Intent().setClassName(app, "sh.edm.s1kiosk.Launcher").putExtra("url", "http://192.0.2.1/")))
     }
 
     @Test fun theS1AppsVoiceStateStartsFromTheAssistantsSwitch() {

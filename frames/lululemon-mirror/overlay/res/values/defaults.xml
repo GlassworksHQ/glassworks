@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SettingsProvider's defaults (packages/SettingsProvider/res/values/defaults.xml, Android 6.0.1),
+     changed for a Mirror with no touchscreen. Names and types as in the image's SettingsProvider.apk
+     (read 2026-11-16). DatabaseHelper reads them only while it builds a fresh userdata's settings. -->
+<resources>
+    <!-- Wi-Fi on, so the network in wpa_supplicant.conf joins. Android 6: false -->
+    <bool name="def_wifi_on">true</bool>
+    <!-- The screen doesn't sleep on its own (Integer.MAX_VALUE ms). Android 6: 60000 -->
+    <integer name="def_screen_off_timeout">2147483647</integer>
+    <!-- Stay on while plugged in. DatabaseHelper turns true into 1 (AC). Android 6: false -->
+    <bool name="def_stay_on_while_plugged_in">true</bool>
+    <!-- No swipe lock screen. ro.lockscreen.disable.default=true does the same; both are set. Android 6: false -->
+    <bool name="def_lockscreen_disabled">true</bool>
+    <!-- No auto-rotate: Kiln's first boot locks user_rotation=3, portrait (ro.sf.hwrotation does nothing on this image). Android 6: true -->
+    <bool name="def_accelerometer_rotation">false</bool>
+</resources>

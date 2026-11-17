@@ -36,11 +36,12 @@ The ids today:
 
 | id | Source | Size |
 |---|---|---|
-| `glass-panes/mirror-android-1/system.img` | [git-nimrod/glass-panes `mirror-android-1`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-1) | 850,905,808 bytes |
-| `glass-panes/mirror-android-1/SHA256SUMS` | the same release | 159 bytes |
+| `glass-panes/mirror-android-2/system.img` | [git-nimrod/glass-panes `mirror-android-2`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2) | 850,905,808 bytes |
+| `glass-panes/mirror-android-2/SHA256SUMS` | the same release | 159 bytes |
 
 So Kiln downloads the Mirror's image from
-`https://refract.glassworks.dev/glass-panes/mirror-android-1/system.img`.
+`https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img` (image 1's ids left the
+allowlist on 2026-11-16, when Kiln moved to image 2).
 
 Each file answer carries:
 
@@ -119,9 +120,9 @@ ETag, Link, Retry-After`.
 2. Add an entry to `allowlist.json`. The key is the id, which becomes the URL path. Use
    `<project>/<tag>/<name>`:
    ```json
-   "glass-panes/mirror-android-1/system.img": {
-     "owner": "git-nimrod", "repo": "glass-panes", "tag": "mirror-android-1", "name": "system.img",
-     "size": 850905808, "sha256": "d13dd330…83ed5",
+   "glass-panes/mirror-android-2/system.img": {
+     "owner": "git-nimrod", "repo": "glass-panes", "tag": "mirror-android-2", "name": "system.img",
+     "size": 850905808, "sha256": "bdb6b844…e35c1",
      "credit": { "name": "git-nimrod", "url": "https://github.com/git-nimrod/glass-panes", "project": "Glass Panes" }
    }
    ```

@@ -316,6 +316,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       dispatch({ type: 'done', done: {
         title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device.',
         backup: { name: 's1-backup-20261112-101500.zip', info: '9 partitions · 52 MiB', hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
+        setupPage: `http://${IP}:8099/setup`,
       } });
       return;
     case 'undo':
@@ -366,7 +367,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
 /**
  * ?demo=selftest: what #27 asks of the bundler, checked in the built page. bootpatch.wasm loads from
  * where Next put it, and every staged blob downloads and passes its SHA-256 (the APK through
- * /api/release-asset). Results go to the technical log; the page title ends in PASS or FAIL.
+ * /api/release/aqara-s1-plus). Results go to the technical log; the page title ends in PASS or FAIL.
  */
 async function selfTest(session: Session) {
   const { dispatch } = session.store;

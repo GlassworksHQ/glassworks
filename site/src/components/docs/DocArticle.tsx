@@ -3,9 +3,12 @@ import type { ReactNode } from "react";
 import { StageChip, manage as m } from "../Manage";
 import { EditGlyph } from "../Glyphs";
 import { Toc } from "./Toc";
+import { NoteFacts } from "./NoteBits";
+import type { Note } from "@/lib/docs/research";
 import { SECTIONS, type Doc } from "@/lib/docs";
 import { frameById } from "@/lib/frames";
 import type { ApiReference } from "@/lib/apiDocs";
+import type { FrameDesign } from "@glassworks/frame-card";
 import d from "./Docs.module.css";
 import "./prose.css";
 
@@ -31,6 +34,31 @@ function ApiStrip({ name, reference: r }: { name: string; reference: ApiReferenc
   );
 }
 
+/** The frame a page belongs to, its stage, and on a frame's own pages its Docs and Research tabs. */
+export function FrameStrip({ frame, tabs }: { frame: FrameDesign; tabs?: ReactNode }) {
+  const name = (
+    <span>
+      Frame: <Link href={`/frames/${frame.id}`}>{frame.name}</Link>
+    </span>
+  );
+  return (
+    <div className={d.strip} data-pagefind-ignore>
+      {tabs ? (
+        <span className={d.stripFrame}>
+          {name}
+          <StageChip support={frame.status} />
+        </span>
+      ) : (
+        <>
+          {name}
+          <StageChip support={frame.status} />
+        </>
+      )}
+      {tabs}
+    </div>
+  );
+}
+
 /** One published doc: its header from the README's, the Markdown, and where to edit it. */
 export function DocArticle({
   doc,
@@ -38,14 +66,21 @@ export function DocArticle({
   next,
   after,
   api,
+  tabs,
+  crumbs,
 }: {
-  doc: Doc;
+  doc: Doc | Note;
   prev?: Doc;
   next?: Doc;
   after?: ReactNode;
   /** a library's README: its API reference */
   api?: { name: string; reference: ApiReference };
+  /** a frame's page: Docs and Research, in the frame's strip */
+  tabs?: ReactNode;
+  /** the breadcrumb after "Docs", when the section's name isn't the right one */
+  crumbs?: ReactNode;
 }) {
+  const note = "blurb" in doc ? doc : undefined;
   const section = SECTIONS.find((s) => s.id === doc.section)!.label;
   const frame = doc.frame ? frameById(doc.frame) : undefined;
   const toc = doc.toc.length >= 2 ? doc.toc : [];
@@ -57,15 +92,10 @@ export function DocArticle({
           <nav className={d.crumbs} aria-label="Breadcrumb" data-pagefind-ignore>
             <Link href="/docs">Docs</Link>
             <span aria-hidden="true">/</span>
-            <span>{frame && doc.section === "notes" ? `${section} · ${frame.name}` : section}</span>
+            {crumbs ?? <span>{frame && doc.section === "notes" ? `${section} · ${frame.name}` : section}</span>}
           </nav>
           {frame && (
-            <div className={d.strip} data-pagefind-ignore>
-              <span>
-                Frame: <Link href={`/frames/${frame.id}`}>{frame.name}</Link>
-              </span>
-              <StageChip support={frame.status} />
-            </div>
+            <FrameStrip frame={frame} tabs={tabs} />
           )}
           {api && <ApiStrip {...api} />}
           <h1 id={doc.titleId || undefined} className={d.h1} data-pagefind-meta="title">
@@ -78,9 +108,20 @@ export function DocArticle({
               <EditGlyph />
               Edit on GitHub
             </a>
-            <code>{doc.file}</code>
+            {note ? (
+              <a href={doc.edit.replace("/edit/main/", "/blob/main/")}>
+                <code>{doc.file}</code>
+              </a>
+            ) : (
+              <code>{doc.file}</code>
+            )}
             {doc.updated && <span>Updated {doc.updated}</span>}
           </p>
+          {note && (
+            <div className={d.facts} data-pagefind-ignore>
+              <NoteFacts note={note} />
+            </div>
+          )}
         </header>
         {toc.length > 0 && (
           <details className={d.tocFold} data-pagefind-ignore>

@@ -127,7 +127,8 @@ class SettingsMenuTest {
     @Test
     fun theSectionsAsDrawn() {
         val m = menu().associate { it.id to titles(it.items) }
-        assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts"), m["dashboard"])
+        // "Allow setup over the network" (#34): the panel's own way to open pairing for the setup page again.
+        assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts", "action ${CoreSettings.SETUP_OVER_NETWORK}"), m["dashboard"])
         assertEquals(
             listOf(
                 "Wake when someone's near", "Presence range", "Turn off when idle", "At night", "At night, turn off after",

@@ -21,6 +21,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowPowerManager
+import java.io.File
 import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
@@ -29,9 +30,15 @@ class ScreenPolicyTest {
     private val context: Context = RuntimeEnvironment.getApplication()
 
     private class Settings(
-        override var autoBrightness: Boolean = true,
-        override var manualBrightness: Float = -1f,
+        autoBrightness: Boolean = true,
+        manualBrightness: Float = -1f,
     ) : ScreenSettings {
+        /** The saved settings the policy wrote. */
+        val writes = mutableListOf<String>()
+        override var autoBrightness = autoBrightness
+            set(v) { writes += "autoBrightness"; field = v }
+        override var manualBrightness = manualBrightness
+            set(v) { writes += "manualBrightness"; field = v }
         override val screenMode = "presence"
         override val idleOffSec = 120
         override var nightWindow = ""
@@ -64,6 +71,17 @@ class ScreenPolicyTest {
     )
 
     private fun advance(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
+
+    private val holdFile get() = File(context.noBackupFilesDir, "test_hold")
+
+    /** The app's process dies (a force-stop): nothing of it runs on, and its files stay. */
+    private fun kill(screen: ScreenPolicy) {
+        val saved = holdFile.takeIf { it.exists() }?.readText()
+        screen.stop()
+        saved?.let(holdFile::writeText)
+    }
+
+    private fun testHoldLog() = ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") }
 
     /** The runtime builds the policy long before the activity starts it; the idle countdown starts at start(). */
     @Test fun theIdleCountdownStartsAtStartNotWhenThePolicyWasBuilt() {
@@ -197,5 +215,221 @@ class ScreenPolicyTest {
         advance(1_000)
         assertEquals(listOf(false), keepOn.filter { !it })
         screen.stop()
+    }
+
+    /** Clarity's test hold (#240): the screen on past the 20 s night timeout, at the night's brightness. */
+    @Test fun aTestHoldKeepsTheScreenOnAndLeavesNightBrightnessAlone() {
+        ShadowLog.clear()
+        val light = FakeSource()
+        val settings = Settings().apply { nightWindow = "00:00-23:59" }
+        val screen = policy(light = light, settings = settings)
+        screen.start(context)
+        light.lux!!(1000f)
+        advance(10)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+
+        screen.testHold(context, 600)
+        assertEquals("the night cap stays", 0.2f, screen.brightness, 0.001f)
+        light.lux!!(1000f)
+        advance(599_000)
+        assertEquals("still the night cap", 0.2f, screen.brightness, 0.001f)
+        assertEquals("on far past the 20 s night timeout", emptyList<Boolean>(), keepOn.filter { !it })
+        assertTrue(screen.testHeld)
+        assertFalse("not a hold that lifts night dimming", screen.held)
+
+        advance(2_000) // the next tick
+        assertFalse("expired by itself", screen.testHeld)
+        advance(19_000)
+        assertEquals(emptyList<Boolean>(), keepOn.filter { !it })
+        advance(2_000) // the next tick
+        assertEquals("the night timeout counts from the end", listOf(false), keepOn.filter { !it })
+
+        assertEquals("no saved setting written", emptyList<String>(), settings.writes)
+        assertEquals(
+            listOf("test hold on for 600 s", "test hold off (expired)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
+        screen.stop()
+    }
+
+    @Test fun zeroEndsATestHoldAtOnceAndLeavesOtherHolds() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(context, 600)
+        screen.hold("notification")
+        screen.testHold(context, 0)
+        assertFalse(screen.testHeld)
+        assertTrue("the notification still holds it", screen.held)
+        screen.release("notification")
+        advance(600_000)
+        assertEquals(
+            listOf("test hold on for 600 s", "test hold off (ended)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
+        screen.stop()
+    }
+
+    @Test fun aNewTestHoldMovesTheEnd() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(context, 30)
+        advance(20_000)
+        screen.testHold(context, 30)
+        advance(20_000)
+        assertTrue("held 40 s after the first, 20 s after the second", screen.testHeld)
+        advance(10_000)
+        assertFalse(screen.testHeld)
+        assertEquals(
+            listOf("test hold on for 30 s", "test hold renewed for 30 s", "test hold off (expired)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
+        screen.stop()
+    }
+
+    @Test fun aTestHoldLastsAnHourAtMost() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(context, 86_400)
+        advance(3_599_000)
+        assertTrue(screen.testHeld)
+        advance(1_000)
+        assertFalse(screen.testHeld)
+        screen.stop()
+    }
+
+    /** stop() then start() (the activity recreated) doesn't leave the panel held. */
+    @Test fun stopEndsATestHold() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(context, 600)
+        screen.stop()
+        assertFalse(screen.testHeld)
+        assertFalse("nothing left for the next start", holdFile.exists())
+        screen.start(context)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+        advance(121_000)
+        assertEquals("the 120 s idle timeout runs again", listOf(false), keepOn.filter { !it })
+        screen.stop()
+    }
+
+    /** The kiosk's intent extra (MainActivity.applyIntent): `--ez test_hold true --ei test_hold_s 90`. */
+    @Test fun theIntentExtraHoldsAndIsUsedOnce() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        val on = Intent().putExtra("test_hold", true).putExtra("test_hold_s", 90)
+        screen.applyTestHoldExtra(context, on)
+        assertTrue(screen.testHeld)
+        assertFalse("removed, so a recreated activity doesn't apply it again", on.hasExtra("test_hold"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_hold", true))
+        screen.applyTestHoldExtra(context, Intent())
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_hold", false))
+        assertFalse(screen.testHeld)
+        assertEquals(
+            listOf("test hold on for 90 s", "test hold renewed for 1800 s", "test hold off (ended)"),
+            ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") },
+        )
+        screen.stop()
+    }
+
+    /** A cold launch: MainActivity applies the intent before it starts the policy (CodeRabbit on #332). */
+    @Test fun aTestHoldFromBeforeStartWakesTheScreenAtStart() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_hold", true))
+        screen.start(context)
+        assertTrue(ShadowLog.getLogsForTag("Test.Screen").any { it.msg == "wake (test hold)" })
+        assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+        screen.stop()
+    }
+
+    /**
+     * The end is on elapsedRealtime and the tick checks it before anything else, so it also ends while
+     * the screen is off (CodeRabbit on #332: a Handler delay counts uptime, which deep sleep stops).
+     */
+    @Test fun aTestHoldEndsWhileTheScreenIsOff() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(context, 60)
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        advance(10)
+        assertFalse(screen.screenOn)
+        advance(61_000)
+        assertFalse(screen.testHeld)
+        screen.stop()
+    }
+
+    /**
+     * The S1's night run (2026-11-16): each graded restart force-stops the app, and the new process's
+     * 20 s night timeout turned the screen off before the runner sent the hold again. The hold now
+     * outlives the restart, and still expires on time.
+     */
+    @Test fun aTestHoldOutlivesARestartOfTheApp() {
+        val settings = Settings().apply { nightWindow = "00:00-23:59" }
+        val before = policy(settings = settings)
+        before.start(context)
+        before.testHold(context, 600)
+        advance(100_000)
+        kill(before)
+        ShadowLog.clear()
+
+        val after = policy(settings = settings)
+        after.start(context)
+        val keepOn = mutableListOf<Boolean>()
+        after.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+        assertTrue(after.testHeld)
+        assertEquals(listOf("test hold resumed for 500 s"), testHoldLog())
+        assertTrue("it wakes the screen", ShadowLog.getLogsForTag("Test.Screen").any { it.msg == "wake (test hold)" })
+        advance(60_000)
+        assertEquals("on past the 20 s night timeout in the new process", emptyList<Boolean>(), keepOn.filter { !it })
+
+        advance(440_000)
+        assertFalse("expired at the first hold's end", after.testHeld)
+        assertFalse(holdFile.exists())
+        advance(21_000)
+        assertEquals("the night timeout is back", listOf(false), keepOn.filter { !it })
+        after.stop()
+    }
+
+    @Test fun falseEndsAHoldThatOutlivedARestart() {
+        val before = policy()
+        before.start(context)
+        before.testHold(context, 600)
+        kill(before)
+        val after = policy()
+        after.start(context)
+        assertTrue(after.testHeld)
+        after.applyTestHoldExtra(context, Intent().putExtra("test_hold", false))
+        assertFalse(after.testHeld)
+        assertFalse(holdFile.exists())
+        kill(after)
+        val next = policy()
+        next.start(context)
+        assertFalse(next.testHeld)
+        next.stop()
+    }
+
+    /**
+     * A hold saved in another boot, one further ahead than the hour a hold may last (a reboot reset
+     * elapsedRealtime, on an Android without a boot count), or a file that doesn't parse, is dropped.
+     */
+    @Test fun aHoldFromAnotherBootIsDropped() {
+        AndroidSettings.Global.putInt(context.contentResolver, "boot_count", 7)
+        val now = android.os.SystemClock.elapsedRealtime()
+        for (saved in listOf("${now + 600_000} 6", "${now + 3_700_000} 7", "garbage")) {
+            holdFile.writeText(saved)
+            val screen = policy()
+            screen.start(context)
+            assertFalse(saved, screen.testHeld)
+            assertFalse(saved, holdFile.exists())
+            screen.stop()
+        }
     }
 }

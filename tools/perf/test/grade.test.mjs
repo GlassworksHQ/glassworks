@@ -41,11 +41,13 @@ test("another protocol is re-measured, not graded", () => {
   assert.equal(g.grade, null);
 });
 
-test("a Clarity v1 summary is re-measured under v2's rules, and says so", () => {
-  assert.equal(rubric.clarity, 2);
-  const g = G.gradeSummary({ clarity: 1, protocol_version: 1, pages: {} }, rubric);
-  assert.deepEqual([g.status, g.grade], ["re-measure", null]);
-  assert.equal(g.why, "measured with Clarity v1; these rules are Clarity v2's: re-measure");
+test("a Clarity v2 summary is re-measured under v3's rules, and says so", () => {
+  assert.equal(rubric.clarity, 3);
+  for (const v of [1, 2]) {
+    const g = G.gradeSummary({ clarity: v, protocol_version: v, pages: {} }, rubric);
+    assert.deepEqual([g.status, g.grade], ["re-measure", null]);
+    assert.equal(g.why, `measured with Clarity v${v}; these rules are Clarity v3's: re-measure`);
+  }
 });
 
 test("a measurement that isn't comparable shows no letter", () => {
@@ -62,5 +64,7 @@ test("scroll levels per run and their median (rubric v5)", () => {
   for (const c of data.scroll_levels) assert.equal(G.scrollLevel(c.stats, rubric), c.level, c.name);
   for (const c of data.update_levels) assert.equal(G.updateLevel(c.run, rubric), c.level, c.name);
   for (const c of data.camera_levels) assert.equal(G.cameraLevel(c.run, rubric), c.level, c.name);
+  assert.ok(data.dialog_levels.length);
+  for (const c of data.dialog_levels) assert.equal(G.dialogLevel(c.run, rubric), c.level, c.name);
   for (const c of data.median_levels) assert.equal(G.medianLevel(c.levels, rubric), c.level, JSON.stringify(c));
 });

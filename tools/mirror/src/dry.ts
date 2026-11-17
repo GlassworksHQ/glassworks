@@ -11,7 +11,8 @@ import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
 import { GLASS_PANES, SYSTEM_BYTES, USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
-import { FakeMirror, FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
+import type { MirrorApp } from '@glassworks/lululemon-mirror-installer';
+import { FakeMirror, FirstBootMirror, fakeServicesJar } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { RunDeps, Want } from './run';
 
 const MiB = 1024 * 1024;
@@ -19,8 +20,8 @@ const MiB = 1024 * 1024;
 export const DRY_USERDATA = 64 * MiB;
 
 /**
- * A small system.img made like the Glass Panes one: its fingerprint in /build.prop and Launcher3 in
- * /priv-app. `room`: bytes the patch will add (the APK, the boot animation).
+ * A small system.img made like the Glass Panes one: its fingerprint in /build.prop, Launcher3 in
+ * /priv-app, and a services.jar that trusts the Glass Panes project key. `room`: bytes the patch will add (the APK, the boot animation).
  */
 export async function dryImage(work: string, room = 0): Promise<{ path: string; want: Want; bytes: number }> {
   const blocks = Math.ceil((32 * MiB + room * 1.5) / 4096);
@@ -29,6 +30,10 @@ export async function dryImage(work: string, room = 0): Promise<{ path: string; 
   const a = { mode: 0o755, uid: 0, gid: 0 }, f = { mode: 0o644, uid: 0, gid: 0 };
   await fs.mkdirs('/priv-app/Launcher3', a);
   await fs.mkdirs('/media', a);
+  await fs.mkdirs('/etc/wifi', a);
+  await fs.mkdirs('/framework', a);
+  await fs.writeFile('/framework/services.jar', await fakeServicesJar(), f);
+  await fs.writeFile('/etc/wifi/wpa_supplicant.conf', new TextEncoder().encode('update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npmf=1\np2p_no_group_iface=1\n'), f);
   await fs.writeFile('/build.prop', new TextEncoder().encode(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`), f);
   await fs.writeFile('/priv-app/Launcher3/Launcher3.apk', new Uint8Array(64 * 1024).fill(0x4c), f);
   await fs.flush();
@@ -64,11 +69,11 @@ export class DryLk extends FakeLk {
 
 export interface Dry { deps: RunDeps; lk: DryLk; before: FakeMirror; after: FirstBootMirror; state: () => 'android' | 'fastboot' | 'glassworks' }
 
-/** Fake devices for runInstall/runWayBack. `stockAtStart: false` starts in fastboot already. */
-export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean; maxDownloadReply?: string } = {}): Dry {
+/** Fake devices for runInstall/runWayBack. `stockAtStart: false` starts in fastboot already; `app` is the app the APK is (Glassworks by default). */
+export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean; maxDownloadReply?: string; app?: MirrorApp } = {}): Dry {
   const lk = new DryLk(systemBytes, o.maxDownloadReply);
-  const before = new FakeMirror();
-  const after = new FirstBootMirror();
+  const before = new FakeMirror({ app: o.app });
+  const after = new FirstBootMirror(undefined, true, o.app);
   after.hideFails = !!o.hideFails;
   let state: 'android' | 'fastboot' | 'glassworks' = o.stockAtStart === false ? 'fastboot' : 'android';
   const fb = new Fastboot(lk);
