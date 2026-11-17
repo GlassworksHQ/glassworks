@@ -148,6 +148,11 @@ below as the release notes.
   generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
+  device whose presence sensor has a range (the S1), and *Auto brightness*, *Illuminance* and *Max auto
+  brightness* only on one with a light sensor. On a tablet with a camera, presence is the Camera pane's
+  *Camera presence*. One the device can't back stays in Home Assistant as unavailable after the update;
+  you can delete it. Nothing changes on the S1.
 - **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
   window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
   Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel

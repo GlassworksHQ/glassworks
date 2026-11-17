@@ -21,6 +21,7 @@ import dev.glassworks.pane.PaneSwitch
 import dev.glassworks.pane.PanelEvent
 import dev.glassworks.pane.forEachPane
 import dev.glassworks.pane.stopAll
+import dev.glassworks.screen.ScreenHardware
 import java.io.IOException
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -257,8 +258,10 @@ class PanelDevice(
         val host = Host(paneContext, cantRun).also { host = it }
         panes = buildPanes(host).filter { it.id !in cantRun }
         runtime.panes = panes
-        // Every pane's on/off, also while the pane is off.
-        coreEntities = buildEntities() + switches.values.map { it.entity() }
+        // The screen's entities the device can back (#476), from the facts its settings and the Manage page show;
+        // every pane's on/off, also while the pane is off.
+        val hardware = ScreenHardware.of(frame, runtime.paneDefinitions(ctx), ctx)
+        coreEntities = buildEntities().filter { hardware.backs(it.objectId) } + switches.values.map { it.entity() }
         appliedDashboards = DashboardOptions.parse(prefs.dashboardsJson).orEmpty()
         dashboardRebuild = StableChange(dashboardOptions(appliedDashboards))
         entities = assemble()
@@ -479,6 +482,18 @@ class PanelDevice(
         screen.brightness.takeIf { it >= 0f }
             ?: prefs.manualBrightness.takeIf { !prefs.autoBrightness && it > 0f }
             ?: 1f
+
+    /**
+     * Whether the device has what the core entity [objectId] reads or sets (#476). A frame without it never lists
+     * it, so Home Assistant shows one it had before as unavailable. Presence from the camera pane is the pane's
+     * own `camera_presence`, listed while the pane can run, on or off, as every pane's entities are.
+     */
+    private fun ScreenHardware.backs(objectId: String): Boolean = when (objectId) {
+        "presence" -> presence is ScreenHardware.Presence.Sensor
+        "presence_range" -> (presence as? ScreenHardware.Presence.Sensor)?.ranged == true
+        "auto_brightness", "illuminance", "max_brightness" -> light
+        else -> true
+    }
 
     private fun buildEntities(): List<ApiEntity> = listOf(
         // --- screen & sensors
