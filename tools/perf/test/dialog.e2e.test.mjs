@@ -122,7 +122,15 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
   // The fake on two free ports (its own and the relay's). freePort only probes them, so another process
   // can take one before the fake binds it (#437: "Address already in use" in 1 of 6 runs here): then
   // the fake exits, and it starts again on others.
-  let port, base, fake, fakeErr = "", banner = "";
+  let port, base, fake, fakeErr = "", banner = "", browser;
+  // Registered before the fake's first start, so a fake that never reports ready is still killed.
+  t.after(() => {
+    browser?.kill("SIGKILL");
+    unguard();
+    fake?.kill();
+    if (!t.passed && fakeErr) t.diagnostic(`the fake's stderr:\n${fakeErr.slice(-4000)}`);
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  });
   for (let attempt = 1; ; attempt++) {
     port = await freePort();
     base = `http://127.0.0.1:${port}`;
@@ -132,23 +140,18 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
                  { stdio: ["ignore", "pipe", "pipe"] });
     fake.stderr.on("data", (d) => { fakeErr += d; });
     fake.stdout.on("data", (d) => { banner += d; });
-    const exited = new Promise((r) => fake.once("exit", () => r(true)));
+    // `close`, not `exit`: it comes after stdio has drained, so the last stderr chunk is in fakeErr.
+    const exited = new Promise((r) => fake.once("close", () => r(true)));
     const up = await Promise.race([until("the fake", () => banner.includes("WebRTC over"), 60000).then(() => true, () => false),
                                    exited.then(() => false)]);
     if (up) break;
+    fake.kill(); // one that timed out is still running; one that exited ignores this
     if (attempt === 3 || !/Address already in use/.test(fakeErr)) throw new Error(`the fake didn't start:\n${fakeErr.slice(-2000)}`);
     t.diagnostic(`the fake's port was taken (attempt ${attempt}); again on others`);
   }
-  const browser = spawn(chrome(), ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${join(dir, "profile")}`,
+  browser = spawn(chrome(), ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${join(dir, "profile")}`,
     "--no-first-run", "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required", "--mute-audio",
     "--window-size=1280,800", ...(process.env.CI ? ["--no-sandbox"] : []), "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
-  t.after(() => {
-    browser.kill("SIGKILL");
-    unguard();
-    fake.kill();
-    if (!t.passed && fakeErr) t.diagnostic(`the fake's stderr:\n${fakeErr.slice(-4000)}`);
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
-  });
 
   let err = "";
   browser.stderr.on("data", (d) => { err += d; });
