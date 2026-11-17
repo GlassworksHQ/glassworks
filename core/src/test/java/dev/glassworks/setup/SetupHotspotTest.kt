@@ -210,17 +210,41 @@ class SetupHotspotTest {
     }
 
     @Test
-    fun `the radio going off while it runs stops it, and back on it opens by the rule again`() {
+    fun `a block that shows up while ours runs doesn't stop it (Android parks the client for our own AP)`() {
         setup.start(); at(3 * min); up()
-        radioLocked = true
+        radioLocked = true // what the S1 retest on b8f827fe misread: the client parked while our AP is up
         at(3 * min + 30_000)
+        setup.refresh()
+        assertTrue("our own hotspot keeps running", hotspot.on)
+        assertTrue(setup.view is View.On)
+        assertEquals(0, hotspot.stops)
+        connected = true // and the rule still runs: a connection stops it as ever
+        setup.refresh()
         assertFalse(hotspot.on)
-        assertEquals(View.Off(null, HotspotFailure.WIFI_OFF), setup.view)
+        assertEquals(View.Off(Stop.CONNECTED, null), setup.view)
+    }
+
+    @Test
+    fun `a block while it is starting (the scan before the start) doesn't stop it either`() {
+        holdScan = true
+        setup.start(); at(3 * min)
+        radioLocked = true
+        setup.refresh()
+        scanDone!!()
+        assertEquals(1, hotspot.starts)
+    }
+
+    @Test
+    fun `Wi-Fi switched off before the start waits, and back on the saved network gets 3 minutes first`() {
+        radioLocked = true
+        setup.start()
+        at(10 * min)
+        assertEquals(0, hotspot.starts)
         radioLocked = false
-        at(3 * min + 60_000)
+        at(10 * min + 30_000)
         assertFalse("Wi-Fi back on: the saved network gets 3 minutes first", hotspot.on)
         assertTrue("and the screen no longer says Wi-Fi is off", (setup.view as View.Off).error == null)
-        at(6 * min + 60_000)
+        at(13 * min + 30_000)
         assertTrue(hotspot.on)
     }
 
