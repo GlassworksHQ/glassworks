@@ -11,7 +11,8 @@ package dev.glassworks.manage
  * Removed: HA tokens (JWTs, `Bearer …`), `Basic …` credentials, a user and password in a URL
  * (`http://user:pass@host`), every value in a URL's query (`?auth=…`), `key=value` pairs whose name says secret (token, password, psk,
  * passphrase, key, secret, dataset, tlv), base64 32-byte keys (the ESPHome API key), long hex (Thread datasets and
- * network keys, EUI64s, extended PAN ids, serials), and MAC addresses.
+ * network keys, EUI64s, extended PAN ids, serials), and MAC addresses. An adb key's fingerprint after "adb key"
+ * (the Manage page's own lines, #435) becomes `<fingerprint>`, except in the panel's own log ([text]'s keepAdbKeys).
  */
 object Redact {
     private val rules: List<Pair<Regex, (MatchResult) -> String>> = listOf(
@@ -35,5 +36,23 @@ object Redact {
         Regex("\\b[0-9A-Fa-f]{16,}\\b") to { _ -> "<hex>" },
     )
 
-    fun text(s: String): String = rules.fold(s) { acc, (re, to) -> re.replace(acc, to) }
+    private val adbKey = Regex("\\badb key (?:[0-9A-F]{2}:){15}[0-9A-F]{2}\\b")
+
+    /**
+     * [s] with the above removed. [keepAdbKeys]: an adb key's fingerprint after "adb key" stays whole, for the
+     * Log page on the panel, which records who let which computer in; the diagnostics file, which people post,
+     * drops it.
+     */
+    fun text(s: String, keepAdbKeys: Boolean = false): String {
+        if (!keepAdbKeys) return all(adbKey.replace(s, "adb key <fingerprint>"))
+        val out = StringBuilder()
+        var at = 0
+        for (m in adbKey.findAll(s)) {
+            out.append(all(s.substring(at, m.range.first))).append(m.value)
+            at = m.range.last + 1
+        }
+        return out.append(all(s.substring(at))).toString()
+    }
+
+    private fun all(s: String): String = rules.fold(s) { acc, (re, to) -> re.replace(acc, to) }
 }
