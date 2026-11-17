@@ -1,0 +1,245 @@
+// How complete Glassworks is on each frame (#423): the checklist's rules, the word, and the facts in every frame.json.
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { completeness, factProblems, type CheckKey, type FrameDesign, type FrameFacts, type FrameRun } from '../src';
+
+const FRAMES = join(__dirname, '../../../frames');
+const ids = readdirSync(FRAMES, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+const read = (id: string) => JSON.parse(readFileSync(join(FRAMES, id, 'design', 'frame.json'), 'utf8')) as FrameDesign;
+
+/** A frame where every item is ticked. */
+const FULL: FrameFacts = {
+  install: [],
+  silentUpdates: "Yes: the boot image's root update service installs them",
+  hardware: [],
+  kiosk: { onlyHome: true, noVendorUi: true, survivesReboot: true, sleepsAndWakes: true },
+  setup: ['screen'],
+  branding: { bootAnimation: true, vendorLogo: false },
+  panelRuns: true,
+};
+const rating = { value: 'yes' };
+const frame = (o: Partial<FrameDesign> = {}): FrameDesign => ({
+  id: 'a-panel', kind: 'full', name: 'A Panel', status: 'beta', summary: '', kiln: '/a-panel', specs: [], panes: {}, install: { how: '' },
+  model: {} as FrameDesign['model'],
+  ratings: Object.fromEntries(['difficulty', 'reversible', 'modifiesAndroid', 'root', 'opensDevice', 'vendorApps', 'wipes', 'backup', 'updates'].map((k) => [k, rating])) as FrameDesign['ratings'],
+  facts: FULL,
+  ...o,
+});
+const item = (f: FrameDesign, key: CheckKey, o?: Parameters<typeof completeness>[1]) => completeness(f, o).items.find((i) => i.key === key)!;
+const word = (f: FrameDesign, o?: Parameters<typeof completeness>[1]) => completeness(f, { clarity: 'B', ...o }).word;
+const facts = (x: FrameFacts) => frame({ facts: { ...FULL, ...x } });
+
+describe('the word', () => {
+  it('is Full when every item that counts is ticked', () => {
+    expect(word(frame())).toBe('full');
+    expect(completeness(frame(), { clarity: 'B' }).items.every((i) => i.state === 'yes')).toBe(true);
+  });
+
+  it('counts install, silent updates, hardware, kiosk and setup, and only those', () => {
+    expect(completeness(frame()).items.filter((i) => i.counts).map((i) => i.key)).toEqual(['install', 'silentUpdates', 'hardware', 'kiosk', 'setup']);
+  });
+
+  it('stays Full when branding and proof are missing: they are shown and don\'t count', () => {
+    const f = facts({ branding: { bootAnimation: false }, panelRuns: false });
+    expect(completeness(f).items.filter((i) => !i.counts).map((i) => [i.key, i.state])).toEqual([['recovery', 'yes'], ['branding', 'no'], ['proof', 'no']]);
+    expect(word(f, { clarity: undefined })).toBe('full');
+  });
+
+  it.each([
+    ['install', { install: ['usb-debugging'] }],
+    ['silent updates', { silentUpdates: 'No: Android 11 asks for a tap on each update' }],
+    ['hardware', { hardware: ['the camera'] }],
+    ['kiosk', { kiosk: { ...FULL.kiosk, noVendorUi: false } }],
+    ['setup', { setup: ['computer'] }],
+  ] as const)('is Good when %s is missing and it installs from Kiln', (_, x) => {
+    expect(word(facts(x as FrameFacts))).toBe('good');
+  });
+
+  it('is Basic when something that counts is missing and it doesn\'t install from Kiln', () => {
+    expect(word(frame({ kiln: undefined }))).toBe('basic');
+  });
+
+  it('is none while the frame doesn\'t ship, however complete its facts', () => {
+    expect(word(frame({ status: 'planned' }))).toBeNull();
+    expect(word(frame({ status: 'development' }))).toBeNull();
+    expect(word(frame({ status: 'alpha' }))).toBe('full');
+  });
+
+  it('counts an item that doesn\'t apply as ticked', () => {
+    const f = facts({ hardware: undefined, na: ['hardware'], notes: { hardware: 'It is a screen and nothing else.' } });
+    expect(item(f, 'hardware')).toMatchObject({ state: 'na', reason: 'It is a screen and nothing else.' });
+    expect(word(f)).toBe('full');
+  });
+
+  it('says it is unverified when an item that counts isn\'t from a real unit, and not for one that is shown only', () => {
+    expect(completeness(facts({ unverified: ['kiosk'] })).unverified).toBe(true);
+    expect(completeness(facts({ unverified: ['branding'] })).unverified).toBe(false);
+    expect(completeness(frame({ unverified: true })).unverified).toBe(true);
+    expect(completeness(frame({ status: 'planned', unverified: true })).unverified).toBe(false);
+  });
+});
+
+describe('each item', () => {
+  it('install: needs Kiln, a way back and nothing to tap on the device', () => {
+    expect(item(frame(), 'install')).toMatchObject({ state: 'yes', reason: 'From Kiln, with nothing to tap on the device and a way back.' });
+    expect(item(frame({ kiln: undefined }), 'install').reason).toBe('Not in Kiln yet.');
+    expect(item(frame({ ratings: { ...frame().ratings, reversible: { value: 'no' } } }), 'install').reason).toBe('No way back.');
+    expect(item(frame({ ratings: { ...frame().ratings, reversible: { value: 'partly' } } }), 'install').state).toBe('yes');
+    expect(item(facts({ install: ['usb-debugging', 'home-pick'] }), 'install').reason).toBe('On the device: turn on USB debugging and pick Glassworks as the home app.');
+    expect(item(facts({ install: undefined }), 'install')).toMatchObject({ state: 'no', reason: 'Taps on the device not checked yet.' });
+  });
+
+  it('silent updates: ticked only on the sensor\'s yes; a tap on any Android doesn\'t count', () => {
+    expect(item(frame(), 'silentUpdates')).toMatchObject({ state: 'yes', reason: "The boot image's root update service installs them." });
+    expect(item(facts({ silentUpdates: 'No: Android 8 asks for a tap on each update' }), 'silentUpdates')).toMatchObject({ state: 'no', reason: 'Android 8 asks for a tap on each update.' });
+    expect(item(facts({ silentUpdates: 'No: Android needs “Install unknown apps” allowed for the app' }), 'silentUpdates').state).toBe('no');
+    expect(item(facts({ silentUpdates: undefined }), 'silentUpdates')).toMatchObject({ state: 'no', reason: 'No panel has reported it yet.' });
+  });
+
+  it('hardware: what it provides needs a pane that runs it here, and what the frame says is missing fails it', () => {
+    expect(item(facts({ hardware: [] }), 'hardware')).toMatchObject({ state: 'yes', reason: 'Everything it has works.' });
+    expect(item(frame({ provides: ['camera'] }), 'hardware').state).toBe('yes');
+    expect(item(frame({ provides: ['camera'], status: 'planned' }), 'hardware').reason).toBe('Not yet: a camera.');
+    expect(item(frame({ provides: ['camera'], panes: { camera: { support: 'planned' } } }), 'hardware').reason).toBe('Not yet: a camera.');
+    expect(item(facts({ hardware: ['the light sensor', 'the case button'] }), 'hardware').reason).toBe('Not yet: the light sensor and the case button.');
+    expect(item(frame({ provides: [], facts: { ...FULL, hardware: undefined } }), 'hardware').reason).toBe('Not checked on a real unit yet.');
+    expect(item(frame({ provides: undefined, facts: { ...FULL, hardware: undefined } }), 'hardware').reason).toBe('Depends on the device.');
+  });
+
+  it('kiosk: all four checks, saying which fail and which nobody checked', () => {
+    expect(item(frame(), 'kiosk').state).toBe('yes');
+    expect(item(facts({ kiosk: { onlyHome: true, noVendorUi: false } }), 'kiosk').reason).toBe(
+      'Not yet: no vendor screens. Not checked: back after a reboot and the screen sleeps and wakes.',
+    );
+  });
+
+  it('setup: a way that needs no computer', () => {
+    expect(item(facts({ setup: ['screen', 'bluetooth', 'computer'] }), 'setup').reason).toBe('On its own screen, or over Bluetooth.');
+    expect(item(facts({ setup: ['hotspot'] }), 'setup').state).toBe('yes');
+    expect(item(facts({ setup: ['computer'] }), 'setup')).toMatchObject({ state: 'no', reason: 'Only from a computer.' });
+  });
+
+  it('recovery: back to stock, or at least to a working state', () => {
+    expect(item(frame({ ratings: { ...frame().ratings, reversible: { value: 'yes', detail: 'Uninstall the app' } } }), 'recovery').reason).toBe('Uninstall the app.');
+    expect(item(frame({ ratings: { ...frame().ratings, reversible: { value: 'partly' } } }), 'recovery').reason).toBe('Back to a working state.');
+    expect(item(frame({ ratings: { ...frame().ratings, reversible: { value: 'unknown' } } }), 'recovery').state).toBe('no');
+  });
+
+  it('branding: our boot animation and no maker\'s logo; a tested device keeps the maker\'s', () => {
+    expect(item(frame(), 'branding').state).toBe('yes');
+    expect(item(facts({ branding: { bootAnimation: true } }), 'branding').reason).toBe("Our boot animation; the logo at power-on isn't checked yet.");
+    expect(item(facts({ branding: { bootAnimation: true, vendorLogo: true } }), 'branding').state).toBe('no');
+    expect(item(facts({ branding: undefined }), 'branding').reason).toBe("The maker's boot screens stay.");
+  });
+
+  it('proof: Clarity graded and the panel runs done', () => {
+    expect(item(frame(), 'proof', { clarity: 'D' })).toMatchObject({ state: 'yes', reason: 'Clarity D, and its panel runs are done.' });
+    expect(item(facts({ panelRuns: false }), 'proof').reason).toBe('Clarity not graded on a real unit yet. Panel runs not done yet.');
+  });
+
+  it('shows the frame\'s own note next to the reason', () => {
+    expect(item(facts({ notes: { setup: 'It has no touch.' } }), 'setup').note).toBe('It has no touch.');
+  });
+});
+
+describe('a tested device', () => {
+  const run: FrameRun = {
+    on: '2026-11-18',
+    plan: { model: 'A Tablet', android: '14', sdk: 34, abi: 'arm64-v8a', app: 'dev.glassworks.generic_android' },
+    install: { grants: { microphone: 'granted' }, silentUpdates: 'allowed', home: { how: 'set-home-activity', state: 'set' }, setupPage: true },
+    panel: { silentUpdates: 'Yes: Android 12 or newer lets the app update itself' },
+    seen: { hardware: [], kiosk: { noVendorUi: true, survivesReboot: true, sleepsAndWakes: true }, setup: ['screen'] },
+  };
+  const tested = (r: Partial<FrameRun> = {}, o: Partial<FrameDesign> = {}) =>
+    frame({ kind: 'tested', base: 'generic-android', kiln: undefined, facts: undefined, run: { ...run, ...r }, ...o });
+  const base = { kiln: '/android' };
+
+  it('takes its facts from its run, and installs from its base\'s Kiln route', () => {
+    const c = completeness(tested(), { base });
+    expect(Object.fromEntries(c.items.map((i) => [i.key, i.state]))).toEqual({
+      install: 'no', silentUpdates: 'yes', hardware: 'yes', kiosk: 'yes', setup: 'yes', recovery: 'yes', branding: 'no', proof: 'no',
+    });
+    expect(c.items[0]!.reason).toBe('On the device: turn on USB debugging.');
+    expect(c.word).toBe('good');
+    expect(word(tested(), {})).toBe('basic');
+  });
+
+  it('counts Android\'s home chooser as a tap, and a refused microphone as missing hardware', () => {
+    const r = tested({ install: { ...run.install, home: { how: 'chooser', state: 'set' }, grants: { microphone: 'refused' } } });
+    expect(item(r, 'install').reason).toMatch(/pick Glassworks as the home app/);
+    expect(item(r, 'hardware').reason).toBe('Not yet: the microphone: Android refused it.');
+  });
+
+  it('says its hardware isn\'t checked when the run saw none: it is one device, not many', () => {
+    expect(item(tested({ seen: {} }), 'hardware').reason).toBe('Not checked on a real unit yet.');
+  });
+
+  it('is unverified, item by item, until the run has a day', () => {
+    const c = completeness(tested({ on: undefined }), { base });
+    expect(c.items.every((i) => i.unverified)).toBe(true);
+    expect(c.unverified).toBe(true);
+    expect(item(tested({ on: undefined }), 'proof').reason).toMatch(/Panel runs not done yet/);
+    expect(completeness(tested(), { base }).unverified).toBe(false);
+  });
+});
+
+describe('the frames', () => {
+  it.each(ids)('%s: its facts pass', (id) => {
+    expect(factProblems(read(id))).toEqual([]);
+  });
+
+  const clarity: Record<string, string | undefined> = { 'aqara-s1-plus': 'D' };
+  const all = ids.map(read);
+  const of = (id: string) => {
+    const f = read(id);
+    return completeness(f, { base: all.find((b) => b.id === f.base), clarity: clarity[id] });
+  };
+
+  it('gives each frame its word: only the S1 ships, and it misses wall base buttons', () => {
+    expect(Object.fromEntries(ids.map((id) => [id, of(id).word]))).toEqual({
+      'aqara-s1-plus': 'good', 'generic-android': null, 'google-pixel-tablet': null, 'lululemon-mirror': null,
+    });
+    expect(of('aqara-s1-plus').items.filter((i) => i.state !== 'yes').map((i) => i.key)).toEqual(['hardware']);
+  });
+
+  it('marks every Pixel Tablet value unverified until the root\'s run', () => {
+    expect(read('google-pixel-tablet').run?.on).toBeUndefined();
+    expect(of('google-pixel-tablet').items.every((i) => i.unverified)).toBe(true);
+  });
+});
+
+describe('factProblems', () => {
+  it.each([
+    ['a sensor answer in its own words', { kind: 'full', facts: { silentUpdates: 'yes' } }, 'facts.silentUpdates: the panel\'s Silent updates sensor, word for word ("Yes: …" or "No: …")'],
+    ['an unknown step', { kind: 'full', facts: { install: ['press-a-button'] } }, 'facts.install: should be a list of usb-debugging, home-pick'],
+    ['an unknown kiosk check', { kind: 'full', facts: { kiosk: { fast: true } } }, 'facts.kiosk: should map onlyHome, noVendorUi, survivesReboot, sleepsAndWakes to true or false'],
+    ['no way to set it up', { kind: 'full', facts: { setup: [] } }, 'facts.setup: should be a list of screen, hotspot, bluetooth, computer'],
+    ['n/a without a reason', { kind: 'full', facts: { na: ['hardware'] } }, 'facts.na: hardware needs its reason in facts.notes.hardware'],
+    ['a verdict written by hand', { kind: 'full', facts: { word: 'full' } }, 'facts.word: not part of the record (no serials, fingerprints or addresses)'],
+    ['a run on a full frame', { kind: 'full', run: {} }, 'run: only a tested device has one; record what this frame\'s panels show in facts'],
+    ['facts on a tested device', { kind: 'tested', facts: {}, run: undefined }, 'facts: a tested device\'s come from its run on a real unit; record them in run'],
+  ])('fails %s', (_, f, why) => {
+    expect(factProblems(f as FrameDesign)).toContain(why);
+  });
+
+  it('fails a tested device without a run', () => {
+    expect(factProblems({ kind: 'tested' })).toEqual(['run: a tested device records its run on a real unit (frames/README.md#a-tested-devices-run)']);
+  });
+
+  it('keeps serials and fingerprints out of a run', () => {
+    const run = { ...read('google-pixel-tablet').run!, plan: { ...read('google-pixel-tablet').run!.plan, serial: 'x', fingerprint: 'y' } };
+    expect(factProblems({ kind: 'tested', run })).toEqual([
+      'run.plan.serial: not part of the record (no serials, fingerprints or addresses)',
+      'run.plan.fingerprint: not part of the record (no serials, fingerprints or addresses)',
+    ]);
+  });
+
+  it('checks a run\'s day and its Kiln results', () => {
+    const good = read('google-pixel-tablet').run!;
+    expect(factProblems({ kind: 'tested', run: { ...good, on: '18 Nov' } })).toEqual(['run.on: should be the day it ran, YYYY-MM-DD']);
+    expect(factProblems({ kind: 'tested', run: { ...good, install: { ...good.install, home: { how: 'tap', state: 'set' } } } })).toEqual([
+      'run.install.home: should be { how: set-home-activity or chooser, state: set or unconfirmed }',
+    ]);
+  });
+});

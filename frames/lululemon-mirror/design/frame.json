@@ -422,5 +422,20 @@
       },
       "uses": "The chips inside: the SoC, Wi-Fi and Bluetooth, audio and camera. Our note mirror-android.md cites it, and the frame's Bluetooth rating comes from it."
     }
-  ]
+  ],
+  "facts": {
+    "install": [],
+    "silentUpdates": "Yes: the app is a system app that may install apps",
+    "kiosk": { "onlyHome": true, "survivesReboot": true },
+    "setup": ["computer"],
+    "branding": { "bootAnimation": true },
+    "panelRuns": false,
+    "unverified": ["install", "silentUpdates", "kiosk", "branding"],
+    "notes": {
+      "install": "Kiln's Mirror recipe runs in test only (/lululemon-mirror?apk=local).",
+      "silentUpdates": "Seen with the probe app on 2026-11-16 (privileged-app.md); Glassworks itself hasn't run on a Mirror yet.",
+      "kiosk": "Seen with the probe app on 2026-11-16 (first-boot.md), not yet with Glassworks.",
+      "setup": "It has no touch. The setup hotspot is meant for it, and hasn't run on a Mirror yet."
+    }
+  }
 }

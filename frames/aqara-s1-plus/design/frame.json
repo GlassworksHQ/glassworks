@@ -172,5 +172,17 @@
         "href": "https://github.com/topjohnwu/Magisk"
       }
     }
-  ]
+  ],
+  "facts": {
+    "install": [],
+    "silentUpdates": "Yes: the boot image's root update service installs them",
+    "hardware": ["button presses on the wall base", "the Ethernet wall base"],
+    "kiosk": { "onlyHome": true, "noVendorUi": true, "survivesReboot": true, "sleepsAndWakes": true },
+    "setup": ["screen", "bluetooth", "computer"],
+    "branding": { "bootAnimation": true, "vendorLogo": false },
+    "panelRuns": true,
+    "notes": {
+      "hardware": "The wall base sends no button presses over its UART (base-protocol.md). The case button isn't checked yet."
+    }
+  }
 }

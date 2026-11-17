@@ -72,6 +72,8 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `ratingsNote`, `notice` | Optional. A sentence of context; something a buyer must know |
 | `unverified` | Optional. `true` when any of it comes from writeups rather than a real device |
 | `credits` | Optional. The outside work the frame stands on, and who made it ([below](#credits)) |
+| `facts` | Optional, not on a tested device. What its panels show, for the checklist ([below](#how-complete-it-is)) |
+| `run` | A tested device only: its run on a real unit, which its checklist comes from ([below](#a-tested-devices-run)) |
 
 `model`:
 
@@ -223,6 +225,81 @@ it out, and says why:
 3. A frame without `provides` can't say: `depends`, "Needs a microphone."
 4. A frame that lacks something the pane needs can't run it: `no`, "Needs a microphone."
 5. Otherwise it runs at the pane's status (`planned` while the frame doesn't ship): "Has a microphone."
+
+## How complete it is
+
+Each frame's page on glassworks.dev shows how complete Glassworks is on it: a checklist of eight
+items, and one word above it (maintainer, #423, 2026-11-17). It is not a letter grade: Clarity owns A to
+F. `completeness()` in [`packages/frame-card`](../packages/frame-card/README.md) works both out from
+`frame.json` when the site is built, so they can't drift from the data. Nothing is written by hand
+except a reason the data can't give (`facts.notes`).
+
+### The items
+
+Each item is ✓, ✗ or n/a, with a short reason. A fact that is left out is "not checked", and that is
+a ✗, never a ✓.
+
+| Item | Ticked when | From |
+|---|---|---|
+| **Install** | One path in Kiln, nothing to tap on the device, and a way back | `kiln` (a tested device: its `base`'s), `ratings.reversible` (`yes` or `partly`), `facts.install` |
+| **Silent updates** | Updates install with no touch at all, from Home Assistant's update entity. An update that needs a tap doesn't count, on any Android version | `facts.silentUpdates`: the panel's *Silent updates* sensor, word for word. Ticked on "Yes: …" only |
+| **Hardware** | Everything the device has works in Glassworks | Every word in `provides` needs a pane that runs on the frame now ([above](#the-panes-a-frame-runs)); `facts.hardware` lists the rest that doesn't work yet. A frame without `provides` says "Depends on the device" |
+| **Kiosk** | Our app is the only home screen, no vendor screens show through, it comes back after a reboot, and the screen sleeps and wakes | `facts.kiosk`: `onlyHome`, `noVendorUi`, `survivesReboot`, `sleepsAndWakes` |
+| **Setup** | It sets up without a computer: on its own screen, the setup hotspot, or Bluetooth | `facts.setup`: `screen`, `hotspot`, `bluetooth`, `computer` |
+| **Recovery** | Back to stock, or at least to a working state | `ratings.reversible` and its `detail` |
+| **Branding** | Our boot animation and splash, with no maker's logo after power-on | `facts.branding`: `{ bootAnimation, vendorLogo }`. A tested device has no recipe of its own, so the maker's stay |
+| **Proof** | Clarity graded on a real unit, and the frame's panel runs done | `clarity/clarity.json` ([Clarity](../docs/perf.md)), `facts.panelRuns` |
+
+`facts.na` lists the items that don't apply, each with its reason in `facts.notes`; n/a counts as
+ticked. `facts.unverified` lists the items whose facts come from code or notes, not yet from a real
+unit, and the page marks them. A frame with `unverified: true` is unverified throughout.
+
+### The word
+
+Only install, silent updates, hardware, kiosk and setup decide it. Recovery, branding and proof are
+shown and don't count: a stock tablet that does everything but the boot animation doesn't sit a level
+below a rooted panel because the maker's logo shows for five seconds.
+
+| Word | When |
+|---|---|
+| **Full** | The frame ships (`status` alpha or later), and every item that counts is ticked or n/a |
+| **Good** | It ships and installs from Kiln, and something that counts is missing |
+| **Basic** | It ships, and doesn't install from Kiln |
+| none ("Not rated yet") | It doesn't ship yet. The checklist still shows, as its to-do list |
+
+When a counted item is unverified, the page says the word is unverified too.
+
+### A tested device's run
+
+A tested device has no frame code, so its facts come from one recorded run on a real unit, like
+Clarity's: Kiln's `--plan` and `--install` results
+([`run-node.ts`](generic-android/installer/run-node.ts)), what the panel reports after, and what the
+person saw. It goes in `run`, and a tested device has no `facts`.
+
+| Field | What | Becomes |
+|---|---|---|
+| `on` | The day it ran, `YYYY-MM-DD`. Without it, the values are what we expect and every item says unverified | Proof's panel run |
+| `app` | The app's version that ran | |
+| `plan` | From `--plan`: `model`, `android` (the version's name), `sdk`, `abi`, `app` (the package). Nothing else: no serial, fingerprint or address, and `factProblems()` refuses any other key | |
+| `install.grants` | From `--install`: `microphone`, `camera`, `secure-settings`, `overlay`, `device-admin`, each `granted`, `not-asked` or `refused` | A refused microphone or camera is missing hardware |
+| `install.silentUpdates` | `--install`'s `silentUpdates.state` | |
+| `install.home` | `{ how, state }`: `set-home-activity` or `chooser`, `set` or `unconfirmed` | Kiosk's `onlyHome` (`set`). USB debugging is always a tap on the device, and the chooser is one more |
+| `install.setupPage` | Kiln handed off to the app's setup page | |
+| `panel.silentUpdates` | The panel's *Silent updates* sensor afterwards, word for word | Silent updates |
+| `seen` | What the person saw that neither reports: `hardware`, `kiosk` (all but `onlyHome`), `setup`, `notes` | The same items |
+
+After the run, the root sets `on` and the values it found, and drops the frame's `unverified`.
+
+### Where the frames stand
+
+Worked out from today's data (2026-11-17):
+
+| Frame | Word | Why |
+|---|---|---|
+| `aqara-s1-plus` | Good | Everything that counts is ticked but hardware: the wall base sends no button presses over its UART, and the Ethernet base isn't supported ([base-protocol.md](aqara-s1-plus/research/base-protocol.md)) |
+| `lululemon-mirror` | Not rated yet | Planned, and not in Kiln yet. Its silent updates and home screen were seen with the probe app, not yet with Glassworks, so they're marked unverified |
+| `generic-android` | Not rated yet | Planned, and not in Kiln yet. Silent updates and hardware depend on the device |
+| `google-pixel-tablet` | Not rated yet | Planned. Its run is filled with the values we expect, all unverified, until the root's run on a real unit |
 
 ## What came from glassworks.dev
 

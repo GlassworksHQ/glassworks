@@ -17,6 +17,10 @@ below as the release notes.
   panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
   so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
   permission first, and says why.
+- **See how complete Glassworks is on each device.** Every frame's page on glassworks.dev has a
+  checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
+  and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the
+  first five decide the word. The S1 is Good today: the wall base's buttons don't reach the panel yet.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on

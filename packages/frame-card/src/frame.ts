@@ -1,5 +1,6 @@
 // A frame's design data, `frames/<id>/design/frame.json` (the format is in frames/README.md), and the
 // card's words for it. Kiln and glassworks.dev read the same files through these types.
+import type { FrameFacts, FrameRun } from './completeness';
 
 type V3 = [number, number, number];
 
@@ -87,6 +88,10 @@ export interface FrameDesign {
   unverified?: boolean;
   /** the outside work the frame stands on: images, unlocks, tools, research (frames/README.md#credits) */
   credits?: FrameCredit[];
+  /** what its panels show, for the checklist (completeness.ts; frames/README.md#how-complete-it-is). Not on a tested device */
+  facts?: FrameFacts;
+  /** a tested device only: its run on a real unit, which its checklist comes from */
+  run?: FrameRun;
 }
 
 /** One piece of outside work a frame relies on, and who made it. */
