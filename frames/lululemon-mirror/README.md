@@ -77,7 +77,7 @@ Kiln show ([how](../README.md#credits)).
 
 ## Status
 
-**Status: planned.** Nothing installs on it yet. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
+**Status: planned.** No release installs on it yet: test builds do. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
 
 The original version runs Android 6.0.1, and S1 Kiosk needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Kiln's Mirror recipe installs the legacy build of Glassworks for generic Android (`dev.glassworks.generic_android.legacy`, #198) instead, which asks for Android 6.0 (API 23). On a Mirror on 2026-11-17 it started as the only home screen and showed the portrait setup screen with no crashes (#443); Wi-Fi, Home Assistant setup and a reboot aren't checked yet. Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
 
