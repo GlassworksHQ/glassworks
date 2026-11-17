@@ -100,8 +100,11 @@ What waits: a first device run, the maintainer's call on `desugar_jdk_libs`, and
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
-- **Orientation:** the screen's natural orientation (rotation 0), either way up. Landscape on most tablets; portrait
-  on the Mirror, whose image sets `ro.sf.hwrotation=270`, and on a tablet that stands portrait at rotation 0.
+- **Orientation:** the device's rotation: Android's auto-rotate, or the way the person locked the screen. The Mirror
+  stands portrait because its image does (`ro.sf.hwrotation=270`, auto-rotate off). A device with a frame of its own
+  stands as its `frame.json`'s `display` says: the Pixel Tablet is landscape, though its screen is portrait at
+  rotation 0. The app knows it by `Build.MODEL`, as Kiln's [`devices.ts`](installer/src/devices.ts) does
+  (`GenericAndroid.KNOWN`; `GenericAndroidKnownTest` keeps the two the same).
 - **Touch:** with input devices listed and no touchscreen among them (the Mirror), setup works from a computer
   instead of the screen (#34).
 Neither build can go on Google Play as it is: each updates itself from the repo's releases, and Play updates
