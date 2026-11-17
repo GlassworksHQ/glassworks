@@ -25,6 +25,21 @@ public interface VoiceInput : WakeWordCatalog {
         get() = null
         set(_) {}
 
+    /**
+     * Whether the wake word can listen now, and if not, why. An input that can't tell (a test's fake) keeps
+     * this default, Ready.
+     */
+    public val readiness: VoiceReadiness
+        get() = VoiceReadiness.Ready
+
+    /** Gets [readiness] each time it changes, on a background thread. A fake that can't tell ignores it. */
+    public var onReadiness: ((VoiceReadiness) -> Unit)?
+        get() = null
+        set(_) {}
+
+    /** After a failure ([readiness]), tries the wake word again now instead of at its next retry. */
+    public fun retryNow() {}
+
     /** Starts listening for the wake word; with [muted], the microphone stays closed until [setMuted] false. */
     public fun start(muted: Boolean)
 

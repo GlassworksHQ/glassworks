@@ -14,3 +14,7 @@ publish the matching section below as the release notes.
 - **The API.** `VoiceAssistantController` (the Assist client), `VoiceEngine` and `VoiceInput` (the
   microphone and wake word), `VoiceConfig`, `VoiceEvent`, `UrlPlayer`, and the wake word catalogue
   (`WakeWords`, `WakeWord`, `MicroModel`, `WakeWordCatalog`).
+- **`VoiceInput.readiness`.** Whether the wake word can listen, and if not why (`VoiceReadiness`: the
+  model's download failed and why (`ModelFailure`), the engine didn't start, the microphone isn't allowed or
+  doesn't open), with `onReadiness` for changes and `retryNow()`. `VoiceEngine` retries a failed load after
+  30 s, then 1, 2, 5 and every 10 minutes (#458).

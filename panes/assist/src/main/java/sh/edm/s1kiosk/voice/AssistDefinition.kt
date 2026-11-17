@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.voice
 
+import dev.glassworks.voice.VoiceReadiness
 import dev.glassworks.voice.WakeWord
 import dev.glassworks.voice.WakeWords
 import dev.glassworks.frame.Capability
@@ -38,13 +39,24 @@ class AssistDefinition(file: SharedPreferences) : PaneDefinition {
         val p = running as? AssistPane ?: return emptyList()
         fun done(d: (String?) -> Unit) = d(null)
         // Its controls cover the pane's entities; a new one would be listed after them.
-        val covers = setOf("mute_microphone", "wake_sound", "voice_overlay", "mic_gain", "wake_word_threshold")
+        val covers = setOf("mute_microphone", "wake_sound", "voice_overlay", "mic_gain", "wake_word_threshold", "voice_status")
+        // Built with the page: a failure the engine retries offers Try again (#458).
+        val tryAgain = if (VoiceStatus.retries(p.readiness)) {
+            SettingsItem.Action("Wake word model", { VoiceStatus.retryLine(p.readiness, p.clock()) }, "Try again") { d -> p.retryNow(); d(null) }
+        } else null
         return listOf(SettingsSection(id, "Voice", covers = covers, status = {
             val w = prefs.wakeWord
-            PaneState(PaneState.Kind.RUNNING, if (w.isEmpty()) "No wake word · Assist" else "Wake word “${WakeWords.parse(w)?.phrase ?: w}” · Assist")
+            val r = p.readiness
+            if (VoiceStatus.problem(r)) PaneState(PaneState.Kind.PROBLEM, "${VoiceStatus.entity(r)} · Assist")
+            else PaneState(PaneState.Kind.RUNNING, if (w.isEmpty()) "No wake word · Assist" else "Wake word “${WakeWords.parse(w)?.phrase ?: w}” · Assist")
         }, items = listOf(
-            SettingsItem.Status(text = { status(prefs.micMuted, prefs.wakeWord) }, ok = { !prefs.micMuted && prefs.wakeWord.isNotEmpty() }),
-            SettingsItem.Group("Listening", listOf(
+            SettingsItem.Status(
+                text = { VoiceStatus.line(p.readiness, prefs.micMuted, prefs.wakeWord, p.clock()) },
+                ok = { !prefs.micMuted && prefs.wakeWord.isNotEmpty() && p.readiness.let { it == null || it == VoiceReadiness.Ready } },
+                problem = { VoiceStatus.problem(p.readiness) },
+            ),
+            SettingsItem.Group("Listening", listOfNotNull(
+                tryAgain,
                 SettingsItem.Choice("Wake word", { prefs.wakeWord }, { wakeWords(prefs.wakeWord) }) { v, d -> p.useWakeWord(v); done(d) },
                 SettingsItem.Slider("Threshold", { prefs.threshold }, 0.1f, 0.99f, 0.01f, { v ->
                     String.format(Locale.ROOT, "%.2f", v) + if (kotlin.math.abs(v - prefs.defaultThreshold) < 0.005f) " · the word's own" else ""
@@ -59,7 +71,11 @@ class AssistDefinition(file: SharedPreferences) : PaneDefinition {
                 SettingsItem.Switch("Voice overlay", "Shows what you said and the answer", { prefs.overlay }) { v, d -> prefs.overlay = v; done(d) },
             )),
             SettingsItem.States(dev.glassworks.pane.IN_HOME_ASSISTANT) {
-                listOf(SettingsItem.StateRow("Assist satellite", p.satellite), SettingsItem.StateRow("Timers running", timers(p.timers)))
+                listOf(
+                    SettingsItem.StateRow("Voice status", VoiceStatus.entity(p.readiness) ?: dev.glassworks.pane.UNKNOWN),
+                    SettingsItem.StateRow("Assist satellite", p.satellite),
+                    SettingsItem.StateRow("Timers running", timers(p.timers)),
+                )
             },
         )))
     }

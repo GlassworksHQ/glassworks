@@ -18,6 +18,8 @@ internal class Microphone(
     private val frameSamples: Int = OwwFeatures.FRAME,
     private val onError: (String) -> Unit,
     private val onFrame: (ShortArray) -> Unit,
+    /** No source opened. It tries again 5 s later. */
+    private val onOpenFailed: () -> Unit = { onError("Cannot open the microphone (RECORD_AUDIO granted? mic busy?)") },
 ) {
     companion object {
         const val RATE = 16_000
@@ -80,7 +82,7 @@ internal class Microphone(
         while (running.get()) {
             val rec = open()
             if (rec == null) {
-                onError("Cannot open the microphone (RECORD_AUDIO granted? mic busy?)")
+                onOpenFailed()
                 sleepQuietly(5_000)
                 continue
             }

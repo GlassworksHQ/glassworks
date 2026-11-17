@@ -16,8 +16,10 @@ import dev.glassworks.esphome.EntityCategory
 import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.esphome.NumberEntity
 import dev.glassworks.esphome.SwitchEntity
+import dev.glassworks.esphome.TextSensorEntity
 import dev.glassworks.voice.VoiceAssistantController
 import dev.glassworks.voice.VoiceInput
+import dev.glassworks.voice.VoiceReadiness
 import sh.edm.s1kiosk.esphome.UrlPlayer
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -91,7 +93,21 @@ class AssistPane(
             "wake_word_threshold", "Wake word threshold", "mdi:account-voice", disabledByDefault = true, min = 0.1f, max = 0.99f, step = 0.01f,
             get = { prefs.threshold }, set = { prefs.threshold = it },
         ),
+        // Whether voice could get ready, and if not why (#458): Ready, Download failed, No microphone, ...
+        TextSensorEntity(
+            "voice_status", "Voice status", "mdi:microphone-message", EntityCategory.DIAGNOSTIC,
+            get = { VoiceStatus.entity(readiness) },
+        ),
     )
+
+    /** Whether the wake word can listen, and if not why, as the engine last said; null while voice is off. */
+    @Volatile var readiness: VoiceReadiness? = null
+        private set
+
+    /** After a failed download or engine start: tries again now instead of at the next retry. */
+    fun retryNow() {
+        input?.retryNow()
+    }
 
     /** The Assist satellite's state in Home Assistant's words (Idle, Listening, Processing, Responding), for the settings page (#212). */
     @Volatile var satellite: String = IDLE
@@ -174,6 +190,8 @@ class AssistPane(
         val engine = createInput(cfg, prefs.wakeWord) { id -> prefs.wakeWord = id }
         engine.onError = { msg -> dispatch(VoiceEvent.Error(msg, local = true)) }
         engine.onMicLevel = { VoiceLevels.mic = it }
+        readiness = engine.readiness
+        engine.onReadiness = { r -> if (input === engine) { readiness = r; ctx.publishStates() } }
         val c = VoiceAssistantController(
             send = { type, payload -> server?.sendVoice(type, payload) ?: false },
             player = object : dev.glassworks.voice.UrlPlayer {
@@ -209,6 +227,7 @@ class AssistPane(
         watchdog = null
         input?.stop()
         input = null
+        readiness = null
         // The server outlives the pane (voice turned off, or the panel stopping): take the stopped controller back.
         server?.let { if (it.voice === controller) it.voice = null }
         controller = null

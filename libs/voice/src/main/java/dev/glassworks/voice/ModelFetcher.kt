@@ -48,7 +48,7 @@ internal class ModelFetcher(
             c.connectTimeout = 15_000
             c.readTimeout = 30_000
             c.instanceFollowRedirects = true // github.com -> release-assets.githubusercontent.com (both https)
-            if (c.responseCode != 200) throw IOException("HTTP ${c.responseCode} for $url")
+            if (c.responseCode != 200) throw HttpStatusException(c.responseCode)
             return c.inputStream
         }
 
@@ -69,36 +69,49 @@ internal class ModelFetcher(
     /**
      * Fetches whatever [missing] reports. Each file goes to a `.part` file first and is renamed only
      * after its SHA-256 matched, so a half download never looks like a model. Returns the names fetched.
+     * A failure is a [ModelDownloadException] that says why ([modelFailureOf]).
      */
     @Throws(IOException::class)
     fun ensure(dir: File): List<String> {
         val need = missing(dir)
         if (need.isEmpty()) return need
-        if (!dir.isDirectory && !dir.mkdirs()) throw IOException("cannot create $dir")
+        if (!dir.isDirectory && !dir.mkdirs()) throw ModelDownloadException("cannot create $dir", ModelFailure.Storage)
         for (name in need) {
             val part = File(dir, "$name.part")
             try {
-                open(URL("$base/$name")).use { input ->
-                    part.outputStream().use { out ->
+                val input = download { open(URL("$base/$name")) }
+                input.use {
+                    val out = save { part.outputStream() }
+                    out.use {
                         val buf = ByteArray(64 * 1024)
                         var total = 0L
                         while (true) {
-                            val n = input.read(buf)
+                            val n = download { input.read(buf) }
                             if (n < 0) break
                             total += n
-                            if (total > MAX_BYTES) throw IOException("$name is larger than expected")
-                            out.write(buf, 0, n)
+                            if (total > MAX_BYTES) throw ModelDownloadException("$name is larger than expected", ModelFailure.CheckFailed)
+                            save { out.write(buf, 0, n) }
                         }
                     }
                 }
                 val got = sha256(part)
-                if (got != files.getValue(name)) throw IOException("$name failed its SHA-256 check (got ${got.take(16)}…)")
-                if (!part.renameTo(File(dir, name))) throw IOException("cannot rename $part")
+                if (got != files.getValue(name)) {
+                    throw ModelDownloadException("$name failed its SHA-256 check (got ${got.take(16)}…)", ModelFailure.CheckFailed)
+                }
+                if (!part.renameTo(File(dir, name))) throw ModelDownloadException("cannot rename $part", ModelFailure.Storage)
                 VoiceLog.i("Downloaded wake word model $name")
             } finally {
                 part.delete()
             }
         }
         return need
+    }
+
+    private inline fun <T> download(block: () -> T): T = try { block() } catch (e: IOException) {
+        throw e as? ModelDownloadException ?: ModelDownloadException(e.message ?: e.toString(), modelFailureOf(e), e)
+    }
+
+    private inline fun <T> save(block: () -> T): T = try { block() } catch (e: IOException) {
+        throw ModelDownloadException(e.message ?: e.toString(), ModelFailure.Storage, e)
     }
 }
