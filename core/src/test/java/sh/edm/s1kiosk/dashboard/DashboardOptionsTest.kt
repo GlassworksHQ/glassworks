@@ -86,6 +86,11 @@ class DashboardOptionsTest {
         assertEquals("http://user:secret@homeassistant.local:8123/tablet-home", DashboardOptions.urlFor("Tablet", set, base, base, list))
         assertEquals("not auto, which would drop them", "http://user:secret@homeassistant.local:8123/",
             DashboardOptions.urlFor(DEFAULT, "$set" + "tablet-home", base, base, list))
+        // A `$` is legal in a password (RFC 3986 sub-delims) and must be copied as it is.
+        val dollar = "http://user:pa%24word@homeassistant.local:8123/"
+        assertEquals("http://user:pa%24word@homeassistant.local:8123/tablet-home", DashboardOptions.urlFor("Tablet", dollar, base, base, list))
+        val raw = "http://user:pa\$1ss@homeassistant.local:8123/"
+        assertEquals("http://user:pa\$1ss@homeassistant.local:8123/tablet-home", DashboardOptions.urlFor("Tablet", raw, base, base, list))
     }
 
     @Test
