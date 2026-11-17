@@ -17,6 +17,16 @@ below as the release notes.
   panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
   so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
   permission first, and says why.
+- **See how complete Glassworks is on each device.** Every frame's page on glassworks.dev has a
+  checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
+  and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the
+  first five decide the word. The S1 is Good today: the wall base's buttons don't reach the panel yet.
+- **The camera pane in Glassworks for generic Android, the Mirror's legacy build included.** On a device
+  with a camera and no proximity sensor of its own, turn the Camera pane on and the screen wakes when someone
+  walks up, with no image leaving the device in Presence only. A device without a camera gets no camera entities. On a screen without
+  touch, such as the lululemon Mirror, setup never waits on the camera step: the use stays Presence only, and
+  Kiln grants the camera. On Android 6-7 the ONVIF stream needs the camera to offer 1280x720; presence works
+  either way. Not yet run on a real Mirror.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -123,6 +133,10 @@ below as the release notes.
   panel's Wi-Fi opens a page on the panel, the QR code changes to the setup page's address, so nobody types
   it. The panel's logs no longer name the Wi-Fi network you pick, nor the panel's own network and
   its password.
+- **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
+  `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
+  setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
+  shows Kiln's name or its orange colours. The steps and words are the same.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
@@ -291,6 +305,9 @@ below as the release notes.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.
+- **No permission prompt the panel doesn't need.** At start, the app asks Android for the microphone only while
+  Voice is on, and for the camera only while the Camera pane is on. On a screen without touch, such as the
+  lululemon Mirror, it never shows Android's prompt: Kiln grants the permissions at install.
 - **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
   pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
   said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
@@ -300,6 +317,12 @@ below as the release notes.
 - **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
   landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
   did, and stops with a clear message if it didn't. The Mirror's install is still test only.
+- **Wake word models and updates download on Android 6 and 7.0.** The lululemon Mirror and other Android
+  6–7.0 devices could not download the wake word models, and would have failed to download an update:
+  their built-in list of trusted certificate authorities is missing the one GitHub's downloads use. The
+  app now adds that one certificate authority on those Android versions, and checks certificates as
+  before. Android 7.1 and newer are unchanged. A device without the fix can't download it either, so
+  install this version with Kiln over USB.
 - **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its

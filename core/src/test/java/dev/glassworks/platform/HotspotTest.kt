@@ -121,6 +121,19 @@ class HotspotTest {
     }
 
     @Test
+    fun `within one interface the address in a hotspot subnet wins over the interface's own order`() {
+        assertEquals("no client list to go by", "192.168.43.1", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20", "192.168.43.1")),
+        )))
+        assertEquals("Wi-Fi Direct's subnet too", "192.168.49.1", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20", "192.168.49.1")),
+        )))
+        assertEquals("no hotspot subnet: the interface's order", "192.168.1.20", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20", "192.168.7.1")),
+        )))
+    }
+
+    @Test
     fun `the AP on wlan1 with the client on wlan0 gives the AP's address`() {
         assertEquals("192.168.49.1", HotspotAddress.pick(listOf(
             Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20")),
