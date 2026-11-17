@@ -23,3 +23,8 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.17")
 }
 
+// BluetoothProxyHomeAssistantTest runs esphome-api's GATT script (shared, not copied): a change to it reruns the tests.
+tasks.withType<Test>().configureEach {
+    inputs.file(rootProject.file("libs/esphome-api/src/test/resources/esphome_bluetooth_connections.py"))
+        .withPropertyName("sharedEsphomeScript").withPathSensitivity(PathSensitivity.RELATIVE)
+}
