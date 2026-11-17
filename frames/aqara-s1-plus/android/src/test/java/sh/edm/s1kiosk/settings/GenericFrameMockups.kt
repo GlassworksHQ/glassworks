@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import dev.glassworks.manage.ManageFixture
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
-import dev.glassworks.frame.friendlyName
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.settingsOrder
@@ -95,7 +94,7 @@ class GenericFrameMockups {
 
     private fun setup(frame: Frame, step: String): SetupOverlay {
         val a = Mockup.activity()
-        val s = SetupOverlay(a, KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).setupPanes(app), frame.friendlyName())
+        val s = SetupOverlay(a, frame, KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).setupPanes(app))
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(
             step = step, done = setOf(SetupFlow.WIFI), wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),

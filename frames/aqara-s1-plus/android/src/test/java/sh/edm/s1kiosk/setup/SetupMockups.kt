@@ -1,5 +1,7 @@
 package sh.edm.s1kiosk.setup
 
+import dev.glassworks.frame.Frame
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.content.Context
 import dev.glassworks.frame.Input
@@ -95,10 +97,10 @@ class SetupMockups {
 
     private fun shot(
         name: String, m: SetupOverlay.Model, radio: RadioFollowUp.Facts? = null, followUp: Boolean = false,
-        input: Input = Input.TOUCH, then: (SetupOverlay) -> Unit = {},
+        frame: (Context) -> Frame = { TestFrames.s1() }, then: (SetupOverlay) -> Unit = {},
     ) {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a, panes(a, radio, followUp)).also { it.input = input }
+        val s = SetupOverlay(a, frame(a), panes(a, radio, followUp))
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(m)
         then(s)
@@ -154,11 +156,11 @@ class SetupMockups {
         shot("setup-13-done", model(SetupFlow.PANES)) { it.finish(holdMs = 60_000) {} }
         shot("setup-14-done-preview", model(SetupFlow.PANES, preview = true)) { it.finish {} }
 
-        // A frame without touch (Input.NONE, #34): set up from a computer; nothing on the screen takes a tap.
-        shot("setup-15-no-touch-wifi", model(SetupFlow.WIFI, wifi = offline, panelIp = null), input = Input.NONE)
-        shot("setup-16-no-touch-ha", model(SetupFlow.HA), input = Input.NONE)
-        shot("setup-17-no-touch-signin", model(SetupFlow.SIGNIN), input = Input.NONE)
-        shot("setup-18-no-touch-radio", model("radio"), radio = coordinator, input = Input.NONE)
+        // A frame without touch (the Mirror's, #34) at the S1's size: set up from a computer; nothing on the screen takes a tap.
+        shot("setup-15-no-touch-wifi", model(SetupFlow.WIFI, wifi = offline, panelIp = null), frame = TestFrames::mirror)
+        shot("setup-16-no-touch-ha", model(SetupFlow.HA), frame = TestFrames::mirror)
+        shot("setup-17-no-touch-signin", model(SetupFlow.SIGNIN), frame = TestFrames::mirror)
+        shot("setup-18-no-touch-radio", model("radio"), radio = coordinator, frame = TestFrames::mirror)
 
         // The setup hotspot (#197): no Wi-Fi works, so the panel opens its own; a phone joins it and opens the setup page.
         val idle = ImprovFacts()
@@ -166,14 +168,14 @@ class SetupMockups {
         shot("setup-20-hotspot-permission", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.permission))
         shot("setup-21-hotspot-on", model(SetupFlow.WIFI, wifi = offline, hotspot = Spot.on))
         shot("setup-22-hotspot-failed", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.failed))
-        shot("setup-23-no-touch-hotspot-on", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on), input = Input.NONE)
+        shot("setup-23-no-touch-hotspot-on", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on), frame = TestFrames::mirror)
         shot("setup-24-hotspot-wifi-off", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.wifiOff))
-        shot("setup-25-no-touch-wifi-off", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.wifiOff), input = Input.NONE)
+        shot("setup-25-no-touch-wifi-off", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.wifiOff), frame = TestFrames::mirror)
         shot("setup-26-hotspot-starting", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.starting))
         shot("setup-27-hotspot-phone-joined", model(SetupFlow.WIFI, wifi = offline, hotspot = Spot.phone))
         shot("setup-28-hotspot-asked-failed", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.askedFailed))
         // #484: the setup page signed it in; only Home Assistant's add is left.
-        shot("setup-29-no-touch-ha-waiting", addWait, input = Input.NONE)
+        shot("setup-29-no-touch-ha-waiting", addWait, frame = TestFrames::mirror)
     }
 
     /**
@@ -195,7 +197,7 @@ class SetupMockups {
             "portrait-08-no-touch-ha-waiting" to addWait,
         )) {
             val a = Mockup.activity()
-            val s = s1SetupOverlay(a, panes(a, null)).also { it.input = Input.NONE }
+            val s = SetupOverlay(a, TestFrames.mirror(a), panes(a, null))
             a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
             s.render(m)
             Mockup.idle()
