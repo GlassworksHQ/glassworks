@@ -523,7 +523,7 @@ class PanelDevice(
             "max_brightness", "Max auto brightness", "mdi:brightness-percent", min = 5f, max = 100f, step = 5f,
             unit = "%", mode = 1,
             get = { Math.round(prefs.maxBrightness * 100f).toFloat() },
-            set = { prefs.maxBrightness = (it / 100f).coerceIn(0.05f, 1f); ui { screen.refreshBrightness() } },
+            set = { prefs.maxBrightness = (it / 100f).coerceIn(0.05f, 1f); ui { screen.refreshBrightness(immediate = true) } },
         ),
         NumberEntity(
             "presence_range", "Presence range", "mdi:signal-distance-variant", disabledByDefault = true, min = 0f, max = 2.5f, step = 0.1f,

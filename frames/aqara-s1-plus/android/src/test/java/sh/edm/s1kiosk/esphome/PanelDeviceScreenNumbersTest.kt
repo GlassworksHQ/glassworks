@@ -1,6 +1,8 @@
 package sh.edm.s1kiosk.esphome
 
 import android.app.Application
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.os.Looper
 import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
@@ -14,6 +16,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.SensorEventBuilder
+import org.robolectric.shadows.ShadowSensor
 import sh.edm.s1kiosk.KioskApp
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.frame.AqaraS1Plus
@@ -28,8 +32,9 @@ class PanelDeviceScreenNumbersTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
 
+    private val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
+
     private fun withDevice(block: (set: (String, Float) -> Unit, state: (String) -> Float) -> Unit) {
-        val runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val device = PanelDevice(app, runtime, runtime::devicePanes)
         try {
             device.initEntities(
@@ -45,6 +50,7 @@ class PanelDeviceScreenNumbersTest {
                 { id -> ProtoMessage(entity(id).state()!!.toByteArray()).float(2) },
             )
         } finally {
+            runtime.screen.stop()
             device.stop()
         }
     }
@@ -64,6 +70,24 @@ class PanelDeviceScreenNumbersTest {
         set("idle_timeout", 0f)
         assertEquals(0, prefs.idleOffSec)
         assertEquals("always", prefs.screenMode)
+    }
+
+    /**
+     * CodeRabbit on #477: a new limit used to ease 30% of the way and wait for the next light reading, which a steady
+     * room never sends (the sensor reports only changes). At 100% auto, 20% left the screen at about 76%.
+     */
+    @Test fun aNewMaxAutoBrightnessAppliesWithoutAnotherLightReading() = withDevice { set, _ ->
+        val sensors = app.getSystemService(SensorManager::class.java)
+        val light = ShadowSensor.newInstance(Sensor.TYPE_LIGHT)
+        shadowOf(sensors).addSensor(light)
+        runtime.screen.start(app)
+        shadowOf(sensors).sendSensorEventToListeners(SensorEventBuilder.newBuilder().setSensor(light).setValues(floatArrayOf(1000f)).setTimestamp(0).build())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("the room's light, at the panel's 100% ceiling", 1f, runtime.screen.brightness, 1e-4f)
+        set("max_brightness", 20f)
+        assertEquals(0.2f, runtime.screen.brightness, 1e-4f)
+        set("max_brightness", 100f)
+        assertEquals("and back up for the day, as quickly", 1f, runtime.screen.brightness, 1e-4f)
     }
 
     @Test fun maxAutoBrightnessIsAPercentOfTheCurvesCeiling() = withDevice { set, state ->

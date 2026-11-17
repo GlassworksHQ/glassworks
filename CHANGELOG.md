@@ -11,7 +11,9 @@ below as the release notes.
 - **Panel night mode, a blueprint for Home Assistant.** At night your panels turn their screen off
   sooner and keep it dimmer, and in the morning they go back to your day settings. Night can be two
   times, sunset to sunrise, or any condition Home Assistant can check, and one automation covers all
-  your panels. It changes a panel only when night starts and ends, so a value you set by hand stays.
+  your panels. It only switches a panel between your two values: at night one that is still at the
+  day value, by day one still at the night value. A value you set by hand stays, unless it is one of
+  those two. A panel that was off or restarting catches up within a minute of coming back.
   Add it from the panel's **Settings → Screen** or the Manage page. A new *Max auto brightness* number
   in Home Assistant sets how bright the screen may get, and *Idle timeout* is now on by default for new
   panels. Setting *Idle timeout* above 0 from Home Assistant also turns *Screen mode* back to presence,

@@ -356,9 +356,13 @@ class ScreenPolicy(
         if (prev.isNaN() || kotlin.math.abs(prev - lux) > maxOf(5f, prev * 0.2f)) notifyChanged()
     }
 
-    /** Re-applies the brightness policy after a settings change (main thread). */
-    fun refreshBrightness() {
-        if (started) updateBrightness()
+    /**
+     * Re-applies the brightness policy after a settings change (main thread). [immediate] jumps to the new target
+     * instead of easing toward it: the light sensor reports only changes, so in a steady room no reading would
+     * come to finish the easing (a new Max auto brightness from Home Assistant, #477).
+     */
+    fun refreshBrightness(immediate: Boolean = false) {
+        if (started) updateBrightness(immediate)
     }
 
     /**

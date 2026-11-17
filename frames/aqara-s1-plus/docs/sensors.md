@@ -46,8 +46,11 @@ See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `sh/edm/s1kiosk/fra
 - **Auto-brightness** from lux (log curve, up to *Max auto brightness*), applied as window brightness.
 - **No clock of its own.** Up to 0.4.3 the panel had a night window (22:00–07:00) with a 20 s
   timeout and a 20% brightness cap. Home Assistant decides when it is night now: the
-  [Panel night mode](../../../docs/blueprints.md) blueprint lowers the idle timeout and the brightness
-  limit, and puts them back in the morning.
+  [Panel night mode](../../../docs/blueprints.md) blueprint switches the idle timeout and the brightness
+  limit between the day and night values you configure. It changes a value only when it matches the
+  other period's configured value: at night a panel still at the day value, by day one still at the
+  night value. Any other value, such as 300 s set by hand when the day value is 120 s, stays as it is.
+  It never restores an earlier value of its own.
 - **Presence range** is configurable in metres. It needs
   `pm grant sh.edm.s1kiosk android.permission.WRITE_SECURE_SETTINGS`.
 - Instant screen-off uses `DevicePolicyManager.lockNow()` if the app is a device admin
