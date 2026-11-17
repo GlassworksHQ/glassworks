@@ -47,6 +47,18 @@ class ModelFetcherTest {
     }
 
     @Test
+    fun sweepDeletesOnlyWhatAKilledDownloadLeft() {
+        val dir = Files.createTempDirectory("models").toFile()
+        val model = File(dir, "w.tflite").apply { writeBytes(ByteArray(64) { 1 }) }
+        val killed = File(dir, "w.tflite.killed.part").apply { writeBytes(ByteArray(8)); setLastModified(System.currentTimeMillis() - 11 * 60_000) }
+        val live = File(dir, "w.tflite.live.part").apply { writeBytes(ByteArray(8)) }
+        ModelFetcher.sweep(dir)
+        assertFalse("a killed download's part is gone", killed.exists())
+        assertTrue("a live download's part stays", live.exists())
+        assertTrue("the model stays", model.exists())
+    }
+
+    @Test
     fun replacesACorruptModel() {
         assumeTrue("no model cache at $cache", haveCache())
         val dir = Files.createTempDirectory("models").toFile()

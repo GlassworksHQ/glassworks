@@ -93,7 +93,7 @@ public class VoiceEngine internal constructor(
     /** The microphone's side of [readiness]: null while it opens (or is closed on purpose). */
     @Volatile private var micProblem: VoiceReadiness? = null
 
-    /** Mic thread: failed reads since the last frame. */
+    /** Mic thread: failed reads since the last frame, or since the microphone opened ([closeMic]). */
     private var micReadFailures = 0
 
     /** Executor thread: failed loads in a row, and the next try. */
@@ -120,10 +120,7 @@ public class VoiceEngine internal constructor(
     override fun stop() {
         running = false
         exec.shutdownNow()
-        mic?.stop()
-        mic = null
-        micProblem = null
-        onMicLevel?.invoke(0f) // the microphone is closed: no frame will bring the level down
+        closeMic()
         clear()
         // Stopped, it reads Starting again, as before start; a new start reports afresh.
         model = VoiceReadiness.Starting
@@ -255,6 +252,8 @@ public class VoiceEngine internal constructor(
             return
         }
         if (showStarting) setModel(VoiceReadiness.Starting)
+        // Every load, even one that finds its model and downloads nothing.
+        ModelFetcher.sweep(if (word is WakeWord.Micro) microDir else modelsDir)
         val failed: Pair<String, (Long) -> VoiceReadiness> = try {
             val next = Loaded(id, word.phrase, load(word))
             if (!install(next)) { closeQuietly(next); return }
@@ -322,12 +321,20 @@ public class VoiceEngine internal constructor(
         m.start()
     }
 
-    /** Mutes: closes the microphone (its thread is joined), then reports the level down, as no frame will. */
     private fun stopMic() {
+        closeMic()
+        publish()
+    }
+
+    /**
+     * Closes the microphone (its thread is joined) and forgets its failures: the next one starts its count over.
+     * Then reports the level down, as no frame will.
+     */
+    private fun closeMic() {
         mic?.stop()
         mic = null
         micProblem = null
-        publish()
+        micReadFailures = 0
         onMicLevel?.invoke(0f)
     }
 
