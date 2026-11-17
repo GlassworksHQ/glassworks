@@ -32,6 +32,12 @@ below as the release notes.
   touch, such as the lululemon Mirror, setup never waits on the camera step: the use stays Presence only, and
   Kiln grants the camera. On Android 6-7 the ONVIF stream needs the camera to offer 1280x720; presence works
   either way. Not yet run on a real Mirror.
+- **Kiln installs Glassworks on any Android tablet, as a test.** At `kiln.glassworks.dev/android?apk=local`, plug
+  the tablet into a computer and Kiln names it, or asks for its brand, then shows how to turn on USB debugging on
+  that brand. After you tap Allow on the tablet, Kiln installs the app, gives it what it can (microphone, screen on
+  and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
+  A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
+  computer until Glassworks for Android has a release.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -138,10 +144,23 @@ below as the release notes.
   do. If the panel can't read its Bluetooth address (Bluetooth never turned on yet), nothing changes
   until it can. Going back to an older version moves the scanner back to the network address. Comes
   with the radio bundle.
+- **The panel's own Wi-Fi says when it is starting, then shows the setup page's QR code once a phone is on it.**
+  **Set up from a phone** now shows "Starting the setup Wi-Fi…" at once, where the screen used to sit unchanged
+  for several seconds. A start that fails says why in the same place, with **Try again**. Once a phone on the
+  panel's Wi-Fi opens a page on the panel, the QR code changes to the setup page's address, so nobody types
+  it. The panel's logs no longer name the Wi-Fi network you pick, nor the panel's own network and
+  its password.
 - **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
   `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
   setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
   shows Kiln's name or its orange colours. The steps and words are the same.
+- **Screen settings show only what the device has.** On a tablet or the Mirror, the Screen page in the
+  panel's settings and on the Manage page no longer shows the S1's presence range. *Wake when someone's
+  near* shows only with a sensor that can wake the screen: a proximity sensor, or the Camera pane, and
+  where the camera could do it but its pane is off, the row says so and opens it. *Brightness* needs a
+  light sensor, and a device without touch has no link to Android's settings. Without presence, *Turn off
+  when idle* is the screen's one on/off: it says Never while Home Assistant's *Screen mode* keeps the screen
+  on, and picking a time there turns that off. The S1's page is unchanged.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.

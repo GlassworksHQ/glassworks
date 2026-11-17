@@ -417,6 +417,14 @@ a few words, why the pane can't run now (the radio without its root helper): the
 `provide` is `CantRun`: it has no section, so the rail, the Manage page and setup don't show it at all
 (#23; maintainer, 2026-11-15).
 
+**Settings inside a page follow the same rule (#471).** The Screen page shows a row only when the device
+can back it. `ScreenHardware.of` (core) is the one answer both surfaces read: who senses presence (the
+frame's sensor, whose range changes only when `PresenceSource.ranged`; else a pane with `givesPresence`,
+like the camera; else nobody), whether `LightSource.available`, and whether the screen takes a tap.
+Without presence there is no wake switch or range. A pane that could give presence but is off gets a row
+that opens its page. Without a light sensor there is no Brightness row, and without touch no link to
+Android's settings.
+
 **Every pane's page shows its state (#212).** No page says the pane has no settings.
 
 - A page reads its running pane: override `settings(running: Pane?)` instead of `settings()`. `running`

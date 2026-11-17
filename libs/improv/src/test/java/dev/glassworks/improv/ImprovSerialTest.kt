@@ -53,7 +53,7 @@ class ImprovSerialTest {
         assertTrue(ImprovSerial.parseRpc(bytes(1, 2, 3, 0x4e)) is SerialRpc.Invalid) // string overruns
         assertTrue(ImprovSerial.parseRpc(bytes(1, 4, 3, 0x4e, 0x65, 0x74)) is SerialRpc.Invalid) // one string
         assertTrue(ImprovSerial.parseRpc(bytes(1)) is SerialRpc.Invalid)
-        assertEquals("WifiSettings(ssid=Net, password=<6 chars>)", SerialRpc.WifiSettings("Net", "secret").toString())
+        assertEquals("WifiSettings(<3 char name>, <6 char password>)", SerialRpc.WifiSettings("Net", "secret").toString())
     }
 
     @Test
@@ -207,5 +207,13 @@ class ImprovSerialTest {
         val p = ImprovSerial.info("f".repeat(200), "v".repeat(200), "c".repeat(200), "n".repeat(200))
         assertTrue(p.size <= 9 + 255 + 1)
         assertEquals(4, resultStrings(p, RPC_REQUEST_INFO).size)
+    }
+
+    @Test
+    fun theSessionLogNamesNeitherTheNetworkNorItsPassword() {
+        val logged = mutableListOf<String>()
+        ImprovSerialSession(Fake(), log = { logged += it }).onBytes(ImprovSerial.rpc(RPC_WIFI_SETTINGS, listOf("Example-Home-Net", "right")))
+        assertTrue("the session logged the request", logged.isNotEmpty())
+        assertTrue(logged.toString(), logged.none { "Example-Home-Net" in it || "right" in it })
     }
 }

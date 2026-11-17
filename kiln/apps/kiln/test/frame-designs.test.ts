@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, factProblems, framePanes, geometry, isCapability, isPaneAlias, keyProblems, kindProblems, type FrameDesign } from '@glassworks/frame-card';
-import { FRAMES, RENDERS } from '../src/frames/catalog';
+import { FRAMES, MEASURED, RENDERS } from '../src/frames/catalog';
 
 const frames = fileURLToPath(new URL('../../../../frames', import.meta.url));
 const folders = readdirSync(frames, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
@@ -91,5 +91,10 @@ describe('frame designs', () => {
       expect(read(id), id).toMatchObject({ status: 'planned' });
       expect(read(id).kiln, id).toBeUndefined();
     }
+  });
+
+  it('knows which frames have a Clarity result, for the "not measured yet" tag on /android\'s Done', () => {
+    const measured = folders.filter((d) => existsSync(join(frames, d, 'clarity', 'clarity.json')));
+    expect([...MEASURED].sort(), 'change MEASURED in src/frames/catalog.ts').toEqual(measured.sort());
   });
 });

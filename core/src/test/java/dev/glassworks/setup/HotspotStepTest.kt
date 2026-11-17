@@ -42,8 +42,47 @@ class HotspotStepTest {
     }
 
     @Test
-    fun `starting - a line under the Wi-Fi step, nothing to press`() {
-        assertEquals(Card(status = "Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…", tone = Tone.AMBER), HotspotStep.card(SetupHotspot.View.Starting, ready, null))
+    fun `starting - its own card at once, with the spinner and Close it, before the QR code`() {
+        val c = HotspotStep.card(SetupHotspot.View.Starting, ready, null)
+        assertEquals("Starting the setup Wi-Fi…", c.title)
+        assertTrue("the spinner's line", c.waiting != null)
+        assertNull("no QR code yet", c.qr)
+        assertNull(c.status)
+        assertEquals(Action.STOP, c.action)
+    }
+
+    @Test
+    fun `on, once a phone reached the panel over it - the setup page's QR code, its address written out`() {
+        val c = HotspotStep.card(SetupHotspot.View.On(net, 14 * 60_000L, asked = true, phone = true), ready, url)
+        assertEquals(url, c.qr)
+        assertEquals("Open the setup page.", c.title)
+        assertTrue(c.body!!, "\n$url\n" in c.body!!)
+        assertEquals("Wi-Fi · closes within 14 minutes", c.label)
+        assertEquals(Action.STOP, c.action)
+    }
+
+    @Test
+    fun `a phone on it before the panel has its address - still the join QR code, not an empty one`() {
+        val c = HotspotStep.card(SetupHotspot.View.On(net, 60_000L, asked = true, phone = true), ready, null)
+        assertEquals(net.qrText(), c.qr)
+    }
+
+    @Test
+    fun `a start the person asked for that failed - the reason in the same card, with Try again`() {
+        val c = HotspotStep.card(off(Stop.FAILED, HotspotFailure.TETHERING_ON), ready, null, asked = true)
+        assertEquals(Card(title = "The setup Wi-Fi didn't start.", status = HotspotFailure.TETHERING_ON.text, tone = Tone.ROSE, action = Action.RETRY), c)
+        val wifiOff = HotspotStep.card(off(error = HotspotFailure.WIFI_OFF), ready, null, asked = true)
+        assertEquals("The setup Wi-Fi didn't start.", wifiOff.title)
+        assertEquals(Action.WIFI_SETTINGS, wifiOff.action)
+        val noReason = HotspotStep.card(off(Stop.FAILED, HotspotFailure.FAILED), ready, null, asked = true)
+        assertEquals("the title says it already", "Android didn't say why.", noReason.status)
+    }
+
+    @Test
+    fun `asked, Android's permission still comes first`() {
+        val why = HotspotPermission.Step.Explain(Manifest.permission.NEARBY_WIFI_DEVICES, "the reason")
+        assertEquals(Card(status = "the reason", tone = Tone.AMBER, action = Action.ALLOW),
+            HotspotStep.card(off(error = HotspotFailure.NO_PERMISSION), why, null, asked = true))
     }
 
     @Test

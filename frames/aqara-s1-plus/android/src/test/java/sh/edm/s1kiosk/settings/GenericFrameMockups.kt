@@ -10,6 +10,7 @@ import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.settingsOrder
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.screen.ScreenHardware
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -59,12 +60,14 @@ class GenericFrameMockups {
 
     private fun menu(frame: Frame, section: String): KioskSettingsOverlay {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+        val definitions = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
         val core = CoreSettings(
             KioskPrefs(app), "0.4.3", status = { "screen on" },
             deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.DEVICE_SETTINGS_DETAIL) {},
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
+            hardware = ScreenHardware.of(frame, definitions, app),
         )
-        val sections = paneSections(KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app))
+        val sections = paneSections(definitions)
         o.show(KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), "0.4.3", sections.map { it.id }.toSet()))
         o.previewSection(section)
         Mockup.idle()

@@ -21,6 +21,12 @@ interface PaneDefinition {
     val requires: Set<Capability> get() = emptySet()
 
     /**
+     * The pane tells the screen whether someone is near, on a device without a presence sensor of its own
+     * (the camera). The Screen settings say so ([dev.glassworks.screen.ScreenHardware]).
+     */
+    val givesPresence: Boolean get() = false
+
+    /**
      * What first-boot setup waits for, in order. The person answers them on the Panes step, with the
      * pane's [setupChoice]; the installer answers them over the setup channel ([SetupStep.ops]).
      */

@@ -115,7 +115,44 @@ object HotspotAddress {
             .mapNotNull { (it.address as? Inet4Address)?.hostAddress }.toSet()
     }.getOrDefault(emptySet())
 
+    /**
+     * [remote] is another device on the hotspot's network: an IPv4 address in the subnet of [ap], the hotspot's own
+     * address with its [prefix] length. The panel's own address doesn't count.
+     */
+    fun onSubnet(remote: String?, ap: String, prefix: Int): Boolean {
+        val r = remote?.removePrefix("::ffff:")?.let(::bits) ?: return false
+        val a = bits(ap) ?: return false
+        if (r == a || prefix !in 1..32) return false
+        val mask = (-1L shl (32 - prefix)) and 0xFFFF_FFFFL
+        return (r and mask) == (a and mask)
+    }
+
+    /** One IPv4 address on the device, with its prefix length. */
+    data class Address(val ip: String, val prefix: Int)
+
+    /**
+     * [remote] is another device on the hotspot's network: [ap] is the hotspot's address ([now]), and [addresses] the
+     * device's IPv4 addresses, where its prefix length is found. False while the hotspot has no address.
+     */
+    fun isClient(remote: String?, ap: String?, addresses: List<Address>): Boolean {
+        val own = addresses.firstOrNull { it.ip == ap } ?: return false
+        return onSubnet(remote, own.ip, own.prefix)
+    }
+
+    /** [isClient] for the hotspot and the device's addresses as they are now. */
+    fun isClient(context: Context, remote: String?): Boolean = runCatching {
+        val addresses = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().flatMap { it.interfaceAddresses }
+            .mapNotNull { a -> (a.address as? Inet4Address)?.hostAddress?.let { Address(it, a.networkPrefixLength.toInt()) } }
+        isClient(remote, now(context), addresses)
+    }.getOrDefault(false)
+
     private val WIFI = Regex("""(wlan|ap|swlan|softap)\d+""")
+
+    private fun bits(ip: String): Long? {
+        val o = ip.split('.').map { it.toIntOrNull() ?: return null }
+        if (o.size != 4 || o.any { it !in 0..255 }) return null
+        return o.fold(0L) { acc, b -> (acc shl 8) or b.toLong() }
+    }
 
     private fun private(ip: String): Boolean {
         val o = ip.split('.').mapNotNull { it.toIntOrNull() }

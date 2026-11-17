@@ -29,6 +29,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.settings.CoreSettings
+import sh.edm.s1kiosk.settings.MenuFixture
 import sh.edm.s1kiosk.setup.ChannelState
 import sh.edm.s1kiosk.setup.SetupChannel
 import sh.edm.s1kiosk.setup.SetupChannelServer
@@ -103,7 +104,7 @@ class FramePanesTest {
 
         val core = CoreSettings(
             KioskPrefs(app), "0.0.0", status = { "screen on" }, deviceSettings = null,
-            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, hardware = MenuFixture.S1_HARDWARE,
         )
         val sections = settingsOrder(core.sections(), definitions.flatMap { it.settings() }).map { it.id }
         val radio = sections.indexOf("radio")

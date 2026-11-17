@@ -72,7 +72,7 @@ class PanesOnBothSurfacesTest {
     private class Surfaces(val panel: sh.edm.s1kiosk.settings.KioskSettingsOverlay.Model, val manage: S1Manage, val browser: ManageFixture.Browser, val fixture: ManageFixture)
 
     private fun surfaces(runtime: GlassworksRuntime): Surfaces {
-        val panel = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {})
+        val panel = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
         val manage = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, prefs)
         val f = ManageFixture().apply { statusFn = { manage.status() } }
         return Surfaces(panel, manage, f.Browser().also { it.signInWithHa() }, f)

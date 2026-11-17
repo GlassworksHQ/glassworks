@@ -119,6 +119,8 @@ class KioskService : Service() {
             connected = { NetworkUp.now(this) },
             clock = SystemClock::elapsedRealtime,
             schedule = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } },
+            // The screen follows at once (a phone joined: the setup page's QR), not on its 2 s tick.
+            onChange = { sh.edm.s1kiosk.setup.SetupSignals.changed() },
             log = { Log.i(HOTSPOT_TAG, it) },
             blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
             // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.

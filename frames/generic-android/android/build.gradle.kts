@@ -166,24 +166,10 @@ androidComponents {
 
 // Every library in the release and legacy APKs must be listed, with its version, in THIRD-PARTY-NOTICES.md
 // (`group:name:version`). Runs before those builds, so a dependency bump can't ship without its notice.
-// Reads only the resolved dependency graph Gradle already has for the build.
+// Reads only the resolved dependency graph Gradle already has for the build (apkModules, in build-logic), and fails
+// when a dependency in it didn't resolve.
 fun checkNotices(name: String, variant: String) = tasks.register(name) {
-    val modules = configurations.named("${variant}RuntimeClasspath").flatMap { c ->
-        c.incoming.resolutionResult.rootComponent.map { root ->
-            val seen = sortedSetOf<String>()
-            val todo = ArrayDeque(listOf(root))
-            val visited = mutableSetOf<org.gradle.api.artifacts.result.ResolvedComponentResult>()
-            while (todo.isNotEmpty()) {
-                val comp = todo.removeFirst()
-                if (!visited.add(comp)) continue
-                (comp.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier)
-                    ?.let { seen += "${it.group}:${it.module}:${it.version}" }
-                comp.dependencies.filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>()
-                    .forEach { todo += it.selected }
-            }
-            seen.toList()
-        }
-    }
+    val modules = apkModules(configurations.named("${variant}RuntimeClasspath"))
     val noticesFile = thirdPartyNotices
     inputs.file(noticesFile)
     inputs.property("modules", modules)
