@@ -266,6 +266,12 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
+  pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
+  said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
+  for those pictures over https, which Home Assistant doesn't serve. It now asks over http, as the page
+  does. If something from Home Assistant's address is ever blocked again, the panel names it with its
+  `https://`, so it doesn't read as your Home Assistant.
 - **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
