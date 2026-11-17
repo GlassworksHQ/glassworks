@@ -61,7 +61,8 @@ public class WifiProvisioner(
          *   `suggestion`.
          */
         public data class Connected(public val ssid: String, public val ip: String?, public val method: String) : Outcome() {
-            override fun toString(): String = "Connected(ip=$ip, method=$method)" // no network name in a log
+            /** For a log: the address and the method, never the network's name. */
+            override fun toString(): String = "Connected(ip=$ip, method=$method)"
         }
 
         /**
@@ -71,7 +72,8 @@ public class WifiProvisioner(
          * @property restored The network it went back to, or null for none.
          */
         public data class Failed(public val reason: String, public val restored: String?) : Outcome() {
-            override fun toString(): String = "Failed(reason=$reason, restored=${restored != null})" // no network name in a log
+            /** For a log: the reason, and whether it went back to a network, never that network's name. */
+            override fun toString(): String = "Failed(reason=$reason, restored=${restored != null})"
         }
     }
 
