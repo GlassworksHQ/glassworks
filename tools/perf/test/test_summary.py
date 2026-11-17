@@ -27,7 +27,8 @@ import test_report as T  # noqa: E402
 SUMMARY_KEYS = {"schema", "test", "clarity", "protocol_version", "report_schema", "measured_on", "frame", "app_version", "viewport",
                 "runs", "pages", "restart_ms", "gaps", "not_comparable", "report", "complete", "ram", "apk", "notes",
                 "webrtc_transport"}
-PAGE_KEYS = {"inp_ms", "open_ms", "blocking_ms", "usable_ms", "scroll", "updates", "camera", "runs", "timed_out_runs"}
+PAGE_KEYS = {"inp_ms", "open_ms", "blocking_ms", "usable_ms", "scroll", "updates", "camera", "runs", "timed_out_runs",
+             "dialog"}   # Clarity v3 (#211): the more-info dialogs, in a report that has them
 GRADE_KEYS = ("grade", "meaning", "levels", "bands", "capped_by_start", "missing", "provisional", "start")
 
 
@@ -134,7 +135,11 @@ class Export(unittest.TestCase):
         self.assertEqual(heavy["scroll"]["sf_valid"], [True, True, True])
         self.assertEqual((heavy["scroll"]["swipes_moved"], heavy["scroll"]["swipes_at_edge"]), (9, 0))
         self.assertEqual(len(heavy["scroll"]["runs"]), 3)
-        self.assertEqual(heavy["runs"], {"tap": 3, "scroll": 3, "updates": 3, "open": 3, "blocking": 3, "camera": 3})
+        self.assertEqual(heavy["runs"], {"tap": 3, "scroll": 3, "updates": 3, "open": 3, "blocking": 3, "camera": 3, "dialog": 3})
+        # Clarity v3 (#211): each run's more-info record, what both graders grade from.
+        self.assertEqual(heavy["dialog"]["settled_ms"], 320)
+        self.assertEqual(heavy["dialog"]["runs"][0], {"n": 3, "failed": 0, "settled_ms": 320.0, "frames": {
+            "p95_ms": 16.67, "jank_pct": 0.0, "frozen_pct": 0.0, "fps": 60.0, "n": 54}})
 
     def test_ram_and_apk_are_carried_and_dont_change_the_grade(self):
         """#68: the summary may carry RAM (reference dashboards) and APK sizes; neither is graded."""
@@ -335,15 +340,16 @@ class Parity(unittest.TestCase):
         self.assertEqual((G.grade_summary(s)["status"], ts_grades([s])[0]["status"]), ("re-measure", "re-measure"))
         self.assertEqual((self.sums["B"]["clarity"], self.sums["B"]["protocol_version"]), (G.CLARITY, G.PROTOCOL_VERSION))
 
-    def test_a_clarity_v1_summary_is_re_measured_under_v2_rules_in_both(self):
-        """Rubric 2 (#264's verifier): a v1 summary (clarity 1, protocol 1) is never graded by v2's rules,
-        in either grader, and says which Clarity it came from."""
-        self.assertEqual(G.CLARITY, 2)
-        s = dict(self.sums["B"], clarity=1, protocol_version=1)
-        ts, py = ts_grades([s])[0], G.grade_summary(s)
-        for g in (py, ts):
-            self.assertEqual((g["status"], g["grade"]), ("re-measure", None))
-            self.assertEqual(g["why"], "measured with Clarity v1; these rules are Clarity v2's: re-measure")
+    def test_an_earlier_clarity_summary_is_re_measured_under_v3_rules_in_both(self):
+        """Rubric 2 (#264's verifier), and rubric 3 (#211): a v1 or v2 summary is never graded by v3's
+        rules, in either grader, and says which Clarity it came from."""
+        self.assertEqual(G.CLARITY, 3)
+        for v in (1, 2):
+            s = dict(self.sums["B"], clarity=v, protocol_version=v)
+            ts, py = ts_grades([s])[0], G.grade_summary(s)
+            for g in (py, ts):
+                self.assertEqual((g["status"], g["grade"]), ("re-measure", None))
+                self.assertEqual(g["why"], f"measured with Clarity v{v}; these rules are Clarity v3's: re-measure")
 
     def test_graded_medians_go_out_unrounded(self):
         """#264's CodeRabbit (/3): a blocking median of 600.4 ms is poor; rounded to 600 it would read
@@ -381,12 +387,22 @@ class Published(unittest.TestCase):
             out = os.path.join(d, "clarity.json")
             cmd = [sys.executable, os.path.join(os.path.dirname(HERE), "summary.py"), os.path.join(folder, "report.json"), out,
                    "--report-url", committed.get("report", "report.json")]
-            if committed.get("complete") is False:
+            # A summary of an earlier Clarity version (the S1's v2, published before v3, #211) stays as it
+            # was published, and the site shows it as re-measure: these rules refuse it as complete, so
+            # it is exported marked, and `complete` is the one byte left as it was decided then. Every
+            # measurement must still be summary.py's output.
+            earlier = committed.get("clarity") != G.CLARITY
+            if committed.get("complete") is False or earlier:
                 cmd.append("--allow-provisional")
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             self.assertEqual(p.returncode, 0, p.stderr)
             with open(out) as f:
                 want = f.read()
+            if earlier:
+                got = json.loads(want)
+                self.assertLess(committed.get("clarity") or 0, G.CLARITY, "a summary of a later Clarity than this code's")
+                got["complete"] = committed.get("complete")
+                want = json.dumps(got, indent=1) + "\n"
         if text != want:
             name = f"{os.path.relpath(folder, REPO)}/clarity.json"
             diff = difflib.unified_diff(text.splitlines(True), want.splitlines(True), name, "summary.py's output", n=1)

@@ -121,9 +121,11 @@ announcements, with a calm full-screen overlay while you talk.
 
 **Status: beta.**
 
-**Clarity v2: D**, a good wall panel for light dashboards (measured 2026-11-15 UTC, 3 of 3 runs, not
-provisional). Typical dashboards hold it back: without a camera their view is drawn in 1.2 s, but the main
-thread then stays blocked for 2.9 s. The report is in
+**Clarity v3: D**, a good wall panel for light dashboards (measured 2026-11-17 UTC, 3 of 3 runs, not
+provisional). Typical dashboards hold it back: without a camera their view is drawn in 0.9 s, but the main
+thread then stays blocked for 2.7 s. Home Assistant's more-info dialogs, new in v3, settle in about 1 s on
+light dashboards and 1.2 to 1.4 s on typical ones. On heavy ones the thermostat's never opens within
+20 s, and the sensor's opens in about 4 s in 2 of 3 runs but its history graph isn't drawn. The report is in
 [clarity/report.md](clarity/report.md), and the summary the site grades in
 [clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)). The Clarity
 badge shows the grade once glassworks.dev publishes it.
@@ -143,6 +145,7 @@ the next one. "Verified" means tested on a real panel in a real home.
 | Boot splash and animation | 🧪 The Glassworks redraw has not yet run on a panel. The Glass Tile one before it works |
 | Web installer, command-line installer, undo | ✅ Verified end to end (firmware 4.5.80) with the old S1 installer; boot patch tested on two firmware versions. Kiln has not yet done a full install on a panel |
 | Manage page in the browser (`:8099`, sign in through Home Assistant): status, log, diagnostics, signed-in browsers ([guide](../../docs/manage.md)) | 🧪 New · not yet checked on a panel; settings are read-only for now |
+| Set up over the network: the panel's own setup page (`:8099/setup`), paired with a code on its screen ([guide](../../docs/manage.md#set-up-over-the-network)) | 🧪 New · paired, the Home Assistant step, the radio kept and Done on the S1 (2026-11-16); allowing it from the settings and Kiln's link not yet |
 | Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
 | Bluetooth proxy for Home Assistant, listening only ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14); the pane itself not yet |
 | App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |

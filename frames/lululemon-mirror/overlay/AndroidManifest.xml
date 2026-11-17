@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A resource overlay for Android 6's SettingsProvider (static RRO, /vendor/overlay): the Mirror's
+     first boot with nothing to tap. Android reads these defaults only when it makes a fresh userdata's
+     settings. Built by build.sh; Kiln writes the APK to /system/vendor/overlay. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.glassworks.mirror.settings"
+    android:versionCode="1"
+    android:versionName="1">
+    <overlay android:targetPackage="com.android.providers.settings" android:priority="1" />
+    <application android:hasCode="false" android:label="Glassworks settings for the Mirror" />
+</manifest>

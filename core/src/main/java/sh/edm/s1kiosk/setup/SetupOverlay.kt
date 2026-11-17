@@ -43,6 +43,8 @@ import sh.edm.s1kiosk.ui.Glass.Companion.MU
 import sh.edm.s1kiosk.ui.Glass.Companion.ROSE
 import sh.edm.s1kiosk.ui.Glass.Companion.TX
 import sh.edm.s1kiosk.ui.Inter
+import dev.glassworks.frame.Input
+import sh.edm.s1kiosk.glassworks
 import sh.edm.s1kiosk.ui.QrCode
 import sh.edm.s1kiosk.ui.StackView
 import sh.edm.s1kiosk.ui.StackView.Look
@@ -58,7 +60,7 @@ import sh.edm.s1kiosk.ui.StackView.Look
  * shows so, with Continue; the rail and Continue move between steps, also in a preview. Panes only asks
  * which panes are on: one card per pane that offers one ([PaneChoice]). The Wi-Fi step shows Improv (Wi-Fi over Bluetooth) inline, Allow included, so
  * no separate ImprovOverlay window covers this screen. Laid out for 960×480 dp (1440×720 px at density
- * 1.5). Main thread only.
+ * 1.5); on a screen taller than wide (the Mirror's 1080×1920) the same card stacks into one column. Main thread only.
  */
 class SetupOverlay(
     context: Context,
@@ -106,6 +108,13 @@ class SetupOverlay(
     /** A pane's step was answered on the screen ([SetupHost.next]). */
     var onStepDone: (() -> Unit)? = null
 
+    /**
+     * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step but Sign in shows where to
+     * set the panel up from a computer (the setup page over the network, #34), and no card has a button.
+     * The frame's, unless a mockup sets it.
+     */
+    var input: Input = runCatching { context.glassworks.frame.input }.getOrDefault(Input.TOUCH)
+
     /** True while visible (including the Done fade-out). */
     var isShowing = false
         private set
@@ -137,6 +146,9 @@ class SetupOverlay(
     private val railStack = StackView(context)
     private val previewChip = g.plain("Preview · Close").apply { textSize = 14f; setOnClickListener { onClosePreview?.invoke() } }
 
+    /** Pushes the rail's stack art to its foot. */
+    private val railSpacer = View(context)
+
     private val rail = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
         addView(LinearLayout(context).apply {
@@ -147,7 +159,7 @@ class SetupOverlay(
             addView(g.text(19f, TX, Inter.REGULAR).apply { text = "Glassworks" })
         })
         addView(railRows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(33f) })
-        addView(View(context), LinearLayout.LayoutParams(-1, 0, 1f))
+        addView(railSpacer, LinearLayout.LayoutParams(-1, 0, 1f))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.BOTTOM
@@ -209,18 +221,60 @@ class SetupOverlay(
         addView(stretch, stretchLp)
         addView(buttonRow, LinearLayout.LayoutParams(-1, -2))
     }
+    // Landscape's places (the S1, tablets); portrait swaps them in stack().
+    private val columnBeside = LinearLayout.LayoutParams(0, -1, 1f)
+    private val qrBeside = LinearLayout.LayoutParams(px(238f), -1)
+    private val railBeside = LinearLayout.LayoutParams(px(227f), -1).apply { marginEnd = px(26f) }
+    private val cardBeside = LinearLayout.LayoutParams(0, -1, 1f)
     private val card = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         background = g.surface(34f)
         setPadding(px(41f), px(36f), px(28f), px(30f))
-        addView(column, LinearLayout.LayoutParams(0, -1, 1f))
-        addView(qrGlow, LinearLayout.LayoutParams(px(238f), -1))
+        addView(column, columnBeside)
+        addView(qrGlow, qrBeside)
     }
     private val wizard = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         setPadding(px(49f), px(44f), px(45f), px(40f))
-        addView(rail, LinearLayout.LayoutParams(px(227f), -1).apply { marginEnd = px(26f) })
-        addView(card, LinearLayout.LayoutParams(0, -1, 1f))
+        addView(rail, railBeside)
+        addView(card, cardBeside)
+    }
+
+    /** The screen stands taller than wide (the Mirror's 1080×1920): one column. */
+    private var portrait = false
+
+    /** In [portrait], the QR code is on and sits under the card's text, filling the room left. */
+    private var qrBelow = false
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        stack(MeasureSpec.getSize(heightMeasureSpec) > MeasureSpec.getSize(widthMeasureSpec))
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /**
+     * The same card, stacked when [on] (#412): the rail over the card, and in the card the text over the QR code. The
+     * rail's stack art stays out, so the QR code keeps its full size. Landscape keeps its own layout params, untouched.
+     */
+    private fun stack(on: Boolean) {
+        val below = on && qrGlow.visibility == View.VISIBLE
+        if (on == portrait && below == qrBelow) return
+        portrait = on
+        qrBelow = below
+        wizard.orientation = if (on) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        card.orientation = wizard.orientation
+        rail.layoutParams = if (on) LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(26f) } else railBeside
+        card.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else cardBeside
+        column.layoutParams = when {
+            !on -> columnBeside
+            below -> LinearLayout.LayoutParams(-1, -2)
+            else -> LinearLayout.LayoutParams(-1, 0, 1f)
+        }
+        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else qrBeside
+        // A plain View measured to wrap takes all the room it may: the spacers go, or the rail fills the screen and
+        // the text the card.
+        railSpacer.visibility = if (on) View.GONE else View.VISIBLE
+        stretch.visibility = if (below) View.GONE else View.VISIBLE
+        railStack.visibility = if (on) View.GONE else View.VISIBLE
     }
 
     // ---- Done: the lit stack on its own
@@ -398,7 +452,8 @@ class SetupOverlay(
                 GroupedRail.Row(
                     id, title(id), SetupFlow.group(id),
                     mark = when { id == shown || id == m.step -> GroupedRail.Mark.CURRENT; id in m.done -> GroupedRail.Mark.DONE; else -> GroupedRail.Mark.PENDING },
-                    enabled = m.preview || id == m.step || id in m.done,
+                    // Without touch (Input.NONE) nothing on this screen takes a tap, the rail included.
+                    enabled = input == Input.TOUCH && (m.preview || id == m.step || id in m.done),
                 )
             },
             GROUPS,
@@ -433,6 +488,18 @@ class SetupOverlay(
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
         val done = shown in m.done
         cardLabel.text = SetupFlow.group(shown)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
+        if (input == Input.NONE) {
+            // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in.
+            if (shown == SetupFlow.SIGNIN) {
+                bindSignin(m, done)
+                // Neither "on this panel instead" nor a done step's Continue: the next step comes by itself.
+                plainLeft.visibility = View.GONE
+                primary.visibility = View.GONE
+            } else bindFromComputer(m)
+            setContent(null)
+            hideKeyboard()
+            return
+        }
         // The URL field never goes GONE and back while shown: a view that goes GONE (even for one
         // frame) loses focus, and this runs on every discovery/Wi-Fi refresh, i.e. while the user types.
         var content: View? = null
@@ -616,6 +683,24 @@ class SetupOverlay(
         plainLeft.text = "Sign in on this panel instead"
         plainLeft.visibility = View.VISIBLE
         plainLeft.setOnClickListener { onUsePanel?.invoke() }
+    }
+
+    /** Without touch ([Input.NONE]): where to set the panel up from a computer, as a QR code and an address. */
+    private fun bindFromComputer(m: Model) {
+        val ip = m.panelIp
+        if (ip == null) {
+            cardTitle.text = "Waiting for Wi-Fi."
+            cardBody.text = "Put the panel on Wi-Fi with Kiln on a computer, over USB. Then this screen shows where to set it up."
+            return
+        }
+        val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
+        if (qrFor != url) {
+            qrImage.setImageBitmap(QrCode.bitmap(url, px(200f)))
+            qrFor = url
+        }
+        qrGlow.visibility = View.VISIBLE
+        cardTitle.text = "Scan to set it up."
+        cardBody.text = "Or open $url on a computer on this network. When it asks for a code, the code shows here."
     }
 
     private fun showStatus(text: String, color: Int) {

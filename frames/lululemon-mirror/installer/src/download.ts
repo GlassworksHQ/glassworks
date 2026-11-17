@@ -9,7 +9,7 @@
 /** Where Refract answers, and the image's id in its allowlist. The tests point it at a fake. */
 export const IMAGE_PROXY = {
   base: 'https://refract.glassworks.dev',
-  systemImg: 'glass-panes/mirror-android-1/system.img',
+  systemImg: 'glass-panes/mirror-android-2/system.img',
 } as const;
 
 /** The proxy couldn't give us the file: fall back to download-and-select. */

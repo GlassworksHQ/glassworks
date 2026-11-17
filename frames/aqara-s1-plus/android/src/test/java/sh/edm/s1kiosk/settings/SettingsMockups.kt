@@ -38,7 +38,10 @@ class SettingsMockups {
 
     private val coordinator = off.copy(mode = RadioMode.ZIGBEE_TCP, status = "ok Zigbee coordinator (TCP): listening on :6638 for Home Assistant (192.0.2.20)")
 
-    private fun menu(radioRunning: Boolean, deviceSettings: Boolean = true, facts: RadioFollowUp.Facts = off, extra: List<dev.glassworks.pane.PaneDefinition> = emptyList()): KioskSettingsOverlay {
+    private fun menu(
+        radioRunning: Boolean, deviceSettings: Boolean = true, facts: RadioFollowUp.Facts = off,
+        extra: List<dev.glassworks.pane.PaneDefinition> = emptyList(), panelIp: String? = null,
+    ): KioskSettingsOverlay {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val app = RuntimeEnvironment.getApplication()
         KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel"; zoom = 1.25f; presenceRangeM = 1.8f; nightWindow = "22:00-07:00" }
@@ -51,7 +54,7 @@ class SettingsMockups {
             ),
             radio,
         ) + MenuFixture.switchOnly(app) + extra
-        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes))
+        o.show(MenuFixture.model(app, radio, deviceSettings, status = "screen on · presence near · voice=idle", panes = panes, panelIp = { panelIp }))
         Mockup.idle()
         return o
     }
@@ -83,6 +86,13 @@ class SettingsMockups {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
 
         shot("settings-01-dashboard", menu(radioRunning = true), "dashboard")
+        // "Allow setup over the network" as on the S1 (#34): Home Assistant has the panel, and Allow was pressed.
+        KioskPrefs(RuntimeEnvironment.getApplication()).apply { haSeen = true; armLanSetup() }
+        shot("settings-01b-dashboard-setup-allowed", menu(radioRunning = true, panelIp = "192.0.2.10"), "dashboard") { o ->
+            Mockup.layout(o)
+            o.previewScrollTo(Mockup.label(o, CoreSettings.SETUP_OVER_NETWORK), alignBottom = true)
+        }
+        KioskPrefs(RuntimeEnvironment.getApplication()).haSeen = false
         shot("settings-02-radio", menu(radioRunning = true), "radio")
         shot("settings-03-screen", menu(radioRunning = true), "screen")
         shot("settings-04-about", menu(radioRunning = true), "about")

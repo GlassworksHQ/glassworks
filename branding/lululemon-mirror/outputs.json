@@ -6,17 +6,18 @@
     "height": 1920,
     "android_api": 23,
     "splash": null,
-    "zip_budget": null
+    "zip_budget": null,
+    "rotate": 90
   },
   "inputs": {
-    "branding/boot/generate.py": "ff3f349ced487af781d23d65e814a2151ae21945fcfb8d4a821d92b5c7c48907",
+    "branding/boot/generate.py": "57c584f8d0d5187071216100591c99559b1cc03729aadea46252d6859da19759",
     "branding/boot/stack.py": "9fb0bc0c19541b111d1a00c3333819830e0ac10e40f19d6230dba918f1818e17",
-    "branding/boot/formats.py": "2a857616d9e69cc17c748b172fba738e1d8ba740938c65863ab742d8b73d455d",
-    "branding/boot/target.py": "5ad61d491c360b17a381508fd5a955b4513ef4e9c69d89065ceddc3450845734",
+    "branding/boot/formats.py": "2b1c2e77aff739ec752bf62f2745617d735c3f16f433062d931a0364e0d6522e",
+    "branding/boot/target.py": "bf45b7c6014010990357d0d07e396953949b671dad94733eccb80ea5898808b8",
     "Inter": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031"
   },
   "outputs": {
-    "bootanimation.zip": "a0ca3d945d2c3f29c6be15e4bd59bd1ba5b9313ec33bbc90151f1fcbbe463662",
+    "bootanimation.zip": "0ccf10d5f149bfaad78a2f9600fb8830fbb55f5ec1ec1dbf1d0844219db967cc",
     "splash-landscape.png": "a234430cad7bf8e2dcbacac5ad5d399d4be6b8275d3386c6cf9a835d2a42899f",
     "preview.webp": "cf7e0517dd1eccd9918aacf377744d27706d8d986de69321330bea28424ab378"
   },

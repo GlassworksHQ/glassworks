@@ -295,7 +295,8 @@ doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
 API 23 in every Android library module: it runs lint's `NewApi` check with minSdk lowered to 23 for that run only
 (`tools/legacy/api23-lint.gradle`, a Gradle init script; no build file changes) and reads lint's reports. Run it
 from the repo root: `python3 tools/legacy/api23-report.py > table.md`. `:engine-gecko` is left out (the current
-engine, API 26; the legacy build lints its sources inside `:engine-gecko-legacy`), and so are the apps.
+engine, API 26; the legacy build lints its sources inside `:engine-gecko-legacy`). Of the apps, it lints the generic
+app's legacy build (its `legacy` build type, minSdk 23 of its own: the app's own sources only).
 
 CI runs it on every PR that touches Android code (`api23` in `pr.yml`) against `tools/legacy/api23-baseline.txt`,
 and fails on a call above API 23 that the baseline doesn't list. Desugared calls never fail it: the legacy build
@@ -304,8 +305,9 @@ and in the baseline; remove a line only when lint stops reporting the call (the 
 `SDK_INT` check lint understands). A lint detector that fails (`LintError`) fails the report too. Generated
 sources are checked: `:engine-gecko-legacy` compiles the shared `GeckoEngine.kt` from `build/generated`.
 
-The run of 2026-11-16 on main at 62775aef with the first fixes (#198 Phase A): 109 calls, 52 of them desugared, so 57
-to look at (main alone read 118 and 53, so 65):
+A run of 2026-11-16 on #198 Phase C's head (#400): 109 calls, 52 of them desugared, so 57 to look at (main
+before Phase A read 118 and 53, so 65). Phase C's fixes (`UpdateManager`) are in these numbers; calls added on main
+since Phase A make up the rest:
 
 | Module | Calls above API 23 | Of them desugared |
 |---|---|---|
@@ -326,6 +328,7 @@ to look at (main alone read 118 and 53, so 65):
 | `:pane-sendspin` | 5 | 5 |
 | `:aqara-s1-plus-wall-base` | 3 | 0 |
 | `:pane-zigbee-thread` | 3 | 0 |
+| `:generic-android` (its `legacy` build, the app's own sources; added in Phase D, #408) | 0 | 0 |
 
 Lint can't see a `Platform` check (`Platform.hasX` is a property, not an `SDK_INT` comparison), so many of these
 are already guarded. Read at each call site (2026-11-16), they split like this (Phase A's fixes marked):
@@ -344,14 +347,15 @@ are already guarded. Read at each call site (2026-11-16), they split like this (
 | core: `web/Http`, `auth/OAuth` | `HashMap.putIfAbsent` (24) | Fixed: plain Kotlin |
 | `pane-camera` | `ConcurrentHashMap.KeySetView.clear`, `.size`, `.remove` (24) | Fixed: the sets are typed `MutableSet` |
 | `pane-diagnostics` | `Process.getStartElapsedRealtime` (24) | Fixed: `Platform.hasProcessStartTime`; below it `/proc/self/stat`'s start time |
-| core: `MainActivity` | `Process.getStartElapsedRealtime` (24) | **Open**; waits for #364/#332, which own the file |
-| core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | **Open**; waits for #365, which owns the file |
+| core: `MainActivity`, `manage/AppManage` | `Process.getStartElapsedRealtime` (24): setup's grace time, the Manage page's uptime | Fixed (Phase B): `Platform.processStartElapsedMs`, `/proc/self/stat`'s start time below 24, as `pane-diagnostics` reads it (`PlatformApi23Test`) |
+| core: `manage/AppManage` | `DevicePolicyManager.reboot` (24) | Fixed (Phase B): `Platform.hasDeviceOwnerReboot`; a system app holding `REBOOT` (the Mirror) reboots through `PowerManager.reboot` instead, on any Android (`RebootRouteTest`) |
+| core: `update/UpdateManager` | `registerDefaultNetworkCallback`, `getContentLengthLong` (24) | Fixed (Phase C): `Platform.registerDefaultNetworkCallback`; `contentLength`, an `Int`, is enough under the APK size limit |
 | `pane-zigbee-thread`, `aqara-s1-plus-wall-base` | `Process.waitFor(timeout)`, autofill (26) | Open, but S1 hardware only (`SILABS_RADIO`, `S1_WALL_BASE`): never offered on a legacy device |
 | The libraries, `pane-assist`, `-bluetooth-proxy`, `-notifications`, `-timers`, `-sendspin`, `engine-gecko-legacy` | None (`pane-sendspin`'s five are desugared) | Ready as far as API levels go; untested on a device |
 
 Each fix has a test on Robolectric's Android 6 framework (`Api23FallbacksTest`, `PlatformApi23Test`,
-`AndroidProbeApi23Test`), where the old call throws `NoSuchMethodError` or `NoSuchFieldError`. Left for the app's
-own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#365).
+`AndroidProbeApi23Test`, `RebootRouteTest`), where the old call throws `NoSuchMethodError` or `NoSuchFieldError`. The
+core's conformance test starts `MainActivity` on an API 23 emulator (`core-emulators.yml`, Phase B).
 
 <details><summary>The full list (109 calls)</summary>
 
@@ -360,7 +364,7 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:aqara-s1-plus-wall-base` | `sh/edm/s1kiosk/base/LocalServiceLink.kt` | 126 | `java.lang.Process#waitFor` | 26 |  |
 | `:aqara-s1-plus-wall-base` | `sh/edm/s1kiosk/base/UartBaseLink.kt` | 71 | `java.lang.Process#waitFor` | 26 |  |
 | `:aqara-s1-plus-wall-base` | `sh/edm/s1kiosk/frame/AqaraCloud.kt` | 35 | `java.lang.Process#waitFor` | 26 |  |
-| `:glassworks-core` | `dev/glassworks/frame/GenericAndroid.kt` | 63 | `android.content.pm.PackageManager#canRequestPackageInstalls` | 26 |  |
+| `:glassworks-core` | `dev/glassworks/frame/GenericAndroid.kt` | 73 | `android.content.pm.PackageManager#canRequestPackageInstalls` | 26 |  |
 | `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 147 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 147 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/manage/HaSignIn.kt` | 147 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
@@ -388,9 +392,9 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 70 | `java.util.Base64.Decoder#decode` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64#getDecoder` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/secrets/SecretStore.kt` | 101 | `java.util.Base64.Decoder#decode` | 26 | yes |
-| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 186 | `java.util.Base64#getUrlEncoder` | 26 | yes |
-| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 186 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
-| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 186 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 236 | `java.util.Base64#getUrlEncoder` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 236 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `dev/glassworks/setup/LanSetup.kt` | 236 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/web/Http.kt` | 121 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
 | `:glassworks-core` | `dev/glassworks/web/WebSocket.kt` | 151 | `java.util.Base64#getEncoder` | 26 | yes |
 | `:glassworks-core` | `dev/glassworks/web/WebSocket.kt` | 151 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
@@ -401,21 +405,21 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 143 | `android.app.NotificationChannel#setShowBadge` | 26 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 156 | `android.app.Notification.Builder()` | 26 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/KioskService.kt` | 183 | `android.content.Context#startForegroundService` | 26 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 175 | `android.view.WindowManager.LayoutParams#layoutInDisplayCutoutMode` | 28 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 175 | `android.view.WindowManager.LayoutParams#layoutInDisplayCutoutMode` | 28 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 330 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 727 | `android.view.Window#setDecorFitsSystemWindows` | 30 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 728 | `android.view.Window#getInsetsController` | 30 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.WindowInsets.Type#navigationBars` | 30 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.WindowInsets.Type#statusBars` | 30 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.WindowInsetsController#hide` | 30 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 730 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 730 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 176 | `android.view.WindowManager.LayoutParams#layoutInDisplayCutoutMode` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 176 | `android.view.WindowManager.LayoutParams#layoutInDisplayCutoutMode` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 331 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 729 | `android.view.Window#setDecorFitsSystemWindows` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 730 | `android.view.Window#getInsetsController` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 731 | `android.view.WindowInsets.Type#navigationBars` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 731 | `android.view.WindowInsets.Type#statusBars` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 731 | `android.view.WindowInsetsController#hide` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 732 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/MainActivity.kt` | 732 | `android.view.WindowInsetsController#setSystemBarsBehavior` | 30 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 35 | `android.content.res.Configuration#getLocales` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 35 | `android.os.LocaleList#get` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 35 | `android.os.LocaleList#size` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 40 | `android.content.res.Configuration#setLocales` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 40 | `android.os.LocaleList()` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 39 | `android.content.res.Configuration#setLocales` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/SystemLocale.kt` | 39 | `android.os.LocaleList()` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 98 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
@@ -425,6 +429,8 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 110 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 110 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
 | `:glassworks-core` | `sh/edm/s1kiosk/auth/OAuth.kt` | 111 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
+| `:glassworks-core` | `sh/edm/s1kiosk/manage/AppManage.kt` | 136 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/manage/AppManage.kt` | 279 | `android.app.admin.DevicePolicyManager#reboot` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/GlassSlider.kt` | 128 | `android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction#ACTION_SET_PROGRESS` | 24 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder#setSlant` | 29 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 57 | `android.graphics.fonts.Font.Builder#setWeight` | 29 |  |
@@ -438,12 +444,10 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 61 | `android.graphics.Typeface.CustomFallbackBuilder#setStyle` | 29 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 61 | `android.graphics.fonts.FontStyle()` | 29 |  |
 | `:glassworks-core` | `sh/edm/s1kiosk/ui/Inter.kt` | 62 | `android.graphics.Typeface.CustomFallbackBuilder#build` | 29 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 122 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 304 | `java.net.URLConnection#getContentLengthLong` | 24 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 359 | `android.content.pm.PackageInfo#signingInfo` | 28 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 359 | `android.content.pm.SigningInfo#getApkContentsSigners` | 28 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 364 | `android.content.pm.PackageInfo#getLongVersionCode` | 28 |  |
-| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 493 | `android.content.pm.PackageInstaller.SessionParams#setRequireUserAction` | 31 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 361 | `android.content.pm.PackageInfo#signingInfo` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 361 | `android.content.pm.SigningInfo#getApkContentsSigners` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 366 | `android.content.pm.PackageInfo#getLongVersionCode` | 28 |  |
+| `:glassworks-core` | `sh/edm/s1kiosk/update/UpdateManager.kt` | 506 | `android.content.pm.PackageInstaller.SessionParams#setRequireUserAction` | 31 |  |
 | `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 131 | `android.app.ActivityOptions#setPendingIntentCreatorBackgroundActivityStartMode` | 34 |  |
 | `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 141 | `android.net.ConnectivityManager#registerDefaultNetworkCallback` | 24 |  |
 | `:glassworks-pane-api` | `dev/glassworks/platform/Platform.kt` | 152 | `android.content.Context#registerReceiver` | 26 |  |
@@ -457,7 +461,7 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 | `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 117 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
 | `:pane-camera` | `dev/glassworks/camera/onvif/OnvifServer.kt` | 360 | `java.util.Collection#removeIf` | 24 | yes |
 | `:pane-camera` | `dev/glassworks/camera/onvif/RtspServer.kt` | 59 | `java.util.concurrent.ConcurrentHashMap#newKeySet` | 24 | yes |
-| `:pane-diagnostics` | `dev/glassworks/diagnostics/AndroidProbe.kt` | 72 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
+| `:pane-diagnostics` | `dev/glassworks/diagnostics/AndroidProbe.kt` | 78 | `android.os.Process#getStartElapsedRealtime` | 24 |  |
 | `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64#getUrlEncoder` | 26 | yes |
 | `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64.Encoder#encodeToString` | 26 | yes |
 | `:pane-sendspin` | `sh/edm/s1kiosk/sendspin/PrefsSsStore.kt` | 80 | `java.util.Base64.Encoder#withoutPadding` | 26 | yes |
@@ -472,6 +476,69 @@ own start on API 23: `MainActivity`'s and `UpdateManager`'s calls (after #364/#3
 **`Pane.requires` stays honest.** Every pane's `requires` names hardware only, and no pane needs the page to reach
 another origin, so the legacy engine needs no new capability: a pane is offered on a legacy device by the same
 hardware checks as anywhere. What keeps a pane from running there is the app's API 24+ calls above, not the engine.
+
+## Updates on the legacy build (#198 Phase C)
+
+The legacy build gets its own release line, `ReleaseLine.GENERIC_ANDROID_LEGACY` (core, `update/Releases.kt`):
+tags `generic-android-legacy-v1.2.3`, APKs `glassworks-generic-android-legacy-<abi>-1.2.3.apk`. The current
+generic app's line never reads those tags, and the legacy line never reads its tags (`ReleasesTest`). So a legacy
+app is never offered a build that needs Android 8, and a current app is never offered the frozen engine.
+
+`UpdateManager` installs through a `PackageInstaller` session on every Android it runs on. How it ends:
+
+| The app | Android 6–7 | What happens (read from `UpdateManager`, tested where marked) |
+|---|---|---|
+| A privileged system app (`INSTALL_PACKAGES` granted: the Mirror, flashed into `/system/priv-app` by Kiln) | Commits with no prompt | Says "without a tap" (`SilentUpdates`, `SilentUpdatesTest`). On the Mirror, #398's probe app updated itself this way and kept its permissions (results in #395, `frames/lululemon-mirror/research/privileged-app.md`) |
+| The device owner | Commits with no prompt | As before (#277) |
+| An app someone installed | Android asks (`STATUS_PENDING_USER_ACTION`) | `UpdateInstallReceiver` shows the confirmation, as on Android 8–11 |
+
+An update keeps only the privileged permissions the `/system` copy requested. So the legacy build declares
+`INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` from its first build (Phase D); a later build can't add one.
+
+## The legacy build (#198 Phase D)
+
+The legacy build is the `legacy` build type of Glassworks for generic Android (`frames/generic-android/android`):
+`dev.glassworks.generic_android.legacy`, minSdk 23, `:engine-gecko-legacy` in place of `:engine-gecko`, core library
+desugaring, and a manifest (`src/legacy`) that overrides the minSdk 26 of the core, the pane API and the panes. How
+to build it, and why a build type and not a flavor: [its README](../../frames/generic-android/README.md#the-legacy-build-android-6-and-7).
+**Not tried on a device yet.** Phase B fixed `MainActivity`'s API 24+ calls, and the core's conformance test starts
+`MainActivity` on an API 23 emulator, but no Android 6-7 device has run the legacy APK. Try it on one where a crash
+loop is cheap first: with `BootReceiver` and the home screen on, a crash at start would repeat at every boot.
+`:kiosk-legacy` (those entry points off) stays the safe way to try the engine alone.
+
+What Phase B added for the Mirror, from the device and not from frame code (`GenericAndroid`, `GenericAndroidDeviceTest`):
+
+| What | How | Tested |
+|---|---|---|
+| Portrait glass | `Frame.orientation` is `ANY` on the Mirror: the app follows Android's rotation (`SCREEN_ORIENTATION_FULL_USER`), and Kiln's first boot locks the Mirror's Android in portrait (`user_rotation=3`, auto-rotate off; `ro.sf.hwrotation` does nothing there, 2026-11-17). The app then stands upright on the glass (verified 2026-11-17, the root's run of #439, the maintainer's look). The S1's frame keeps landscape, as its manifest asks. Phase B first used the screen at rotation 0, which held a Pixel Tablet portrait on its dock (2026-11-16) | `OrientationTest` (the S1, the Pixel Tablet, the Mirror, an unknown tablet, a turn) |
+| No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
+| Reboot | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
+
+What checks it, besides the unit tests of the shared sources:
+
+| Check | What | Where |
+|---|---|---|
+| `LegacyBuildTest` | Its id is the one the app picks the legacy line by; each build has one engine; every module above API 23 is in `overrideLibrary` | `./gradlew test` |
+| `size-generic` | It builds for arm64-v8a, with its id, minSdk 23, the three system permissions and GeckoView's native code | `pr.yml` |
+| `api23` | No new call above API 23 in the app's own sources | `pr.yml` |
+| The conformance test on API 23 | The core boots on Android 6 with a fake frame and engine, built at minSdk 23 with desugaring (`tools/legacy/api23-emulator.gradle`) | `core-emulators.yml` |
+
+**Desugaring and its licence.** Core library desugaring compiles the `desugar_jdk_libs` classes the app calls
+(`java.time`, `Base64` and friends) into the legacy APK as `j$.*` (863 classes, #408). That code is GPL-2.0 with the
+Classpath exception. The maintainer allowed it on 2026-11-16, in the generic legacy APK and the engine's debug test
+app, as the one exception to the no-GPL rule (`AGENTS.md`, rule 4); it's in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
+Where it goes:
+
+| Build | Desugaring | `desugar_jdk_libs` code in the APK |
+|---|---|---|
+| Generic legacy (`assembleLegacy`) | On | Yes, the classes it calls |
+| Generic current (`assembleRelease`, minSdk 26) | On, because AGP turns it on per module, not per variant | None. D8 adds a 3.8 kB dex of inert API stubs, so the APK isn't byte-identical to one without desugaring (#408) |
+| S1 Kiosk (`:kiosk`) | Off | None |
+| `:kiosk-legacy` (the engine's debug test app) | On | Yes. A test build artifact on branches named `legacy`, never released. Allowed too (maintainer, 2026-11-16) |
+
+Test builds publish the legacy APK (`generic-test-build.yml`, arm64-v8a, 0.1.0 and 0.1.1). There's no release yet:
+`release.yml` doesn't build the generic app or its legacy build, and the app has no release key. The app's legacy
+release line ([above](#updates-on-the-legacy-build-198-phase-c)) is ready for one.
 
 ## How to reproduce
 
@@ -502,7 +569,7 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
   redirects to another origin (`http` → `https`, a reverse proxy), and HA's external sign-in providers. Each is
   refused today and says so on the page.
 - GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
-- `MainActivity`'s `url` intent extra still restarts only when the secure-context hosts change. A same-host change
-  of port or scheme over that extra reloads instead, and the legacy engine then refuses the new dashboard (with the
-  note) until the app restarts. The fix is one line (`engineStart()` in place of `secureHosts()`), after #364.
-- The app itself on API 23–25: the API 24+ calls behind `registerDefaultNetworkCallback`.
+- The app itself on an Android 6-7 device: Phase B's code ran only on Robolectric and an API 23 emulator (no
+  GeckoView there: the conformance test's engine is blank).
+- The Mirror's `Build.MODEL` and `MANUFACTURER` have never been read on the unit. If the Mirror should lock portrait
+  whatever its Android says, it needs a `GenericAndroid.KNOWN` row, and that needs a real reading first.

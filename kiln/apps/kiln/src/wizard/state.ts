@@ -38,6 +38,10 @@ export type Setup =
       hint?: string;
       unreachable?: boolean;
       joining?: { ssid: string; step: 'sent' | 'join' | 'ok' | 'err'; error?: string };
+      /** `lan`: on the panel's own page, over its setup channel (issue 197). Kiln's wizard sends it over USB. */
+      over?: 'lan';
+      /** Under the joining steps: what happens next when this page can't see the outcome. */
+      joinNote?: string;
     }
   /** signingIn: a sign-in tab is open, and the panel isn't signed in yet */
   | { phase: 'ha'; ha: SetupState['ha']; note?: string; error?: string; busy?: boolean; signingIn?: boolean }
@@ -95,6 +99,8 @@ export interface UndoState {
 export interface DoneState {
   title: string;
   body: string;
+  /** The panel's own setup page (`http://<panel>:8099/setup`, #34), when the app on it has one: Kiln hands off to it. */
+  setupPage?: string;
   backup?: { name: string; info: string; hint: string; error?: string };
 }
 

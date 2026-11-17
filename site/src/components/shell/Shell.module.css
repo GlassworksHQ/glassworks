@@ -196,6 +196,8 @@ a.group:hover {
     text-decoration: none;
     font-size: 17px;
     font-weight: 500;
+    padding: 9px 0;
+    margin: -9px 0;
   }
 
   .topMark {
@@ -213,8 +215,9 @@ a.group:hover {
   .iconBtn {
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    margin: -2px;
     border: 0;
     background: none;
     color: inherit;
@@ -242,6 +245,17 @@ a.group:hover {
 
   .side .brand {
     display: none;
+  }
+
+  /* touch: 44 px rows and toggle in the menu */
+  .ni {
+    min-height: 44px;
+  }
+
+  .theme {
+    width: 44px;
+    height: 44px;
+    margin: -7px;
   }
 }
 

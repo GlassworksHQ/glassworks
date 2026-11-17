@@ -1,7 +1,10 @@
 package sh.edm.s1kiosk.setup
 
+import android.net.wifi.WifiManager
+import dev.glassworks.frame.Input
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import sh.edm.s1kiosk.improv.ImprovController
@@ -10,7 +13,7 @@ class OfflineTextTest {
     private val grace = ImprovController.BOOT_GRACE_MS
     private val boot = OfflineText.Facts(wifiEnabled = true, savedNetwork = null, joining = false, wasOnlineBefore = true, offlineForMs = 3_000)
 
-    private fun text(f: OfflineText.Facts) = OfflineText.decide(f, grace)
+    private fun text(f: OfflineText.Facts, input: Input = Input.TOUCH) = OfflineText.decide(f, grace, input)
 
     @Test
     fun graceIsImprovsBootGrace() = assertEquals(30_000L, grace)
@@ -79,5 +82,33 @@ class OfflineTextTest {
         assertFalse(OfflineText.joining("DISCONNECTED", null))
         assertFalse(OfflineText.joining("INACTIVE", "IDLE"))
         assertFalse(OfflineText.joining(null, null))
+    }
+
+    @Test
+    fun wifiStateReadsOnlyAndroidsAnswer() {
+        assertEquals(true, OfflineText.wifiEnabled(WifiManager.WIFI_STATE_ENABLED))
+        assertEquals(true, OfflineText.wifiEnabled(WifiManager.WIFI_STATE_ENABLING))
+        assertEquals(false, OfflineText.wifiEnabled(WifiManager.WIFI_STATE_DISABLED))
+        assertEquals(false, OfflineText.wifiEnabled(WifiManager.WIFI_STATE_DISABLING))
+        assertNull(OfflineText.wifiEnabled(WifiManager.WIFI_STATE_UNKNOWN))
+        assertNull("no WifiManager, or the read threw", OfflineText.wifiEnabled(null))
+    }
+
+    @Test
+    fun aWifiStateNobodyReadIsNeverOff() {
+        // #448: the Mirror said "Wi-Fi is off" while Android had Wi-Fi on.
+        val unknown = boot.copy(wifiEnabled = null, savedNetwork = false, wasOnlineBefore = false)
+        assertEquals("No network yet", text(unknown).title)
+        assertTrue("a join still counts", text(unknown.copy(joining = true)).connecting)
+    }
+
+    @Test
+    fun theSetupButtonNeedsTouch() {
+        val stuck = boot.copy(savedNetwork = false)
+        assertEquals(OfflineText.SETUP_ACTION, text(stuck).action)
+        assertEquals(OfflineText.SETUP_ACTION, text(stuck.copy(wifiEnabled = false)).action)
+        assertNull(text(stuck, Input.NONE).action)
+        assertNull(text(stuck.copy(wifiEnabled = false), Input.NONE).action)
+        assertNull("connecting has no button", text(boot).action)
     }
 }

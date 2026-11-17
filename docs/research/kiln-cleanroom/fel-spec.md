@@ -1,8 +1,26 @@
+---
+topic: install
+evidence: verified
+---
+
 # Clean-room spec: `kiln/packages/fel`
 
-**Status (2026-11-15): spec ready; the clean-room rewrite is in review (#355), real panel run pending.** This page says what Kiln's FEL client
+**Status: panel-verified 2026-11-16: the rewrite FEL-booted U-Boot on a real S1 (fastboot answered `sunxi`).** This page says what Kiln's FEL client
 must do, in behaviour and facts. It is the input for an implementer who has not read sunxi-tools.
 Read [README.md](README.md) first: it says what you may open and what you must not.
+
+**The panel run** (2026-11-16, verified, RAM only). The maintainer put the S1 in FEL. The root ran
+#372's `kiln/packages/fel` from Node over WebUSB. It used the same transfer-timeout wrapper as
+`tools/mirror`. What came back:
+
+1. `checkChip`: SoC id `0x1855`, secure boot `0`.
+2. `bootUboot`: the SPL ran, U-Boot uploaded in 64 KiB writes, and `reset64` jumped to `0x4a000000`.
+3. U-Boot came up as USB fastboot. `fastboot getvar product` answered `sunxi`.
+4. Nothing was written to eMMC. After a replug, the panel booted its flashed image as before.
+
+The full report is in [#372's comment](https://github.com/GlassworksHQ/glassworks/pull/372#issuecomment-6906668434).
+To repeat it in a browser, follow the panel plan in #372's description: Kiln's dev page, a fresh Chrome
+profile, **Install** then **Connect**. It stops at the fastboot prompt.
 
 ## What the package does
 

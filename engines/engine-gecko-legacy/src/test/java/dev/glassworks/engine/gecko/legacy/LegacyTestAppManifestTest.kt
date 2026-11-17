@@ -20,6 +20,11 @@ class LegacyTestAppManifestTest {
     private val dirs: Map<String, File> = Regex("""project\("(:[^"]+)"\)\.projectDir = file\("([^"]+)"\)""")
         .findAll(settings).associate { it.groupValues[1] to RepoFiles.file(it.groupValues[2]) }
     private val dependency = Regex("""\bproject\("(:[^"]+)"\)""")
+    private val minSdkLine = Regex("""minSdk = (\d+)""")
+
+    /** The minSdk of a module that doesn't set one: glassworks.android's (build-logic, #282). */
+    private val defaultMinSdk = minSdkLine.find(RepoFiles.file("build-logic/src/main/kotlin/glassworks.android.gradle.kts").readText())
+        ?.groupValues?.get(1)?.toInt() ?: throw AssertionError("no minSdk in glassworks.android")
 
     private fun build(path: String) = File(dirs[path] ?: throw AssertionError("$path isn't in settings.gradle.kts"), "build.gradle.kts").readText()
 
@@ -48,7 +53,8 @@ class LegacyTestAppManifestTest {
         assertTrue("found only $deps", deps.size >= 10)
         val missing = deps.mapNotNull { p ->
             val b = build(p)
-            val minSdk = Regex("""minSdk = (\d+)""").find(b)?.groupValues?.get(1)?.toInt() ?: return@mapNotNull null
+            if ("id(\"com.android." !in b) return@mapNotNull null // esphome-api: a JVM library
+            val minSdk = minSdkLine.find(b)?.groupValues?.get(1)?.toInt() ?: defaultMinSdk
             val namespace = Regex("""namespace = "([^"]+)"""").find(b)?.groupValues?.get(1) ?: return@mapNotNull null
             if (minSdk > 23 && namespace !in named) "$p ($namespace, minSdk $minSdk)" else null
         }

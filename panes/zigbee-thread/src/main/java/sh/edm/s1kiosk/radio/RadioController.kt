@@ -15,12 +15,18 @@ interface SysProps {
     fun get(name: String): String
     fun set(name: String, value: String)
     fun sleep(ms: Long) = Thread.sleep(ms)
+    /** [get] without starting a process, for reads on the UI thread (the settings page's live rows). */
+    fun peek(name: String): String = get(name)
 }
 
 /** Real implementation: toybox getprop/setprop as the app uid (SELinux is permissive on this firmware). */
 object ShellProps : SysProps {
     override fun get(name: String) = run("getprop", name)
     override fun set(name: String, value: String) { run("setprop", name, value) }
+
+    override fun peek(name: String): String = try {
+        Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as? String ?: ""
+    } catch (_: Exception) { get(name) }
 
     private fun run(vararg cmd: String): String = try {
         val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
@@ -147,6 +153,13 @@ class RadioController(
     @Volatile private var helperShown = ""
     @Volatile private var firmwareShown = ""
     @Volatile private var fwSelectedShown = RadioFirmware.KEEP
+    /**
+     * [connectedNow] as the last [refresh] read it. Home Assistant's sensor shows this, not a live read: a
+     * publish between refreshes could otherwise send a client that [refresh] never saw, and its leaving
+     * would then never be published.
+     */
+    @Volatile private var connectedShown = ""
+    fun connectedText(): String = connectedShown
     fun helperStatusText(): String = helperShown
     fun firmwareText(): String = firmwareShown
     fun firmwareSelected(): String = fwSelectedShown
@@ -220,6 +233,35 @@ class RadioController(
         return null
     }
 
+    /**
+     * "Connected now" (#217): who uses the Zigbee coordinator's EZSP port, from [RadioHelper.PROP_PEER]. Read
+     * afresh on each call, without a process ([SysProps.peek]): the settings page reads it every couple of
+     * seconds, and the helper every 3 s. Home Assistant's address (its last authenticated ESPHome connection)
+     * is named; the time it connected is in the panel's time zone.
+     */
+    fun connectedNow(): String {
+        if (mode != RadioMode.ZIGBEE_TCP) return "Only the Zigbee coordinator takes a client"
+        return when (val p = RadioHelper.parsePeer(props.peek(RadioHelper.PROP_PEER))) {
+            RadioHelper.Peer.NotReported -> "Not known (the root helper doesn't report it yet)"
+            RadioHelper.Peer.Nobody -> "Nobody"
+            is RadioHelper.Peer.Connected -> {
+                val name = when {
+                    p.address == "127.0.0.1" || p.address == "::1" -> "The panel itself"
+                    p.address == allow.haV4 || p.address == allow.haV6 -> "Home Assistant"
+                    else -> null
+                }
+                listOfNotNull(name, p.address, "since ${since(p.sinceEpochSeconds * 1000)}").joinToString(" · ")
+            }
+        }
+    }
+
+    /** "14:32" today, else "14 Nov 14:32". */
+    private fun since(ms: Long): String {
+        val day = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT)
+        val today = day.format(java.util.Date(ms)) == day.format(java.util.Date(clock()))
+        return java.text.SimpleDateFormat(if (today) "HH:mm" else "d MMM HH:mm", java.util.Locale.ENGLISH).format(java.util.Date(ms))
+    }
+
     /** Radio thread (or inline): recompute [shown]; notifies [onChange] when it changed. */
     fun refresh() {
         val helper = helperInstalled()
@@ -266,8 +308,9 @@ class RadioController(
         val h = helperText().let { if (it.length > 250) it.take(249) + "…" else it }
         val fw = firmware.statusText().let { if (it.length > 250) it.take(249) + "…" else it }
         val sel = firmware.selected()
-        if (s != shown || h != helperShown || fw != firmwareShown || sel != fwSelectedShown) {
-            shown = s; helperShown = h; firmwareShown = fw; fwSelectedShown = sel
+        val c = connectedNow()
+        if (s != shown || h != helperShown || fw != firmwareShown || sel != fwSelectedShown || c != connectedShown) {
+            shown = s; helperShown = h; firmwareShown = fw; fwSelectedShown = sel; connectedShown = c
             onChange()
         }
     }

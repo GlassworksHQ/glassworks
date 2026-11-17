@@ -203,4 +203,16 @@ describe('flashBlob against a Qualcomm LK fake', () => {
     const p2 = await flash(new FakeLk(64 * 1024, [['userdata', 1024 * BLOCK]]), 'userdata', many.image);
     expect(p2.at(-1)).toBe(1);
   });
+
+  it('flashes a piece of thousands of chunks, as make_ext4fs writes them (the Mirror\'s system.img: Node crashed, 2026-11-16)', async () => {
+    // One piece of this image holds ~8,000 chunks. Built one nested Blob per chunk, Node's Blob reader
+    // overflowed its native stack reading it (SIGSEGV, exit 139) before a byte reached the device.
+    const chunks: Chunk[] = [];
+    for (let i = 0; i < 5000; i++) chunks.push({ raw: new Uint8Array(BLOCK).fill(i & 0xff) }, { skip: 1 });
+    const { image, expected } = sparseImage(chunks, 0xee);
+    const lk = new FakeLk(16 << 20, [['system', 10_000 * BLOCK]]);
+    await flash(lk, 'system', image);
+    expect(lk.downloads.length).toBeGreaterThan(1);
+    expect(Buffer.from(lk.parts.get('system')!).equals(Buffer.from(expected))).toBe(true);
+  }, 60_000);
 });

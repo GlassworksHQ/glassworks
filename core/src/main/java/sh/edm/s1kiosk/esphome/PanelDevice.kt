@@ -600,6 +600,11 @@ class PanelDevice(
             "update_status", "Update status", "mdi:update", EntityCategory.DIAGNOSTIC,
             disabledByDefault = true, get = { updates.statusText() },
         ),
+        // On: it's what people check to know whether an update needs someone at the panel (#422).
+        TextSensorEntity(
+            "silent_updates", "Silent updates", "mdi:auto-download", EntityCategory.DIAGNOSTIC,
+            get = { updates.silentUpdates?.state.orEmpty() },
+        ),
         // --- Home Assistant sign-in (docs/onboarding.md)
         TextSensorEntity(
             "home_assistant_url", "Home Assistant URL", "mdi:home-assistant", EntityCategory.DIAGNOSTIC,

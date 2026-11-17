@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import dev.glassworks.engine.EngineSettings
 import dev.glassworks.engine.gecko.GeckoEngine
-import dev.glassworks.manage.ManageHost
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.platform.AppBuild
 import org.junit.After
@@ -99,8 +98,7 @@ class AppBuildTest {
         assertEquals("9.8.7 · test build f00ba47", status.version)
         val about = status.sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
         assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", about.title())
-        val host = S1Manage::class.java.getDeclaredField("host").apply { isAccessible = true }.get(manage) as ManageHost
-        assertEquals("Version: S1 Kiosk 9.8.7 · test build f00ba47 (90807)", host.diagnostics().lineSequence().first())
+        assertEquals("Version: S1 Kiosk 9.8.7 · test build f00ba47 (90807)", manage.diagnostics().lineSequence().first())
     }
 
     @Test fun theSettingsMenuShowsTheGivenBuild() {

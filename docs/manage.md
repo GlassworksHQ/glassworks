@@ -18,7 +18,7 @@ changes them the same way.
 |---|---|
 | Overview | Running or not, the app's version ("· test build <commit>" on a test build) and how long the app has run; Home Assistant, Wi-Fi (connected or not from Android's connectivity service; the network's name and signal where Android gives them to the app), the web engine, memory; every pane the panel can run, with its state (running, off, or can't run now and why). A pane the device has no hardware for isn't listed, here or on the panel. Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
 | Home Assistant & dashboard, Screen, each pane | Every setting the panel's own menu has, in the same order and words, and you can change each one here. A pane's page has its on/off at the top right and shows what it's doing; a pane that's off says what that means. The radio's page links to the Thread join |
-| The device's page (S1 Plus, or the device's model) | What belongs to the device and to no pane. On the S1: **Block Aqara cloud**, the cloud daemon's state, which of Aqara's apps are turned off, and the radio's mode (it opens the Radio page). Elsewhere: whether app updates install without a tap, whether the app is the device owner, the model and the Android version |
+| The device's page (S1 Plus, or the device's model) | What belongs to the device and to no pane. On the S1: **Block Aqara cloud**, the cloud daemon's state, which of Aqara's apps are turned off, the radio's mode (it opens the Radio page) and **Silent updates**. Elsewhere: **Silent updates**, whether the app is the device owner, the model and the Android version. **Silent updates** says whether an update from Home Assistant installs with nobody at the panel, and why; where it can't, how to change that on this kind of device, in amber ([Silent updates](esphome.md#silent-updates)) |
 | Log | The last 7 days, kept across reboots. Filter by warnings or errors, search, and **Download diagnostics** |
 | Security | The browsers signed in, each with **Sign out** |
 | About | Versions, frame, licences |
@@ -39,6 +39,59 @@ and connections tiles, the mode (*Listen only* or *Listen and connect*), and its
 The time zone page has everything the panel's has: the zone, picked from a
 list grouped by region, whether the panel keeps it, and Home Assistant's zone, with **Use it** when
 Home Assistant keeps another zone's clock.
+
+## Set up over the network
+
+A panel already on Wi-Fi can be set up from a laptop, with no cable and no tap on its screen (#34). Open
+`http://<panel>:8099/setup` on a computer on the same network: the panel's own page, a small build of
+Kiln's setup steps. Kiln's Done screen links it after an install over USB. A panel without touch shows
+the address and a QR code on its own setup screen (below); the Manage page and the panel's settings say it
+too, in **Allow setup over the network**.
+
+1. **Pair.** Press **Show the code on the panel**. The panel shows a 6-digit code ("Set up this panel from
+   a computer"). Type it on the page and press **Pair**. Only someone who can see the panel can pair.
+2. **Wi-Fi**, only on a panel that is on no network: the page reached it on the panel's own setup Wi-Fi
+   (#197). Pick a network the panel sees and type its password. The panel closes its setup Wi-Fi and
+   joins; its own screen shows how it goes, since the page loses the panel there. A panel already on a
+   network skips this step, and refuses Wi-Fi details from the page.
+3. **Home Assistant.** The address the panel found, or type one, and sign in on the panel's sign-in page.
+4. **Radio.** What the Zigbee and Thread radio does, then what to do in Home Assistant for it.
+5. **Done.** The page ends the pairing. Reload it and it asks for a code again (once Home Assistant has the
+   panel, allow setup over the network first, below).
+
+The page is plain HTTP on your local network. While you pair, others on the same network can see the code
+you type and the session cookie. The session only works from the address that paired, which limits replay.
+A Wi-Fi password crosses the page only on the panel's own setup Wi-Fi, which is WPA2 with a key shown on the
+panel's screen; the panel refuses one while it is on a network, so it never crosses your network as plain HTTP.
+
+| | |
+|---|---|
+| A wrong code | 5 tries per code. 10 wrong tries in 15 minutes lock code entry for a while. At most 6 new codes in 10 minutes |
+| How long a pairing lasts | Until Done, 30 minutes without a change, or 2 hours. Reading the panel's state doesn't count as a change: after 30 quiet minutes the page asks for a new code and carries on at the same step. If Home Assistant has added the panel in the meantime, allow setup over the network first |
+| Which browser | The one that paired, from the address it paired from. A computer whose address changes (a `.local` name that switches between IPv4 and IPv6) pairs again |
+| Without pairing | The page and the panel's channel answer what the panel's state is, and refuse every change |
+
+**Pairing is off once Home Assistant has added the panel.** Nobody on the network can pair with it then.
+If Home Assistant adds the panel during setup, pairing closes but the session you have carries on. After
+Done, or once that session has run out, a new code alone can't resume: allow setup over the network first.
+It stays allowed for 30 minutes. Any of these allows it:
+
+- In Home Assistant, the panel's device page: **Allow setup over the network** (a button, under Configuration).
+- On the panel: Settings → **Home Assistant & dashboard** → **Allow setup over the network**. The Manage page has
+  the same row.
+- With Kiln over USB: at Done, Kiln allows it before it links the page.
+
+**Panels without touch.** On a frame whose screen takes no tap (`input = NONE`, the lululemon Mirror's), the
+panel's setup screen only shows where to set it up: the page's address and a QR code ("Scan to set it up."),
+and Sign in's QR code for a phone. The pairing code shows without Close, and goes when it's used or runs
+out. Wi-Fi comes from Kiln over USB first.
+
+**What the page can't protect against.** It is plain HTTP on your network, as the Manage page is: no
+browser trusts a certificate for a panel's local address. The session cookie is bound to the address that
+paired, so a copy taken off the network doesn't work from another device. Something that can also take
+over that address on your network could still use it, until Done or the 30 quiet minutes end it. The panel
+has no write timeout on the page's connection: a browser that stops reading holds one of the panel's web
+workers until the network gives up (minutes), or until another paired browser or Done ends it.
 
 ## Changing settings
 

@@ -1,3 +1,8 @@
+---
+topic: hardware
+evidence: read
+---
+
 # Wall bases ("brackets" / "docks")
 
 The panel mounts on a mains-powered wall base. Aqara's firmware calls it the **bracket** (native code)

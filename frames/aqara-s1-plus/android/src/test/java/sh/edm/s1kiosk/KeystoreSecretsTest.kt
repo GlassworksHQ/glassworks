@@ -361,11 +361,12 @@ class KeystoreSecretsTest {
         val sources = RepoFiles.code(atLeast = 100, inModules = RepoFiles.appModules)
         val opens = sources.filter { "getSharedPreferences(" in it.readText() }.map { RepoFiles.rel(it).substringAfterLast('/') }.toSet()
         val secretOpeners = sources.filter { "SecretFiles.open(" in it.readText() }.map { it.name }.toSet()
-        assertEquals("the openers of kiosk, auth and sendspin", setOf("KioskPrefs.kt", "PanePrefs.kt", "PrefsSsStore.kt"), secretOpeners)
+        assertEquals("the openers of kiosk, auth and sendspin (PaneFiles: every app's pane files, #23)",
+            setOf("KioskPrefs.kt", "PaneFiles.kt", "PrefsSsStore.kt"), secretOpeners)
         assertTrue("the scan sees SecretFiles", "SecretFiles.kt" in opens)
-        // The others open only files without secrets: PanePrefs opens SecretFiles' files through it, the
+        // The others open only files without secrets: PaneFiles opens SecretFiles' files through it, the
         // wall base its energy counter (s1base), the timers their anchor (timers).
-        assertEquals(setOf("SecretFiles.kt", "PanePrefs.kt", "WallBase.kt", "TimerOverlay.kt"), opens)
+        assertEquals(setOf("SecretFiles.kt", "PaneFiles.kt", "WallBase.kt", "TimerOverlay.kt"), opens)
         for (literal in SecretFiles.SECRETS.keys) {
             val raw = sources.filter { it.name != "SecretFiles.kt" && Regex("""getSharedPreferences\(\s*"$literal"""").containsMatchIn(it.readText()) }
             assertTrue("$literal opened raw in ${raw.map(RepoFiles::rel)}", raw.isEmpty())

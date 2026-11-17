@@ -31,22 +31,24 @@ def target_from_args(a):
         t = from_frame(a.frame)
         over = {k: v for k, v in (("name", a.name), ("width", a.width), ("height", a.height),
                                   ("android_api", a.android_api), ("splash", a.splash),
-                                  ("zip_budget", a.zip_budget)) if v is not None}
+                                  ("zip_budget", a.zip_budget), ("rotate", a.rotate)) if v is not None}
         return dataclasses.replace(t, **over)
     if a.name is None or a.width is None or a.height is None:
         raise SystemExit("give --frame <id>, or --name, --width and --height")
-    return Target(a.name, a.width, a.height, a.android_api, a.splash, a.zip_budget)
+    return Target(a.name, a.width, a.height, a.android_api, a.splash, a.zip_budget, a.rotate)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--frame", help="frames/<id>: read the target from its design/frame.json")
     ap.add_argument("--name", help="the device's name, for the line under the wordmark")
-    ap.add_argument("--width", type=int, help="the display's width in px, as Android's boot animation sees it")
+    ap.add_argument("--width", type=int, help="the display's width in px, as people see it")
     ap.add_argument("--height", type=int, help="the display's height in px")
     ap.add_argument("--android-api", type=int, help="Android's API level; 25+ gets trimmed frames")
     ap.add_argument("--splash", help="the bootloader splash format (allwinner-boot-resource)")
     ap.add_argument("--zip-budget", type=int, help="the largest bootanimation.zip allowed, in bytes")
+    ap.add_argument("--rotate", type=int, choices=(90, 270),
+                    help="turn each frame this many degrees counter-clockwise into the panel's framebuffer")
     ap.add_argument("--out", metavar="DIR", help="where to write the files")
     ap.add_argument("--stills", metavar="DIR", help="write the comparison stills here instead of building")
     a = ap.parse_args()

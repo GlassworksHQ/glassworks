@@ -57,7 +57,7 @@ class KioskService : Service() {
         runtime.app.serviceStarted(this, runtime)
         glassworks.voiceCancel = { device?.cancelVoice() }
         HaAuth.startServer(this)
-        codeOverlay = CodeOverlay(this) { glassworks.panelCode.dismiss() }
+        codeOverlay = CodeOverlay(this, touch = glassworks.frame.input == dev.glassworks.frame.Input.TOUCH) { glassworks.panelCode.dismiss() }
         // Without "draw over other apps" the code can't show: the Manage page says so instead of waiting for it.
         glassworks.panelCode.canDisplay = { android.provider.Settings.canDrawOverlays(this) }
         glassworks.panelCode.display = { shown ->
@@ -169,8 +169,13 @@ class KioskService : Service() {
         return b.build()
     }
 
-    /** The app's icon, from its manifest; Android's default app icon for an APK without one, so the service still starts. */
-    private fun notificationIcon(): Int = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
+    /**
+     * The app's notification icon ([dev.glassworks.platform.AppBuild.notificationIcon]), else its icon from its manifest;
+     * Android's default app icon for an APK without one, so the service still starts. An icon Android can't load
+     * crashes the app (RemoteServiceException "Couldn't create icon": the Mirror's first start, #198).
+     */
+    private fun notificationIcon(): Int = glassworks.build.notificationIcon.takeIf { it != 0 }
+        ?: applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
         private const val CHANNEL = "kiosk"
