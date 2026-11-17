@@ -1,3 +1,8 @@
+---
+topic: boot
+evidence: verified
+---
+
 # Persistent root: Magisk + the S1 Kiosk root helper
 
 **Status (2026-11-09): working on the reference panel.**

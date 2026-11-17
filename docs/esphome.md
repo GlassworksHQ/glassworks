@@ -546,7 +546,7 @@ read again every 15 minutes, so allowing "Install unknown apps" shows within tha
 | `No: this boot image has no root update service` | The S1 with a boot image from before the service | Update the boot image with Kiln |
 | `No: Android <n> asks for a tap on each update` | Android 6 to 11, not device owner, not a system app | Make the app device owner, on a reset device with no accounts ([generic Android](../frames/generic-android/README.md#device-owner)) |
 | `No: Android needs “Install unknown apps” allowed for the app` | Android 12+ | Allow it in Android's settings, under Apps |
-| `No: Android <n> needs an app that targets API <t>, and this one targets <s>` | Android 12+ newer than the app's target allows | A release with a newer target, or device owner |
+| `No: Android <n> needs an app that targets API <t>, and this one targets <s>` | Android 12+ newer than the app's target allows | A release with a newer target (and "Install unknown apps", when that's off too), or device owner |
 
 The routes come in the order the app takes them (`dev.glassworks.update.SilentUpdates`). Where they
 come from, read 2026-11-16:

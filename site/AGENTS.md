@@ -82,7 +82,9 @@ files change.
    `typecheck` script runs the root's TypeScript 7 by path. Don't add a script that calls bare `tsc`.
 8. **The docs build fails on a link it can't resolve**: a relative link to a missing file, or an
    `#anchor` its target doesn't have. Links follow GitHub's rules (its heading slugs), so a link that
-   works on GitHub works here, and `tools/check-doc-links.py` checks the same Markdown. Search is
+   works on GitHub works here, and `tools/check-doc-links.py` checks the same Markdown. A research
+   note's front matter (`topic`, `evidence`) must use the words in `src/lib/docs/notes.ts`, or the
+   build fails too; the site strips it before rendering. Search is
    Pagefind, built over the static HTML by `npm run build`; it only works on a built site.
 9. **A blog post is `blog/<YYYY-MM-DD>-<slug>/index.md`**, rendered like a doc. `draft: true` keeps it
    out of production and the feed: drafts show only in `next dev`, on preview deploys, or with

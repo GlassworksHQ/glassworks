@@ -1,3 +1,8 @@
+---
+topic: boot
+evidence: read
+---
+
 # Mirror Android: can the lululemon Mirror run Android 8 (API 26) or newer?
 
 **Status (2026-11-13): dead end for now (desk research).** No path to an API 26+ image is open

@@ -132,7 +132,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     return root;
   }
 
-  it('adds Glassworks as a privileged app with its libraries, the boot animation and the rotation', async () => {
+  it('adds Glassworks as a privileged app with its libraries and the boot animation, and no ro.sf.hwrotation', async () => {
     const img = join(dir, 'system.img');
     mke2fs(img, 64, MAKE_EXT4FS, systemTree());
     const owner = (out: string) => out.match(/Mode:\s+\d+|User:\s+\d+\s+Group:\s+\d+/g);
@@ -141,9 +141,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const fs = await Ext4.open(disk);
     await fs.setLabel('/framework/services.jar', 'u:object_r:system_file:s0');
     const log: string[] = [];
-    await patchSystem(fs, { adbKey: KEY, apk: APK, bootAnimation: ANIM, hwrotation: 270, settingsOverlay: OVERLAY, time: T }, (l) => log.push(l));
+    await patchSystem(fs, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, time: T }, (l) => log.push(l));
     const after = { free: fs.freeBlocks, inodes: fs.freeInodes };
-    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, bootAnimation: ANIM, hwrotation: 270, settingsOverlay: OVERLAY, time: T }); // again: the same result
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, time: T }); // again: the same result
     const again = await Ext4.open(disk);
     expect({ free: again.freeBlocks, inodes: again.freeInodes }).toEqual(after);
     await dump(disk, img);
@@ -155,8 +155,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(debugfs(img, `ls ${DIR}/lib`)).not.toContain('arm '); // only the primary ABI's
     expect(Buffer.from(debugfsCat(img, '/media/bootanimation.zip'))).toEqual(Buffer.from(ANIM));
     const prop = new TextDecoder().decode(debugfsCat(img, '/build.prop'));
-    expect(prop.match(/ro\.sf\.hwrotation=/g)).toHaveLength(1);
-    expect(prop).toMatch(/\nro\.lockscreen\.disable\.default=true\nro\.sf\.hwrotation=270\n$/);
+    // nothing in the image reads ro.sf.hwrotation (2026-11-17): the first boot sets the rotation instead
+    expect(prop).not.toContain('ro.sf.hwrotation');
+    expect(prop).toMatch(/\nro\.lockscreen\.disable\.default=true\n$/);
     expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
     for (const p of [DIR, `${DIR}/lib/arm64`, '/vendor/overlay']) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0755[\s\S]*User:\s+0\s+Group:\s+0/);
@@ -352,7 +353,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       // the template buildImages puts the saved network after (read 2026-11-16 from image 2)
       expect(new TextDecoder().decode(await real.readFile('/etc/wifi/wpa_supplicant.conf'))).toBe(TEMPLATE);
       expect((await real.readdir('/vendor')).map((e) => e.name)).not.toContain('overlay'); // ours is the only overlay
-      await patchSystem(real, { adbKey: KEY, apk: APK, bootAnimation: ANIM, hwrotation: 270, settingsOverlay: OVERLAY });
+      await patchSystem(real, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY });
       const out = openSync(join(dir, 'out.img'), 'w');
       let pos = 0;
       await writeSparse(disk, (b) => { writeSync(out, b, 0, b.length, pos); pos += b.length; });
@@ -372,7 +373,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       expect(problems(r.out)).toEqual(baseline); // the image's own make_ext4fs quirk, nothing new
       const img = join(dir, 'flashed.raw');
       expect(Buffer.from(debugfsCat(img, `${DIR}/Glassworks.apk`))).toEqual(Buffer.from(APK));
-      expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.lockscreen\.disable\.default=true\nro\.sf\.hwrotation=270\n$/);
+      expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.lockscreen\.disable\.default=true\n$/);
       expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
       expect(debugfs(img, 'ls /app')).toContain('Provision');
       // services.jar: the installer's key in place of the project key, and (with the SDK's dexdump)

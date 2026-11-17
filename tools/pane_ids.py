@@ -22,6 +22,21 @@ def main_sources(root):
     return found
 
 
+def supertypes(header):
+    """What a Kotlin class [header] (from its name to its body's brace) says it extends or implements: the text after
+    the primary constructor's parameters, so a parameter's type (`step: SetupStep`) isn't counted."""
+    h = header
+    paren, colon = h.find("("), h.find(":")
+    if paren != -1 and (colon == -1 or paren < colon):
+        depth = 0
+        for i in range(paren, len(h)):
+            depth += {"(": 1, ")": -1}.get(h[i], 0)
+            if depth == 0:
+                h = h[i + 1:]
+                break
+    return h.split(":", 1)[1] if ":" in h else ""
+
+
 def pane_ids_in(src):
     """The pane ids the Kotlin under [src] declares with `override val id = …`: a literal, the file's own
     `const val ID = "…"`, or another class's (`CameraPane.ID`). An id that resolves to nothing fails, so a
@@ -34,13 +49,18 @@ def pane_ids_in(src):
                     texts.append(fh.read())
     consts = {}  # class name -> its companion's ID
     for t in texts:
-        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n\S[^\n]*\bclass \w|\Z)', t, re.S):
+        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n(?=\S)[^\n]*\bclass \w|\Z)', t, re.S):
             m = re.search(r'const val ID = "([a-z0-9-]+)"', body)
             if m:
                 consts[cls] = m.group(1)
     ids = set()
     for t in texts:
-        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n\S[^\n]*\bclass \w|\Z)', t, re.S):
+        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n(?=\S)[^\n]*\bclass \w|\Z)', t, re.S):
+            # A setup step's id names the step, not a pane (#422's SilentUpdatesStep); a pane's own step
+            # reuses the id its pane declares anyway (CameraSetupStep). The header ends at the brace that ends
+            # its line, so a constructor default such as `= {}` doesn't cut it short.
+            if re.search(r'\bSetupStep\b', supertypes(re.split(r'\{[ \t]*\n', body, maxsplit=1)[0])):
+                continue
             for ref in re.findall(r'override val id = ([^\n]+)', body):
                 ref = ref.split("//")[0].strip()
                 lit = re.fullmatch(r'"([a-z0-9-]+)"', ref)

@@ -41,8 +41,8 @@ class GenericAndroid(
 
     /**
      * A device with a frame of its own stands as that frame says ([KNOWN]: a Pixel Tablet is landscape on its dock, though
-     * its screen is portrait at rotation 0). Any other turns as Android says: the lululemon Mirror's image makes it
-     * portrait (`ro.sf.hwrotation=270`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
+     * its screen is portrait at rotation 0). Any other turns as Android says: Kiln's first boot locks the lululemon
+     * Mirror's Android in portrait (`user_rotation=3`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
      */
     override val orientation: Orientation get() = KNOWN[Platform.model] ?: Orientation.ANY
 
@@ -90,12 +90,15 @@ class GenericAndroid(
 
         /**
          * Every frame's Device page row (#422): whether updates install with nobody at the screen, and how to make
-         * them where they don't. Amber when there's a way. [answer] is null while the frame is still reading it.
+         * them where they don't. Amber when there's a way. [read] gives null while the frame is still reading it.
          */
-        fun silentUpdatesItem(answer: () -> SilentUpdates?) = SettingsItem.Info(
-            { SILENT_UPDATES_TITLE },
-            { answer()?.detail ?: "Checking" },
-            fixable = { answer()?.let { !it.silent && it.fix != null } == true },
-        )
+        fun silentUpdatesItem(read: () -> SilentUpdates?): SettingsItem.Info {
+            val answer = SilentUpdates.Fresh(read = read)
+            return SettingsItem.Info(
+                { SILENT_UPDATES_TITLE },
+                { answer()?.detail ?: "Checking" },
+                fixable = { answer()?.let { !it.silent && it.fix != null } == true },
+            )
+        }
     }
 }

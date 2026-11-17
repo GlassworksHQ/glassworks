@@ -104,6 +104,10 @@ below as the release notes.
   keep Home Assistant's in one tap. Voice has the wake word, its threshold, mute, mic gain, the wake
   sound and the overlay. Music shows what plays and its volume. Radio shows its firmware and the root
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
+- **Glassworks has its own icon.** The launcher, the home app chooser and Settings show the Glassworks
+  mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
+  Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
+  generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
@@ -271,6 +275,17 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
+  landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
+  did, and stops with a clear message if it didn't. The Mirror's install is still test only.
+- **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
+  app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
+  notification used the app's icon, which only Android 8 and later can draw. The notification now has its
+  own icon, and every icon the app shows has a version Android 6 can draw.
+- **A screen without touch stays on setup when it has no network.** A Mirror with no Wi-Fi saved used to
+  leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
+  button that nobody could press. It now stays on the setup screen, which says how to set it up from a
+  computer. On every panel, the offline screen says "Wi-Fi is off" only when Android says so.
 - **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
   Panes image lets one adb key in without asking: the project's own key, published with its private
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its

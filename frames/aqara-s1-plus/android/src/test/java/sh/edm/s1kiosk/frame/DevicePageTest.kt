@@ -143,6 +143,17 @@ class DevicePageTest {
         assertFalse(silent(withService).fixable())
     }
 
+    @Test fun aRootServicePropertyThatIsntAVersionMeansNoService() {
+        for (v in listOf("", "0", "-1", "yes", "1.0", " v2 ")) {
+            props.values["sys.s1kiosk.update.version"] = v
+            val row = silent(S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app) { null })
+            assertTrue("'$v': ${row.detail()}", row.detail().startsWith("No: this boot image has no root update service"))
+        }
+        props.values["sys.s1kiosk.update.version"] = " 3\n"
+        val row = silent(S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app) { null })
+        assertTrue("getprop's own whitespace is fine", row.detail().startsWith("Yes: "))
+    }
+
     @Test fun theS1sSilentUpdatesSayCheckingUntilGetpropLands() {
         val queued = ArrayList<Runnable>()
         val device = S1Device(AqaraCloud(run = { "" }), props, reader = { queued += it })
