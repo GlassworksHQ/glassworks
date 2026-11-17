@@ -1,3 +1,8 @@
+---
+topic: boot
+evidence: verified
+---
+
 # <Topic>: <one-line question this note answers>
 
 **Status (YYYY-MM-DD): working | partly working | dead end | untested.** One or two sentences: what
@@ -38,6 +43,10 @@ What is still unknown, and what the next test would be.
 Before committing:
 - No serials, MACs, EUI64s, keys, PAN IDs, tokens or Wi-Fi details. Redact them in logs.
 - No vendor binaries or firmware, only names, versions, offsets and what you read there.
+- Front matter: topic is one of hardware, boot, access, install, android, display, radio, panes,
+  perf, method. evidence is the strongest level the note's answer reaches: verified (ran it),
+  read (from source or a binary) or untested. The site groups and labels notes by them
+  (site/src/lib/docs/notes.ts) and takes the date from the Status line.
 - Where it goes: frame-specific notes go in frames/<id>/research/, general ones in docs/research/.
 - Add this note to the table in docs/research/README.md, and a frame's note to frames/<id>/README.md.
 -->
