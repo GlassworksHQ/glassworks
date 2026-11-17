@@ -466,6 +466,36 @@ class SignInServerTest {
         assertTrue(jar.cookies.isEmpty())
     }
 
+    private fun serverWith(store: StateStore) = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()),
+        { auth, ok -> signedIn = auth to ok }, states = store, bindAddress = loopback)
+
+    @Test
+    fun aCookieFromAPushedOutSignInDoesNotBindTheOneNowInItsSlot() {
+        val s = serverWith(StateStore(max = 2))
+        val stale = Jar()
+        start(s, stale) // slot 0, then pushed out by the next two
+        start(s, Jar())
+        val (q, now) = start(s, Jar())
+        assertEquals("gw_signin_0 for both", listOf("${SignInServer.HANDOFF}0"), stale.names)
+        issueCode("c0de", q)
+        val r = callback(s, now, stale)
+        assertEquals("the slot's name is not enough: the value must be this sign-in's state", 403, r.status)
+        assertTrue(tokenRequests.isEmpty())
+        assertNull(signedIn)
+    }
+
+    @Test
+    fun aCrossSiteStartCannotPushOutTheVictimsBinding() {
+        repeat(15) { start(server, Jar()) }
+        val victim = Jar()
+        val (q, state) = start(server, victim)
+        assertEquals(listOf("${SignInServer.HANDOFF}15"), victim.names)
+        start(server, victim) // the store is full: the oldest goes, and the new one takes its slot, not the victim's
+        assertEquals(state, victim.cookies["${SignInServer.HANDOFF}15"]!!.second)
+        issueCode("c0de", q)
+        assertEquals(200, callback(server, state, victim).status)
+    }
+
     @Test
     fun aBrowserHoldsAFewBindingsAtMostHoweverManySignInsStart() {
         val jar = Jar()

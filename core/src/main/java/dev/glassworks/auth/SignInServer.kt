@@ -161,6 +161,7 @@ class SignInServer(
         // one no other pending sign-in holds, so starting another (or a cross-site GET starting one) never replaces
         // it, and there are at most a few. It outlives the state (10 minutes), so a sign-in that ran out still shows
         // the way back to setup.
+        if (toSetup) check(sign.slot >= 0) { "a setup sign-in without a slot can't be bound" }
         val bind = if (toSetup) mapOf("Set-Cookie" to "$HANDOFF${sign.slot}=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
         return Response(
             302, "Found",
