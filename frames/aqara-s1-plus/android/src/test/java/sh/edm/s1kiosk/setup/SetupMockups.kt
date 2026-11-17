@@ -202,5 +202,15 @@ class SetupMockups {
         o.previewPhase(0.62f)
         Mockup.idle()
         Mockup.save("portrait-04-connecting", o, 1080, 1920)
+        // #448: no network and nothing to join. The loading screen's text has no button here; the Wi-Fi step
+        // (portrait-01) covers it at the next setup tick.
+        val stuck = OfflineText.Facts(wifiEnabled = true, savedNetwork = null, joining = false, wasOnlineBefore = false, offlineForMs = 5_000)
+        val t = OfflineText.decide(stuck, 30_000, Input.NONE)
+        val b = Mockup.activity()
+        val n = LoadingOverlay(b)
+        b.setContentView(n, android.view.ViewGroup.LayoutParams(-1, -1))
+        n.show(LoadingOverlay.State.Offline(t.title, t.detail, t.action))
+        Mockup.idle()
+        Mockup.save("portrait-05-no-touch-no-network", n, 1080, 1920)
     }
 }

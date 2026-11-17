@@ -98,6 +98,14 @@ class HotspotTest {
             Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20")),
             Interface("wlan1", up = true, ipv4 = listOf("192.168.49.1")),
         )))
+        // Name order can't tell: the interface Android's own Wi-Fi network uses is the client, whatever its number.
+        assertEquals("the client on wlan1, the AP on wlan0", "192.168.43.1", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.43.1")),
+            Interface("wlan1", up = true, ipv4 = listOf("192.168.1.20")),
+        ), client = setOf("wlan1")))
+        assertNull("only the client is up: no hotspot address", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20")),
+        ), client = setOf("wlan0")))
     }
 
     @Test

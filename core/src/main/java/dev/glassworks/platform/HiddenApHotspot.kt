@@ -31,8 +31,16 @@ import java.security.SecureRandom
 class HiddenApHotspot<C>(
     private val ap: ApControls<C>,
     private val handler: Handler,
+    /**
+     * The hotspot's address once its interface has one ([HotspotAddress.now]). "Started" waits for it: on Android 7.1,
+     * `setWifiApEnabled` can bring the AP up without tethering its interface (no address, no DHCP), and a phone could
+     * then join a network that can't reach the setup page (CodeRabbit on #418). No address in [addressTimeoutMs] is a
+     * clear failure, with everything put back.
+     */
+    private val address: () -> String?,
     private val newNetwork: () -> HotspotNetwork = ::randomNetwork,
     private val startTimeoutMs: Long = 20_000,
+    private val addressTimeoutMs: Long = 5_000,
 ) : Hotspot {
     /** What the start changed, to put back: the device's hotspot settings and whether Wi-Fi was on. */
     private class Before<C>(val config: C?, val wifiOn: Boolean)
@@ -41,6 +49,7 @@ class HiddenApHotspot<C>(
     private var unwatch: (() -> Unit)? = null
     private var started = false
     private var timeout: Runnable? = null
+    private var addressWait: Runnable? = null
 
     override fun start(onEvent: (Hotspot.Event) -> Unit) {
         stop()
@@ -50,7 +59,7 @@ class HiddenApHotspot<C>(
         val net = newNetwork()
         unwatch = ap.watch { state ->
             when (state) {
-                ApControls.State.ENABLED -> if (!started) { started = true; clearTimeout(); onEvent(Hotspot.Event.Started(net)) }
+                ApControls.State.ENABLED -> if (!started && addressWait == null) waitForAddress(saved, net, onEvent)
                 ApControls.State.FAILED -> { restore(); onEvent(Hotspot.Event.Failed(HotspotFailure.FAILED)) }
                 ApControls.State.DISABLED -> if (started) { restore(); onEvent(Hotspot.Event.Stopped) }
                 ApControls.State.OTHER -> Unit
@@ -73,12 +82,37 @@ class HiddenApHotspot<C>(
 
     override fun stop() = restore()
 
+    /** Up, as far as Android says: started once the interface has an address, failed if it never gets one. */
+    private fun waitForAddress(saved: Before<C>, net: HotspotNetwork, onEvent: (Hotspot.Event) -> Unit) {
+        var tries = (addressTimeoutMs / ADDRESS_POLL_MS).toInt()
+        val check = object : Runnable {
+            override fun run() {
+                if (before !== saved || started) return
+                if (address() != null) {
+                    addressWait = null
+                    started = true
+                    onEvent(Hotspot.Event.Started(net))
+                } else if (tries-- > 0) {
+                    handler.postDelayed(this, ADDRESS_POLL_MS)
+                } else {
+                    restore()
+                    onEvent(Hotspot.Event.Failed(HotspotFailure.NOT_TETHERED))
+                }
+            }
+        }
+        clearTimeout() // the AP is up: from here the address wait has its own clock
+        addressWait = check
+        check.run()
+    }
+
     /** Ends the AP, then puts back what [start] changed. Does nothing when nothing is changed. */
     private fun restore() {
         val b = before ?: return
         before = null
         started = false
         clearTimeout()
+        addressWait?.let(handler::removeCallbacks)
+        addressWait = null
         unwatch?.invoke()
         unwatch = null
         runCatching { ap.setAp(null, false) }
@@ -94,6 +128,7 @@ class HiddenApHotspot<C>(
     companion object {
         private const val LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" // no 0/O, 1/I/L: the key may be typed from the screen
         private val random = SecureRandom()
+        private const val ADDRESS_POLL_MS = 500L
 
         private fun pick(n: Int) = String(CharArray(n) { LETTERS[random.nextInt(LETTERS.length)] })
 

@@ -7,6 +7,10 @@ import { JsonLd } from "@/components/JsonLd";
 import { apiReferenceOf } from "@/lib/apiDocs";
 import { getDoc, getDocs } from "@/lib/docs";
 import { SOURCES } from "@/lib/docs/sources";
+import { getNotes, notesOf, researchUrl } from "@/lib/docs/research";
+import { frameById } from "@/lib/frames";
+import { FrameTabs } from "@/components/docs/FrameTabs";
+import Link from "next/link";
 import { articleLd, breadcrumbLd, pageMetadata, type SitePath } from "@/lib/seo";
 
 const urlOf = (slug: string[]) => `/docs/${slug.join("/")}`;
@@ -35,9 +39,23 @@ async function Doc({ params }: { params: PageProps<"/docs/[...slug]">["params"] 
   if (!SOURCES.some((s) => s.url === url)) notFound();
   const doc = await getDoc(url);
   if (!doc) notFound();
-  const same = (await getDocs()).filter((d) => d.section === doc.section && d.url.startsWith("/docs/"));
+  const notes = await getNotes();
+  const note = notes.find((n) => n.url === doc.url);
+  // a note's prev and next stay in its frame's notes (or the general ones), in the research list's order
+  const same = note ? notesOf(notes, note.frame) : (await getDocs()).filter((d) => d.section === doc.section && d.url.startsWith("/docs/"));
   // matched by URL: each cached call hands back its own copies
   const i = same.findIndex((d) => d.url === doc.url);
+  const frame = doc.frame ? frameById(doc.frame) : undefined;
+  const frameNotes = frame ? notesOf(notes, frame.id).length : 0;
+  const tabs = frame && frameNotes > 0 ? <FrameTabs frame={frame.id} on={note ? "research" : "docs"} notes={frameNotes} /> : undefined;
+  const crumbs =
+    note && frame ? (
+      <>
+        <Link href={`/docs/frames/${frame.id}`}>{frame.name}</Link>
+        <span aria-hidden="true">/</span>
+        <Link href={researchUrl(frame.id)}>Research</Link>
+      </>
+    ) : undefined;
   return (
     <>
       <JsonLd
@@ -49,7 +67,15 @@ async function Doc({ params }: { params: PageProps<"/docs/[...slug]">["params"] 
           ]),
         ]}
       />
-      <DocArticle doc={doc} prev={same[i - 1]} next={same[i + 1]} after={doc.url === "/docs/notes" ? <NotesList /> : undefined} api={apiReferenceOf(doc.file)} />
+      <DocArticle
+        doc={note ?? doc}
+        prev={same[i - 1]}
+        next={same[i + 1]}
+        after={doc.url === "/docs/notes" ? <NotesList /> : undefined}
+        api={apiReferenceOf(doc.file)}
+        tabs={tabs}
+        crumbs={crumbs}
+      />
     </>
   );
 }

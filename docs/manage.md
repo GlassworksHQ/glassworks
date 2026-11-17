@@ -61,8 +61,12 @@ too, in **Allow setup over the network**.
 
 The page is plain HTTP on your local network. While you pair, others on the same network can see the code
 you type and the session cookie. The session only works from the address that paired, which limits replay.
-A Wi-Fi password crosses the page only on the panel's own setup Wi-Fi, which is WPA2 with a key shown on the
-panel's screen; the panel refuses one while it is on a network, so it never crosses your network as plain HTTP.
+A Wi-Fi password is no exception: the page sends it in plain text over its WebSocket (`ws://`), like everything
+else. The panel takes one only while it is on no network, which in practice means over its own setup Wi-Fi. That
+link is WPA2, with a key shown only on the panel's screen, so the password is encrypted on the air; anyone else who
+joined the setup Wi-Fi (with the key from the screen) could still read it. On your own network the page doesn't ask
+for a password and the panel refuses one, but nothing encrypts the page there either: it is plain `ws://`, as Home
+Assistant is over `http://`.
 
 | | |
 |---|---|

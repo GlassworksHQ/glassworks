@@ -13,6 +13,15 @@ publish the matching section below as the release notes.
   the one a failed join went back to. A join that times out fails with the reason `timed out`, without the
   name. The `ssid` and `restored` fields are unchanged.
 
+### Fixed
+- **A join right after the device's own hotspot waits for the Wi-Fi client.** With the user's Wi-Fi switch on but
+  the client down (a device without STA+AP, a few seconds after its hotspot stops), `WifiProvisioner.connect` waits
+  up to 15 s for the client instead of asking Android to turn Wi-Fi on, which Android 10 refuses. If it never comes
+  back, the join fails with `WifiProvisioner.RADIO_DIDNT_COME_BACK`.
+- **A password Android refuses fails the join instead of crashing.** A WPA3 password that isn't ASCII made Android's
+  suggestion builder throw on the main thread. The join now fails with a reason, and nothing is logged about the
+  password.
+
 ## [0.1.0] - 2026-11-15
 
 ### Added

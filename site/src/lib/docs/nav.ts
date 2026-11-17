@@ -2,6 +2,7 @@ import { frames } from "../frames";
 import { PANES, STAGE_TEXT } from "@glassworks/frame-card";
 import { getDocs, SECTIONS, type Doc } from "./index";
 import { apiReferenceOf } from "../apiDocs";
+import { researchUrl } from "./research";
 
 /** The docs' sidebar: sections of links, a frame's guides nested under it, a library's API reference under it. */
 export type NavItem = {
@@ -13,6 +14,8 @@ export type NavItem = {
   plain?: boolean;
   /** one step deeper than a child */
   deep?: boolean;
+  /** pages under this path light it too */
+  also?: string;
 };
 export type NavGroup = { label: string; items: NavItem[] };
 
@@ -20,6 +23,11 @@ const item = (d: Doc): NavItem => ({ label: d.label ?? d.title, href: d.url });
 
 export async function docsNav(): Promise<NavGroup[]> {
   const docs = await getDocs();
+  // a frame's research tab, lit on its notes too
+  const research = (frame: string): NavItem[] => {
+    const n = docs.filter((d) => d.section === "notes" && d.frame === frame).length;
+    return n ? [{ label: "Research", href: researchUrl(frame), aside: String(n), also: `/docs/frames/${frame}/notes/` }] : [];
+  };
   const of = (section: string) => docs.filter((d) => d.section === section);
   const libraries = docs.filter((d) => d.url.startsWith("/docs/libraries/"));
   const groups: Record<string, NavItem[]> = {
@@ -29,9 +37,12 @@ export async function docsNav(): Promise<NavGroup[]> {
         label: f.name,
         href: `/docs/frames/${f.id}`,
         aside: f.status === "beta" || f.status === "stable" ? undefined : STAGE_TEXT[f.status],
-        children: of("frames")
-          .filter((d) => d.frame === f.id && d.url !== `/docs/frames/${f.id}`)
-          .map(item),
+        children: [
+          ...of("frames")
+            .filter((d) => d.frame === f.id && d.url !== `/docs/frames/${f.id}`)
+            .map(item),
+          ...research(f.id),
+        ],
       })),
       ...of("frames").filter((d) => !d.frame).map(item),
     ],

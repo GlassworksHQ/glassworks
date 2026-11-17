@@ -1,6 +1,7 @@
 // The Mirror's images, made in the person's browser (#40, option A). `system` is the Glass Panes
 // community image the person downloaded themselves. Kiln checks its SHA-256 and adds the legacy build of
-// Glassworks as a privileged system app, the Glassworks boot animation, and the screen's rotation. The
+// Glassworks as a privileged system app and the Glassworks boot animation (the screen's rotation is
+// set on the first boot: flash.ts setPortrait). The
 // Mirror has no touchscreen to answer "Allow USB debugging?", and the image lets one key in without
 // asking (services.ts): Kiln makes that this browser's key instead of the published Glass Panes one.
 // `userdata` is new and empty. Nothing here is downloaded from or uploaded to anyone: the person's
@@ -55,8 +56,6 @@ export interface SystemPatch {
   app?: MirrorApp;
   /** /system/media/bootanimation.zip; none: the image's own (it has none, so Android's text one). */
   bootAnimation?: Uint8Array;
-  /** ro.sf.hwrotation: how the screen is turned. The Mirror stands portrait on a 1920×1080 panel: 270. */
-  hwrotation?: 0 | 90 | 180 | 270;
   /**
    * GlassworksSettings.apk (frames/lululemon-mirror/overlay): SettingsProvider's defaults for a first
    * boot with nothing to tap. It brings ro.lockscreen.disable.default=true with it; without it, the
@@ -191,7 +190,6 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   let next = prop;
   const set: string[] = [];
   if (o.settingsOverlay) { next = setProp(next, 'ro.lockscreen.disable.default', 'true'); set.push('ro.lockscreen.disable.default=true'); }
-  if (o.hwrotation !== undefined) { next = setProp(next, 'ro.sf.hwrotation', String(o.hwrotation)); set.push(`ro.sf.hwrotation=${o.hwrotation}`); }
   if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ${set.join(', ')}`); }
   if (services) { await fs.replaceFile(SERVICES_JAR, services, time); log(`${SERVICES_JAR}: lets in this adb key without asking, not the Glass Panes project key`); }
   await fs.flush();

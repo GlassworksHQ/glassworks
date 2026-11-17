@@ -1,3 +1,8 @@
+---
+topic: radio
+evidence: verified
+---
+
 # Zigbee2MQTT on the panel's radio (research, 2026-11-10)
 
 Goal: make the panel's Zigbee coordinator usable by **Zigbee2MQTT** (zigbee-herdsman), not only ZHA.

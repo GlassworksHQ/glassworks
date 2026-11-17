@@ -259,6 +259,11 @@ export class FirstBootMirror implements PanelShell {
   hideFails = false;
   /** our app's HOME is off (as the S1 legacy test build's was, 2026-11-16): HOME doesn't resolve in it */
   noHome = false;
+  /** user_rotation and auto-rotate as a fresh userdata has them: 0, landscape (read on the unit 2026-11-17) */
+  userRotation = 0;
+  accelerometer = 1;
+  /** the display doesn't follow user_rotation (the timeout case) */
+  rotationStuck = false;
   /** `installed`: our app is there; `ours`: which app (Glassworks by default) */
   constructor(private readonly fp: string = FINGERPRINT, private readonly installed = true, readonly ours: MirrorApp = GLASSWORKS) {}
   async run(cmd: string) {
@@ -266,7 +271,27 @@ export class FirstBootMirror implements PanelShell {
     const ok = (out = '') => ({ out, code: 0 });
     if (cmd === 'getprop sys.boot_completed') return ok('1\n');
     if (cmd === 'getprop ro.build.fingerprint') return ok(`${this.fp}\n`);
-    if (cmd === 'getprop ro.sf.hwrotation') return ok('270\n');
+    const set = /^settings put system (user_rotation|accelerometer_rotation) (\d)$/.exec(cmd);
+    if (set) { if (set[1] === 'user_rotation') this.userRotation = Number(set[2]); else this.accelerometer = Number(set[2]); return ok(); }
+    if (cmd === 'dumpsys window windows') {
+      // Android 6.0.1's dumpWindowsLocked(pw, true, null): the windows, then the global state, mRotation among it
+      const rot = this.rotationStuck || this.accelerometer !== 0 ? 0 : this.userRotation;
+      const [w, h] = rot % 2 ? [1080, 1920] : [1920, 1080];
+      return ok(['WINDOW MANAGER WINDOWS (dumpsys window windows)',
+        '  Window #0 Window{5f1c2a8 u0 com.android.systemui.ImageWallpaper}:',
+        '    mDisplayId=0 stack=0 mSession=Session{3c1d0b5 1043:u0a10023} mClient=android.os.BinderProxy@2b6a4e7',
+        `    mConfiguration={1.0 ?mcc?mnc en_US ldltr sw1080dp w${w}dp h${h - 48}dp 240dpi xlrg ${rot % 2 ? 'port' : 'land'} finger -keyb/v/h -nav/h s.4}`,
+        '    mHasSurface=true mShownFrame=[0.0,0.0][1080.0,1920.0] isReadyForDisplay()=true',
+        '',
+        '  mCurrentFocus=Window{9a3e21c u0 dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity}',
+        '  mInTouchMode=true mLayoutSeq=58',
+        `  mScreenRect=[0,0][${w},${h}]`,
+        '  mDisplayFrozen=false windows=0 client=false apps=0  waitingForConfig=false',
+        `  mRotation=${rot} mAltOrientation=false`,
+        '  mLastWindowForcedOrientation=-1 mForcedAppOrientation=-1',
+        ''].join('\n'));
+    }
+    if (cmd === 'dumpsys window') return ok('WINDOW MANAGER LAST ANR (dumpsys window lastanr)\n  <no ANR has occurred since boot>\n'); // Android 6 prints mRotation here only with dumpAll
     const pkg = this.ours.package;
     if (cmd === `dumpsys package ${pkg}`) return ok(this.installed ? '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n' : '');
     if (cmd === 'pm list packages com.android.launcher3') return ok(this.hidden.has('com.android.launcher3') ? '' : 'package:com.android.launcher3\n');

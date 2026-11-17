@@ -1,3 +1,8 @@
+---
+topic: display
+evidence: verified
+---
+
 # WebRTC cameras on the S1: does GeckoView play them, and with which decoder?
 
 **Status (2026-11-13): partly working; Clarity's WebRTC now connects on this panel (smoke 3, below).** A real camera plays live in the kiosk, and the frontend started

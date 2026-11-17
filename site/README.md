@@ -73,6 +73,7 @@ src/lib/frameText.ts   the site's words for that data: install ratings, pane sup
 src/lib/clarity.ts     each frame's Clarity grade, worked out from its clarity.json at build time
 src/lib/release.ts     the latest app release, from ../CHANGELOG.md
 src/lib/docs/          the docs: sources.ts (repo file → URL and nav group), render.ts (Markdown → HTML, GitHub's rules), index.ts (renders all, checks every link)
+                       research.ts: the research notes by frame and topic (front matter words in notes.ts, summaries from docs/research/README.md)
 src/app/docs/          /docs, each doc page, the panes and libraries indexes; the docs' own sidebar
 src/components/search/ the ⌘K search over the Pagefind index that `npm run build` writes
 blog/<YYYY-MM-DD>-<slug>/index.md  a post (front matter: title, date, author, summary, draft); src/lib/blog/posts.ts reads them

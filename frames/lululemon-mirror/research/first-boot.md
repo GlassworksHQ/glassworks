@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: verified
+---
+
 # Mirror first boot: how a fresh userdata comes up with nothing to tap
 
 **Status (2026-11-16): verified on the unit.** The root's Mirror run (below) found every claim true on
@@ -92,7 +97,7 @@ from `system` or the fresh `userdata` it already builds?
 | Wi-Fi on | Overlay: `def_wifi_on` true | `/system/vendor/overlay/GlassworksSettings.apk` | Read: AOSP 6.0.1 PMS and DatabaseHelper |
 | The person's network | `network={ ssid psk key_mgmt=WPA-PSK priority=1 }` after the template; the PSK is PBKDF2-HMAC-SHA1 (passphrase, SSID, 4096, 256 bits), never the password | `userdata`'s `/misc/wifi/wpa_supplicant.conf`, 0660 1000:1010, `wifi_data_file` | Read: AOSP 6.0.1 wifi.c; tests on the IEEE 802.11i vectors |
 | Screen stays on | Overlay: `def_screen_off_timeout` 2147483647 (no timeout in practice) and `def_stay_on_while_plugged_in` true. DatabaseHelper turns that into **1** (AC only), not 7: there is no default that gives 7 | Overlay | Read: `DatabaseHelper.java:2580` |
-| Portrait, no auto-rotate | Overlay: `def_accelerometer_rotation` false. Rotation stays 0, the natural orientation, which `ro.sf.hwrotation=270` makes portrait. **No `user_rotation` is needed** | Overlay, `build.prop` | Read. `ro.sf.hwrotation` turning the UI upright still needs a look; it did **not** turn the boot animation |
+| Portrait, no auto-rotate | Overlay: `def_accelerometer_rotation` false. The first boot over adb: `settings put system accelerometer_rotation 0`, `settings put system user_rotation 3`, then `dumpsys window windows` until `mRotation=3` exactly; Kiln stops after 10 s otherwise (`setPortrait`) | Overlay, the first boot | **Corrected 2026-11-17.** This row said rotation stays 0 and `ro.sf.hwrotation=270` makes it portrait, with no `user_rotation` needed. Wrong: the real legacy app came up **sideways** (the maintainer saw landscape), and nothing on the image reads `ro.sf.hwrotation` ([image-patch.md](image-patch.md#the-rotation-2026-11-17)). 3 is upright: **verified** 2026-11-17 at the first boot, the maintainer on the glass. After a reboot: **untested** (the run's record on #439 lists it as not checked; the setting lives in `userdata`, so it should hold) |
 | Our app as HOME | Unchanged: `makeOnlyHome` hides the image's launchers only once our app answers HOME, and Kiln refuses an APK without one (#385) | | Verified with the probe app (below). The legacy build of Glassworks, Kiln's app since 2026-11-16, has not run on a Mirror yet |
 
 The overlay is `frames/lululemon-mirror/overlay` (`AndroidManifest.xml`, `res/values/defaults.xml`).
@@ -127,14 +132,18 @@ full table is on #395.
 | `/vendor` | `vendor -> /system/vendor`; `GlassworksSettings.apk` in `/vendor/overlay`, applied |
 | Wi-Fi | `wifi_on=1`, connected on its own at the first boot and again after a reboot |
 | Screen | `screen_off_timeout=2147483647`, `stay_on_while_plugged_in=1`; it doesn't sleep |
-| Rotation | `accelerometer_rotation=0`, portrait. The boot animation (#389) upright on the glass (the maintainer's photo) |
+| Rotation | `accelerometer_rotation=0`. The boot animation (#389) upright on the glass (the maintainer's photo). "Portrait" here was the probe app asking for portrait itself, not the system: **corrected 2026-11-17**, the system stayed at rotation 0, landscape ([image-patch.md](image-patch.md#the-rotation-2026-11-17)) |
 | Lock screen | `mShowingLockscreen=false` at the first boot, after sleep and wake, and after a reboot |
 | Home | the probe's `.MainActivity`; Launcher3 hidden once it answered HOME |
 
 The run also found that the first boot's Wi-Fi step logged the network's name. It now reads "Wi-Fi:
 the network you entered", and tests check that no log line holds the name or the password.
 
-## The root's test plan (as run above)
+## The root's test plan
+
+Steps 1–4 and 6 ran on 2026-11-16 (above). Step 5 changed on 2026-11-17 and passed that day on the
+root's run of #439 at the first boot: rotation 3, the app upright on the glass. Its "repeat after a
+reboot" part is **untested** (not checked in that run). The run above (2026-11-16) saw rotation 0.
 
 Flash with this build (Kiln or `tools/mirror/flash-node.ts`), with the Wi-Fi name and password
 given, a Home Assistant address, and an APK that has a home screen on API 23. Then, touching nothing
@@ -151,8 +160,11 @@ on the Mirror:
    `adb shell dumpsys window policy | grep -i keyguard` should show it isn't showing.
 4. **Screen stays on.** `adb shell settings get system screen_off_timeout` gives 2147483647 and
    `settings get global stay_on_while_plugged_in` gives 1. Leave it 10 minutes: the screen stays on.
-5. **Portrait.** `adb shell settings get system accelerometer_rotation` gives 0 and
-   `dumpsys window | grep mRotation` gives 0. **Photograph the app on the glass**: upright, not sideways.
+5. **Portrait.** `adb shell settings get system accelerometer_rotation` gives 0,
+   `settings get system user_rotation` gives 3, and `dumpsys window windows | grep mRotation=` gives
+   `mRotation=3` (until 2026-11-17 this step expected rotation 0, which is landscape; plain
+   `dumpsys window` doesn't print `mRotation` on Android 6).
+   **Photograph the app on the glass**: upright, not sideways.
 6. **HOME.** `adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME` opens
    the app (in the run above, the probe).
 

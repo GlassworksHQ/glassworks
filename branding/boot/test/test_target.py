@@ -38,7 +38,7 @@ class FramesTest(unittest.TestCase):
         self.assertFalse(from_frame("lululemon-mirror").trim)
 
     def test_the_mirror_turns_its_frames_into_the_landscape_panel(self):
-        # ro.sf.hwrotation turns Android's UI, not the boot animation (seen on the unit, 2026-11-16)
+        # nothing on the Mirror's image turns the boot animation (seen on the unit, 2026-11-16)
         t = from_frame("lululemon-mirror")
         self.assertEqual((t.screen, t.rotate, t.panel), ((1080, 1920), 90, (1920, 1080)))
         self.assertIsNone(from_frame("aqara-s1-plus").rotate)

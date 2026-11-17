@@ -103,7 +103,7 @@ the generic app or its legacy build yet, and the app has no release key.
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
 - **Orientation:** the device's rotation: Android's auto-rotate, or the way the person locked the screen. The Mirror
-  stands portrait because its image does (`ro.sf.hwrotation=270`, auto-rotate off). A device with a frame of its own
+  stands portrait because Kiln's first boot locks it there (`user_rotation=3`, auto-rotate off). A device with a frame of its own
   stands as its `frame.json`'s `display` says: the Pixel Tablet is landscape, though its screen is portrait at
   rotation 0. The app knows it by `Build.MODEL`, as Kiln's [`devices.ts`](installer/src/devices.ts) does
   (`GenericAndroid.KNOWN`; `GenericAndroidKnownTest` keeps the two the same).
@@ -133,7 +133,8 @@ It installs as a normal app (an APK). It doesn't install from Kiln yet, and ther
 Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403), with no
 screen yet. Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
 installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
-admin; the camera too, once a build asks for it) and reads each grant back, makes it the home screen (`cmd package set-home-activity` on Android 7+, else
+admin; the camera too, once a build asks for it) and reads each grant back, allows "Install unknown apps" on Android 12+
+so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else
 Android's chooser), and hands over to setup over the LAN. Its table of brands maps a USB vendor ID, or adb's
 maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
 device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
@@ -189,6 +190,8 @@ The app asks Android to install its own update with no user action (#277). Andro
 
 1. "Install unknown apps" is allowed for the app: *Settings → Apps → Glassworks → Install unknown
    apps*, or `adb shell appops set dev.glassworks.generic_android REQUEST_INSTALL_PACKAGES allow`.
+   Kiln's recipe does this by default on Android 12+ and reads it back; the person can say no
+   (`silentUpdates: false`), and `undoSilentUpdates` sets it back to Android's default (#422).
 2. The app that runs the install has this feature. An app from before it asks for a tap once, and
    the version it installs updates silently from then on.
 3. The new APK targets a recent enough API for the device's Android
