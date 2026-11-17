@@ -157,6 +157,13 @@ class Runner(unittest.TestCase):
             c = json.load(f)
         self.assertEqual(sorted(c["fallback"]), ["heavy-hls", "typical-hls"])
         self.assertEqual(c["fallback"]["heavy-hls"]["swipes"], [])
+        # Clarity v3 (#211): the more-info dialogs on the graded views only; the copies are asked for none.
+        self.assertNotIn("dialogs", c["fallback"]["heavy-hls"])
+        self.assertEqual([len(c["tiers"][t]["dialogs"]) for t in c["order"]], [3, 3, 3, 3])
+        with open(os.path.join(self.state, "views.json")) as f:
+            asked = {v["view"]: v.get("dialogs") for v in json.load(f)}
+        self.assertEqual(asked, {"light": None, "typical-nocam": None, "typical": None, "heavy": None,
+                                 "typical-hls": "0", "heavy-hls": "0"})
         # Each gesture's time on this computer's clock and how long `input` took (#202, smoke 5).
         sent = c["gestures_sent"]
         self.assertEqual({g[2] for g in sent}, {"tap", "swipe"})
@@ -521,7 +528,8 @@ class FakeMatchesThePanel(unittest.TestCase):
         with open(os.path.join(HERE, "page-lines.json")) as f:
             want = json.load(f)["shapes"]
         tmp = tempfile.mkdtemp()
-        p, _ = refstart(tmp, taps=2, FAKE_SWIPES="1")
+        # #410: heavy's dialogs held past its own wait, so the fake logs a settle line too.
+        p, _ = refstart(tmp, taps=2, FAKE_SWIPES="1", FAKE_SETTLE_VIA="heavy")
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         got = {}
         with open(os.path.join(tmp, "state", "page-lines.jsonl")) as f:
@@ -888,11 +896,12 @@ class Restart(unittest.TestCase):
         self.assertEqual((ref["graded_runs"], ref["timed_out"]), (1, [[1, "heavy"]]))
         heavy = ref["tiers"]["heavy"]
         self.assertIsNotNone(heavy["load_ms"])                                  # what heavy measured stands
-        self.assertEqual((heavy["timed_out_runs"], heavy["timed_out_tasks"]), (1, ["camera", "scroll", "tap", "updates"]))
+        self.assertEqual((heavy["timed_out_runs"], heavy["timed_out_tasks"]), (1, ["camera", "dialog", "scroll", "tap", "updates"]))
+        self.assertIn("| the view didn't get to them, slow |", report.markdown(rep))   # Clarity v3: its dialogs fail
         self.assertNotIn("heavy.scroll", rep["grade"]["missing"])               # what it didn't fails, measured
         self.assertEqual(rep["grade"]["bands"]["heavy"]["scroll"], "slow")
         self.assertFalse(any("deadline" in r for r in rep["grade"]["provisional_reasons"]), rep["grade"]["provisional_reasons"])
-        self.assertIn("heavy in run 1 (camera, scroll, tap, updates)", report.markdown(rep))   # named in the detail
+        self.assertIn("heavy in run 1 (camera, dialog, scroll, tap, updates)", report.markdown(rep))   # named in the detail
 
     def test_after_a_view_times_out_the_kiosk_restarts_and_the_run_carries_on(self):
         """#202, s1rtc3: heavy timed out in every run, and in runs 2 and 3 the views after it were never
@@ -988,7 +997,7 @@ class Restart(unittest.TestCase):
         self.assertEqual(c["tiers"]["typical"]["timed_out_after"], "usable")
         self.assertTrue(c["tiers"]["heavy"]["done"])
         rep = self.build(self.last_out)
-        self.assertEqual(rep["graded"]["reference"]["tiers"]["typical"]["timed_out_tasks"], ["blocking", "camera", "open", "scroll", "tap", "updates"])
+        self.assertEqual(rep["graded"]["reference"]["tiers"]["typical"]["timed_out_tasks"], ["blocking", "camera", "dialog", "open", "scroll", "tap", "updates"])
 
     def test_a_view_drawn_but_never_free_keeps_its_open_and_blocks_for_the_deadline(self):
         """#264's verifier: rubric 2 times the open to the draw, so a view that draws fast and is never
@@ -1007,7 +1016,7 @@ class Restart(unittest.TestCase):
             self.assertEqual(c["tiers"][v]["drawn"]["tier"], v)
         self.assertTrue(c["tiers"]["heavy"]["done"])
         t = self.build(self.last_out)["graded"]["reference"]["tiers"]["typical"]
-        self.assertEqual(t["timed_out_tasks"], ["blocking", "camera", "scroll", "tap", "updates"])
+        self.assertEqual(t["timed_out_tasks"], ["blocking", "camera", "dialog", "scroll", "tap", "updates"])
         self.assertLess(t["load_ms"]["median"], 1000)             # drawn 210 ms after the navigation (and its frame)
         self.assertEqual(t["blocking_ms"]["median"], c["tiers"]["typical"]["timed_out_s"] * 1000)
         self.assertIsNone((t.get("usable_ms") or {}).get("median"))
@@ -1107,6 +1116,97 @@ class Cameras(unittest.TestCase):
         self.assertEqual(rep["graded"]["reference"]["tiers"]["heavy"]["camera_level"], "slow")
         self.assertNotIn("heavy.camera", rep["grade"]["missing"])
         self.assertEqual(rep["grade"]["bands"]["heavy"]["camera"], "slow")
+
+
+class MoreInfoDialogs(unittest.TestCase):
+    """Clarity v3 (#211): each graded view opens HA's more-info dialogs after its swipes, one page line
+    each, and the report grades the slowest to settle: a dialog that never opens fails the task (it was
+    measured: the panel didn't show it), and a slow history graph slows it, on its own view only."""
+
+    build = Cameras.build
+
+    def test_every_view_opens_its_dialogs(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp)
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        for t in ("light", "typical-nocam", "typical", "heavy"):
+            ds = c["tiers"][t]["dialogs"]
+            self.assertEqual([d["kind"] for d in ds], ["light", "climate", "sensor"], t)
+            self.assertTrue(all(d["stage"] == t and d["nonce"] == c["tiers"][t]["nonce"] for d in ds), t)
+        rep = self.build(tmp)
+        tiers = rep["graded"]["reference"]["tiers"]
+        for t in ("light", "typical-nocam", "typical", "heavy"):
+            self.assertEqual((tiers[t]["dialog_level"], tiers[t]["dialog_settled_ms"]["median"]), ("premium", 320.0), t)
+        self.assertNotIn("light.dialog", rep["grade"]["missing"])
+
+    def test_a_dialog_that_never_opens_fails_the_task(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_DIALOG_NEVER_OPENS="typical")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual({d["error"] for d in c["tiers"]["typical"]["dialogs"]}, {"it never opened within 20 s"})
+        rep = self.build(tmp)
+        tiers = rep["graded"]["reference"]["tiers"]
+        self.assertEqual((tiers["typical"]["dialog_level"], tiers["heavy"]["dialog_level"]), ("slow", "premium"))
+        self.assertEqual(rep["grade"]["bands"]["typical"]["dialog"], "slow")
+        self.assertNotIn("typical.dialog", rep["grade"]["missing"])
+        self.assertIn("light: it never opened within 20 s", tiers["typical"]["dialog_errors"])
+
+    def test_a_view_left_for_the_start_view_keeps_its_results_and_says_so(self):
+        """#410 (s1v3a): HA held two of heavy's dialogs past its own wait; the page left heavy for the
+        start view (untimed) so they didn't land on the next view. The runner keeps how (detail), the
+        report says it, and nothing graded changes."""
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SETTLE_VIA="heavy")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        heavy = c["tiers"]["heavy"]
+        self.assertEqual((heavy["settle"]["via"], heavy["settle"]["clean"]), ("start", True))
+        self.assertEqual(heavy["settle_first"]["pending"], ["climate.clarity_0", "sensor.clarity_10"])
+        self.assertEqual(c["tiers"]["light"]["settle"], {"ms": 0, "clean": True, "closed": 0, "pending": [],
+                                                         "open": False, "history": False})
+        rep = self.build(tmp)
+        tiers = rep["graded"]["reference"]["tiers"]
+        self.assertEqual(len(tiers["heavy"]["dialog_settles_away"]), 1)
+        self.assertEqual(tiers["light"]["dialog_settles_away"], [])
+        self.assertEqual((tiers["heavy"]["dialog_level"], tiers["heavy"]["dialog_settled_ms"]["median"]), ("premium", 320.0))
+        self.assertIn("heavy: HA still held climate.clarity_0, sensor.clarity_10 after the view's own wait in 1 of 1 run(s)",
+                      report.markdown(rep))
+
+    def test_the_warm_ups_settle_is_kept_even_after_the_first_view_opened(self):
+        """#410's verifier: the restart's warm-up settles as a view does. Its lines have no nonce and can
+        come after the runner opened the first view; they are still the restart's (warmup_settle), and
+        the views are measured as usual."""
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SETTLE_VIA="warmup")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        ws = c["warmup_settle"]
+        self.assertEqual([(w["stage"], w["clean"], w.get("via")) for w in ws], [("warmup", False, None), ("warmup", False, "start")])
+        self.assertEqual(ws[-1]["pending"], ["sensor.clarity_10"])
+        self.assertTrue(all(c["tiers"][t].get("done") for t in ("light", "typical-nocam", "typical", "heavy")))
+
+    def test_a_view_that_would_start_on_a_held_dialog_is_not_measured(self):
+        """#410: HA still held the view before's dialogs at a view's check before its navigation. The page
+        logs an `error` for that view (its nonce), and nothing of it is graded in that run."""
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_DIALOG_HELD="typical")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        typical = c["tiers"]["typical"]
+        self.assertIn("this view isn't measured on them", typical["error"])
+        self.assertNotIn("done", typical)
+        self.assertTrue(all(c["tiers"][t].get("done") for t in ("light", "typical-nocam", "heavy")))   # the run goes on
+        rep = self.build(tmp)
+        self.assertNotIn("typical", rep["graded"]["reference"]["tiers"])
+        for task in ("load", "blocking", "scroll", "updates", "camera", "dialog"):
+            self.assertIn(f"typical.{task}", rep["grade"]["missing"])
+        self.assertTrue(rep["grade"]["provisional"])                   # not graded on what it didn't measure
+
+    def test_a_slow_history_graph_slows_the_task(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_DIALOG_SLOW_GRAPH="1500")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        sensor = [d for d in c["tiers"]["light"]["dialogs"] if d["kind"] == "sensor"][0]
+        self.assertEqual((sensor["graph_ms"], sensor["settled_ms"]), (1500.0, 1500.0))
+        tiers = self.build(tmp)["graded"]["reference"]["tiers"]
+        self.assertEqual((tiers["light"]["dialog_level"], tiers["light"]["dialog_settled_ms"]["median"]), ("fluid", 1500.0))
 
 
 class NoisyLogcat(unittest.TestCase):
