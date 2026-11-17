@@ -70,6 +70,10 @@ export interface SetupState {
     /** The panel's sign-in page (`http://<ip>:8099/signin`): the same link as its QR code. */
     signinUrl?: string;
   };
+  /**
+   * The panel's Zigbee/Thread radio. A frame without one (any Android device, the Mirror) leaves it out;
+   * Kiln's phone setup checks for that at run time. The S1 installer (kiln/src) only meets the S1, which always sends it.
+   */
   radio: {
     mode: string;
     status: string;
