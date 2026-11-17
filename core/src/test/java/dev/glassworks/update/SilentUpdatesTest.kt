@@ -45,11 +45,13 @@ class SilentUpdatesTest {
     @Test fun theRouteTheAppTakesComesFirst() {
         assertEquals("the root service installs before PackageInstaller is asked", SilentUpdates.RootService,
             SilentUpdates.of(android14.copy(root = Root.PRESENT, unknownApps = false)))
+        assertEquals("the root service before a system app: it's the path UpdateManager takes", SilentUpdates.RootService,
+            SilentUpdates.of(android10.copy(root = Root.PRESENT, systemApp = true, deviceOwner = true)))
         assertEquals("a system app needs no unknown-apps permission", SilentUpdates.SystemApp,
             SilentUpdates.of(android14.copy(systemApp = true, unknownApps = false, target = 20)))
         assertEquals("an old boot image on an owned device still installs silently", SilentUpdates.DeviceOwner,
             SilentUpdates.of(android10.copy(root = Root.MISSING, deviceOwner = true)))
-        assertEquals("allowing unknown apps wouldn't help an old target", SilentUpdates.TargetTooLow("17", 35, 30),
+        assertEquals("allowing unknown apps alone wouldn't help an old target", SilentUpdates.TargetTooLow("17", 35, 30, unknownApps = false),
             SilentUpdates.of(android14.copy(android = "17", minTarget = 35, target = 30, unknownApps = false)))
     }
 
@@ -59,8 +61,36 @@ class SilentUpdatesTest {
         val old = SilentUpdates.OldAndroid("9")
         assertEquals("No: Android 9 asks for a tap on each update", old.state)
         assertEquals("No: Android 9 asks for a tap on each update. ${SilentUpdates.DEVICE_OWNER_FIX}", old.detail)
+        assertEquals("Yes: the app is a system app that may install apps", SilentUpdates.SystemApp.state)
+        val target = SilentUpdates.TargetTooLow("17", 35, 34)
+        assertEquals("No: Android 17 needs an app that targets API 35, and this one targets 34", target.state)
+        assertEquals(
+            "To change it: wait for a release that targets 35, or make the app device owner on a reset device with no accounts",
+            target.fix,
+        )
+        assertEquals(
+            "both No reasons: a newer release alone wouldn't do",
+            "To change it: wait for a release that targets 35 and allow “Install unknown apps” for the app, " +
+                "or make the app device owner on a reset device with no accounts",
+            SilentUpdates.TargetTooLow("17", 35, 34, unknownApps = false).fix,
+        )
         assertTrue("Home Assistant keeps a state up to 255 characters",
-            listOf(SilentUpdates.NoRootService, SilentUpdates.UnknownAppsOff, SilentUpdates.TargetTooLow("17", 35, 34)).all { it.state.length <= 255 })
+            listOf(SilentUpdates.NoRootService, SilentUpdates.UnknownAppsOff, target).all { it.state.length <= 255 })
+    }
+
+    @Test fun freshReadsAtMostOncePerSecond() {
+        var t = 0L
+        var reads = 0
+        var answer: SilentUpdates = SilentUpdates.UnknownAppsOff
+        val fresh = SilentUpdates.Fresh(now = { t }) { reads++; answer }
+        assertEquals(SilentUpdates.UnknownAppsOff, fresh())
+        answer = SilentUpdates.SelfUpdate
+        t = 999
+        assertEquals("the row's words and its colour share one read", SilentUpdates.UnknownAppsOff, fresh())
+        assertEquals(1, reads)
+        t = 1_000
+        assertEquals(SilentUpdates.SelfUpdate, fresh())
+        assertEquals(2, reads)
     }
 
     @Test fun aPrivilegedAppInstallsWithoutATapOnAndroid6() {
@@ -85,5 +115,7 @@ class SilentUpdatesTest {
         assertEquals(SilentUpdates.SelfUpdate, SilentUpdates.read(app, Root.NONE))
         app.applicationInfo.targetSdkVersion = 30
         assertEquals(SilentUpdates.TargetTooLow("14", 31, 30), SilentUpdates.read(app, Root.NONE))
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        assertEquals(SilentUpdates.TargetTooLow("14", 31, 30, unknownApps = false), SilentUpdates.read(app, Root.NONE))
     }
 }
