@@ -257,21 +257,27 @@ and there are no shared keys and no leader.
 - **Who may.** Administrators only, as on the page itself. The panel asks its Home Assistant who the token
   belongs to (`auth/current_user`), at the address it uses, and only when that address is on your network.
   It keeps the answer for a minute, so a token revoked in Home Assistant still works here for up to a minute.
+  A token Home Assistant didn't confirm stays refused for 10 seconds, and the panel asks Home Assistant about
+  at most two tokens at a time: while Home Assistant is slow, the rest are told to try again in a moment.
   Whether other Home Assistant users get a say is still open.
 - **What it reads.** Every setting the page can change, with its value as text, the way the page's forms send
   it. A sign-in (a camera's) says only whether it is set: no password or user name leaves the panel.
   Actions such as **Allow setup over the network** aren't listed.
 - **What it changes.** One setting at a time, through the same checks and saves as the panel's own menu.
-  A change that asks first on the panel (turning the radio off) is refused until the page says the person
-  agreed. A sign-in and an action can't be changed this way. Each change goes in the Log with the user and
+  A change that asks first on the panel (turning the radio off) answers with the panel's question and a
+  one-time id. It runs only when the same token sends the same change again with that id, within 5 minutes,
+  as the page's own dialogs do. A sign-in and an action can't be changed this way. Each change goes in the Log with the user and
   the address of the page that sent it.
 - **Signing in from another panel's page.** That page can also sign your browser in here with its token,
-  so the panel's own Manage page opens without another Home Assistant sign-in. The sign-in lasts until the
-  browser closes. The panel doesn't keep or revoke the token: it belongs to the other page.
+  so the panel's own Manage page opens without another Home Assistant sign-in. The panel asks Home Assistant
+  about the token then and there, without the minute-old answer. The sign-in lasts until the browser closes. The panel doesn't keep or revoke the token: it belongs to the other page.
 - **What it can't protect.** The token travels over plain HTTP, as it does to a Home Assistant on
   `http://`. Someone who can read your Wi-Fi traffic could use it until it expires (30 minutes) or the
   other page signs out. The panel never writes the token anywhere, including the Log and the diagnostics.
 
 For developers: `GET` and `POST` `/manage/api/settings` with `Authorization: Bearer <token>`, form-encoded
-`section`, `key`, `value` and `confirmed=1` (`ManageApi`); `POST /manage/ha/token` with `token` and `next`
-signs the browser in (`ManageServer.HANDOFF`). Any page may call them (CORS `*`): no cookie counts there.
+`section`, `key`, `value` and, for a question's answer, `answer=<id>` (`ManageApi`); `POST /manage/ha/token`
+with `token` and `next` signs the browser in (`ManageServer.HANDOFF`). `GET /manage/api/hello` needs no token
+and answers only that this is a Glassworks panel and its model as Home Assistant shows it. Any page may call
+them (CORS `*`): no cookie counts there. Chrome's private-network permission goes only to a page on the local
+network (a private address, `localhost` or a `.local` name).

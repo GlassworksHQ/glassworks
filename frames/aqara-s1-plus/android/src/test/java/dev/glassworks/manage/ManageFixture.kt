@@ -43,6 +43,8 @@ class ManageFixture(
     val revoked = Collections.synchronizedList(ArrayList<String>())
     /** The HA address of each `auth/current_user` the panel asked. */
     val userChecks = Collections.synchronizedList(ArrayList<String>())
+    /** When set, each `auth/current_user` waits for it: Home Assistant slow or down. */
+    @Volatile var userGate: java.util.concurrent.CountDownLatch? = null
     /** Tokens the fake HA doesn't know. */
     val refusedTokens = Collections.synchronizedSet(HashSet<String>())
     val gateway = object : HaGateway {
@@ -52,6 +54,7 @@ class ManageFixture(
         }
         override fun currentUser(haBase: String, accessToken: String): HaUser? {
             userChecks += haBase
+            userGate?.await()
             return if (accessToken in refusedTokens) null else user
         }
         override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean { revoked += refreshToken; return revokeWorks }
@@ -112,6 +115,7 @@ class ManageFixture(
 
     val host = object : ManageHost {
         override val name = "Glassworks Panel"
+        override val model = "Panel Hub S1 Plus (S1 Kiosk)"
         override fun status() = statusFn?.invoke() ?: status
         override fun onMain(f: () -> Unit) { onMainCalls++; f() }
         override val actions = this@ManageFixture.actions

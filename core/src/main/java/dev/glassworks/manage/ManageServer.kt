@@ -62,7 +62,7 @@ class ManageServer(
     /** A Home Assistant token another panel's page brings, checked with this panel's own Home Assistant (#466). */
     private val tokens = HaTokenCheck(signIn.gateway, haBase, signIn::isLocal, monoMs)
 
-    private val api = ManageApi(host, tokens, ::apply, PENDING, event)
+    private val api = ManageApi(host, tokens, ::apply, PENDING, event, ::ask) { id, owner, section, key, value -> answered(id, owner, section, key, value) }
 
     /** A question's answer (#269 verifier): the change it asked about, for one session, until it runs out. */
     private data class Asked(val session: String, val section: String, val key: String, val value: String, val untilMs: Long)
@@ -203,11 +203,13 @@ class ManageServer(
             return html(403, PageShell.qrPage(name(), title, PageShell.esc(text), PageShell.Look.PROBLEM,
                 button = """<a class="btn" href="/">Sign in here</a>"""))
         }
-        val ok = when (val r = tokens.check(req.form["token"])) {
+        // Asked fresh: an answer kept from before must not start a 12-hour sign-in for a token revoked since.
+        val ok = when (val r = tokens.check(req.form["token"], fresh = true)) {
             is HaTokenCheck.Result.Ok -> r
             is HaTokenCheck.Result.NotAdmin -> return refused("Administrators only", "${r.name} isn't a Home Assistant administrator. Sign in with an administrator's account.")
             HaTokenCheck.Result.NoHa -> return refused("Can't check who you are", ManageApi.NO_HA)
             HaTokenCheck.Result.Refused -> return refused("Can't sign in", ManageApi.REFUSED)
+            HaTokenCheck.Result.Busy -> return refused("Try again in a moment", ManageApi.BUSY)
         }
         // Bound to the address that confirmed the user, as haCallback binds its own: if it changed since, start again.
         val ha = haBase()

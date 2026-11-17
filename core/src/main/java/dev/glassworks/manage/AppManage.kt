@@ -122,6 +122,9 @@ open class AppManage(
 
         override val name = PageShell.PRODUCT_NAME
 
+        /** The model [PanelDevice] gives Home Assistant (its `DeviceIdentity.model`); `ManageModelPinTest` keeps the two the same. */
+        override val model: String get() = deviceModel(runtime.frame.hardware.model, runtime.build.product)
+
         override fun status(): PanelStatus {
             val defs = runtime.paneDefinitions(app)
             // The panel menu's own model (#242): the same sections, items and saves.
@@ -326,6 +329,9 @@ open class AppManage(
 
     companion object {
         const val TAG = "S1Manage"
+
+        /** "Panel Hub S1 Plus (S1 Kiosk)": the device's model as Home Assistant shows it. */
+        fun deviceModel(model: String, product: String) = "$model ($product)"
 
         /** How long a restart or reboot waits, so the page that started it reaches the browser first. */
         const val ACTION_DELAY_MS = 1_000L

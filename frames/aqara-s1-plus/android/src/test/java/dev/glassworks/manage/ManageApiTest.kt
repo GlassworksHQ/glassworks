@@ -100,15 +100,25 @@ class ManageApiTest {
         assertEquals(120, idle)
     }
 
-    @Test fun aChangeThatAsksFirstOnThePanelAsksHereUntilConfirmed() {
+    @Test fun aChangeThatAsksFirstOnThePanelRunsOnlyWithItsOneShotAnswer() {
         val asked = page().post("section" to "radio", "key" to "on", "value" to "off")
         assertEquals(409, asked.status)
-        assertEquals("Turn the radio off?", json(asked).getJSONObject("ask").getString("title"))
+        val ask = json(asked).getJSONObject("ask")
+        assertEquals("Turn the radio off?", ask.getString("title"))
+        val id = ask.getString("id")
         assertTrue(radioOn)
-        assertEquals(409, page().post("section" to "radio", "key" to "Role", "value" to "thread").status)
+        assertEquals("the caller's word alone is no answer", 409, page().post("section" to "radio", "key" to "on", "value" to "off", "confirmed" to "1").status)
+        assertEquals("another change can't use it", 409, page().post("section" to "radio", "key" to "Role", "value" to "thread", "answer" to id).status)
         assertEquals("zigbee", role)
-        assertEquals(200, page().post("section" to "radio", "key" to "on", "value" to "off", "confirmed" to "1").status)
+        assertTrue(radioOn)
+        val id2 = json(page().post("section" to "radio", "key" to "on", "value" to "off")).getJSONObject("ask").getString("id")
+        assertEquals("another token can't use it", 409, page("other-admin-token-0123456789").post("section" to "radio", "key" to "on", "value" to "off", "answer" to id2).status)
+        val id3 = json(page().post("section" to "radio", "key" to "on", "value" to "off")).getJSONObject("ask").getString("id")
+        assertEquals(200, page().post("section" to "radio", "key" to "on", "value" to "off", "answer" to id3).status)
         assertFalse(radioOn)
+        radioOn = true
+        assertEquals("used up", 409, page().post("section" to "radio", "key" to "on", "value" to "off", "answer" to id3).status)
+        assertTrue(radioOn)
     }
 
     @Test fun aSettingThisPanelDoesntHaveIsMissingNotAnError() {
@@ -164,10 +174,35 @@ class ManageApiTest {
         assertEquals(listOf("http://192.0.2.10:8123", "http://192.0.2.10:8123", "http://192.0.2.11:8123"), f.userChecks.toList())
     }
 
-    @Test fun aRefusedTokenIsAskedAgainNextTime() {
+    @Test fun aRefusedTokenIsKeptAsRefusedForTenSeconds() {
         f.refusedTokens += token
-        page().get()
+        page().get(); page().get(); page().get()
+        assertEquals("a made-up token asks Home Assistant once", 1, f.userChecks.size)
         f.refusedTokens.clear()
+        assertEquals(401, page().get().status)
+        f.monoMs += 10_000
+        assertEquals(200, page().get().status)
+        assertEquals(2, f.userChecks.size)
+    }
+
+    @Test fun whileHomeAssistantIsSlowAtMostTwoChecksWaitAndTheRestAreTurnedAwayAtOnce() {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        f.userGate = gate
+        val waiting = (1..2).map { n -> Thread { page("made-up-token-$n-0123456789").get() }.apply { start() } }
+        while (f.userChecks.size < 2) Thread.sleep(5)
+        val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val third = runCatching { pool.submit<dev.glassworks.web.HttpResponse> { page("made-up-token-3-0123456789").get() }.get(3, java.util.concurrent.TimeUnit.SECONDS) }
+                .getOrElse { throw AssertionError("a third check waited on Home Assistant instead of being turned away", it) }
+            assertEquals(503, third.status)
+            assertEquals("2", third.headers["Retry-After"])
+            assertEquals(2, f.userChecks.size)
+        } finally {
+            gate.countDown()
+            pool.shutdownNow()
+        }
+        waiting.forEach { it.join(5_000) }
+        f.userGate = null
         assertEquals(200, page().get().status)
     }
 
@@ -176,7 +211,30 @@ class ManageApiTest {
             "access-control-request-method" to "POST", "access-control-request-headers" to "authorization", "access-control-request-private-network" to "true"))
         assertEquals(204, r.status)
         assertTrue(r.headers["Access-Control-Allow-Headers"]!!.contains("Authorization"))
-        assertEquals("true", r.headers["Access-Control-Allow-Private-Network"])
+        assertNull("192.0.2.0/24 isn't a private range: no private-network permission for it", r.headers["Access-Control-Allow-Private-Network"])
+        assertTrue(f.userChecks.isEmpty())
+        fun pna(origin: String) = f.Browser().send("OPTIONS", ManageApi.SETTINGS, emptyMap(), mapOf("origin" to origin,
+            "access-control-request-method" to "GET", "access-control-request-private-network" to "true")).headers["Access-Control-Allow-Private-Network"]
+        assertEquals("true", pna("http://glassworks-panel.local:8099"))
+        assertNull(pna("https://evil.example"))
+        assertNull(pna("http://203.0.113.5"))
+    }
+
+    @Test fun onlyAPageOnTheLocalNetworkCounts() {
+        for (o in listOf("http://localhost:8099", "http://kitchen-panel.local:8099", "http://10.0.0.41:8099", "http://[fd00::41]:8099", "http://[fe80::1]:8099"))
+            assertTrue(o, ManageApi.localOrigin(o))
+        for (o in listOf(null, "", "null", "https://evil.example", "http://203.0.113.5", "http://[2001:db8::1]", "http://10.0.0.41.evil.example"))
+            assertFalse(o.toString(), ManageApi.localOrigin(o))
+    }
+
+    @Test fun helloNeedsNoTokenAndSaysOnlyWhatHomeAssistantShowsAlready() {
+        val r = f.Browser().get(ManageApi.HELLO, mapOf("origin" to "http://192.0.2.41:8099"))
+        assertEquals(200, r.status)
+        assertEquals("*", r.headers["Access-Control-Allow-Origin"])
+        val j = json(r)
+        assertTrue(j.getBoolean("glassworks"))
+        assertEquals("Panel Hub S1 Plus (S1 Kiosk)", j.getString("model"))
+        assertEquals(setOf("api", "glassworks", "model"), j.keys().asSequence().toSet())
         assertTrue(f.userChecks.isEmpty())
     }
 
@@ -213,6 +271,16 @@ class ManageApiTest {
         f.refusedTokens += "unknown"
         assertNull(handoff("unknown").second.headers["Set-Cookie"])
         assertEquals("a link can't sign anyone in", 303, f.Browser().get(ManageServer.HANDOFF + "?token=$token").status)
+    }
+
+    @Test fun aHandoffAsksHomeAssistantFreshSoARevokedTokenCantSignIn() {
+        assertEquals(200, page().get().status)
+        f.refusedTokens += token
+        assertEquals("the API still has the minute-old answer", 200, page().get().status)
+        val (_, r) = handoff(token)
+        assertEquals(403, r.status)
+        assertNull(r.headers["Set-Cookie"])
+        assertEquals(2, f.userChecks.size)
     }
 
     @Test fun aHandoffIsBoundToTheAddressThatConfirmedTheUser() {

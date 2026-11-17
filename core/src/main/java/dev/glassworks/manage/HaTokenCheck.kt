@@ -10,8 +10,10 @@ package dev.glassworks.manage
  * administrator. No panel trusts another: each one asks Home Assistant itself, at the address it uses, and
  * only when that address is on the local network ([HaSignIn.isLocal]), as its own sign-in does.
  *
- * An answer is kept for [ttlMs] per token, so a page that reads and then changes a panel doesn't make it ask
- * Home Assistant each time. A token Home Assistant didn't confirm is not kept: the next request asks again.
+ * An administrator's answer is kept for [ttlMs] per token, so a page that reads and then changes a panel doesn't
+ * make it ask Home Assistant each time; a sign-in ([check] with `fresh`) always asks. A token Home Assistant didn't
+ * confirm is kept as refused for [refusedTtlMs], and at most [maxAsking] questions to Home Assistant run at once,
+ * so made-up tokens can't hold the panel's few web workers while Home Assistant is slow or down (verifier on #487).
  * Only the token's SHA-256 is kept, in memory. The token never goes in a log.
  */
 class HaTokenCheck(
@@ -20,6 +22,8 @@ class HaTokenCheck(
     private val isLocal: (String) -> Boolean,
     private val monoMs: () -> Long = { System.nanoTime() / 1_000_000 },
     private val ttlMs: Long = 60_000,
+    private val refusedTtlMs: Long = 10_000,
+    private val maxAsking: Int = 2,
     private val max: Int = 32,
 ) {
     sealed class Result {
@@ -30,28 +34,40 @@ class HaTokenCheck(
         object NoHa : Result()
         /** No token, or one Home Assistant didn't confirm (unknown, expired, or Home Assistant didn't answer). */
         object Refused : Result()
+        /** [maxAsking] questions to Home Assistant are running already: try again in a moment. */
+        object Busy : Result()
     }
 
-    private class Known(val haBase: String, val user: HaUser, val atMs: Long)
+    /** What Home Assistant said for a token at [haBase]: its user, or null when it didn't confirm it. */
+    private class Known(val haBase: String, val user: HaUser?, val atMs: Long)
 
     private val known = LinkedHashMap<String, Known>()
+    private val asking = java.util.concurrent.Semaphore(maxAsking)
 
-    /** [token] as Home Assistant answers for it now, or from the last [ttlMs]. */
-    fun check(token: String?): Result {
+    /**
+     * [token] as Home Assistant answers for it now, or as it answered in the last [ttlMs] ([refusedTtlMs] for a
+     * refusal). [fresh]: a confirmed answer from before doesn't count, so a token revoked since can't start a sign-in.
+     */
+    fun check(token: String?, fresh: Boolean = false): Result {
         val t = token?.trim()
         if (t.isNullOrEmpty() || t.length > MAX_TOKEN || t.any { it.code <= 0x20 || it.code >= 0x7f }) return Result.Refused
         val base = haBase()?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() && isLocal(it) } ?: return Result.NoHa
         val key = SessionStore.hash(t)
         val now = monoMs()
-        val user = synchronized(known) {
-            known.entries.removeAll { now - it.value.atMs >= ttlMs }
-            known[key]?.takeIf { it.haBase == base }?.user
-        } ?: gateway.currentUser(base, t)?.also { u ->
+        val before = synchronized(known) {
+            known.entries.removeAll { now - it.value.atMs >= if (it.value.user != null) ttlMs else refusedTtlMs }
+            known[key]?.takeIf { it.haBase == base && (it.user == null || !fresh) }
+        }
+        val user = if (before != null) before.user else {
+            if (!asking.tryAcquire()) return Result.Busy
+            val u = try { gateway.currentUser(base, t) } finally { asking.release() }
             synchronized(known) {
-                known[key] = Known(base, u, now)
+                known[key] = Known(base, u, monoMs())
                 while (known.size > max) known.remove(known.keys.first())
             }
-        } ?: return Result.Refused
+            u
+        }
+        if (user == null) return Result.Refused
         return if (user.isAdmin) Result.Ok(user, base) else Result.NotAdmin(user.name)
     }
 

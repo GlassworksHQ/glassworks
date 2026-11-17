@@ -21,6 +21,11 @@ import org.json.JSONObject
  *
  * Values are text, as the forms send them: `on`/`off`, a number, an option's id, `HH:MM-HH:MM`. A sign-in's
  * password never leaves the panel: its item says only whether one is set. Actions aren't listed.
+ *
+ * A change that asks first on the panel answers `409` with the question and a one-shot `id`; it runs only when the
+ * same token sends that change again with `answer=<id>`, as the page's own dialogs do (verifier on #487).
+ * [HELLO] needs no token: it says only that this is a Glassworks panel, and its model as Home Assistant has it,
+ * so a page sends its token only to a panel the registry lists ([HELLO]'s callers in panels.js).
  */
 class ManageApi(
     private val host: ManageHost,
@@ -29,21 +34,29 @@ class ManageApi(
     private val apply: (SettingsItem, String) -> String?,
     private val pending: String,
     private val event: (String) -> Unit,
+    /** A one-shot id for the question about this change, for [owner] ([ManageServer]'s questions). */
+    private val ask: (owner: String, section: String, key: String, value: String) -> String,
+    /** Whether [id] answers that question for [owner]; used up either way. */
+    private val answered: (id: String?, owner: String, section: String, key: String, value: String) -> Boolean,
 ) {
     fun handle(req: HttpRequest): HttpResponse {
         if (req.method == "OPTIONS") return HttpResponse(204, cors(req), ByteArray(0))
+        if (req.path == HELLO && req.method == "GET") return json(req, 200, JSONObject().put("api", VERSION).put("glassworks", true).put("model", host.model))
         if (req.path != SETTINGS) return json(req, 404, JSONObject().put("problem", "Not found."))
         if (req.method != "GET" && req.method != "POST") return json(req, 405, JSONObject().put("problem", "Not allowed."))
-        val user = when (val r = check.check(HaTokenCheck.bearer(req.headers["authorization"]))) {
+        val token = HaTokenCheck.bearer(req.headers["authorization"])
+        val user = when (val r = check.check(token)) {
             is HaTokenCheck.Result.Ok -> r.user
             is HaTokenCheck.Result.NotAdmin -> return json(req, 403, JSONObject().put("problem", "${r.name} isn't a Home Assistant administrator."))
             HaTokenCheck.Result.NoHa -> return json(req, 409, JSONObject().put("problem", NO_HA))
             HaTokenCheck.Result.Refused -> return json(req, 401, JSONObject().put("problem", REFUSED), mapOf("WWW-Authenticate" to "Bearer"))
+            HaTokenCheck.Result.Busy -> return json(req, 503, JSONObject().put("problem", BUSY), mapOf("Retry-After" to "2"))
         }
-        return if (req.method == "GET") json(req, 200, settings(host.status())) else change(req, user)
+        // The question's answer is bound to this token, as a form's is to its session.
+        return if (req.method == "GET") json(req, 200, settings(host.status())) else change(req, user, "api:" + SessionStore.hash(token!!))
     }
 
-    private fun change(req: HttpRequest, user: HaUser): HttpResponse {
+    private fun change(req: HttpRequest, user: HaUser, owner: String): HttpResponse {
         val f = req.form
         val section = host.status().sections.firstOrNull { it.id == f["section"] }
         val key = f["key"].orEmpty()
@@ -52,8 +65,9 @@ class ManageApi(
         if (item is SettingsItem.SignIn || item is SettingsItem.Action) return json(req, 422, JSONObject().put("problem", "Change this on the panel's own Manage page."))
         val raw = f["value"].orEmpty().trim()
         val what = what(section, key)
-        if (f["confirmed"] != "1") question(item, raw)?.let { q ->
-            return json(req, 409, JSONObject().put("ask", JSONObject().put("title", q.title).put("detail", q.detail).put("action", q.action)))
+        question(item, raw)?.takeIf { !answered(f["answer"], owner, section.id, key, raw) }?.let { q ->
+            return json(req, 409, JSONObject().put("ask", JSONObject().put("title", q.title).put("detail", q.detail).put("action", q.action)
+                .put("id", ask(owner, section.id, key, raw))))
         }
         val by = "${user.name} (from ${from(req)})"
         val problem = apply(item, raw)
@@ -73,17 +87,32 @@ class ManageApi(
         "Access-Control-Allow-Methods" to "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers" to "Authorization, Content-Type",
         "Access-Control-Max-Age" to "600",
-    ) + if (req.headers["access-control-request-private-network"] == "true") mapOf("Access-Control-Allow-Private-Network" to "true") else emptyMap()
+    ) + if (req.headers["access-control-request-private-network"] == "true" && localOrigin(req.headers["origin"])) mapOf("Access-Control-Allow-Private-Network" to "true") else emptyMap()
 
     companion object {
         const val PREFIX = "/manage/api/"
         const val SETTINGS = "/manage/api/settings"
+        const val HELLO = "/manage/api/hello"
 
         /** Bumped when a page on an older panel couldn't read the answer any more. */
         const val VERSION = 1
 
         const val REFUSED = "Home Assistant didn't confirm this sign-in. Sign in again."
         const val NO_HA = "This panel has no Home Assistant address on your network, so it can't check who you are."
+        const val BUSY = "The panel is still asking Home Assistant about other sign-ins. Try again in a moment."
+
+        /**
+         * Whether a page at [origin] is on the local network: its host is a private, link-local or loopback IP
+         * address, `localhost` or an mDNS `.local` name. Only such a page gets Chrome's private-network permission;
+         * a public site's page doesn't, whatever it holds. Names aren't resolved here.
+         */
+        fun localOrigin(origin: String?): Boolean {
+            val host = try { java.net.URI(origin ?: return false).host } catch (_: Exception) { null }?.trim('[', ']')?.lowercase()?.trimEnd('.') ?: return false
+            if (host == "localhost" || host.endsWith(".local")) return true
+            val literal = host.all { it.isDigit() || it == '.' } || (':' in host && host.all { it.isLetterOrDigit() || it == ':' || it == '.' })
+            if (!literal) return false
+            return runCatching { HaSignIn.isLocalAddress(java.net.InetAddress.getByName(host)) }.getOrDefault(false)
+        }
 
         /** Every section with something to change, and its items, as [item] lists them. */
         fun settings(status: PanelStatus): JSONObject = JSONObject()
