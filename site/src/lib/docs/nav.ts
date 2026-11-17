@@ -68,7 +68,10 @@ export async function docsNav(): Promise<NavGroup[]> {
       ...docs.filter((d) => d.url.startsWith("/docs/kiln")).map(item),
     ],
     project: of("project").map(item),
-    notes: [{ label: "How we got here", href: "/docs/notes", aside: String(of("notes").length - 1) }],
+    notes: [
+      { label: "Research", href: "/research", aside: String(of("notes").length - 1), also: "/docs/notes/" },
+      { label: "How we got here", href: "/docs/notes" },
+    ],
   };
   return SECTIONS.map((s) => ({ label: s.label, items: groups[s.id] }));
 }

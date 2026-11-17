@@ -114,7 +114,10 @@ class EngineCheckActivity : Activity() {
                 // its origin once, so a check of another origin needs `am force-stop` first.
                 settings = { ctx ->
                     val url = ctx.getSharedPreferences("legacy_check", android.content.Context.MODE_PRIVATE).getString("url", null)
-                    EngineSettings(secureHosts = emptyList(), zoom = 0f, remoteDebugging = true, dashboard = url)
+                    // The dashboard's host is a secure context, as KioskPrefs.secureHosts makes it: GeckoView 144 then
+                    // upgrades its http images to https (#455), which a check without it never sees.
+                    val host = url?.let { android.net.Uri.parse(it).host }
+                    EngineSettings(secureHosts = listOfNotNull(host), zoom = 0f, remoteDebugging = true, dashboard = url)
                 },
                 extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
                 logTag = TAG,

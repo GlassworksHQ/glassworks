@@ -67,6 +67,8 @@ var LockdownPolicy = (function () {
   }
 
   const hostOf = (o) => (o === null ? "" : o.slice(o.indexOf("://") + 3));
+  /** How a note names [target]: its host, or the whole origin when that host is [allowed]'s on another scheme (#455). */
+  const label = (target, allowed) => (allowed && hostOf(target) === hostOf(allowed) ? target : hostOf(target));
 
   /**
    * The verdict on one webRequest: { allow: true } or { allow: false, host, frame }. [haOrigin] is the app's
@@ -81,11 +83,11 @@ var LockdownPolicy = (function () {
     if (target === null) return LOCAL.test(String(details.url).trim()) ? { allow: true } : { allow: false, host: "", frame };
     if (details.type === "main_frame") {
       if (haOrigin === null || haOrigin === undefined || target === haOrigin) return { allow: true };
-      return { allow: false, host: hostOf(target), frame: false };
+      return { allow: false, host: label(target, haOrigin), frame: false };
     }
     const allowed = haOrigin || topOrigin(details);
     if (allowed !== null && target === allowed) return { allow: true };
-    return { allow: false, host: hostOf(target), frame };
+    return { allow: false, host: label(target, allowed), frame };
   }
 
   return { origin, topOrigin, decide };

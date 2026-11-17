@@ -301,6 +301,8 @@ class MainActivity : Activity() {
     private val overlayHost = object : OverlayHost {
         override val activity get() = this@MainActivity
         override fun openInPage(url: String?) = if (url != null) this@MainActivity.openInPage(url) else backToDashboard()
+        override fun placePage(area: android.graphics.Rect?) { page?.view?.let { dev.glassworks.engine.PageCapture.place(it, area) } }
+        override fun capturePage(done: (android.graphics.Bitmap?) -> Unit) = dev.glassworks.engine.PageCapture.capture(page, done)
         override fun hideMenu() { if (::settingsOverlay.isInitialized && settingsOverlay.isShowing) settingsOverlay.hide() }
         override fun post(block: () -> Unit) { handler.post(block) }
     }
@@ -311,7 +313,7 @@ class MainActivity : Activity() {
     /** A notification's view, on the panel's own HA: in place when the frontend is already up, else loaded. */
     private fun openInPage(url: String) {
         if (beforeNotificationPage == null) beforeNotificationPage = currentUrl
-        Log.i(TAG, "Notification: opening a view full screen")
+        Log.i(TAG, "Notification: opening a view")
         if (FrontendUrls.sameOrigin(currentUrl, url)) page?.post(navigate(url))
         else page?.load(externalize(url))
     }

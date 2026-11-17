@@ -33,6 +33,7 @@ class LockdownTest {
                 "network.http.speculative-parallel-limit" to 0,
                 "network.early-hints.enabled" to false,
                 "network.early-hints.preconnect.enabled" to false,
+                "security.mixed_content.upgrade_display_content" to false,
             ),
             Lockdown("test").prefs,
         )
@@ -47,8 +48,11 @@ class LockdownTest {
         started.start("http://192.0.2.11:8123/") // ignored: the origin is set once
         assertFalse(started.allows(dev.glassworks.engine.gecko.PageGuard.Load.PAGE, "http://192.0.2.11:8123/"))
         val why = started.refusedAppLoad("http://192.0.2.11:8123/")
-        assertTrue(why, why.startsWith("192.0.2.11:8123 isn't the Home Assistant the panel started with"))
+        assertTrue(why, why.startsWith("192.0.2.11:8123 isn't the Home Assistant address the panel started with"))
         assertTrue(why, why.contains("restart the app"))
+        // Home Assistant's host and port on https: named with its scheme, so it doesn't read as HA's own address (#455).
+        val https = started.refusedAppLoad("https://192.0.2.10:8123/")
+        assertTrue(https, https.startsWith("https://192.0.2.10:8123 isn't the Home Assistant address the panel started with"))
     }
 
     /** The extension never connects: after [Lockdown.READY_TIMEOUT_MS] the page says so, and the load still waits. */
