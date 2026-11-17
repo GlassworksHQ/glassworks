@@ -412,3 +412,11 @@ a.tile:hover {
     font-size: 28px;
   }
 }
+
+/* touch: a card's "All … ›" link gets a 44 px hit area without moving it */
+@media (max-width: 900px) {
+  .lh > a {
+    padding: 12px 0 12px 16px;
+    margin: -12px 0 -12px -16px;
+  }
+}
