@@ -65,7 +65,15 @@ class AdbComputersTest {
     private var refuse: String? = null
     private val events = ArrayList<String>()
 
-    private fun computers() = AdbComputers(file, allow = { k -> allowed += k.base64; refuse }, event = { events += it }, clock = { now })
+    /** What Android does once the approval is sent (its refusal comes back through the log). */
+    private var android: (AdbComputers, AdbKey) -> Unit = { _, _ -> }
+
+    private fun computers(): AdbComputers {
+        lateinit var c: AdbComputers
+        c = AdbComputers(file, allow = { k -> allowed += k.base64; refuse.also { if (it == null) android(c, k) } }, event = { events += it },
+            clock = { now }, confirmMs = 50)
+        return c
+    }
 
     private val a = TestAdbKeys.key(1, "alex@laptop")
     private val b = TestAdbKeys.key(2, "sam@desktop")
@@ -89,7 +97,7 @@ class AdbComputersTest {
         again.asked(a)
         assertEquals(listOf(a.base64, a.base64), allowed)
         assertNull(again.asking())
-        assertTrue(events.last(), events.last().startsWith("Let in adb key ${a.fingerprint} (alex@laptop)"))
+        assertTrue(events.last(), events.last().startsWith("Asked Android to let in adb key ${a.fingerprint} (alex@laptop)"))
     }
 
     @Test fun `allowed once, it isn't listed and asks again next time`() {
@@ -154,11 +162,42 @@ class AdbComputersTest {
     }
 
     @Test fun `the list has a limit`() {
-        val c = AdbComputers(file, allow = { null }, event = { events += it }, clock = { now }, max = 2)
+        val c = AdbComputers(file, allow = { null }, event = { events += it }, clock = { now }, max = 2, confirmMs = 10)
         for (seed in 10..11) { val k = TestAdbKeys.key(seed); c.asked(k); c.allowAsking(k.fingerprint, true, "Alex") }
         c.asked(a)
         assertEquals(AdbComputers.Allowed.FULL, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
         assertEquals("once still works", AdbComputers.Allowed.ONCE, c.allowAsking(a.fingerprint, remember = false, who = "Alex"))
+    }
+
+    @Test fun `Android refusing the approval is a failure, and nothing is saved`() {
+        val c = computers()
+        c.asked(a)
+        android = { comp, k -> comp.refused(k.fingerprint, b.fingerprint) }
+        assertEquals(AdbComputers.Allowed.REFUSED, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
+        assertEquals("sent to Android", listOf(a.base64), allowed)
+        assertTrue("not listed", c.list().isEmpty())
+        assertTrue("not on disk either", computers().list().isEmpty())
+        assertTrue(events.last(), events.last() == "Alex tried to allow adb key ${a.fingerprint} (alex@laptop) over USB: Android refused it, adb key ${b.fingerprint} is the one waiting")
+        assertFalse(events.any { it.contains("allowed adb key") })
+    }
+
+    @Test fun `with no refusal Allow waits, then saves`() {
+        val c = computers()
+        c.asked(a)
+        val t0 = System.nanoTime()
+        assertEquals(AdbComputers.Allowed.FROM_NOW_ON, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
+        assertTrue("waited for a refusal", (System.nanoTime() - t0) / 1_000_000 >= 50)
+        assertEquals(listOf(a), c.list().map { it.key })
+    }
+
+    @Test fun `a refusal of another approval, or of the automatic one, goes to the Log`() {
+        val c = computers()
+        c.asked(a)
+        c.allowAsking(a.fingerprint, remember = true, who = "Alex")
+        c.asked(a)
+        c.refused(a.fingerprint, null)
+        assertEquals("Android didn't let in adb key ${a.fingerprint} over USB: no computer is waiting", events.last())
+        assertEquals("the list stays", listOf(a), c.list().map { it.key })
     }
 
     /** Makes the list's file unwritable: a folder with something in it where the file goes. */
