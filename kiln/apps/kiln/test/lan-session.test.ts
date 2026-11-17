@@ -3,6 +3,7 @@
 import { NOT_PAIRED, type SetupState } from '@glassworks/setup-channel';
 import { describe, expect, it, vi } from 'vitest';
 import { LanSession, RAN_OUT, type ChannelStream } from '../src/lan/lanSession';
+import { JOIN_CHECK_MS, stillOnHotspot } from '../src/setup/channelSetup';
 
 const CODE = '482913';
 
@@ -29,6 +30,8 @@ function fakePanel({ open = true, online = undefined as boolean | undefined } = 
     joinDrops: false,
     /** The connection is gone when wifi.join is written: nothing reaches the panel. */
     joinUnsent: false,
+    /** The panel closed its hotspot: nothing it gets is answered any more. */
+    gone: false,
     /** What wifi.join carried. */
     joined: undefined as { ssid: string; password: string } | undefined,
     sleep: async () => {},
@@ -65,12 +68,13 @@ function fakePanel({ open = true, online = undefined as boolean | undefined } = 
           for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
             const m = JSON.parse(line);
             panel.asked.push(m.op);
+            if (panel.gone) continue;
             let r: object;
             if (m.op !== 'state' && !(pairedAtOpen && panel.paired)) r = { id: m.id, ok: false, error: NOT_PAIRED };
             else if (m.op === 'wifi.scan') r = { id: m.id, ok: true, state: st, networks: [{ ssid: 'Example-Home', rssi: -48, secure: true }] };
             else if (m.op === 'wifi.join') {
               if (panel.joinUnsent) throw new Error('the connection dropped');
-              if (panel.joinDrops) { panel.joined = { ssid: m.ssid, password: m.password }; continue; }
+              if (panel.joinDrops) { panel.joined = { ssid: m.ssid, password: m.password }; panel.gone = true; continue; }
               if (panel.joinRefused) r = { id: m.id, ok: false, error: panel.joinRefused };
               else { panel.joined = { ssid: m.ssid, password: m.password }; r = { id: m.id, ok: true, state: st }; }
             } else {
@@ -135,6 +139,30 @@ describe('the panel\'s setup page', () => {
       await join;
       expect(panel.joined?.ssid).toBe('Example-Home');
       expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'join' } } });
+      // later, the check finds no panel (it left to join): still "joining", and the channel let go
+      const closed = panel.closedChannels;
+      await vi.advanceTimersByTimeAsync(JOIN_CHECK_MS + 9000);
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'join' } } });
+      expect(panel.closedChannels).toBe(closed + 1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a join after which the panel still answers (its setup Wi-Fi never closed) says so, and Try again works', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const panel = fakePanel({ online: false });
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      await lan.click('join', () => lan.joinWifi('Example-Home', 'correct horse'));
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'join' } } });
+      await vi.advanceTimersByTimeAsync(JOIN_CHECK_MS - 1);
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { joining: { step: 'join' } } });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'err', error: stillOnHotspot('Example-Home') } } });
+      await lan.click('wifi', () => lan.wifi());
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', networks: [{ ssid: 'Example-Home' }] } });
+      expect((lan.state.view as { setup: { joining?: unknown } }).setup.joining).toBeUndefined();
     } finally { vi.useRealTimers(); }
   });
 

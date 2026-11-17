@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, creditProblems, kindProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
+import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, creditProblems, factProblems, keyProblems, kindProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
 
 /*
  * The frame catalog: every `frames/<id>/design/frame.json` in this repo, read at build time (the
@@ -25,6 +25,9 @@ function check(file: string, f: FrameDesign, id: string, all: FrameDesign[]) {
     throw new Error(`${file}: ${why} (format: frames/README.md)`);
   };
   if (f.id !== id) bad(`id "${f.id}" isn't its folder's name "${id}"`);
+  // only FrameDesign's own fields: a stray `serial` or a misspelt key fails here
+  const keys = keyProblems(f);
+  if (keys.length) bad(keys.join("; "));
   if (!(f.status in ORDER)) bad(`status "${f.status}" isn't one of ${Object.keys(ORDER).join(", ")}`);
   // full frame, device frame or tested device; a tested device names the frame it installs as (#403)
   const kind = kindProblems(f, all);
@@ -39,6 +42,9 @@ function check(file: string, f: FrameDesign, id: string, all: FrameDesign[]) {
   // a credit names who, links them and their project, and says what we use (frames/README.md#credits)
   const credits = creditProblems(f);
   if (credits.length) bad(credits.join("; "));
+  // the checklist's facts, or a tested device's run on a real unit (frames/README.md#how-complete-it-is)
+  const facts = factProblems(f);
+  if (facts.length) bad(facts.join("; "));
   // a route on Kiln: resolved against it, it must stay there ("//host/x" or "/\\host" would leave)
   if (f.kiln && (!f.kiln.startsWith("/") || new URL(f.kiln, KILN).origin !== new URL(KILN).origin)) {
     bad(`kiln "${f.kiln}" should be a route on ${KILN}, starting with a single /`);

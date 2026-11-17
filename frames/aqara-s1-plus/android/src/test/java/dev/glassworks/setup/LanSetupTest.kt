@@ -49,7 +49,10 @@ class LanSetupTest {
         serve = { i, o, may -> SetupChannel(backend, mayChange = may).serve(i, o, pollMs = 50) },
         code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, monoMs = { mono }, wallMs = { wall },
         files = { name -> RepoFiles.file("core/src/main/assets/setup").resolve(name).takeIf { it.exists() }?.readBytes() ?: if (name == "inter.ttf") ByteArray(4) else null },
+        onDone = { dones++ },
     )
+    /** Setups ended with Done: each closes the setup hotspot (#197). */
+    private var dones = 0
     private lateinit var server: HttpServer
     private val host get() = "127.0.0.1:${server.localPort}"
 
@@ -214,11 +217,13 @@ class LanSetupTest {
         ws(session).use { c ->
             assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok"))
             assertEquals(200, post(LanSetup.DONE, cookie = session, remote = "192.0.2.99").status)
+            assertEquals("Done from another address doesn't close the setup hotspot", 0, dones)
             assertTrue("the session is still paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
             assertTrue("and its channel still works", c.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok"))
             assertEquals(200, post(LanSetup.DONE, cookie = session).status)
             assertTrue("done from its own address ends it and drops the channel", c.ended())
         }
+        assertEquals("Done closes the setup hotspot", 1, dones)
         assertFalse(JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
     }
 

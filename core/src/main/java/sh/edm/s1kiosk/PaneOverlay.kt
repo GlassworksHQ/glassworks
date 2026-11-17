@@ -35,6 +35,15 @@ interface OverlayHost {
     /** Shows a Home Assistant view full screen in the page, or goes back to the dashboard with null. Main thread. */
     fun openInPage(url: String?)
 
+    /**
+     * Where the page sits: in [area] (px, in the activity's window), or full screen with null. A
+     * notification's half-screen view (#230) shrinks the page into its dialog. Main thread.
+     */
+    fun placePage(area: android.graphics.Rect?) {}
+
+    /** A still picture of the page as it is now, or null ([dev.glassworks.engine.Page.capture]). Main thread. */
+    fun capturePage(done: (android.graphics.Bitmap?) -> Unit) = done(null)
+
     /** Closes the settings menu if it is open. Main thread. */
     fun hideMenu()
 

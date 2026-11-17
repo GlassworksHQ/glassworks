@@ -50,8 +50,10 @@ data class Delivery(
  *
  * - A notification with a tag replaces the one with the same tag.
  * - [clear] closes by tag, [dismiss] by id, [expire] the ones whose timeout has passed.
- * - A *held* entry is in the list but has no card: Do not disturb held it, or a newer full-screen
- *   page took the screen from it. Tapping it in the list shows it.
+ * - A *held* entry is in the list but has no card: Do not disturb held it. Tapping it in the list shows it.
+ * - Views ([Notification.url]) take the screen one at a time, in the order of a [ViewQueue] (#230): the
+ *   open one keeps it, later ones wait, and closing the open one opens the next. A critical one is never
+ *   a view: it is a card (the alert stage), whose view opens from there ([openView]).
  * - At most [max] entries; past that the oldest goes, critical ones last.
  *
  * Thread-safe. [now] is in milliseconds (`SystemClock.elapsedRealtime` on the panel).
@@ -72,6 +74,9 @@ class NotificationStore(private val now: () -> Long, val max: Int = 20) {
         val held: Boolean = delivery.held,
     ) {
         val expiresAt: Long? get() = notification.timeoutS?.let { postedAt + it * 1000L }
+
+        /** A view that takes the screen in its turn: one with a `url`, not held, and not critical. */
+        val queued: Boolean get() = notification.url != null && !held && notification.priority != Priority.CRITICAL
     }
 
     /** What [post] did: the new entry, the one it replaced (same tag), and any dropped to stay under [max]. */
@@ -79,37 +84,67 @@ class NotificationStore(private val now: () -> Long, val max: Int = 20) {
 
     private val entries = ArrayList<Entry>()
     private var nextId = 1L
+    private var views = ViewQueue()
 
+    /**
+     * Adds [n]. A view joins the line behind the open one, or takes the place of the one it replaces (same
+     * tag); [jump]: the person asked for it, so it opens at once, in front.
+     */
     @Synchronized
-    fun post(n: Notification, doNotDisturb: Boolean): Posted {
+    fun post(n: Notification, doNotDisturb: Boolean, jump: Boolean = false): Posted {
         val replaced = n.tag?.let { t -> entries.firstOrNull { it.notification.tag == t } }
         if (replaced != null) entries.remove(replaced)
         // Overdue entries are gone already: they must not take a place from the new one.
         val t = now()
-        entries.removeAll { e -> e.expiresAt?.let { it <= t } == true }
+        removeWhere { e -> e.expiresAt?.let { it <= t } == true }
         val e = Entry(nextId++, n, t, Delivery.of(n.priority, doNotDisturb))
         entries.add(0, e)
+        if (e.queued) {
+            views = when {
+                jump -> views.remove(replaced?.id ?: -1).jump(e.id)
+                replaced != null -> views.replace(replaced.id, e.id)
+                else -> views.arrive(e.id)
+            }
+        } else if (replaced != null) {
+            views = views.remove(replaced.id)
+        }
         val dropped = ArrayList<Entry>()
         while (entries.size > max) {
             val victim = entries.lastOrNull { it.notification.priority != Priority.CRITICAL } ?: entries.last()
-            entries.remove(victim)
+            remove(victim)
             dropped += victim
-        }
-        // A full-screen page takes the screen, if it stayed: an older page stays in the list, without the screen.
-        if (n.url != null && !e.held && e !in dropped) {
-            for (i in entries.indices) {
-                val o = entries[i]
-                if (o !== e && o.notification.url != null && !o.held) entries[i] = o.copy(held = true)
-            }
         }
         return Posted(e, replaced, dropped)
     }
 
     @Synchronized
-    fun clear(tag: String): Entry? = entries.firstOrNull { it.notification.tag == tag }?.also { entries.remove(it) }
+    fun clear(tag: String): Entry? = entries.firstOrNull { it.notification.tag == tag }?.also { remove(it) }
 
     @Synchronized
-    fun dismiss(id: Long): Entry? = entries.firstOrNull { it.id == id }?.also { entries.remove(it) }
+    fun dismiss(id: Long): Entry? = entries.firstOrNull { it.id == id }?.also { remove(it) }
+
+    /**
+     * The view of critical entry [id], from its alert stage (#230): the alert closes, and its `url` opens at
+     * once, in front, until it is closed. Null when there is no such entry or it has no view.
+     */
+    @Synchronized
+    fun openView(id: Long): Entry? {
+        val e = entries.firstOrNull { it.id == id } ?: return null
+        val url = e.notification.url ?: return null
+        remove(e)
+        // The same tag: clear_notification closes the view, and a same-tag post replaces it.
+        val n = Notification(e.notification.title.ifEmpty { e.notification.message }, "", tag = e.notification.tag, url = url, sound = Sound.NONE)
+        return post(n, doNotDisturb = false, jump = true).entry
+    }
+
+    private fun remove(e: Entry) {
+        entries.remove(e)
+        views = views.remove(e.id)
+    }
+
+    private fun removeWhere(gone: (Entry) -> Boolean) {
+        entries.filter(gone).forEach(::remove)
+    }
 
     /**
      * Do not disturb turned on: every entry it would have held now is held too, so its card and its
@@ -123,24 +158,20 @@ class NotificationStore(private val now: () -> Long, val max: Int = 20) {
             val e = entries[i]
             if (!e.held && Delivery.of(e.notification.priority, doNotDisturb = true).held) {
                 entries[i] = e.copy(held = true)
+                views = views.remove(e.id)
                 changed = true
             }
         }
         return changed
     }
 
-    /** Shows a held entry (tapped in the list). A page takes the screen from any other page. */
+    /** Shows an entry tapped in the list: a held one gets its card back, and a view opens at once, in front. */
     @Synchronized
     fun show(id: Long): Entry? {
         val i = entries.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return null
         val e = entries[i].copy(held = false)
-        if (e.notification.url != null) {
-            for (j in entries.indices) {
-                val o = entries[j]
-                if (j != i && o.notification.url != null && !o.held) entries[j] = o.copy(held = true)
-            }
-        }
         entries[i] = e
+        if (e.queued) views = views.jump(e.id)
         return e
     }
 
@@ -157,7 +188,7 @@ class NotificationStore(private val now: () -> Long, val max: Int = 20) {
         val e = entries.firstOrNull { it.id == id } ?: return null
         val a = e.notification.actions.firstOrNull { it.id == actionId } ?: return null
         val closes = !e.notification.sticky
-        if (closes) entries.remove(e)
+        if (closes) remove(e)
         return Acted(a, e.notification.tag, closes)
     }
 
@@ -166,7 +197,7 @@ class NotificationStore(private val now: () -> Long, val max: Int = 20) {
     fun expire(): List<Entry> {
         val t = now()
         val gone = entries.filter { e -> e.expiresAt?.let { it <= t } == true }
-        entries.removeAll(gone.toSet())
+        gone.forEach(::remove)
         return gone
     }
 
@@ -183,12 +214,12 @@ class NotificationStore(private val now: () -> Long, val max: Int = 20) {
     /** Every entry, newest first. */
     fun list(): List<Entry> = synchronized(this) { entries.toList() }.also { afterRead?.invoke("list") }
 
-    /** The full-screen page that is open, if any: the newest page that isn't held. */
+    /** The view that is open, if any: the first in the [ViewQueue]. */
     fun page(): Entry? = synchronized(this) { pageNow() }.also { afterRead?.invoke("page") }
 
-    /** The cards over the dashboard: entries that aren't held and aren't a page, newest first. */
+    /** The cards over the dashboard: entries that aren't held and aren't a view (a critical one is always a card), newest first. */
     fun cards(): List<Entry> = synchronized(this) { cardsNow() }.also { afterRead?.invoke("cards") }
 
-    private fun pageNow() = entries.firstOrNull { it.notification.url != null && !it.held }
-    private fun cardsNow() = entries.filter { !it.held && it.notification.url == null }
+    private fun pageNow() = views.open?.let { id -> entries.firstOrNull { it.id == id } }
+    private fun cardsNow() = entries.filter { !it.held && !it.queued }
 }

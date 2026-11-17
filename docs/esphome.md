@@ -474,10 +474,19 @@ HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. 
 refusal once a minute per client.
 
 The camera's settings can also be set from adb, through an activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
-the stream): `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
+the stream). Its component and the main activity's differ per app:
+
+| App | Camera settings | Main activity |
+|---|---|---|
+| S1 Kiosk | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
+| Glassworks for generic Android | `dev.glassworks.generic_android/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity` |
+| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity` |
+
+For example, on S1 Kiosk: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
-usual `--ez camera_enabled true` on the main activity.
+usual `--ez camera_enabled true` on the main activity, for example
+`adb shell am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --ez camera_enabled true` on the Mirror.
 
 ### App updates
 

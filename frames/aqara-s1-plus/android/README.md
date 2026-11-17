@@ -216,6 +216,15 @@ adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshot
     --es camera_stream_sign_in 'viewer:a-long-password'   # adb only: camera settings and the stream's sign-in
 ```
 
+A notification's half-screen view (#230) takes a still picture of the dashboard first. What that costs is
+logged only when asked, under `S1Kiosk.ViewCapture`: the time to the picture, its size, and the app's PSS
+before and after, plus where the page was put.
+
+```sh
+adb shell setprop log.tag.S1Kiosk.ViewCapture DEBUG   # off again: setprop log.tag.S1Kiosk.ViewCapture INFO
+adb logcat -s S1Kiosk.ViewCapture
+```
+
 `ImprovActivity` only accepts callers holding `WRITE_SECURE_SETTINGS` (i.e. `adb shell`).
 Joining the new network uses `WifiManager.addNetwork`, which Android 10 allows because the app holds
 the SYSTEM_ALERT_WINDOW app-op (see the install step), or because it's device owner
@@ -241,7 +250,8 @@ python3 tools/gecko-eval/gecko_eval.py 'JSON.stringify({w: innerWidth, h: innerH
 Gecko's prefs are written to `files/geckoview-config.yaml` at startup and logged under the
 `S1Kiosk` tag. Sign-in and HA discovery log under `S1Auth` / `S1Discovery`, the Manage page under `S1Manage` ([docs/manage.md](../../../docs/manage.md); its own log keeps the `S1…` lines for 7 days in `files/manage/log/`), the Music Assistant
 player under `S1Sendspin` (with a `sync:` line every 10 s while playing). The Wi-Fi scans the app
-starts while the screen is off log under `S1Kiosk.Wifi`. The secret store logs under `S1Kiosk.Secrets`
+starts while the screen is off log under `S1Kiosk.Wifi`, the setup hotspot (#197) under `S1Kiosk.Hotspot`
+(never its name or key). The secret store logs under `S1Kiosk.Secrets`
 when the Keystore isn't there or a secret no longer opens ([docs/secrets.md](../../../docs/secrets.md)).
 None of them log tokens or keys. Page
 console output goes to logcat (`Isolated Web Content` / `GeckoConsole`).

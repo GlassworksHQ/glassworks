@@ -87,6 +87,17 @@ class CameraSetupTest {
         assertTrue(step.done())
     }
 
+    /** The lululemon Mirror (Input.NONE): nobody can pick a use or answer Android there, so setup never waits on it. */
+    @Test fun onAScreenWithoutTouchTheStepNeverWaits() {
+        val def = CameraDefinition(file, granted = { false }, touch = { false })
+        val step = def.setupSteps.single()
+        def.switch.on = true
+        assertFalse("no use picked", def.prefs.useChosen)
+        assertTrue("on, not picked, not allowed: still done", step.done())
+        assertEquals("the use stays the safe one", CameraUse.PRESENCE, def.prefs.use)
+        assertFalse("with touch it waits", CameraDefinition(file, granted = { false }, touch = { true }).setupSteps.single().done())
+    }
+
     @Test fun allowAsksAndKeepsTheUseThenARefusalOffersToTurnItOff() {
         val r = Rig()
         r.def.switch.on = true

@@ -135,14 +135,17 @@ check `isTargetSdkLessThanQOrPrivileged()`, which is true for target < Q, privil
 (`WifiPermissionsUtil.checkSystemAlertWindowPermission`). The panel already grants our app that
 app-op (`frames/aqara-s1-plus/tools/install.sh`), so the "legacy" path works **without device owner** on this Android
 version. (That SAW exemption is gone from Android 11; there only device owner works.)
-`setWifiEnabled` is not covered: if Wi-Fi is off we report "unable to connect".
+`setWifiEnabled` is not covered: if Wi-Fi is switched off we report "unable to connect". With the switch on but the
+client down (a few seconds after the panel's own setup hotspot stops, on a device without STA+AP) the join waits up to
+15 s for the client instead, and says "The Wi-Fi radio didn't come back. Try again" if it never does (#197).
 
 Order of attempts in `WifiProvisioner.connect()`:
 1. Already connected to the requested SSID → success, config untouched.
 2. Legacy (`device owner` or `SAW` on API 29): `addNetwork` (PSK / SAE / OWE / WEP / open, chosen
    from the scan result; transition WPA2/WPA3 → PSK) → `enableNetwork(id, true)` → `reconnect()`.
    Wait up to 30 s (ESPHome's timeout) for supplicant COMPLETED on that network with an IPv4;
-   2 authentication errors = wrong password.
+   2 authentication errors = wrong password. Before that, up to 15 s for Wi-Fi to come on and 6 s for a first scan:
+   about 51 s in the worst case, which the setup screen rounds to "up to a minute".
 3. Otherwise `WifiNetworkSuggestion`: Android 10 shows a notification the user must approve, and
    never switches away from a working saved network, so this only helps a panel with no Wi-Fi.
    The overlay tells the user to approve it; waits up to 2 min.
@@ -226,7 +229,7 @@ glue `frames/aqara-s1-plus/android/…/improv/ImprovSerialServer.kt`). [Improv S
 
 While the installer's join runs, the panel's setup screen shows it in its Wi-Fi step like any join
 from the computer (`ImprovController.installerWifi`: connecting to <SSID> with WifiProvisioner's
-progress, e.g. "Turning Wi-Fi on…", then connected or failed with the reason).
+progress, e.g. "Turning Wi-Fi on…" or "Waiting for Wi-Fi…", then connected or failed with the reason).
 
 **Home Assistant and radio: the setup channel on `@s1kiosk_setup`** (`setup/SetupChannel.kt`, pure,
 `SetupChannelTest`; glue `setup/SetupChannelServer.kt`). The core answers `state` and the Home

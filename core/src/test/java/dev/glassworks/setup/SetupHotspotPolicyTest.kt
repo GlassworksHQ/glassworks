@@ -89,6 +89,17 @@ class SetupHotspotPolicyTest {
     }
 
     @Test
+    fun `a connection that outlasts the hold disarms at the hold's end, so a later drop doesn't re-arm`() {
+        p.configured(now = 0)
+        p.update(connected = true, now = 0)
+        p.update(connected = false, now = min)
+        assertEquals("wakes when the hold ends", Decision(false, 90_000), p.update(connected = true, now = 90_000))
+        assertEquals(Decision(false, null), p.update(connected = true, now = 3 * min))
+        assertFalse(p.update(connected = false, now = 4 * min).on)
+        assertFalse(p.update(connected = false, now = 30 * min).on)
+    }
+
+    @Test
     fun `a new network that fails brings the hotspot back, the only way back without touch`() {
         p.update(false, 3 * min)
         p.configured(now = 4 * min)
@@ -126,6 +137,24 @@ class SetupHotspotPolicyTest {
         p.update(false, min)
         p.ask(false, 2 * min)
         assertEquals(Decision(false, null), p.update(false, 17 * min))
+    }
+
+    @Test
+    fun `Android closing it re-arms, as the 15 minutes do`() {
+        p.update(false, 3 * min)
+        p.androidStopped(now = 13 * min)
+        assertEquals(Stop.ANDROID, p.lastStop)
+        assertEquals(Decision(false, 3 * min), p.update(false, 13 * min))
+        assertTrue(p.update(false, 16 * min).on)
+    }
+
+    @Test
+    fun `Android closing one asked for after the panel had been online leaves it off`() {
+        p.update(true, 0)
+        p.update(false, min)
+        p.ask(false, 2 * min)
+        p.androidStopped(now = 5 * min)
+        assertEquals(Decision(false, null), p.update(false, 5 * min))
     }
 
     @Test

@@ -48,6 +48,12 @@ class HotspotPermissionTest {
     }
 
     @Test
+    fun `fine location goes with coarse, which Android 12 needs, and nearby alone`() {
+        assertEquals(listOf(fine, Manifest.permission.ACCESS_COARSE_LOCATION), HotspotPermission.request(fine).toList())
+        assertEquals(listOf(nearby), HotspotPermission.request(nearby).toList())
+    }
+
+    @Test
     fun `granted, or Android 6 and 7, nothing to ask`() {
         assertEquals(Step.Ready, step(33, granted = true))
         assertEquals(Step.Ready, step(29, granted = true))

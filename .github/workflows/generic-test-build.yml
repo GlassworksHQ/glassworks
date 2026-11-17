@@ -3,20 +3,22 @@
 #
 #   git push origin HEAD:test-build/<name>
 #   gh run download <run-id> -n glassworks-generic-test-<sha>
-#   adb install glassworks-generic-test-0.1.0-arm64-v8a-<sha>.apk         (a fresh install: its own app id)
-#   adb install -r glassworks-generic-test-0.1.1-arm64-v8a-<sha>.apk      (updates it in place, data kept)
+#   adb install -r glassworks-generic-test-0.1.0-arm64-v8a-<sha>.apk      (installs, or updates in place, data kept)
+#   adb install -r glassworks-generic-test-0.1.1-arm64-v8a-<sha>.apk      (a higher version, to try an update)
 #   glassworks-generic-legacy-test-0.1.0-arm64-v8a-<sha>.apk             (the legacy build, Android 6-7: the Mirror)
 #
 # What it is:
 #   - The release variant, applicationId dev.glassworks.generic_android. It never installs over S1 Kiosk.
 #   - The legacy build too (#198): dev.glassworks.generic_android.legacy, minSdk 23, GeckoView 144, 0.1.0 and 0.1.1
-#     for arm64-v8a (the Mirror's ABI), with the same run's key. Its APK carries desugar_jdk_libs code (GPL-2.0 with
+#     for arm64-v8a (the Mirror's ABI), with the same key. Its APK carries desugar_jdk_libs code (GPL-2.0 with
 #     the Classpath exception), which the maintainer allowed on 2026-11-16 (AGENTS.md, rule 4).
-#   - Signed with a key made for this run only: the app has no release key yet (frames/generic-android/README.md,
-#     "Signing"). Two APKs of one run update each other; an APK of another run doesn't, so
-#     uninstall first (that wipes the app's settings).
+#   - Signed with Glassworks' release key (`release-signing` environment, GENERIC_* secrets;
+#     frames/generic-android/README.md, "Signing"), so a test build updates any earlier test build or release in
+#     place, settings kept. Once only: a build from before 2026-11-17 was signed with a key made for its own run,
+#     so uninstall it first (that wipes the app's settings).
 #   - 0.1.0 for each ABI the frame runs, and 0.1.1 for arm64-v8a, so an update in place can be tried.
-#   - No secrets, no environment. Kept for 3 days; the repo is public.
+#   - Kept for 3 days; the repo is public. Only pushes (write access) and manual runs trigger it, so pull requests
+#     from forks never get the key.
 name: Generic test build
 
 on:
@@ -35,6 +37,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    environment: release-signing   # the APK key; this environment allows only main and test-build/**
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -53,24 +56,22 @@ jobs:
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
 
-      - name: A signing key for this run only
+      - name: Release keystore
+        env:
+          GENERIC_KEYSTORE_B64: ${{ secrets.GENERIC_KEYSTORE_B64 }}
         run: |
+          [ -n "$GENERIC_KEYSTORE_B64" ] || { echo "::error::secret GENERIC_KEYSTORE_B64 is not set (frames/generic-android/README.md)"; exit 1; }
           umask 077
-          pass="$(openssl rand -hex 16)"
-          echo "::add-mask::$pass"
-          keytool -genkeypair -keystore "$RUNNER_TEMP/generic-test.jks" -storepass "$pass" -keypass "$pass" \
-            -alias test -keyalg RSA -keysize 2048 -validity 7 -dname "CN=Glassworks generic test build" -noprompt
-          {
-            echo "GENERIC_KEYSTORE_FILE=$RUNNER_TEMP/generic-test.jks"
-            echo "GENERIC_KEYSTORE_PASSWORD=$pass"
-            echo "GENERIC_KEY_ALIAS=test"
-            echo "GENERIC_KEY_PASSWORD=$pass"
-          } >> "$GITHUB_ENV"
+          printf '%s' "$GENERIC_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/glassworks-release.jks"
+          echo "GENERIC_KEYSTORE_FILE=$RUNNER_TEMP/glassworks-release.jks" >> "$GITHUB_ENV"
           echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Build, one APK per ABI and version
         env:
           GENERIC_REQUIRE_RELEASE_SIGNING: 'true'
+          GENERIC_KEYSTORE_PASSWORD: ${{ secrets.GENERIC_KEYSTORE_PASSWORD }}
+          GENERIC_KEY_ALIAS: glassworks   # not a secret; as a secret, GitHub would mask every "glassworks" in the log
+          GENERIC_KEY_PASSWORD: ${{ secrets.GENERIC_KEY_PASSWORD }}
         run: |
           mkdir -p generic-dist
           frame_abis="$(jq -r '.abis[]' frames/generic-android/design/frame.json)"
@@ -88,11 +89,14 @@ jobs:
               "generic-dist/glassworks-generic-legacy-test-$version-arm64-v8a-$SHORT_SHA.apk"
           done
 
-      - name: Remove the key
+      - name: Remove the keystore
         if: always()
-        run: rm -f "$RUNNER_TEMP/generic-test.jks"
+        run: rm -f "$RUNNER_TEMP/glassworks-release.jks"
 
       - name: Verify and checksum
+        env:
+          # Glassworks' release certificate (CN=Glassworks, O=GlassworksHQ, 2026-11-17). Public, not a secret.
+          GLASSWORKS_CERT_SHA256: 564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa
         run: |
           apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
           aapt2="$(dirname "$apksigner")/aapt2"
@@ -100,6 +104,17 @@ jobs:
           cd generic-dist
           for apk in *.apk; do
             "$apksigner" verify "$apk"
+            # The certificate's SHA-256, not its name: a new key with the same name must fail here, or every
+            # installed build would refuse the next update (frames/generic-android/README.md, "Signing").
+            certs="$("$apksigner" verify --print-certs "$apk" 2>&1 || true)"
+            # Every signer line apksigner prints ("Signer #1 …" here, "V1 Signer: …", "V2 Signer: …" on CI's
+            # build-tools), reduced to the distinct certificates: exactly one, and it must be ours.
+            digests="$(sed -n 's/^.*Signer.*certificate SHA-256 digest: //p' <<< "$certs" | sort -u)"
+            if [ "$digests" != "$GLASSWORKS_CERT_SHA256" ]; then
+              echo "::error::$apk isn't signed with Glassworks' release key alone (signers: $(tr '\n' ' ' <<< "$digests"))"
+              echo "apksigner said:"; head -n 8 <<< "$certs" | cut -c1-200
+              exit 1
+            fi
             badging="$("$aapt2" dump badging "$apk")"
             case "$apk" in
               glassworks-generic-legacy-test-*) id=dev.glassworks.generic_android.legacy min=23

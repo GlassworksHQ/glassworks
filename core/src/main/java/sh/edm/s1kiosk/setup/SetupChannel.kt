@@ -33,9 +33,11 @@ import java.util.concurrent.TimeUnit
  * has paired: then every request but `state` is refused. Over USB it is always true.
  * While a client is connected, `{"event":"state","state":{…}}` is pushed whenever the serialized
  * state changes (checked every [SetupChannel.POLL_MS]). No tokens or API key cross it. One secret does: the
- * Wi-Fi password `wifi.join` carries, which is never logged nor sent back. `wifi.join` is refused while the panel
- * is on a network ([ChannelState.online]), so the password never crosses a working LAN as plain HTTP: it comes
- * over the panel's own WPA2 setup hotspot, or over USB. Kiln's USB wizard keeps Improv Serial for Wi-Fi.
+ * Wi-Fi password `wifi.join` carries, which is never logged nor sent back. It goes in plain text over the WebSocket
+ * (`ws://`), like everything else here. `wifi.join` is refused while the panel is on a network ([ChannelState.online]),
+ * so in practice it comes over the panel's own setup hotspot (WPA2, so encrypted on the air, but readable by anyone
+ * else who joined it with the key from the screen) or over USB. Nothing encrypts this channel on a LAN either
+ * (docs/manage.md). Kiln's USB wizard keeps Improv Serial for Wi-Fi.
  */
 data class ChannelState(
     val ip: String?,
@@ -116,10 +118,19 @@ class SetupChannel(
         fun scanWifi(): List<WifiNetwork> = emptyList()
 
         /**
+         * While the setup hotspot runs: the networks scanned just before it started, since the radio can't scan as an
+         * access point. Null otherwise, and then `wifi.scan` scans afresh.
+         */
+        fun hotspotNetworks(): List<WifiNetwork>? = null
+
+        /**
          * Joins [ssid] with [password] (checked already; never logged). The join runs in [Change.afterReply], after the
          * reply: joining can take the panel off the network the browser reached it on.
          */
         fun joinWifi(ssid: String, password: String): Change = Change(error = "This panel can't join Wi-Fi from here.")
+
+        /** The Wi-Fi radio is off and the app can't turn it on (Android 10+): a join could never happen. */
+        fun wifiRadioLocked(): Boolean = false
     }
 
     /** What a change request did: [error] refuses it; [afterReply] runs once the reply is written. */
@@ -160,7 +171,7 @@ class SetupChannel(
                 null -> reply(id, state = state())
                 else -> reply(id, error = err)
             } to null
-            WIFI_SCAN -> reply(id, state = state(), networks = WifiNetwork.list(backend.scanWifi())) to null
+            WIFI_SCAN -> reply(id, state = state(), networks = WifiNetwork.list(backend.hotspotNetworks() ?: backend.scanWifi())) to null
             WIFI_JOIN -> joinWifi(id, req)
             HA_SET_URL -> {
                 val url = req.optString("url", "").trim()
@@ -189,6 +200,9 @@ class SetupChannel(
             ssid.isEmpty() || ssid.toByteArray(Charsets.UTF_8).size > 32 -> "A network name is 1 to 32 bytes long (an accented letter takes 2)."
             !validPassword(password) -> "A Wi-Fi password is at most 63 bytes long (an accented letter takes 2), or a 64-digit hex key."
             backend.state().online -> ON_A_NETWORK
+            // A refusal in the reply, not a join after it: the page swaps its brief "Joining…" for this as soon as the
+            // reply comes (S1 panel run on e7d2d49d).
+            backend.wifiRadioLocked() -> WIFI_OFF
             else -> null
         }
         if (why != null) return reply(id, error = why) to null
@@ -256,6 +270,7 @@ class SetupChannel(
         const val PAIRING_ARM = "pairing.arm"
         const val WIFI_SCAN = "wifi.scan"
         const val WIFI_JOIN = "wifi.join"
+        const val WIFI_OFF = "The panel's Wi-Fi is turned off, and it can't turn it on itself. Turn on Wi-Fi on the panel first."
         const val ON_A_NETWORK = "The panel is on a network already. Change its Wi-Fi on the panel's screen."
         const val NOT_PAIRED = "Pair with the panel first: enter the code it shows."
         /** The core's keys in the state; no step may take them. */

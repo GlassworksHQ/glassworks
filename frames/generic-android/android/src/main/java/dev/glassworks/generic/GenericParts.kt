@@ -25,6 +25,7 @@ import sh.edm.s1kiosk.PaneFiles
 import sh.edm.s1kiosk.TimerOverlay
 import sh.edm.s1kiosk.VoiceOverlay
 import sh.edm.s1kiosk.auth.HaTokenClient
+import sh.edm.s1kiosk.camera.CameraWiring
 import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.esphome.DeviceHost
 import sh.edm.s1kiosk.manage.AppManage
@@ -43,9 +44,9 @@ import sh.edm.s1kiosk.voice.chime
 import sh.edm.s1kiosk.voice.wakeChime
 
 /**
- * The generic app's parts ([AppParts]): its fixed base set of panes (#23), Assist with its timers and Sendspin,
- * which need no hardware beyond a microphone and a speaker. A device without them hides the pane
- * (CantRun). The wiring of each pane is S1 Kiosk's (S1Panes), with the S1's own panes left out.
+ * The generic app's parts ([AppParts]): its fixed set of panes (#23), Assist with its timers and Sendspin, which
+ * need a microphone and a speaker, and the camera (#117), which needs a camera. A device without a pane's hardware
+ * hides the pane (CantRun). The wiring of each pane is S1 Kiosk's (S1Panes), with the S1's own panes left out.
  */
 class GenericParts : AppParts {
 
@@ -56,9 +57,10 @@ class GenericParts : AppParts {
     private val settingsWorker by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "gw-settings").apply { isDaemon = true } } }
 
     override fun paneDefinitions(context: Context, runtime: GlassworksRuntime, frameDefinitions: List<PaneDefinition>): List<PaneDefinition> =
-        listOf(AssistDefinition(paneFile(context, "assist")), SendspinDefinition(paneFile(context, "sendspin"), settingsWorker::execute)) + frameDefinitions
+        listOf(AssistDefinition(paneFile(context, "assist")), SendspinDefinition(paneFile(context, "sendspin"), settingsWorker::execute)) +
+            frameDefinitions + CameraWiring.definition(context, runtime, paneFile(context, "camera"))
 
-    /** The timers (12 dp), then the voice orb (16 dp) over them. */
+    /** The timers (12 dp), then the voice orb (16 dp) over them, and the camera's privacy dot above the menus (30 dp). */
     override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> {
         val activity = host.activity
         val timers = TimerOverlay(activity, runtime.orbs)
@@ -78,6 +80,7 @@ class GenericParts : AppParts {
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
                 override fun destroy() { runtime.onVoiceUi = null }
             },
+            CameraWiring.dot(runtime, activity),
         )
     }
 
@@ -141,7 +144,7 @@ class GenericParts : AppParts {
                 play = { host.chimes().chime() },
                 silence = host::silenceChimes,
             ),
-        ) + runtime.frame.panes(paneContext, exec)
+        ) + runtime.frame.panes(paneContext, exec) + listOfNotNull(CameraWiring.pane(runtime, host))
         // Timers ride with Assist (their pane.json requires the same).
         if (assist.id in host.cantRun) return panes.filter { it !is TimersPane }
         host.cancelVoice = assist::cancel
@@ -153,6 +156,6 @@ class GenericParts : AppParts {
         const val LAUNCHER = "dev.glassworks.generic.Launcher"
 
         /** The panes this app has settings for. */
-        val PANES = setOf("assist", "sendspin", "timers")
+        val PANES = setOf("assist", "sendspin", "timers", "camera")
     }
 }
