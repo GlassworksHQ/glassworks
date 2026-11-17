@@ -103,7 +103,7 @@ the generic app or its legacy build yet, and the app has no release key.
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
 - **Orientation:** the device's rotation: Android's auto-rotate, or the way the person locked the screen. The Mirror
-  stands portrait because its image does (`ro.sf.hwrotation=270`, auto-rotate off). A device with a frame of its own
+  stands portrait because Kiln's first boot locks it there (`user_rotation=3`, auto-rotate off). A device with a frame of its own
   stands as its `frame.json`'s `display` says: the Pixel Tablet is landscape, though its screen is portrait at
   rotation 0. The app knows it by `Build.MODEL`, as Kiln's [`devices.ts`](installer/src/devices.ts) does
   (`GenericAndroid.KNOWN`; `GenericAndroidKnownTest` keeps the two the same).

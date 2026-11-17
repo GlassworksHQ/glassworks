@@ -316,7 +316,6 @@ export function FlashDone({ f, s }: P) {
         <p className="lede">
           Glassworks {fb.app.name ?? fb.app.code} {stranded || noHome ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
           {fb.wifi === false && ' It didn’t confirm the Wi-Fi; the network saved in the image still applies.'}
-          {fb.rotation !== '270' && ' The screen’s rotation isn’t set (ro.sf.hwrotation): check it is upright.'}
         </p>
       )}
       {s.back && <p className="lede">It starts like a new Glass Panes Mirror: set it up as its install guide says.</p>}

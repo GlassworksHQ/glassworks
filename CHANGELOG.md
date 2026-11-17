@@ -266,6 +266,9 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
+  landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
+  did, and stops with a clear message if it didn't. The Mirror's install is still test only.
 - **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its

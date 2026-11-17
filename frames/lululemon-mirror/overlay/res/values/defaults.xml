@@ -11,6 +11,6 @@
     <bool name="def_stay_on_while_plugged_in">true</bool>
     <!-- No swipe lock screen. ro.lockscreen.disable.default=true does the same; both are set. Android 6: false -->
     <bool name="def_lockscreen_disabled">true</bool>
-    <!-- Rotation stays at 0, which ro.sf.hwrotation=270 makes portrait. Android 6: true -->
+    <!-- No auto-rotate: Kiln's first boot locks user_rotation=3, portrait (ro.sf.hwrotation does nothing on this image). Android 6: true -->
     <bool name="def_accelerometer_rotation">false</bool>
 </resources>
