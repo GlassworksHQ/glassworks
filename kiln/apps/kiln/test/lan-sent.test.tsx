@@ -32,6 +32,15 @@ describe('the panel\'s page after the Wi-Fi is sent', () => {
     expect(text).not.toMatch(/Connected|joins the network/);
   });
 
+  it('says it in one polite live region, there from "Sending…" on, so a screen reader hears the change', () => {
+    const { rerender } = render(<Wifi busy={false} steps={steps} setup={sent('lan', 'sent')} />);
+    const region = screen.getByRole('status');
+    expect(region.getAttribute('aria-live')).toBe('polite');
+    rerender(<Wifi busy={false} steps={steps} setup={sent('lan', 'join')} />);
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region.textContent).toMatch(/Sent to the panel\.[\s\S]*watch the panel's screen/);
+  });
+
   it('while the reply is on its way: sending, with nothing that waits for more', () => {
     const { container } = render(<Wifi busy={false} steps={steps} setup={sent('lan', 'sent')} />);
     expect(screen.getByRole('heading').textContent).toBe('Sending to the panel…');

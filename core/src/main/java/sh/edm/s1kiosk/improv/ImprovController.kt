@@ -289,7 +289,7 @@ object ImprovController {
         app.glassworks.screen.wake("installer wifi")
         app.glassworks.setupHotspot?.configured() // off first: on most devices the radio can't join while it runs (#197)
         refreshOverlay()
-        wifi.connect(ssid, psk, hidden) { outcome -> main.post { onInstallerOutcome(seq, ssid, outcome); done?.invoke(outcome) } }
+        wifi.connect(ssid, psk, hidden) { outcome -> main.post { onInstallerOutcome(seq, ssid, via, outcome); done?.invoke(outcome) } }
         return true
     }
 
@@ -303,7 +303,7 @@ object ImprovController {
         return true
     }
 
-    private fun onInstallerOutcome(seq: Int, ssid: String, o: WifiProvisioner.Outcome) {
+    private fun onInstallerOutcome(seq: Int, ssid: String, via: ImprovDone.Via, o: WifiProvisioner.Outcome) {
         settleUntil = SystemClock.elapsedRealtime() + SETTLE_MS
         val result = when (o) {
             is WifiProvisioner.Outcome.Connected -> {
@@ -317,6 +317,7 @@ object ImprovController {
             }
         }
         if (seq != installerSeq) return // superseded by a newer request: that one is on screen
+        if (o is WifiProvisioner.Outcome.Connected) joinPath.joined() else joinPath.failed(via)
         installerJoining = false
         installerWifi = result
         refreshOverlay()
@@ -414,10 +415,12 @@ object ImprovController {
             is WifiProvisioner.Outcome.Connected -> {
                 provisionedUrl = o.ip?.let { "http://$it:${OAuth.SIGNIN_PORT}/" }
                 Log.i(TAG, "connected to the chosen network via ${o.method}; ip=${o.ip}; redirect=$provisionedUrl")
+                joinPath.joined()
                 s.onWifiResult(true, provisionedUrl, now)
             }
             is WifiProvisioner.Outcome.Failed -> {
                 failure = o.reason + (o.restored?.let { ". Back on $it" } ?: "")
+                joinPath.failed(ImprovDone.Via.BLUETOOTH)
                 Log.w(TAG, "connect failed: $o")
                 s.onWifiResult(false, null, now)
                 windowEndsAt = maxOf(windowEndsAt, now + 2 * 60_000L)
