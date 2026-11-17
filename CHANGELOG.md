@@ -273,6 +273,10 @@ below as the release notes.
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
   own icon, and every icon the app shows has a version Android 6 can draw.
+- **A screen without touch stays on setup when it has no network.** A Mirror with no Wi-Fi saved used to
+  leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
+  button that nobody could press. It now stays on the setup screen, which says how to set it up from a
+  computer. On every panel, the offline screen says "Wi-Fi is off" only when Android says so.
 - **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
   Panes image lets one adb key in without asking: the project's own key, published with its private
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its
