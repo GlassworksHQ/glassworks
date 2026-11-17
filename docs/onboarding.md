@@ -27,6 +27,9 @@ lightly tested end to end. Nothing below is implemented unless marked ✅.
 5. **Pick a dashboard** from a dropdown on the panel's device page in HA (defaults to your default
    dashboard). HA adds that dropdown turned off: turn on **Dashboard** first
    ([how](esphome.md#categories-and-defaults)).
+6. **Optional: night mode.** The panel has no night schedule of its own. To turn the screen off sooner
+   and dim it at night, add the [Panel night mode](blueprints.md#panel-night-mode) blueprint from
+   **Settings → Screen** and pick your panels. Setup doesn't ask for it.
 
 A first-boot **setup screen** (same visual style as the dashboard) walks through these and moves on
 by itself as each step completes ✅ (see [Setup screen](#setup-screen-)).

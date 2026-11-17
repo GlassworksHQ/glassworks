@@ -20,7 +20,8 @@ import java.io.File
 
 /**
  * The panes' Home Assistant blueprints: each pane.json's `blueprints` lists files in its module's
- * `blueprints/` folder, each with a one-line summary. Every listed file exists and is an automation
+ * `blueprints/` folder, each with a one-line summary. A page of the core's own settings lists its blueprints the
+ * same way in a page.json (the Screen page's Panel night mode, #473). Every listed file exists and is an automation
  * blueprint (a `blueprint:` block with a name, a description, `domain: automation` and named inputs),
  * every YAML in a `blueprints/` folder is listed, and no two share a file name: Home Assistant saves an
  * import from GitHub as `GlassworksHQ/<file>`, without the folder.
@@ -33,6 +34,11 @@ import java.io.File
  */
 class BlueprintCatalogTest {
 
+    private companion object {
+        /** The files that list blueprints: a pane's, and a core settings page's. */
+        val LISTS = setOf("pane.json", "page.json")
+    }
+
     private val repo = RepoFiles.root
 
     private class Listed(val pane: String, val module: File, val paneJson: File, val file: String, val summary: String) {
@@ -40,7 +46,7 @@ class BlueprintCatalogTest {
     }
 
     private val listed by lazy {
-        RepoFiles.sources(atLeast = 8) { it.name == "pane.json" }.flatMap { f ->
+        RepoFiles.sources(atLeast = 8) { it.name in LISTS }.flatMap { f ->
             val d = JSONObject(f.readText())
             val module = File(repo, RepoFiles.rel(f).substringBefore("/src/main/"))
             val a = d.optJSONArray("blueprints") ?: return@flatMap emptyList()
@@ -78,8 +84,34 @@ class BlueprintCatalogTest {
     @Test
     fun theScanFindsTheKnownBlueprints() {
         // If a refactor hides them from the scan, this fails before the checks below pass on nothing.
-        assertTrue(listed.map { it.file }.toString(), listed.map { it.yaml.name }.containsAll(listOf("doorbell-panels.yaml", "ask-panels.yaml")))
-        assertTrue(listed.map { it.pane }.toSet().toString(), listed.map { it.pane }.toSet().containsAll(setOf("notifications", "camera")))
+        assertTrue(listed.map { it.file }.toString(), listed.map { it.yaml.name }.containsAll(listOf("doorbell-panels.yaml", "ask-panels.yaml", "panel-night-mode.yaml")))
+        assertTrue(listed.map { it.pane }.toSet().toString(), listed.map { it.pane }.toSet().containsAll(setOf("notifications", "camera", "screen")))
+    }
+
+    /**
+     * Panel night mode (#473) takes any number of panels by their entities: the idle timeouts and brightness
+     * limits are multiple ESPHome number pickers, night is any condition, and the body names no entity.
+     */
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun panelNightModeTakesThePanelsByTheirEntities() {
+        val l = listed.single { it.yaml.name == "panel-night-mode.yaml" }
+        assertEquals("screen", l.pane)
+        val inputs = blueprintBlock(l.yaml)["input"] as Map<String, Map<String, Any?>>
+        for (k in listOf("idle_timeouts", "max_brightness")) {
+            val entity = (inputs.getValue(k)["selector"] as Map<String, Any?>)["entity"] as? Map<String, Any?>
+                ?: throw AssertionError("$k: an entity selector")
+            assertEquals("$k: any number of panels", true, entity["multiple"])
+            assertEquals("$k: the panels' ESPHome numbers", listOf(mapOf("integration" to "esphome", "domain" to "number")), entity["filter"])
+        }
+        assertTrue("idle_timeouts is required", "default" !in inputs.getValue("idle_timeouts"))
+        assertEquals(emptyList<Any>(), inputs.getValue("max_brightness")["default"])
+        assertTrue("night: a condition selector", (inputs.getValue("night")["selector"] as Map<String, Any?>).containsKey("condition"))
+        // The panel's own defaults by day, and the old night bracket's values at night.
+        assertEquals(listOf(20, 120, 20, 100), listOf("night_idle", "day_idle", "night_brightness", "day_brightness").map { inputs.getValue(it)["default"] })
+        val body = l.yaml.readText().substringAfter("\nmode:")
+        assertTrue("no entity id in the body", Regex("""entity_id:\s*\[?\s*[a-z_]+\.""").find(body) == null)
+        assertTrue("it sets the entities it was given", "entity_id: \"{{ idle_stale }}\"" in body && "entity_id: \"{{ brightness_stale }}\"" in body)
     }
 
     @Test

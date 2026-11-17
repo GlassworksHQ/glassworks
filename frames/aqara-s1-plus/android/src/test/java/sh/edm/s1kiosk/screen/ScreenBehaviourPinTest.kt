@@ -14,9 +14,10 @@ import org.robolectric.annotation.Config
 
 /**
  * Pins how the panel's screen behaves: the VI5300 range table, presence, wake on approach, idle off,
- * the night window and its timeout, and the brightness curve. Issue #19 moves this code into a generic
- * policy with the S1's sensors in its frame; these numbers must not move with it. Only
- * [ScreenPinHarness] follows the code's API.
+ * and the brightness curve. Issue #19 moves this code into a generic policy with the S1's sensors in
+ * its frame; these numbers must not move with it. Only [ScreenPinHarness] follows the code's API.
+ * The panel has no night of its own since #473: Home Assistant sets the idle timeout and the
+ * brightness limit (the Panel night mode blueprint).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -118,11 +119,11 @@ class ScreenBehaviourPinTest {
         assertEquals(listOf(false), h.keepOnCalls)
     }
 
-    @Test fun nightIdleTimeoutIs20sByDefault() {
+    @Test fun theIdleTimeoutIsTheSameAtNight() {
         h.setClock(23, 0)
         h.start()
         h.userActivity()
-        h.advance(19_000)
+        h.advance(119_000)
         assertEquals(emptyList<Boolean>(), h.keepOnCalls)
         h.advance(1_000)
         assertEquals(listOf(false), h.keepOnCalls)
@@ -130,7 +131,6 @@ class ScreenBehaviourPinTest {
 
     @Test fun configuredTimeoutsAreUsed() {
         prefs.idleOffSec = 30
-        prefs.nightIdleOffSec = 5
         h.setClock(12, 0)
         h.start()
         h.userActivity()
@@ -220,39 +220,25 @@ class ScreenBehaviourPinTest {
         assertTrue(h.wokeScreen)
     }
 
-    // ---- night window
+    // ---- the night bracket of 0.4.3 and before (#473)
 
-    @Test fun defaultNightWindowIs22To07() {
-        assertEquals("22:00-07:00", prefs.nightWindow)
+    /**
+     * A panel updated from 0.4.3 keeps its night keys in kiosk.xml, set to anything: they change nothing.
+     * At 23:00 the screen turns off after the idle timeout, and brightness reaches the day's maximum.
+     */
+    @Test fun leftoverNightPrefsAreIgnored() {
+        h.context.getSharedPreferences("kiosk", android.content.Context.MODE_PRIVATE).edit()
+            .putString("night_window", "00:00-23:59").putInt("night_idle_off_sec", 5).putFloat("night_max_brightness", 0.05f)
+            .commit()
+        h.setClock(23, 0)
         h.start()
-        assertEquals(
-            mapOf("21:59" to false, "22:00" to true, "23:30" to true, "00:00" to true, "06:59" to true, "07:00" to false, "12:00" to false),
-            nightAt("21:59", "22:00", "23:30", "00:00", "06:59", "07:00", "12:00"),
-        )
-    }
-
-    @Test fun nightWindowWithinOneDay() {
-        prefs.nightWindow = "08:00-17:00"
-        h.start()
-        assertEquals(
-            mapOf("07:59" to false, "08:00" to true, "16:59" to true, "17:00" to false),
-            nightAt("07:59", "08:00", "16:59", "17:00"),
-        )
-    }
-
-    @Test fun nightWindowEdgeCases() {
-        h.start()
-        h.setClock(8, 0)
-        for ((window, night) in listOf("" to false, "night" to false, "7:00-9:00" to true, "08:00-08:00" to false, "8:0-9:00" to false)) {
-            prefs.nightWindow = window
-            assertEquals(window, night, h.night)
-        }
-    }
-
-    private fun nightAt(vararg times: String): Map<String, Boolean> = times.associateWith {
-        val (hh, mm) = it.split(":").map(String::toInt)
-        h.setClock(hh, mm)
-        h.night
+        h.light(999f)
+        assertEquals(1.0f, h.brightness, 1e-4f)
+        h.userActivity()
+        h.advance(119_000)
+        assertEquals(emptyList<Boolean>(), h.keepOnCalls)
+        h.advance(1_000)
+        assertEquals(listOf(false), h.keepOnCalls)
     }
 
     // ---- brightness
@@ -278,15 +264,22 @@ class ScreenBehaviourPinTest {
         assertEquals(0.6f, firstBrightnessAt(999f), 1e-4f)
     }
 
-    @Test fun nightCapsBrightness() {
+    /** Home Assistant's Max auto brightness at 20 %, as the night mode blueprint sets it: the old night cap's curve. */
+    @Test fun maxAutoBrightnessCapsTheCurve() {
+        prefs.maxBrightness = 0.2f
         assertEquals(0.2f, firstBrightnessAt(999f, hour = 23), 1e-4f)
         assertEquals(0.1f, firstBrightnessAt(0f, hour = 23), 1e-4f)
         assertEquals(0.13333f, firstBrightnessAt(9f, hour = 23), 1e-4f)
     }
 
-    @Test fun nightCapAlsoLimitsTheMinimum() {
+    @Test fun maxAutoBrightnessAlsoLimitsTheMinimum() {
         prefs.minBrightness = 0.3f
+        prefs.maxBrightness = 0.2f
         assertEquals(0.2f, firstBrightnessAt(0f, hour = 23), 1e-4f)
+    }
+
+    @Test fun noCapAtNightByDefault() {
+        assertEquals(1.0f, firstBrightnessAt(999f, hour = 23), 1e-4f)
     }
 
     @Test fun brightnessMovesThirtyPercentTowardTheTarget() {

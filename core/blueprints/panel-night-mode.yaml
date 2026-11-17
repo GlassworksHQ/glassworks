@@ -1,0 +1,155 @@
+# Glassworks: night mode for the panels (#473). The panel has no clock-based schedule of its own: Home
+# Assistant decides when it is night, and this sets each panel's Idle timeout and Max auto brightness
+# (docs/esphome.md). The Screen page's blueprint: listed in
+# core/src/main/java/dev/glassworks/screen/page.json, offered on the panel's Screen settings.
+# Not yet run on a panel (2026-11-17).
+#
+# It checks once a minute and writes only the entities whose value differs, so a panel that was offline
+# or restarted catches up within a minute, and nothing is stored between runs: a Home Assistant restart
+# in the middle of the night loses nothing.
+blueprint:
+  name: Panel night mode
+  description: >-
+    At night the panels turn their screen off sooner and keep it dimmer. In the morning they go back to
+    your day settings. Night is whatever you pick: between two times (22:00 to 07:00 to start with),
+    from sunset to sunrise with a Sun condition, or any condition Home Assistant can check, like
+    an alarm being armed. Pick each panel's Idle timeout and Max auto brightness; any number of panels
+    works. A panel that Home Assistant added before this blueprint has its Idle timeout entity off:
+    enable it on the panel's device page first.
+  domain: automation
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    idle_timeouts:
+      name: The panels' Idle timeout
+      description: >-
+        One per panel: number.<panel>_idle_timeout. The screen turns off after this long with nobody
+        near and no touch.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: esphome
+              domain: number
+    max_brightness:
+      name: The panels' Max auto brightness (optional)
+      description: >-
+        One per panel: number.<panel>_max_auto_brightness. It limits how bright the screen gets while its
+        brightness follows the room's light. Leave it empty to change only the idle timeout.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: esphome
+              domain: number
+    night:
+      name: Night is when
+      description: >-
+        The conditions that make it night; all of them must hold. Use a Time condition for two times, or
+        a Sun condition (after sunset, before sunrise) for the sun.
+      default:
+        - condition: time
+          after: "22:00:00"
+          before: "07:00:00"
+      selector:
+        condition:
+    night_idle:
+      name: At night, turn off after
+      description: The idle timeout at night.
+      default: 20
+      selector:
+        number:
+          min: 5
+          max: 3600
+          step: 5
+          unit_of_measurement: s
+    day_idle:
+      name: By day, turn off after
+      description: The idle timeout the rest of the time. 120 s is the panel's own default.
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          step: 5
+          unit_of_measurement: s
+    night_brightness:
+      name: At night, at most
+      description: Max auto brightness at night.
+      default: 20
+      selector:
+        number:
+          min: 5
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+    day_brightness:
+      name: By day, at most
+      description: Max auto brightness the rest of the time. 100% is the panel's own default.
+      default: 100
+      selector:
+        number:
+          min: 5
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+
+mode: single
+max_exceeded: silent
+
+variables:
+  idle_timeouts: !input idle_timeouts
+  max_brightness: !input max_brightness
+  night_idle: !input night_idle
+  day_idle: !input day_idle
+  night_brightness: !input night_brightness
+  day_brightness: !input day_brightness
+
+triggers:
+  - trigger: time_pattern
+    minutes: /1
+  - trigger: homeassistant
+    event: start
+
+actions:
+  - if: !input night
+    then:
+      - variables:
+          idle: "{{ night_idle }}"
+          brightness: "{{ night_brightness }}"
+      - &apply
+        sequence:
+          # Only the panels that are there and not already at the value: no write every minute.
+          - variables:
+              idle_stale: >-
+                {% set ns = namespace(out=[]) %}
+                {% for e in idle_timeouts if has_value(e) and states(e) | float(-1) != idle | float %}
+                {% set ns.out = ns.out + [e] %}
+                {% endfor %}
+                {{ ns.out }}
+              brightness_stale: >-
+                {% set ns = namespace(out=[]) %}
+                {% for e in max_brightness if has_value(e) and states(e) | float(-1) != brightness | float %}
+                {% set ns.out = ns.out + [e] %}
+                {% endfor %}
+                {{ ns.out }}
+          - if: "{{ idle_stale | count > 0 }}"
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: "{{ idle_stale }}"
+                data:
+                  value: "{{ idle }}"
+          - if: "{{ brightness_stale | count > 0 }}"
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: "{{ brightness_stale }}"
+                data:
+                  value: "{{ brightness }}"
+    else:
+      - variables:
+          idle: "{{ day_idle }}"
+          brightness: "{{ day_brightness }}"
+      - *apply
