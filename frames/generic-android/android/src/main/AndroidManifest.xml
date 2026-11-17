@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Glassworks for generic Android (#23). The shell's components are the core's (package sh.edm.s1kiosk, kept
      for the S1); this app names them in full. S1 Kiosk's manifest (frames/aqara-s1-plus/android) has the
-     reasons for each permission. Left out here: the camera (no camera pane), Aqara's packages and the S1's
-     direct-boot splash. -->
+     reasons for each permission. Left out here: Aqara's packages and the S1's direct-boot splash. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -10,6 +9,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The camera pane (#117). A runtime permission from Android 6: setup's Camera step asks for it, and on a
+         screen without touch (the lululemon Mirror) Kiln grants it with `pm grant` at install. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -18,6 +20,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- The camera pane's presence with the screen off (#117). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Updates through PackageInstaller (#277): silent on Android 12+ once "Install unknown apps" is allowed. -->
@@ -50,6 +54,7 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
 
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.proximity" android:required="false" />
@@ -102,7 +107,7 @@
         <service
             android:name="sh.edm.s1kiosk.KioskService"
             android:exported="false"
-            android:foregroundServiceType="microphone|location|connectedDevice" />
+            android:foregroundServiceType="microphone|location|connectedDevice|camera" />
 
         <receiver
             android:name="sh.edm.s1kiosk.AdminReceiver"
@@ -118,6 +123,16 @@
 
         <activity
             android:name="sh.edm.s1kiosk.improv.ImprovActivity"
+            android:exported="true"
+            android:permission="android.permission.WRITE_SECURE_SETTINGS"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+
+        <!-- The camera pane's settings from adb (CameraAdbActivity). WRITE_SECURE_SETTINGS: adb shell holds it, normal
+             apps can't. -->
+        <activity
+            android:name="sh.edm.s1kiosk.CameraAdbActivity"
             android:exported="true"
             android:permission="android.permission.WRITE_SECURE_SETTINGS"
             android:excludeFromRecents="true"

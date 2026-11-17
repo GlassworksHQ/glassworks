@@ -58,6 +58,7 @@ class ScreenPolicyTest {
         override fun start(context: Context, onReading: (near: Boolean, raw: Float) -> Unit) { starts++; presence = onReading }
         var lux: ((Float) -> Unit)? = null
         override fun start(context: Context, onLux: (Float) -> Unit) { starts++; lux = onLux }
+        override fun available(context: Context) = true
         override fun stop(context: Context) { stops++; presence = null }
     }
 

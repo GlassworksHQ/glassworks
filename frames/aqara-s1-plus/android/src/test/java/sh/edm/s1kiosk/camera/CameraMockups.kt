@@ -33,6 +33,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.frame.Input
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.FixedReadout
@@ -150,14 +151,17 @@ class CameraMockups {
         return o
     }
 
+    /** The screen's size in px: the S1's 1440x720 unless a portrait test sets the Mirror's 1080x1920. */
+    private var size = 1440 to 720
+
     private fun shot(name: String, o: KioskSettingsOverlay, scrollTo: String? = null, bottom: Boolean = true, then: (KioskSettingsOverlay) -> Unit = {}) {
         o.previewSection("camera")
         Mockup.idle()
-        Mockup.layout(o)
+        Mockup.layout(o, size.first, size.second)
         scrollTo?.let { o.previewScrollTo(Mockup.label(o, it), alignBottom = bottom); Mockup.idle() }
         then(o)
         Mockup.idle()
-        Mockup.save(name, o)
+        Mockup.save(name, o, size.first, size.second)
     }
 
     /** A stand-in for a dashboard, as the timer mock-ups draw it, with the dot as MainActivity places it on Android [api]. */
@@ -187,7 +191,7 @@ class CameraMockups {
     }
 
     /** Setup on [step], with the camera's card and step from the real definition. [then] acts on the screen. */
-    private fun setupShot(name: String, step: String, allowed: Boolean = false, then: (SetupOverlay) -> Unit = {}) {
+    private fun setupShot(name: String, step: String, allowed: Boolean = false, input: Input = Input.TOUCH, then: (SetupOverlay) -> Unit = {}) {
         val a = Mockup.activity()
         val file = PanePrefs(app).paneFile("camera").also { it.edit().clear().commit() }
         val def = CameraDefinition(file, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) })
@@ -198,7 +202,7 @@ class CameraMockups {
             SetupPane(PaneChoice("Bluetooth proxy", "For BLE sensors", on = { false }, apply = { null }), emptyList()),
             SetupPane(def.setupChoice!!, def.setupSteps),
         )
-        val s = s1SetupOverlay(a, panes)
+        val s = s1SetupOverlay(a, panes).also { it.input = input }
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         val flow = SetupFlow.ids(true, listOf("camera"))
         s.render(SetupOverlay.Model(
@@ -209,7 +213,7 @@ class CameraMockups {
         Mockup.idle()
         then(s)
         Mockup.idle()
-        Mockup.save(name, s)
+        Mockup.save(name, s, size.first, size.second)
     }
 
     @Test
@@ -255,5 +259,24 @@ class CameraMockups {
             Mockup.layout(s)
             Mockup.save("camera-13-signin-after-camera", s)
         }
+    }
+
+    /**
+     * The generic app's camera in portrait at 1080x1920 (the lululemon Mirror's glass, a tablet stood up): the page, and
+     * setup's Camera step with touch and without it. Without touch the step shows where to set up from a computer, and
+     * never holds setup (CameraSetupStep), so the Mirror only meets it when someone opens it.
+     *   ./gradlew :kiosk:testDebugUnitTest --tests '*CameraMockups.portrait' -Ps1MockupDir=<dir>
+     */
+    @Test
+    @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    fun portrait() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        size = 1080 to 1920
+        shot("camera-portrait-01-presence-only", menu(Rig().someoneWalksUp()))
+        shot("camera-portrait-02-not-allowed", menu(Rig(allowed = false)))
+        shot("camera-portrait-03-privacy-on", menu(Rig { it.privacy = true }))
+        setupShot("camera-portrait-04-setup-camera-asks", "camera")
+        setupShot("camera-portrait-05-setup-camera-allowed", "camera", allowed = true)
+        setupShot("camera-portrait-06-setup-camera-no-touch", "camera", input = Input.NONE)
     }
 }

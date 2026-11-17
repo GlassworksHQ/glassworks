@@ -10,6 +10,26 @@ import dev.glassworks.platform.HotspotNetwork
 import dev.glassworks.setup.SetupHotspotPolicy.Stop
 
 /**
+ * The panel's web server's check for a phone on the setup hotspot (#460). Android 10 gives an app no list of a
+ * hotspot's clients, so a request from the hotspot's own network ([isClient]) is the proof that a phone joined: then
+ * [SetupHotspot.phoneJoined] runs through [post] (the main thread). Checked until the first one in each run. Any thread.
+ */
+class PhoneJoin(
+    private val hotspot: () -> SetupHotspot?,
+    private val isClient: (remote: String?) -> Boolean,
+    private val post: (() -> Unit) -> Unit,
+) {
+    /** The web server got a request from [remote]. */
+    fun request(remote: String?) {
+        val hs = hotspot() ?: return
+        // The run is read before the check: the main thread may stop it and start another before the post runs
+        // (CodeRabbit on #465), and a request seen in one run says nothing about the next.
+        val run = hs.runId
+        if (hs.isOn && !hs.phoneSeen && isClient(remote)) post { hs.phoneJoined(run) }
+    }
+}
+
+/**
  * The setup hotspot on the panel (#197): runs [SetupHotspotPolicy] and keeps [hotspot] on exactly while it
  * says so. The setup screen draws [view], and its Stop calls [cancel]. Wi-Fi details from any channel call
  * [configured] before the panel joins: the hotspot is off by the time it returns, so the radio is free.
@@ -77,6 +97,10 @@ class SetupHotspot(
     /** A phone reached the panel over this run of the hotspot ([phoneJoined]). Any thread may read it. */
     @Volatile var phoneSeen: Boolean = false
         private set
+
+    /** Which run of the hotspot this is: a new start changes it. Any thread may read it. */
+    @Volatile var runId: Int = 0
+        private set
     private var cancelWake: (() -> Unit)? = null
     private var closed = false
 
@@ -137,11 +161,11 @@ class SetupHotspot(
 
     /**
      * A device on the hotspot's network reached the panel (a request to its setup page, or a phone's captive check).
-     * Android 10 gives an app no list of a hotspot's clients, so this is the proof that a phone joined. Once per run;
-     * ignored while the hotspot isn't on.
+     * Android 10 gives an app no list of a hotspot's clients, so this is the proof that a phone joined. [run]: the
+     * [runId] the device was seen in. Once per run; ignored while the hotspot isn't on, or once another run started.
      */
-    fun phoneJoined() {
-        if (!isOn || phoneSeen) return
+    fun phoneJoined(run: Int) {
+        if (run != runId || !isOn || phoneSeen) return
         phoneSeen = true
         log("setup hotspot: a phone reached the panel over it")
         onChange()
@@ -181,6 +205,7 @@ class SetupHotspot(
         run = mine
         error = null
         phoneSeen = false
+        runId++
         log("setup hotspot starting")
         beforeStart {
             // Stopped (or replaced) while the scan ran: nothing to start.

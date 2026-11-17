@@ -9,7 +9,8 @@ publish the matching section below as the release notes.
 
 ### Added
 - **`WifiProvisioner.saysWhatToDo(reason)`.** True when a failure reason already tells the user what to do
-  (`RADIO_DIDNT_COME_BACK`, `UNUSABLE_PASSWORD`, both public now), so an app doesn't add "check the password" on top.
+  (`RADIO_DIDNT_COME_BACK`, or `UNUSABLE_PASSWORD`, which is public now), so an app doesn't add "check the password"
+  on top.
 
 ### Changed
 - **No network name in the logs.** `WifiProvisioner` logs "the chosen network" and the name's length instead

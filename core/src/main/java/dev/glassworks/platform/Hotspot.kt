@@ -76,15 +76,28 @@ object HotspotAddress {
      * on `rmnet`.
      *
      * [client] holds the IPv4 addresses of Android's own Wi-Fi networks (the client side). Those never count, but the
-     * interface they sit on still does: on the S1 the AP itself is `wlan0`, and Android may still list a client network
-     * there for a while (#418 verifier; measured in docs/research/setup-hotspot-portal-and-name.md). Among the addresses
-     * left, name order picks: an interface named for an access point first, then the highest `wlan` (with the client
-     * still up on `wlan0`, AOSP puts the AP on `wlan1`).
+     * interface they sit on still does. On the S1 the AP itself is `wlan0` (measured, docs/research/setup-hotspot-portal-and-name.md).
+     * That Android still lists a client network on the AP's interface is a precaution, not measured: if it does, the AP's
+     * address still counts (#418 verifier).
+     *
+     * Among the addresses left, name order picks the interface: one named for an access point first, then the highest
+     * `wlan` (with the client still up on `wlan0`, AOSP puts the AP on `wlan1`). Within an interface, an address in a
+     * subnet Android gives its hotspots ([AP_SUBNETS]) wins over the order the interface lists them in.
      */
     fun pick(interfaces: List<Interface>, client: Set<String> = emptySet()): String? = interfaces
         .filter { it.up && WIFI.matches(it.name) }
         .sortedWith(compareBy({ it.name.startsWith("wlan") }, { -(it.name.removePrefix("wlan").toIntOrNull() ?: 0) }))
-        .firstNotNullOfOrNull { i -> i.ipv4.firstOrNull { private(it) && it !in client } }
+        .firstNotNullOfOrNull { i ->
+            val left = i.ipv4.filter { private(it) && it !in client }
+            left.firstOrNull { ip -> AP_SUBNETS.any { ip.startsWith(it) } } ?: left.firstOrNull()
+        }
+
+    /**
+     * Subnets Android gives its own access points: `192.168.43.0/24`, the Wi-Fi hotspot's on older Android (the S1's
+     * local-only hotspot on Android 10 took `192.168.43.x`, measured), and `192.168.49.0/24`, Wi-Fi Direct's group
+     * owner. Newer Android may use another `192.168.x.0/24`; then name order alone decides.
+     */
+    private val AP_SUBNETS = listOf("192.168.43.", "192.168.49.")
 
     /** [pick] over the device's interfaces now, leaving out the addresses [context]'s Wi-Fi client networks have. */
     fun now(context: Context): String? = runCatching {
@@ -114,13 +127,23 @@ object HotspotAddress {
         return (r and mask) == (a and mask)
     }
 
-    /** [onSubnet] for the hotspot as it is now ([now]); false while it has no address. */
+    /** One IPv4 address on the device, with its prefix length. */
+    data class Address(val ip: String, val prefix: Int)
+
+    /**
+     * [remote] is another device on the hotspot's network: [ap] is the hotspot's address ([now]), and [addresses] the
+     * device's IPv4 addresses, where its prefix length is found. False while the hotspot has no address.
+     */
+    fun isClient(remote: String?, ap: String?, addresses: List<Address>): Boolean {
+        val own = addresses.firstOrNull { it.ip == ap } ?: return false
+        return onSubnet(remote, own.ip, own.prefix)
+    }
+
+    /** [isClient] for the hotspot and the device's addresses as they are now. */
     fun isClient(context: Context, remote: String?): Boolean = runCatching {
-        val ap = now(context) ?: return false
-        val own = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
-            .flatMap { it.interfaceAddresses }.firstOrNull { it.address is Inet4Address && it.address.hostAddress == ap }
-            ?: return false
-        onSubnet(remote, ap, own.networkPrefixLength.toInt())
+        val addresses = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().flatMap { it.interfaceAddresses }
+            .mapNotNull { a -> (a.address as? Inet4Address)?.hostAddress?.let { Address(it, a.networkPrefixLength.toInt()) } }
+        isClient(remote, now(context), addresses)
     }.getOrDefault(false)
 
     private val WIFI = Regex("""(wlan|ap|swlan|softap)\d+""")

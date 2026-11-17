@@ -95,8 +95,7 @@ object WifiStep {
                 if (fail != null) ImprovLine(
                     Phase.FAILED, "$label · allowed for ${clock(f.authLeftMs)}",
                     "Couldn't connect to ${ssid ?: "the network"}",
-                    // A reason that says what to do gets no password advice on top (#418 verifier).
-                    "${sentence(fail)}" + if (WifiProvisioner.saysWhatToDo(fail)) "" else " Check the password and send it again.",
+                    failureText(fail),
                     Tone.ROSE, listOf(Action.STOP),
                 ) else ImprovLine(
                     Phase.AUTHORIZED, "$label · allowed for ${clock(f.authLeftMs)}", "Waiting for Wi-Fi details",
@@ -122,6 +121,16 @@ object WifiStep {
         val s = (ms.coerceAtLeast(0) + 999) / 1000
         return "${s / 60}:${"%02d".format(s % 60)}"
     }
+
+    /**
+     * A failed join, in words: the reason as a sentence, then "check the password" unless the reason already says what
+     * to do ([WifiProvisioner.saysWhatToDo]). The setup step and the Improv overlay both say it this way (#418 verifier).
+     */
+    fun failureText(fail: String): String =
+        sentence(fail) + if (WifiProvisioner.saysWhatToDo(fail)) "" else " $CHECK_PASSWORD"
+
+    /** The one place the app says it. */
+    private const val CHECK_PASSWORD = "Check the password and send it again."
 
     private fun sentence(s: String): String {
         val t = s.trim().replaceFirstChar { it.uppercaseChar() }

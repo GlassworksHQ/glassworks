@@ -50,9 +50,12 @@ A Glassworks **frame**: the device definition for the Generic Android. Its data 
 (`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
 device's features allow.
 
-The app is the Glassworks core with a fixed base set of panes: Assist (with its timers) and Sendspin. A pane
-the device has no hardware for (no microphone, no speaker) is hidden: it isn't in the settings, on the Manage
-page, in setup or in Home Assistant. The screen follows Android's standard proximity sensor (near means under
+The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin and the camera
+(#117). A pane the device has no hardware for (no microphone, no speaker, no camera) is hidden: it isn't in the
+settings, on the Manage page, in setup or in Home Assistant. The camera pane is off until someone turns it on, as
+in S1 Kiosk; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
+On a screen without touch (the lululemon Mirror) its setup step never waits: the use stays Presence only, and
+Kiln grants the camera. On Android 6-7 its stream needs the camera to list 1280x720; presence works either way. The screen follows Android's standard proximity sensor (near means under
 5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
 no proximity sensor; then the screen goes off after the idle time and wakes on a touch.
 
@@ -60,7 +63,7 @@ no proximity sensor; then the screen goes off after the idle time and wakes on a
 |---|---|---|
 | applicationId | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
 | Home Assistant's model | "Pixel Tablet (S1 Kiosk)" | "Pixel Tablet (Glassworks)" |
-| Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin |
+| Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin, Camera |
 | Presence and light | None | Android's proximity and light sensors |
 
 Settings that S1 Kiosk takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
@@ -128,12 +131,16 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet.
+It installs as a normal app (an APK). There is no release yet, so Kiln installs it only as a test: open
+`kiln.glassworks.dev/android?apk=local` (or `/android?apk=local` on `npm run dev -w @glassworks/kiln-app`) in Chrome
+or Edge, pick a test build's APK, plug the tablet in with USB debugging still off, and follow the screens. Kiln names
+the tablet or asks for its brand, shows that brand's steps to turn on USB debugging, waits for Allow on the tablet,
+then installs. Undo is on the Done screen, and on the first screen for a later visit.
 
-Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403), with no
-screen yet. Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
+Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403). Given an adb connection and an APK, it reads the device, refuses a device with a frame of its own (the S1, by
+`ro.hardware`: Kiln installs it from its own page), below Android 6 or the wrong build,
 installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
-admin; the camera too, once a build asks for it) and reads each grant back, allows "Install unknown apps" on Android 12+
+admin, the camera) and reads each grant back, allows "Install unknown apps" on Android 12+
 so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else
 Android's chooser), and hands over to setup over the LAN. Its table of brands maps a USB vendor ID, or adb's
 maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake

@@ -24,6 +24,7 @@ import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.glassworks
 import sh.edm.s1kiosk.setup.ImprovFacts
 import sh.edm.s1kiosk.setup.InstallerWifi
+import sh.edm.s1kiosk.setup.WifiStep
 import java.lang.ref.WeakReference
 
 /**
@@ -125,6 +126,9 @@ object ImprovController {
     /** The Wi-Fi attempt in flight belongs to the installer (progress goes there), not to Improv. */
     private var installerJoining = false
 
+    /** How the Wi-Fi was last sent since the session started: the done card follows it (#460). */
+    private val joinPath = ImprovDone.JoinPath()
+
     /** Until when a finished join's result may still be on its way to the installer or HA (ms, elapsedRealtime). */
     @Volatile private var settleUntil = 0L
 
@@ -210,7 +214,7 @@ object ImprovController {
         val server = ble ?: ImprovBleServer(app, main, bleListener).also { ble = it }
         val s = ImprovSession(effects)
         session = s
-        reason = why; auto = isAuto; failure = null; progress = null; provisionedUrl = null; connectingSsid = ""
+        reason = why; auto = isAuto; failure = null; progress = null; provisionedUrl = null; connectingSsid = ""; joinPath.sessionStarted()
         startError = null; advertising = false; clients.clear()
         windowEndsAt = now + WINDOW_MS
         s.start(requireAuthorization = true, now = now)
@@ -267,6 +271,8 @@ object ImprovController {
     fun connectFromInstaller(
         ssid: String,
         psk: String,
+        /** Where it came from: Kiln over USB, or the panel's setup page. The done card says so. */
+        via: ImprovDone.Via,
         hidden: Boolean? = null,
         done: ((WifiProvisioner.Outcome) -> Unit)? = null,
     ): Boolean {
@@ -279,6 +285,7 @@ object ImprovController {
         Log.i(TAG, "installer Wi-Fi: joining the chosen network")
         installerWifi = InstallerWifi(ssid, InstallerWifi.Phase.CONNECTING)
         installerJoining = true
+        joinPath.sent(via, ssid)
         app.glassworks.screen.wake("installer wifi")
         app.glassworks.setupHotspot?.configured() // off first: on most devices the radio can't join while it runs (#197)
         refreshOverlay()
@@ -384,6 +391,7 @@ object ImprovController {
 
         override fun startWifi(ssid: String, password: String) {
             connectingSsid = ssid
+            joinPath.sent(ImprovDone.Via.BLUETOOTH, ssid)
             failure = null
             progress = null
             installerJoining = false
@@ -557,7 +565,7 @@ object ImprovController {
                 ImprovOverlay.Model(
                     label = "Wi-Fi setup · allowed for ${left / 60}:${"%02d".format(left % 60)}",
                     title = if (fail != null) "Couldn't connect to $connectingSsid" else "Ready for Wi-Fi details",
-                    body = if (fail != null) "$fail." + (if (WifiProvisioner.saysWhatToDo(fail)) "" else " Check the password and send it again.") else
+                    body = if (fail != null) WifiStep.failureText(fail) else
                         "Open the “Improv via BLE” discovery for this panel in Home Assistant and enter your Wi-Fi." +
                             if (!wifi.legacyApiAllowed) " You'll then be asked to approve the network in a notification." else "",
                     secondary = "Stop" to { stop("stopped on panel") },
@@ -571,13 +579,15 @@ object ImprovController {
                 accent = ImprovOverlay.AMBER,
                 busy = true,
             )
-            ImprovState.PROVISIONED -> ImprovOverlay.Model(
-                label = "Wi-Fi setup · done",
-                title = if (connectingSsid.isNotEmpty()) "Connected to $connectingSsid" else "Panel is online",
-                body = provisionedUrl?.let { "Continue setup at $it" } ?: "Wi-Fi is set up.",
-                primary = "Done" to { overlay.hide() },
-                accent = ImprovOverlay.GREEN,
-            )
+            ImprovState.PROVISIONED -> {
+                val c = joinPath.card(provisionedUrl)
+                ImprovOverlay.Model(
+                    label = c.label, title = c.title, body = c.body,
+                    primary = "Done" to { overlay.hide() },
+                    accent = ImprovOverlay.GREEN,
+                    mark = c.mark,
+                )
+            }
         }
         overlay.show(m)
     }

@@ -19,8 +19,10 @@ class NoNetworkNameInLogsTest {
     @Test
     fun noLogCallInterpolatesANetworkName() {
         val found = RepoFiles.sources(atLeast = 300) { it.extension == "kt" }.flatMap { f ->
-            f.readLines().mapIndexedNotNull { i, line ->
-                if (LOG_CALL.containsMatchIn(line) && NAME.containsMatchIn(line)) "${RepoFiles.rel(f)}:${i + 1}: ${line.trim()}" else null
+            val lines = f.readLines()
+            lines.indices.mapNotNull { i ->
+                val call = call(lines, i) ?: return@mapNotNull null
+                if (NAME.containsMatchIn(call)) "${RepoFiles.rel(f)}:${i + 1}: ${call.trim()}" else null
             }
         }
         assertEquals(found.joinToString("\n"), emptyList<String>(), found)
@@ -39,7 +41,71 @@ class NoNetworkNameInLogsTest {
         assertTrue("a length is fine", !NAME.containsMatchIn("""Log.i(TAG, "connect (${'$'}{ssid.length} char name)")"""))
     }
 
+    @Test
+    fun `a call wrapped over several lines is read whole`() {
+        val wrapped = listOf("""Log.i(""", """    TAG,""", """    "joining '${'$'}ssid'",""", """)""", """val after = ssid""")
+        assertEquals("""Log.i( TAG, "joining '${'$'}ssid'", )""", call(wrapped, 0)!!.replace(Regex("""\s+"""), " ").trim())
+        assertTrue(NAME.containsMatchIn(call(wrapped, 0)!!))
+    }
+
+    @Test
+    fun `a parenthesis inside the message doesn't end the call`() {
+        val tricky = listOf("""Log.i(""", """    TAG,""", """    "joining ) " +""", """        "${'$'}ssid"""", """)""")
+        assertTrue(call(tricky, 0)!!, NAME.containsMatchIn(call(tricky, 0)!!))
+        assertEquals("a char literal too", 0, Parens().count("""log(')' + "(" + ")")"""))
+    }
+
     private companion object {
+        /**
+         * The log call that starts on line [i] of [lines], up to its closing parenthesis (at most [MAX_LINES] lines), or null
+         * when none starts there. Parentheses in string and char literals don't count (CodeRabbit on #465). A string
+         * template with quotes inside (`"${if (a) "x" else "y"}"`) would fool it: none of the log lines do that.
+         */
+        fun call(lines: List<String>, i: Int): String? {
+            val m = LOG_CALL.find(lines[i]) ?: return null
+            val text = StringBuilder()
+            val parens = Parens()
+            var depth = 0
+            for (j in i until minOf(lines.size, i + MAX_LINES)) {
+                val part = if (j == i) lines[j].substring(m.range.first) else lines[j]
+                text.append(part).append(' ')
+                depth += parens.count(part)
+                if (depth <= 0) break
+            }
+            return text.toString()
+        }
+
+        /** Counts `(` minus `)` outside string and char literals; a raw string (`"""…"""`) may run on to the next line. */
+        class Parens {
+            private var raw = false
+
+            fun count(line: String): Int {
+                var d = 0
+                var str = false
+                var k = 0
+                while (k < line.length) {
+                    val c = line[k]
+                    when {
+                        raw -> if (line.startsWith(RAW, k)) { raw = false; k += 2 }
+                        str -> if (c == '\\') k++ else if (c == '"') str = false
+                        line.startsWith(RAW, k) -> { raw = true; k += 2 }
+                        c == '"' -> str = true
+                        c == '\'' -> { if (line.getOrNull(k + 1) == '\\') k++; k += 2 } // 'x' or '\x': on to its closing quote
+                        c == '(' -> d++
+                        c == ')' -> d--
+                    }
+                    k++
+                }
+                return d
+            }
+
+            private companion object {
+                const val RAW = "\"\"\""
+            }
+        }
+
+        const val MAX_LINES = 8
+
         val LOG_CALL = Regex("""\b(Log\.[vdiwe]|[A-Za-z]*Log\.[a-z]|log|event)\(""")
 
         /** A template that prints a name: `$ssid`, `${o.ssid}`, `$prevSsid`, `${x.passphrase}`, `${o.restored}`. Not `.length`. */

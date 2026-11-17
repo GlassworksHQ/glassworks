@@ -264,7 +264,7 @@ class Budgets(unittest.TestCase):
         g = A.read_json(os.path.join(ROOT, "frames", "generic-android", "budgets.json"))
         frame = A.read_json(os.path.join(ROOT, "frames", "generic-android", "design", "frame.json"))
         self.assertEqual(set(g["size"]["apk_max_bytes"]), set(frame["abis"]))
-        self.assertEqual(set(g["panes"]), {"assist", "sendspin", "timers"})
+        self.assertEqual(set(g["panes"]), {"assist", "sendspin", "timers", "camera"})
         for pid, pane in g["panes"].items():
             self.assertIn(pid, PARTS["panes"])
             self.assertIsInstance(pane["size_max_bytes"], int, pid)

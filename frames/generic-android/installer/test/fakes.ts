@@ -33,6 +33,10 @@ export interface FakeAndroidOptions {
   abilist?: string;
   manufacturer?: string;
   model?: string;
+  /** ro.hardware */
+  hardware?: string;
+  /** `getprop ro.hardware` fails */
+  hardwareFails?: boolean;
   /** the app's versionCode when it is installed already */
   installed?: number;
   /** pm install's answer, when it isn't Success */
@@ -100,10 +104,11 @@ export class FakeAndroid implements PanelShell {
     const props: Record<string, string> = {
       'ro.build.version.sdk': String(sdk), 'ro.build.version.release': o.release ?? '14',
       'ro.product.cpu.abilist': o.abilist ?? 'arm64-v8a,armeabi-v7a,armeabi',
-      'ro.product.manufacturer': o.manufacturer ?? 'Google', 'ro.product.model': o.model ?? 'Pixel Tablet',
+      'ro.product.manufacturer': o.manufacturer ?? 'Google', 'ro.product.model': o.model ?? 'Pixel Tablet', 'ro.hardware': o.hardware ?? 'tangorpro',
       'ro.build.fingerprint': `example/tablet/tablet:${o.release ?? '14'}/TEST.000000/1:user/release-keys`,
     };
     let m: RegExpExecArray | null;
+    if (cmd === 'getprop ro.hardware' && o.hardwareFails) return { out: '', code: 1 };
     if ((m = /^getprop (\S+)$/.exec(cmd))) return ok(`${props[m[1]!] ?? ''}\n`);
     if (cmd.startsWith('cmd ') && sdk < 24) return { out: '/system/bin/sh: cmd: not found\n', code: 127 };
     if (cmd === `dumpsys package ${PKG}`) {

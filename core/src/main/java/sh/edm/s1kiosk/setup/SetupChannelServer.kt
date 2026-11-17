@@ -9,6 +9,7 @@ import sh.edm.s1kiosk.InstallerGlue
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.improv.ImprovController
+import sh.edm.s1kiosk.improv.ImprovDone
 import dev.glassworks.improv.ScannedNetwork
 import java.io.InputStream
 import java.io.OutputStream
@@ -32,7 +33,7 @@ object SetupChannelServer {
 
     fun start(context: Context, runtime: Glassworks) {
         if (server != null) return
-        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime))
+        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime, ImprovDone.Via.COMPUTER))
         server = AdbSocketServer(SetupChannel.SOCKET, TAG) { input, output -> channel { true }.serve(input, output) }.also { it.start() }
     }
 
@@ -50,7 +51,8 @@ object SetupChannelServer {
      * gated by the browser's pairing.
      */
     fun lan(context: Context, runtime: Glassworks): (InputStream, OutputStream, () -> Boolean) -> Unit {
-        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime))
+        // Wi-Fi on this page is the hotspot's case: a panel on a network skips the step.
+        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime, ImprovDone.Via.SETUP_PAGE))
         return { input, output, mayChange -> channel(mayChange).serve(input, output) }
     }
 
@@ -59,7 +61,8 @@ object SetupChannelServer {
         server = null
     }
 
-    private class AndroidBackend(private val ctx: Context, private val runtime: Glassworks) : SetupChannel.Backend {
+    /** [via]: where this channel's Wi-Fi comes from, for the panel's done card. */
+    private class AndroidBackend(private val ctx: Context, private val runtime: Glassworks, private val via: ImprovDone.Via) : SetupChannel.Backend {
         private val prefs = KioskPrefs(ctx)
 
         init { HaAuth.init(ctx) }
@@ -98,7 +101,7 @@ object SetupChannelServer {
             Log.i(TAG, "Wi-Fi details from the setup page: joining")
             return SetupChannel.Change(afterReply = {
                 InstallerGlue.post {
-                    if (!ImprovController.connectFromInstaller(ssid, password)) Log.w(TAG, "Wi-Fi: the panel's Wi-Fi isn't ready yet")
+                    if (!ImprovController.connectFromInstaller(ssid, password, via)) Log.w(TAG, "Wi-Fi: the panel's Wi-Fi isn't ready yet")
                 }
             })
         }
