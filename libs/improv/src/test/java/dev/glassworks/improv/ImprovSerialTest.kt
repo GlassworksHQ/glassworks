@@ -208,4 +208,12 @@ class ImprovSerialTest {
         assertTrue(p.size <= 9 + 255 + 1)
         assertEquals(4, resultStrings(p, RPC_REQUEST_INFO).size)
     }
+
+    @Test
+    fun theSessionLogNamesNeitherTheNetworkNorItsPassword() {
+        val logged = mutableListOf<String>()
+        ImprovSerialSession(Fake(), log = { logged += it }).onBytes(ImprovSerial.rpc(RPC_WIFI_SETTINGS, listOf("Example-Home-Net", "right")))
+        assertTrue("the session logged the request", logged.isNotEmpty())
+        assertTrue(logged.toString(), logged.none { "Example-Home-Net" in it || "right" in it })
+    }
 }

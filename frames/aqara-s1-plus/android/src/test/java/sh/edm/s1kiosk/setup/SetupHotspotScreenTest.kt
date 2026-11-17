@@ -61,13 +61,54 @@ class SetupHotspotScreenTest {
         assertEquals(listOf(HotspotStep.Action.STOP), asked)
     }
 
-    @Test fun opening_thenOnLeavesNoOpeningLineUnderTheCard() {
-        val s = screen(HotspotStep.card(SetupHotspot.View.Starting, HotspotPermission.Step.Ready, null))
-        assertTrue("Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…" in texts(s))
+    private val starting = HotspotStep.card(SetupHotspot.View.Starting, HotspotPermission.Step.Ready, null)
+
+    @Test fun startingFillsTheCardAtOnceWithTheSpinnerThenTheQrCode() {
+        val s = screen(starting)
+        val asked = mutableListOf<HotspotStep.Action>()
+        s.onHotspotAction = { asked += it }
+        assertTrue(texts(s).toString(), "Starting the setup Wi-Fi…" in texts(s))
+        assertTrue("the spinner's line", starting.waiting!! in texts(s))
+        assertTrue("no Set up from a phone, no Bluetooth tile", texts(s).none { it == "Set up from a phone" || it == "Allow" })
+        assertTrue("no QR code yet", !qrShown(s))
+        button(s, "Close it").performClick()
+        assertEquals(listOf(HotspotStep.Action.STOP), asked)
         s.render(s.model!!.copy(hotspot = on))
         Mockup.idle()
         Mockup.layout(s)
-        assertTrue(texts(s).toString(), "Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…" !in texts(s))
+        assertTrue(qrShown(s))
+        assertTrue(texts(s).toString(), starting.waiting!! !in texts(s) && "Starting the setup Wi-Fi…" !in texts(s))
+    }
+
+    @Test fun withoutTouchStartingShowsTheSpinnerToo() {
+        val s = screen(starting, Input.NONE)
+        assertTrue(texts(s).toString(), "Starting the setup Wi-Fi…" in texts(s) && starting.waiting!! in texts(s))
+    }
+
+    @Test fun aFailedAskSaysWhyInTheSameCardAndTryAgainAsksAgain() {
+        val failed = HotspotStep.card(SetupHotspot.View.Off(dev.glassworks.setup.SetupHotspotPolicy.Stop.FAILED, dev.glassworks.platform.HotspotFailure.TETHERING_ON),
+            HotspotPermission.Step.Ready, null, asked = true)
+        val s = screen(failed)
+        val asked = mutableListOf<HotspotStep.Action>()
+        s.onHotspotAction = { asked += it }
+        assertTrue(texts(s).toString(), "The setup Wi-Fi didn't start." in texts(s) && dev.glassworks.platform.HotspotFailure.TETHERING_ON.text in texts(s))
+        button(s, "Try again").performClick()
+        assertEquals(listOf(HotspotStep.Action.RETRY), asked)
+        s.render(s.model!!.copy(hotspot = starting))
+        Mockup.idle()
+        assertTrue("the reason goes once it starts again", dev.glassworks.platform.HotspotFailure.TETHERING_ON.text !in texts(s))
+    }
+
+    @Test fun onceAPhoneIsOnItTheQrCodeIsTheSetupPage() {
+        val url = "http://192.0.2.1:8099/setup"
+        val s = screen(on)
+        val join = (views(s).first { it is ImageView && it.isShown && it.drawable is BitmapDrawable } as ImageView).drawable as BitmapDrawable
+        s.render(s.model!!.copy(hotspot = HotspotStep.card(SetupHotspot.View.On(net, 14 * 60_000L, asked = true, phone = true), HotspotPermission.Step.Ready, url)))
+        Mockup.idle()
+        Mockup.layout(s)
+        val page = (views(s).first { it is ImageView && it.isShown && it.drawable is BitmapDrawable } as ImageView).drawable as BitmapDrawable
+        assertTrue("a new QR code", !join.bitmap.sameAs(page.bitmap))
+        assertTrue(texts(s).toString(), "Open the setup page." in texts(s) && texts(s).any { url in it })
     }
 
     private val wifiOff = HotspotStep.card(SetupHotspot.View.Off(null, dev.glassworks.platform.HotspotFailure.WIFI_OFF), HotspotPermission.Step.Ready, null)

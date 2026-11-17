@@ -65,6 +65,13 @@ class SetupMockups {
         )
         val failed = card(dev.glassworks.setup.SetupHotspot.View.Off(dev.glassworks.setup.SetupHotspotPolicy.Stop.FAILED, dev.glassworks.platform.HotspotFailure.TETHERING_ON))
         val wifiOff = card(dev.glassworks.setup.SetupHotspot.View.Off(null, dev.glassworks.platform.HotspotFailure.WIFI_OFF))
+        // #460: the card at once after Set up from a phone, the setup page once a phone is on it, and a failed ask.
+        val starting = card(dev.glassworks.setup.SetupHotspot.View.Starting)
+        val phone = card(dev.glassworks.setup.SetupHotspot.View.On(net, 13 * 60_000L, asked = true, phone = true))
+        val askedFailed = dev.glassworks.setup.HotspotStep.card(
+            dev.glassworks.setup.SetupHotspot.View.Off(dev.glassworks.setup.SetupHotspotPolicy.Stop.FAILED, dev.glassworks.platform.HotspotFailure.TETHERING_ON),
+            ready, null, asked = true,
+        )
     }
 
     private fun facts(mode: RadioMode, status: String, thread: ThreadRouterState? = null) =
@@ -159,6 +166,9 @@ class SetupMockups {
         shot("setup-23-no-touch-hotspot-on", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on), input = Input.NONE)
         shot("setup-24-hotspot-wifi-off", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.wifiOff))
         shot("setup-25-no-touch-wifi-off", model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.wifiOff), input = Input.NONE)
+        shot("setup-26-hotspot-starting", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.starting))
+        shot("setup-27-hotspot-phone-joined", model(SetupFlow.WIFI, wifi = offline, hotspot = Spot.phone))
+        shot("setup-28-hotspot-asked-failed", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.askedFailed))
     }
 
     /**
@@ -175,6 +185,8 @@ class SetupMockups {
             "portrait-02-no-touch-ha" to model(SetupFlow.HA),
             "portrait-03-no-touch-signin" to model(SetupFlow.SIGNIN),
             "portrait-05-no-touch-hotspot-on" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on),
+            "portrait-06-no-touch-hotspot-starting" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.starting),
+            "portrait-07-no-touch-hotspot-phone-joined" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.phone),
         )) {
             val a = Mockup.activity()
             val s = s1SetupOverlay(a, panes(a, null)).also { it.input = Input.NONE }

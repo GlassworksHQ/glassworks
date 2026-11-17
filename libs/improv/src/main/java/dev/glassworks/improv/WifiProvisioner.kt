@@ -60,7 +60,9 @@ public class WifiProvisioner(
          * @property method How it joined, for logs: `already-connected`, `device-owner`, `addNetwork` or
          *   `suggestion`.
          */
-        public data class Connected(public val ssid: String, public val ip: String?, public val method: String) : Outcome()
+        public data class Connected(public val ssid: String, public val ip: String?, public val method: String) : Outcome() {
+            override fun toString(): String = "Connected(ip=$ip, method=$method)" // no network name in a log (#460)
+        }
 
         /**
          * Joining failed.
@@ -68,7 +70,9 @@ public class WifiProvisioner(
          * @property reason Why, in words for the user or a log.
          * @property restored The network it went back to, or null for none.
          */
-        public data class Failed(public val reason: String, public val restored: String?) : Outcome()
+        public data class Failed(public val reason: String, public val restored: String?) : Outcome() {
+            override fun toString(): String = "Failed(reason=$reason, restored=${restored != null})" // no network name in a log (#460)
+        }
     }
 
     private val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -262,7 +266,7 @@ public class WifiProvisioner(
 
     private fun connectNow(ssid: String, password: String, hidden: Boolean?, cb: (Outcome) -> Unit) {
         ensureLocationIfDeviceOwner()
-        Log.i(TAG, "connect '$ssid' (${password.length} char password); ${status()}")
+        Log.i(TAG, "connect to the chosen network (${ssid.length} char name, ${password.length} char password); ${status()}")
         if (!wm.isWifiEnabled) return cb(Outcome.Failed("Wi-Fi is turned off", null))
 
         val loc = hasLocationAccess
@@ -273,7 +277,7 @@ public class WifiProvisioner(
 
         if (loc && wifiUpAtStart && prevSsid == ssid) {
             // Already there: don't touch the saved config (we couldn't restore its password).
-            Log.i(TAG, "already connected to '$ssid'; reporting success without changes")
+            Log.i(TAG, "already on the chosen network; reporting success without changes")
             return cb(Outcome.Connected(ssid, WifiSecurityRules.ipv4(info.ipAddress), "already-connected"))
         }
         if (!loc && wifiUpAtStart) {
@@ -286,7 +290,7 @@ public class WifiProvisioner(
         val scan = if (loc) runCatching { wm.scanResults.filter { it.SSID == ssid }.maxByOrNull { it.level } }.getOrNull() else null
         val security = WifiSecurityRules.choose(scan?.capabilities, password)
         WifiSecurityRules.validate(security, password)?.let { return cb(Outcome.Failed(it, null)) }
-        Log.i(TAG, "security=$security inScan=${scan != null} prevNetId=$prevNetId prevSsid=$prevSsid wifiUpAtStart=$wifiUpAtStart")
+        Log.i(TAG, "security=$security inScan=${scan != null} prevNetId=$prevNetId onAnother=${prevSsid != null} wifiUpAtStart=$wifiUpAtStart")
 
         val attempt = Attempt(ssid, loc, wifiUpAtStart, prevNetId, prevSsid, cb)
         job = attempt
@@ -436,7 +440,7 @@ public class WifiProvisioner(
                 return Outcome.Connected(ssid, ip, method)
             }
             if (authErrors >= 2) return failAndRestore("wrong password (authentication failed)")
-            if (SystemClock.elapsedRealtime() > deadline) return failAndRestore("timed out connecting to '$ssid'")
+            if (SystemClock.elapsedRealtime() > deadline) return failAndRestore("timed out")
             return null
         }
 

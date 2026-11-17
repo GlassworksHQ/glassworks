@@ -86,7 +86,34 @@ object HotspotAddress {
         })
     }.getOrNull()
 
+    /**
+     * [remote] is another device on the hotspot's network: an IPv4 address in the subnet of [ap], the hotspot's own
+     * address with its [prefix] length. The panel's own address doesn't count.
+     */
+    fun onSubnet(remote: String?, ap: String, prefix: Int): Boolean {
+        val r = remote?.removePrefix("::ffff:")?.let(::bits) ?: return false
+        val a = bits(ap) ?: return false
+        if (r == a || prefix !in 1..32) return false
+        val mask = (-1L shl (32 - prefix)) and 0xFFFF_FFFFL
+        return (r and mask) == (a and mask)
+    }
+
+    /** [onSubnet] for the hotspot as it is now ([now]); false while it has no address. */
+    fun isClient(remote: String?): Boolean = runCatching {
+        val ap = now() ?: return false
+        val own = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+            .flatMap { it.interfaceAddresses }.firstOrNull { it.address is Inet4Address && it.address.hostAddress == ap }
+            ?: return false
+        onSubnet(remote, ap, own.networkPrefixLength.toInt())
+    }.getOrDefault(false)
+
     private val WIFI = Regex("""(wlan|ap|swlan|softap)\d+""")
+
+    private fun bits(ip: String): Long? {
+        val o = ip.split('.').map { it.toIntOrNull() ?: return null }
+        if (o.size != 4 || o.any { it !in 0..255 }) return null
+        return o.fold(0L) { acc, b -> (acc shl 8) or b.toLong() }
+    }
 
     private fun private(ip: String): Boolean {
         val o = ip.split('.').mapNotNull { it.toIntOrNull() }

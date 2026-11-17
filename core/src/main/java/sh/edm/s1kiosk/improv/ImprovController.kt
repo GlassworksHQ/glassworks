@@ -276,7 +276,7 @@ object ImprovController {
             Log.i(TAG, "installer Wi-Fi supersedes the Improv attempt")
         }
         val seq = ++installerSeq
-        Log.i(TAG, "installer Wi-Fi: joining '$ssid'")
+        Log.i(TAG, "installer Wi-Fi: joining the chosen network")
         installerWifi = InstallerWifi(ssid, InstallerWifi.Phase.CONNECTING)
         installerJoining = true
         app.glassworks.screen.wake("installer wifi")
@@ -300,12 +300,12 @@ object ImprovController {
         settleUntil = SystemClock.elapsedRealtime() + SETTLE_MS
         val result = when (o) {
             is WifiProvisioner.Outcome.Connected -> {
-                Log.i(TAG, "installer Wi-Fi: connected to '$ssid'")
+                Log.i(TAG, "installer Wi-Fi: connected to the chosen network")
                 InstallerWifi(ssid, InstallerWifi.Phase.CONNECTED, o.ip)
             }
             is WifiProvisioner.Outcome.Failed -> {
                 val why = o.reason + (o.restored?.let { ". Back on $it" } ?: "")
-                Log.i(TAG, "installer Wi-Fi: '$ssid' failed: $why")
+                Log.i(TAG, "installer Wi-Fi: joining the chosen network failed: $o")
                 InstallerWifi(ssid, InstallerWifi.Phase.FAILED, why)
             }
         }
@@ -405,12 +405,12 @@ object ImprovController {
         when (o) {
             is WifiProvisioner.Outcome.Connected -> {
                 provisionedUrl = o.ip?.let { "http://$it:${OAuth.SIGNIN_PORT}/" }
-                Log.i(TAG, "connected to '${o.ssid}' via ${o.method}; ip=${o.ip}; redirect=$provisionedUrl")
+                Log.i(TAG, "connected to the chosen network via ${o.method}; ip=${o.ip}; redirect=$provisionedUrl")
                 s.onWifiResult(true, provisionedUrl, now)
             }
             is WifiProvisioner.Outcome.Failed -> {
                 failure = o.reason + (o.restored?.let { ". Back on $it" } ?: "")
-                Log.w(TAG, "connect failed: $failure")
+                Log.w(TAG, "connect failed: $o")
                 s.onWifiResult(false, null, now)
                 windowEndsAt = maxOf(windowEndsAt, now + 2 * 60_000L)
             }

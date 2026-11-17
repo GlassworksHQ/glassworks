@@ -125,7 +125,14 @@ object HaAuth {
                 }.getOrNull()
             },
         )
-        s.front = lan::handle
+        s.front = { req ->
+            // A request from the setup hotspot's network proves a phone joined it: the setup screen then shows the
+            // setup page's address (#460). Checked only until the first one in each run.
+            context.glassworks.setupHotspot?.let { hs ->
+                if (hs.isOn && !hs.phoneSeen && dev.glassworks.platform.HotspotAddress.isClient(req.remote)) main.post { hs.phoneJoined() }
+            }
+            lan.handle(req)
+        }
         try {
             s.start()
             server = s

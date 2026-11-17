@@ -54,8 +54,11 @@ class SetupHotspot(
 
         data object Starting : View
 
-        /** On as [network], for [leftMs] more. [asked]: from the setup screen. */
-        data class On(val network: HotspotNetwork, val leftMs: Long, val asked: Boolean) : View
+        /**
+         * On as [network], for [leftMs] more. [asked]: from the setup screen. [phone]: a phone reached the panel over
+         * it ([phoneJoined]), so the screen can show the setup page's address instead of how to join.
+         */
+        data class On(val network: HotspotNetwork, val leftMs: Long, val asked: Boolean, val phone: Boolean = false) : View
     }
 
     private val policy = SetupHotspotPolicy(clock(), graceMs, maxOnMs)
@@ -70,6 +73,10 @@ class SetupHotspot(
     /** The hotspot is up now. Any thread may read it (the setup page's pairing gate does); the rest is main-thread only. */
     @Volatile var isOn: Boolean = false
         private set
+
+    /** A phone reached the panel over this run of the hotspot ([phoneJoined]). Any thread may read it. */
+    @Volatile var phoneSeen: Boolean = false
+        private set
     private var cancelWake: (() -> Unit)? = null
     private var closed = false
 
@@ -83,7 +90,7 @@ class SetupHotspot(
         return when {
             r == null || on == null -> View.Off(policy.lastStop, error)
             net == null -> View.Starting
-            else -> View.On(net, policy.leftMs(clock()) ?: 0, on.asked)
+            else -> View.On(net, policy.leftMs(clock()) ?: 0, on.asked, phoneSeen)
         }
     }
 
@@ -128,6 +135,18 @@ class SetupHotspot(
         return true
     }
 
+    /**
+     * A device on the hotspot's network reached the panel (a request to its setup page, or a phone's captive check).
+     * Android 10 gives an app no list of a hotspot's clients, so this is the proof that a phone joined. Once per run;
+     * ignored while the hotspot isn't on.
+     */
+    fun phoneJoined() {
+        if (!isOn || phoneSeen) return
+        phoneSeen = true
+        log("setup hotspot: a phone reached the panel over it")
+        onChange()
+    }
+
     /** Stop on the setup screen, or setup finished or cancelled. */
     fun cancel() {
         policy.cancel()
@@ -161,6 +180,7 @@ class SetupHotspot(
         val mine = Run()
         run = mine
         error = null
+        phoneSeen = false
         log("setup hotspot starting")
         beforeStart {
             // Stopped (or replaced) while the scan ran: nothing to start.

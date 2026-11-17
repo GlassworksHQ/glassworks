@@ -23,15 +23,18 @@ object HotspotStep {
     }
 
     /**
-     * The step's card while the hotspot is on ([title], [body], [qr]: the text of a "join this Wi-Fi" QR code), or
-     * only a [status] line and an [action] under the Wi-Fi step's own card while it isn't.
+     * What the Wi-Fi step shows. With a [title], the hotspot fills the step's card: starting, on, or a start the person
+     * asked for that failed (#460). Without one, only a [status] line and an [action] under the Wi-Fi step's own card.
      */
     data class Card(
         /** The card's small label while on: how long it stays open. */
         val label: String? = null,
         val title: String? = null,
         val body: String? = null,
+        /** The QR code's text: how to join the hotspot, or the setup page's address once a phone is on it. */
         val qr: String? = null,
+        /** A line beside the spinner while it starts. */
+        val waiting: String? = null,
         val status: String? = null,
         val tone: Tone = Tone.MUTED,
         val action: Action? = null,
@@ -39,12 +42,19 @@ object HotspotStep {
 
     /**
      * The card for [view]. [permission]: Android's permission step, which wins over an offer to open the hotspot.
-     * [setupUrl]: the setup page on the hotspot's address, once the panel has one.
+     * [setupUrl]: the setup page on the hotspot's address, once the panel has one. [asked]: the person asked for the
+     * hotspot on the setup screen, so a failed start answers them in the card.
      */
-    fun card(view: SetupHotspot.View, permission: HotspotPermission.Step, setupUrl: String?): Card = when (view) {
-        is SetupHotspot.View.On -> Card(
-            // "within": Android may close it sooner when nobody joins (10 minutes on the S1's Android 10).
-            label = "Wi-Fi · closes within ${minutes(view.leftMs)}",
+    fun card(view: SetupHotspot.View, permission: HotspotPermission.Step, setupUrl: String?, asked: Boolean = false): Card = when (view) {
+        is SetupHotspot.View.On -> if (view.phone && setupUrl != null) Card(
+            label = label(view),
+            title = "Open the setup page.",
+            // The address on its own line, as on the join card; the network stays written for a second phone.
+            body = "Scan it on the phone, or open\n$setupUrl\nWi-Fi “${view.network.ssid}”\nPassword ${view.network.passphrase}",
+            qr = setupUrl,
+            action = Action.STOP,
+        ) else Card(
+            label = label(view),
             title = "Join the panel's Wi-Fi.",
             // Short lines that fit beside the QR code; the address alone on one, as Android would break it at a dot.
             body = "Scan it with a phone, then open\n" + (setupUrl ?: "the address that shows here") +
@@ -52,10 +62,21 @@ object HotspotStep {
             qr = view.network.qrText(),
             action = Action.STOP,
         )
-        SetupHotspot.View.Starting -> Card(status = "Looking for Wi-Fi networks, then opening the panel's own Wi-Fi…", tone = Tone.AMBER)
+        SetupHotspot.View.Starting -> Card(
+            title = "Starting the setup Wi-Fi…",
+            body = "A phone joins it to set the panel up. Its QR code shows here in a few seconds.",
+            waiting = "Looking for Wi-Fi networks, then opening it…",
+            action = Action.STOP,
+        )
         is SetupHotspot.View.Off -> when {
             permission is HotspotPermission.Step.Blocked -> Card(status = permission.why, tone = Tone.ROSE)
             permission is HotspotPermission.Step.Explain -> Card(status = permission.why, tone = Tone.AMBER, action = Action.ALLOW)
+            asked && view.error != null && view.error != HotspotFailure.NO_PERMISSION -> Card(
+                title = "The setup Wi-Fi didn't start.",
+                status = if (view.error == HotspotFailure.FAILED) "Android didn't say why." else view.error.text,
+                tone = Tone.ROSE,
+                action = if (view.error == HotspotFailure.WIFI_OFF) Action.WIFI_SETTINGS else Action.RETRY,
+            )
             view.error == HotspotFailure.WIFI_OFF -> Card(status = view.error.text, tone = Tone.ROSE, action = Action.WIFI_SETTINGS)
             view.error != null && view.error != HotspotFailure.NO_PERMISSION -> Card(status = view.error.text, tone = Tone.ROSE, action = Action.RETRY)
             view.stopped == Stop.ANDROID -> Card(
@@ -68,6 +89,9 @@ object HotspotStep {
             else -> Card(action = Action.OPEN)
         }
     }
+
+    // "within": Android may close it sooner when nobody joins (10 minutes on the S1's Android 10).
+    private fun label(on: SetupHotspot.View.On) = "Wi-Fi · closes within ${minutes(on.leftMs)}"
 
     /** Whole minutes, rounded up: the screen refreshes every 2 s, so seconds would flicker. */
     fun minutes(ms: Long): String {
