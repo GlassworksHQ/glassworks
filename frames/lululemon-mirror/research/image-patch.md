@@ -266,8 +266,8 @@ the other entry and every header as they were.
 | The rewritten jar | `unzip -t`: no errors |
 | `GW_MIRROR_SYSTEM_IMG=<image 2> npm test -w @glassworks/lululemon-mirror-installer` | Passed in 56 s: hash, patch, e2fsck as before, and the `dexdump` comparison on the flashed result |
 
-Still to do on the unit: the root's plan (flash with a throwaway key, first boot over it, the
-project key refused).
+On the unit (2026-11-17, #443's run): flashed with a throwaway key, the first boot came up over it alone. Not
+checked in that run: that the project key is refused.
 
 ## The rotation (2026-11-17)
 
