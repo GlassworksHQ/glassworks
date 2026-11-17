@@ -96,7 +96,8 @@ each one there?
 - **What failed on API 23–24:** the openWakeWord models (GitHub release assets, which redirect to
   `release-assets.githubusercontent.com`), the microWakeWord models (`raw.githubusercontent.com`), and an update's
   APK download (also a release asset). A Home Assistant on https with a Let's Encrypt certificate (DuckDNS, a
-  reverse proxy) failed the same way for the sign-in and notification pictures.
+  reverse proxy) should fail the same way for the sign-in and notification pictures (untested: inferred from the
+  same chain, as they use the same HttpsURLConnection).
 - **What worked:** the update check itself. `api.github.com` chains to USERTrust ECC, which Android 6 has. The
   Mirror's "latest none" means the check got an answer and found no usable release, not a TLS failure. The
   dashboard is not affected: GeckoView brings its own CA store.
@@ -121,7 +122,10 @@ table. To refresh or add a root:
 1. Run `tools/legacy/ca-roots.sh` to see which hosts fail on which Android.
 2. Take the new root from its CA's site, and check that it matches the copy in AOSP's `system/ca-certificates`.
 3. Paste it into `HttpsTrust.ROOTS`, update the fingerprint in `HttpsTrustTest`, and update this table.
-4. Run `tools/legacy/ca-roots.sh --with <the roots>.pem`: every row should be OK.
+4. If the new root is missing on Android 7.1 or later too, move the gate: `PlatformApi.hasIsrgRootX1` becomes a
+   query for the first Android that has every bundled root, `PlatformTest` gets its new boundary, and
+   `ca-roots.sh` gets that Android's store (add its tag to `STORES`).
+5. Run `tools/legacy/ca-roots.sh --with <the roots>.pem`: every row should be OK.
 
 The next likely one is **ISRG Root X2** (ECDSA). Let's Encrypt signs its ECDSA chains with it, but GitHub served
 RSA chains on 2026-11-16. Android has it only from Android 14, so if GitHub moves, newer Androids would fail too.

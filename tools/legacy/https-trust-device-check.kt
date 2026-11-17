@@ -66,7 +66,7 @@ class HttpsTrustDeviceCheck {
             results += with
             if (sha != null) assertEquals(true, with.endsWith(sha))
         }
-        val ip = java.net.InetAddress.getByName("raw.githubusercontent.com").hostAddress
+        val ip = java.net.InetAddress.getAllByName("raw.githubusercontent.com").first { it is java.net.Inet4Address }.hostAddress // no [] needed
         val byIp = fetch("https://$ip/", withRoots)
         Log.i("HttpsScratch", "WITH    https://<raw.githubusercontent.com's IP>/ (chain to X1, name doesn't match) -> $byIp")
         assertEquals(true, byIp.contains("SSLPeerUnverifiedException") || byIp.contains("Hostname"))
