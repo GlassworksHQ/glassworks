@@ -12,8 +12,10 @@ data class HaSeen(val origin: String, val uuid: String)
 
 /**
  * What the stored sign-in does when the dashboard's Home Assistant ([decide]'s `base`) is somewhere else (#467).
- * DHCP can move Home Assistant to a new address that discovery finds. The sign-in follows only once the uuid
- * stored with it matches the uuid seen at the new address, so no token goes to an address that isn't confirmed.
+ * DHCP can move Home Assistant to a new address that discovery finds. The sign-in follows by itself only from https
+ * to https, where the certificate proves the host, and only where the uuid stored with it answers. On http nothing
+ * proves which device answers: the uuid is public in mDNS, and anything on the LAN can advertise it. So a moved
+ * http Home Assistant always means signing in again, and no token goes to an address that isn't confirmed.
  */
 sealed interface SignInMove {
     /** The sign-in is for the dashboard's address, or there is no address to compare. */
@@ -22,10 +24,10 @@ sealed interface SignInMove {
     /** The sign-in's own address, and the panel learnt that Home Assistant's [uuid] (a sign-in from before #467). */
     data class Learn(val uuid: String) : SignInMove
 
-    /** The same Home Assistant answers at [base] now: the sign-in moves there. */
+    /** The same Home Assistant answers at [base] now, both addresses https: the sign-in moves there. */
     data class Move(val base: String) : SignInMove
 
-    /** Not confirmed as the sign-in's Home Assistant (another address, or another uuid here): the person signs in again. */
+    /** Not confirmed as the sign-in's Home Assistant (another address on http, another uuid): the person signs in again. */
     data object Unconfirmed : SignInMove
 
     companion object {
@@ -39,8 +41,8 @@ sealed interface SignInMove {
                     else -> Unconfirmed // another Home Assistant took the sign-in's own address
                 }
             }
-            val sameScheme = scheme(auth.haBase) == scheme(to)
-            return if (auth.haUuid != null && auth.haUuid == at && sameScheme) Move(to) else Unconfirmed
+            val https = scheme(auth.haBase) == "https" && scheme(to) == "https"
+            return if (https && auth.haUuid != null && auth.haUuid == at) Move(to) else Unconfirmed
         }
 
         private fun scheme(url: String) = runCatching { URI(url).scheme?.lowercase() }.getOrNull()
@@ -49,7 +51,7 @@ sealed interface SignInMove {
 
 /**
  * The stored sign-in ([load], [save]) kept with its Home Assistant: [now] learns HA's uuid at the sign-in's own
- * address and moves the sign-in where the same uuid answers ([SignInMove]), against the dashboard's address
+ * address and moves the sign-in where the same uuid answers over https ([SignInMove]), against the dashboard's address
  * ([base]) and what discovery saw ([seen]). Idempotent, so every reader of the sign-in's address goes through it.
  * [log] gets each change once, without addresses or tokens.
  */
@@ -93,7 +95,7 @@ class FollowedSignIn(
         logged = move
         when (move) {
             is SignInMove.Learn -> log("Sign-in: learnt which Home Assistant it is for (its uuid, from mDNS)")
-            is SignInMove.Move -> log("Sign-in moved to Home Assistant's new address: the same Home Assistant (uuid) answers there")
+            is SignInMove.Move -> log("Sign-in moved to Home Assistant's new https address: the same Home Assistant (uuid) answers there")
             SignInMove.Unconfirmed -> log("Home Assistant is at another address than the sign-in's, and the panel can't confirm " +
                 "it's the same one: asking to sign in again, no token sent")
             SignInMove.Stay -> if (was == SignInMove.Unconfirmed) log("Home Assistant is back at the sign-in's address")

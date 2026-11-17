@@ -451,8 +451,9 @@ class MainActivity : Activity() {
     /** Every step a preview can show: all the panes' steps, as if every pane were on. */
     private fun previewFlow() = SetupFlow.ids(setupPanes.isNotEmpty(), paneSteps.map { it.id })
 
-    private fun setupModel(d: sh.edm.s1kiosk.setup.SetupDecision, step: String, done: Set<String>, preview: Boolean) =
-        SetupOverlay.Model(
+    private fun setupModel(d: sh.edm.s1kiosk.setup.SetupDecision, step: String, done: Set<String>, preview: Boolean): SetupOverlay.Model {
+        val moved = HaAuth.movedAway
+        return SetupOverlay.Model(
             step = step,
             done = done,
             improv = d.improv,
@@ -461,11 +462,12 @@ class MainActivity : Activity() {
             haUrl = prefs.haBase,
             haSource = if (prefs.isAutoUrl) prefs.haUrlSource else "",
             panelIp = HaUrls.localIpv4(),
-            signedIn = HaAuth.signedIn,
-            signinMoved = !preview && HaAuth.movedAway,
+            signedIn = HaAuth.signedIn && !moved,
+            signinMoved = !preview && moved,
             preview = preview,
             hotspot = if (preview) null else hotspotCard(),
         )
+    }
 
     // ---- setup: the panel's own Wi-Fi (#197)
 

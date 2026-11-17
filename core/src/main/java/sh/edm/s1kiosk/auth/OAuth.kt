@@ -247,7 +247,8 @@ class AccessTokenCache(private val marginMs: Long = 60_000L, private val clock: 
  * by ([HaSeen]), null until the panel saw it at [haBase] (a sign-in from before #467, or HA not seen over mDNS).
  */
 data class StoredAuth(val haBase: String, val clientId: String, val refreshToken: String, val haUuid: String? = null) {
-    override fun toString() = "StoredAuth(haBase=$haBase, clientId=$clientId, refreshToken=<redacted>, haUuid=$haUuid)"
+    override fun toString() =
+        "StoredAuth(haBase=$haBase, clientId=$clientId, refreshToken=<redacted>, haUuid=${if (haUuid == null) "none" else "<redacted>"})"
 }
 
 /**

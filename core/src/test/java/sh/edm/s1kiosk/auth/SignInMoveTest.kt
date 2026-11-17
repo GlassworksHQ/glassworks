@@ -7,12 +7,15 @@ import org.junit.Test
 import sh.edm.s1kiosk.SignInNotStored
 
 /**
- * #467: DHCP moves Home Assistant, and discovery finds it at a new address. The sign-in follows only where the same
- * Home Assistant (its mDNS uuid) answers, and no token goes to an address before that is confirmed. RFC 5737 hosts.
+ * #467: DHCP moves Home Assistant, and discovery finds it at a new address. The sign-in follows only from https to
+ * https where the same Home Assistant (its mDNS uuid) answers, and no token goes to an address before that is
+ * confirmed. On http it never follows: the uuid is public, so anything on the LAN can claim it. RFC 5737 hosts.
  */
 class SignInMoveTest {
-    private val old = "http://192.0.2.20:8123"
-    private val new = "http://192.0.2.21:8123"
+    private val old = "https://192.0.2.20:8123"
+    private val new = "https://192.0.2.21:8123"
+    private val oldHttp = "http://192.0.2.20:8123"
+    private val newHttp = "http://192.0.2.21:8123"
     private val ours = "0123456789abcdef0123456789abcdef"
     private val other = "fedcba9876543210fedcba9876543210"
     private val token = "made-up-refresh-token"
@@ -29,9 +32,17 @@ class SignInMoveTest {
         // The uuid was seen at another address than the dashboard's.
         assertEquals(SignInMove.Unconfirmed, SignInMove.decide(auth(), new, HaSeen("http://192.0.2.22:8123", ours)))
         // Never from https to http, whatever the uuid says.
-        assertEquals(SignInMove.Unconfirmed, SignInMove.decide(auth("https://192.0.2.20:8123"), new, HaSeen(new, ours)))
+        assertEquals(SignInMove.Unconfirmed, SignInMove.decide(auth(), newHttp, HaSeen(newHttp, ours)))
         // Another Home Assistant took the sign-in's own address.
         assertEquals(SignInMove.Unconfirmed, SignInMove.decide(auth(), old, HaSeen(old, other)))
+    }
+
+    @Test fun onHttpTheSameUuidNeverMovesTheSignIn() {
+        // A device on the LAN can advertise Home Assistant's uuid with its own address: only a certificate proves the host.
+        assertEquals(SignInMove.Unconfirmed, SignInMove.decide(auth(oldHttp), newHttp, HaSeen(newHttp, ours)))
+        assertEquals(SignInMove.Unconfirmed, SignInMove.decide(auth(oldHttp), new, HaSeen(new, ours)))
+        // Learning stores the uuid and sends nothing, so it stays on http.
+        assertEquals(SignInMove.Learn(ours), SignInMove.decide(auth(oldHttp, uuid = null), oldHttp, HaSeen(oldHttp, ours)))
     }
 
     @Test fun atItsOwnAddressTheSignInStays() {
@@ -82,6 +93,13 @@ class SignInMoveTest {
         assertEquals(auth(base = new), p.stored)
     }
 
+    @Test fun onHttpNoTokenGoesToAnAddressThatClaimsTheUuid() {
+        val p = Panel(auth(oldHttp), base = newHttp, seen = HaSeen(newHttp, ours))
+        assertNull(p.refresh())
+        assertEquals(emptyList<String>(), p.posts)
+        assertEquals(auth(oldHttp), p.stored)
+    }
+
     @Test fun aSignInFromBeforeLearnsItsUuidThenFollows() {
         val p = Panel(auth(uuid = null), base = new, seen = HaSeen(new, ours))
         assertNull("not known as ours yet", p.refresh())
@@ -111,6 +129,7 @@ class SignInMoveTest {
         repeat(3) { p.home.now() }
         assertEquals(2, p.log.size)
         assertTrue(p.log.toString(), p.log.none { "192.0.2" in it || token in it || ours in it })
+        assertTrue(auth().toString(), ours !in auth().toString() && token !in auth().toString())
     }
 
     @Test fun aNewSignInKeepsTheUuidSeenAtItsAddress() {

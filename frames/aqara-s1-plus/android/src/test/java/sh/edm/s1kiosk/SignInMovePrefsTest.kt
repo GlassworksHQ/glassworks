@@ -22,15 +22,15 @@ import java.io.File
 
 /**
  * #467 over the real files: Home Assistant's uuid is kept with the address discovery found and with the sign-in, a
- * sign-in stored before #467 (no `ha_uuid` in `auth.xml`) learns it at its own address, and a move keeps the sealed
+ * sign-in stored before #467 (no `ha_uuid` in `auth.xml`) learns it at its own address, and an https move keeps the sealed
  * refresh token. The sign-in follows HaAuth's wiring ([KioskPrefs.haBase], [KioskPrefs.haUrlUuid]). RFC 5737 hosts.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class SignInMovePrefsTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val old = "http://192.0.2.20:8123"
-    private val new = "http://192.0.2.21:8123"
+    private val old = "https://192.0.2.20:8123"
+    private val new = "https://192.0.2.21:8123"
     private val ours = "0123456789abcdef0123456789abcdef"
     private val token = "made-up-refresh-token-0f1e2d3c"
 
