@@ -4,7 +4,7 @@
 import lockup from '@glassworks/brand/lockup-on-dark.svg?raw';
 import { useState, useSyncExternalStore } from 'react';
 import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
-import type { LanSession, LanView, RailStep } from './lanSession';
+import { FULL_RAIL, type LanSession, type LanView, type RailStep } from './lanSession';
 import { PanelStack, type PlateLook } from './PanelStack';
 
 const LOCKUP = `data:image/svg+xml,${encodeURIComponent(lockup)}`;
@@ -100,8 +100,10 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
 export function LanPage({ lan }: { lan: LanSession }) {
   const st = useSyncExternalStore(lan.subscribe, lan.get, lan.get);
   const v = st.view;
-  const rail = st.rail;
-  const at = v.at === 'done' ? rail.length - 1 : Math.max(0, rail.indexOf(stepOf(v)));
+  const step = stepOf(v);
+  // On a step the rail doesn't list, the rail is out of date (the panel showed a radio step after all): list them all
+  const rail = st.rail.includes(step) ? st.rail : FULL_RAIL;
+  const at = rail.indexOf(step);
   const paired = v.at === 'setup' || v.at === 'done';
   const looks = stackLooks(v, at, rail.length);
   return (

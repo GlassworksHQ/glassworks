@@ -41,9 +41,9 @@ object AuthLog {
  *    the refresh token. The phone sees "Panel signed in ✓".
  *
  * The setup page (`/setup`, #453) starts the same flow in its own tab with `[CONTINUE]?then=setup`. That
- * sign-in is bound to the browser with a cookie holding its state, and its callback sends the browser back
- * to the setup page ([SETUP_RETURN]) instead of showing the done page. A callback for it without that
- * cookie is refused before the code is used.
+ * sign-in is bound to the browser with a cookie named for its state ([handOffCookie]), and its callback sends
+ * the browser back to the setup page ([SETUP_RETURN]) instead of showing the done page. A callback for it
+ * without that cookie is refused before the code is used. The QR code's own sign-in is not bound, as before.
  *
  * `/thread` and `/thread/callback` are the same flow for [ThreadJoin]: an administrator signs in once
  * so the panel can read HA's Thread dataset; the tokens are revoked right after. `/thread` only works
@@ -156,9 +156,10 @@ class SignInServer(
         val toSetup = req.query["then"] == THEN_SETUP
         val sign = states.create(clientId, redirect, ha, toSetup = toSetup)
         val location = OAuth.authorizeUrl(ha, clientId, redirect, sign.state, sign.codeChallenge)
-        // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. It outlives
-        // the state (10 minutes), so a sign-in that ran out still shows the way back to setup.
-        val bind = if (toSetup) mapOf("Set-Cookie" to "$HANDOFF=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
+        // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. One per
+        // sign-in, so starting another (or a cross-site GET starting one) never replaces it. It outlives the state
+        // (10 minutes), so a sign-in that ran out still shows the way back to setup.
+        val bind = if (toSetup) mapOf("Set-Cookie" to "${handOffCookie(sign.state)}=1; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
         return Response(
             302, "Found",
             mapOf("Location" to location, "Cache-Control" to "no-store", "Content-Type" to "text/plain; charset=utf-8") + bind,
@@ -166,26 +167,37 @@ class SignInServer(
         )
     }
 
+    /** Every way out of a callback lets its binding cookie go: the sign-in it binds is over. */
     private fun callback(req: Request): Response {
-        val q = req.query
-        val handOff = cookie(req, HANDOFF)
-        // Started on the setup page: every way out of here leads back to it.
-        val back = if (handOff != null) BACK_TO_SETUP else ""
-        val again = if (handOff != null) "Go back to setup and sign in again." else "Scan the code to try again."
+        val state = req.query["state"]?.takeIf { it.isNotEmpty() }
+        val bound = state != null && cookie(req, handOffCookie(state)) != null
+        val pending = states.consume(state, PendingSignIn.PURPOSE_SIGNIN)
+        val r = callback(req.query, pending, bound)
+        if (!bound) return r
+        val clear = "${handOffCookie(state!!)}=; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=0"
+        return Response(r.status, r.reason, r.headers + ("Set-Cookie" to clear), r.body)
+    }
+
+    private fun callback(q: Map<String, String>, pending: PendingSignIn?, bound: Boolean): Response {
+        // Started on the setup page: every way out of here leads back to it. A sign-in the panel still knows says
+        // where it started; one it doesn't (run out) has only its cookie to say so.
+        val setup = pending?.toSetup ?: bound
+        val back = if (setup) BACK_TO_SETUP else ""
+        val again = if (setup) "Go back to setup and sign in again." else "Scan the code to try again."
         q["error"]?.let { err ->
             return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. $again", button = back)
         }
-        val pending = states.consume(q["state"], PendingSignIn.PURPOSE_SIGNIN)
-            ?: return expired(back)
-        // Another browser finishing the setup page's sign-in (login CSRF): refused, the code is not used.
-        if (pending.toSetup && handOff != q["state"]) return page(403, "Forbidden", "Can't sign in",
-            "This sign-in was started in another browser. Start it again from the setup page, in this browser.")
+        pending ?: return expired(back)
+        // Another browser finishing the setup page's sign-in (login CSRF): refused, the code is not used. Usually an
+        // in-app browser that handed HA's login to the default one: the way back starts it again there.
+        if (pending.toSetup && !bound) return page(403, "Forbidden", "Can't sign in",
+            "This sign-in was started in another browser. Start it again from the setup page, in this browser.", button = back)
         val code = q["code"]?.takeIf { it.isNotEmpty() }
             ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. $again", button = back)
         return when (val r = tokens.exchangeCode(pending.haBase, pending.clientId, code, pending.codeVerifier)) {
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
-                    ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't return a refresh token.")
+                    ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't return a refresh token.", button = back)
                 try {
                     onSignedIn(StoredAuth(pending.haBase, pending.clientId, rt), r)
                 } catch (t: Throwable) {
@@ -203,7 +215,7 @@ class SignInServer(
                 when {
                     r.isInvalidCode -> expired(back)
                     r.httpStatus <= 0 -> page(502, "Bad Gateway", "Can't reach Home Assistant",
-                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${if (handOff != null) "sign in again from setup" else "scan the code again"}.", button = back)
+                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${if (setup) "sign in again from setup" else "scan the code again"}.", button = back)
                     else -> page(502, "Bad Gateway", "Can't sign in",
                         "Home Assistant refused the sign-in (${esc(r.code)}). $again", button = back)
                 }
@@ -238,8 +250,7 @@ class SignInServer(
      */
     private fun backToSetup() = Response(
         200, "OK",
-        mapOf("Content-Type" to "text/html; charset=utf-8", "Cache-Control" to "no-store",
-            "Set-Cookie" to "$HANDOFF=; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=0") + PageShell.securityHeaders(formAction = "'none'"),
+        mapOf("Content-Type" to "text/html; charset=utf-8", "Cache-Control" to "no-store") + PageShell.securityHeaders(formAction = "'none'"),
         PageShell.document(PageShell.PRODUCT_NAME, "", """<meta http-equiv="refresh" content="0;url=$SETUP_RETURN">""").toByteArray(Charsets.UTF_8),
     )
 
@@ -337,8 +348,8 @@ class SignInServer(
         /** Where a sign-in from the setup page ends: the page, which carries on after Home Assistant. */
         const val SETUP_RETURN = "/setup#signed-in"
 
-        /** The cookie that binds a setup page's sign-in to its browser: the sign-in's state. */
-        const val HANDOFF = "gw_signin"
+        /** The cookie that binds a setup page's sign-in to its browser, named for the sign-in's state (base64url). */
+        fun handOffCookie(state: String) = "gw_signin_$state"
 
         private const val BACK_TO_SETUP = """<a class="btn" href="/setup">Back to setup</a>"""
 

@@ -58,6 +58,16 @@ export const DONE = '/setup/done';
 export const SIGN_IN_HERE = '/signin/continue?then=setup';
 export const BACK_FROM_SIGN_IN = '#signed-in';
 
+/**
+ * Whether this load came back from the panel's sign-in. Takes the mark off the address, so a reload starts where
+ * the panel is instead of handing off again.
+ */
+export function cameBackFromSignIn(loc: Pick<Location, 'hash' | 'pathname' | 'search'>, history: Pick<History, 'replaceState'>): boolean {
+  if (loc.hash !== BACK_FROM_SIGN_IN) return false;
+  history.replaceState(null, '', loc.pathname + loc.search);
+  return true;
+}
+
 /** The note when the panel ended the pairing under the page: it lasts 30 minutes without a change. */
 export const RAN_OUT = 'The pairing ran out: it lasts 30 minutes without a change. Pair again to carry on where you were.';
 
