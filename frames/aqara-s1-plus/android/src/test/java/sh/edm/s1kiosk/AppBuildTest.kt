@@ -102,7 +102,7 @@ class AppBuildTest {
     }
 
     @Test fun theSettingsMenuShowsTheGivenBuild() {
-        val model = S1Settings.model(runtime, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {})
+        val model = S1Settings.model(runtime, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {}, context = app)
         assertEquals("9.8.7 · test build f00ba47", model.version)
         val about = model.sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
         assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", about.title())
@@ -118,7 +118,7 @@ class AppBuildTest {
         assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.ble(r.frame, other).take(2))
         assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.serial(r.frame, other).take(2))
         assertEquals("Glassworks", UpdateManager(app, r) {}.also { stops += it::stop }.model.title)
-        val about = S1Settings.model(r, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {})
+        val about = S1Settings.model(r, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {}, context = app)
             .sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
         assertEquals("Glassworks 9.8.7 · test build f00ba47", about.title())
 

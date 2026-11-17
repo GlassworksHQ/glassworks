@@ -10,6 +10,7 @@ import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.withHaLink
 import dev.glassworks.pane.settingsOrder
 import dev.glassworks.diagnostics.DiagnosticsDefinition
+import dev.glassworks.screen.ScreenHardware
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.WallBaseDefinition
@@ -23,6 +24,9 @@ import sh.edm.s1kiosk.radio.RadioDefinition
  * (#63 D6: the rail's Panes group and "Panes ›").
  */
 object MenuFixture {
+    /** The S1: its own ranged presence sensor, a light sensor and touch. */
+    val S1_HARDWARE = ScreenHardware(ScreenHardware.Presence.Sensor(ranged = true), light = true, touch = true)
+
     /** Voice and Music as the app has them: a card on setup's Panes step and no settings of their own. */
     fun cardOnly(id: String, title: String, detail: String, on: () -> Boolean = { true }, apply: (Boolean) -> String? = { null }) =
         object : PaneDefinition {
@@ -50,12 +54,15 @@ object MenuFixture {
         link: () -> HaLink = { HaLink.CONNECTED },
         /** The panel's Wi-Fi address, as "Allow setup over the network" says it; none by default. */
         panelIp: () -> String? = { null },
+        /** What the device has for the Screen page; the S1's by default. */
+        hardware: ScreenHardware = S1_HARDWARE,
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
             deviceSettings = if (deviceSettings) SettingsItem.Link(AqaraS1Plus.SETTINGS_TITLE, SettingsMenu.DEVICE_SETTINGS_DETAIL) {} else null,
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             live = live,
+            hardware = hardware,
             account = { account },
             panelIp = panelIp,
         )

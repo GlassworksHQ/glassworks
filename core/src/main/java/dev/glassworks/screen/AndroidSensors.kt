@@ -56,6 +56,8 @@ class AmbientLight(private val logTag: String) : LightSource {
     }
 
     override fun stop(context: Context) = unregister(context, registered).also { registered = null }
+
+    override fun available(context: Context): Boolean = sensor(context, Sensor.TYPE_LIGHT) != null
 }
 
 private fun sensor(context: Context, type: Int): Sensor? =

@@ -34,6 +34,9 @@ class Vi5300Presence(
 
     private var registered: SensorEventListener? = null
 
+    /** Lumi's threshold table: the Screen settings' Presence range. */
+    override val ranged = true
+
     /**
      * The S1 app also runs on devices without the S1's sensor (a tablet, until #23). Only the VI5300
      * counts: this source reads 1.0 as near, and another device's proximity sensor reports a distance.

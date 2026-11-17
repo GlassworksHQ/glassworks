@@ -208,6 +208,15 @@ class GenericAppTest {
         assertNotNull(runtime().screen)
     }
 
+    @Test fun theScreenPageHasNothingOfTheS1sSensors() {
+        // A tablet with no proximity or light sensor, as Robolectric's: #471, seen on the Pixel Tablet on 2026-11-17.
+        val runtime = runtime()
+        val screen = S1Settings.model(runtime, KioskPrefs(app), runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
+            .sections.single { it.id == "screen" }.items.map(dev.glassworks.pane.SettingsChange::titleOf)
+        for (row in listOf("Presence range", "Brightness")) assertFalse(screen.toString(), row in screen)
+        assertTrue(screen.toString(), "Turn off when idle" in screen)
+    }
+
     @Test fun aTabletRunsTheBaseSetAndAnnouncesItselfAsGlassworks() {
         val runtime = runtime()
         val definitions = runtime.paneDefinitions(app)

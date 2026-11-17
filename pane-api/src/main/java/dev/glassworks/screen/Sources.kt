@@ -22,6 +22,9 @@ interface PresenceSource {
 
     /** Whether this device has the sensor. A frame's source can be wrong about a device it wasn't made for. */
     fun available(context: Context): Boolean = true
+
+    /** Whether [setRange] can change how far it sees. A standard proximity sensor's range is fixed by its hardware. */
+    val ranged: Boolean get() = false
 }
 
 /** Ambient light for [ScreenPolicy]'s brightness curve. */
@@ -31,6 +34,9 @@ interface LightSource {
 
     /** Stops reporting. [start] may run again. */
     fun stop(context: Context)
+
+    /** Whether this device has the sensor. */
+    fun available(context: Context): Boolean = true
 }
 
 /** What [ScreenPolicy] reads on every decision. The app keeps these in its own settings file under its own keys. */
