@@ -372,7 +372,8 @@ below as the release notes.
 - **The panel asks to sign in again when Home Assistant gets a new address.** If your router gave Home
   Assistant a new address, or you turned on https, the dashboard showed Home Assistant's login page, which a
   panel without touch can't use. Now the setup screen shows the sign-in code and says Home Assistant moved.
-  The panel sends its sign-in to neither address until you scan the code.
+  The panel never sends its sign-in to the new address, and the phone's setup page and Manage say it isn't
+  signed in.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.

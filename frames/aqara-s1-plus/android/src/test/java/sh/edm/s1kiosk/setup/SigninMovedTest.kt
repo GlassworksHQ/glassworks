@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import dev.glassworks.frame.Input
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -27,9 +28,9 @@ class SigninMovedTest {
     private val moved = "Home Assistant moved to a new address. Sign in again."
     private val online = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi")
 
-    private fun screen(input: Input, signinMoved: Boolean): SetupOverlay {
+    private fun screen(input: Input, signinMoved: Boolean, setUp: (SetupOverlay) -> Unit = {}): SetupOverlay {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a).also { it.input = input }
+        val s = s1SetupOverlay(a).also { it.input = input }.also(setUp)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(step = SetupFlow.SIGNIN, done = setOf(SetupFlow.WIFI, SetupFlow.HA), wifi = online,
             haUrl = "http://192.0.2.20:8123", haSource = "mdns", panelIp = "192.0.2.10", signedIn = true, signinMoved = signinMoved))
@@ -49,6 +50,22 @@ class SigninMovedTest {
             assertTrue("$input: $t", "Scan to sign in." in t)
             assertTrue("$input: $t", moved in t)
         }
+    }
+
+    /**
+     * #484's rule on a no-touch frame without a presence sensor: only setup can light the screen. Home Assistant added
+     * this panel before (its step is done), but after a move only a person scanning the code can sign it in, so the
+     * Sign in step wakes the screen and keeps it on (MainActivity's stayOn reads [SetupOverlay.needsHomeAssistant]).
+     */
+    @Test fun aNoTouchScreenWakesAndStaysOnForTheMovedSignIn() {
+        val wakes = ArrayList<String>()
+        val s = screen(Input.NONE, signinMoved = true) { it.presenceSensor = false; it.wakeScreen = { r -> wakes += r } }
+        assertEquals(listOf("setup"), wakes)
+        assertTrue("kept on", s.needsHomeAssistant)
+
+        val calm = screen(Input.NONE, signinMoved = false) { it.presenceSensor = false; it.wakeScreen = { r -> wakes += r } }
+        assertEquals("a set-up panel's Sign in step otherwise stays dark", listOf("setup"), wakes)
+        assertFalse(calm.needsHomeAssistant)
     }
 
     @Test fun aFirstSignInKeepsItsUsualLine() {

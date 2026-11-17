@@ -406,8 +406,13 @@ This is the part that removes the login screen. Implemented in `auth/` (`OAuth.k
   dashboard's Home Assistant has another origin (DHCP moved it and discovery found the new address, or https
   was turned on at the same host), the panel asks to sign in again: the Sign-in step shows instead of HA's
   login page, with "Home Assistant moved to a new address. Sign in again.", and its QR code works on a frame
-  without touch. Until then its token goes to neither address: no refresh, no cached token, no revoke. The
-  panel never follows a move by itself, because discovery can't prove which device answers at the new
+  without touch. On a screen nothing else can wake, the step wakes it and keeps it on. The phone's setup page
+  and Manage say the dashboard isn't signed in and offer the sign-in, HA's *Signed in* sensor says `no`, and
+  the settings menu drops its Dashboard sign-in row, as with no sign-in.
+- The token goes to no address other than the one the sign-in is for. While the dashboard is elsewhere it
+  goes nowhere: no refresh, no cached token, no revoke. Signing in again stores a new sign-in. The old refresh
+  token stays in the old Home Assistant, under your profile, Security, Refresh tokens, where you can delete it.
+- The panel never follows a move by itself, because discovery can't prove which device answers at the new
   address. HA's mDNS `uuid` is public, and anything on the LAN can advertise it with its own `internal_url`
   and a copy of `/manifest.json`.
 

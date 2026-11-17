@@ -66,13 +66,18 @@ object HaAuth {
         if (!::prefs.isInitialized) prefs = KioskPrefs(context.applicationContext)
     }
 
-    val signedIn: Boolean get() = ::prefs.isInitialized && prefs.hasAuth
+    /**
+     * Signed in to the dashboard's Home Assistant: what every screen means by "signed in" (the setup screen, the
+     * phone's setup page, Manage, the settings menu, HA's *Signed in* sensor). False after Home Assistant moved
+     * ([movedAway]), although the old sign-in is still stored (#467).
+     */
+    val signedIn: Boolean get() = stored != null
 
-    /** The HA base URL the stored token belongs to, if signed in. */
+    /** The HA base URL the stored token belongs to, if a sign-in is stored (also after a move). */
     val signedInBase: String? get() = if (::prefs.isInitialized) prefs.auth?.haBase else null
 
-    /** The stored sign-in, if any (its token is redacted from toString). */
-    val stored: StoredAuth? get() = if (::prefs.isInitialized) prefs.auth else null
+    /** The stored sign-in, if it is for the dashboard's Home Assistant (see [signedIn]); its token is redacted from toString. */
+    val stored: StoredAuth? get() = if (::prefs.isInitialized) prefs.auth?.takeIf { it.isFor(prefs.haBase) } else null
 
     /**
      * Signed in, but the dashboard's Home Assistant is at another address than the sign-in's ([StoredAuth.isFor]):
