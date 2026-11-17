@@ -8,6 +8,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT=${1:?usage: build.sh <out-dir>}
 SDK=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}
+# A CI SDK from setup-android may have no build-tools yet (Gradle fetches them later): install one then.
+if ! ls -d "$SDK"/build-tools/* >/dev/null 2>&1 && command -v sdkmanager >/dev/null; then
+  sdkmanager --install "build-tools;36.0.0" >/dev/null
+fi
 BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -n 1)"
 JAR="$(ls -d "$SDK"/platforms/android-* | sort -V | tail -n 1)/android.jar"
 [ -f "$JAR" ] || { echo "no android.jar under $SDK/platforms" >&2; exit 1; }
