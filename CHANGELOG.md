@@ -289,7 +289,8 @@ below as the release notes.
   not download the wake word models, and would have failed to download an update: their built-in list of
   trusted certificate authorities is missing the one GitHub's downloads use. The app now adds that one
   certificate authority on those Android versions, and checks certificates as before. Android 7.1 and
-  newer are unchanged.
+  newer are unchanged. A device without the fix can't download it either, so install this version with
+  Kiln over USB.
 - **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its

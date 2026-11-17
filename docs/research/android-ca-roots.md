@@ -1,3 +1,8 @@
+---
+topic: android
+evidence: verified
+---
+
 # Android CA roots: which roots Android 6 and 7.0 lack for the hosts the app fetches from
 
 **Status (2026-11-17): working.** Android 6.0.1 and 7.0 lack **ISRG Root X1**. GitHub serves its download
@@ -45,7 +50,7 @@ each one there?
    | 7.1 (API 25) | `platform/system/ca-certificates` `android-7.1.0_r1`, `files` | `465b0d8` | 156 | yes (`6187b673.0`) | yes |
 
 3. **Each chain against each store** (2026-11-16, verified, `tools/legacy/ca-roots.sh`): `openssl verify` with
-   only that store as its CA file.
+   only that store as its CA file (`-no-CAfile -no-CApath -no-CAstore`, so the computer's own roots don't count).
 
    | Host | Root it chains to | 6.0.1 (API 23) | 7.0 (API 24) | 7.1 (API 25) |
    |---|---|---|---|---|

@@ -15,6 +15,9 @@ HOSTS=${HOSTS:-"github.com api.github.com release-assets.githubusercontent.com r
 EXTRA=""
 [ "${1:-}" = "--with" ] && EXTRA=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
 
+# Only the store under test: OpenSSL 3 also reads a default CA store unless told not to (-no-CAstore).
+NOSTORE=$(openssl verify -help 2>&1 | grep -q -- '-no-CAstore' && echo -no-CAstore || :)
+
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 cd "$work"
@@ -42,7 +45,7 @@ for h in $HOSTS; do
     top=$(openssl x509 -in "$last" -noout -issuer | sed 's/.*CN *= *//')
     printf '| %s | %s |' "$h" "$top"
     echo "$STORES" | while read -r name _; do
-        if openssl verify -no-CApath -no-CAfile -CAfile "$name.pem" -untrusted "$h.chain.pem" "$h.1.pem" >/dev/null 2>&1
+        if openssl verify -no-CApath -no-CAfile $NOSTORE -CAfile "$name.pem" -untrusted "$h.chain.pem" "$h.1.pem" >/dev/null 2>&1
         then printf ' OK |'; else printf ' **fails** |'; fi
     done
     echo
