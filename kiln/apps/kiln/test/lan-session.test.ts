@@ -21,6 +21,8 @@ function fakePanel({ open = true, online = undefined as boolean | undefined, rad
     paired: false,
     /** Every channel the page opens fails its first request (it opens, then nothing answers). */
     channelDead: false,
+    /** Every request after this many fails, on this channel and any new one. */
+    deadAfter: undefined as number | undefined,
     /** The panel refuses to end the session (a network error on /setup/done). */
     doneFails: false,
     /** /setup/done answers this instead of ending the session. */
@@ -68,7 +70,7 @@ function fakePanel({ open = true, online = undefined as boolean | undefined, rad
         onData: (f) => { cb = f; },
         close: async () => { panel.closedChannels++; },
         write: async (d) => {
-          if (panel.channelDead) throw new Error('the connection dropped');
+          if (panel.channelDead || (panel.deadAfter !== undefined && panel.asked.length >= panel.deadAfter)) throw new Error('the connection dropped');
           for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
             const m = JSON.parse(line);
             panel.asked.push(m.op);
@@ -397,6 +399,19 @@ describe('the panel\'s setup page', () => {
       await lan.start();
       expect(lan.state.view).toMatchObject({ at: 'lost' });
       panel.channelDead = false;
+      await lan.retry();
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('back from it, the panel lost at the radio step: Try again still lands on Radio', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true };
+      panel.deadAfter = 2; // the state reads after the return work, the radio step's own doesn't
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'lost' });
+      panel.deadAfter = undefined;
       await lan.retry();
       expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
     });

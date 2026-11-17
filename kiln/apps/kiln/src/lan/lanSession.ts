@@ -216,7 +216,7 @@ export class LanSession implements SetupSteps, WifiSteps {
     else if (back === 'ha') await this.steps.homeAssistant();
     else await this.steps.wifi(); // an offline panel (on its setup hotspot) starts with Wi-Fi, one on a network with HA
     // kept until the step opened: Try again after a lost panel goes back there, not to the start
-    if (this.resume === back) this.resume = undefined;
+    if (this.resume === back && this.state.view.at !== 'lost') this.resume = undefined;
   }
 
   wifi(): Promise<void> { return this.steps.wifi(); }
