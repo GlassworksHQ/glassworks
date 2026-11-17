@@ -106,7 +106,7 @@ object UsbDebugging {
                     while (synchronized(this) { running && generation == mine }) {
                         try {
                             val p = logcat()
-                            // following with the process, under the lock: a stop() in between can't leave it true.
+                            // Set in the same lock as the generation check: set after it, a stop() in between would leave it true.
                             val keep = synchronized(this) { if (running && generation == mine) { process = p; following = true; true } else false }
                             if (!keep) { p.destroy(); return@Thread }
                             BufferedReader(InputStreamReader(p.inputStream)).useLines { lines ->
