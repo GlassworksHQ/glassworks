@@ -510,7 +510,7 @@ What Phase B added for the Mirror, from the device and not from frame code (`Gen
 
 | What | How | Tested |
 |---|---|---|
-| Portrait glass | `Frame.orientation`: the screen's natural orientation (rotation 0), which `ro.sf.hwrotation=270` makes portrait on the Mirror. `MainActivity` asks for it, either way up, at start. The S1's frame keeps landscape, as its manifest asks | `OrientationTest` (the S1 unchanged; a portrait screen gets portrait); `GenericAndroidDisplayTest` |
+| Portrait glass | `Frame.orientation` is `ANY` on the Mirror: the app follows Android's rotation (`SCREEN_ORIENTATION_FULL_USER`), and the Mirror's Android stands portrait (`ro.sf.hwrotation=270`, auto-rotate off). The S1's frame keeps landscape, as its manifest asks. Phase B first used the screen at rotation 0, which held a Pixel Tablet portrait on its dock (2026-11-16) | `OrientationTest` (the S1, the Pixel Tablet, the Mirror, an unknown tablet, a turn) |
 | No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
 | Reboot | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
 
@@ -554,5 +554,5 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
 - GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
 - The app itself on an Android 6-7 device: Phase B's code ran only on Robolectric and an API 23 emulator (no
   GeckoView there: the conformance test's engine is blank).
-- A natural-portrait tablet now shows the app portrait (Phase B's rule), where it was always landscape. Fine for the
-  Mirror; whether small portrait tablets want landscape is a setting for later.
+- The Mirror's `Build.MODEL` and `MANUFACTURER` have never been read on the unit. If the Mirror should lock portrait
+  whatever its Android says, it needs a `GenericAndroid.KNOWN` row, and that needs a real reading first.
