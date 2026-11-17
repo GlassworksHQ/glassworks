@@ -97,7 +97,7 @@ What the phone gets today on Android 10's local-only hotspot:
   Removed again when it stops. `PREROUTING` runs before local delivery, so this wins over whatever Android's own
   DNS forwarder listens on (**read**, netfilter; **untested** next to netd's own tether chains).
 - The app answers every DNS `A` query with the hotspot's address, and answers the check paths
-  (`/hotspot-detect.html`, `/generate_204`, any other path on port 80) with a 302 to `/setup`.
+  (`/hotspot-detect.html`, `/generate_204`, any other path on port 80) with a 302 to the absolute `http://<AP address>:8099/setup` (a relative `/setup` would keep the probe's host and port 80 and loop back to the redirector).
 - The contract: no property. On the S1 any app may set properties (SELinux is permissive), and the root helpers take
   no input but files the kiosk owns (`frames/aqara-s1-plus/tools/AGENTS.md`). The helper keys off what it can check
   itself: hostapd runs, the kiosk's uid owns the DNS and redirect sockets on one address, and that address is on a
