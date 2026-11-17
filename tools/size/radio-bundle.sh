@@ -14,8 +14,10 @@
 #   hotspot-name.apk         frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh's output (the Android SDK's
 #                            build-tools; skipped for a base commit from before it existed)
 # Signed with a throwaway Ed25519 key made here, not the release key: the signature is 64 bytes
-# whichever key makes it, so the APK's bundle is the shipped one but for manifest.sig and the
-# manifest's version line. No secret is read. BUILD ONLY: never talks to a device. Needs docker
+# whichever key makes it, so the APK's bundle is the shipped one but for manifest.sig, the
+# manifest's version line and hotspot-name.apk: build.sh signs the overlay with a key made for each
+# build, so its bytes, and its sha256 in the manifest, differ from the release's (its size within a few
+# bytes). No secret is read. BUILD ONLY: never talks to a device. Needs docker
 # (for the sisdk build), python3, openssl and, for the hotspot name overlay, the Android SDK.
 #
 # Keep it in step with release.yml: tools/size/test/test_apksize.py checks that both bundle the same
