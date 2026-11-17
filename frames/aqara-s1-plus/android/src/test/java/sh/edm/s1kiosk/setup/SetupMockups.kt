@@ -45,10 +45,10 @@ class SetupMockups {
         step: String, wifi: WifiSetupStatus.Snapshot = online, haUrl: String? = ha,
         improv: ImprovFacts = ImprovFacts(), installer: InstallerWifi? = null, preview: Boolean = false,
         done: Set<String> = flow.takeWhile { it != step }.toSet(), panelIp: String? = ip,
-        hotspot: dev.glassworks.setup.HotspotStep.Card? = null,
+        hotspot: dev.glassworks.setup.HotspotStep.Card? = null, signedIn: Boolean = false,
     ) = SetupOverlay.Model(
         step = step, done = done, wifi = wifi, haUrl = haUrl, haSource = "mdns", panelIp = panelIp,
-        signedIn = false, improv = WifiStep.improv(improv), installer = installer, preview = preview, hotspot = hotspot,
+        signedIn = signedIn, improv = WifiStep.improv(improv), installer = installer, preview = preview, hotspot = hotspot,
     )
 
     /** The setup hotspot's states (#197), with a made-up network. */
@@ -73,6 +73,9 @@ class SetupMockups {
             ready, null, asked = true,
         )
     }
+
+    /** Without touch: signed in from the setup page, waiting for Home Assistant to add the panel (#484). */
+    private val addWait get() = model(SetupFlow.HA, done = setOf(SetupFlow.WIFI, SetupFlow.SIGNIN), signedIn = true)
 
     private fun facts(mode: RadioMode, status: String, thread: ThreadRouterState? = null) =
         RadioFollowUp.Facts(mode, status, HelperFacts(true, 4), ZigbeeStack.AQARA, if (thread != null) false else null, thread, ha, ip)
@@ -169,6 +172,8 @@ class SetupMockups {
         shot("setup-26-hotspot-starting", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.starting))
         shot("setup-27-hotspot-phone-joined", model(SetupFlow.WIFI, wifi = offline, hotspot = Spot.phone))
         shot("setup-28-hotspot-asked-failed", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.askedFailed))
+        // #484: the setup page signed it in; only Home Assistant's add is left.
+        shot("setup-29-no-touch-ha-waiting", addWait, input = Input.NONE)
     }
 
     /**
@@ -187,6 +192,7 @@ class SetupMockups {
             "portrait-05-no-touch-hotspot-on" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on),
             "portrait-06-no-touch-hotspot-starting" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.starting),
             "portrait-07-no-touch-hotspot-phone-joined" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.phone),
+            "portrait-08-no-touch-ha-waiting" to addWait,
         )) {
             val a = Mockup.activity()
             val s = s1SetupOverlay(a, panes(a, null)).also { it.input = Input.NONE }

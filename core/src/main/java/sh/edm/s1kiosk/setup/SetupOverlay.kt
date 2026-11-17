@@ -114,10 +114,17 @@ class SetupOverlay(
 
     /**
      * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step but Sign in shows where to
-     * set the panel up from a computer (the setup page over the network, #34), and no card has a button.
+     * set the panel up from a computer (the setup page over the network, #34), and no card has a button. Once signed in,
+     * the Home Assistant step waits for Home Assistant to add the panel instead (#484).
      * The frame's, unless a mockup sets it.
      */
     var input: Input = runCatching { context.glassworks.frame.input }.getOrDefault(Input.TOUCH)
+
+    /** The frame has its own presence sensor ([dev.glassworks.screen.PresenceRelay.ownSensor]). The frame's, unless a test sets it. */
+    var presenceSensor: Boolean = runCatching { context.glassworks.presence.ownSensor(context) }.getOrDefault(true)
+
+    /** Turns the screen on ([dev.glassworks.screen.ScreenPolicy.wake]). The runtime's, unless a test sets it. */
+    var wakeScreen: (String) -> Unit = { reason -> context.glassworks.screen.wake(reason) }
 
     /** True while visible (including the Done fade-out). */
     var isShowing = false
@@ -295,11 +302,12 @@ class SetupOverlay(
 
     // ---- the steps' own views
     private val improvTile = ImprovTile()
+    private val waitingText = g.text(17f, MU)
     private val waiting = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         addView(Pulse(), LinearLayout.LayoutParams(px(44f), px(44f)).apply { marginEnd = px(19f) })
-        addView(g.text(17f, MU).apply { text = "Waiting for Home Assistant…" })
+        addView(waitingText, LinearLayout.LayoutParams(0, -2, 1f))
     }
     /** The same spinner while the setup hotspot starts (#460), with its own line. */
     private val spotWaitingText = g.text(17f, MU)
@@ -677,6 +685,7 @@ class SetupOverlay(
             return urlField
         }
         cardTitle.text = "Add it in Home Assistant."
+        waitingText.text = "Waiting for Home Assistant…"
         cardBody.text = SpannableStringBuilder().apply {
             append("Settings → Devices & services → ")
             val start = length
@@ -765,6 +774,8 @@ class SetupOverlay(
             return null
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
+        // Signed in from the setup page, and only Home Assistant's add is left: nothing to scan any more (#484).
+        if (m.step == SetupFlow.HA && m.signedIn && SetupFlow.HA !in m.done) return bindAddWait(url)
         if (qrFor != url) {
             qrImage.setImageBitmap(QrCode.bitmap(url, px(200f)))
             qrFor = url
@@ -775,6 +786,22 @@ class SetupOverlay(
         return null
     }
 
+    /** Without touch, signed in: waiting for Home Assistant to add the panel, and where to do that. */
+    private fun bindAddWait(url: String): View {
+        cardTitle.text = "Add it in Home Assistant."
+        cardBody.text = SpannableStringBuilder().apply {
+            append("Settings → Devices & services, where ")
+            val start = length
+            append(haName)
+            setSpan(ForegroundColorSpan(TX), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            append(" shows up as discovered. If Home Assistant knew this panel before a reinstall, its entry asks to re-authenticate.")
+        }
+        waitingText.text = "Waiting for Home Assistant to add it…"
+        foot.text = "Another computer? $url"
+        foot.visibility = View.VISIBLE
+        return waiting
+    }
+
     private fun showStatus(text: String, color: Int) {
         status.text = text
         status.setTextColor(color)
@@ -783,6 +810,8 @@ class SetupOverlay(
 
     private fun reveal() {
         if (isShowing && visibility == View.VISIBLE && alpha == 1f) return
+        // Nothing else can turn this screen on: no touch, no presence sensor, and Home Assistant may not have it yet (#484).
+        if (!isShowing && input == Input.NONE && !presenceSensor) wakeScreen("setup")
         isShowing = true
         animate().cancel()
         if (visibility != View.VISIBLE) alpha = 0f
