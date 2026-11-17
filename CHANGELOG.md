@@ -104,6 +104,13 @@ below as the release notes.
   keep Home Assistant's in one tap. Voice has the wake word, its threshold, mute, mic gain, the wake
   sound and the overlay. Music shows what plays and its volume. Radio shows its firmware and the root
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
+- **A notification can open its view over half the screen, and views take turns.** Add
+  `"size": "half"` to a notification with a `url`, and the view opens as a dialog on the right of the
+  screen (at the bottom of a portrait one), with the dashboard dimmed behind it. A view that arrives
+  while another is open now waits its turn instead of taking the screen. The bar's one button says
+  *Next* while another waits. A critical notification with a `url` shows the alert first, with an
+  **Open the view** button. The time-left bars on a view and on the cards slide smoothly instead of
+  stepping each second. See [Open a view](docs/notifications.md#open-a-view).
 - **Glassworks has its own icon.** The launcher, the home app chooser and Settings show the Glassworks
   mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
   Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
@@ -281,6 +288,15 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
+  setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
+  radio step there and goes to Done.
+- **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
+  pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
+  said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
+  for those pictures over https, which Home Assistant doesn't serve. It now asks over http, as the page
+  does. If something from Home Assistant's address is ever blocked again, the panel names it with its
+  `https://`, so it doesn't read as your Home Assistant.
 - **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
   landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
   did, and stops with a clear message if it didn't. The Mirror's install is still test only.
@@ -288,6 +304,8 @@ below as the release notes.
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
   own icon, and every icon the app shows has a version Android 6 can draw.
+- **The Manage code shows on Android 6 and 7.** On panels older than Android 8, the code a phone asks
+  for on the setup page never appeared, so setup couldn't go on. It does now.
 - **A screen without touch stays on setup when it has no network.** A Mirror with no Wi-Fi saved used to
   leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
   button that nobody could press. It now stays on the setup screen, which says how to set it up from a

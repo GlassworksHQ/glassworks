@@ -557,7 +557,7 @@ object ImprovController {
                 ImprovOverlay.Model(
                     label = "Wi-Fi setup · allowed for ${left / 60}:${"%02d".format(left % 60)}",
                     title = if (fail != null) "Couldn't connect to $connectingSsid" else "Ready for Wi-Fi details",
-                    body = if (fail != null) "$fail." + (if (fail.startsWith(WifiProvisioner.RADIO_DIDNT_COME_BACK)) "" else " Check the password and send it again.") else
+                    body = if (fail != null) "$fail." + (if (WifiProvisioner.saysWhatToDo(fail)) "" else " Check the password and send it again.") else
                         "Open the “Improv via BLE” discovery for this panel in Home Assistant and enter your Wi-Fi." +
                             if (!wifi.legacyApiAllowed) " You'll then be asked to approve the network in a notification." else "",
                     secondary = "Stop" to { stop("stopped on panel") },

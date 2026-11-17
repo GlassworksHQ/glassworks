@@ -115,7 +115,10 @@ class S1Panes : AppParts {
         }
         val notes = NotificationOverlay(activity, notifications, notificationImages(activity), orbs = runtime.orbs).apply {
             screenOn = { runtime.screen.screenOn }
+            input = runtime.frame.input
             onPage = host::openInPage
+            onPageArea = host::placePage
+            capturePage = host::capturePage
             onDoNotDisturb = { on -> panePrefs.notifications.doNotDisturb = on }
         }
         val listener: (NotificationsHub.State) -> Unit = { s -> host.post { notes.update(s) } }
@@ -257,6 +260,7 @@ class S1Panes : AppParts {
                 schedule = { ms, action -> exec.schedule({ action() }, ms, TimeUnit.MILLISECONDS) },
                 haBase = { prefs.haBase },
                 now = SystemClock::elapsedRealtime,
+                touch = { runtime.frame.input == dev.glassworks.frame.Input.TOUCH },
             ),
         ) + runtime.frame.panes(paneContext, exec) +
             runtime.paneDefinitions(ctx).filterIsInstance<RadioDefinition>().map { it.pane(paneContext, panelIp = host::ipAddress) } +

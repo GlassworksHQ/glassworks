@@ -98,14 +98,38 @@ class HotspotTest {
             Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20")),
             Interface("wlan1", up = true, ipv4 = listOf("192.168.49.1")),
         )))
-        // Name order can't tell: the interface Android's own Wi-Fi network uses is the client, whatever its number.
+        // Name order can't tell: the client's own address never counts, whatever its interface's number.
         assertEquals("the client on wlan1, the AP on wlan0", "192.168.43.1", HotspotAddress.pick(listOf(
             Interface("wlan0", up = true, ipv4 = listOf("192.168.43.1")),
             Interface("wlan1", up = true, ipv4 = listOf("192.168.1.20")),
-        ), client = setOf("wlan1")))
+        ), client = setOf("192.168.1.20")))
         assertNull("only the client is up: no hotspot address", HotspotAddress.pick(listOf(
             Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20")),
-        ), client = setOf("wlan0")))
+        ), client = setOf("192.168.1.20")))
+    }
+
+    @Test
+    fun `the AP and a lingering client network on the same wlan0 (the S1) still give the AP's address`() {
+        // Android still lists the client network on wlan0, with its old address; the interface holds the AP's now.
+        assertEquals("192.168.43.1", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.43.1")),
+        ), client = setOf("192.168.1.20")))
+        // Both addresses on wlan0 at once: the one that isn't the client's.
+        assertEquals("192.168.43.1", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20", "192.168.43.1")),
+        ), client = setOf("192.168.1.20")))
+    }
+
+    @Test
+    fun `the AP on wlan1 with the client on wlan0 gives the AP's address`() {
+        assertEquals("192.168.49.1", HotspotAddress.pick(listOf(
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.1.20")),
+            Interface("wlan1", up = true, ipv4 = listOf("192.168.49.1")),
+        ), client = setOf("192.168.1.20")))
+        assertEquals("the client's address is skipped even where name order would pick it", "192.168.49.1", HotspotAddress.pick(listOf(
+            Interface("wlan1", up = true, ipv4 = listOf("192.168.1.20")),
+            Interface("wlan0", up = true, ipv4 = listOf("192.168.49.1")),
+        ), client = setOf("192.168.1.20")))
     }
 
     @Test

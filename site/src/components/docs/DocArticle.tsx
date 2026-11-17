@@ -119,7 +119,7 @@ export function DocArticle({
           </p>
           {note && (
             <div className={d.facts} data-pagefind-ignore>
-              <NoteFacts note={note} />
+              <NoteFacts note={note} commitDate={false} />
             </div>
           )}
         </header>
