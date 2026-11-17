@@ -97,6 +97,8 @@ open class AppManage(
      * privileged app such as the Mirror's. Null elsewhere, and the Security page has no such card.
      */
     private val adb: AdbComputers? = if (UsbDebugging.available(app)) AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event,
+        // following is volatile and read without Requests' lock on purpose: the reader holds that lock while it calls
+        // onHeard, which takes AdbComputers' own, so locking here (inside Allow) would invert the order.
         listening = { adbRequests?.following == true }) else null
 
     private val adbRequests: UsbDebugging.Requests? = adb?.let { c ->

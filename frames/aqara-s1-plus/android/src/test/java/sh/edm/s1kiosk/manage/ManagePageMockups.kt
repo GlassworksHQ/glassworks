@@ -129,5 +129,9 @@ class ManagePageMockups {
         save("13c-security-code-sign-in", uc.get("/security"))
         ub.post(dev.glassworks.manage.ManageUsbDebugging.ALLOW, mapOf("csrf" to ub.csrf(), "fingerprint" to key(8, "alex@laptop").fingerprint, "remember" to "1"))
         save("13d-security-allowed", ub.get("/security?usb=allowed"))
+        // Android refused: the computer still asks. Another computer waits, or none does.
+        computers.asked(key(9, "jo@laptop"))
+        save("13e-security-refused", ub.get("/security?usb=refused"))
+        save("13f-security-not-waiting", ub.get("/security?usb=notwaiting"))
     }
 }
