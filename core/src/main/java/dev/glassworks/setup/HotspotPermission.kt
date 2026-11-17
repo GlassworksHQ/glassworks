@@ -33,6 +33,13 @@ object HotspotPermission {
         return if (!askedBefore || androidWouldExplain(p)) Step.Explain(p, explain(p)) else Step.Blocked(p, blocked(p))
     }
 
+    /**
+     * What to ask Android for, for [p]. Fine location alone is ignored on Android 12 for apps targeting it: coarse
+     * goes with it (CodeRabbit on #418), and on 8 to 11 asking for both does no harm.
+     */
+    fun request(p: String): Array<String> =
+        if (p == Manifest.permission.ACCESS_FINE_LOCATION) arrayOf(p, Manifest.permission.ACCESS_COARSE_LOCATION) else arrayOf(p)
+
     private fun explain(p: String) = when (p) {
         Manifest.permission.NEARBY_WIFI_DEVICES ->
             "To open its own Wi-Fi for setup, the panel needs Android's “Nearby devices” permission. It doesn't use it to find where you are."

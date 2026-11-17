@@ -30,6 +30,7 @@ class PlatformTest {
         Triple("hasLocaleList", 24) { it.hasLocaleList },
         Triple("hasSetProgressAction", 24) { it.hasSetProgressAction },
         Triple("hasProcessStartTime", 24) { it.hasProcessStartTime },
+        Triple("hasIsrgRootX1", 25) { it.hasIsrgRootX1 },
         Triple("hasActivityManagerGetService", 26) { it.hasActivityManagerGetService },
         Triple("hasNotificationChannels", 26) { it.hasNotificationChannels },
         Triple("hasForegroundServiceStart", 26) { it.hasForegroundServiceStart },
@@ -65,6 +66,7 @@ class PlatformTest {
             }
             assertEquals("permission at API $level", permission, PlatformApi(level).hotspotPermission)
             assertEquals("location on at API $level", level in 26..32, PlatformApi(level).hotspotNeedsLocationOn)
+            assertEquals("an app turns Wi-Fi on at API $level", level < 29, PlatformApi(level).appCanEnableWifi)
         }
     }
 

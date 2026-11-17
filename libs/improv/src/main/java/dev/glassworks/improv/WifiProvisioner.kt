@@ -170,9 +170,10 @@ public class WifiProvisioner(
         runCatching { ctx.registerReceiver(receiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)) }
         main.postDelayed(finish, timeoutMs)
         if (!wm.isWifiEnabled) {
+            val switchOn = wifiSwitchOn(ctx) // the client comes back by itself (see connect)
             @Suppress("DEPRECATION")
-            val ok = runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
-            Log.i(TAG, "scan: Wi-Fi is off: setWifiEnabled(true) -> $ok")
+            val ok = switchOn || runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
+            Log.i(TAG, if (switchOn) "scan: Wi-Fi client is down with the switch on: waiting for it" else "scan: Wi-Fi is off: setWifiEnabled(true) -> $ok")
             // Wi-Fi scans by itself once it is on; ask again shortly in case it doesn't.
             if (ok) main.postDelayed({ if (!finished) requestScan() }, 3_000L)
         } else if (!requestScan()) {
@@ -194,6 +195,8 @@ public class WifiProvisioner(
         val password: String,
         val hidden: Boolean?,
         val cb: (Outcome) -> Unit,
+        /** The switch is on and the client is down: if it never comes back, the reason says so, not "turned off". */
+        val waitingForClient: Boolean = false,
     ) : Runnable {
         val enableDeadline = SystemClock.elapsedRealtime() + WIFI_ENABLE_TIMEOUT_MS
         var scanDeadline = 0L
@@ -202,7 +205,9 @@ public class WifiProvisioner(
             if (preparing !== this) return
             val now = SystemClock.elapsedRealtime()
             if (!wm.isWifiEnabled) {
-                if (now > enableDeadline) return finishPreparing(this, Outcome.Failed("Wi-Fi is turned off and could not be turned on", null))
+                if (now > enableDeadline) {
+                    return finishPreparing(this, Outcome.Failed(if (waitingForClient) RADIO_DIDNT_COME_BACK else "Wi-Fi is turned off and could not be turned on", null))
+                }
                 main.postDelayed(this, 500)
                 return
             }
@@ -242,12 +247,16 @@ public class WifiProvisioner(
         preparing?.let { finishPreparing(it, Outcome.Failed("superseded", null)) }
         job?.finish(Outcome.Failed("superseded", null))
         if (!wm.isWifiEnabled) {
+            // The user's switch is on, but the client is down: Android brings it back by itself (e.g. a few seconds
+            // after our setup hotspot stops on a device without STA+AP). Wait for it; asking to turn it on is refused
+            // from Android 10 and would fail the join at once (#418 S1 retest 3, 2026-11-17).
+            val switchOn = wifiSwitchOn(ctx)
             @Suppress("DEPRECATION")
-            val ok = runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
-            Log.i(TAG, "Wi-Fi is off: setWifiEnabled(true) -> $ok")
+            val ok = switchOn || runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
+            Log.i(TAG, if (switchOn) "Wi-Fi client is down with the switch on: waiting for it" else "Wi-Fi is off: setWifiEnabled(true) -> $ok")
             if (!ok) return cb(Outcome.Failed("Wi-Fi is turned off and could not be turned on", null))
-            onProgress?.invoke("Turning Wi-Fi on…")
-            val p = Preparing(ssid, password, hidden, cb)
+            onProgress?.invoke(if (switchOn) "Waiting for Wi-Fi…" else "Turning Wi-Fi on…")
+            val p = Preparing(ssid, password, hidden, cb, waitingForClient = switchOn)
             preparing = p
             main.postDelayed(p, 500)
             return
@@ -390,16 +399,11 @@ public class WifiProvisioner(
 
         fun startSuggestion(security: WifiSecurity, password: String, hidden: Boolean) {
             if (!Compat.hasNetworkSuggestions) return finish(Outcome.Failed("cannot add networks on this Android version", null))
-            val b = WifiNetworkSuggestion.Builder().setSsid(ssid).setIsHiddenSsid(hidden)
-            when (security) {
-                WifiSecurity.PSK -> b.setWpa2Passphrase(password)
-                WifiSecurity.SAE -> b.setWpa3Passphrase(password)
-                WifiSecurity.OWE -> b.setIsEnhancedOpen(true)
-                WifiSecurity.OPEN -> {}
-                WifiSecurity.WEP, WifiSecurity.EAP ->
-                    return finish(Outcome.Failed("$security networks can't be suggested; make the app device owner", null))
+            if (security == WifiSecurity.WEP || security == WifiSecurity.EAP) {
+                return finish(Outcome.Failed("$security networks can't be suggested; make the app device owner", null))
             }
-            val s = b.build()
+            val s = suggestion(ssid, security, password, hidden)
+                ?: return finish(Outcome.Failed(UNUSABLE_PASSWORD, null))
             runCatching { wm.removeNetworkSuggestions(listOf(s)) }
             val status = wm.addNetworkSuggestions(listOf(s))
             Log.i(TAG, "addNetworkSuggestions -> $status")
@@ -481,5 +485,55 @@ public class WifiProvisioner(
         internal const val WIFI_ENABLE_TIMEOUT_MS: Long = 15_000L
         /** After turning Wi-Fi on: wait this long at most for the network to show up in a scan. */
         internal const val FIRST_SCAN_WAIT_MS: Long = 6_000L
+
+        /**
+         * The user's switch was on but the Wi-Fi client didn't come back within [WIFI_ENABLE_TIMEOUT_MS] (for example after
+         * the panel's own setup hotspot). Not a password problem: callers say "try again", not "check the password".
+         */
+        public const val RADIO_DIDNT_COME_BACK: String = "The Wi-Fi radio didn't come back. Try again"
+
+        /** Android refused the password for the network's security (a non-ASCII WPA2 or WPA3 password, CodeRabbit on #418). */
+        public const val UNUSABLE_PASSWORD: String = "Android can't use that password for this network. Check it, and send it again"
+
+        /**
+         * True when a [Outcome.Failed] reason already says what to do ([RADIO_DIDNT_COME_BACK], the unusable password), so a
+         * caller adds no "check the password" of its own (#418 verifier).
+         */
+        public fun saysWhatToDo(reason: String): Boolean =
+            reason.startsWith(RADIO_DIDNT_COME_BACK) || reason.startsWith(UNUSABLE_PASSWORD)
     }
+}
+
+/**
+ * The user's Wi-Fi switch (`Settings.Global.WIFI_ON`): 1 on, 2 on with airplane mode; 0 off, 3 off by airplane mode
+ * (AOSP WifiSettingsStore, the same values from Android 6 to 10). Unreadable reads as off here, so the old path
+ * (asking Android to turn it on) still runs.
+ *
+ * Keep in step with `dev.glassworks.platform.WifiRadio.switchedOff` in the core (this library can't depend on it): the
+ * same setting and values. The one difference is on purpose: there an unreadable switch counts as on, so the setup
+ * hotspot isn't blocked on a guess.
+ */
+internal fun wifiSwitchOn(ctx: Context): Boolean =
+    runCatching { Settings.Global.getInt(ctx.contentResolver, Settings.Global.WIFI_ON) }.getOrNull().let { it == 1 || it == 2 }
+
+/**
+ * A suggestion for [ssid] with [password], or null when Android refuses the password for [security]: its builder throws
+ * for a WPA2 or WPA3 password that isn't ASCII, and the join runs on the main thread, where a throw is a crash
+ * (CodeRabbit on #418). Neither the password nor the reason is logged. WEP and EAP never come here.
+ */
+internal fun suggestion(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion? {
+    if (!Compat.hasNetworkSuggestions) return null // Android 10+, as its caller checks too; lint reads this one
+    return runCatching { suggestionOrThrow(ssid, security, password, hidden) }.getOrNull()
+}
+
+@androidx.annotation.RequiresApi(29)
+private fun suggestionOrThrow(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion {
+    val b = WifiNetworkSuggestion.Builder().setSsid(ssid).setIsHiddenSsid(hidden)
+    when (security) {
+        WifiSecurity.PSK -> b.setWpa2Passphrase(password)
+        WifiSecurity.SAE -> b.setWpa3Passphrase(password)
+        WifiSecurity.OWE -> b.setIsEnhancedOpen(true)
+        WifiSecurity.OPEN, WifiSecurity.WEP, WifiSecurity.EAP -> {}
+    }
+    return b.build()
 }

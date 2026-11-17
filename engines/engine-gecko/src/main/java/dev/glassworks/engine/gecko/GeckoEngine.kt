@@ -230,6 +230,11 @@ class GeckoEngine(
             ports.toList().forEach { runCatching { it.post(message) } }
         }
 
+        override fun capture(done: (android.graphics.Bitmap?) -> Unit) {
+            // Engine.Page promises the main thread: post rather than trust which thread GeckoResult completes on.
+            view.capturePixels().accept({ b -> main.post { done(b) } }, { e -> Log.w(logTag, "page capture failed", e); main.post { done(null) } })
+        }
+
         private inner class Port(private val port: WebExtension.Port) : PagePort {
             override val url: String? get() = port.sender.url
             override val topLevel: Boolean get() = port.sender.isTopLevel

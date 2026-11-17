@@ -145,6 +145,9 @@ already on Wi-Fi can be set up from a laptop with no cable, and one on no networ
 panel's own setup Wi-Fi (#197): then the page starts with the Wi-Fi step. The steps are the wizard's own
 (`src/setup/`: `ChannelSetup` and `steps.tsx`); the page adds pairing with the code on the panel's
 screen (`src/lan/`). It runs the setup channel over the panel's `/setup/channel` WebSocket.
+The page is the panel's own, so it has the panel's look (#63), not Kiln's: `lan/lan.css` sets the tokens
+Kiln's steps read to the panel's colours (always night, one white button, sky to violet for "on"), and
+`src/lan/PanelStack.tsx` draws the Glassworks stack. Kiln's wizard loads neither, so it doesn't change.
 
 ```sh
 npm run build:lan -w @glassworks/kiln-app          # writes core/src/main/assets/setup (committed)
@@ -165,7 +168,8 @@ How it behaves:
 - Wi-Fi (`wifi.scan`, `wifi.join`) comes first only when the panel says it is on no network
   (`state.online` false). The same card as the wizard's Wi-Fi step (`Wifi` in `steps.tsx`). The panel
   replies, then joins, which closes its setup Wi-Fi, so the page stays on "joining" and the panel's screen
-  gives the outcome. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
+  gives the outcome. The page keeps its channel and asks once more 45 s later (`JOIN_CHECK_MS`): an answer
+  means the panel's setup Wi-Fi is still up and the join didn't happen, so the page says so, with Try again. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
   as plain HTTP.
 - Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
   network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.

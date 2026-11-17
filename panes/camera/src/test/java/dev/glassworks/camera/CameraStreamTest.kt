@@ -80,4 +80,24 @@ class CameraStreamTest {
             assertEquals("the multicast lock is let go", 0, wifi.activeLockCount)
         }
     }
+
+    /** CodeRabbit on #463: a device without Wi-Fi (Ethernet only) has no WifiManager. The stream still starts and stops. */
+    @Test fun withoutWifiTheStreamRunsWithoutTheMulticastLock() {
+        val noWifi = object : android.content.ContextWrapper(app) {
+            override fun getApplicationContext() = this
+            override fun getSystemService(name: String): Any? = if (name == Context.WIFI_SERVICE) null else super.getSystemService(name)
+        }
+        val rtsp = freePort()
+        val onvif = generateSequence { freePort() }.first { it != rtsp }
+        val stream = CameraStream(
+            noWifi, hub = {}, egress = FrameEgress({ 0L }, { _, _ -> }) {},
+            identity = { CameraIdentity("Test panel", "1.0", "02:00:00:00:00:01") },
+            host = { "127.0.0.1" }, snapshot = { null }, log = {},
+            rtspPort = rtsp, onvifPort = onvif, discovery = false,
+        )
+        assertTrue(stream.start("viewer" to "made-up-pass"))
+        assertFalse("RTSP listens", bindsWithin(rtsp, deadlineMs = 200))
+        stream.stop()
+        assertTrue("RTSP's port closed", bindsWithin(rtsp))
+    }
 }

@@ -1,6 +1,5 @@
 package sh.edm.s1kiosk
 
-import android.Manifest
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -25,7 +24,14 @@ import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
 import dev.glassworks.pane.applyFrom
 import dev.glassworks.pane.intentExtras
+import dev.glassworks.pane.permissionsToAsk
 import dev.glassworks.platform.Platform
+import dev.glassworks.platform.HotspotAddress
+import dev.glassworks.platform.HotspotFailure
+import dev.glassworks.setup.HotspotPermission
+import dev.glassworks.setup.HotspotStep
+import dev.glassworks.setup.LanSetup
+import dev.glassworks.setup.SetupHotspot
 import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
 import dev.glassworks.frame.Input
@@ -149,6 +155,7 @@ class MainActivity : Activity() {
         override fun run() {
             refreshSetup()
             setupOverlay.tick() // the panes' steps follow their state
+            if (resumed) requestRuntimePermissions() // a pane turned on since (from Home Assistant) asks once
             refreshOffline()
             handler.postDelayed(this, SETUP_TICK_MS)
         }
@@ -197,10 +204,11 @@ class MainActivity : Activity() {
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
-            onChooseNetwork = ::openWifiSettings
+            onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }
             onSkipHa = ::onSkipHaSetup
             onClosePreview = ::closeSetupPreview
             onImprovAction = ::onImprovAction
+            onHotspotAction = ::onHotspotAction
             onPanesDone = { if (!setupPreview) refreshSetup() }
             onStepDone = { refreshSetup() }
         }
@@ -257,7 +265,6 @@ class MainActivity : Activity() {
         handler.post(setupTick)
         // The app's upkeep on each start (the S1's direct-boot splash).
         Thread({ runtime.app.activityStarted(applicationContext) }, "s1-boot-splash").start()
-        requestRuntimePermissions()
         hideSystemUi()
     }
 
@@ -294,6 +301,8 @@ class MainActivity : Activity() {
     private val overlayHost = object : OverlayHost {
         override val activity get() = this@MainActivity
         override fun openInPage(url: String?) = if (url != null) this@MainActivity.openInPage(url) else backToDashboard()
+        override fun placePage(area: android.graphics.Rect?) { page?.view?.let { dev.glassworks.engine.PageCapture.place(it, area) } }
+        override fun capturePage(done: (android.graphics.Bitmap?) -> Unit) = dev.glassworks.engine.PageCapture.capture(page, done)
         override fun hideMenu() { if (::settingsOverlay.isInitialized && settingsOverlay.isShowing) settingsOverlay.hide() }
         override fun post(block: () -> Unit) { handler.post(block) }
     }
@@ -304,7 +313,7 @@ class MainActivity : Activity() {
     /** A notification's view, on the panel's own HA: in place when the frontend is already up, else loaded. */
     private fun openInPage(url: String) {
         if (beforeNotificationPage == null) beforeNotificationPage = currentUrl
-        Log.i(TAG, "Notification: opening a view full screen")
+        Log.i(TAG, "Notification: opening a view")
         if (FrontendUrls.sameOrigin(currentUrl, url)) page?.post(navigate(url))
         else page?.load(externalize(url))
     }
@@ -394,6 +403,8 @@ class MainActivity : Activity() {
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
+            glassworks.setupHotspot?.cancel() // setup is over: its hotspot too (#197)
+            hotspotAsked = false
             setupOverlay.finish { loadDashboardIfNeeded() }
         }
         syncImprovInline()
@@ -430,7 +441,49 @@ class MainActivity : Activity() {
             panelIp = HaUrls.localIpv4(),
             signedIn = HaAuth.signedIn,
             preview = preview,
+            hotspot = if (preview) null else hotspotCard(),
         )
+
+    // ---- setup: the panel's own Wi-Fi (#197)
+
+    /** The person asked for the setup hotspot on this screen: Android's permission comes into the card now. */
+    private var hotspotAsked = false
+
+    /** Android was asked for the hotspot's permission in this run: tells "not asked yet" from "won't ask again". */
+    private var hotspotPermissionAsked = false
+
+    private fun hotspotPermission(): HotspotPermission.Step =
+        HotspotPermission.step(Platform, { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }, hotspotPermissionAsked) {
+            shouldShowRequestPermissionRationale(it)
+        }
+
+    private fun hotspotCard(): HotspotStep.Card? {
+        val h = glassworks.setupHotspot ?: return null
+        val view = h.view
+        val needsPermission = hotspotAsked ||
+            (view as? SetupHotspot.View.Off)?.error == HotspotFailure.NO_PERMISSION
+        val permission = if (needsPermission) hotspotPermission() else HotspotPermission.Step.Ready
+        val url = HotspotAddress.now(this)?.let { "http://$it:${sh.edm.s1kiosk.auth.OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }
+        return HotspotStep.card(view, permission, url)
+    }
+
+    private fun onHotspotAction(a: HotspotStep.Action) {
+        if (setupPreview) return // the preview never changes state
+        val h = glassworks.setupHotspot ?: return
+        when (a) {
+            HotspotStep.Action.OPEN, HotspotStep.Action.RETRY -> {
+                hotspotAsked = true
+                if (hotspotPermission() == HotspotPermission.Step.Ready) h.ask()
+            }
+            HotspotStep.Action.ALLOW -> (hotspotPermission() as? HotspotPermission.Step.Explain)?.let {
+                hotspotPermissionAsked = true
+                requestPermissions(HotspotPermission.request(it.permission), REQ_HOTSPOT)
+            }
+            HotspotStep.Action.STOP -> { hotspotAsked = false; h.cancel() }
+            HotspotStep.Action.WIFI_SETTINGS -> openWifiSettings()
+        }
+        refreshSetup()
+    }
 
     /** After setup: (re)load the dashboard unless it is already showing. */
     private fun loadDashboardIfNeeded() {
@@ -750,7 +803,14 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         hideSystemUi()
+        requestRuntimePermissions() // at start, and what was turned on while another screen was in front
+    }
+
+    override fun onPause() {
+        resumed = false
+        super.onPause()
     }
 
     @Suppress("DEPRECATION")
@@ -881,16 +941,50 @@ class MainActivity : Activity() {
 
     // ---- Android runtime permissions (mic/camera) for Gecko
 
+    @Suppress("DEPRECATION") // getPackageInfo(String, PackageInfoFlags) is API 33; this one runs everywhere
+    private val declaredPermissions by lazy { packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toSet() }
+
+    /** The screen takes a tap: read once, as the setup tick asks every couple of seconds. */
+    private val touchScreen by lazy { glassworks.frame.input == Input.TOUCH }
+
+    /** In front of the person: only then may Android's dialog show. */
+    private var resumed = false
+
+    /** Answered in this activity's life: a refusal isn't asked again until the next start. Android kills the app on a revoke. */
+    private val answeredPermissions = HashSet<String>()
+    private val grantedPermissions = HashSet<String>()
+
+    /** The startup request is open: no second one until Android answers it (an empty answer when it cancelled it). */
+    private var askingPermissions = false
+
+    private fun granted(permission: String): Boolean =
+        permission in grantedPermissions || (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED).also { if (it) grantedPermissions += permission }
+
+    /**
+     * What the panes that are on need and the app declares (#461), at start and when a pane turns on later, each once,
+     * while the activity is in front. Never on a screen without touch: nobody could answer there.
+     */
     private fun requestRuntimePermissions() {
-        val wanted = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
-            .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (wanted.isNotEmpty()) requestPermissions(wanted.toTypedArray(), REQ_STARTUP)
+        if (askingPermissions) return
+        val wanted = glassworks.paneDefinitions(this).permissionsToAsk(touch = touchScreen, declared = declaredPermissions, granted = ::granted) -
+            answeredPermissions
+        if (wanted.isEmpty()) return
+        askingPermissions = true
+        requestPermissions(wanted.toTypedArray(), REQ_STARTUP)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // A new grant can add a foreground type (microphone on Android 14+): KioskService takes it on start.
         if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) KioskService.start(this)
+        if (requestCode == REQ_HOTSPOT) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) glassworks.setupHotspot?.ask()
+            refreshSetup()
+        }
+        if (requestCode == REQ_STARTUP) {
+            askingPermissions = false
+            answeredPermissions += permissions.filterIndexed { i, _ -> i < grantResults.size }
+        }
         if (requestCode == REQ_GECKO) {
             val cb = pendingAndroidPermission
             pendingAndroidPermission = null
@@ -1139,6 +1233,7 @@ class MainActivity : Activity() {
         private const val TAG = "S1Kiosk"
         private const val REQ_STARTUP = 1
         private const val REQ_GECKO = 2
+        private const val REQ_HOTSPOT = 3
         private const val RETRY_MS = 10_000L
         /** The connecting screen waits this long after the page loaded for the page to say it's drawn. Public for tests. */
         const val READY_FALLBACK_MS = 15_000L

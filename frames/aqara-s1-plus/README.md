@@ -105,7 +105,7 @@ announcements, with a calm full-screen overlay while you talk.
 |---|---|
 | 🏠 **One ESPHome device** | HA discovers the panel and sets up encryption automatically. You get the screen as a light, presence, light level, a speaker, voice settings and the wall base, plus the dashboard and radio controls. [The entities](../../docs/esphome.md) |
 | 🎵 **Music Assistant player** | A native Sendspin player that plays in sync with your other speakers. [Sendspin guide](../../docs/sendspin.md) |
-| 🔔 **Notifications** | HA sends a notification and the panel shows it over the dashboard, with a camera's picture, buttons and a sound. It can also open a dashboard view full screen, like a doorbell's. [Notifications guide](../../docs/notifications.md) |
+| 🔔 **Notifications** | HA sends a notification and the panel shows it over the dashboard, with a camera's picture, buttons and a sound. It can also open a dashboard view, like a doorbell's, over the whole screen or half of it. [Notifications guide](../../docs/notifications.md) |
 | 👋 **Wakes when you walk up** | The screen wakes as you approach, turns off when the room is empty, and dims at night. It is driven by the panel's own sensors. [Sensors guide](docs/sensors.md) |
 | 📡 **Radio for Home Assistant** | The panel's Zigbee/Thread radio can be a Zigbee coordinator for ZHA or (experimental) Zigbee2MQTT, a Thread border router, or a repeater in your existing network. You switch roles from HA. [How to](docs/radio-guide.md) |
 | 🔄 **Updates in Home Assistant** | New versions show up under *Settings → Updates*, and one click installs them. Fixes for the radio side come with them. [Updates](#updates) |
@@ -139,13 +139,14 @@ the next one. "Verified" means tested on a real panel in a real home.
 | ESPHome device with automatic encryption | ✅ Works |
 | Voice assistant with on-device wake word, timers, announcements | ✅ Works · far-field tuning ongoing |
 | Music Assistant player (Sendspin, synced) | ✅ Works |
-| Notifications from HA: cards, pictures, buttons, sounds, a view full screen ([how](../../docs/notifications.md)) | 🧪 New · first run on the S1 2026-11-14 (cards, pictures, buttons, Do not disturb, a view full screen); the critical alert's rerun pending |
+| Notifications from HA: cards, pictures, buttons, sounds, a view over the whole screen or half of it ([how](../../docs/notifications.md)) | 🧪 New · first run on the S1 2026-11-14 (cards, pictures, buttons, Do not disturb, a view full screen); the critical alert's rerun pending. Views in turn and the half view (#230): on the S1 2026-11-16, two full views with Next and one half view opened and closed; the rest of the run pending |
 | Presence wake, idle-off, night mode, auto-brightness | ✅ Works |
 | Aqara cloud and bloat disabled (reversible) | ✅ Works |
 | Boot splash and animation | 🧪 The Glassworks redraw has not yet run on a panel. The Glass Tile one before it works |
 | Web installer, command-line installer, undo | ✅ Verified end to end (firmware 4.5.80) with the old S1 installer; boot patch tested on two firmware versions. Kiln has not yet done a full install on a panel |
 | Manage page in the browser (`:8099`, sign in through Home Assistant): status, log, diagnostics, signed-in browsers ([guide](../../docs/manage.md)) | 🧪 New · not yet checked on a panel; settings are read-only for now |
 | Set up over the network: the panel's own setup page (`:8099/setup`), paired with a code on its screen ([guide](../../docs/manage.md#set-up-over-the-network)) | 🧪 New · paired, the Home Assistant step, the radio kept and Done on the S1 (2026-11-16); allowing it from the settings and Kiln's link not yet |
+| Set up from a phone with no Wi-Fi: the panel's own setup Wi-Fi, a QR code on its screen ([guide](../../docs/manage.md#the-panels-own-wi-fi)) | 🧪 New · unit tests only; not yet run on a panel |
 | Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
 | Bluetooth proxy for Home Assistant, listening only ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14); the pane itself not yet |
 | App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |

@@ -59,6 +59,14 @@ internal object Origin {
         return if (p == default.getValue(scheme)) "$scheme://$h" else "$scheme://$h:$p"
     }
 
-    /** The host to name in a note: the origin without its scheme, or "" when it has none. */
-    fun host(url: String?): String = of(url)?.substringAfter("://") ?: ""
+    /**
+     * The host to name in a note: the origin without its scheme, or "" when it has none. When it has the [allowed]
+     * origin's host and port, it's that address on another scheme (`https://` for Home Assistant's `http://`), so the
+     * whole origin, not a name that reads as Home Assistant's own (#455). As policy.js names it.
+     */
+    fun host(url: String?, allowed: String? = null): String {
+        val o = of(url) ?: return ""
+        val h = o.substringAfter("://")
+        return if (allowed != null && h == allowed.substringAfter("://")) o else h
+    }
 }

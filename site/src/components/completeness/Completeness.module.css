@@ -1,0 +1,161 @@
+/*
+ * How complete. The same glass panel as Clarity's, without the seal (that is Clarity's mark): the word in the
+ * panel's head, the checklist under it. Ticks are status: green, amber, faint.
+ */
+.ok {
+  --t: var(--green);
+  --ti: var(--ok-ink);
+}
+
+.mid {
+  --t: var(--amber);
+  --ti: var(--work-ink);
+}
+
+.none {
+  --t: var(--faint);
+  --ti: var(--faint);
+}
+
+.section {
+  min-width: 0;
+  margin-bottom: 18px;
+  scroll-margin-top: 24px;
+}
+
+.panel {
+  border-radius: var(--r-tile);
+  overflow: hidden;
+}
+
+.head {
+  display: grid;
+  gap: 8px;
+  padding: 22px 24px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.word {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 30px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.wordOff {
+  color: var(--faint);
+  font-size: 22px;
+}
+
+.meaning {
+  color: var(--muted);
+  max-width: 70ch;
+}
+
+.prov {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--work-ink);
+  background: color-mix(in srgb, var(--amber) 16%, transparent);
+  white-space: nowrap;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+  gap: 8px 28px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--edge);
+}
+
+.groupHead {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--faint);
+  padding: 6px 0;
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 30px 118px minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: baseline;
+  padding: 11px 0;
+  border-top: 1px solid var(--edge);
+  font-size: 14px;
+}
+
+.mark {
+  color: var(--ti);
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+}
+
+.name {
+  font-weight: 500;
+}
+
+.reason {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  color: var(--fg);
+}
+
+.note {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .head {
+    padding: 18px 16px;
+  }
+
+  .body {
+    padding: 10px 16px 14px;
+  }
+
+  .word {
+    font-size: 26px;
+  }
+
+  .item {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+
+  .reason {
+    grid-column: 2;
+  }
+}

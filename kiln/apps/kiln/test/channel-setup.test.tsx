@@ -18,9 +18,10 @@ const panelState: SetupState = {
 };
 
 /** The panel's side of the channel: `state` always answers; a change answers only once `paired`. */
-function lanPanel() {
+function lanPanel(o: { noRadio?: boolean } = {}) {
   let cb: (c: Uint8Array) => void = () => {};
   const st = structuredClone(panelState);
+  if (o.noRadio) delete (st as Partial<typeof panelState>).radio; // a generic frame's state has no radio
   const self = {
     paired: false,
     /** The next write fails as a dropped connection would (no answer at all). */
@@ -87,6 +88,24 @@ describe('the setup steps over the LAN', () => {
     expect(c.phase()).toMatchObject({ phase: 'radio-next', plan: { title: 'Use the radio in Home Assistant.' } });
     expect(panel.asked).toEqual(['state', 'set_ha', 'state', 'set_radio']);
     c.steps.close();
+  });
+
+  it('a panel without a radio (the Mirror, any Android device) goes from Home Assistant straight to Done', async () => {
+    const panel = lanPanel({ noRadio: true });
+    panel.paired = true;
+    let done = 0;
+    let phase: Setup = { phase: 'waiting', note: '' };
+    const steps = new ChannelSetup({
+      open: async () => { const c = new SetupChannel(panel.stream); await c.getState(); return c; },
+      phase: () => phase, show: (s) => { phase = s; }, here: () => true,
+      done: () => { done++; }, unreachable: (e) => { throw e; }, app: async () => undefined,
+    });
+    await steps.homeAssistant();
+    await steps.saveHa('http://192.0.2.20:8123');
+    expect(done).toBe(1);
+    expect(phase.phase).not.toBe('radio');
+    expect(panel.asked).not.toContain('set_radio');
+    steps.close();
   });
 
   it('a Thread router kept as it is, and already answered, sends nothing to the radio', async () => {
