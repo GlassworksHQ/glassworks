@@ -108,6 +108,7 @@ dependencies {
 
     // GPL-2.0 with the Classpath exception, like the JDK it backports: the classes the app calls (java.time and
     // friends) are compiled into the APK. This debug APK is never released, only a test build's artifact (test-build.yml,
-    // on branches named "legacy"); the legacy release is the generic app's. Allowed: AGENTS.md, rule 4.
+    // on branches named "legacy"); the legacy release is the generic app's. AGENTS.md rule 4's exception names the
+    // generic legacy APK, not this one: whether it covers this artifact is the maintainer's call (#433).
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
