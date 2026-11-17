@@ -144,4 +144,13 @@ class HotspotTest {
         assertFalse("IPv6", HotspotAddress.onSubnet("fe80::1", "192.168.43.42", 24))
         assertFalse("no prefix", HotspotAddress.onSubnet("192.168.43.206", "192.168.43.42", 0))
     }
+
+    @Test
+    fun `a client is on the subnet of the hotspot's own address, with that address's prefix`() {
+        val addresses = listOf(HotspotAddress.Address("192.0.2.10", 24), HotspotAddress.Address("192.168.43.1", 24))
+        assertTrue(HotspotAddress.isClient("192.168.43.206", "192.168.43.1", addresses))
+        assertFalse("the device's other network", HotspotAddress.isClient("192.0.2.20", "192.168.43.1", addresses))
+        assertFalse("no hotspot address yet", HotspotAddress.isClient("192.168.43.206", null, addresses))
+        assertFalse("its address isn't the device's", HotspotAddress.isClient("192.168.43.206", "192.168.43.1", addresses.take(1)))
+    }
 }

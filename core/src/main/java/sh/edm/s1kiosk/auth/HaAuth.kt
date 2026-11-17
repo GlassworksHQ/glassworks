@@ -117,6 +117,12 @@ object HaAuth {
             pairingOpen = { prefs.lanPairingOpen || context.glassworks.setupHotspot?.isOn == true },
             event = { msg -> android.util.Log.i(LAN_TAG, msg) },
             onDone = { main.post { context.glassworks.setupHotspot?.cancel() } },
+            // A phone on the setup hotspot: the screen then shows the setup page's address (#460).
+            phoneJoin = dev.glassworks.setup.PhoneJoin(
+                hotspot = { context.glassworks.setupHotspot },
+                isClient = { dev.glassworks.platform.HotspotAddress.isClient(context, it) },
+                post = { main.post(it) },
+            ),
             // The page (kiln/apps/kiln/lan) is in the assets; its font is the app's own Inter.
             files = { name ->
                 runCatching {
@@ -125,14 +131,7 @@ object HaAuth {
                 }.getOrNull()
             },
         )
-        s.front = { req ->
-            // A request from the setup hotspot's network proves a phone joined it: the setup screen then shows the
-            // setup page's address (#460). Checked only until the first one in each run.
-            context.glassworks.setupHotspot?.let { hs ->
-                if (hs.isOn && !hs.phoneSeen && dev.glassworks.platform.HotspotAddress.isClient(context, req.remote)) main.post { hs.phoneJoined() }
-            }
-            lan.handle(req)
-        }
+        s.front = lan::handle
         try {
             s.start()
             server = s

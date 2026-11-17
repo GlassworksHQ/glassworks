@@ -19,8 +19,10 @@ class NoNetworkNameInLogsTest {
     @Test
     fun noLogCallInterpolatesANetworkName() {
         val found = RepoFiles.sources(atLeast = 300) { it.extension == "kt" }.flatMap { f ->
-            f.readLines().mapIndexedNotNull { i, line ->
-                if (LOG_CALL.containsMatchIn(line) && NAME.containsMatchIn(line)) "${RepoFiles.rel(f)}:${i + 1}: ${line.trim()}" else null
+            val lines = f.readLines()
+            lines.indices.mapNotNull { i ->
+                val call = call(lines, i) ?: return@mapNotNull null
+                if (NAME.containsMatchIn(call)) "${RepoFiles.rel(f)}:${i + 1}: ${call.trim()}" else null
             }
         }
         assertEquals(found.joinToString("\n"), emptyList<String>(), found)
@@ -39,7 +41,33 @@ class NoNetworkNameInLogsTest {
         assertTrue("a length is fine", !NAME.containsMatchIn("""Log.i(TAG, "connect (${'$'}{ssid.length} char name)")"""))
     }
 
+    @Test
+    fun `a call wrapped over several lines is read whole`() {
+        val wrapped = listOf("""Log.i(""", """    TAG,""", """    "joining '${'$'}ssid'",""", """)""", """val after = ssid""")
+        assertEquals("""Log.i( TAG, "joining '${'$'}ssid'", )""", call(wrapped, 0)!!.replace(Regex("""\s+"""), " ").trim())
+        assertTrue(NAME.containsMatchIn(call(wrapped, 0)!!))
+    }
+
     private companion object {
+        /**
+         * The log call that starts on line [i] of [lines], up to its closing parenthesis (at most [MAX_LINES] lines), or null
+         * when none starts there. Parentheses inside strings count too: good enough for log lines, which balance.
+         */
+        fun call(lines: List<String>, i: Int): String? {
+            val m = LOG_CALL.find(lines[i]) ?: return null
+            val text = StringBuilder()
+            var depth = 0
+            for (j in i until minOf(lines.size, i + MAX_LINES)) {
+                val part = if (j == i) lines[j].substring(m.range.first) else lines[j]
+                text.append(part).append(' ')
+                depth += part.count { it == '(' } - part.count { it == ')' }
+                if (depth <= 0) break
+            }
+            return text.toString()
+        }
+
+        const val MAX_LINES = 8
+
         val LOG_CALL = Regex("""\b(Log\.[vdiwe]|[A-Za-z]*Log\.[a-z]|log|event)\(""")
 
         /** A template that prints a name: `$ssid`, `${o.ssid}`, `$prevSsid`, `${x.passphrase}`, `${o.restored}`. Not `.length`. */

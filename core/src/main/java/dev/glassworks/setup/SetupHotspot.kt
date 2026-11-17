@@ -10,6 +10,23 @@ import dev.glassworks.platform.HotspotNetwork
 import dev.glassworks.setup.SetupHotspotPolicy.Stop
 
 /**
+ * The panel's web server's check for a phone on the setup hotspot (#460). Android 10 gives an app no list of a
+ * hotspot's clients, so a request from the hotspot's own network ([isClient]) is the proof that a phone joined: then
+ * [SetupHotspot.phoneJoined] runs through [post] (the main thread). Checked until the first one in each run. Any thread.
+ */
+class PhoneJoin(
+    private val hotspot: () -> SetupHotspot?,
+    private val isClient: (remote: String?) -> Boolean,
+    private val post: (() -> Unit) -> Unit,
+) {
+    /** The web server got a request from [remote]. */
+    fun request(remote: String?) {
+        val hs = hotspot() ?: return
+        if (hs.isOn && !hs.phoneSeen && isClient(remote)) post(hs::phoneJoined)
+    }
+}
+
+/**
  * The setup hotspot on the panel (#197): runs [SetupHotspotPolicy] and keeps [hotspot] on exactly while it
  * says so. The setup screen draws [view], and its Stop calls [cancel]. Wi-Fi details from any channel call
  * [configured] before the panel joins: the hotspot is off by the time it returns, so the radio is free.
