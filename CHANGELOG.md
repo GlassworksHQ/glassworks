@@ -341,6 +341,10 @@ below as the release notes.
 - **The Bluetooth proxy says when it can't run.** With the pane on but Bluetooth or location off, or
   the location permission missing, the settings menu and the Manage page said it was running. They
   now say *Can't run* and why.
+- **The lululemon Mirror shows in Home Assistant as the Mirror.** Glassworks for generic Android used to
+  name it after the board its image reports, `msm8916-for-arm64`. Now HA finds it as `lululemon-mirror-…`,
+  named "lululemon Studio Mirror", made by lululemon. A Mirror HA already has keeps its entry and entities and
+  takes the new name on its next connection. Any other device keeps its own name.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.

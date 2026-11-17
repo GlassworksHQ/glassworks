@@ -94,13 +94,22 @@ conflict" dialog.
 | The frame | Node name (`device_name`, mDNS) | Friendly name (the device page) |
 |---|---|---|
 | `namedBy = FRAME`: one product (the S1) | The frame's id and the suffix: `aqara-s1-plus-a1b2c3` | The frame's name: "Aqara S1 Plus" |
-| `namedBy = MODEL`: many devices (generic-android: any device that isn't an S1) | The model as a host name and the suffix: `pixel-tablet-a1b2c3` | The model: "Pixel Tablet" |
+| `namedBy = MODEL`: many devices (generic-android: any other device) | The model as a host name and the suffix: `pixel-tablet-a1b2c3` | The model: "Pixel Tablet" |
+| A device frame the generic app recognises (`DeviceFrame`): the lululemon Mirror (#454) | As `namedBy = FRAME`: `lululemon-mirror-a1b2c3` | The frame's name: "lululemon Studio Mirror" |
 
 The node name is lowercase `a-z0-9-` and at most 63 characters. It is the same on every start and after
 an update, because the MAC is kept in prefs (`device_mac`). The code is `dev.glassworks.frame.DeviceName`,
 and `DeviceNameTest`, `PanelNameTest` and `GenericFrameTest` test it. The app picks the S1 frame only on the
 S1's hardware (`Build.HARDWARE` `sun50iw10p1`) and the generic one everywhere else. The Music Assistant
 player and Improv use the same friendly name.
+
+The generic frame goes by a device frame only when the device carries that frame's mark, so another device
+is never named after it. The Mirror's community image reports the Qualcomm reference board (`ro.product.model`
+"MSM8916 for arm64"), as other MSM8916 devices do. Its mark is lululemon's own signed boot image, which every
+Mirror keeps: `ro.bootimage.build.fingerprint` starts `mirror/mirror/`, on `ro.board.platform` `msm8916`. There,
+the `board` record is `lululemon-mirror` and HA's device info says *Studio Mirror* by *lululemon*.
+`DeviceFrameTest` covers the Mirror, another MSM8916 device, the Pixel Tablet and an unknown device. A Mirror
+added to HA before #454 as `msm8916-for-arm64-…` is renamed in place, as in the table below.
 
 **After updating** a panel that HA already has (read 2026-11-14 from home-assistant/core 2026.11.0,
 `esphome/manager.py` and `esphome/config_flow.py`, and aioesphomeapi 46.25.0; the dev HA runs
