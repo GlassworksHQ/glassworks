@@ -41,12 +41,19 @@ class ManageFixture(
     var tokens: HaGateway.Tokens = HaGateway.Tokens.Ok("ACCESS", "REFRESH")
     val exchanged = Collections.synchronizedList(ArrayList<String>())
     val revoked = Collections.synchronizedList(ArrayList<String>())
+    /** The HA address of each `auth/current_user` the panel asked. */
+    val userChecks = Collections.synchronizedList(ArrayList<String>())
+    /** Tokens the fake HA doesn't know. */
+    val refusedTokens = Collections.synchronizedSet(HashSet<String>())
     val gateway = object : HaGateway {
         override fun exchangeCode(haBase: String, clientId: String, code: String, codeVerifier: String): HaGateway.Tokens {
             exchanged += "$haBase $clientId $code"
             return tokens
         }
-        override fun currentUser(haBase: String, accessToken: String) = user
+        override fun currentUser(haBase: String, accessToken: String): HaUser? {
+            userChecks += haBase
+            return if (accessToken in refusedTokens) null else user
+        }
         override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean { revoked += refreshToken; return revokeWorks }
     }
     val signIn = HaSignIn(gateway, resolve = { listOf(InetAddress.getByName(it)) }, clock = { now },
