@@ -79,6 +79,8 @@ class CameraHub(
     private var presenceRange: android.util.Range<Int>? = null
     /** The reader's size: [width] x [height] when the camera lists it ([yuvSizeFor]). */
     private var size = width to height
+    /** The stream on the open camera, read with [size]: the session never looks the camera up again. */
+    private var openFit: StreamFit = StreamFit.Refused(SIZES_UNREADABLE)
 
     private val wanted get() = sinks.isNotEmpty() || waiters.isNotEmpty() || encoder != null ||
         SystemClock.elapsedRealtime() < lingerUntil
@@ -280,7 +282,9 @@ class CameraHub(
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
-        size = sizes(id).reader // throws to openCamera, which retries
+        val read = sizes(id) // throws to openCamera, which retries
+        size = read.reader
+        openFit = read.fit
         val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
         presenceRange = if (!legacy) null else presenceRangeFor(
             c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
@@ -296,8 +300,8 @@ class CameraHub(
             reader = r
         }
         // The stream never asks on a camera that can't stream ([CameraStream] opens no port); if it did, presence goes on alone.
-        val encoder = encoder?.takeIf { streamFit is StreamFit.Size }
-        if (this.encoder != null && encoder == null) log("camera: no stream ($streamFit); presence goes on")
+        val encoder = encoder?.takeIf { openFit is StreamFit.Size }
+        if (this.encoder != null && encoder == null) log("camera: no stream ($openFit); presence goes on")
         val targets = listOfNotNull(r.surface, encoder)
         val gen = ++generation
         configuring = true
