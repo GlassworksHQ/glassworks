@@ -162,7 +162,7 @@ open the entity, and turn on *Enabled*.
 | Auto brightness | `auto_brightness` | core | config | off | Set once |
 | Idle timeout | `idle_timeout` | core | config | on | Automations: [Panel night mode](blueprints.md) sets it at night |
 | Max auto brightness | `max_brightness` | core | config | on | Automations: [Panel night mode](blueprints.md) lowers it at night |
-| Presence range | `presence_range` | core | config | off | Set once, for the room. Every frame has it today, though only the S1's sensor has a range; [#476](https://github.com/GlassworksHQ/glassworks/issues/476) makes the entities follow the hardware |
+| Presence range | `presence_range` | core | config | off | Set once, for the room. Only on a sensor with a range ([by frame](#screen-entities-by-frame)) |
 | Zoom | `zoom` | core | config | off | Set once |
 | Dashboard | `dashboard` | core | config | off | Set once. Turn it on to pick a dashboard; the panel has no picker of its own yet |
 | Dashboard URL | `dashboard_url` | core | config | off | Set once |
@@ -249,9 +249,9 @@ So on a panel HA already has:
 | Entity | object_id | What it does |
 |---|---|---|
 | light `Screen` | `screen` | on → wake the screen, off → screen off (`ScreenPolicy.wake/sleep`); brightness sets a fixed brightness and turns *Auto brightness* off |
-| switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve |
-| binary_sensor `Presence` (occupancy) | `presence` | VI5300 ToF "near" |
-| sensor `Illuminance` (lx) | `illuminance` | MK6212 light sensor |
+| switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
+| binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
+| sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
 | select `Screen mode` | `screen_mode` | `presence` / `always` |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
@@ -298,6 +298,36 @@ So on a panel HA already has:
 | text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
 | text_sensor `Signed in` | `signed_in` | diagnostic; `yes` / `no`: whether a QR sign-in refresh token is stored (never the token) |
 | button `Sign out` | `sign_out` | revokes the refresh token at HA (`/auth/revoke`), deletes it, shows the sign-in screen |
+
+#### Screen entities by frame
+
+The screen's entities follow the device's hardware (#476), from the same facts as the panel's **Settings → Screen**
+and the Manage page: an entity the device can't back isn't listed. A device decides when the app starts, from
+the sensors Android lists then. Android gives an app its sensor list once (`SystemSensorManager` reads it when it is
+made, and the app reuses that one; read in AOSP, not tried on a device), so a sensor Android lists only later shows
+up after the next app start: an update, a restart, or **Restart app**. The S1 doesn't ask: its frame declares both
+of its sensors.
+
+| Entity | object_id | Needs | S1 | Pixel Tablet | Mirror | Other Android devices |
+|---|---|---|---|---|---|---|
+| Screen, Screen mode, Idle timeout | `screen`, `screen_mode`, `idle_timeout` | nothing | yes | yes | yes | yes |
+| Presence | `presence` | the frame's own presence sensor | yes (VI5300) | no | no | with a proximity sensor whose range isn't 0 |
+| Presence range | `presence_range` | a presence sensor with a range | yes | no | no | no: a proximity sensor's range is fixed |
+| Auto brightness, Illuminance, Max auto brightness | `auto_brightness`, `illuminance`, `max_brightness` | a light sensor | yes (MK6212) | yes | no: none expected, not yet read on a Mirror | with a light sensor |
+| Camera presence | `camera_presence` | a camera ([Camera entities](#camera-entities)) | no | yes | yes | with a camera |
+
+**Presence from the camera is `camera_presence`, not `presence`.** The camera pane has its own
+presence entity, listed whenever the device has a camera, with the pane on or off: off, it has no
+state, and the entity list stays the same (as for every pane, [Panes on and off](#panes-on-and-off)).
+So turning the Camera pane on or off never makes Home Assistant reconnect. On a device that has both
+its own sensor and a camera, `presence` is the sensor's and `camera_presence` the camera's.
+
+Before #476 every device listed all of them. After the update, a device drops the ones it can't back, and
+Home Assistant removes them on the next reconnect (`esphome/entry_data.py` and `entity.py`, 2026.11: the
+entity registry's `async_remove`). If the hardware comes back, so does the entity, with its old id
+if no other entity has taken that id meanwhile. An automation that used one stops working. The S1 lists the same entities, with the same object ids, order and
+defaults, as before. The Mirror and Pixel Tablet columns come from the frames' hardware and the tests
+(`FrameEntitiesTest`), not yet checked on those devices (2026-11-17).
 
 Plus `Block Aqara cloud` and `Aqara cloud daemon` ([below](#aqara-cloud)), the wall base entities, and the entities HA adds itself for a voice device: `assist_satellite.<device>_assist_satellite`,
 *Assist pipeline* and *Wake word* selects (two of each), *Finished speaking detection*.
@@ -426,8 +456,9 @@ Rename them in HA.
 
 When the detected base changes (none ↔ switch, channel count) and stays changed for 5 s, the panel
 rebuilds its entity list and sends `DisconnectRequest` to every API client. HA reconnects (after
-its short "expected disconnect" cool-down), lists the entities again and adds the new ones. Removed
-entities stay in HA's registry, shown as unavailable/removed. The last layout is persisted, so
+its short "expected disconnect" cool-down), lists the entities again and adds the new ones. It removes
+the ones that went away from its entity registry, as for [a frame's screen entities](#screen-entities-by-frame),
+and they come back when the base does, with their old ids if no other entity has taken them meanwhile. The last layout is persisted, so
 restarting the app with the same base doesn't trigger this.
 
 The **Dashboard** select uses the same mechanism: its options are only sent in the entity listing,
