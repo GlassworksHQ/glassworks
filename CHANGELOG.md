@@ -23,6 +23,10 @@ below as the release notes.
   shows the panel's setup page as soon as it joins, with no address to type, and so does an Android 11 or newer
   phone that joined from its Wi-Fi settings. Android 10 shows a "Sign in to Wi-Fi network" notification to tap.
   Comes with the radio bundle.
+- **See how complete Glassworks is on each device.** Every frame's page on glassworks.dev has a
+  checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
+  and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the
+  first five decide the word. The S1 is Good today: the wall base's buttons don't reach the panel yet.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -300,6 +304,12 @@ below as the release notes.
 - **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
   landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
   did, and stops with a clear message if it didn't. The Mirror's install is still test only.
+- **Wake word models and updates download on Android 6 and 7.0.** The lululemon Mirror and other Android
+  6–7.0 devices could not download the wake word models, and would have failed to download an update:
+  their built-in list of trusted certificate authorities is missing the one GitHub's downloads use. The
+  app now adds that one certificate authority on those Android versions, and checks certificates as
+  before. Android 7.1 and newer are unchanged. A device without the fix can't download it either, so
+  install this version with Kiln over USB.
 - **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
