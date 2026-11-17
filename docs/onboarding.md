@@ -402,6 +402,17 @@ This is the part that removes the login screen. Implemented in `auth/` (`OAuth.k
 - The sign-in screen (now the setup screen's Sign-in step) appears when the GeckoView lands on HA's
   `/auth/authorize` (logged out) and there is no refresh token, or after a sign-out. It goes away by
   itself when the token arrives. `--ez show_signin true` previews it without touching the session.
+- **Home Assistant moves (#467).** A sign-in stores HA's `uuid` (`ha_uuid` in `auth`), and discovery
+  stores the `uuid` of the mDNS record its address came from (`ha_url_uuid`). It is HA's `instance_id`,
+  from TXT `uuid` (`components/zeroconf/__init__.py`). It is the only place HA gives it without a token:
+  `/api/config` needs a token, and its answer has no uuid. When DHCP moves HA and the dashboard's address
+  changes, the sign-in moves to the new address only if the same uuid answers there, with the same scheme.
+  Token refresh, external auth and the Thread join then use the new address. If the uuid differs or isn't
+  known, no token goes out (no refresh, no revoke). The Sign-in step shows instead of HA's login page,
+  with "Home Assistant moved to a new address. Sign in again." A sign-in from before has no uuid. It
+  learns it the next time discovery sees HA at the sign-in's own address. The uuid is public on the LAN, so
+  this check tells two Home Assistants apart. It does not stop someone on the LAN who can already
+  intercept the panel's plain `http://` traffic.
 
 The original design notes:
 

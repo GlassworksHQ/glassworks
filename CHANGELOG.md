@@ -357,6 +357,10 @@ below as the release notes.
   name it after the board its image reports, `msm8916-for-arm64`. Now HA finds it as `lululemon-mirror-…`,
   named "lululemon Studio Mirror", made by lululemon. A Mirror HA already has keeps its entry and entities and
   takes the new name on its next connection. Any other device keeps its own name.
+- **The dashboard stays signed in when Home Assistant gets a new address.** If your router gives Home
+  Assistant a new address and the panel finds it, the panel checks that it is the same Home Assistant and
+  keeps its sign-in, instead of showing Home Assistant's login page. If it can't tell, the setup screen asks
+  you to scan the sign-in code again and says why. This also works on panels without touch.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.

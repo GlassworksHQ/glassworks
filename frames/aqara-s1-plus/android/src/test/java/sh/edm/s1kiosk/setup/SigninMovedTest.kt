@@ -17,7 +17,7 @@ import sh.edm.s1kiosk.ui.Mockup
 
 /**
  * Home Assistant moved to an address the panel can't confirm (#467): the Sign in step says why it asks again, with
- * its phone QR code, also on a frame without touch. Its mock-ups (touch, no touch) are written with
+ * its phone QR code, also on a frame without touch. Its mock-ups (touch, no touch, each with the usual line) are written with
  * `./gradlew :kiosk:testDebugUnitTest --tests '*SigninMovedTest*' -Ps1MockupDir=<dir>`.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -60,8 +60,11 @@ class SigninMovedTest {
     @Test fun mockups() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
         Mockup.interFromSources()
-        for ((name, input) in listOf("setup-signin-moved" to Input.TOUCH, "setup-signin-moved-no-touch" to Input.NONE)) {
-            val s = screen(input, signinMoved = true)
+        for ((name, input, moved) in listOf(
+            Triple("setup-signin-usual", Input.TOUCH, false), Triple("setup-signin-moved", Input.TOUCH, true),
+            Triple("setup-signin-usual-no-touch", Input.NONE, false), Triple("setup-signin-moved-no-touch", Input.NONE, true),
+        )) {
+            val s = screen(input, signinMoved = moved)
             Mockup.idle()
             Mockup.save(name, s)
         }
