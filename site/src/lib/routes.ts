@@ -35,6 +35,7 @@ const pages: RouteSource = () => [
   { path: "/blueprints" },
   { path: "/brand" },
   { path: "/trademarks" },
+  { path: "/research" },
 ];
 
 const framePages: RouteSource = () => frames.map((f) => ({ path: `/frames/${f.id}` }));

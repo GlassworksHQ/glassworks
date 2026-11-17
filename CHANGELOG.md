@@ -269,6 +269,12 @@ below as the release notes.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.
+- **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
+  pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
+  said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
+  for those pictures over https, which Home Assistant doesn't serve. It now asks over http, as the page
+  does. If something from Home Assistant's address is ever blocked again, the panel names it with its
+  `https://`, so it doesn't read as your Home Assistant.
 - **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
   landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
   did, and stops with a clear message if it didn't. The Mirror's install is still test only.
