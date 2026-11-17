@@ -88,8 +88,12 @@ It stays allowed for 30 minutes. Any of these allows it:
 
 **Panels without touch.** On a frame whose screen takes no tap (`input = NONE`, the lululemon Mirror's), the
 panel's setup screen only shows where to set it up: the page's address and a QR code ("Scan to set it up."),
-and Sign in's QR code for a phone. The pairing code shows without Close, and goes when it's used or runs
-out. Wi-Fi comes from Kiln over USB first.
+and Sign in's QR code for a phone. Once the page has signed it in, the screen waits for Home Assistant to add
+the panel (Settings → Devices & services, or the old entry's re-authenticate after a reinstall), with the
+page's address small below. The pairing code shows without Close, and goes when it's used or runs
+out. Wi-Fi comes from Kiln over USB first. Such a screen often has no presence sensor either, so until Home
+Assistant has added the panel, the setup screen turns it on when it comes up. A set-up panel that loses Wi-Fi
+stays dark.
 
 **What the page can't protect against.** It is plain HTTP on your network, as the Manage page is: no
 browser trusts a certificate for a panel's local address. The session cookie is bound to the address that

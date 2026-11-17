@@ -54,6 +54,17 @@ internal class ModelFetcher(
             return c.inputStream
         }
 
+        /**
+         * Deletes the `.part` files in [dir] older than 10 minutes: what a killed download left. A live download's
+         * part is younger. The age comes from the wall clock, and the S1 has no RTC battery: if NTP moves the clock
+         * forward at boot while a download runs, its part can look old and go. That download then fails, and the
+         * engine retries it.
+         */
+        fun sweep(dir: File) {
+            val stale = System.currentTimeMillis() - STALE_PART_MS
+            dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
+        }
+
         fun sha256(f: File): String = f.inputStream().use { input ->
             val md = MessageDigest.getInstance("SHA-256")
             val buf = ByteArray(64 * 1024)
@@ -78,9 +89,6 @@ internal class ModelFetcher(
         val need = missing(dir)
         if (need.isEmpty()) return need
         if (!dir.isDirectory && !dir.mkdirs()) throw ModelDownloadException("cannot create $dir", ModelFailure.Storage)
-        // What a killed process left behind; a live download's part is younger.
-        val stale = System.currentTimeMillis() - STALE_PART_MS
-        dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
         for (name in need) {
             // Its own .part: an engine stopped mid-download (voice off and on) may still be writing one.
             val part = File(dir, "$name.${UUID.randomUUID()}.part")

@@ -160,8 +160,9 @@ class MainActivity : Activity() {
             if (resumed) requestRuntimePermissions() // a pane turned on since (from Home Assistant) asks once
             refreshOffline()
             // #449: a frame with no presence sensor has nothing to wake it, so it stays on through setup and the
-            // connecting screen. The S1's sensor wakes it as before.
-            glassworks.screen.stayOn(NOT_READY, !presenceSensor && (setupOverlay.isShowing || loadingOverlay.isShowing))
+            // connecting screen. The S1's sensor wakes it as before. Setup, which covers the connecting screen, only until
+            // Home Assistant has added the panel: a set-up panel that lost Wi-Fi sleeps on its idle timeout (#484).
+            glassworks.screen.stayOn(NOT_READY, !presenceSensor && if (setupOverlay.isShowing) setupOverlay.needsHomeAssistant else loadingOverlay.isShowing)
             handler.postDelayed(this, SETUP_TICK_MS)
         }
     }

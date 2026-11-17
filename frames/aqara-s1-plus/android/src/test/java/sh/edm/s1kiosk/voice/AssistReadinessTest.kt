@@ -164,6 +164,17 @@ class AssistReadinessTest {
     }
 
     @Test
+    fun aStoppedEnginesLateReportDoesNotComeBack() {
+        pane.start()
+        val report = input.onReadiness!!
+        pane.stop()
+        report(VoiceReadiness.MicrophoneUnavailable)
+        assertNull("Home Assistant keeps voice off unknown", entity())
+        assertEquals("nothing sent to Home Assistant", 0, published)
+        assertFalse("the Voice page shows no problem", status().problem())
+    }
+
+    @Test
     fun aMutedPanelSaysMutedWhileTheModelLoads() {
         prefs.micMuted = true
         pane.start()
