@@ -58,7 +58,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       <section className="card" aria-labelledby="h">
         <h2 id="h">{j.step === 'ok' ? `On ${j.ssid}.` : j.step === 'err' ? `Couldn't join ${j.ssid}.` : `Joining ${j.ssid}…`}</h2>
         <ol className="join" aria-live="polite">
-          {['Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
+          {[setup.over === 'lan' ? 'Sent to the panel' : 'Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
             <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
           ))}
         </ol>

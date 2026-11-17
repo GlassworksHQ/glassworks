@@ -33,4 +33,25 @@ class ImprovDoneTest {
         assertTrue(ImprovDone.card(Via.COMPUTER, "Example-Home", null).body.contains("Kiln"))
         assertEquals("Panel is online", ImprovDone.card(Via.OTHER, null, null).title)
     }
+
+    @Test
+    fun `the done card follows the way the Wi-Fi was last sent in the session`() {
+        val p = ImprovDone.JoinPath()
+        p.sessionStarted()
+        p.sent(Via.SETUP_PAGE, "Example-Home")
+        assertEquals(ImprovDone.card(Via.SETUP_PAGE, "Example-Home", null), p.card(null))
+        p.sent(Via.BLUETOOTH, "Example-Upstairs")
+        assertEquals("the last one sent wins", ImprovDone.card(Via.BLUETOOTH, "Example-Upstairs", "http://192.0.2.10:8099/"), p.card("http://192.0.2.10:8099/"))
+    }
+
+    @Test
+    fun `a new session forgets the last way, and a network from elsewhere is named by nobody`() {
+        val p = ImprovDone.JoinPath()
+        p.sent(Via.COMPUTER, "Example-Home")
+        p.sessionStarted()
+        val c = p.card(null)
+        assertEquals(Mark.WIFI, c.mark)
+        assertEquals("no stale name from an earlier join", "Panel is online", c.title)
+        assertEquals(ImprovDone.card(Via.OTHER, null, null), c)
+    }
 }

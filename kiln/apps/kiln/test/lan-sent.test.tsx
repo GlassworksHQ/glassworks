@@ -39,8 +39,9 @@ describe('the panel\'s page after the Wi-Fi is sent', () => {
   });
 
   it('the panel answering later that it never left is still an error, with Try again', () => {
-    render(<Wifi busy={false} steps={steps} setup={sent('lan', 'err')} />);
+    const { container } = render(<Wifi busy={false} steps={steps} setup={sent('lan', 'err')} />);
     expect(screen.getByRole('heading').textContent).toBe('Couldn\'t join Example-Home.');
+    expect(container.querySelector('ol li')?.textContent).toBe('Sent to the panel');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
