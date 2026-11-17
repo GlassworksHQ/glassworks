@@ -172,8 +172,10 @@ PackageInstaller. Two routes install it without anyone touching the screen:
 | Device owner | 8.0 or newer | `dpm set-device-owner` over adb, on a device with no accounts |
 | Privileged system app | 6.0 or newer | Nothing: Kiln flashes the app into `/system/priv-app` (the Mirror), where Android grants `INSTALL_PACKAGES` |
 
-Without either, Android asks for a tap on the screen before it installs. The *Update status* sensor
-says which one happens: "Installing 1.2.3 without a tap", or "Installing 1.2.3: waiting for a tap on
+Without one of them, Android asks for a tap on the screen before it installs. The device's page in
+the panel's settings and on the Manage page, and the *Silent updates* sensor in Home Assistant, say
+whether updates install silently, and how to change it
+([esphome.md](../../docs/esphome.md#silent-updates)). The *Update status* sensor says which one happens: "Installing 1.2.3 without a tap", or "Installing 1.2.3: waiting for a tap on
 the screen".
 
 ### Silent self-update (Android 12+)

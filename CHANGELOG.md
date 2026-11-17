@@ -21,6 +21,11 @@ below as the release notes.
   digits instead of Android's `AndroidShare_`. Comes with the radio bundle, from the panel's next restart.
 - **On the S1, joining the panel's own Wi-Fi opens its setup page by itself.** As with a hotel's Wi-Fi, the
   phone shows the panel's setup page as soon as it joins, with no address to type. Comes with the radio bundle.
+- **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
+  Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
+  system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
+  the Manage page shows the same answer, and where updates ask for a tap, how to change that, such as
+  allowing "Install unknown apps" for the app.
 - **Every device says what kind it is, and the Pixel Tablet is listed.** On glassworks.dev and in Kiln's
   device list, each card now says whether it is a full frame with its own code (the S1), a device frame
   that runs the generic app with its own settings (the Mirror, generic Android), or a tested device that

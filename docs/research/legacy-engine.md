@@ -488,7 +488,7 @@ app is never offered a build that needs Android 8, and a current app is never of
 
 | The app | Android 6–7 | What happens (read from `UpdateManager`, tested where marked) |
 |---|---|---|
-| A privileged system app (`INSTALL_PACKAGES` granted: the Mirror, flashed into `/system/priv-app` by Kiln) | Commits with no prompt | Says "without a tap" (`InstallRights`, `InstallRightsTest`). On the Mirror, #398's probe app updated itself this way and kept its permissions (results in #395, `frames/lululemon-mirror/research/privileged-app.md`) |
+| A privileged system app (`INSTALL_PACKAGES` granted: the Mirror, flashed into `/system/priv-app` by Kiln) | Commits with no prompt | Says "without a tap" (`SilentUpdates`, `SilentUpdatesTest`). On the Mirror, #398's probe app updated itself this way and kept its permissions (results in #395, `frames/lululemon-mirror/research/privileged-app.md`) |
 | The device owner | Commits with no prompt | As before (#277) |
 | An app someone installed | Android asks (`STATUS_PENDING_USER_ACTION`) | `UpdateInstallReceiver` shows the confirmation, as on Android 8–11 |
 

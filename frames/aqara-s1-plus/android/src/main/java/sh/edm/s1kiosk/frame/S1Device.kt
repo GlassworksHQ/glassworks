@@ -7,6 +7,7 @@ import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
+import dev.glassworks.update.SilentUpdates
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.RadioHelper
 import sh.edm.s1kiosk.radio.RadioMode
@@ -20,7 +21,8 @@ import java.util.concurrent.Executors
  * The S1's Device page ([dev.glassworks.frame.Frame.deviceSection]): what belongs to the device and to no
  * pane. Block Aqara cloud (the wall base pane's setting and Home Assistant entity, `block_aqara_cloud`; the
  * pane still applies it), the cloud daemon's state, which of Aqara's apps are turned off
- * (frames/aqara-s1-plus/tools/debloat/debloat.sh), and the radio's mode, which opens the Radio pane.
+ * (frames/aqara-s1-plus/tools/debloat/debloat.sh), the radio's mode, which opens the Radio pane, and whether
+ * app updates install silently (the boot image's root update service, #422).
  */
 class S1Device(
     private val cloud: AqaraCloud,
@@ -53,8 +55,13 @@ class S1Device(
             SettingsItem.Info({ DAEMON_TITLE }, { daemon(running) }),
             appsReadable(context).takeIf { it }?.let { SettingsItem.Info({ APPS_TITLE }, { apps(context) }) },
             SettingsItem.Link(RADIO_TITLE, radioMode(running), section = "radio"),
+            GenericAndroid.silentUpdatesItem { rootService()?.let { SilentUpdates.read(context, it) } },
         ))
     }
+
+    /** Whether this boot image has the root update service; null until the first getprop lands. */
+    private fun rootService(): SilentUpdates.Root? =
+        cached("root") { RootUpdateInstaller(props).present().toString() }?.let { if (it.toBoolean()) SilentUpdates.Root.PRESENT else SilentUpdates.Root.MISSING }
 
     /** What the wall base pane says of the daemon (`aqara_cloud`), else init's word for it. */
     private fun daemon(running: (String) -> Pane?): String =

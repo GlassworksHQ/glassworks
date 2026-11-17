@@ -115,6 +115,21 @@ open class PlatformApi(
      */
     val canInstallWithoutUserAction: Boolean get() = apiLevel >= 31
 
+    /**
+     * The lowest targetSdk the new APK needs for [canInstallWithoutUserAction] to install it with no tap, or null
+     * below Android 12. From `SessionParams.setRequireUserAction`'s docs (read 2026-11-16): 29 on Android 12, 30 on
+     * 13, 31 on 14, 33 on 15, 34 on 16, 35 on 17. AOSP's code agrees up to 15 (`SILENT_INSTALL_ALLOWED`); its public
+     * main branch still says 33 after that, so this follows the stricter docs. Past 17 the docs say only that it goes
+     * up: one level a year, as from 15 to 17, is a guess.
+     */
+    val silentInstallMinTarget: Int? get() = when {
+        apiLevel < 31 -> null
+        apiLevel < 33 -> 29
+        apiLevel == 33 -> 30
+        apiLevel == 34 -> 31
+        else -> apiLevel - 2
+    }
+
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 
