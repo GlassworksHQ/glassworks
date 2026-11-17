@@ -217,6 +217,51 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    /**
+     * #449: a frame with no presence sensor through setup at night. Past the 20 s night timeout, at the night's
+     * brightness, with no wake; the countdown starts when it ends.
+     */
+    @Test fun stayOnPausesTheIdleTimeoutAndChangesNothingElse() {
+        val light = FakeSource()
+        val settings = Settings().apply { nightWindow = "00:00-23:59" }
+        val screen = policy(light = light, settings = settings)
+        screen.start(context)
+        light.lux!!(1000f)
+        advance(10)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+
+        screen.stayOn("not ready", true)
+        screen.stayOn("not ready", true)
+        advance(600_000)
+        assertEquals("on far past the 20 s night timeout", emptyList<Boolean>(), keepOn.filter { !it })
+        assertEquals("the night cap stays", 0.2f, screen.brightness, 0.001f)
+        assertFalse("not a hold", screen.held)
+        assertEquals("no wake", null, ShadowPowerManager.getLatestWakeLock())
+
+        screen.stayOn("not ready", false)
+        advance(19_000)
+        assertEquals(emptyList<Boolean>(), keepOn.filter { !it })
+        advance(2_000)
+        assertEquals("the night timeout counts from the end", listOf(false), keepOn.filter { !it })
+        screen.stop()
+    }
+
+    @Test fun stayOnLeavesAScreenThatIsOffAlone() {
+        val screen = policy()
+        screen.start(context)
+        screen.sleep("test")
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        advance(10)
+        ShadowPowerManager.reset()
+        screen.stayOn("not ready", true)
+        advance(10_000)
+        assertFalse(screen.screenOn)
+        assertEquals("nothing turned it on", null, ShadowPowerManager.getLatestWakeLock())
+        screen.stop()
+    }
+
     /** Clarity's test hold (#240): the screen on past the 20 s night timeout, at the night's brightness. */
     @Test fun aTestHoldKeepsTheScreenOnAndLeavesNightBrightnessAlone() {
         ShadowLog.clear()

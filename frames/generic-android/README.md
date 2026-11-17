@@ -54,7 +54,8 @@ The app is the Glassworks core with a fixed base set of panes: Assist (with its 
 the device has no hardware for (no microphone, no speaker) is hidden: it isn't in the settings, on the Manage
 page, in setup or in Home Assistant. The screen follows Android's standard proximity sensor (near means under
 5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
-no proximity sensor; then the screen goes off after the idle time and wakes on a touch.
+no proximity sensor; then the screen goes off after the idle time and wakes on a touch. Until setup is done and
+the dashboard has loaded, it stays on (#449).
 
 | | S1 Kiosk on a tablet | Glassworks for generic Android |
 |---|---|---|

@@ -342,6 +342,13 @@ Every candidate is confirmed with `GET <url>/manifest.json` (the frontend's PWA 
 "Home Assistant") before it is stored (`ha_url`, `ha_url_source`). A manual entry is never
 overwritten. ESPHome exposes the URL the panel uses as the text_sensor **Home Assistant URL**.
 
+A dashboard URL set by hand on a `.local` host (`http://homeassistant.local:8123/…`) loads through
+the address discovery stored, on Android 6 to 11, whose resolver can't look up `.local` names (#449).
+The setting keeps the name; the engine's secure-context host, the sign-in base and relative media URLs
+use the address. A failed load browses for Home Assistant again, in case DHCP moved it, and a new
+address restarts the app onto it. `https://` URLs keep the name, since the certificate is for it.
+Android 12 and later load the URL as set.
+
 ### 4. Login without typing on the panel: QR sign-in + external auth ✅
 
 This is the part that removes the login screen. Implemented in `auth/` (`OAuth.kt`,

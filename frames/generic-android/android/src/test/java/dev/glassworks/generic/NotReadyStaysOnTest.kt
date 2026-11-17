@@ -1,0 +1,90 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.generic
+
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.NetworkInfo
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowNetwork
+import org.robolectric.shadows.ShadowNetworkCapabilities
+import org.robolectric.shadows.ShadowNetworkInfo
+import sh.edm.s1kiosk.KioskPrefs
+import sh.edm.s1kiosk.gecko.GeckoPinHarness
+import sh.edm.s1kiosk.gecko.GeckoShadows
+import sh.edm.s1kiosk.setup.SetupOverlay
+
+/**
+ * #449: the Mirror (no presence sensor) slept 20 s after boot at night, with the connecting screen up. The real
+ * MainActivity under GenericApp, at night (20 s idle timeout). Until setup is done and the dashboard is up, nothing
+ * turns the screen off. Then the timeout works as before.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(
+    sdk = [34],
+    application = GenericApp::class,
+    instrumentedPackages = ["org.mozilla.geckoview"],
+    shadows = [
+        GeckoShadows.ShadowRuntime::class, GeckoShadows.ShadowExtensionController::class,
+        GeckoShadows.ShadowSessionController::class, GeckoShadows.ShadowSession::class, GeckoShadows.ShadowView::class,
+    ],
+)
+class NotReadyStaysOnTest {
+    private val dash = "http://192.0.2.10:8123/"
+
+    private fun night(set: (KioskPrefs) -> Unit = {}) = GeckoPinHarness(prefs = { it.nightWindow = "00:00-23:59"; set(it) })
+
+    private fun GeckoPinHarness.sleeps() = logs("S1Kiosk.Screen").filter { it.startsWith("sleep (idle") }
+    private fun GeckoPinHarness.setup() = rootChildren().filterIsInstance<SetupOverlay>().single()
+
+    @Test fun theSetupScreenStaysOnAtNight() = night().use { h ->
+        h.advance(5_000)
+        assertTrue("a fresh panel shows setup", h.setup().isShowing)
+        h.advance(120_000)
+        assertEquals(emptyList<String>(), h.sleeps())
+        assertTrue(h.logs("S1Kiosk.Screen").toString(), "stay on (not ready)" in h.logs("S1Kiosk.Screen"))
+    }
+
+    /** Online over Wi-Fi: an active network with internet. */
+    private fun online() {
+        val app = RuntimeEnvironment.getApplication()
+        val cm = shadowOf(app.getSystemService(ConnectivityManager::class.java))
+        cm.clearAllNetworks()
+        val n = ShadowNetwork.newInstance(1)
+        val ni = ShadowNetworkInfo.newInstance(NetworkInfo.DetailedState.CONNECTED, ConnectivityManager.TYPE_WIFI, 0, true, NetworkInfo.State.CONNECTED)
+        cm.addNetwork(n, ni)
+        cm.setActiveNetworkInfo(ni)
+        cm.setNetworkCapabilities(n, ShadowNetworkCapabilities.newInstance().also { c ->
+            shadowOf(c).addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            shadowOf(c).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        })
+    }
+
+    @Test fun theConnectingScreenStaysOnUntilTheDashboardIsUpThenTheTimeoutCounts() {
+        online()
+        night { it.urlSetting = dash; it.haSeen = true }.use { h ->
+            h.progress.onPageStart(h.session, dash)
+            h.advance(120_000)
+            assertFalse("set up: no setup screen", h.setup().isShowing)
+            assertTrue("still connecting", h.loading.isShowing)
+            assertEquals(emptyList<String>(), h.sleeps())
+
+            h.progress.onPageStop(h.session, true)
+            h.send(h.connect(dash), org.json.JSONObject("""{"type":"ready","why":"frontend"}"""), replies = 0)
+            h.advance(2_000)
+            assertFalse(h.loading.isShowing)
+            h.advance(30_000)
+            assertEquals("the 20 s night timeout, as before", listOf("sleep (idle 20s) admin=false"), h.sleeps())
+        }
+    }
+}

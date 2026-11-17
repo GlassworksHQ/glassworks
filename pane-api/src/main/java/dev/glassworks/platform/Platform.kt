@@ -108,6 +108,12 @@ open class PlatformApi(
     val hasSystemCameraIndicator: Boolean get() = apiLevel >= 31
 
     /**
+     * Android's resolver answers mDNS `.local` names (Android 12, its DnsResolver module). Below it, a lookup of
+     * `homeassistant.local` fails in every app and in GeckoView, though the name answers on the network (#449).
+     */
+    val resolvesLocalNames: Boolean get() = apiLevel >= 31
+
+    /**
      * An app may update itself without a tap (Android 12): a PackageInstaller session can ask for
      * `USER_ACTION_NOT_REQUIRED`. Android still asks when the app lacks
      * `UPDATE_PACKAGES_WITHOUT_USER_ACTION` or "Install unknown apps", or when the new APK targets

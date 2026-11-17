@@ -30,6 +30,8 @@ import kotlin.math.log10
  *  - Brightness follows ambient light (log curve), capped lower at night.
  *  - [hold] keeps the screen on at the day's brightness, past night dimming and the idle timeout,
  *    while something urgent is on it (a high or critical notification), until [release].
+ *  - [stayOn] pauses the idle timeout and changes nothing else: no wake, no brightness. A frame with no
+ *    presence sensor keeps the screen on with it until setup is done and the dashboard is up (#449).
  *  - [testHold] keeps the screen on past the idle timeout for a test run, and changes nothing else:
  *    brightness and night dimming stay as they are. It ends by itself.
  *
@@ -91,6 +93,9 @@ class ScreenPolicy(
     private var lastActivity = SystemClock.elapsedRealtime()
     /** Why the screen is held ([hold]). Main thread. */
     private val holds = HashSet<String>()
+
+    /** Why the idle timeout is paused ([stayOn]). Main thread. */
+    private val stays = HashSet<String>()
 
     /** Something holds the screen on ([hold]). */
     val held: Boolean get() = holds.isNotEmpty()
@@ -283,6 +288,20 @@ class ScreenPolicy(
         lastActivity = SystemClock.elapsedRealtime()
     }
 
+    /**
+     * Pauses the idle timeout while [on], for [reason]. Several reasons can pause it at once, and the countdown
+     * starts from the moment the last one ends. Unlike [hold] it neither wakes the screen nor lifts night dimming:
+     * a screen that is off stays off, so a panel whose Home Assistant goes away at night stays dark.
+     */
+    fun stayOn(reason: String, on: Boolean) {
+        if (on) {
+            if (stays.add(reason)) Log.i(logTag, "stay on ($reason)")
+        } else if (stays.remove(reason)) {
+            Log.i(logTag, "stay on ended ($reason)")
+            lastActivity = SystemClock.elapsedRealtime()
+        }
+    }
+
     /** Lets go of a [hold]. The idle timeout counts from now, so the screen doesn't go dark at once. */
     fun release(reason: String) {
         if (!holds.remove(reason)) return
@@ -326,7 +345,7 @@ class ScreenPolicy(
                 return
             }
             val now = SystemClock.elapsedRealtime()
-            if (near || holds.isNotEmpty() || testHeld) lastActivity = now
+            if (near || holds.isNotEmpty() || stays.isNotEmpty() || testHeld) lastActivity = now
             val timeoutSec = if (isNight()) prefs.nightIdleOffSec else prefs.idleOffSec
             if (timeoutSec > 0 && keepOn && now - lastActivity >= timeoutSec * 1000L) {
                 sleep("idle ${timeoutSec}s")

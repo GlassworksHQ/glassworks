@@ -8,8 +8,12 @@ import dev.glassworks.screen.ScreenSettings
 import dev.glassworks.esphome.NoiseKeyStore
 import dev.glassworks.esphome.ReadableNoiseKeyStore
 import dev.glassworks.esphome.StoredKey
+import dev.glassworks.platform.Platform
+import dev.glassworks.platform.PlatformApi
 import dev.glassworks.secrets.SecretPrefs
 import dev.glassworks.secrets.SecretStore
+import dev.glassworks.web.LocalName
+import dev.glassworks.web.LocalRoute
 import sh.edm.s1kiosk.auth.OAuth
 import sh.edm.s1kiosk.auth.StoredAuth
 
@@ -19,7 +23,11 @@ import sh.edm.s1kiosk.auth.StoredAuth
  * which Home Assistant provisions, and the HA refresh token in `auth.xml`, see [auth]) are sealed
  * with the Keystore key ([SecretFiles]) and never logged.
  */
-class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()) : ScreenSettings {
+class KioskPrefs(
+    context: Context,
+    secrets: SecretStore = SecretStore.keystore(),
+    private val platform: PlatformApi = Platform,
+) : ScreenSettings {
     private val sp = SecretFiles.open(context, "kiosk", secrets)
     private val authSp = SecretFiles.open(context, "auth", secrets)
 
@@ -41,10 +49,19 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
 
     val isAutoUrl: Boolean get() = urlSetting.equals(AUTO, ignoreCase = true)
 
-    /** The dashboard URL to load, or "" while [isAutoUrl] and Home Assistant hasn't been found. */
+    /**
+     * The dashboard URL to load, or "" while [isAutoUrl] and Home Assistant hasn't been found. A set URL on a `.local`
+     * host loads through Home Assistant's [haUrl] where Android can't resolve the name ([dashboardRoute], #449).
+     */
     var url: String
-        get() = if (isAutoUrl) haUrl.takeIf { it.isNotEmpty() }?.let { "$it/" } ?: "" else urlSetting
+        get() = if (isAutoUrl) haUrl.takeIf { it.isNotEmpty() }?.let { "$it/" } ?: "" else dashboardRoute.url
         set(v) { urlSetting = v }
+
+    /** How [url] reaches a set dashboard URL: as set, or through [haUrl] in place of its `.local` name. */
+    val dashboardRoute: LocalRoute get() = LocalName.route(urlSetting, haUrl, platform.resolvesLocalNames)
+
+    /** The dashboard loads through the address discovery found: a load error may mean that address changed. */
+    val loadsFoundAddress: Boolean get() = isAutoUrl || dashboardRoute is LocalRoute.ByAddress
 
     /** Home Assistant base URL found by discovery or entered on the sign-in screen (`http://h:8123`). */
     val haUrl: String get() = sp.getString("ha_url", "") ?: ""
@@ -56,10 +73,17 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
         sp.edit().putString("ha_url", url).putString("ha_url_source", source).commit()
 
     /**
-     * The Home Assistant the panel talks to (sign-in, relative media URLs): the origin of a
-     * configured dashboard URL, else the discovered [haUrl]. Null if neither is known.
+     * The Home Assistant the panel talks to (sign-in, relative media URLs): the origin of the
+     * configured dashboard [url], else the discovered [haUrl]. Null if neither is known.
      */
     val haBase: String?
+        get() = (if (isAutoUrl) null else OAuth.origin(url)) ?: haUrl.takeIf { it.isNotEmpty() }
+
+    /**
+     * [haBase] as the setting names it: a `.local` host stays one. For what compares with the setting or writes it
+     * (the dashboard select), so a choice there keeps the name the person entered.
+     */
+    val settingBase: String?
         get() = (if (isAutoUrl) null else OAuth.origin(urlSetting)) ?: haUrl.takeIf { it.isNotEmpty() }
 
     // ---- first-boot setup screen + dashboard select (docs/onboarding.md, steps 4-5)

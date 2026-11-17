@@ -276,7 +276,7 @@ class PanelDevice(
         EntityRegistry(panes).assemble(coreEntities + dashboardSelect(dashboardRebuild.applied()))
 
     private fun currentDashboardOption(list: List<Dashboard>) =
-        DashboardOptions.currentOption(prefs.urlSetting, prefs.haBase, list)
+        DashboardOptions.currentOption(prefs.urlSetting, prefs.settingBase, list)
 
     private fun dashboardOptions(list: List<Dashboard>) = DashboardOptions.options(list, currentDashboardOption(list))
 
@@ -285,7 +285,7 @@ class PanelDevice(
         "dashboard", "Dashboard", "mdi:view-dashboard", disabledByDefault = true, options = options,
         get = { currentDashboardOption(appliedDashboards) },
         set = { option ->
-            val url = DashboardOptions.urlFor(option, prefs.urlSetting, prefs.haBase, prefs.haUrl, appliedDashboards)
+            val url = DashboardOptions.urlFor(option, prefs.urlSetting, prefs.settingBase, prefs.haUrl, appliedDashboards)
             if (url != null) {
                 EspHomeLog.i("Dashboard select: '$option'")
                 toActivity { putExtra("url", url) } // saves the setting and reloads

@@ -53,6 +53,7 @@ import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
 import sh.edm.s1kiosk.improv.ImprovController
 import sh.edm.s1kiosk.improv.ImprovWifiStatus
+import dev.glassworks.web.LocalRoute
 import org.json.JSONObject
 import kotlin.system.exitProcess
 
@@ -150,9 +151,14 @@ class MainActivity : Activity() {
             refreshSetup()
             setupOverlay.tick() // the panes' steps follow their state
             refreshOffline()
+            // #449: a frame with no presence sensor has nothing to wake it, so it stays on through setup and the
+            // connecting screen. The S1's sensor wakes it as before.
+            glassworks.screen.stayOn(NOT_READY, !presenceSensor && (setupOverlay.isShowing || loadingOverlay.isShowing))
             handler.postDelayed(this, SETUP_TICK_MS)
         }
     }
+
+    private val presenceSensor by lazy { glassworks.presence.ownSensor(this) }
 
     // Hidden settings gesture: 5 taps in the top-left corner within 3 s.
     private var cornerTaps = 0
@@ -282,11 +288,23 @@ class MainActivity : Activity() {
             refreshSetup()
             return
         }
+        val route = prefs.dashboardRoute
+        if (!prefs.isAutoUrl && route != loggedRoute) {
+            loggedRoute = route
+            when (route) {
+                is LocalRoute.ByAddress -> Log.i(TAG, "Dashboard through ${route.url}: Android can't resolve ${route.name} before 12")
+                is LocalRoute.Unresolved -> Log.i(TAG, "Dashboard at ${route.url} as set, though Android can't resolve it before 12: ${route.why}")
+                is LocalRoute.AsSet -> Unit
+            }
+        }
         dashboardLoadAt = SystemClock.elapsedRealtime()
         page?.load(externalize(url))
     }
 
     private var dashboardLoadAt = 0L
+
+    /** The last [KioskPrefs.dashboardRoute] [loadDashboard] logged: a line when it changes, not every retry. */
+    private var loggedRoute: LocalRoute? = null
 
     // ---- notifications (#118): the overlay, a view full screen and the way back
 
@@ -640,7 +658,7 @@ class MainActivity : Activity() {
     private fun onHaFound(url: String) {
         Log.i(TAG, "Home Assistant at $url (dashboard setting: ${prefs.urlSetting})")
         refreshSetup()
-        if (!prefs.isAutoUrl) return
+        if (!prefs.loadsFoundAddress) return
         val started = glassworks.engine.started
         if (prefs.engineStart() != KioskPrefs.engineStart(started?.secureHosts.orEmpty(), started?.dashboard)) {
             // The HA host must be in dom.securecontext.allowlist (mic), which Gecko reads at startup, and the legacy
@@ -970,6 +988,7 @@ class MainActivity : Activity() {
                 if (hasNetwork()) {
                     offlineShown = false
                     loadingOverlay.show(LoadingOverlay.State.Unreachable(dashboardHost(), SystemClock.elapsedRealtime() + RETRY_MS))
+                    if (prefs.loadsFoundAddress) glassworks.discovery?.findAgain() // DHCP may have moved Home Assistant (#449)
                 } else {
                     showOffline() // "Connecting to Wi-Fi…" after a reboot, the setup hint when there's nothing to wait for
                 }
@@ -1112,6 +1131,7 @@ class MainActivity : Activity() {
         glassworks.screen.onKeepScreenOn = null
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
+        glassworks.screen.stayOn(NOT_READY, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -1148,5 +1168,7 @@ class MainActivity : Activity() {
         const val LAUNCH_FALLBACK_MS = 45_000L
         private const val SETUP_TICK_MS = 2_000L
         private const val SETTINGS_TICK_MS = 2_000L
+        /** The [dev.glassworks.screen.ScreenPolicy.stayOn] reason while setup or the connecting screen is up (#449). */
+        private const val NOT_READY = "not ready"
     }
 }
