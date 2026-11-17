@@ -1,8 +1,6 @@
 package sh.edm.s1kiosk
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -10,16 +8,8 @@ import android.util.Log
 import android.widget.FrameLayout
 import dev.glassworks.bluetoothproxy.AndroidProxyRadio
 import dev.glassworks.bluetoothproxy.BluetoothProxyDefinition
-import dev.glassworks.camera.CameraDefinition
-import dev.glassworks.camera.CameraHub
-import dev.glassworks.camera.CameraIdentity
-import dev.glassworks.camera.CameraPane
-import dev.glassworks.camera.CameraStream
-import dev.glassworks.camera.FrameEgress
-import dev.glassworks.camera.stillGate
 import dev.glassworks.diagnostics.DiagnosticsDefinition
 import dev.glassworks.diagnostics.DiagnosticsPane
-import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.notifications.HaImages
 import dev.glassworks.notifications.NotificationScreen
@@ -36,7 +26,7 @@ import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.auth.HaTokenClient
 import sh.edm.s1kiosk.auth.SignInServer
-import sh.edm.s1kiosk.camera.CameraDot
+import sh.edm.s1kiosk.camera.CameraWiring
 import sh.edm.s1kiosk.esphome.DeviceHost
 import sh.edm.s1kiosk.manage.S1Manage
 import sh.edm.s1kiosk.notifications.NotificationOverlay
@@ -91,11 +81,7 @@ class S1Panes : AppParts {
             now = SystemClock::elapsedRealtime,
         )
         // It requires a camera: without one in the frame's hardware it is CantRun, as every pane that lacks its own.
-        val camera = CameraDefinition(
-            panePrefs.paneFile("camera"),
-            granted = { context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
-            pickers = { c -> sh.edm.s1kiosk.camera.CameraUseCards(c) },
-        )
+        val camera = CameraWiring.definition(context, runtime, panePrefs.paneFile("camera"))
         // The Bluetooth adapter's MAC comes from the root helper (#246); without the helper there is no
         // file, and Home Assistant keys the proxy on the panel's ESPHome MAC, as before.
         val bluetoothProxy = BluetoothProxyDefinition(
@@ -120,7 +106,10 @@ class S1Panes : AppParts {
         }
         val notes = NotificationOverlay(activity, notifications, notificationImages(activity), orbs = runtime.orbs).apply {
             screenOn = { runtime.screen.screenOn }
+            input = runtime.frame.input
             onPage = host::openInPage
+            onPageArea = host::placePage
+            capturePage = host::capturePage
             onDoNotDisturb = { on -> panePrefs.notifications.doNotDisturb = on }
         }
         val listener: (NotificationsHub.State) -> Unit = { s -> host.post { notes.update(s) } }
@@ -128,10 +117,6 @@ class S1Panes : AppParts {
         notifications.onOpenList = { host.post { host.hideMenu(); notes.openList() } }
         notifications.onReveal = { host.post { host.hideMenu() } }
         runtime.onVoiceUi = { voice.update(voiceUi, panePrefs.voice.overlay) }
-        val dot = CameraDot(activity)
-        // Images leaving the panel (#117): the dot follows, on the main thread (the device posts each change).
-        runtime.onCameraLeaving = { dot.show(runtime.cameraLeaving) }
-        dot.show(runtime.cameraLeaving)
         return listOf(
             object : PaneOverlay {
                 override val view = timers
@@ -154,12 +139,8 @@ class S1Panes : AppParts {
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
                 override fun destroy() { runtime.onVoiceUi = null }
             },
-            object : PaneOverlay {
-                override val view = dot
-                override val layoutParams = dot.layoutParams()
-                override val aboveMenus = true
-                override fun destroy() { runtime.onCameraLeaving = null }
-            },
+            // Images leaving the panel (#117): the dot follows, on the main thread (the device posts each change).
+            CameraWiring.dot(runtime, activity),
         )
     }
 
@@ -262,49 +243,17 @@ class S1Panes : AppParts {
                 schedule = { ms, action -> exec.schedule({ action() }, ms, TimeUnit.MILLISECONDS) },
                 haBase = { prefs.haBase },
                 now = SystemClock::elapsedRealtime,
+                touch = { runtime.frame.input == dev.glassworks.frame.Input.TOUCH },
             ),
         ) + runtime.frame.panes(paneContext, exec) +
             runtime.paneDefinitions(ctx).filterIsInstance<RadioDefinition>().map { it.pane(paneContext, panelIp = host::ipAddress) } +
             runtime.paneDefinitions(ctx).filterIsInstance<BluetoothProxyDefinition>().map { it.pane(paneContext, exec) } +
-            listOfNotNull(cameraPane(runtime, host, main)) +
+            listOfNotNull(CameraWiring.pane(runtime, host)) +
             DiagnosticsPane(paneContext, runtime.frame.cpuThermalZone, runtime.engine::isContentProcess, exec)
         // Timers ride with Assist (their pane.json requires the same): without it they go too.
         if (assistPane.id in host.cantRun) panes = panes.filter { it !is TimersPane }
         else host.cancelVoice = assistPane::cancel
         return panes
-    }
-
-    /** The camera pane (#117), on a device with a camera only: elsewhere its definition is CantRun (#23), and this finds none. */
-    private fun cameraPane(runtime: GlassworksRuntime, host: DeviceHost, main: Handler): CameraPane? {
-        val paneContext = host.paneContext
-        val ctx = paneContext.context
-        val identity = paneContext.device
-        val def = runtime.paneDefinitions(ctx).filterIsInstance<CameraDefinition>().firstOrNull() ?: return null
-        val hub = CameraHub(ctx)
-        host.onStop { hub.release() }
-        val egress = FrameEgress(SystemClock::elapsedRealtime, { ms, r -> main.postDelayed(r, ms) }) { leaving ->
-            EspHomeLog.i("Camera frames ${if (leaving) "leaving the panel" else "no longer leaving"}")
-            runtime.cameraLeaving = leaving
-            main.post { runtime.onCameraLeaving?.invoke() }
-        }
-        var pane: CameraPane? = null
-        // The pane's own judgement: no still while it is off or Android doesn't allow the camera.
-        val gate = stillGate(hub, { pane?.stillPolicy() ?: def.prefs.policy.copy(privacy = true) }, egress)
-        val stream = CameraStream(
-            ctx, hub, egress,
-            identity = { CameraIdentity(identity.friendlyName, "Glassworks ${runtime.build.versionName}", identity.macAddress) },
-            host = host::ipAddress,
-            snapshot = gate,
-        )
-        return CameraPane(
-            paneContext, def.prefs, hub, hub, stream, egress,
-            permitted = { ctx.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED },
-            ownSensor = { runtime.presence.ownSensor(ctx) },
-            toScreen = runtime.presence::offer,
-            exec = host.exec,
-            release = hub::idle,
-            facts = hub,
-        ).also { pane = it }
     }
 }
 

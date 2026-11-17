@@ -211,18 +211,19 @@ class GenericAppTest {
     @Test fun aTabletRunsTheBaseSetAndAnnouncesItselfAsGlassworks() {
         val runtime = runtime()
         val definitions = runtime.paneDefinitions(app)
-        assertEquals(listOf("assist", "sendspin"), definitions.map { it.id })
+        assertEquals(listOf("assist", "sendspin", "camera"), definitions.map { it.id })
         assertTrue(definitions.none { it is CantRun })
 
         val (id, device) = run(runtime)
         assertEquals("Pixel Tablet (Glassworks)", id.model)
         assertEquals("Glassworks 1.0.0", id.compilationTime)
-        assertEquals(listOf("sendspin", "assist", "timers"), device.paneList().map { it.id })
+        assertEquals(listOf("sendspin", "assist", "timers", "camera"), device.paneList().map { it.id })
+        assertTrue("its camera's entities", device.entityList().map { it.objectId }.containsAll(listOf("camera", "camera_presence", "camera_privacy", "camera_pane")))
         assertFalse("nothing of the S1", device.entityList().any { it.objectId.startsWith("radio_") || it.objectId.startsWith("base_") })
     }
 
     @Test fun aPaneTheDeviceCantRunIsHiddenEverywhere() {
-        features(PackageManager.FEATURE_AUDIO_OUTPUT) // a speaker, no microphone
+        features(PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_CAMERA_ANY) // a speaker and a camera, no microphone
         val runtime = runtime()
         assertEquals(listOf("assist"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
 
@@ -240,14 +241,30 @@ class GenericAppTest {
 
         val (id, device) = run(runtime)
         assertEquals("no voice features in Home Assistant", 0, id.voiceFeatures)
-        assertEquals("timers ride with Assist", listOf("sendspin"), device.paneList().map { it.id })
+        assertEquals("timers ride with Assist", listOf("sendspin", "camera"), device.paneList().map { it.id })
         assertFalse(device.entityList().any { it.objectId == "mute_microphone" })
+    }
+
+    /** #463: a tablet without a camera has the camera pane as CantRun: no page, no setup card or step, no entity. */
+    @Test fun aDeviceWithoutACameraHasNoCameraAnywhere() {
+        features(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_BLUETOOTH_LE)
+        val runtime = runtime()
+        assertEquals(listOf("camera"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
+        val menu = S1Settings.model(runtime, KioskPrefs(app), runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
+        assertFalse("not in the settings", menu.sections.any { it.id == "camera" })
+        assertFalse("no step in setup", runtime.setupSteps(app).any { it.id == "camera" })
+
+        val (_, device) = run(runtime)
+        assertEquals(listOf("sendspin", "assist", "timers"), device.paneList().map { it.id })
+        val ids = device.entityList().map { it.objectId }
+        assertEquals("no camera entity in Home Assistant", emptyList<String>(), ids.filter { it.startsWith("camera") || it == "onvif_stream" })
+        assertTrue("the core's entities are there", "app_version" in ids)
     }
 
     @Test fun aDeviceWithNeitherRunsNoPaneButStillRunsTheCore() {
         features()
         val runtime = runtime()
-        assertEquals(listOf("assist", "sendspin"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
+        assertEquals(listOf("assist", "sendspin", "camera"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
         val (_, device) = run(runtime)
         assertTrue(device.paneList().isEmpty())
         assertTrue("the core's entities are there", device.entityList().any { it.objectId == "app_version" })

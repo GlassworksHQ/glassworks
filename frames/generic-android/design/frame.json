@@ -101,5 +101,16 @@
     "updates": {
       "value": "planned"
     }
+  },
+  "facts": {
+    "install": ["usb-debugging"],
+    "kiosk": { "onlyHome": true },
+    "setup": ["screen", "computer"],
+    "panelRuns": false,
+    "unverified": ["install", "kiosk", "setup"],
+    "notes": {
+      "install": "Android 6 also asks for a tap on Always, to keep Glassworks as the home app.",
+      "silentUpdates": "Depends on the device: Android 12 or newer can update the app with no tap once Install unknown apps is allowed; older Android asks for one unless the app is device owner."
+    }
   }
 }

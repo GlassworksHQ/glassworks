@@ -74,6 +74,12 @@ class CameraHub(
     private var facingFront = true
     private var sensorDegrees = 0
     private var fpsRange: android.util.Range<Int>? = null
+    /** Presence's range on a LEGACY camera ([presenceRangeFor]), else null. */
+    private var presenceRange: android.util.Range<Int>? = null
+    /** The reader's size: [width] x [height] when the camera lists it ([yuvSizeFor]). */
+    private var size = width to height
+    /** The stream's encoder is [width] x [height]: a camera that doesn't list that size gets no encoder. */
+    private val streamable get() = size == width to height
 
     private val wanted get() = sinks.isNotEmpty() || waiters.isNotEmpty() || encoder != null ||
         SystemClock.elapsedRealtime() < lingerUntil
@@ -168,7 +174,7 @@ class CameraHub(
                     opening = false
                     if (released) { camera.close(); thread.quitSafely(); return }
                     device = camera
-                    log("camera $id open (${if (facingFront) "front" else "back"}, ${width}x$height)")
+                    log("camera $id open (${if (facingFront) "front" else "back"}, ${size.first}x${size.second}${if (presenceRange != null) ", legacy" else ""})")
                     settle()
                 }
                 override fun onDisconnected(camera: CameraDevice) {
@@ -250,16 +256,25 @@ class CameraHub(
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
+        val listed = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.getOutputSizes(ImageFormat.YUV_420_888)
+        size = yuvSizeFor(listed?.map { it.width to it.height }, width to height)
+        val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
+        presenceRange = if (!legacy) null else presenceRangeFor(
+            c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
+        )?.let { android.util.Range(it.first, it.last) }
         return id
     }
 
     @Suppress("DEPRECATION") // createCaptureSession(List): SessionConfiguration needs API 28, the S1 app's floor is 26
     private fun startSession() {
         val camera = device ?: return
-        val r = reader ?: ImageReader.newInstance(width, height, ImageFormat.YUV_420_888, 3).also { r ->
+        val r = reader ?: ImageReader.newInstance(size.first, size.second, ImageFormat.YUV_420_888, 3).also { r ->
             r.setOnImageAvailableListener({ onImage(it) }, handler)
             reader = r
         }
+        // A camera without the encoder's size would refuse the whole session, presence included: presence goes on alone.
+        val encoder = encoder?.takeIf { streamable }
+        if (this.encoder != null && encoder == null) log("camera: no ${width}x$height output, so no stream; presence goes on")
         val targets = listOfNotNull(r.surface, encoder)
         val gen = ++generation
         configuring = true
@@ -275,6 +290,8 @@ class CameraHub(
                             targets.forEach(::addTarget)
                             // While streaming, the encoder's rate when the camera offers it (less CPU, a true a=framerate).
                             if (encoder != null) fpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+                            // Presence alone on a LEGACY camera: fewer frames for the shim to copy.
+                            else presenceRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         }
                         s.setRepeatingRequest(req.build(), null, handler)
                     } catch (e: Exception) {

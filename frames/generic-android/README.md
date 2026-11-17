@@ -50,9 +50,12 @@ A Glassworks **frame**: the device definition for the Generic Android. Its data 
 (`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
 device's features allow.
 
-The app is the Glassworks core with a fixed base set of panes: Assist (with its timers) and Sendspin. A pane
-the device has no hardware for (no microphone, no speaker) is hidden: it isn't in the settings, on the Manage
-page, in setup or in Home Assistant. The screen follows Android's standard proximity sensor (near means under
+The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin and the camera
+(#117). A pane the device has no hardware for (no microphone, no speaker, no camera) is hidden: it isn't in the
+settings, on the Manage page, in setup or in Home Assistant. The camera pane is off until someone turns it on, as
+in S1 Kiosk; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
+On a screen without touch (the lululemon Mirror) its setup step never waits: the use stays Presence only, and
+Kiln grants the camera. On Android 6-7 its stream needs the camera to list 1280x720; presence works either way. The screen follows Android's standard proximity sensor (near means under
 5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
 no proximity sensor; then the screen goes off after the idle time and wakes on a touch.
 
@@ -60,7 +63,7 @@ no proximity sensor; then the screen goes off after the idle time and wakes on a
 |---|---|---|
 | applicationId | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
 | Home Assistant's model | "Pixel Tablet (S1 Kiosk)" | "Pixel Tablet (Glassworks)" |
-| Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin |
+| Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin, Camera |
 | Presence and light | None | Android's proximity and light sensors |
 
 Settings that S1 Kiosk takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
@@ -98,7 +101,7 @@ Status: it builds (CI builds and checks it on every change, and test builds publ
 starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
 release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
 What waits: a first device run and a release job: `release.yml` doesn't build
-the generic app or its legacy build yet, and the app has no release key.
+the generic app or its legacy build yet. The release key exists ([Signing](#signing)).
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
@@ -133,7 +136,7 @@ It installs as a normal app (an APK). It doesn't install from Kiln yet, and ther
 Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403), with no
 screen yet. Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
 installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
-admin; the camera too, once a build asks for it) and reads each grant back, allows "Install unknown apps" on Android 12+
+admin, the camera) and reads each grant back, allows "Install unknown apps" on Android 12+
 so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else
 Android's chooser), and hands over to setup over the LAN. Its table of brands maps a USB vendor ID, or adb's
 maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
@@ -262,9 +265,20 @@ from the environment only, as S1 Kiosk's reads its `S1_*` variables:
 | `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS`, `GENERIC_KEY_PASSWORD` | Its password, the key's alias and the key's password |
 | `GENERIC_REQUIRE_RELEASE_SIGNING=true` | Fail the build when no key is set, instead of an unsigned APK |
 
-None set: the release APK is unsigned. Some but not all set: the build fails. No release key exists yet; the
-maintainer makes it before the first release, keeps it out of the repo, and from then on never changes it.
-Test builds sign with a key made for each run ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
+None set: the release APK is unsigned. Some but not all set: the build fails.
+
+The key exists since 2026-11-17: certificate `CN=Glassworks, O=GlassworksHQ` (RSA 4096, valid to 2054). One key
+signs both builds, `dev.glassworks.generic_android` and `.legacy`. It lives in the `release-signing` environment as
+`GENERIC_KEYSTORE_B64` (the PKCS12 keystore, base64), `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD`
+(the alias, `glassworks`, isn't secret and sits in the workflow), and in the maintainer's password manager. It is never in the repo, and it never changes.
+The keystore is PKCS12, which has one password: `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD` must be the
+same value, or signing fails with "keystore password was incorrect". The certificate's SHA-256 is
+`564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`.
+
+Test builds sign with it too ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), so each one
+updates the last in place, settings kept. CI checks every APK's certificate SHA-256 against the one above, so a new
+key, even with the same name, fails the build. Builds from before 2026-11-17 were signed with a key made for their
+own run: uninstall one before installing a newer build (once; that wipes the app's settings).
 
 ## Panes
 

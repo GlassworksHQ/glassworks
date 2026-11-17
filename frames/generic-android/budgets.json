@@ -1,6 +1,6 @@
 {
   "_comment": "Glassworks for generic Android's budgets (#23, #68), the S1's rules (frames/aqara-s1-plus/budgets.json; docs/size.md and docs/perf.md say why and how each is measured). CI's size check (tools/size/apksize.py, pr.yml's size-generic job) reads size and panes.*.size_max_bytes and fails a PR that goes over unless the same PR raises the budget. The size budgets are the 2026-11-15 release build (unsigned, measured with apksize.py: 100.82 MB arm64-v8a, 97.88 MB armeabi-v7a) plus about 2.5%, and each pane's size about twice its own then, at least 100 kB (assist 1.47 MB arm64-v8a with TensorFlow Lite's native library, sendspin 0.07 MB, timers 0.03 MB). The RAM budgets aren't set yet: see _todo_ram. Until then Clarity's report uses tools/perf/budgets.json for `ram`, and has no per-pane RAM budget for this frame.",
-  "_todo_ram": "TODO(#23): per-pane RAM, from the root's Clarity run on the S1 and the Pixel Tablet (Android 14+, arm64). Add, per pane, \"ram_pss_max_kb\": <whole KB>, the pane's PSS on by itself against every pane off, as frames/aqara-s1-plus/budgets.json has them (48 MB for assist and sendspin there, set before a measurement), and a frame-wide \"ram\": {\"app_pss_max_pct_of_ram\": <int>, \"device_available_min_pct\": <int>} if the tablet needs other numbers than tools/perf/budgets.json's. Then delete this key.",
+  "_todo_ram": "TODO(#23): per-pane RAM, from the root's Clarity run on the S1 and the Pixel Tablet (Android 14+, arm64). Add, per pane (the camera too, Presence only, watching), \"ram_pss_max_kb\": <whole KB>, the pane's PSS on by itself against every pane off, as frames/aqara-s1-plus/budgets.json has them (48 MB for assist and sendspin there, set before a measurement), and a frame-wide \"ram\": {\"app_pss_max_pct_of_ram\": <int>, \"device_available_min_pct\": <int>} if the tablet needs other numbers than tools/perf/budgets.json's. Then delete this key.",
   "size": {
     "apk_max_bytes": {
       "arm64-v8a": 103400000,
@@ -22,6 +22,12 @@
     "timers": {
       "not_switched": "it comes only with the voice assistant and has no switch of its own, so it is inside assist's share",
       "size_max_bytes": 100000
+    },
+    "camera": {
+      "switch": "camera_enabled",
+      "state": "pane:camera",
+      "size_max_bytes": 220000,
+      "note": "about twice its own: 0.11 MB (107,793 bytes, apksize.py) in the arm64-v8a release build on 2026-11-17. Its RAM and CPU while it watches wait for the root's run on the Pixel Tablet and the lululemon Mirror (_todo_ram)"
     }
   }
 }

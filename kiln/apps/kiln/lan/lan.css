@@ -9,3 +9,53 @@
   font-display: swap;
 }
 :root { --font-inter: 'Inter'; --font-mono: ui-monospace; }
+
+/*
+ * The panel's look, not Kiln's: this page is the panel's own, so it looks like the panel's setup screen
+ * (#63, SetupOverlay). Always night, sky and violet glows, glass cards, one white button, sky to violet
+ * for "on". Ember is Kiln's colour only (docs/branding.md), so the tokens Kiln's steps read for it point
+ * at sky and violet here; Kiln's wizard never loads this file. Colours only from the brand's tokens.
+ */
+:root {
+  --bg: var(--night);
+  --bg-2: color-mix(in srgb, var(--s-fg) 3%, var(--night));
+  --glass: color-mix(in srgb, var(--s-fg) 4.5%, transparent);
+  --edge: color-mix(in srgb, var(--s-fg) 8%, transparent);
+  --raised: color-mix(in srgb, var(--s-fg) 8%, transparent);
+  --fg: var(--s-fg);
+  --muted: var(--s-mu);
+  --faint: var(--s-fa);
+  --ink-sky: color-mix(in srgb, var(--sky) 65%, var(--s-fg));
+  --ok-ink: var(--green);
+  --work-ink: var(--amber);
+  --glow-a: 14%;
+  --ember-a: var(--sky);
+  --ember-b: var(--violet);
+  color-scheme: dark;
+}
+
+.lockup { display: block; height: 28px; width: auto; }
+
+/* the screen's one white button; every other button is a dark pill, or only its words */
+.btn.ember { background: var(--fg); color: var(--night); box-shadow: none; }
+.btn.ghost { background: var(--raised); }
+button.link { color: var(--muted); font-weight: 500; }
+button.link:hover { color: var(--fg); text-decoration: none; }
+
+/* "on": the current step and the chosen option, sky to violet */
+.now .mk { border: 0; background: color-mix(in srgb, var(--sky) 18%, transparent); box-shadow: none; }
+.now .mk::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--lit-gradient); box-shadow: 0 0 8px color-mix(in srgb, var(--violet) 60%, transparent); }
+.opt[data-state="checked"] { background: color-mix(in srgb, var(--sky) 6%, transparent); }
+.opt[data-state="checked"] .rd { border: 0; background: radial-gradient(circle, var(--night) 0 3px, transparent 3.5px), var(--lit-gradient); }
+
+/* the stack (src/lan/PanelStack.tsx), drawn as the panel's StackView draws it */
+.ps-ghost, .ps-outline, .ps-bad { fill: none; stroke-linejoin: round; }
+.ps-ghost { stroke: var(--fg); stroke-opacity: 0.22; stroke-width: 4; stroke-dasharray: 7 6; }
+.ps-outline { stroke: var(--fg); stroke-width: 5; }
+.ps-bad { stroke: var(--rose); stroke-width: 4.5; stroke-dasharray: 7 6; }
+.ps-lit { fill: url(#gw-lit); }
+.rail-stack { margin: 26px 0 0 18px; }
+
+@media (max-width: 760px) {
+  .lockup { height: 26px; }
+}

@@ -37,7 +37,7 @@ class CodeOverlay(private val context: Context, private val touch: Boolean, priv
         val v = build(context, shown, onClose, touch)
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            dev.glassworks.platform.OverlayWindow.type(),
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.OPAQUE,
         )

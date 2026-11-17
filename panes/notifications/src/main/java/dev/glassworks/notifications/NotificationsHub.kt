@@ -21,7 +21,10 @@ class NotificationsHub {
         val page: NotificationStore.Entry? = null,
         val list: List<NotificationStore.Entry> = emptyList(),
         val doNotDisturb: Boolean = false,
-    )
+    ) {
+        /** How many views wait behind [page]: every view in the line is [NotificationStore.Entry.queued] (#230). */
+        val waiting: Int get() = (list.count { it.queued } - 1).coerceAtLeast(0)
+    }
 
     @Volatile var state = State()
         private set
@@ -63,7 +66,8 @@ class NotificationsHub {
     fun tapAction(id: Long, actionId: String) { center?.tapAction(id, actionId) }
     fun dismiss(id: Long) { center?.dismiss(id) }
     fun show(id: Long) { center?.show(id) }
-    fun openPage(title: String, url: String) { center?.openPage(title, url) }
+    fun openPage(title: String, url: String, size: ViewSize = ViewSize.FULL) { center?.openPage(title, url, size) }
+    fun openView(id: Long) { center?.openView(id) }
     fun clearAll() { center?.let { c -> state.list.forEach { c.dismiss(it.id) } } }
 
     /** The settings page's "Send a test notification". False while the pane is off, or stopping meanwhile. */

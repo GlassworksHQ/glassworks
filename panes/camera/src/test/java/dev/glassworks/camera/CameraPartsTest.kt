@@ -81,4 +81,21 @@ class CameraPartsTest {
         assertEquals(15, announcedFps(7..15))
         assertEquals("no a=framerate", 0, announcedFps(null))
     }
+
+    @Test fun theHubReadsAtASizeTheCameraLists() {
+        val hd = 1280 to 720
+        assertEquals("listed: kept", hd, yuvSizeFor(listOf(640 to 480, 1280 to 720, 1920 to 1080), hd))
+        assertEquals("not listed: the nearest in area", 1280 to 960, yuvSizeFor(listOf(640 to 480, 1280 to 960, 2592 to 1944), hd))
+        assertEquals("never above 1080p", 640 to 480, yuvSizeFor(listOf(640 to 480, 2592 to 1944), hd))
+        assertEquals("nothing up to 1080p: the smallest listed, never one it doesn't list", 2048 to 1536, yuvSizeFor(listOf(2592 to 1944, 2048 to 1536), hd))
+        assertEquals(hd, yuvSizeFor(null, hd))
+        assertEquals(hd, yuvSizeFor(emptyList(), hd))
+    }
+
+    @Test fun presenceOnALegacyCameraAsksForTheSlowestRangeThatCoversIt() {
+        assertEquals("the lowest top, then the lowest floor", 7..15, presenceRangeFor(listOf(15..30, 30..30, 15..15, 7..15), 5))
+        assertEquals(5..5, presenceRangeFor(listOf(5..5, 5..30), 5))
+        assertEquals("none reaches presence's rate", null, presenceRangeFor(listOf(1..3), 5))
+        assertEquals(null, presenceRangeFor(null, 5))
+    }
 }

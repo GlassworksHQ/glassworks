@@ -13,6 +13,25 @@ below as the release notes.
   BLE devices that need a connection, such as locks, SwitchBots and sensors with a key, up to 3 at
   once. A *Connections* tile shows how many are in use. It stays on *Listen only* until you pick it,
   and the panel never pairs with a device.
+- **The panel opens its own Wi-Fi for setup when no Wi-Fi works.** With no connection 3 minutes after it
+  starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
+  its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
+  send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
+  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. Android may close it
+  sooner when nobody joins (10 minutes on the S1); it opens again 3 minutes later if no Wi-Fi works. With the
+  panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
+  so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
+  permission first, and says why.
+- **See how complete Glassworks is on each device.** Every frame's page on glassworks.dev has a
+  checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
+  and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the
+  first five decide the word. The S1 is Good today: the wall base's buttons don't reach the panel yet.
+- **The camera pane in Glassworks for generic Android, the Mirror's legacy build included.** On a device
+  with a camera and no proximity sensor of its own, turn the Camera pane on and the screen wakes when someone
+  walks up, with no image leaving the device in Presence only. A device without a camera gets no camera entities. On a screen without
+  touch, such as the lululemon Mirror, setup never waits on the camera step: the use stays Presence only, and
+  Kiln grants the camera. On Android 6-7 the ONVIF stream needs the camera to offer 1280x720; presence works
+  either way. Not yet run on a real Mirror.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -100,6 +119,13 @@ below as the release notes.
   keep Home Assistant's in one tap. Voice has the wake word, its threshold, mute, mic gain, the wake
   sound and the overlay. Music shows what plays and its volume. Radio shows its firmware and the root
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
+- **A notification can open its view over half the screen, and views take turns.** Add
+  `"size": "half"` to a notification with a `url`, and the view opens as a dialog on the right of the
+  screen (at the bottom of a portrait one), with the dashboard dimmed behind it. A view that arrives
+  while another is open now waits its turn instead of taking the screen. The bar's one button says
+  *Next* while another waits. A critical notification with a `url` shows the alert first, with an
+  **Open the view** button. The time-left bars on a view and on the cards slide smoothly instead of
+  stepping each second. See [Open a view](docs/notifications.md#open-a-view).
 - **Glassworks has its own icon.** The launcher, the home app chooser and Settings show the Glassworks
   mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
   Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
@@ -112,6 +138,10 @@ below as the release notes.
   do. If the panel can't read its Bluetooth address (Bluetooth never turned on yet), nothing changes
   until it can. Going back to an older version moves the scanner back to the network address. Comes
   with the radio bundle.
+- **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
+  `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
+  setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
+  shows Kiln's name or its orange colours. The steps and words are the same.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
@@ -280,13 +310,33 @@ below as the release notes.
 - **The Bluetooth proxy says when it can't run.** With the pane on but Bluetooth or location off, or
   the location permission missing, the settings menu and the Manage page said it was running. They
   now say *Can't run* and why.
+- **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
+  setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
+  radio step there and goes to Done.
+- **No permission prompt the panel doesn't need.** At start, the app asks Android for the microphone only while
+  Voice is on, and for the camera only while the Camera pane is on. On a screen without touch, such as the
+  lululemon Mirror, it never shows Android's prompt: Kiln grants the permissions at install.
+- **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
+  pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
+  said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
+  for those pictures over https, which Home Assistant doesn't serve. It now asks over http, as the page
+  does. If something from Home Assistant's address is ever blocked again, the panel names it with its
+  `https://`, so it doesn't read as your Home Assistant.
 - **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
   landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
   did, and stops with a clear message if it didn't. The Mirror's install is still test only.
+- **Wake word models and updates download on Android 6 and 7.0.** The lululemon Mirror and other Android
+  6–7.0 devices could not download the wake word models, and would have failed to download an update:
+  their built-in list of trusted certificate authorities is missing the one GitHub's downloads use. The
+  app now adds that one certificate authority on those Android versions, and checks certificates as
+  before. Android 7.1 and newer are unchanged. A device without the fix can't download it either, so
+  install this version with Kiln over USB.
 - **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
   own icon, and every icon the app shows has a version Android 6 can draw.
+- **The Manage code shows on Android 6 and 7.** On panels older than Android 8, the code a phone asks
+  for on the setup page never appeared, so setup couldn't go on. It does now.
 - **A screen without touch stays on setup when it has no network.** A Mirror with no Wi-Fi saved used to
   leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
   button that nobody could press. It now stays on the setup screen, which says how to set it up from a

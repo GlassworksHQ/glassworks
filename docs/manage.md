@@ -52,8 +52,9 @@ too, in **Allow setup over the network**.
    a computer"). Type it on the page and press **Pair**. Only someone who can see the panel can pair.
 2. **Wi-Fi**, only on a panel that is on no network: the page reached it on the panel's own setup Wi-Fi
    (#197). Pick a network the panel sees and type its password. The panel closes its setup Wi-Fi and
-   joins; its own screen shows how it goes, since the page loses the panel there. A panel already on a
-   network skips this step, and refuses Wi-Fi details from the page.
+   joins; its own screen shows how it goes, since the page loses the panel there. If the page still reaches
+   the panel 45 seconds later, its setup Wi-Fi never closed and the join didn't start: the page says so, with
+   **Try again**. A panel already on a network skips this step, and refuses Wi-Fi details from the page.
 3. **Home Assistant.** The address the panel found, or type one, and sign in on the panel's sign-in page.
 4. **Radio.** What the Zigbee and Thread radio does, then what to do in Home Assistant for it.
 5. **Done.** The page ends the pairing. Reload it and it asks for a code again (once Home Assistant has the
@@ -61,8 +62,12 @@ too, in **Allow setup over the network**.
 
 The page is plain HTTP on your local network. While you pair, others on the same network can see the code
 you type and the session cookie. The session only works from the address that paired, which limits replay.
-A Wi-Fi password crosses the page only on the panel's own setup Wi-Fi, which is WPA2 with a key shown on the
-panel's screen; the panel refuses one while it is on a network, so it never crosses your network as plain HTTP.
+A Wi-Fi password is no exception: the page sends it in plain text over its WebSocket (`ws://`), like everything
+else. The panel takes one only while it is on no network, which in practice means over its own setup Wi-Fi. That
+link is WPA2, with a key shown only on the panel's screen, so the password is encrypted on the air; anyone else who
+joined the setup Wi-Fi (with the key from the screen) could still read it. On your own network the page doesn't ask
+for a password and the panel refuses one, but nothing encrypts the page there either: it is plain `ws://`, as Home
+Assistant is over `http://`.
 
 | | |
 |---|---|
@@ -92,6 +97,36 @@ paired, so a copy taken off the network doesn't work from another device. Someth
 over that address on your network could still use it, until Done or the 30 quiet minutes end it. The panel
 has no write timeout on the page's connection: a browser that stops reading holds one of the panel's web
 workers until the network gives up (minutes), or until another paired browser or Done ends it.
+
+### The panel's own Wi-Fi
+
+A panel that can't reach any Wi-Fi opens a network of its own for setup (#197), so a phone can set it up with
+no cable and no Bluetooth (an iPhone too).
+
+1. **When it opens.** The panel has had no connection for 3 minutes since it started, or you pressed **Set up
+   from a phone** on its Wi-Fi step. It never opens while the panel is on a network.
+2. **Join it.** The setup screen shows a QR code: scan it with the phone's camera to join. The network's name
+   and password are under it too, for typing. Then open the address it shows (`http://<address>:8099/setup`)
+   and pair as above.
+3. **Send your Wi-Fi.** The page starts with Wi-Fi, since the panel is on no network. Pick yours and type the
+   password. The panel closes its own Wi-Fi and joins; its screen shows how it goes. Put the phone back on
+   your own Wi-Fi.
+4. **When it closes.** Once Wi-Fi is set, after 15 minutes, or with **Close it**, and when setup is done. Then
+   the panel tries your Wi-Fi again for 3 minutes, and opens its own again if that still fails. **Close it**
+   keeps it closed until the next Wi-Fi is set.
+   One limit: Wi-Fi details sent while the panel is still on its old network (over the LAN, Bluetooth or USB)
+   keep its own Wi-Fi ready for 3 minutes only. A panel that is still on the old network after that, and fails
+   to join the new one later, doesn't open its own Wi-Fi by itself: restart it, or press **Set up from a phone**.
+
+| | |
+|---|---|
+| The network list | The panel scans just before it opens its own Wi-Fi, and the setup page lists what it saw then: on most devices the radio can't scan while it is the access point. A network that isn't listed can be typed under **Other…** |
+| Who can join | Anyone who sees the panel's screen: the password shows only there, and changes each time (WPA2). Pairing still needs the code the panel shows |
+| While it's open | On most devices, the S1 among them, the panel's Wi-Fi client is off: it is on no network until the hotspot closes. 2.4 GHz. Android may close it sooner than 15 minutes when nobody joins (10 minutes on the S1); then it counts as closed, and opens again 3 minutes later if no Wi-Fi works |
+| Wi-Fi turned off | From Android 10 an app can't turn Wi-Fi on. With the panel's Wi-Fi off, it doesn't open its own: it couldn't join what the phone sends. The setup screen says so, with **Turn on Wi-Fi** |
+| Android 8 and newer | Android's local-only hotspot: Android names it (`AndroidShare_…` on the S1) and picks its key. No setting changes. On Android 13 and newer the panel asks for *Nearby devices* first; on 8 to 12 it needs location on |
+| Android 6 and 7 | A hidden Android call opens it as `Glassworks-…`. The panel puts back the device's own hotspot settings and its Wi-Fi when it closes |
+| A captive portal | Not yet: the page doesn't open by itself. It comes later, on panels with root |
 
 ## Changing settings
 

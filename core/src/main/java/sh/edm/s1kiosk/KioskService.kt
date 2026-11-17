@@ -9,8 +9,17 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
+import android.os.SystemClock
 import dev.glassworks.frame.ServiceWork
+import dev.glassworks.platform.Hotspot
+import dev.glassworks.platform.HotspotFailure
+import dev.glassworks.platform.WifiRadio
+import dev.glassworks.platform.NetworkUp
 import dev.glassworks.platform.Platform
+import dev.glassworks.setup.SetupHotspot
 import sh.edm.s1kiosk.settings.SettingsMenu
 import android.os.IBinder
 import android.os.Handler
@@ -41,6 +50,18 @@ class KioskService : Service() {
     private var frameWork: ServiceWork? = null
     private var codeOverlay: CodeOverlay? = null
     private lateinit var foreground: KioskForeground
+    private var hotspotNetworks: ConnectivityManager.NetworkCallback? = null
+
+    /** The scan before each hotspot start, into the runtime's list the setup page reads. */
+    private val scanFirst = sh.edm.s1kiosk.setup.HotspotScanStep(
+        scan = { done ->
+            ImprovController.scanFromInstaller { nets ->
+                done(nets.map { sh.edm.s1kiosk.setup.WifiNetwork(it.ssid, it.rssi, secure = it.auth != "NO") })
+            }
+        },
+        store = { glassworks.hotspotScan = it },
+        log = { Log.i(HOTSPOT_TAG, it) },
+    )
 
     override fun onCreate() {
         super.onCreate()
@@ -83,10 +104,47 @@ class KioskService : Service() {
         // The web installer, over adb (docs/onboarding.md): Wi-Fi via Improv Serial, then HA + radio.
         ImprovSerialServer.start(glassworks.frame, glassworks.build)
         SetupChannelServer.start(this, glassworks)
+        startSetupHotspot()
         Log.i("S1Kiosk", "KioskService started")
     }
 
+    /**
+     * The setup hotspot (#197): the panel opens its own Wi-Fi when no saved Wi-Fi works (SetupHotspotPolicy). Here,
+     * not in the activity: Android starts a local-only hotspot only for an app in the foreground, and this foreground
+     * service counts, screen off included. Any network coming or going is a change for the rule.
+     */
+    private fun startSetupHotspot() {
+        val hs = SetupHotspot(
+            hotspot = Hotspot.of(this, main),
+            connected = { NetworkUp.now(this) },
+            clock = SystemClock::elapsedRealtime,
+            schedule = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } },
+            log = { Log.i(HOTSPOT_TAG, it) },
+            blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
+            // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.
+            beforeStart = { start ->
+                // Where the app may turn the radio on (Android 9 and older, the device owner), it does: an off radio
+                // couldn't scan nor join. Where it may not, the hotspot is blocked before it gets here.
+                if (!WifiRadio.ensureOn(this)) Log.w(HOTSPOT_TAG, "Wi-Fi is off, and it didn't come on")
+                scanFirst(start)
+            },
+        )
+        glassworks.setupHotspot = hs
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { main.post { hs.refresh() } }
+            override fun onLost(network: Network) { main.post { hs.refresh() } }
+        }
+        runCatching { getSystemService(ConnectivityManager::class.java)?.registerNetworkCallback(NetworkRequest.Builder().build(), cb) }
+            .onSuccess { hotspotNetworks = cb }
+            .onFailure { Log.w(HOTSPOT_TAG, "can't follow the networks; the 3-minute check still runs", it) }
+        hs.start()
+    }
+
     override fun onDestroy() {
+        hotspotNetworks?.let { cb -> runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } }
+        hotspotNetworks = null
+        glassworks.setupHotspot?.close() // stops it, and puts back what it changed
+        glassworks.setupHotspot = null
         glassworks.voiceCancel = null
         SetupChannelServer.stop()
         ImprovSerialServer.stop()
@@ -178,6 +236,7 @@ class KioskService : Service() {
         ?: applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
+        private const val HOTSPOT_TAG = "S1Kiosk.Hotspot"
         private const val CHANNEL = "kiosk"
         private const val NOTIFICATION_ID = 1
         private const val REQ_KIOSK_SETTINGS = 10  // distinct PendingIntent request codes
