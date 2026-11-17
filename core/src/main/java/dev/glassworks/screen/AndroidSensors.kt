@@ -22,7 +22,11 @@ import android.util.Log
 class ProximityPresence(private val logTag: String) : PresenceSource {
     private var registered: SensorEventListener? = null
 
-    override fun available(context: Context): Boolean = sensor(context, Sensor.TYPE_PROXIMITY) != null
+    /**
+     * A sensor whose range is 0 or less can never read near ([near]): a stub some devices list. It counts as none,
+     * so the Screen settings offer no wake row it can't back and the camera pane can stand in (#471).
+     */
+    override fun available(context: Context): Boolean = sensor(context, Sensor.TYPE_PROXIMITY)?.let { it.maximumRange > 0f } == true
 
     override fun start(context: Context, onReading: (near: Boolean, raw: Float) -> Unit) {
         val s = sensor(context, Sensor.TYPE_PROXIMITY) ?: return

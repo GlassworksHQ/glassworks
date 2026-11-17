@@ -48,9 +48,10 @@ class ScreenByFrameTest {
     private val app = RuntimeEnvironment.getApplication()
     private val prefs = KioskPrefs(app)
 
-    private fun sensor(type: Int, name: String) {
+    private fun sensor(type: Int, name: String, maxRange: Float = 5f) {
         val s = ShadowSensor.newInstance(type)
         shadowOf(s).setName(name)
+        shadowOf(s).setMaximumRange(maxRange)
         shadowOf(app.getSystemService(SensorManager::class.java)).addSensor(s)
     }
 
@@ -91,7 +92,7 @@ class ScreenByFrameTest {
     private fun List<SettingsItem>.wake() = filterIsInstance<SettingsItem.Switch>().single { it.title == CoreSettings.WAKE_TITLE }
 
     @Test fun theS1HasItsSensorsAndTouch() {
-        sensor(Sensor.TYPE_PROXIMITY, "vi5300 Proximity Sensor")
+        // No VI5300 listed, as while the sensor HAL starts late after boot or a restart: the frame declares its radar.
         assertEquals(ScreenHardware(Presence.Sensor(ranged = true), light = true, touch = true), hardware(AqaraS1Plus()))
         val (rows, html) = screen(AqaraS1Plus())
         assertEquals(
@@ -118,6 +119,14 @@ class ScreenByFrameTest {
         assertEquals("Uses the proximity sensor", rows.wake().detail)
         assertTrue("Uses the proximity sensor" in html)
         assertFalse("Presence range" in html)
+    }
+
+    @Test fun aStubProximitySensorIsNoPresence() {
+        // Listed with a range of 0 it can never read near: no wake row it can't back, and the camera can stand in.
+        sensor(Sensor.TYPE_PROXIMITY, "Proximity", maxRange = 0f)
+        assertEquals(Presence.None, hardware(generic()).presence)
+        camera()
+        assertEquals(Presence.Pane("camera", "Camera", on = false), hardware(generic()).presence)
     }
 
     @Test fun aCameraWithItsPaneOffSaysWhatTurnsPresenceOn() {

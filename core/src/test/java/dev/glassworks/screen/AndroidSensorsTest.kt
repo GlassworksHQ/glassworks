@@ -52,6 +52,11 @@ class AndroidSensorsTest {
         p.stop(app)
     }
 
+    @Test fun aSensorWithNoRangeIsNone() {
+        add(Sensor.TYPE_PROXIMITY, 0f) // a stub: near needs a reading under its range (#471)
+        assertFalse(ProximityPresence("test").available(app))
+    }
+
     @Test fun readingsBecomeNearAndFar() {
         val s = add(Sensor.TYPE_PROXIMITY, 5f)
         val p = ProximityPresence("test")

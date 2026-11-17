@@ -37,6 +37,9 @@ class Vi5300Presence(
     /** Lumi's threshold table: the Screen settings' Presence range. */
     override val ranged = true
 
+    /** Every S1 has it: AqaraS1Plus is only the frame on the S1's own board. */
+    override val builtIn = true
+
     /**
      * The S1 app also runs on devices without the S1's sensor (a tablet, until #23). Only the VI5300
      * counts: this source reads 1.0 as near, and another device's proximity sensor reports a distance.

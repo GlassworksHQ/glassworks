@@ -36,7 +36,7 @@ data class ScreenHardware(val presence: Presence, val light: Boolean, val touch:
          * camera pane's plan has it.
          */
         fun of(frame: Frame, panes: List<PaneDefinition>, context: Context): ScreenHardware {
-            val own = frame.presence?.takeIf { it.available(context) }
+            val own = frame.presence?.takeIf { it.builtIn || it.available(context) }
             val presence = own?.let { Presence.Sensor(it.ranged) }
                 ?: panes.firstOrNull { it.givesPresence }?.let { d -> Presence.Pane(d.id, d.switch?.title ?: d.id, d.switch?.on ?: true) }
                 ?: Presence.None
