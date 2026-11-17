@@ -246,7 +246,11 @@ export class ChannelSetup {
       try {
         const st = url === this.channel?.state?.ha.url ? this.channel.state : await this.request((x) => x.setHa(url));
         if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
-        if (here) here();
+        if (here) {
+          // the person may have moved on while the address was saved: leaving the page then would cut that short
+          const cur = this.d.phase();
+          if (this.d.here() && cur.phase === 'ha' && cur.signingIn) here();
+        }
         else if (tab) tab.location.href = st.ha.signinUrl;
         else if (!window.open(st.ha.signinUrl, '_blank')) throw new Error('The browser blocked the sign-in tab. Allow pop-ups for this page, then sign in again.');
       } catch (e) {

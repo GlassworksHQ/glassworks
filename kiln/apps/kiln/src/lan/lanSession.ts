@@ -210,12 +210,13 @@ export class LanSession implements SetupSteps, WifiSteps {
   private async begin(): Promise<void> {
     this.steps.close(); // a channel opened before pairing doesn't carry the session
     const back = this.resume;
-    this.resume = undefined;
     this.set({ view: { at: 'setup', setup: { phase: 'waiting', note: 'Connecting to the panel.' } } });
     if (back === 'signed-in') await this.steps.afterSignIn();
     else if (back === 'radio') await this.steps.radio();
     else if (back === 'ha') await this.steps.homeAssistant();
     else await this.steps.wifi(); // an offline panel (on its setup hotspot) starts with Wi-Fi, one on a network with HA
+    // kept until the step opened: Try again after a lost panel goes back there, not to the start
+    if (this.resume === back) this.resume = undefined;
   }
 
   wifi(): Promise<void> { return this.steps.wifi(); }
