@@ -18,6 +18,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
@@ -806,6 +807,14 @@ class NotificationOverlay(
 
         private fun leftMs() = (endsAt - now()).coerceAtLeast(0)
 
+        /**
+         * The system's animator duration scale: Developer options, and 0 with Remove animations. From the setting
+         * the system copies into ValueAnimator, because ValueAnimator.getDurationScale is API 33 and
+         * areAnimatorsEnabled API 26 (the S1 is API 29; the legacy build API 23).
+         */
+        private fun animatorScale(): Float =
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+
         /** [f] of the fill, rounded up to its next whole pixel: it reaches 0 only when the time does. */
         private fun wholePixels(f: Float): Float {
             val w = fill.width
@@ -821,10 +830,11 @@ class NotificationOverlay(
             stop()
             step()
             val left = leftMs()
-            if (!windowShown || !isAttachedToWindow || left == 0L || !ValueAnimator.areAnimatorsEnabled()) return
+            val scale = animatorScale()
+            if (!windowShown || !isAttachedToWindow || left == 0L || scale <= 0f) return
             animator = ValueAnimator.ofFloat(fill.scaleX, 0f).apply {
                 // The system scales every animator's duration; a countdown keeps real time.
-                duration = (left / ValueAnimator.getDurationScale()).toLong()
+                duration = (left / scale).toLong()
                 interpolator = LinearInterpolator()
                 addUpdateListener { a -> fill.scaleX = wholePixels(a.animatedValue as Float) }
                 start()

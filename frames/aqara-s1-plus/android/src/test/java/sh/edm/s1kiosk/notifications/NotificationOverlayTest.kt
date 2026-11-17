@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.os.Looper
+import android.provider.Settings
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -24,6 +25,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -339,9 +341,9 @@ class NotificationOverlayTest {
             .map { b -> b to IntArray(2).also { b.getLocationInWindow(it) }[1] }
     }
 
-    /** The system's animator duration scale (Developer options, or 0 with Remove animations): a hidden API, as the system sets it. */
+    /** The system's animator duration scale (Developer options, or 0 with Remove animations): the setting, as the system keeps it. */
     private fun animationScale(scale: Float) {
-        ValueAnimator::class.java.getMethod("setDurationScale", Float::class.javaPrimitiveType).invoke(null, scale)
+        Settings.Global.putFloat(RuntimeEnvironment.getApplication().contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, scale)
     }
 
     private fun timeLeft(): ViewGroup = views(overlay).filterIsInstance<ViewGroup>().single { it.javaClass.simpleName == "TimeLeft" && it.isAttachedToWindow }

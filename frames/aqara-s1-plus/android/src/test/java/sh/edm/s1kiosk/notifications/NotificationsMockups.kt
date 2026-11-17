@@ -1,6 +1,5 @@
 package sh.edm.s1kiosk.notifications
 
-import android.animation.ValueAnimator
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
@@ -12,6 +11,7 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.provider.Settings
 import android.view.View
 import android.widget.FrameLayout
 import dev.glassworks.frame.Input
@@ -74,7 +74,7 @@ class NotificationsMockups {
     @After fun animationsBack() = animationScale(1f)
 
     private fun animationScale(scale: Float) {
-        ValueAnimator::class.java.getMethod("setDurationScale", Float::class.javaPrimitiveType).invoke(null, scale)
+        Settings.Global.putFloat(RuntimeEnvironment.getApplication().contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, scale)
     }
 
     private val now = 10_000_000L
