@@ -127,6 +127,8 @@ describe('refusals: nothing changes on the device', () => {
     expect(e).toBeInstanceOf(OwnFrameRefused);
     expect((e as OwnFrameRefused).own.frame).toBe('aqara-s1-plus');
   });
+  it.each([['fails', { hardwareFails: true }], ['is empty', { hardware: '' }]] as const)('ro.hardware that %s: can\'t tell, so refused', (_, o) =>
+    refuses(o, apkFor(34), /couldn't read this device's hardware \(ro\.hardware\), so it can't tell whether it is a panel with its own install/));
   it('another Allwinner A133 tablet with the same maker and model, but not the S1\'s hardware, installs', async () => {
     const p = new FakeAndroid({ sdk: 29, release: '10', abilist: 'armeabi-v7a,armeabi', manufacturer: 'Allwinner', model: 'QUAD-CORE R818 EVB2', hardware: 'sun50iw10' });
     await expect(planInstall(p, apkFor(29, ['armeabi-v7a']))).resolves.toMatchObject({ app: GENERIC });

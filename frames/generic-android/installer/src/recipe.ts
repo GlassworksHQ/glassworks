@@ -27,7 +27,7 @@ export interface DeviceFacts {
   manufacturer: string;
   model: string;
   fingerprint: string;
-  /** ro.hardware: how a frame's own app knows its device (ownFrame) */
+  /** ro.hardware: how a frame's own app knows its device (ownFrame); empty when the read failed */
   hardware: string;
 }
 
@@ -140,7 +140,7 @@ export async function readDevice(p: PanelShell): Promise<DeviceFacts> {
     manufacturer: await prop(p, 'ro.product.manufacturer'),
     model: await prop(p, 'ro.product.model'),
     fingerprint: await prop(p, 'ro.build.fingerprint'),
-    hardware: await prop(p, 'ro.hardware'),
+    hardware: await (async () => { const r = await p.run('getprop ro.hardware'); return r.code === 0 ? r.out.trim() : ''; })(),
   };
 }
 
@@ -151,6 +151,8 @@ export async function readDevice(p: PanelShell): Promise<DeviceFacts> {
  */
 export async function planInstall(p: PanelShell, apk: Uint8Array): Promise<Plan> {
   const device = await readDevice(p);
+  // without ro.hardware Kiln can't rule out a frame of its own (the S1), so it doesn't guess
+  if (!device.hardware) throw new Refused('Kiln couldn\'t read this device\'s hardware (ro.hardware), so it can\'t tell whether it is a panel with its own install, such as the Aqara S1 Plus. Unplug it, plug it in again and try again.');
   const own = ownFrame(device);
   if (own) throw new OwnFrameRefused(own);
   const app = appFor(device.sdk);
