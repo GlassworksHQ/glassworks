@@ -11,13 +11,13 @@ import { clean, cleanup, debugfs, debugfsCat, fsck, haveTools, load, mke2fs, scr
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
 import { GLASSWORKS } from '../src/app';
-import { FirstBootMirror, fakeMirrorApk } from './fakes';
+import { FirstBootMirror, fakeAdbKey, fakeMirrorApk, fakeServicesJar } from './fakes';
 import {
-  GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, makeOnlyHome, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, type FastbootLike,
+  GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, displayRotation, makeOnlyHome, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, setPortrait, type FastbootLike,
 } from '../src';
 
 const T = 1_700_000_000;
-const KEY = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';
+const KEY = fakeAdbKey(5, 'kiln@glassworks');
 const MAKE_EXT4FS = ['-O', '^metadata_csum,^64bit,^flex_bg,^dir_index,^huge_file,^dir_nlink,^extra_isize,uninit_bg,resize_inode'];
 
 /** A fake LK with the variables Qualcomm's aboot publishes. */
@@ -72,6 +72,8 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
     const tree = join(dir, 'tree');
     mkdirSync(join(tree, 'priv-app/Launcher3'), { recursive: true });
     mkdirSync(join(tree, 'media'), { recursive: true });
+    mkdirSync(join(tree, 'framework'), { recursive: true });
+    writeFileSync(join(tree, 'framework/services.jar'), await fakeServicesJar());
     writeFileSync(join(tree, 'build.prop'), `ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`);
     writeFileSync(join(tree, 'priv-app/Launcher3/Launcher3.apk'), randomBytes(50_000));
     const raw = join(dir, 'system.raw');
@@ -92,7 +94,7 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
     const out = { system: [] as Uint8Array<ArrayBuffer>[], userdata: [] as Uint8Array<ArrayBuffer>[] };
     const steps = new Set<string>();
     const userdataBytes = 40 * 1024 * 1024;
-    await buildImages(loaded, { apk: fakeMirrorApk(), hwrotation: 270, adbKey: KEY, userdataBytes, time: T },
+    await buildImages(loaded, { apk: fakeMirrorApk(), adbKey: KEY, userdataBytes, time: T },
       { system: (b) => { out.system.push(b.slice()); }, userdata: (b) => { out.userdata.push(b.slice()); } }, (s) => steps.add(s));
     expect([...steps]).toEqual(['patch', 'system', 'userdata']);
 
@@ -139,13 +141,71 @@ describe('first boot', () => {
   it('checks the image, grants, hides the other launcher, starts Glassworks through its main activity with Home Assistant', async () => {
     const p = new FirstBootMirror();
     const r = await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async () => {} });
-    expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: '270',
+    expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: 3,
       home: { result: 'set', focused: GLASSWORKS.activity, left: [] } });
     const at = (c: string) => p.cmds.findIndex((x) => x.startsWith(c));
     expect(at('pm grant')).toBeLessThan(at(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`));
     expect(at(`am start -n ${GLASSWORKS.activity} --es url`)).toBeLessThan(at('pm hide com.android.launcher3'));
     expect(at('pm hide com.android.launcher3')).toBeLessThan(at('dumpsys activity activities'));
     expect(p.cmds).not.toContain('pm hide com.cyanogenmod.trebuchet'); // not on this image
+  });
+
+  it('runs these commands, in this order: the rotation locked to 3 and checked before the app starts (golden, 2026-11-17)', async () => {
+    const p = new FirstBootMirror();
+    await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async () => {} });
+    const pkg = GLASSWORKS.package;
+    expect(p.cmds).toEqual([
+      'getprop ro.build.fingerprint',
+      `dumpsys package ${pkg}`,
+      `pm grant ${pkg} android.permission.RECORD_AUDIO`,
+      `pm grant ${pkg} android.permission.CAMERA`,
+      `pm grant ${pkg} android.permission.WRITE_SECURE_SETTINGS`,
+      `appops set ${pkg} SYSTEM_ALERT_WINDOW allow`,
+      `pm grant ${pkg} android.permission.CHANGE_CONFIGURATION`,
+      `dpm set-active-admin ${pkg}/sh.edm.s1kiosk.AdminReceiver`,
+      'settings put system accelerometer_rotation 0',
+      'settings put system user_rotation 3',
+      'dumpsys window windows',
+      `am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`,
+      `am start -a android.intent.action.MAIN -c android.intent.category.HOME ${pkg}`,
+      'pm list packages com.android.launcher3',
+      'pm hide com.android.launcher3',
+      'pm list packages com.cyanogenmod.trebuchet',
+      'pm list packages com.android.launcher3',
+      'pm list packages com.cyanogenmod.trebuchet',
+      'am start -a android.intent.action.MAIN -c android.intent.category.HOME',
+      'dumpsys activity activities',
+    ]);
+    expect(p.cmds.some((c) => c.includes('hwrotation'))).toBe(false);
+  });
+
+  it('refuses when the screen doesn\'t turn to portrait, before the app starts (2026-11-17: it came up sideways)', async () => {
+    const p = new FirstBootMirror();
+    p.rotationStuck = true;
+    const waited: number[] = [];
+    await expect(firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async (ms) => { waited.push(ms); } }))
+      .rejects.toThrow(/screen didn't turn to portrait: after user_rotation=3, Android still reports rotation 0 \(10 s\)/);
+    expect(waited).toEqual(Array(10).fill(1000));
+    expect(p.cmds.filter((c) => c === 'dumpsys window windows')).toHaveLength(10);
+    expect(p.cmds.some((c) => c.startsWith('am start'))).toBe(false);
+  });
+
+  it('takes rotation 3 only: refuses 1 (portrait, upside down) and a dump with no mRotation, whatever the size (#439 verifier)', async () => {
+    const p = new FirstBootMirror();
+    p.userRotation = 1; // what settings put would leave if Android ignored our 3
+    const flip = { run: async (c: string) => ({ out: c === 'dumpsys window windows' ? (await p.run('dumpsys window windows')).out.replace(/mRotation=\d/, 'mRotation=1') : '', code: 0 }), push: async () => {} };
+    await expect(setPortrait(flip, () => {}, async () => {}, 3)).rejects.toThrow(/still reports rotation 1 \(3 s\)/);
+    const none = { run: async (c: string) => ({ out: c === 'dumpsys window windows' ? '  mScreenRect=[0,0][1080,1920]\n  mUserRotation=3\n    init=1920x1080 240dpi cur=1080x1920 app=1080x1920\n' : '', code: 0 }), push: async () => {} };
+    await expect(setPortrait(none, () => {}, async () => {}, 2)).rejects.toThrow(/still reports rotation unknown \(2 s\)/);
+  });
+
+  it('reads mRotation from Android 6\'s dumpsys window windows, not the plain dump (#439 verifier)', async () => {
+    const p = new FirstBootMirror();
+    p.accelerometer = 0; p.userRotation = 3;
+    expect(await displayRotation(p)).toBe(3);
+    expect(p.cmds).toEqual(['dumpsys window windows']);
+    p.userRotation = 0;
+    expect(await displayRotation(p)).toBe(0);
   });
 
   it('says when Launcher3 survives and HOME shows the chooser, and the same step fixes it once hiding works', async () => {

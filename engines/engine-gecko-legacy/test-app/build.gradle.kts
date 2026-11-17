@@ -107,6 +107,8 @@ dependencies {
     implementation(project(":bluetooth-proxy"))
 
     // GPL-2.0 with the Classpath exception, like the JDK it backports: the classes the app calls (java.time and
-    // friends) are compiled into the APK. This debug APK is never published; the legacy release is the generic app's.
+    // friends) are compiled into the APK. This debug APK is never released, only a test build's artifact (test-build.yml,
+    // on branches named "legacy"); the legacy release is the generic app's. Allowed in this app too (maintainer,
+    // 2026-11-16; AGENTS.md, rule 4).
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

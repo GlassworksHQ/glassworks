@@ -35,21 +35,33 @@ class LocalOnlyHotspot(
     private var current: ((Hotspot.Event) -> Unit)? = null
 
     /**
-     * A request is out and Android hasn't answered it. A new start waits for that answer instead of asking again:
-     * Android refuses a second request from the same app while one is pending (CodeRabbit on #418).
+     * The request that is out and Android hasn't answered, or null. A new start waits for that answer instead of asking
+     * again: Android refuses a second request from the same app while one is pending (CodeRabbit on #418).
      */
-    private var asked = false
+    private var pending: Int? = null
+
+    /** The request whose reservation we hold, or null. Only its stop counts. */
+    private var holding: Int? = null
+
+    /** Each Android request's number: an answer counts only for the request it belongs to. */
+    private var requests = 0
 
     /** Each start's number, for the refusals [start] posts itself. */
     private var generation = 0
 
-    /** One listener for every request: the answer goes to whoever [current] is when it comes. */
-    private val listener = object : LocalOnlyAp.Listener {
+    /**
+     * One listener per Android request. Its answer goes to whoever [current] is when it comes, and its terminal events
+     * only while it is the request out ([pending]) or held ([holding]): a stop Android queued for an earlier request
+     * never reaches a later one (CodeRabbit on #418).
+     */
+    private fun listener(id: Int) = object : LocalOnlyAp.Listener {
         override fun onStarted(r: LocalOnlyAp.Reservation) {
-            asked = false
+            if (pending != id) { runCatching { r.close() }; return } // not the request out: nobody's
+            pending = null
             // Nobody wants it any more (stop() ran since): Android's reservation goes back at once.
             val to = current ?: run { runCatching { r.close() }; return }
             reservation = r
+            holding = id
             // Unreadable, or reading it threw: closed again by stop(), never left open.
             val net = runCatching { r.network() }.getOrNull()
             if (net == null) { stop(); to(Hotspot.Event.Failed(HotspotFailure.FAILED)); return }
@@ -57,12 +69,15 @@ class LocalOnlyHotspot(
         }
 
         override fun onStopped() {
+            if (holding != id) return
+            holding = null
             reservation = null
             current?.invoke(Hotspot.Event.Stopped)
         }
 
         override fun onFailed(reason: Int) {
-            asked = false
+            if (pending != id) return
+            pending = null
             current?.invoke(Hotspot.Event.Failed(failure(reason)))
         }
     }
@@ -76,16 +91,17 @@ class LocalOnlyHotspot(
         }
         if (platform.hotspotNeedsLocationOn && !locationOn()) { fail(HotspotFailure.LOCATION_OFF); return }
         current = onEvent
-        if (asked) return // the request still out answers this start
-        asked = true
+        if (pending != null) return // the request still out answers this start
+        val id = ++requests
+        pending = id
         try {
-            if (!ap.start(listener, handler)) { asked = false; fail(HotspotFailure.NOT_ALLOWED) }
+            if (!ap.start(listener(id), handler)) { pending = null; fail(HotspotFailure.NOT_ALLOWED) }
         } catch (_: SecurityException) {
-            asked = false
+            pending = null
             fail(if (platform.hotspotNeedsLocationOn && !locationOn()) HotspotFailure.LOCATION_OFF else HotspotFailure.NO_PERMISSION)
         } catch (_: IllegalStateException) {
             // This app already holds a reservation Android hasn't let go of.
-            asked = false
+            pending = null
             fail(HotspotFailure.FAILED)
         }
     }
@@ -93,6 +109,7 @@ class LocalOnlyHotspot(
     override fun stop() {
         generation++
         current = null
+        holding = null
         reservation?.let { runCatching { it.close() } }
         reservation = null
     }

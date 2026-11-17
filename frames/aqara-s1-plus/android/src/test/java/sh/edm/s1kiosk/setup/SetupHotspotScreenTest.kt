@@ -31,12 +31,12 @@ class SetupHotspotScreenTest {
     private val on = HotspotStep.card(SetupHotspot.View.On(net, 14 * 60_000L, asked = true), HotspotPermission.Step.Ready, "http://192.0.2.1:8099/setup")
     private val offer = HotspotStep.card(SetupHotspot.View.Off(null, null), HotspotPermission.Step.Ready, null)
 
-    private fun screen(card: HotspotStep.Card?, input: Input = Input.TOUCH): SetupOverlay {
+    private fun screen(card: HotspotStep.Card?, input: Input = Input.TOUCH, installer: InstallerWifi? = null): SetupOverlay {
         val a = Mockup.activity()
         val s = s1SetupOverlay(a).also { it.input = input }
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(step = SetupFlow.WIFI, done = emptySet(), wifi = offline, haUrl = null, haSource = "",
-            panelIp = null, signedIn = false, hotspot = card))
+            panelIp = null, signedIn = false, hotspot = card, installer = installer))
         Mockup.idle()
         Mockup.layout(s)
         return s
@@ -86,6 +86,15 @@ class SetupHotspotScreenTest {
         val s = screen(wifiOff, Input.NONE)
         assertTrue(texts(s).toString(), dev.glassworks.platform.HotspotFailure.WIFI_OFF.text in texts(s))
         assertTrue(views(s).none { it.isShown && it is TextView && it.text.toString() == "Turn on Wi-Fi" })
+    }
+
+    @Test fun theHotspotsReasonGoesWithItsButtonOverAnOldInstallerFailure() {
+        val explain = HotspotStep.card(SetupHotspot.View.Off(null, dev.glassworks.platform.HotspotFailure.NO_PERMISSION),
+            HotspotPermission.Step.Explain(android.Manifest.permission.NEARBY_WIFI_DEVICES, "the reason for Nearby devices"), null)
+        val s = screen(explain, installer = InstallerWifi("Example-WiFi", InstallerWifi.Phase.FAILED, "wrong password"))
+        assertTrue(texts(s).toString(), "the reason for Nearby devices" in texts(s))
+        assertTrue(texts(s).toString(), texts(s).none { it.startsWith("Couldn't join") })
+        button(s, "Allow")
     }
 
     @Test fun whileOffOneButtonOffersIt() {

@@ -4,6 +4,7 @@ import { absoluteUrl, type SitePath } from "./seo";
 import { panes } from "./site";
 import { lastChanged } from "./docs";
 import { SOURCES as DOC_SOURCES } from "./docs/sources";
+import { researchUrl } from "./docs/research";
 import { POSTS } from "./blog/posts";
 import { apiReferences } from "./apiDocs";
 
@@ -34,6 +35,7 @@ const pages: RouteSource = () => [
   { path: "/blueprints" },
   { path: "/brand" },
   { path: "/trademarks" },
+  { path: "/research" },
 ];
 
 const framePages: RouteSource = () => frames.map((f) => ({ path: `/frames/${f.id}` }));
@@ -46,6 +48,8 @@ const docs: RouteSource = () => [
   { path: "/docs/panes" },
   { path: "/docs/libraries" },
   ...DOC_SOURCES.map((s) => ({ path: s.url as SitePath, modified: lastChanged(s.file) })),
+  // each frame's research tab (app/docs/frames/[id]/research)
+  ...[...new Set(DOC_SOURCES.filter((s) => s.section === "notes" && s.frame).map((s) => s.frame!))].map((id) => ({ path: researchUrl(id) as SitePath })),
 ];
 
 /** The index of each library's API reference this site serves: static Dokka pages (scripts/api-docs.mjs). */

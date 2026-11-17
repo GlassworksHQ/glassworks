@@ -32,7 +32,7 @@ import sh.edm.s1kiosk.glassworks
  * rgba(255,255,255,.07) border and 26px radius, letter-spaced uppercase label in #63636b, text
  * #f4f4f5 / muted #a1a1aa, `.btn` and `.btn.pri` buttons, sky #38bdf8 accent).
  *
- * Shown as a TYPE_APPLICATION_OVERLAY window (the app holds the SYSTEM_ALERT_WINDOW app-op on the
+ * Shown as an overlay window, [dev.glassworks.platform.OverlayWindow] (the app holds the SYSTEM_ALERT_WINDOW app-op on the
  * panel), so it also works while the activity is stopped or the kiosk isn't up yet. Without the
  * app-op it falls back to the current activity's decor view. Main thread only.
  */
@@ -105,7 +105,7 @@ class ImprovOverlay(private val ctx: Context) {
         if (Settings.canDrawOverlays(ctx)) {
             val lp = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                dev.glassworks.platform.OverlayWindow.type(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or

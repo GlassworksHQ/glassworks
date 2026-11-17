@@ -1,6 +1,6 @@
 // The Mirror in fastboot (its locked LK, reached with the button inside its back): what Kiln reads
 // before writing, the images it builds for it, the writes, and the first boot over adb with Kiln's
-// own key. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
+// own key, which the patched services.jar lets in without asking. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
 // lululemon's software: the screens say so before anything is written (#40).
 import type { PanelShell } from '@glassworks/adb';
 import { Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
@@ -8,6 +8,7 @@ import { GLASSWORKS, type MirrorApp } from './app';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
 import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
+import { adbKeyLines } from './services';
 import type { Check } from './recipe';
 
 /** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
@@ -97,8 +98,8 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
 
 /**
  * The two images Kiln flashes, written as sparse images to the sinks: the loaded system image with
- * the app (Glassworks) and the rest (patchSystem), and a fresh userdata the partition's size with this browser's
- * adb key (buildUserdata).
+ * the app (Glassworks), services.jar trusting `adbKey`'s first line, and the rest (patchSystem), and a
+ * fresh userdata the partition's size with `adbKey` in adb_keys (buildUserdata).
  */
 /** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
 export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean;
@@ -106,6 +107,7 @@ export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: str
   wifi?: { ssid: string; password: string } },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
   onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
+  adbKeyLines(o.adbKey); // every line, before the system image is touched
   onProgress('patch', 0);
   const sys = await Ext4.open(loaded.disk);
   await patchSystem(sys, o);
@@ -127,7 +129,45 @@ export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'
  * our app has no home screen of its own (a build whose launcher activity is off), so nothing was
  * hidden: the image's launcher stays the home screen.
  */
-export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean; rotation?: string }
+export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean;
+  /** the display rotation Android reports after the rotation step: always MIRROR_ROTATION */
+  rotation: number }
+
+/**
+ * The Mirror's 1920x1080 panel stands portrait, upright at user_rotation 3 (Surface.ROTATION_270:
+ * graphics turned 90 degrees counter-clockwise, AOSP 6.0.1 Display.getRotation). Seen upright on the
+ * glass with Kiln's first boot, 2026-11-17. The setting lives in userdata, which Kiln writes fresh, so
+ * the first boot sets it again. (`ro.sf.hwrotation` does nothing on this image: nothing reads it.)
+ */
+export const MIRROR_ROTATION = 3;
+
+/**
+ * Android's display rotation: WindowManagerService's mRotation from `dumpsys window windows`, which
+ * prints it every time (dumpWindowsLocked with dumpAll) and holds no saved ANR state. Plain
+ * `dumpsys window` prints it only with dumpAll on Android 6, and its ANR snapshot has an old display.
+ */
+export async function displayRotation(p: PanelShell): Promise<number | undefined> {
+  const m = /(?:^|\s)mRotation=(\d)\b/m.exec((await p.run('dumpsys window windows')).out);
+  return m ? Number(m[1]) : undefined;
+}
+
+/**
+ * Locks the screen upright in portrait (no auto-rotate, user_rotation 3) and waits until Android
+ * reports rotation 3 exactly: 1 is portrait too, upside down. Throws after `tries` reads a second apart.
+ */
+export async function setPortrait(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  tries = 10): Promise<number> {
+  const r = new Steps(p, onStep);
+  await r.run('settings put system accelerometer_rotation 0');
+  await r.run(`settings put system user_rotation ${MIRROR_ROTATION}`);
+  let seen: number | undefined;
+  for (let i = 0; i < tries; i++) {
+    seen = await displayRotation(p);
+    if (seen === MIRROR_ROTATION) { r.detail(`rotation ${seen}`); return seen; }
+    await sleep(1000);
+  }
+  throw new Error(`the Mirror's screen didn't turn to portrait: after user_rotation=${MIRROR_ROTATION}, Android still reports rotation ${seen ?? 'unknown'} (${tries} s). Look at the glass, then run the first boot again`);
+}
 export interface HomeCheck { result: 'set' | 'chooser' | 'other' | 'none'; focused?: string; left: string[] }
 
 /** The activity in front, from `dumpsys activity activities` (Android 6's mFocusedActivity). */
@@ -176,9 +216,9 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
 }
 
 /**
- * The Mirror's first start on Glassworks, over adb with Kiln's own key: checks it is the patched
- * image, grants what adb can, hides the other launchers, starts the app (Glassworks) with Home Assistant's
- * address, and gives it the Wi-Fi.
+ * The Mirror's first start on Glassworks, over adb with Kiln's own key (the one services.jar trusts): checks it is the patched
+ * image, grants what adb can, turns the screen upright in portrait, starts the app (Glassworks) with Home
+ * Assistant's address, hides the other launchers, and gives it the Wi-Fi.
  */
 export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: string; wifi?: { ssid: string; password: string }; onStep?: StepFn;
   sleep?: (ms: number) => Promise<void>; app?: MirrorApp }): Promise<FirstBoot> {
@@ -190,9 +230,12 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   if (fp !== GLASS_PANES.fingerprint) throw new Error(`the Mirror runs ${fp || 'something unknown'}, not the image Kiln wrote`);
   const app = await kioskVersion(p, undefined, ours);
   if (!app) throw new Error(`${ours.name} (${ours.package}) isn't on the Mirror after the install`);
-  const rotation = (await r.try('getprop ro.sf.hwrotation')).trim() || undefined;
-  r.detail(`${ours.name} ${app.name ?? app.code}, ro.sf.hwrotation=${rotation ?? 'unset'}`);
+  r.detail(`${ours.name} ${app.name ?? app.code}`);
   await grantPermissions(r, ours);
+
+  // before the app starts, so it opens in portrait (it follows the system's rotation, #434)
+  r.step('Turn the screen upright (portrait)');
+  const rotation = await setPortrait(p, o.onStep, sleep);
 
   // through its main activity, whose extras it trusts from adb (#364): the HOME alias drops them
   r.step(`Start ${ours.name}`);
@@ -207,7 +250,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : `${ours.name} didn't confirm it joined (the image's saved network still applies)`);
   }
-  return { app, hidden, home, ...(wifi !== undefined ? { wifi } : {}), ...(rotation ? { rotation } : {}) };
+  return { app, hidden, home, rotation, ...(wifi !== undefined ? { wifi } : {}) };
 }
 
 /** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */

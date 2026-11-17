@@ -33,9 +33,11 @@ import java.util.concurrent.TimeUnit
  * has paired: then every request but `state` is refused. Over USB it is always true.
  * While a client is connected, `{"event":"state","state":{…}}` is pushed whenever the serialized
  * state changes (checked every [SetupChannel.POLL_MS]). No tokens or API key cross it. One secret does: the
- * Wi-Fi password `wifi.join` carries, which is never logged nor sent back. `wifi.join` is refused while the panel
- * is on a network ([ChannelState.online]), so the password never crosses a working LAN as plain HTTP: it comes
- * over the panel's own WPA2 setup hotspot, or over USB. Kiln's USB wizard keeps Improv Serial for Wi-Fi.
+ * Wi-Fi password `wifi.join` carries, which is never logged nor sent back. It goes in plain text over the WebSocket
+ * (`ws://`), like everything else here. `wifi.join` is refused while the panel is on a network ([ChannelState.online]),
+ * so in practice it comes over the panel's own setup hotspot (WPA2, so encrypted on the air, but readable by anyone
+ * else who joined it with the key from the screen) or over USB. Nothing encrypts this channel on a LAN either
+ * (docs/manage.md). Kiln's USB wizard keeps Improv Serial for Wi-Fi.
  */
 data class ChannelState(
     val ip: String?,

@@ -208,6 +208,39 @@ Three things to find out:
     and `localhost` resolves on the device anyway. Early Hints are off too (`network.early-hints.enabled`,
     `network.early-hints.preconnect.enabled`): a 103 from Home Assistant could otherwise preconnect. Untested: a
     real 103, which the check page doesn't send.
+15. **Home Assistant's own images blocked** (#455; 2026-11-17, API 23 emulator, verified). On the Mirror, with the
+    dashboard at `http://<address>:8123`, HA's image entities stayed empty and the note said "Blocked content
+    from <address>:8123". Logcat: `Mixed Content: Upgrading insecure display request
+    'http://<address>:8123/api/image_proxy/image.<entity>?token=…'`, then `lockdown: blocked image from
+    <address>:8123`. The cause (read, Gecko source at `FIREFOX_144_0_RELEASE`):
+    - The app makes HA's host a secure context (`dom.securecontext.allowlist`, `GeckoEngine.writeConfig`), so the
+      microphone works over http.
+    - The `LoadInfo` constructor (`netwerk/base/LoadInfo.cpp`) marks every image, audio and video load from a
+      secure-context document for upgrade when `security.mixed_content.upgrade_display_content` is on, its
+      default (`StaticPrefList.yaml`). Only loopback documents are exempt. `ShouldSecureUpgradeNoHSTS`
+      (`netwerk/base/nsNetUtil.cpp`) then rewrites the URL to https and logs the line above.
+      `nsMixedContentBlocker::ShouldLoad` lets the http load through because the target is allowlisted, but the
+      upgrade is decided elsewhere.
+    - Gecko 158 also exempts allowlisted documents (`GetIsSecureContextAllowlistedHost`, in
+      `FIREFOX_158_0_RELEASE` and `FIREFOX_159_0_RELEASE`, not in 144 to 155). So the S1 (GeckoView 159) isn't
+      affected, lockdown or not.
+    - Not the cause: a CSP `upgrade-insecure-requests` from HA logs "Content Security Policy: Upgrading…", and
+      HTTPS-Only or HTTPS-First log "HTTPS-Only Mode"/"HTTPS-First Mode". The Mirror logged neither.
+
+    Why no check caught it: `lockdown-page.py` serves "Home Assistant" on 127.0.0.1, which is loopback (never
+    upgraded), and `EngineCheckActivity` started the engine with no secure hosts. The check now allowlists the
+    dashboard's host, as the app does, and an emulator reaches the page at `http://10.0.2.2:18125/`, which isn't
+    loopback to Gecko. The same page, before and after:
+    ```
+    before:  Mixed Content: Upgrading insecure display request 'http://10.0.2.2:18125/green.png' to use 'https'
+             lockdown: blocked image from 10.0.2.2:18125        (the server got no GET /green.png; image broken)
+    after:   security.mixed_content.upgrade_display_content: false
+             [home] "GET /green.png HTTP/1.1" 200               (image shown; no upgrade line)
+    ```
+    The other origin stayed blocked in both runs (image, frame, XHR, WebSocket), with no `LEAK` line. The fix is
+    the pref, set by the lockdown (`Lockdown.prefs`), not a lockdown rule that allows https on HA's host: that
+    origin is still refused (`policy.test.mjs` pins it). The note now names a blocked origin with its scheme when
+    it has HA's host and port (`https://<address>:8123`), so it no longer reads as HA's own address.
 
 ## Result
 
@@ -226,13 +259,13 @@ on the Mirror (step 11). "Nothing left" means the other origin's server logged n
 
 | The page tries | Stopped by | Nothing left? | On the page |
 |---|---|---|---|
-| A link to another origin | `onLoadRequest` → deny | Yes | "<host> isn't your Home Assistant, so it didn't open." |
+| A link to another origin | `onLoadRequest` → deny | Yes | "<host> isn't your Home Assistant's address, so it didn't open." |
 | `window.open` to another origin | `onLoadRequest` (new window) → deny | Yes | Same |
 | `window.open` to Home Assistant | Loads in place, as on the current engine | — | The page |
 | A same-origin download | `onExternalResponse`: nothing saved. The GET reaches Home Assistant first | — | "Downloads are off on this panel." |
 | An image, fetch or WebSocket from another origin | The extension's `webRequest` blocking | Yes | "Blocked content from <host>." |
 | A cross-origin iframe | `onSubframeLoadRequest` → deny | Yes | Empty frame, same note |
-| A cross-origin download (`<a download>`) | `onLoadRequest`: a page load, refused | Yes | "isn't your Home Assistant" |
+| A cross-origin download (`<a download>`) | `onLoadRequest`: a page load, refused | Yes | "isn't your Home Assistant's address" |
 | A meta refresh, 302 or auto-submitted POST in a frame | `onSubframeLoadRequest` → deny | Yes | Same note |
 | A POST or link with `target=_top` from a frame | `onLoadRequest` → deny | Yes | Same note |
 | A top-level 302 or meta refresh to another origin | `onLoadRequest` → deny; `policy.js` also cancels a `main_frame` request off Home Assistant | Yes | Same note |
@@ -271,7 +304,8 @@ as before (4 frames and 2 pages refused). Then, in the same process (same pid, `
 with `--es url http://127.0.0.1:18126/`), the new dashboard address was refused: `Lockdown: refused page from
 127.0.0.1:18126`, nothing reached the other origin's server, and with nothing else on screen the engine showed
 "127.0.0.1:18126 isn't the Home Assistant the panel started with, so it didn't open. … If the dashboard's address
-changed, restart the app." (`Lockdown.ELSEWHERE`; `NO_DASHBOARD` when there was none at start).
+changed, restart the app." (`Lockdown.ELSEWHERE`; `NO_DASHBOARD` when there was none at start). Since step 15
+the message says "…isn't the Home Assistant address the panel started with…".
 
 ## What runs on the legacy engine
 
@@ -510,7 +544,7 @@ What Phase B added for the Mirror, from the device and not from frame code (`Gen
 
 | What | How | Tested |
 |---|---|---|
-| Portrait glass | `Frame.orientation`: the screen's natural orientation (rotation 0), which `ro.sf.hwrotation=270` makes portrait on the Mirror. `MainActivity` asks for it, either way up, at start. The S1's frame keeps landscape, as its manifest asks | `OrientationTest` (the S1 unchanged; a portrait screen gets portrait); `GenericAndroidDisplayTest` |
+| Portrait glass | `Frame.orientation` is `ANY` on the Mirror: the app follows Android's rotation (`SCREEN_ORIENTATION_FULL_USER`), and Kiln's first boot locks the Mirror's Android in portrait (`user_rotation=3`, auto-rotate off; `ro.sf.hwrotation` does nothing there, 2026-11-17). The app then stands upright on the glass (verified 2026-11-17, the root's run of #439, the maintainer's look). The S1's frame keeps landscape, as its manifest asks. Phase B first used the screen at rotation 0, which held a Pixel Tablet portrait on its dock (2026-11-16) | `OrientationTest` (the S1, the Pixel Tablet, the Mirror, an unknown tablet, a turn) |
 | No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
 | Reboot | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
 
@@ -523,6 +557,23 @@ What checks it, besides the unit tests of the shared sources:
 | `api23` | No new call above API 23 in the app's own sources | `pr.yml` |
 | The conformance test on API 23 | The core boots on Android 6 with a fake frame and engine, built at minSdk 23 with desugaring (`tools/legacy/api23-emulator.gradle`) | `core-emulators.yml` |
 
+**Desugaring and its licence.** Core library desugaring compiles the `desugar_jdk_libs` classes the app calls
+(`java.time`, `Base64` and friends) into the legacy APK as `j$.*` (863 classes, #408). That code is GPL-2.0 with the
+Classpath exception. The maintainer allowed it on 2026-11-16, in the generic legacy APK and the engine's debug test
+app, as the one exception to the no-GPL rule (`AGENTS.md`, rule 4); it's in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
+Where it goes:
+
+| Build | Desugaring | `desugar_jdk_libs` code in the APK |
+|---|---|---|
+| Generic legacy (`assembleLegacy`) | On | Yes, the classes it calls |
+| Generic current (`assembleRelease`, minSdk 26) | On, because AGP turns it on per module, not per variant | None. D8 adds a 3.8 kB dex of inert API stubs, so the APK isn't byte-identical to one without desugaring (#408) |
+| S1 Kiosk (`:kiosk`) | Off | None |
+| `:kiosk-legacy` (the engine's debug test app) | On | Yes. A test build artifact on branches named `legacy`, never released. Allowed too (maintainer, 2026-11-16) |
+
+Test builds publish the legacy APK (`generic-test-build.yml`, arm64-v8a, 0.1.0 and 0.1.1). There's no release yet:
+`release.yml` doesn't build the generic app or its legacy build, and the app has no release key. The app's legacy
+release line ([above](#updates-on-the-legacy-build-198-phase-c)) is ready for one.
+
 ## How to reproduce
 
 Off-device: `./gradlew :engine-gecko-legacy:testDebugUnitTest` (the policy in Kotlin and in `policy.js`, the gate).
@@ -533,7 +584,9 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
    `engines/engine-gecko-legacy/test-app/build/outputs/apk/debug/`.
 2. `python3 tools/legacy/lockdown-page.py`, and `adb -s <serial> reverse tcp:18125 tcp:18125` and the same for 18126.
 3. `adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/sh.edm.s1kiosk.legacycheck.EngineCheckActivity --es url
-   http://127.0.0.1:18125/`. The page lists what must load and what must not.
+   http://127.0.0.1:18125/`. The page lists what must load and what must not. On an emulator, also run it with
+   `--es url http://10.0.2.2:18125/` (after `am force-stop`): a host that isn't loopback, as a real HA's isn't,
+   so the page is an allowlisted secure context, as in the app (step 15).
 4. For Home Assistant: `python3 tools/perf/fakeha.py --port 18123 --no-harness`, reverse 18123, and the same
    `am start` with `--es url http://127.0.0.1:18123/clarity-ref/typical-nocam`.
 
@@ -554,5 +607,5 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
 - GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
 - The app itself on an Android 6-7 device: Phase B's code ran only on Robolectric and an API 23 emulator (no
   GeckoView there: the conformance test's engine is blank).
-- A natural-portrait tablet now shows the app portrait (Phase B's rule), where it was always landscape. Fine for the
-  Mirror; whether small portrait tablets want landscape is a setting for later.
+- The Mirror's `Build.MODEL` and `MANUFACTURER` have never been read on the unit. If the Mirror should lock portrait
+  whatever its Android says, it needs a `GenericAndroid.KNOWN` row, and that needs a real reading first.

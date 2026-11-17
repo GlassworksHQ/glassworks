@@ -119,25 +119,40 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
 
   const dir = mkdtempSync(join(tmpdir(), "gw-dialog-"));
   const unguard = guard(dir);           // Chrome and the fake die with this test, however it ends
-  const port = await freePort(), base = `http://127.0.0.1:${port}`;
-  const fake = spawn(py, [join(PERF, "fakeha.py"), "--port", String(port), "--log", join(dir, "fakeha.jsonl")],
-                     { stdio: ["ignore", "pipe", "pipe"] });
-  let fakeErr = "";
-  fake.stderr.on("data", (d) => { fakeErr += d; });
-  const browser = spawn(chrome(), ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${join(dir, "profile")}`,
-    "--no-first-run", "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required", "--mute-audio",
-    "--window-size=1280,800", ...(process.env.CI ? ["--no-sandbox"] : []), "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+  // The fake on two free ports (its own and the relay's). freePort only probes them, so another process
+  // can take one before the fake binds it (#437: "Address already in use" in 1 of 6 runs here): then
+  // the fake exits, and it starts again on others.
+  let port, base, fake, fakeErr = "", banner = "", browser;
+  // Registered before the fake's first start, so a fake that never reports ready is still killed.
   t.after(() => {
-    browser.kill("SIGKILL");
+    browser?.kill("SIGKILL");
     unguard();
-    fake.kill();
+    fake?.kill();
     if (!t.passed && fakeErr) t.diagnostic(`the fake's stderr:\n${fakeErr.slice(-4000)}`);
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   });
+  for (let attempt = 1; ; attempt++) {
+    port = await freePort();
+    base = `http://127.0.0.1:${port}`;
+    fakeErr = "";
+    banner = "";
+    fake = spawn(py, [join(PERF, "fakeha.py"), "--port", String(port), "--log", join(dir, "fakeha.jsonl")],
+                 { stdio: ["ignore", "pipe", "pipe"] });
+    fake.stderr.on("data", (d) => { fakeErr += d; });
+    fake.stdout.on("data", (d) => { banner += d; });
+    // `close`, not `exit`: it comes after stdio has drained, so the last stderr chunk is in fakeErr.
+    const exited = new Promise((r) => fake.once("close", () => r(true)));
+    const up = await Promise.race([until("the fake", () => banner.includes("WebRTC over"), 60000).then(() => true, () => false),
+                                   exited.then(() => false)]);
+    if (up) break;
+    fake.kill(); // one that timed out is still running; one that exited ignores this
+    if (attempt === 3 || !/Address already in use/.test(fakeErr)) throw new Error(`the fake didn't start:\n${fakeErr.slice(-2000)}`);
+    t.diagnostic(`the fake's port was taken (attempt ${attempt}); again on others`);
+  }
+  browser = spawn(chrome(), ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${join(dir, "profile")}`,
+    "--no-first-run", "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required", "--mute-audio",
+    "--window-size=1280,800", ...(process.env.CI ? ["--no-sandbox"] : []), "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
 
-  let banner = "";
-  fake.stdout.on("data", (d) => { banner += d; });
-  await until("the fake", () => banner.includes("WebRTC over"), 60000);
   let err = "";
   browser.stderr.on("data", (d) => { err += d; });
   const wsUrl = await until("Chrome's DevTools", () => (/DevTools listening on (ws:\S+)/.exec(err) || [])[1], 30000);
@@ -229,8 +244,12 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
   const asks = readFileSync(join(dir, "fakeha.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l))
     .filter((e) => e.type === "config/entity_registry/get" || e.open);
   const bOpen = asks.findIndex((e) => e.open && e.open.nonce === "d1a10004");
-  // After B's command: B's own three asks, one per dialog, in order, and nothing of A's.
-  assert.deepEqual(asks.slice(bOpen + 1).map((e) => e.msg.entity_id), TIERS.DIALOG.entities.map((e) => e.entity));
+  // After B's command: B's own three asks, one per dialog, in order, last. Before them at most an ask of
+  // A's held dialogs: one HA shows between B's command and B's check is caught and closed there, by
+  // design (2 of 4 runs on #410's head, #410's delta verifier).
+  const afterB = asks.slice(bOpen + 1).map((e) => e.msg.entity_id), mine = TIERS.DIALOG.entities.map((e) => e.entity);
+  assert.deepEqual(afterB.slice(-mine.length), mine, JSON.stringify(afterB));
+  for (const x of afterB.slice(0, -mine.length)) assert.ok(["climate.clarity_0", "sensor.clarity_10"].includes(x), JSON.stringify(afterB));
 
   // A view's history entry is HA's own navigate()'s, { from } alone (#410): B's entry has HA's
   // opensDialog from its dialogs now, and none of it rides into the next one (no dialogs on that one,
@@ -253,28 +272,44 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
   // waited for: 30 s, the start view, 30 s more, and the next view refused).
   assert.equal(thrown.find((l) => l.t === "done").settle, null);
 
-  // #410: HA holds A's dialogs past both waits (the hold isn't let go this time). The next view's
-  // check before its navigation finds them still held: that view isn't measured (an error line with
-  // its nonce), rather than measured on them.
-  await evaluate("(window.__gwHold = true)");
-  const a2 = "d1a10006", q2 = new URLSearchParams({ view: "light", nonce: a2, run: "1", taps: "0", swipes: "0", vsync: "16.667" });
-  assert.equal((await fetch(`${base}/clarity/open?${q2}`)).status, 204);
-  const a2End = await until("A2 done", () => page.lines.find((l) => l.nonce === a2 && (l.t === "done" || l.t === "error")), 300000);
-  assert.equal(a2End.t, "done", a2End.message);
-  // On the view, HA held both shows; at the start view (a fresh `{ from }` entry) they came and were
-  // closed, but that close's history.back() is held too, so HA's history still says a dialog.
-  assert.deepEqual([a2End.settle.via, a2End.settle.clean, a2End.settle.first.pending],
-                   ["start", false, ["climate.clarity_0", "sensor.clarity_10"]]);
-  assert.equal(a2End.settle.history, true, JSON.stringify(a2End.settle));
-  const b2 = "d1a10007", qb2 = new URLSearchParams({ view: "typical-nocam", nonce: b2, run: "1", taps: "0", swipes: "0", vsync: "16.667" });
-  assert.equal((await fetch(`${base}/clarity/open?${qb2}`)).status, 204);
-  const b2End = await until("B2's line", () => page.lines.find((l) => l.nonce === b2 && (l.t === "done" || l.t === "error")), 120000);
-  assert.equal(b2End.t, "error");
-  assert.match(b2End.message, /HA wasn't done with the view before's more-info dialogs after 10 s \(its history entry still current\); this view isn't measured on them/);
-  assert.deepEqual(page.lines.filter((l) => l.nonce === b2).map((l) => l.t), ["error"]);     // nothing of it measured
-  // Let go: what HA held comes now, and the view after is measured clean (the reduced-motion one below).
-  await evaluate("(window.__gwRelease(), true)");
-  await sleep(3000);
+  // #410 (CodeRabbit): a view refused because HA still hasn't shown one of the view before's dialogs
+  // carries that dialog to the next view's check (stats.js carriedShows). Here view X's sensor event
+  // never reaches HA, so it stays pending through X's own wait and the start view's; view Y's check
+  // refuses Y for it; and the test then gives HA that show 1.5 s after view Z's command arrives, when
+  // Z's check, with nothing carried, would already have passed and Z be opening under the sheet.
+  await evaluate(`(() => { const d = EventTarget.prototype.dispatchEvent; window.__gwHeld = null;
+    EventTarget.prototype.dispatchEvent = function (e) {
+      if (e && e.type === "hass-more-info" && e.detail && e.detail.entityId === "sensor.clarity_10" && !window.__gwHeld) {
+        window.__gwHeld = e.detail.entityId; return true; }
+      return d.call(this, e); };
+    return true; })()`);
+  const xEnd = (await open("light", "d1a10006")).find((l) => l.t === "done");
+  assert.deepEqual([xEnd.settle.clean, xEnd.settle.via, xEnd.settle.pending], [false, "start", ["sensor.clarity_10"]], JSON.stringify(xEnd.settle));
+  // HA shows the held sensor late: 1.5 s after the page gets Z's command. Hooked before Y opens: the
+  // harness long-polls /clarity/next, so the poll that brings Z's command starts after Y's error.
+  const z = "d1a10009";
+  await evaluate(`(() => { const f = window.fetch;
+    window.fetch = function (url) {
+      const r = f.apply(this, arguments);
+      if (String(url).includes("/clarity/next")) r.then((res) => res.clone().json()).then((cmd) => {
+        if (cmd && cmd.nonce === "${z}") setTimeout(() => {
+          const e = new Event("hass-more-info", { bubbles: true, composed: true });
+          e.detail = { entityId: "sensor.clarity_10" };
+          document.querySelector("home-assistant").dispatchEvent(e); }, 1500);
+      }).catch(() => {});
+      return r; };
+    return true; })()`);
+  const y = "d1a10007", qy = new URLSearchParams({ view: "typical-nocam", nonce: y, run: "1", taps: "0", swipes: "0", vsync: "16.667" });
+  assert.equal((await fetch(`${base}/clarity/open?${qy}`)).status, 204);
+  const yEnd = await until("Y's line", () => page.lines.find((l) => l.nonce === y && (l.t === "done" || l.t === "error")), 120000);
+  assert.equal(yEnd.t, "error");
+  assert.match(yEnd.message, /HA wasn't done with the view before's more-info dialogs after 10 s \(sensor\.clarity_10 not shown yet\); this view isn't measured on them/);
+  assert.deepEqual(page.lines.filter((l) => l.nonce === y).map((l) => l.t), ["error"]);     // nothing of it measured
+  const zLines = await open("typical-nocam", z);
+  // Z's check waited for the carried sensor, closed it when it came, and then Z was measured clean.
+  const zBefore = zLines.find((l) => l.t === "refdash").dialogs_before;
+  assert.ok(zBefore && zBefore.clean && zBefore.closed === 1 && zBefore.ms >= 1000, JSON.stringify(zBefore));
+  checkDialogs(t, zLines, "typical-nocam", "bottom-sheet");
 
   // prefers-reduced-motion: HA's sheet takes 1 ms and the graph doesn't animate.
   await cdp("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);

@@ -84,9 +84,9 @@ interface Frame {
     val input: Input get() = Input.TOUCH
 
     /**
-     * How the app's screen stands on this device, either way up: [Orientation.LANDSCAPE] (the S1, most tablets) or
-     * [Orientation.PORTRAIT] (a screen that stands portrait, like the lululemon Mirror's). Read when the activity
-     * starts, so a frame can ask the device (#198).
+     * How the app's screen stands on this device: [Orientation.LANDSCAPE] or [Orientation.PORTRAIT], either way up, for
+     * a device that is always held one way (the S1, a Pixel Tablet on its dock), or [Orientation.ANY] to turn as
+     * Android's auto-rotate or the person's choice says. Read when the activity starts.
      */
     val orientation: Orientation get() = Orientation.LANDSCAPE
 
@@ -149,8 +149,8 @@ enum class NamedBy { FRAME, MODEL }
 /** Whether a frame's screen takes a tap ([Frame.input]). */
 enum class Input { TOUCH, NONE }
 
-/** How a frame's screen stands ([Frame.orientation]). */
-enum class Orientation { LANDSCAPE, PORTRAIT }
+/** How a frame's screen stands ([Frame.orientation]). [ANY]: as the device stands, which Android decides. */
+enum class Orientation { LANDSCAPE, PORTRAIT, ANY }
 
 /** [manufacturer] ("Aqara"), [model] ("Panel Hub S1 Plus") and [chip] ("Allwinner A133", or the board's name where Android gives no chip). */
 class Hardware(val manufacturer: String, val model: String, val chip: String)

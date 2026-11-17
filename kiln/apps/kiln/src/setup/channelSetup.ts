@@ -266,6 +266,8 @@ export class ChannelSetup {
       return;
     }
     this.ip = st.ip ?? this.ip; // also when setup starts here (#/radio): Done's hand-off needs it
+    // A frame without a radio (any Android device, the Mirror) has no radio step: straight to Done.
+    if (!st.radio) { await this.d.done(); return; }
     this.d.show({
       phase: 'radio', radio: st.radio,
       note: st.radio.helper ? `Now: ${st.radio.status}` : 'Only Off is available: this panel has no root helper for the radio.',

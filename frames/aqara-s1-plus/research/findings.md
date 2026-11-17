@@ -1,3 +1,8 @@
+---
+topic: boot
+evidence: verified
+---
+
 # Findings
 
 Everything below is from the stock firmware on a retail unit, via the debug UART console.
