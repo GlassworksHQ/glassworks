@@ -22,20 +22,27 @@ import java.util.concurrent.ScheduledExecutorService
 
 /**
  * Any Android device that has no frame of its own (frames/generic-android): a tablet, an old phone.
- * It goes by its own maker and model, has what its features say, and has no panes of its own. Its sensors
- * are the app's choice: the generic app (frames/generic-android/android) reads Android's standard proximity
- * and light sensors (dev.glassworks.screen.ProximityPresence, AmbientLight); the S1 app on a tablet reads none.
+ * It goes by its own maker and model, or by its frame's on a [DeviceFrame] it recognises from the device's system
+ * properties ([prop]): the lululemon Mirror's ROM calls it "MSM8916 for arm64" (#454). It has what its features say,
+ * and has no panes of its own. Its sensors are the app's choice: the generic app (frames/generic-android/android)
+ * reads Android's standard proximity and light sensors (dev.glassworks.screen.ProximityPresence, AmbientLight); the
+ * S1 app on a tablet reads none.
  */
 class GenericAndroid(
     private val context: Context,
     override val presence: PresenceSource? = null,
     override val light: LightSource? = null,
+    prop: (String) -> String = DeviceFrame::systemProperty,
 ) : Frame {
-    override val board = "generic-android"
+    private val deviceFrame = DeviceFrame.of(prop)
 
-    override val namedBy = NamedBy.MODEL
+    override val board = deviceFrame?.id ?: "generic-android"
 
-    override val hardware = Hardware(Platform.manufacturer, Platform.model, Platform.hardware)
+    override val namedBy = if (deviceFrame != null) NamedBy.FRAME else NamedBy.MODEL
+
+    override val displayName = deviceFrame?.name
+
+    override val hardware = Hardware(deviceFrame?.brand ?: Platform.manufacturer, deviceFrame?.modelName ?: Platform.model, Platform.hardware)
 
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 
