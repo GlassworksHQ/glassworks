@@ -131,10 +131,13 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-It installs as a normal app (an APK). It doesn't install from Kiln yet, and there is no release yet.
+It installs as a normal app (an APK). There is no release yet, so Kiln installs it only as a test: open
+`kiln.glassworks.dev/android?apk=local` (or `/android?apk=local` on `npm run dev -w @glassworks/kiln-app`) in Chrome
+or Edge, pick a test build's APK, plug the tablet in with USB debugging still off, and follow the screens. Kiln names
+the tablet or asks for its brand, shows that brand's steps to turn on USB debugging, waits for Allow on the tablet,
+then installs. Undo is on the Done screen, and on the first screen for a later visit.
 
-Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403), with no
-screen yet. Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
+Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403). Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
 installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
 admin, the camera) and reads each grant back, allows "Install unknown apps" on Android 12+
 so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else

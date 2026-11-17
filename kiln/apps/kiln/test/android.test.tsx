@@ -1,0 +1,221 @@
+// @vitest-environment jsdom
+// /android (#403): off without ?apk=local, and every demo screen on the real generic recipe behind a
+// simulated device, as the approved mockup draws them.
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { fakeApk } from '@glassworks/app-adb/fakes';
+import { FakeAndroid, fakeGenericApk } from '@glassworks/generic-android-installer/fakes';
+import type { ReactNode } from 'react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
+
+import { AndroidActivity } from '../src/android/activity';
+import { AndroidWizard, Screens } from '../src/android/AndroidWizard';
+import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from '../src/android/demo';
+import { AndroidSession, androidMode } from '../src/android/session';
+import { registry } from '../src/wizard/registry';
+
+beforeAll(() => {
+  Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
+  Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+  window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} })) as never;
+  globalThis.ResizeObserver = class { observe() {} disconnect() {} } as never;
+});
+afterEach(() => { cleanup(); registry.clear(); history.replaceState(null, '', '/'); });
+
+const until = async (f: () => boolean, ms = 10_000) => {
+  const end = Date.now() + ms;
+  while (!f() && Date.now() < end) await act(() => new Promise((r) => setTimeout(r, 20)));
+  expect(f()).toBe(true);
+};
+const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
+const heading = () => document.querySelector('h2')?.textContent ?? '';
+const rail = () => [...document.querySelectorAll('.steps > li')].map((li) => `${li.textContent}:${li.className}`);
+
+async function show(name: AndroidDemo, ready: string | RegExp) {
+  const s = await androidDemo(name, true);
+  render(<Screens session={s} />);
+  await until(() => (typeof ready === 'string' ? heading() === ready : ready.test(document.body.textContent ?? '')));
+  return s;
+}
+
+describe('the switch', () => {
+  it('is off without ?apk=local, and demos only where demos run', () => {
+    expect(androidMode('', true, ANDROID_DEMOS)).toEqual({ on: false });
+    expect(androidMode('?apk=local', false, ANDROID_DEMOS)).toEqual({ on: true });
+    expect(androidMode('?demo=done', true, ANDROID_DEMOS)).toEqual({ on: true, demo: 'done' });
+    expect(androidMode('?demo=done', false, ANDROID_DEMOS)).toEqual({ on: false });
+  });
+
+  it('without it, the page says Kiln doesn\'t install on Android yet, with no file picker', async () => {
+    render(<AndroidWizard />);
+    await screen.findByText(/doesn.t install on Android devices yet/);
+    expect(document.querySelector('input[type=file]')).toBeNull();
+    expect(embers()).toEqual([]);
+  });
+
+  it('with it, the device screen and a test APK field', async () => {
+    history.replaceState(null, '', '/android?apk=local');
+    render(<AndroidWizard />);
+    await screen.findByText('Plug in the tablet.');
+    expect(screen.getByText('Test only')).toBeTruthy();
+    expect(document.querySelector('input[type=file]')).toBeTruthy();
+    expect(embers()).toEqual(['Find it']);
+  });
+});
+
+describe('the screens', () => {
+  it('1: a Pixel Tablet is named from USB, with its frame card', async () => {
+    await show('named', 'This looks like a Pixel Tablet.');
+    expect(screen.getByText(/Google · a tested device\./)).toBeTruthy();
+    expect(document.querySelector('.fc')?.textContent).toContain('Google Pixel Tablet');
+    expect(document.querySelector('.fc')?.textContent).toContain('Tested device');
+    expect(embers()).toEqual(['Continue']);
+  });
+
+  it('1b: a chip maker\'s ID asks for the brand, and says why', async () => {
+    await show('brand', 'Which brand is it?');
+    expect(screen.getByText('It reports Allwinner, the maker of its chip, not its brand.')).toBeTruthy();
+    expect([...document.querySelectorAll('.brand-pick')].map((b) => b.firstChild?.textContent))
+      .toEqual(['Google Pixel', 'Samsung Galaxy', 'Amazon Fire', 'Lenovo', 'Xiaomi', 'Other']);
+    expect((document.querySelector('.btn.ember') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('2: the brand\'s steps, its path as chips, and the sources', async () => {
+    await show('debug', 'Turn on USB debugging.');
+    const paths = [...document.querySelectorAll('.num > li > .path')].map((p) => [...p.querySelectorAll('span')].map((x) => x.textContent));
+    expect(paths).toEqual([['Settings', 'About tablet'], ['Settings', 'System', 'Developer options']]);
+    expect(screen.getByText(/Tap/).textContent).toMatch(/Build number seven times/);
+    expect(embers()).toEqual(['It\'s on']);
+  });
+
+  it('2, Other: Android\'s general steps, one path per Android version', async () => {
+    await show('debug-generic', 'Turn on USB debugging.');
+    expect([...document.querySelectorAll('.when > li')].map((l) => l.querySelector('.small')?.textContent))
+      .toEqual(['Android 9 and newer: ', 'Android 8: ', 'Android 7 and older: ']);
+  });
+
+  it('3: Allow on the tablet is the person\'s turn', async () => {
+    await show('allow', 'Tap Allow on the tablet.');
+    expect(screen.getByText('Waiting for the tablet')).toBeTruthy();
+    expect(rail()).toContain('Connect:turn');
+    expect(embers()).toEqual([]);
+  });
+
+  it('4: the install line, 5 of 6 at the home screen, and each grant read back', async () => {
+    await show('installing', /5 of 6/);
+    expect(heading()).toBe('Keep it plugged in.');
+    expect(document.querySelector('.plain')?.textContent).toContain('Pixel Tablet, Android 14, 64-bit');
+    const grants = [...document.querySelectorAll('.grants > div')].map((g) => g.textContent);
+    expect(grants).toEqual(['MicrophoneOn', 'CameraNot asked by this build', 'Screen on and offOn', 'Show over other appsOn', 'Lock the screenOn', 'Updates without a tapOn']);
+    expect(document.querySelector('.warnbox')).toBeNull();
+    expect(rail()).toContain('Install:now');
+  });
+
+  it('4b: a vendor build that refuses a grant and the home screen: said once, then one tap', async () => {
+    await show('vendor', 'One tap on the tablet.');
+    expect(document.querySelector('.lede')?.textContent).toBe('Pick Glassworks, then Always.');
+    expect(document.querySelector('.grants')?.textContent).toContain('Screen on and offThis tablet said no');
+    expect(document.querySelector('.warnbox')?.textContent).toBe('This tablet\'s software refused screen on and off. Glassworks works without it; the screen won\'t turn off by itself.');
+    expect(screen.getByText('Waiting for your tap')).toBeTruthy();
+    expect(rail()).toContain('Install:turn');
+  });
+
+  it('5: a tested device: its frame card, its page, and the setup page on the network', async () => {
+    await show('done', 'Done.');
+    expect(screen.getByText('Glassworks is the Pixel Tablet\'s home screen.')).toBeTruthy();
+    expect(screen.getByText('Clarity · not measured yet')).toBeTruthy();
+    expect(screen.getByText('Its page on glassworks.dev').getAttribute('href')).toBe('https://www.glassworks.dev/frames/google-pixel-tablet');
+    expect(screen.getByText('Open setup').getAttribute('href')).toBe('http://192.0.2.10:8099/setup');
+    expect(embers()).toEqual(['Open setup']);
+    expect(rail().every((r) => r.endsWith(':done'))).toBe(true);
+  });
+
+  it('5: an unknown device: "untested device" and a way to report it', async () => {
+    await show('done-untested', 'Done.');
+    expect(screen.getByText('Glassworks is installed on your Teclast P20HD.')).toBeTruthy();
+    expect(screen.getByText('Untested device')).toBeTruthy();
+    expect(screen.getByText('Tell us how it goes').getAttribute('href')).toContain('issues/new?title=Tested%3A%20Teclast%20P20HD');
+  });
+
+  it('a refused install: nothing changed, said so, with Try again', async () => {
+    await show('error', 'Kiln can\'t install on this tablet.');
+    expect(document.querySelector('.raw')?.textContent).toMatch(/Install via USB/);
+    expect(rail()).toContain('Install:bad');
+    expect(embers()).toEqual(['Try again']);
+  });
+
+  it('undo: the app removed, its device admin first', async () => {
+    const s = await show('undo-done', 'Glassworks is off the tablet.');
+    expect(s.state.log.join('\n')).toMatch(/device admin removed/);
+    expect(rail().map((r) => r.split(':')[0])).toEqual(['Device', 'Connect', 'Undo', 'Done']);
+  });
+
+  it('Undo from Done removes what it installed', async () => {
+    const s = await show('done', 'Done.');
+    fireEvent.click(screen.getByText('Undo'));
+    await until(() => heading() === 'Glassworks is off the tablet.');
+    expect(s.state.result).toMatchObject({ flow: 'undo', removed: [{ package: 'dev.glassworks.generic_android' }] });
+  });
+});
+
+describe('the session', () => {
+  const deps = () => ({ findUsb: vi.fn(() => Promise.resolve({ vendorId: 0x04e8, productName: 'SM-X200' })), connect: vi.fn(() => Promise.resolve(new FakeAndroid())) });
+
+  it('opens the browser\'s lists inside the click, before any await', () => {
+    const d = deps();
+    const s = new AndroidSession(d, true);
+    void s.find();
+    expect(d.findUsb).toHaveBeenCalledTimes(1);
+    s.toSteps();
+    void s.connect();
+    expect(d.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('names a model it knows from USB, without a frame: not tested yet', async () => {
+    const s = new AndroidSession(deps(), true);
+    await s.pickApk('a.apk', fakeGenericApk());
+    await s.find();
+    expect(s.state).toMatchObject({ screen: 'named', usbName: 'SM-X200' });
+    render(<Screens session={s} />);
+    expect(heading()).toBe('This looks like a Galaxy Tab A8.');
+    expect(document.querySelector('.lede')?.textContent).toMatch(/^Samsung Galaxy · not tested yet\./);
+  });
+
+  it('refuses an APK that isn\'t Glassworks for Android, and won\'t go on without one', async () => {
+    const s = new AndroidSession(deps(), true);
+    expect(s.blocked()).toBe('Pick the APK file first.');
+    await s.pickApk('s1.apk', fakeApk('sh.edm.s1kiosk'));
+    expect(s.state.apk?.error).toBe('this is sh.edm.s1kiosk, not Glassworks for Android');
+    await s.find();
+    s.toSteps();
+    expect(s.state.screen).toBe('named');
+  });
+
+  it('a closed list is said plainly, and changes nothing', async () => {
+    const s = new AndroidSession({ ...deps(), findUsb: () => Promise.reject(new DOMException('No device selected.', 'NotFoundError')) }, true);
+    await s.find();
+    expect(s.state).toMatchObject({ screen: 'find', findError: 'Nothing was picked. Plug the tablet in, then pick it in the list.' });
+  });
+
+  it('a refused plan writes nothing: the legacy APK on Android 14', async () => {
+    const tablet = new FakeAndroid();
+    const s = new AndroidSession({ ...deps(), connect: () => Promise.resolve(tablet) }, true);
+    await s.pickApk('legacy.apk', fakeGenericApk({ app: { ...tablet.app, package: 'dev.glassworks.generic_android.legacy' } as never }));
+    await s.find();
+    s.toSteps();
+    await s.connect();
+    expect(s.state.screen).toBe('error');
+    expect(s.state.error).toMatch(/Nothing was changed\.$/);
+    expect(tablet.cmds.filter((c) => !/^(getprop|dumpsys package)/.test(c))).toEqual([]);
+  });
+
+  it('is kept in Kiln\'s registry: the picker\'s way back while it works, and LeaveGuard while it writes', async () => {
+    const s = await androidDemo('installing', true);
+    const a = new AndroidActivity(s);
+    await until(() => s.state.screen === 'working');
+    expect(a.writing()).toBe(true);
+    expect(a.running()).toBe('/android?apk=local');
+    expect(new AndroidActivity(await androidDemo('find', true)).running()).toBeUndefined();
+  });
+});
