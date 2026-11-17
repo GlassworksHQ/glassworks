@@ -33,6 +33,8 @@ export interface FakeAndroidOptions {
   abilist?: string;
   manufacturer?: string;
   model?: string;
+  /** ro.hardware */
+  hardware?: string;
   /** the app's versionCode when it is installed already */
   installed?: number;
   /** pm install's answer, when it isn't Success */
@@ -100,7 +102,7 @@ export class FakeAndroid implements PanelShell {
     const props: Record<string, string> = {
       'ro.build.version.sdk': String(sdk), 'ro.build.version.release': o.release ?? '14',
       'ro.product.cpu.abilist': o.abilist ?? 'arm64-v8a,armeabi-v7a,armeabi',
-      'ro.product.manufacturer': o.manufacturer ?? 'Google', 'ro.product.model': o.model ?? 'Pixel Tablet',
+      'ro.product.manufacturer': o.manufacturer ?? 'Google', 'ro.product.model': o.model ?? 'Pixel Tablet', 'ro.hardware': o.hardware ?? 'tangorpro',
       'ro.build.fingerprint': `example/tablet/tablet:${o.release ?? '14'}/TEST.000000/1:user/release-keys`,
     };
     let m: RegExpExecArray | null;
