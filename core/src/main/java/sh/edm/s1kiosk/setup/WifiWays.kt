@@ -1,0 +1,50 @@
+package sh.edm.s1kiosk.setup
+
+import dev.glassworks.setup.HotspotStep
+
+/**
+ * Which way the Wi-Fi step leads with, and which it offers as alternatives (#468). In order of preference:
+ *
+ * 1. [Way.IMPROV]: Home Assistant (its app on a phone, or its Discovered list) finds the panel over Bluetooth and sends
+ *    the Wi-Fi. Nothing to type on the panel.
+ * 2. [Way.HOTSPOT]: "Set up from a phone". A phone joins the panel's own Wi-Fi and sends yours from a page (#197).
+ * 3. [Way.MANUAL]: "Choose a network", typed on the panel.
+ *
+ * The first one the panel can do right now leads; the rest that it can do follow, in the same order. Pure, so the
+ * order and the fallback have tests (WifiWaysTest).
+ */
+object WifiWays {
+    enum class Way { IMPROV, HOTSPOT, MANUAL }
+
+    /** [lead] fills the card; [others] go in the quiet "Other ways" row, in this order. */
+    data class Plan(val lead: Way, val others: List<Way>)
+
+    /**
+     * [improv]: Bluetooth setup as the step shows it. It can lead while it runs, in any state but one that couldn't
+     * start; switched off (Not now, or its window ended) it is only an alternative ("Use Bluetooth"), and missing or
+     * refused it is no way at all. [hotspot]: the setup hotspot's line, null where the app has none. It counts while
+     * one tap opens it ([HotspotStep.Action.OPEN], [HotspotStep.Action.ALLOW] for Android's permission, or
+     * [HotspotStep.Action.RETRY]); off with Wi-Fi off, or with the permission refused for good, it doesn't. Waiting on
+     * Android's permission ([HotspotStep.Action.ALLOW]), it leads: the person chose it.
+     */
+    fun plan(improv: WifiStep.ImprovLine, hotspot: HotspotStep.Card?): Plan {
+        val improvRuns = improv.phase != WifiStep.Phase.OFF && improv.phase != WifiStep.Phase.UNAVAILABLE
+        val improvStartable = improv.phase == WifiStep.Phase.OFF
+        val hotspotOpens = hotspot?.title == null && hotspot?.action in HOTSPOT_OPENS
+        val lead = when {
+            // Android's permission is asked only once the person picked the hotspot: they are in the middle of it.
+            hotspot?.action == HotspotStep.Action.ALLOW -> Way.HOTSPOT
+            improvRuns -> Way.IMPROV
+            hotspotOpens -> Way.HOTSPOT
+            else -> Way.MANUAL
+        }
+        val can = buildList {
+            if (improvRuns || improvStartable) add(Way.IMPROV)
+            if (hotspotOpens) add(Way.HOTSPOT)
+            add(Way.MANUAL)
+        }
+        return Plan(lead, can - lead)
+    }
+
+    private val HOTSPOT_OPENS = setOf(HotspotStep.Action.OPEN, HotspotStep.Action.ALLOW, HotspotStep.Action.RETRY)
+}

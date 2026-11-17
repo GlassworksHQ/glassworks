@@ -189,14 +189,42 @@ class SetupOverlay(
     private val ghost = g.ghost("").apply { setPadding(px(28f), px(15f), px(28f), px(15f)) }
     private val plainLeft = g.plain("").apply { setPadding(0, px(14f), px(12f), px(14f)) }
     private val plain = g.plain("")
+
+    /** The quietest action at the foot: Bluetooth's Not now (or Stop) on the Wi-Fi step (#468). */
+    private val quiet = g.text(15f, FA, Inter.MEDIUM).apply { setPadding(px(12f), px(14f), px(12f), px(14f)) }
+
+    // ---- the Wi-Fi step's other ways (#468): one quiet row under the way it leads with
+    private val waysLabel = g.text(15f, FA).apply { text = "Other ways" }
+    private val wayButtons = List(2) { g.plain("").apply { setPadding(px(12f), px(14f), px(12f), px(14f)) } }
+    /** Layout B: the row folded behind this link until it is tapped. */
+    private val waysToggle = g.plain("Other ways to set up ›").apply { setPadding(0, px(14f), px(12f), px(14f)) }
+    private val waysRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(waysToggle)
+        addView(waysLabel, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(4f) })
+        wayButtons.forEach { addView(it) }
+    }
+
+    /**
+     * Where the Wi-Fi step's other ways go, while the maintainer picks (#468): false shows them as a quiet row (A),
+     * true folds them behind "Other ways to set up" (B). Public for the mockups.
+     */
+    var otherWaysFolded = false
+
+    /** Layout B's row is open: tapped on this step. */
+    private var waysOpen = false
+
     private val buttonRow = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
+        addView(waysRow, LinearLayout.LayoutParams(-2, -2))
         addView(ghost, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(22f) })
         addView(plainLeft, LinearLayout.LayoutParams(-2, -2))
         addView(foot, LinearLayout.LayoutParams(-2, -2))
         addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
         addView(plain, LinearLayout.LayoutParams(-2, -2))
+        addView(quiet, LinearLayout.LayoutParams(-2, -2))
         addView(primary, LinearLayout.LayoutParams(-2, -2))
     }
     private val qrImage = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
@@ -488,13 +516,14 @@ class SetupOverlay(
         slotLp.topMargin = px(SECTION_GAP_DP)
         primary.visibility = View.GONE; ghost.visibility = View.GONE
         plain.visibility = View.GONE; plainLeft.visibility = View.GONE; foot.visibility = View.GONE
+        quiet.visibility = View.GONE; waysRow.visibility = View.GONE
         primary.isEnabled = true; primary.alpha = 1f
-        listOf(primary, ghost, plain, plainLeft).forEach { it.setOnClickListener(null) }
+        listOf(primary, ghost, plain, plainLeft, quiet).forEach { it.setOnClickListener(null) }
         val shown = shown()
         // Also when the caller saw no change: a pane step's Continue clears `viewing` before the screen draws
         // the current step again, so that draw can't tell (the tablet run on 28c157d: the camera's
         // "Android allows the camera." stayed on Sign in).
-        if (stepChanged || shown != cardStep) status.visibility = View.GONE
+        if (stepChanged || shown != cardStep) { status.visibility = View.GONE; waysOpen = false }
         cardStep = shown
         if (shown == null) return
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
@@ -561,29 +590,17 @@ class SetupOverlay(
     private fun bindWifi(m: Model, done: Boolean): View? {
         val w = m.wifi
         val inst = m.installer
-        var tile = false
         val spot = m.hotspot?.takeIf { !w.online && !done }
         if (spot?.title != null) return bindHotspotCard(spot)
-        when {
-            w.online || done -> {
-                cardTitle.text = if (w.ethernet) "Connected over Ethernet." else "Connected to ${w.ssid ?: "Wi-Fi"}."
-                cardBody.text = "The panel is on the network."
-                // Already there: on to the next step, or change the network.
-                continueButton()
-                ghost.text = "Use another network"
-                ghost.visibility = View.VISIBLE
-                ghost.setOnClickListener { onChooseNetwork?.invoke() }
-                return null
-            }
-            inst?.phase == InstallerWifi.Phase.CONNECTING -> {
-                cardTitle.text = "Connecting to ${inst.ssid}…"
-                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This can take up to a minute.")
-            }
-            else -> {
-                cardTitle.text = if (w.state == WifiSetupStatus.State.CONNECTING) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
-                cardBody.text = "Send it from Home Assistant: it finds this panel over Bluetooth."
-                tile = true
-            }
+        if (w.online || done) {
+            cardTitle.text = if (w.ethernet) "Connected over Ethernet." else "Connected to ${w.ssid ?: "Wi-Fi"}."
+            cardBody.text = "The panel is on the network."
+            // Already there: on to the next step, or change the network.
+            continueButton()
+            ghost.text = "Use another network"
+            ghost.visibility = View.VISIBLE
+            ghost.setOnClickListener { onChooseNetwork?.invoke() }
+            return null
         }
         // The hotspot's line goes with its button (Allow, Try again, Turn on Wi-Fi), so it wins over an older line
         // (CodeRabbit on #418): a failed installer join, then the Wi-Fi status.
@@ -593,23 +610,78 @@ class SetupOverlay(
             !w.online && inst?.phase == InstallerWifi.Phase.FAILED -> showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
             else -> w.message?.let { showStatus(it, AMBER) } ?: run { status.visibility = View.GONE } // nor the hotspot card's line from a moment ago
         }
-        spot?.action?.let { a ->
+        if (inst?.phase == InstallerWifi.Phase.CONNECTING) {
+            // The computer is setting it up (Kiln, over USB): nothing to choose here.
+            cardTitle.text = "Connecting to ${inst.ssid}…"
+            cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This can take up to a minute.")
+            return null
+        }
+        val plan = WifiWays.plan(m.improv, spot)
+        val joining = w.state == WifiSetupStatus.State.CONNECTING
+        // A way that can't open says what fixes it (Turn on Wi-Fi), whichever way leads.
+        spot?.action?.takeIf { plan.lead != WifiWays.Way.HOTSPOT && it == dev.glassworks.setup.HotspotStep.Action.WIFI_SETTINGS }?.let { a ->
             plain.text = a.label
             plain.visibility = View.VISIBLE
             plain.setOnClickListener { onHotspotAction?.invoke(a) }
         }
-        ghost.text = "Choose a network"
-        ghost.visibility = View.VISIBLE
-        ghost.setOnClickListener { onChooseNetwork?.invoke() }
-        if (!tile) return null
-        improvTile.bind(m.improv)
-        // Not now and Stop end the Bluetooth window: quiet words next to Choose a network, not a button.
-        m.improv.actions.firstOrNull { it == WifiStep.Action.NOT_NOW || it == WifiStep.Action.STOP }?.let { a ->
-            plainLeft.text = a.label
-            plainLeft.visibility = View.VISIBLE
-            plainLeft.setOnClickListener { onImprovAction?.invoke(a) }
+        val content: View? = when (plan.lead) {
+            WifiWays.Way.IMPROV -> {
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
+                cardBody.text = "Home Assistant sends it over Bluetooth: from its app on your phone, or from Discovered in its settings."
+                improvTile.bind(m.improv)
+                // Not now and Stop end the Bluetooth window: the quietest words on the card.
+                m.improv.actions.firstOrNull { it == WifiStep.Action.NOT_NOW || it == WifiStep.Action.STOP }?.let { a ->
+                    quiet.text = a.label
+                    quiet.visibility = View.VISIBLE
+                    quiet.setOnClickListener { onImprovAction?.invoke(a) }
+                }
+                improvTile.view
+            }
+            WifiWays.Way.HOTSPOT -> {
+                val a = spot!!.action!!
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Set up from a phone."
+                cardBody.text = "A phone joins the panel's own Wi-Fi, then sends yours from a page. Nothing to type here."
+                primary.text = if (a == dev.glassworks.setup.HotspotStep.Action.ALLOW) a.label else dev.glassworks.setup.HotspotStep.Action.OPEN.label
+                primary.visibility = View.VISIBLE
+                primary.setOnClickListener { onHotspotAction?.invoke(a) }
+                null
+            }
+            WifiWays.Way.MANUAL -> {
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Choose your Wi-Fi."
+                cardBody.text = "Pick your network and type its password here."
+                primary.text = "Choose a network"
+                primary.visibility = View.VISIBLE
+                primary.setOnClickListener { onChooseNetwork?.invoke() }
+                null
+            }
         }
-        return improvTile.view
+        bindOtherWays(plan.others, m, spot)
+        return content
+    }
+
+    /** The Wi-Fi step's other ways, in [WifiWays] order: one quiet tap each, as a row (A) or behind one link (B). */
+    private fun bindOtherWays(others: List<WifiWays.Way>, m: Model, spot: dev.glassworks.setup.HotspotStep.Card?) {
+        if (others.isEmpty()) return
+        waysRow.visibility = View.VISIBLE
+        val open = !otherWaysFolded || waysOpen
+        waysToggle.visibility = if (open) View.GONE else View.VISIBLE
+        waysToggle.setOnClickListener { waysOpen = true; bind(m, false) }
+        waysLabel.visibility = if (open && !otherWaysFolded) View.VISIBLE else View.GONE
+        wayButtons.forEachIndexed { i, b ->
+            val way = others.getOrNull(i)
+            b.visibility = if (open && way != null) View.VISIBLE else View.GONE
+            b.setOnClickListener(null)
+            when (way) {
+                WifiWays.Way.IMPROV -> { b.text = WifiStep.Action.START.label; b.setOnClickListener { onImprovAction?.invoke(WifiStep.Action.START) } }
+                WifiWays.Way.HOTSPOT -> {
+                    val a = spot?.action ?: dev.glassworks.setup.HotspotStep.Action.OPEN
+                    b.text = dev.glassworks.setup.HotspotStep.Action.OPEN.label
+                    b.setOnClickListener { onHotspotAction?.invoke(a) }
+                }
+                WifiWays.Way.MANUAL -> { b.text = "Choose a network"; b.setOnClickListener { onChooseNetwork?.invoke() } }
+                null -> {}
+            }
+        }
     }
 
     /**
