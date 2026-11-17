@@ -31,8 +31,17 @@ class UsbDebuggingHeardTest {
 
     @Test fun `the image letting its owner in, and lines about neither`() {
         assertEquals(UsbDebugging.Heard.LetInByImage, UsbDebugging.heard("I/UsbDebuggingManager(  873): Authorizing the Mirror owner's ADB key"))
-        assertNull(UsbDebugging.heard("E/UsbDebuggingManager(  873): Fingerprints do not match. Got AA, expected BB"))
+        assertNull(UsbDebugging.heard("I/UsbDebuggingManager(  873): Entering thread"))
         assertNull(UsbDebugging.heard("--------- beginning of system"))
+    }
+
+    @Test fun `Android refusing an approval, with the computer it waits on or none`() {
+        val got = "AF:0F:9E:EB:A4:B4:AF:75:6D:1F:86:23:46:4D:36:D2"
+        val waiting = "6C:F6:AF:69:38:B4:24:7B:F0:27:6D:5B:F6:A1:ED:7C"
+        assertEquals(UsbDebugging.Heard.Refused(got, waiting),
+            UsbDebugging.heard("E/UsbDebuggingManager(  873): Fingerprints do not match. Got $got, expected $waiting"))
+        assertEquals(UsbDebugging.Heard.Refused(got, null),
+            UsbDebugging.heard("E/UsbDebuggingManager(  873): Fingerprints do not match. Got $got, expected null"))
     }
 
     private class FakeProcess(text: String) : Process() {
