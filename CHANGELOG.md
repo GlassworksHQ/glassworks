@@ -270,6 +270,8 @@ below as the release notes.
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
   own icon, and every icon the app shows has a version Android 6 can draw.
+- **The Manage code shows on Android 6 and 7.** On panels older than Android 8, the code a phone asks
+  for on the setup page never appeared, so setup couldn't go on. It does now.
 - **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
   Panes image lets one adb key in without asking: the project's own key, published with its private
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its
