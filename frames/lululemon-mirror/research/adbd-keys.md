@@ -14,8 +14,10 @@ copy), and the confined root can't read it either.
 Device: lululemon Studio Mirror (MSM8916 / APQ8016E, Android 6.0.1), Glass Panes `mirror-android-2`
 system image (`userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`, a
 `user`/`test-keys` build). Tools: AOSP source at tag `android-6.0.1_r81` (android.googlesource.com),
-the SELinux policy and `dmesg` pulled read-only from the unit on 2026-11-15 (see
-[mirror-root.md](mirror-root.md) §3), `grep`. No device was touched in this pass.
+and two files pulled read-only from the unit on 2026-11-15 ([mirror-root.md](mirror-root.md) §3):
+`sepolicy-rules.txt`, the 10,038-rule dump of the unit's binary policy, and `dmesg.txt`, the kernel
+log. Both live outside the repo with the rest of that pull and are not committed (hard rule 3). No
+device was touched in this pass; the analysis is `grep` over those two files and the AOSP source.
 
 ## Question
 
@@ -23,10 +25,12 @@ A Mirror flashed by Kiln has to let in the installer's own adb key, with no touc
 "Allow USB debugging?" (#29, #40). Kiln writes that key into a fresh `userdata`'s
 `/data/misc/adb/adb_keys`, the AOSP location ([image-patch.md](image-patch.md)). On 2026-11-16 the
 root verified that this does not work: adbd leaves the key `unauthorized`, and the only key that gets
-in is the Glass Panes project key, which the project publishes with its private half. #426 works
-around it by rewriting the framework's hardcoded fingerprint. This note asks the root-cause question
-#426 left open: **why does adbd ignore `/data/misc/adb/adb_keys`, and does that leave Kiln any lever
-other than the services.jar rewrite?**
+in is the Glass Panes project key, which the project publishes with its private half. #426 rewrites
+the framework's hardcoded fingerprint to work around it, and corrects the first-flash row in
+[image-patch.md](image-patch.md) that had read "took the adb key" (it was the project key the root's
+computer carried). This note builds on #426 and merges after it. It asks the root-cause question #426
+left open: **why does adbd ignore `/data/misc/adb/adb_keys`, and does that leave Kiln any lever other
+than the services.jar rewrite?**
 
 Observed by the root (2026-11-16), taken as given here:
 
@@ -39,6 +43,23 @@ Observed by the root (2026-11-16), taken as given here:
   hardcoded "Mirror owner" fingerprint (in the image's rebuilt `services.jar`) answers OK.
 - `dumpsys usb` prints both the user keys (that file) and the system keys (`/adb_keys` in the
   ramdisk, one key, a lululemon key).
+
+### What the root measured on the unit (2026-11-16, verified)
+
+The root ran these on the Mirror (Glass Panes image 2) and recorded them in #426. `adb` is addressed
+`adb -s $(cat /tmp/mirror-serial)`, which never prints the serial. The flashes used the headless
+harness (`tools/mirror/flash-node.ts`) with a throwaway key; the probe is `tools/mirror/probe-app`.
+
+| Test (commands) | Result |
+|---|---|
+| Flash with `--adb-key <throwaway>` only, then `adb -s … shell dumpsys usb` | User keys: the throwaway and the project key; one system key, the ramdisk's `/adb_keys` |
+| The throwaway key alone: `adb devices` after the boot | `unauthorized`, and stays `unauthorized` |
+| The project key, right after a restart: `adb devices`, `logcat` | `unauthorized` until the framework runs and lets it in through the `services.jar` constant, although `adb_keys` held it 11 times |
+| A key approved with `allowUsbDebugging(true, key)` (the probe's step 6), then reconnect | In for that one connection and written to `adb_keys`; the next connection `unauthorized` again ([privileged-app.md](privileged-app.md), the root's step 6) |
+
+The three tests say the file never decides a connection on this image: not for the key Kiln writes,
+not for a key written there 11 times, not for a key the framework itself appended. The framework's
+one hardcoded fingerprint is the only thing that ever authenticates.
 
 ## What we tried
 
@@ -73,21 +94,35 @@ int adb_auth_verify(uint8_t* token, uint8_t* sig, int siglen) {
 ```
 
 `load_keys` runs **inside `adb_auth_verify`, on every signature check**, not once at init, and it
-reads `/data/misc/adb/adb_keys`. In `system/core/adb/adb.cpp`, the `A_AUTH` handler calls
-`adb_auth_verify` when the client sends `ADB_AUTH_SIGNATURE`; only when that returns 0 for every
-token does the client fall through to sending `ADB_AUTH_RSAPUBLICKEY`, which routes to
-`adb_auth_confirm_key` and the framework dialog. So on a stock 6.0.1 adbd a valid key in the file
-authenticates immediately, with the framework never consulted.
+reads `/data/misc/adb/adb_keys`. The order on the wire is in `system/core/adb/adb.cpp`'s `A_AUTH`
+case. adbd sends a token. The client signs it with one private key at a time and sends each as
+`ADB_AUTH_SIGNATURE` (`adb.cpp:435`-440, the client picking `adb_auth_nextkey` until it runs out).
+adbd calls `adb_auth_verify` on each signature; on a failure it just asks again
+(`send_auth_request`, `adb.cpp:449`), so the client tries its next key. Only when the client has no
+private keys left does it send its **public** key, `ADB_AUTH_RSAPUBLICKEY`, which routes to
+`adb_auth_confirm_key` and the framework dialog (`adb.cpp:450`). So on a stock 6.0.1 adbd a key in
+the file matches during the signature exchange and authenticates immediately, with the framework
+never consulted.
 
 **This rules out candidate (b).** Stock 6.0.1 does not cache keys from init before `/data` is
 mounted. It re-reads the file at connection time. The Mirror's behaviour, where the framework is the
 only thing that ever says OK, is the opposite of this. Whatever `adbd` the Mirror runs, it is not
 behaving like stock 6.0.1 `adb_auth_verify`.
 
+`load_keys` skips a path whose `stat()` fails (`adb_auth_client.cpp:119`), so a path that isn't
+present is simply not read. That cannot be why `/data/misc/adb/adb_keys` is ignored here. `/data` is
+`unencrypted` (`ro.crypto.state`, [image-patch.md](image-patch.md) read 2) and mounted on
+`post-fs-data`, long before the reconnects that stay `unauthorized`, and `dumpsys usb` reads the file
+at those same reconnects, so the file exists and `stat()`s at verify time.
+
 ### 2. SELinux (c) (2026-11-15 pull, read 2026-11-16 from the dump)
 
-The unit's binary SELinux policy was dumped read-only on 2026-11-15 (`magiskpolicy --print-rules`,
-10,038 rules; [mirror-root.md](mirror-root.md) §3). It **grants** adbd the read:
+The unit's binary policy was dumped read-only on 2026-11-15 and read here as `sepolicy-rules.txt`.
+How it was taken (mirror-root.md §3): the world-readable `/sepolicy` was pulled from the ramdisk, and
+its rules printed with `magiskpolicy --load /sepolicy --print-rules` (magiskpolicy pushed to
+`/data/local/tmp` as `shell`, deleted after), giving 10,038 rules. `dmesg.txt` is `adb shell dmesg`
+from the same session. To repeat: redo that pull (mirror-root.md §3, "How to reproduce"), then `grep`
+the two files as below. The dump **grants** adbd the read:
 
 ```
 allow adbd adb_keys_file dir { search }
@@ -96,14 +131,19 @@ allow adbd adb_keys_file file { ioctl read getattr lock open }
 
 So adbd is allowed by policy to open and read `/data/misc/adb/adb_keys`. The pulled `dmesg` (same
 day) shows `init: Starting service 'adbd'` at 2.6 s and **no** `avc: denied` for adbd on
-`adb_keys_file`. The only adbd denials are `shell` doing an `ioctl` on adbd's control socket (that is
-`adb devices` / `dumpsys`, not adbd reading a file), and one `shell` `ls /adb_keys` `getattr` denial
-(our own probe, not adbd). **This rules out candidate (c).** A policy denial would have left adbd's
-read in the log, and the rule to deny is not there anyway.
+`adb_keys_file`. The only adbd denials are `shell` doing an `ioctl` on adbd's control socket, and one
+`shell` `ls /adb_keys` `getattr` denial (our own probe, not adbd). **This rules out candidate (c).** A
+policy denial would have left adbd's read in the log, and the rule to deny is not there anyway.
 
 DAC does not block it either. The dir is 02750 `system:shell` and the file 0640 `system:shell`, and
 a `ro.secure=1` adbd drops to `AID_SHELL`, so it reads the file through the `shell` group
 ([image-patch.md](image-patch.md) read 2, AOSP `adb/daemon/main.cpp`).
+
+And `ro.adb.secure=0` is not a way round any of this. adbd only skips auth when
+`ALLOW_ADBD_NO_AUTH && ro.adb.secure == 0` (`adb_main.cpp:242`), and `ALLOW_ADBD_NO_AUTH` is compiled
+to `1` only for `userdebug` and `eng` builds (`adb/Android.mk:238`). The Mirror's `boot` is a `user`
+build ([mirror-root.md](mirror-root.md) §1), so `ALLOW_ADBD_NO_AUTH` is `0` and auth stays required
+whatever `ro.adb.secure` is set to. There is no property that opens adb here.
 
 ### 3. The key-file format (d) (2026-11-16, read + inferred from the premise)
 
@@ -137,8 +177,8 @@ The evidence to hand cannot tell these apart. It can say it is one of them.
 
 ### 5. Could the root settle it, or a public image? (2026-11-16, read)
 
-No. The direct check is to read `/sbin/adbd` and look at `key_paths` and the `adb_auth` strings. Every
-route to the bytes is closed:
+No. The direct check is to disassemble `/sbin/adbd`'s `adb_auth_verify` and see what it reads and
+whether it checks signatures at all. Every route to the bytes is closed:
 
 - **A published stock boot.** None exists. git-nimrod/glass-panes ships only `system.img`,
   `userdata.sparse` and `SHA256SUMS` (`gh api .../releases/tags/mirror-android-2`, 2026-11-16). The
@@ -174,10 +214,11 @@ by reading the binary, because the binary is out of reach.
 | (c) SELinux or DAC denies adbd the file | **Ruled out** | §2: policy allows `adbd adb_keys_file:file read`, no `avc` denial in `dmesg`; DAC group-readable |
 | (d) key-file format or line handling | **Ruled out** | §3: Kiln's line, the framework's `writeKey` line, and the project key times 11 all fail |
 
-**The one experiment that would name the exact modification:** read `/sbin/adbd`'s `key_paths` array
-and its `adb_auth` strings (and its build string). It needs the boot ramdisk, which today means the
-untested full-root `.ko` route ([mirror-root.md](mirror-root.md) §4) or a published stock boot. It is
-not needed to decide the lever below, so it stays a want, not a blocker.
+**The one experiment that would name the exact modification:** disassemble `/sbin/adbd`'s
+`adb_auth_verify` (and `load_keys`) and read its `key_paths` and build string. It needs the boot
+ramdisk, which today means the untested full-root `.ko` route ([mirror-root.md](mirror-root.md) §4)
+or a published stock boot. It is not needed to decide the lever below, so it stays a want, not a
+blocker.
 
 ### What it means for Glassworks
 
@@ -190,7 +231,8 @@ won't RAM-boot. So:
 - **Nothing Kiln writes to `userdata` makes the key stick.** Writing `adb_keys` is inert on this
   device. The note and #426 keep writing it only because it is harmless and matches AOSP.
 - **No `system` or property knob turns it back on.** AOSP 6 has no property that makes adbd consult
-  the file, and a binary that doesn't read the file wouldn't honour one.
+  the file, a binary that doesn't read the file wouldn't honour one, and `ro.adb.secure=0` is dead on
+  a `user` build (§2: `ALLOW_ADBD_NO_AUTH` is compiled to `0`).
 - **A privileged app can't make it persist either.** `allowUsbDebugging` only answers "the computer
   that last asked", and the key it writes is the same file adbd ignores, so the approval lasts one
   connection ([privileged-app.md](privileged-app.md), verified read-only on the unit 2026-11-16).
@@ -211,9 +253,14 @@ Off-device, all read-only:
   `android-6.0.1_r81` from android.googlesource.com
   (`.../platform/system/core/+/refs/tags/android-6.0.1_r81/adb/adb_auth_client.cpp`). Read
   `key_paths`, `load_keys`, `read_keys`, `adb_auth_verify`, and the `A_AUTH` case in `adb.cpp`.
-- The policy and log (§2): from the material pulled in [mirror-root.md](mirror-root.md) §3 (kept
-  outside the repo), `grep -E 'allow adbd adb_keys_file' sepolicy-rules.txt` and
-  `grep -iE 'adb|avc' dmesg.txt`. `/sbin` and `/adb_keys` labels are in the pulled `file_contexts`.
+- The policy and log (§2): redo the 2026-11-15 pull per [mirror-root.md](mirror-root.md) §3 (the
+  files are kept outside the repo, never committed), then `grep -E 'allow adbd adb_keys_file'
+  sepolicy-rules.txt` (expect the dir-search and file-read rules) and `grep -iE 'adb|avc' dmesg.txt`
+  (expect adbd starting, and no adbd denial on `adb_keys_file`). `/sbin` and `/adb_keys` labels are
+  in the pulled `file_contexts`.
+- The three tests on the unit (the "What the root measured" table): the harness and probe steps in
+  `tools/mirror/README.md` ("A throwaway key") and `tools/mirror/probe-app/README.md` (step 6). They
+  write the Mirror, so only the root runs them; read `adb devices` and `dumpsys usb` after each.
 - Availability of a stock boot (§5): `gh api repos/git-nimrod/glass-panes/releases/tags/mirror-android-2 --jq '.assets[].name'`
   and `gh api repos/<repo>/git/trees/HEAD?recursive=1 --jq '.tree[].path'` for the three research
   repos.
@@ -228,7 +275,7 @@ anything.
 A plan for the root, if the exact modification is ever wanted (untested, and gated on the `.ko`
 route, so **don't run it for this question**): from a full root that can read a block device or
 rootfs, copy `/sbin/adbd` out through the #393 hook's one channel, a 0644 file in `/persist` written
-by `qti_init_shell`, then `adb pull` it and read `key_paths`/`adb_auth` strings. The confined root as
+by `qti_init_shell`, then `adb pull` it and disassemble `adb_auth_verify`. The confined root as
 it stands can't, because it has neither rootfs read nor `boot` block access (§5). Undo is the
 cleanup-build boot that deletes the `/persist/gw-*` files, exactly as [mirror-root.md](mirror-root.md)
 §7 describes.
