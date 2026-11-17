@@ -66,6 +66,10 @@ tools/mirror/probe-app/adbkey.py new "$T/.android"       # prints fingerprints o
 | The project key after a restart | `adb -s "$S" shell stop && … start` (the root's restart), `adb devices`, `adb -s "$S" shell logcat -d` | `unauthorized` until the framework runs and lets it in through the `services.jar` constant, although `adb_keys` held the project key 11 times |
 | A key approved with `allowUsbDebugging(true, key)` | the probe's step 6: queue the approval, `HOME=$T adb --one-device "$S" start-server`, reconnect, then `adb -s "$S" shell dumpsys usb` | In for that one connection and written to `adb_keys`; the next connection `unauthorized` again ([privileged-app.md](privileged-app.md), the root's step 6) |
 
+Each test that set `HOME=$T` ran `adb kill-server` first, so the server it started was the only one
+and held the throwaway key; a server already running keeps the key it started with, whatever `HOME`
+the next command has.
+
 The four tests say the file never decides a connection on this image: not for the key Kiln writes,
 not for a key written there 11 times, not for a key the framework itself appended. The framework's
 one hardcoded fingerprint is the only thing that ever authenticates. The commands here are the root's
@@ -141,8 +145,8 @@ allow adbd adb_keys_file file { ioctl read getattr lock open }   # /data/misc/ad
 allow domain system_data_file dir { getattr search }    # /data and /data/misc (adbd has the `domain` attr)
 ```
 
-`/data` and `/data/misc` are `system_data_file` (the pulled `file_contexts`), and the blanket
-`domain` rule gives every domain, adbd included (`type adbd { ... domain }`), `search` on them. So
+`/data` and `/data/misc` are `system_data_file` in the pulled `file_contexts`. Their runtime labels
+were not read on the device, so this holds only if they match. The blanket `domain` rule gives every domain, adbd included (`type adbd { ... domain }`), `search` on them. So
 adbd can traverse `/data` and `/data/misc` and read `/data/misc/adb/adb_keys`, with no missing
 component. This matches stock AOSP 6.0.1 `adbd.te` (lines 59-61, `adb_keys_file` dir+file) plus the
 same `domain` ancestor rule.
@@ -257,8 +261,10 @@ blocker.
 
 ### What it means for Glassworks
 
-**The services.jar rewrite (#426) is the only lever Kiln has without the boot partition, and it is
-the right one.** The thing that would have to change to honour `/data/misc/adb/adb_keys` is `adbd`
+**The services.jar rewrite (#426) is the only lever Kiln has without the boot partition that is
+known to work, and it is the right one.** One alternative stays open: if the cause is a malformed
+combined file (§3, not ruled out), a well-formed `adb_keys` written to `userdata` might be honoured,
+and Kiln could do that without `boot`. It is untested; the paragraph below assumes it isn't the cause. The thing that would have to change to honour `/data/misc/adb/adb_keys` is `adbd`
 (its binary, or the key file it reads, both reached only from `boot`). It lives in the **stock
 lululemon boot**, which Kiln never writes: the bootloader is locked, Kiln flashes only `system` and
 `userdata`, and an image we build won't RAM-boot. So:
