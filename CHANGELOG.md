@@ -344,6 +344,11 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A screen without touch waits for Home Assistant after phone setup.** On the Mirror, the setup screen
+  kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
+  Assistant to add the panel, and where: Settings → Devices & services, or the old entry's
+  re-authenticate after a reinstall. When the setup screen comes up on a device with no touch and no
+  presence sensor, it also turns the screen on.
 - **The Bluetooth proxy says when it can't run.** With the pane on but Bluetooth or location off, or
   the location permission missing, the settings menu and the Manage page said it was running. They
   now say *Can't run* and why.
