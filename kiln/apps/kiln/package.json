@@ -23,6 +23,7 @@
     "@glassworks/fastboot": "0.0.0",
     "@glassworks/fel": "0.0.0",
     "@glassworks/frame-card": "0.0.0",
+    "@glassworks/generic-android-installer": "0.0.0",
     "@glassworks/kiln-core": "0.0.0",
     "@glassworks/lululemon-mirror-installer": "0.0.0",
     "@glassworks/setup-channel": "0.0.0",

@@ -22,3 +22,6 @@ export const RENDERS: Record<string, string> = {
   [genericAndroid.id]: url(genericAndroidRender),
   [pixelTablet.id]: url(pixelTabletRender),
 };
+
+/** Frames with a published Clarity result (`frames/<id>/clarity/clarity.json`); test/frame-designs.test.ts keeps it true. */
+export const MEASURED: ReadonlySet<string> = new Set([s1Plus.id]);

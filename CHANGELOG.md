@@ -27,6 +27,12 @@ below as the release notes.
   touch, such as the lululemon Mirror, setup never waits on the camera step: the use stays Presence only, and
   Kiln grants the camera. On Android 6-7 the ONVIF stream needs the camera to offer 1280x720; presence works
   either way. Not yet run on a real Mirror.
+- **Kiln installs Glassworks on any Android tablet, as a test.** At `kiln.glassworks.dev/android?apk=local`, plug
+  the tablet into a computer and Kiln names it, or asks for its brand, then shows how to turn on USB debugging on
+  that brand. After you tap Allow on the tablet, Kiln installs the app, gives it what it can (microphone, screen on
+  and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
+  A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
+  computer until Glassworks for Android has a release.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
