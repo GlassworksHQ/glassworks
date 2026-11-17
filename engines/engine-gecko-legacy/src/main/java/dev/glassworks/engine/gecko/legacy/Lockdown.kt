@@ -51,6 +51,12 @@ internal class Lockdown(
         // A 103 Early Hints answer could otherwise preconnect or preload around the limit above.
         "network.early-hints.enabled" to false,
         "network.early-hints.preconnect.enabled" to false,
+        // GeckoView 144 upgrades every http image, audio and video request from a secure context to https, and the
+        // app makes Home Assistant's http host one (dom.securecontext.allowlist, for the microphone). So HA's own
+        // images went to https://<HA>, which HA doesn't serve and the lockdown refuses (#455). Gecko 158 stopped
+        // upgrading for allowlisted hosts; here it's off. A page's http images stay http, and the lockdown still
+        // allows only HA's origin.
+        "security.mixed_content.upgrade_display_content" to false,
     )
 
     override fun attach(runtime: GeckoRuntime) {
@@ -94,11 +100,11 @@ internal class Lockdown(
     }
 
     override fun refusedAppLoad(url: String): String =
-        if (policy.origin == null) NO_DASHBOARD else ELSEWHERE.replace("{host}", Origin.host(url).ifEmpty { "This address" })
+        if (policy.origin == null) NO_DASHBOARD else ELSEWHERE.replace("{host}", Origin.host(url, policy.origin).ifEmpty { "This address" })
 
     override fun allows(kind: PageGuard.Load, url: String): Boolean {
         if (policy.allows(kind, url)) return true
-        val host = Origin.host(url)
+        val host = Origin.host(url, policy.origin)
         Log.w(logTag, "Lockdown: refused ${kind.name.lowercase()} from ${host.ifEmpty { "a URL without a network origin" }}")
         send(JSONObject().put("type", "blocked").put("kind", kind.name.lowercase()).put("host", host))
         return false
@@ -122,7 +128,7 @@ internal class Lockdown(
         const val FAILED = "Home Assistant can't load: the lockdown didn't start.\n\n$WHY\n\nRestart the app. If this stays, report it."
         const val NO_DASHBOARD = "Home Assistant can't load: the panel started without a dashboard address.\n\n$WHY\n\n" +
             "Restart the app after setting it."
-        const val ELSEWHERE = "{host} isn't the Home Assistant the panel started with, so it didn't open.\n\n$WHY\n\n" +
+        const val ELSEWHERE = "{host} isn't the Home Assistant address the panel started with, so it didn't open.\n\n$WHY\n\n" +
             "If the dashboard's address changed, restart the app."
         const val SLOW = "Home Assistant can't load yet: the lockdown hasn't started.\n\n$WHY\n\nWaiting for it…"
     }

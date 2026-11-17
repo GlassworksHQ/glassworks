@@ -15,6 +15,9 @@ reaches them through `adb reverse`:
   adb -s <serial> reverse tcp:18125 tcp:18125 && adb -s <serial> reverse tcp:18126 tcp:18126
   adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/sh.edm.s1kiosk.legacycheck.EngineCheckActivity \\
       --es url http://127.0.0.1:18125/
+
+On an emulator, `--es url http://10.0.2.2:18125/` reaches the same server without `adb reverse`, at a host that
+isn't loopback: Gecko exempts loopback from rules a real Home Assistant meets (#455, legacy-engine.md step 15).
 """
 import argparse
 import base64

@@ -78,30 +78,35 @@ first (`adb shell am force-stop <id>`).
 Android 6 and 7 (API 23-25) get a legacy build of this app (#198): GeckoView 144, locked to the panel's Home
 Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a separate app,
 `dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
-updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln will flash it into
-`/system/priv-app` once its Mirror recipe takes this id (today it takes `sh.edm.s1kiosk`).
+updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln's Mirror recipe flashes it into
+`/system/priv-app` under this id (#411).
 
 It is the `legacy` build type of [`android/`](android): the same sources, manifest and key as the release build,
 with its own id, GeckoView 144 (`:engine-gecko-legacy`), minSdk 23 and core library desugaring. A build type, not
 a product flavor, so the release build keeps its tasks (a flavor would rename them and add `BuildConfig.FLAVOR`).
 Desugaring is the module's, though (AGP has no per-variant switch), so it changes the release APK too: no desugared
 library code goes in at minSdk 26, but D8 adds a small dex of inert API stubs, and the APK isn't byte-identical to
-one built without it. Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
+one built without it. Desugaring puts `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception) in the legacy
+APK only, which the maintainer allowed on 2026-11-16 (`AGENTS.md`, rule 4; `THIRD-PARTY-NOTICES.md`). Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
 
 ```sh
 ./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
 # → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
 ```
 
-Status: it builds (CI builds and checks it on every change, without publishing it), and CI's conformance test starts
-the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
+Status: it builds (CI builds and checks it on every change, and test builds publish it), and CI's conformance test
+starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
 release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
-What waits: a first device run, the maintainer's call on `desugar_jdk_libs`, and Kiln's Mirror recipe taking this id.
+What waits: a first device run and a release job: `release.yml` doesn't build
+the generic app or its legacy build yet. The release key exists ([Signing](#signing)).
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
-- **Orientation:** the screen's natural orientation (rotation 0), either way up. Landscape on most tablets; portrait
-  on the Mirror, whose image sets `ro.sf.hwrotation=270`, and on a tablet that stands portrait at rotation 0.
+- **Orientation:** the device's rotation: Android's auto-rotate, or the way the person locked the screen. The Mirror
+  stands portrait because Kiln's first boot locks it there (`user_rotation=3`, auto-rotate off). A device with a frame of its own
+  stands as its `frame.json`'s `display` says: the Pixel Tablet is landscape, though its screen is portrait at
+  rotation 0. The app knows it by `Build.MODEL`, as Kiln's [`devices.ts`](installer/src/devices.ts) does
+  (`GenericAndroid.KNOWN`; `GenericAndroidKnownTest` keeps the two the same).
 - **Touch:** with input devices listed and no touchscreen among them (the Mirror), setup works from a computer
   instead of the screen (#34).
 Neither build can go on Google Play as it is: each updates itself from the repo's releases, and Play updates
@@ -128,14 +133,15 @@ It installs as a normal app (an APK). It doesn't install from Kiln yet, and ther
 Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403), with no
 screen yet. Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
 installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
-admin; the camera too, once a build asks for it) and reads each grant back, makes it the home screen (`cmd package set-home-activity` on Android 7+, else
+admin; the camera too, once a build asks for it) and reads each grant back, allows "Install unknown apps" on Android 12+
+so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else
 Android's chooser), and hands over to setup over the LAN. Its table of brands maps a USB vendor ID, or adb's
 maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
 device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
 
 To try a branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
-([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)). Not the legacy build's yet: its APK
-carries `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception), which waits for the maintainer's call.
+([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), the legacy build's
+(`glassworks-generic-legacy-test-<version>-arm64-v8a-<commit>.apk`) among them.
 
 ## Updates
 
@@ -184,6 +190,8 @@ The app asks Android to install its own update with no user action (#277). Andro
 
 1. "Install unknown apps" is allowed for the app: *Settings → Apps → Glassworks → Install unknown
    apps*, or `adb shell appops set dev.glassworks.generic_android REQUEST_INSTALL_PACKAGES allow`.
+   Kiln's recipe does this by default on Android 12+ and reads it back; the person can say no
+   (`silentUpdates: false`), and `undoSilentUpdates` sets it back to Android's default (#422).
 2. The app that runs the install has this feature. An app from before it asks for a tap once, and
    the version it installs updates silently from then on.
 3. The new APK targets a recent enough API for the device's Android
@@ -254,9 +262,20 @@ from the environment only, as S1 Kiosk's reads its `S1_*` variables:
 | `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS`, `GENERIC_KEY_PASSWORD` | Its password, the key's alias and the key's password |
 | `GENERIC_REQUIRE_RELEASE_SIGNING=true` | Fail the build when no key is set, instead of an unsigned APK |
 
-None set: the release APK is unsigned. Some but not all set: the build fails. No release key exists yet; the
-maintainer makes it before the first release, keeps it out of the repo, and from then on never changes it.
-Test builds sign with a key made for each run ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
+None set: the release APK is unsigned. Some but not all set: the build fails.
+
+The key exists since 2026-11-17: certificate `CN=Glassworks, O=GlassworksHQ` (RSA 4096, valid to 2054). One key
+signs both builds, `dev.glassworks.generic_android` and `.legacy`. It lives in the `release-signing` environment as
+`GENERIC_KEYSTORE_B64` (the PKCS12 keystore, base64), `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD`
+(the alias, `glassworks`, isn't secret and sits in the workflow), and in the maintainer's password manager. It is never in the repo, and it never changes.
+The keystore is PKCS12, which has one password: `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD` must be the
+same value, or signing fails with "keystore password was incorrect". The certificate's SHA-256 is
+`564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`.
+
+Test builds sign with it too ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), so each one
+updates the last in place, settings kept. CI checks every APK's certificate SHA-256 against the one above, so a new
+key, even with the same name, fails the build. Builds from before 2026-11-17 were signed with a key made for their
+own run: uninstall one before installing a newer build (once; that wipes the app's settings).
 
 ## Panes
 

@@ -1007,7 +1007,8 @@ view, or the view again when HA's held `history.back()` lands after the move and
 with its nonce, and none of its tasks is graded in that run. The dialogs HA still hadn't shown then
 are carried to the next view's check, each for one dialog's wait and one settle (`waitMs` +
 `settleMs`, 50 s) from when it was first carried (`stats.js` `carriedShows`). One HA shows late is
-still caught; one it never shows refuses only the views in that time, not every view after it. The
+still caught; one it never shows refuses only the views in that time, not every view after it (the
+dialog e2e test gives HA a held show after the next view's check would otherwise have passed). The
 wait itself is `stats.js` `settleLoop`: a dialog still open at the limit is closed before it stops,
 and `closed` counts dialogs, not looks.
 
@@ -1824,7 +1825,8 @@ CI (#115).
 
 **A published result of an earlier Clarity version stays as it was published** until the frame's
 next run replaces it, and the maintainer decides when that is. The site grades it with the current
-rules, so it shows "Re-measure", not a letter: since Clarity v3, the S1's v2 result (s1rtc10) does.
+rules, so it shows "Re-measure", not a letter. The S1's v2 result (s1rtc10) did, until its Clarity v3 result
+(s1v3c, 2026-11-17 UTC, D) replaced it.
 `summary.py` now refuses that report as complete, so `test_summary.py` exports it marked and checks
 every byte but `complete`, which stays as it was decided under its own version's rules.
 
@@ -1900,7 +1902,7 @@ load) and `t`:
 | `camera` | Views with streams (#174), logged before the swipes: `stage`, `path` (`web_rtc` or `hls`, protocol 6), `window_ms`, `t0_ms` and `nav_ms` (the window's start and the navigation, page clock; protocol 8), `fps`, `expected`, `found`, and per stream `w`, `h`, `first_frame_ms` (after the navigation), `shown_pct`, `max_gap_ms`, `stall_total_ms`, `frames` (presented, from the decoder), `callbacks` (`requestVideoFrameCallback`), `decoded`, `dropped`, `waiting`, `source`, `stall_presented` (frames presented inside the stalls, from rVFC's `presentedFrames`; `null` without rVFC), `gaps_source` (`webrtc`, `webrtc (bound)`, `webrtc (no freeze counts: n/a)`, `rvfc` or `timeupdate`: where `max_gap_ms` and `stall_total_ms` come from), `stalls_at` (where the stalls were, page clock), `callback_gaps` (WebRTC, protocol 8: the frame callbacks' `max_gap_ms`, `stall_total_ms`, `presented`, `callbacks`, `stalls_at`; detail), `span_ms` (WebRTC: the receiver samples' span, which shown is over), `path`, `others` (the camera's other players: `path`, `first_frame_ms`, `connected`), `webrtc` (WebRTC only: `stats.js` `webrtcStats`); then `fetches` (`segment` and `playlist`: `n`, `queued_ms`, `wait_ms`, `total_ms`, each `median`, `p95`, `max`; `segment.kb`, `segment.arrival_gap_max_ms`; `streams`) |
 | `dialog` | Clarity v3 (#211), one per more-info dialog, after the swipes (and after a restart with `stage` `warmup`, not graded): `stage` (the view), `n`, `of`, `entity`, `kind` (`light`, `climate`, `sensor`), `graph` (whether it has a history graph), `mode` (`bottom-sheet` or `dialog`, as HA showed it), `show_duration_ms` (its show animation, as the page computed it), `reduced_motion`, `opened`, `open_ms`, `shown_ms`, `graph_ms`, `settled_ms` (all after the tile's event; `null` when it didn't happen; `settled_ms`, graded, unrounded), `anim` (the open animation's frame stats), `anim_intervals`, `dropped` (refreshes missed), `longest_frame_ms`, `close_ms`, `close_longest_ms`, `error` and `close_error` (`null`, or why it didn't open, settle or close in time) |
 | `hello`, `js` | Animation test page: `ua`, `dpr`, `css`, `cores`, `load`; the JS workload's `runs`, `median_ms`, `p95_ms`, `checksum`, `expected` |
-| `settle` | #410: a view whose dialogs HA still held after `DIALOG.settleMs` on it, logged before the move to the start view: `stage`, `ms`, `clean` (`false`), `closed` (dialogs found open and closed), `pending` (the entities HA hadn't shown), `open`, `history` (a dialog's history entry still current). After a restart's warm-up (`stage` `warmup`, no nonce) it is logged again if HA still held one after the move too; the runner keeps those in `refstart-<k>.json` under `warmup_settle` |
+| `settle` | #410: a view whose dialogs HA still held after `DIALOG.settleMs` on it, logged before the move to the start view: `stage`, `ms`, `clean` (`false`), `closed` (dialogs found open and closed), `pending` (the entities HA hadn't shown), `open`, `history` (a dialog's history entry still current). After a restart's warm-up (`stage` `warmup`, no nonce) it is logged again if HA still held one after the move too. The runner keeps those in `refstart-<k>.json` under `warmup_settle`: a `settle` line with no nonce is always the restart's, even when it comes after the runner has opened the first view, as a held warm-up dialog's does (`perfrun.py` `handle`; `test_runner` `FAKE_SETTLE_VIA=warmup`) |
 | `done`, `error` | `message` on error. At `done` the page has stopped its updates. A view's `done` has `settle` (#410, detail, untimed): how HA got done with its dialogs (`ms`, `clean`, `closed`, `pending`, `open`, `history`; with `via: "start"`, `first` (the view's own wait) and `at` (the view HA was on at the end), when it was left for the start view); `null` on a view asked for none |
 
 The restart page logs with an empty nonce (its parts are numbered `restart:<n>`): only `refdash` and

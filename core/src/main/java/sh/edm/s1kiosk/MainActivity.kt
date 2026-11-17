@@ -34,6 +34,7 @@ import dev.glassworks.setup.LanSetup
 import dev.glassworks.setup.SetupHotspot
 import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
+import dev.glassworks.frame.Input
 import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
@@ -175,9 +176,9 @@ class MainActivity : Activity() {
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
         applyIntent(intent, fromNewIntent = false)
-        // The frame's orientation, either way up (#198). The S1's manifest already asks for landscape: no change there.
-        val portrait = glassworks.frame.orientation == Orientation.PORTRAIT
-        screenOrientation(portrait).let { if (requestedOrientation != it) requestedOrientation = it }
+        // The frame's orientation. The S1's manifest already asks for landscape: no change there.
+        val orientation = glassworks.frame.orientation
+        screenOrientation(orientation).let { if (requestedOrientation != it) requestedOrientation = it }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // 8 bits per channel: the dithered backdrop/voice glows would band again on an RGB565 surface.
@@ -192,7 +193,11 @@ class MainActivity : Activity() {
         // frame's orientation); until it is ready the loading screen draws 8-bit gradients.
         val real = android.graphics.Point().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealSize(it) }
         val (long, short) = maxOf(real.x, real.y) to minOf(real.x, real.y)
-        if (portrait) Backdrop.prewarm(short, long) else Backdrop.prewarm(long, short)
+        when (orientation) {
+            Orientation.LANDSCAPE -> Backdrop.prewarm(long, short)
+            Orientation.PORTRAIT -> Backdrop.prewarm(short, long)
+            Orientation.ANY -> Backdrop.prewarm(real.x, real.y)
+        }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
@@ -296,6 +301,8 @@ class MainActivity : Activity() {
     private val overlayHost = object : OverlayHost {
         override val activity get() = this@MainActivity
         override fun openInPage(url: String?) = if (url != null) this@MainActivity.openInPage(url) else backToDashboard()
+        override fun placePage(area: android.graphics.Rect?) { page?.view?.let { dev.glassworks.engine.PageCapture.place(it, area) } }
+        override fun capturePage(done: (android.graphics.Bitmap?) -> Unit) = dev.glassworks.engine.PageCapture.capture(page, done)
         override fun hideMenu() { if (::settingsOverlay.isInitialized && settingsOverlay.isShowing) settingsOverlay.hide() }
         override fun post(block: () -> Unit) { handler.post(block) }
     }
@@ -306,7 +313,7 @@ class MainActivity : Activity() {
     /** A notification's view, on the panel's own HA: in place when the frontend is already up, else loaded. */
     private fun openInPage(url: String) {
         if (beforeNotificationPage == null) beforeNotificationPage = currentUrl
-        Log.i(TAG, "Notification: opening a view full screen")
+        Log.i(TAG, "Notification: opening a view")
         if (FrontendUrls.sameOrigin(currentUrl, url)) page?.post(navigate(url))
         else page?.load(externalize(url))
     }
@@ -355,6 +362,9 @@ class MainActivity : Activity() {
             dashboardLoaded = currentUrl.let { u -> u != null && FrontendUrls.sameOrigin(u, prefs.haBase) && !FrontendUrls.isAuthorizePage(u, prefs.haBase) },
             improv = ImprovController.setupFacts,
             installer = ImprovController.installerWifi,
+            input = setupOverlay.input,
+            // Read only where it counts (a frame without touch, offline): the S1 makes no extra Wi-Fi calls.
+            joinExpected = !w.online && setupOverlay.input == Input.NONE && OfflineText.expectsJoin(offlineFacts()),
             neverSetUp = SetupState.neverSetUp(
                 haKnown = prefs.haBase != null, haSeen = prefs.haSeen || SetupSignals.haSubscribed,
                 apiKeySet = prefs.apiEncryption, haSkipped = prefs.haSetupSkipped, paneStepDone = steps.any { it.done },
@@ -453,7 +463,7 @@ class MainActivity : Activity() {
         val needsPermission = hotspotAsked ||
             (view as? SetupHotspot.View.Off)?.error == HotspotFailure.NO_PERMISSION
         val permission = if (needsPermission) hotspotPermission() else HotspotPermission.Step.Ready
-        val url = HotspotAddress.now()?.let { "http://$it:${sh.edm.s1kiosk.auth.OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }
+        val url = HotspotAddress.now(this)?.let { "http://$it:${sh.edm.s1kiosk.auth.OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }
         return HotspotStep.card(view, permission, url)
     }
 
@@ -553,11 +563,11 @@ class MainActivity : Activity() {
 
     /** A failed load without a network: "Connecting to Wi-Fi…" while a join is underway or expected. */
     private fun showOffline() {
-        val t = OfflineText.decide(offlineFacts(), ImprovController.BOOT_GRACE_MS)
+        val t = OfflineText.decide(offlineFacts(), ImprovController.BOOT_GRACE_MS, setupOverlay.input)
         offlineShown = true
         loadingOverlay.show(
             if (t.connecting) LoadingOverlay.State.Connecting(t.title, t.detail, host = false)
-            else LoadingOverlay.State.Offline(t.title, t.detail, OfflineText.SETUP_ACTION),
+            else LoadingOverlay.State.Offline(t.title, t.detail, t.action),
         )
     }
 
@@ -589,14 +599,24 @@ class MainActivity : Activity() {
         }
         val supplicant = runCatching { wm?.connectionInfo?.supplicantState?.name }.getOrNull()
         val detailed = runCatching { cm?.getNetworkInfo(android.net.ConnectivityManager.TYPE_WIFI)?.detailedState?.name }.getOrNull()
+        // A failed read is "can't tell", never "off" (#448: a Mirror with Wi-Fi on said "Wi-Fi is off").
+        val wifiState = runCatching { wm?.wifiState }
+        val wifiRead = wifiState.exceptionOrNull()?.toString() ?: "state ${wifiState.getOrNull()}"
+        if (wifiRead != lastWifiRead) {
+            lastWifiRead = wifiRead
+            Log.i(TAG, "Offline: Wi-Fi $wifiRead")
+        }
         return OfflineText.Facts(
-            wifiEnabled = runCatching { wm?.isWifiEnabled == true }.getOrDefault(false),
+            wifiEnabled = OfflineText.wifiEnabled(wifiState.getOrNull()),
             savedNetwork = saved,
             joining = OfflineText.joining(supplicant, detailed),
             wasOnlineBefore = prefs.wifiSeen || prefs.haSeen,
             offlineForMs = if (offlineSince == 0L) 0L else now - offlineSince,
         )
     }
+
+    /** The last Wi-Fi read [offlineFacts] logged: a line when it changes, not every tick. */
+    private var lastWifiRead: String? = null
 
     private fun isDeviceOwner(): Boolean = runCatching {
         getSystemService(android.app.admin.DevicePolicyManager::class.java).isDeviceOwnerApp(packageName)
@@ -1164,9 +1184,12 @@ class MainActivity : Activity() {
             return true
         }
 
-        /** The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]): either way up. Public for tests. */
-        fun screenOrientation(portrait: Boolean): Int =
-            if (portrait) ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        /** The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]). Public for tests. */
+        fun screenOrientation(orientation: Orientation): Int = when (orientation) {
+            Orientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            Orientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            Orientation.ANY -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        }
 
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()

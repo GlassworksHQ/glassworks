@@ -17,7 +17,7 @@
   function headline(kind, host) {
     if (kind === "download") return "Downloads are off on this panel.";
     if (kind === "page" || kind === "window" || kind === "main_frame") {
-      return host ? `${host} isn't your Home Assistant, so it didn't open.` : "That isn't your Home Assistant, so it didn't open.";
+      return host ? `${host} isn't your Home Assistant's address, so it didn't open.` : "That isn't your Home Assistant's address, so it didn't open.";
     }
     if (hosts.length > 1) return `Blocked content from ${hosts.slice(-3).join(", ")}.`;
     return host ? `Blocked content from ${host}.` : "Blocked content.";

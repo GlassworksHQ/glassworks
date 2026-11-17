@@ -1,3 +1,8 @@
+---
+topic: boot
+evidence: verified
+---
+
 # FEL boot: mainline U-Boot from USB, RAM only
 
 **Status (2026-11-09): working.** Mainline U-Boot 2027.01-rc1 boots on the S1 Plus from FEL to a

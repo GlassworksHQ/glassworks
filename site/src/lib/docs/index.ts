@@ -6,11 +6,17 @@ import { imageSize } from "image-size";
 import { anchorsOf, cutSection, render, type Image, type Link, type Rendered, type Toc } from "./render";
 import { REPO, SECTIONS, SOURCES, siteUrl, type Section, type Source } from "./sources";
 import { links } from "../links";
+import { frontMatter } from "../frontMatter";
+import { noteMeta, type Evidence, type Topic } from "./notes";
 import { POSTS, type PostSource } from "../blog/posts";
 
 export { SECTIONS, type Section, type Source, type Toc };
 
+/** A research note's front matter (src/lib/docs/notes.ts); absent until the note has it. */
+type NoteMeta = { topic: Topic; evidence: Evidence };
+
 export type Doc = Source &
+  Partial<NoteMeta> &
   Omit<Rendered, "ids" | "lead"> & {
     /** one line for cards and search: the tagline, else the first paragraph */
     summary: string;
@@ -75,14 +81,23 @@ const plain = (html: string) =>
 
 async function build(): Promise<{ docs: Doc[]; posts: Post[]; assets: string[] }> {
   const assets = new Set<string>();
+  const errors: string[] = [];
   const read = (s: Source) => {
-    const src = fs.readFileSync(path.join(/* turbopackIgnore: true */ REPO, s.file), "utf8");
-    return s.cut ? cutSection(src, s.cut) : src;
+    // a note's front matter (topic, evidence) is data, not text
+    const { data, body } = frontMatter(s.file, fs.readFileSync(path.join(/* turbopackIgnore: true */ REPO, s.file), "utf8"));
+    const doc: Source & Partial<NoteMeta> = { ...s };
+    if (s.section === "notes") {
+      const meta = noteMeta(s.file, data);
+      errors.push(...meta.errors);
+      if (meta.topic) doc.topic = meta.topic;
+      if (meta.evidence) doc.evidence = meta.evidence;
+    }
+    return { url: s.url, file: s.file, src: s.cut ? cutSection(body, s.cut) : body, doc };
   };
 
   // docs and posts render the same way, with the same link rules
   const inputs = [
-    ...SOURCES.map((s) => ({ url: s.url, file: s.file, src: read(s), doc: s })),
+    ...SOURCES.map(read),
     ...POSTS.map((p) => ({ url: p.url, file: p.file, src: p.body, post: p })),
   ];
 
@@ -92,7 +107,6 @@ async function build(): Promise<{ docs: Doc[]; posts: Post[]; assets: string[] }
   for (const i of inputs) ids.set(i.url, (await render(i.src, idle)).ids);
   const publishedAt = (file: string) => siteUrl(file) ?? POSTS.find((p) => p.file === file)?.url;
 
-  const errors: string[] = [];
   const anchors: Record<string, Set<string>> = {};
   const docs: Doc[] = [];
   const posts: Post[] = [];
@@ -185,7 +199,7 @@ async function build(): Promise<{ docs: Doc[]; posts: Post[]; assets: string[] }
       updated: lastChanged(s.file),
     });
   }
-  if (errors.length && BUILDING) throw new Error(`Docs: ${errors.length} link(s) the site can't resolve (fix the Markdown):\n${errors.join("\n")}`);
+  if (errors.length && BUILDING) throw new Error(`Docs: ${errors.length} problem(s) in the Markdown (bad links or front matter):\n${errors.join("\n")}`);
   return { docs, posts, assets: [...assets] };
 }
 

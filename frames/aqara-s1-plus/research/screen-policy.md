@@ -1,3 +1,8 @@
+---
+topic: display
+evidence: verified
+---
+
 # Screen on/off policy (why the panel turns itself off)
 
 The stock firmware's `com.lumi.systemmanager` (kept enabled, it's system-critical) runs

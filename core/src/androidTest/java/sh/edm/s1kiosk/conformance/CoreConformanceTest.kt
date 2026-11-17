@@ -4,7 +4,10 @@
 
 package sh.edm.s1kiosk.conformance
 
+import android.Manifest
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
+import android.os.ParcelFileDescriptor
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -45,12 +48,24 @@ class CoreConformanceTest {
         assertEquals("Conformance", runtime.build.product)
     }
 
-    /** #198: the core's MainActivity starts, and stands as the frame says, on every Android the core runs on. */
+    /**
+     * #198: the core's MainActivity starts, and stands as the frame says, on every Android the core runs on.
+     * Ungranted, it opens the system's permission activity over itself, which pauses it (STARTED, not RESUMED)
+     * and on the API 34 emulator can crash the emulator (SIGSEGV in qemu).
+     */
     @Test fun mainActivityStartsAndStandsAsTheFrameSays() {
+        grant(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
         ActivityScenario.launch(MainActivity::class.java).use { s ->
             assertEquals("RESUMED", s.state.name)
             s.onActivity { a -> assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, a.requestedOrientation) }
         }
+    }
+
+    private fun grant(vararg permissions: String) = permissions.forEach {
+        ParcelFileDescriptor.AutoCloseInputStream(
+            instrumentation.uiAutomation.executeShellCommand("pm grant ${app.packageName} $it"),
+        ).use { out -> out.readBytes() }
+        assertEquals(it, PackageManager.PERMISSION_GRANTED, app.checkSelfPermission(it))
     }
 
     @Test fun aPaneTheFrameCantRunIsHidden() {

@@ -8,8 +8,7 @@ import dev.glassworks.frame.Input
 
 /**
  * The order in which notifications' views take the screen (#230), by [NotificationStore.Entry.id]: one
- * is [open], the rest wait in the order they came. Not wired in yet: today the newest view takes the
- * screen ([NotificationStore.post]).
+ * is [open], the rest wait in the order they came. [NotificationStore] keeps it.
  *
  * - A new view waits behind the open one ([arrive]). The open one keeps the screen.
  * - One the person asked for (a button's `uri`, a tap in the list) opens at once, in front ([jump]).
@@ -19,8 +18,8 @@ import dev.glassworks.frame.Input
  * - A cleared, dismissed or expired view leaves the line wherever it is ([remove]). A waiting view's
  *   timeout keeps running from when it came, so a stale one never opens.
  *
- * Which views join is the caller's: not one Do not disturb holds, and not a critical one (its stage
- * covers everything). Immutable.
+ * Which views join is the store's ([NotificationStore.Entry.queued]): not one Do not disturb holds,
+ * and not a critical one (its stage covers everything). Immutable.
  */
 class ViewQueue(ids: List<Long> = emptyList()) {
     /** Its own copy: a list the caller changes later doesn't change the queue. */
@@ -46,19 +45,13 @@ class ViewQueue(ids: List<Long> = emptyList()) {
 
     fun next(): ViewQueue = ViewQueue(ids.drop(1))
 
-    /**
-     * The one button on the open view's bar, or null on a screen that takes no tap ([Input.NONE]): there
-     * the countdown and Home Assistant's `clear_notification` move on.
-     */
-    fun button(size: ViewSize, input: Input): ViewButton? = when {
-        input == Input.NONE || open == null -> null
-        waiting > 0 -> ViewButton.NEXT
-        size == ViewSize.FULL -> ViewButton.BACK_NOW
-        else -> ViewButton.CLOSE
+    companion object {
+        /** Seconds a view with no `timeout` stays on a screen that takes no tap ([Input.NONE]): nothing else could close it. */
+        const val NO_TOUCH_VIEW_S = 120
     }
 }
 
-/** What the open view's button says. Each does [ViewQueue.next]; the words say where it leads. */
+/** What the open view's one button says. Each moves on, as [ViewQueue.next]; the words say where it leads. */
 enum class ViewButton(val label: String) {
     /** Another view waits. */
     NEXT("Next"),
@@ -67,5 +60,18 @@ enum class ViewButton(val label: String) {
     BACK_NOW("Back now"),
 
     /** The last view, half screen: the dialog closes over the dashboard. */
-    CLOSE("Close"),
+    CLOSE("Close");
+
+    companion object {
+        /**
+         * The button for the open view, with [waiting] views behind it, or null on a screen that takes no tap
+         * ([Input.NONE]): there the countdown and Home Assistant's `clear_notification` move on.
+         */
+        fun of(waiting: Int, size: ViewSize, input: Input): ViewButton? = when {
+            input == Input.NONE -> null
+            waiting > 0 -> NEXT
+            size == ViewSize.FULL -> BACK_NOW
+            else -> CLOSE
+        }
+    }
 }

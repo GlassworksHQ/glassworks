@@ -21,6 +21,7 @@ import dev.glassworks.platform.NetworkUp
 import dev.glassworks.platform.Platform
 import dev.glassworks.setup.CaptivePortal
 import dev.glassworks.setup.LanSetup
+import dev.glassworks.setup.PortalAddresses
 import dev.glassworks.setup.PortalHotspot
 import dev.glassworks.setup.SetupHotspot
 import sh.edm.s1kiosk.settings.SettingsMenu
@@ -123,7 +124,7 @@ class KioskService : Service() {
         val hotspot = Hotspot.of(this, main).let { h ->
             if (!glassworks.frame.hotspotPortal) h
             else PortalHotspot(h, CaptivePortal({ ap -> "http://$ap:${OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }, log = { Log.i(HOTSPOT_TAG, it) }), schedule,
-                log = { Log.i(HOTSPOT_TAG, it) })
+                addresses = { PortalAddresses.now(this) }, log = { Log.i(HOTSPOT_TAG, it) })
         }
         val hs = SetupHotspot(
             hotspot = hotspot,
@@ -238,8 +239,13 @@ class KioskService : Service() {
         return b.build()
     }
 
-    /** The app's icon, from its manifest; Android's default app icon for an APK without one, so the service still starts. */
-    private fun notificationIcon(): Int = applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
+    /**
+     * The app's notification icon ([dev.glassworks.platform.AppBuild.notificationIcon]), else its icon from its manifest;
+     * Android's default app icon for an APK without one, so the service still starts. An icon Android can't load
+     * crashes the app (RemoteServiceException "Couldn't create icon": the Mirror's first start, #198).
+     */
+    private fun notificationIcon(): Int = glassworks.build.notificationIcon.takeIf { it != 0 }
+        ?: applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
         private const val HOTSPOT_TAG = "S1Kiosk.Hotspot"

@@ -16,18 +16,26 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 1. Checks, read-only: the APK must be the legacy build of Glassworks for generic Android
    (`dev.glassworks.generic_android.legacy`, or the probe with `--probe`) for Android 6, ask for
    `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS`, and have a home screen Android can open
-   (an enabled activity or alias with MAIN, HOME and DEFAULT in one intent filter), then over adb the board must be `msm8916`.
+   (an enabled activity or alias with MAIN, HOME and DEFAULT in one intent filter). The first
+   `--adb-key` must be an adb key and not the published Glass Panes project key. Then over adb the
+   board must be `msm8916`.
 2. The warning above.
 3. Load `system.img` (a local file, or `--refract`), and check its size and SHA-256.
 4. `adb reboot bootloader`.
 5. Fastboot checks, read-only: partition sizes and `max-download-size`.
-6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), the boot animation, `ro.sf.hwrotation=270`, the
-   settings overlay and `ro.lockscreen.disable.default` (a first boot with nothing to tap), and a
-   fresh userdata whose `adb_keys` holds this computer's `~/.android/adbkey.pub` and, with
-   `--wifi-ssid`, the saved network.
+6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), the boot animation, the
+   settings overlay and `ro.lockscreen.disable.default` (a first boot with nothing to tap),
+   `/framework/services.jar` letting in the first `--adb-key` (default `~/.android/adbkey.pub`) in
+   place of the Glass Panes project key, and a fresh userdata with the keys in `adb_keys` and, with
+   `--wifi-ssid`, the saved network. This image's adbd ignores `adb_keys`: the key gets in through
+   services.jar ([image-patch.md](../../frames/lululemon-mirror/research/image-patch.md#who-the-image-lets-in-over-adb)).
 7. Flash system. 8. Flash userdata. 9. Reboot.
-10. Wait for adb and `sys.boot_completed`.
-11. First boot: permissions, Home Assistant's address, Wi-Fi, the other launchers hidden.
+10. Wait for adb and `sys.boot_completed`. `unauthorized` for a while after each start is normal: the
+    framework lets the key in once it runs. Still `unauthorized` after 6 minutes means adb's server
+    isn't answering with the key the image lets in (below).
+11. First boot: permissions, the screen locked upright in portrait (`user_rotation=3`, checked in
+    `dumpsys window windows`; it stops if Android doesn't turn within 10 s), Home Assistant's address, Wi-Fi,
+    the other launchers hidden.
 12. HOME check (hides the launchers again if HOME didn't open the app). If the APK has no home
     screen of its own, nothing was hidden: the image's launcher stays, and the run exits 1.
 13. Screenshot.
@@ -49,6 +57,30 @@ The adb serial is read from `/tmp/mirror-serial` (`--serial-file`) and is shown 
 logs. The tool never restarts or kills the adb server. Each USB transfer gets 120 s: the `usb`
 package's default is 1 s, which stopped a real flash with "Cancelled" (2026-11-16). The images take about 2.5 GB in a temporary
 folder, which is removed at the end unless `--keep` or `--work` is given.
+
+## A throwaway key
+
+The Mirror lets in only the first `--adb-key`, and adb's server answers with the key in its
+`HOME`'s `.android/adbkey`. To flash with a key other than this computer's (a throwaway one for a
+test), give the server that key for the Mirror only. This stops adb for every other device on this
+computer until the last command: check no one is using them first.
+
+```sh
+T=$(mktemp -d); mkdir "$T/.android"
+tools/mirror/probe-app/adbkey.py new "$T/.android"     # adbkey and adbkey.pub; prints only fingerprints
+adb reboot bootloader                                   # with the normal server, while it still gets in
+adb kill-server
+HOME="$T" adb --one-device "$(cat /tmp/mirror-serial)" start-server   # --one-device before start-server: after it, adb ignores it
+npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk <apk> --adb-key "$T/.android/adbkey.pub"
+# … and afterwards, the normal server again:
+adb kill-server; adb start-server
+```
+
+The harness sees no adb before the flash and takes the Mirror to be in fastboot already. Keep `$T`
+while the Mirror runs that image: its key is the only one the Mirror lets in without a screen tap.
+Back with the normal server, the Mirror shows as `unauthorized`.
+
+## Tests
 
 The tests (`npm test -w @glassworks/mirror-root-run`) run the install and the way back on the fake
 Mirror: `@glassworks/fastboot`'s `Fastboot` on `FakeLk`, the installer's adb fakes, and e2fsck on

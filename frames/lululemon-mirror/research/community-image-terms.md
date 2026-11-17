@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: read
+---
+
 # Community image terms: may Kiln download the Mirror's community system image and modify it for the user?
 
 **Status (2026-11-15): decided, then changed the same day.** The image's own release grants no

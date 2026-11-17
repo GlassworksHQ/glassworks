@@ -569,7 +569,7 @@ class SetupOverlay(
             }
             inst?.phase == InstallerWifi.Phase.CONNECTING -> {
                 cardTitle.text = "Connecting to ${inst.ssid}…"
-                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This takes up to 30 seconds.")
+                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This can take up to a minute.")
             }
             else -> {
                 cardTitle.text = if (w.state == WifiSetupStatus.State.CONNECTING) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
@@ -577,8 +577,14 @@ class SetupOverlay(
                 tile = true
             }
         }
-        if (!w.online && inst?.phase == InstallerWifi.Phase.FAILED) showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
-        else w.message?.let { showStatus(it, AMBER) } ?: spot?.status?.let { showStatus(it, tone(spot.tone)) }
+        // The hotspot's line goes with its button (Allow, Try again, Turn on Wi-Fi), so it wins over an older line
+        // (CodeRabbit on #418): a failed installer join, then the Wi-Fi status.
+        val spotStatus = spot?.status
+        when {
+            spotStatus != null -> showStatus(spotStatus, tone(spot.tone))
+            !w.online && inst?.phase == InstallerWifi.Phase.FAILED -> showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
+            else -> w.message?.let { showStatus(it, AMBER) }
+        }
         spot?.action?.let { a ->
             plain.text = a.label
             plain.visibility = View.VISIBLE

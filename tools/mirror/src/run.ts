@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
 import type { Store } from '@glassworks/ext4';
 import {
-  GLASS_PANES, GLASS_PANES_USERDATA, GLASSWORKS, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
+  GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASS_PANES_USERDATA, GLASSWORKS, adbFingerprint, adbKeyLines, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
   type MirrorApp,
   type FastbootLike, type FirstBoot,
 } from '@glassworks/lululemon-mirror-installer';
@@ -42,7 +42,11 @@ export interface InstallOptions {
   apk: Uint8Array;
   /** which app the APK is: Glassworks' legacy build by default (frame.json `app`), MIRROR_PROBE for the probe */
   app?: MirrorApp;
-  /** the adb_keys line(s) for the new userdata, e.g. the host's ~/.android/adbkey.pub */
+  /**
+   * The adb key line(s), e.g. the host's ~/.android/adbkey.pub. The first is the one the patched
+   * services.jar lets in without asking; all go in the new userdata's adb_keys, which this image's adbd
+   * ignores. adb's server must answer with the first one's private half for the first boot.
+   */
   adbKey: string;
   bootAnimation?: Uint8Array;
   /** GlassworksSettings.apk: Wi-Fi on, no screen timeout, no lock screen, no auto-rotate on the first boot */
@@ -109,6 +113,10 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         // the APK first: one the Mirror can't run as its home screen stops here, before anything is read or written
         const apk = await checkMirrorApk(o.apk, ours);
         d.log(`    APK: ${apk.package}, minSdk ${apk.minSdk ?? 1}, home screen on`);
+        // every key line, before anything restarts: a bad second key would otherwise stop the build in fastboot
+        const trusted = adbFingerprint(adbKeyLines(o.adbKey)[0]!);
+        if (trusted === GLASS_PANES_KEY_FINGERPRINT) throw new Error('the adb key is the Glass Panes project key, published with its private half: the Mirror would let anyone in. Pass your own (--adb-key). Nothing was changed.');
+        d.log(`    adb key the image will let in: ${trusted}`);
         const p = await d.adb();
         if (!p) { d.log('    no adb: the Mirror is in fastboot already, or off'); return; }
         const prop = async (k: string) => (await p.run(`getprop ${k}`)).out.trim();
@@ -137,12 +145,12 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         if (!r.ok) throw new Error('the fastboot checks failed. Nothing was written.');
         userdataBytes = o.userdataBytes ?? r.userdataBytes;
       }],
-      [`Build the images (${ours.name}, boot animation, rotation; a fresh userdata with the adb key)`, async () => {
+      [`Build the images (${ours.name}, boot animation, services.jar trusting the adb key; a fresh userdata)`, async () => {
         // patched in place: a build that fails ends the run, and the next run loads and checks the file again
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, hwrotation: 270, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); });
         } finally { sys.close(); ud.close(); }
         d.log(`    ${sysOut}, ${udOut}`);
@@ -157,7 +165,7 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
           await sleep(2000);
         }
       }],
-      ['First boot: permissions, Home Assistant, Wi-Fi, the only home screen', async () => {
+      ['First boot: permissions, portrait, Home Assistant, Wi-Fi, the only home screen', async () => {
         const p = await d.waitForAdb();
         res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
       }],
