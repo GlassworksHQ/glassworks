@@ -305,8 +305,8 @@ below as the release notes.
   pane isn't shown, and Home Assistant gets nothing new.
 - **The panel can be a Bluetooth proxy for Home Assistant.** Turn on *Bluetooth proxy* in the
   panel's settings or on setup's Panes step, and Home Assistant finds it by itself and hears the
-  Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a
-  connection, like locks, still need an ESP32 proxy. Off by default. It never logs or keeps the
+  Bluetooth thermometers, plant sensors and tags near the panel. Devices that need a
+  connection, like locks, can use it too with *Listen and connect*. Off by default. It never logs or keeps the
   addresses it hears, and sends them only over an encrypted connection with the panel's key, which
   Home Assistant 2026.11 and later sets when you add the panel. If Home Assistant connects without that
   key, the proxy's settings page and its *Bluetooth proxy status* sensor say *Waiting for the panel's
