@@ -107,13 +107,15 @@ class DeviceNamesTest {
                 on a lululemon Mirror
             ""${'"'}
             val c = '"' + "https://example.com/x" // Pixel Tablet
+            /* outer /* inner */ val d = "Echo Show" */
         """.trimIndent()
         val texts = Literals.of(kotlin, js = false)
         assertEquals(listOf("Aqara", "S1", "lululemon", "Mirror"), texts.flatMap { names(it.second) })
         assertEquals("the inner literal's line", 3, texts.single { "Aqara" in it.second }.first)
 
-        val js = """var r=/["'`]/g,t=`Not supported by ${'$'}{n} on the Mirror`,u=a/b/c,v="S1 Kiosk ${'$'}{v}",w='Aqara'"""
-        assertEquals(listOf("Mirror", "Aqara"), Literals.of(js, js = true).flatMap { names(it.second) })
+        val js = """var r=/["'`]/g,t=`Not supported by ${'$'}{n} on the Mirror`,u=a/b/c,v="S1 Kiosk ${'$'}{v}",w='Aqara',x=n++/2,y="Pixel""""
+        assertEquals(listOf("Mirror", "Aqara", "Pixel"), Literals.of(js, js = true).flatMap { names(it.second) })
+        assertEquals("a JavaScript comment ends at the first */", listOf("NSPanel"), Literals.of("""/* a /* b */ x="NSPanel" """, js = true).flatMap { names(it.second) })
         assertEquals(listOf("tablet"), names("on a reset tablet with mdi:tablet-dashboard"))
     }
 }
@@ -138,15 +140,34 @@ internal object Literals {
                 when {
                     c.isWhitespace() -> { i++; continue }
                     s.startsWith("//", i) -> i = s.indexOf('\n', i).let { if (it < 0) s.length else it }
-                    s.startsWith("/*", i) -> i = s.indexOf("*/", i + 2).let { if (it < 0) s.length else it + 2 }
+                    s.startsWith("/*", i) -> blockComment()
                     !js && s.startsWith("\"\"\"", i) -> { string("\"\"\""); prev = 'a' }
                     c == '"' || c == '\'' || (js && c == '`') -> { string(c.toString()); prev = 'a' }
-                    js && c == '/' && prev in "(,=:[!&|?{};+-*%<>~^" -> { regex(); prev = 'a' }
+                    js && c == '/' && prev in "(,=:[!&|?{};+-*%<>~^" && !postfix() -> { regex(); prev = 'a' }
                     c == '{' -> { depth++; i++; prev = c }
                     c == '}' -> { i++; if (untilBrace && depth == 0) return; depth--; prev = c }
                     else -> { i++; prev = c }
                 }
             }
+        }
+
+        /** A block comment. Kotlin's nest, and end at the matching close; Java's and JavaScript's end at the first close. */
+        private fun blockComment() {
+            var depth = 0
+            while (i < s.length) {
+                when {
+                    s.startsWith("/*", i) && (depth == 0 || !js) -> { depth++; i += 2 }
+                    s.startsWith("*/", i) -> { i += 2; if (--depth == 0) return }
+                    else -> i++
+                }
+            }
+        }
+
+        /** The `/` at [i] follows `++` or `--` (`n++/2`): a division, not a regular expression. */
+        private fun postfix(): Boolean {
+            var p = i - 1
+            while (p >= 0 && s[p].isWhitespace()) p--
+            return p >= 1 && s[p] == s[p - 1] && s[p] in "+-"
         }
 
         private fun string(delim: String) {

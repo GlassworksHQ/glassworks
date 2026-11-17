@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.setup
 
+import dev.glassworks.frame.Capability
 import dev.glassworks.frame.Frame
 import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
@@ -82,16 +83,20 @@ class SetupMockups {
     private fun facts(mode: RadioMode, status: String, thread: ThreadRouterState? = null) =
         RadioFollowUp.Facts(mode, status, HelperFacts(true, 4), ZigbeeStack.AQARA, if (thread != null) false else null, thread, ha, ip)
 
-    /** The app's panes: voice, music and the wall base on, the radio as [radio] (its follow-up open when [followUp]). */
-    private fun panes(a: Context, radio: RadioFollowUp.Facts?, followUp: Boolean = false): List<SetupPane> {
+    /**
+     * The panes [frame] can run: voice and music on, and on the S1 the wall base on and the radio as [radio] (its
+     * follow-up open when [followUp]).
+     */
+    private fun panes(a: Context, frame: Frame, radio: RadioFollowUp.Facts?, followUp: Boolean = false): List<SetupPane> {
         val def: RadioDefinition = radioDefinition(a, FixedReadout(radio, mode = radio?.mode ?: RadioMode.OFF, haBase = ha, panelIp = ip))
         def.followUpOpen = followUp
-        return listOf(
+        return listOfNotNull(
             SetupPane(PaneChoice("Voice", "Assist and timers", on = { true }, apply = { null }), emptyList()),
             SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { null }), emptyList()),
-            SetupPane(def.setupChoice, def.setupSteps),
+            SetupPane(def.setupChoice, def.setupSteps).takeIf { Capability.SILABS_RADIO in frame.provides },
             SetupPane(PaneChoice("Bluetooth proxy", "For BLE sensors", on = { false }, apply = { null }), emptyList()),
-            SetupPane(PaneChoice("Wall base", "The S1's wired base", on = { true }, apply = { null }), emptyList()),
+            SetupPane(PaneChoice("Wall base", "The S1's wired base", on = { true }, apply = { null }), emptyList())
+                .takeIf { Capability.S1_WALL_BASE in frame.provides },
         )
     }
 
@@ -100,7 +105,8 @@ class SetupMockups {
         frame: (Context) -> Frame = { TestFrames.s1() }, then: (SetupOverlay) -> Unit = {},
     ) {
         val a = Mockup.activity()
-        val s = SetupOverlay(a, frame(a), panes(a, radio, followUp))
+        val f = frame(a)
+        val s = SetupOverlay(a, f, panes(a, f, radio, followUp))
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(m)
         then(s)
@@ -157,10 +163,10 @@ class SetupMockups {
         shot("setup-14-done-preview", model(SetupFlow.PANES, preview = true)) { it.finish {} }
 
         // A frame without touch (the Mirror's, #34) at the S1's size: set up from a computer; nothing on the screen takes a tap.
+        // A pane's step without touch: CameraMockups' camera-portrait-06 (the radio is the S1's alone).
         shot("setup-15-no-touch-wifi", model(SetupFlow.WIFI, wifi = offline, panelIp = null), frame = TestFrames::mirror)
         shot("setup-16-no-touch-ha", model(SetupFlow.HA), frame = TestFrames::mirror)
         shot("setup-17-no-touch-signin", model(SetupFlow.SIGNIN), frame = TestFrames::mirror)
-        shot("setup-18-no-touch-radio", model("radio"), radio = coordinator, frame = TestFrames::mirror)
 
         // The setup hotspot (#197): no Wi-Fi works, so the panel opens its own; a phone joins it and opens the setup page.
         val idle = ImprovFacts()
@@ -197,7 +203,8 @@ class SetupMockups {
             "portrait-08-no-touch-ha-waiting" to addWait,
         )) {
             val a = Mockup.activity()
-            val s = SetupOverlay(a, TestFrames.mirror(a), panes(a, null))
+            val mirror = TestFrames.mirror(a)
+            val s = SetupOverlay(a, mirror, panes(a, mirror, null))
             a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
             s.render(m)
             Mockup.idle()
