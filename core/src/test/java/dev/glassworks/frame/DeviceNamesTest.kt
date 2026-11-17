@@ -52,8 +52,9 @@ class DeviceNamesTest {
 
     /** [f]'s texts a person could see, each with its line: string literals in code, markup without its comments. */
     private fun texts(f: File): List<Pair<Int, String>> = when (f.extension) {
-        "kt", "java" -> Literals.of(f.readText(), js = false)
-        "js", "mjs" -> Literals.of(f.readText(), js = true)
+        "kt" -> Literals.of(f.readText(), Literals.Language.KOTLIN)
+        "java" -> Literals.of(f.readText(), Literals.Language.JAVA)
+        "js", "mjs" -> Literals.of(f.readText(), Literals.Language.JS)
         else -> f.readText().replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL)) { m -> "\n".repeat(m.value.count { it == '\n' }) }
             .lines().mapIndexed { i, l -> i + 1 to l }
     }
@@ -80,7 +81,7 @@ class DeviceNamesTest {
             assertTrue(f, f in files)
         }
         assertTrue(files.any { it.endsWith("dev/glassworks/manage/ManagePages.kt") })
-        assertTrue("the setup page's literals, not one blob", Literals.of(RepoFiles.file("core/src/main/assets/setup/setup.js").readText(), js = true).size > 1000)
+        assertTrue("the setup page's literals, not one blob", Literals.of(RepoFiles.file("core/src/main/assets/setup/setup.js").readText(), Literals.Language.JS).size > 1000)
     }
 
     @Test
@@ -109,22 +110,33 @@ class DeviceNamesTest {
             val c = '"' + "https://example.com/x" // Pixel Tablet
             /* outer /* inner */ val d = "Echo Show" */
         """.trimIndent()
-        val texts = Literals.of(kotlin, js = false)
+        val texts = Literals.of(kotlin, Literals.Language.KOTLIN)
         assertEquals(listOf("Aqara", "S1", "lululemon", "Mirror"), texts.flatMap { names(it.second) })
         assertEquals("the inner literal's line", 3, texts.single { "Aqara" in it.second }.first)
 
         val js = """var r=/["'`]/g,t=`Not supported by ${'$'}{n} on the Mirror`,u=a/b/c,v="S1 Kiosk ${'$'}{v}",w='Aqara',x=n++/2,y="Pixel""""
-        assertEquals(listOf("Mirror", "Aqara", "Pixel"), Literals.of(js, js = true).flatMap { names(it.second) })
-        assertEquals("a JavaScript comment ends at the first */", listOf("NSPanel"), Literals.of("""/* a /* b */ x="NSPanel" """, js = true).flatMap { names(it.second) })
+        assertEquals(listOf("Mirror", "Aqara", "Pixel"), Literals.of(js, Literals.Language.JS).flatMap { names(it.second) })
+        assertEquals("a JavaScript comment ends at the first */", listOf("NSPanel"), Literals.of("""/* a /* b */ x="NSPanel" """, Literals.Language.JS).flatMap { names(it.second) })
+        val java = """class C { /* a /* b */ String label = "Aqara"; String block = ""${'"'}
+            on the Mirror""${'"'}; }"""
+        assertEquals("a Java comment ends at the first */", listOf("Aqara", "Mirror"), Literals.of(java, Literals.Language.JAVA).flatMap { names(it.second) })
         assertEquals(listOf("tablet"), names("on a reset tablet with mdi:tablet-dashboard"))
     }
 }
 
 /** The string literals of Kotlin, Java or JavaScript source, comments left out, each with the line it starts on. */
 internal object Literals {
-    fun of(src: String, js: Boolean): List<Pair<Int, String>> = Lexer(src, js).run { code(untilBrace = false); found }
+    /**
+     * What differs between the three: Kotlin's block comments nest, and its quoted and raw strings take templates. Java's
+     * strings take none. JavaScript's templates are its backtick strings, and it has regular expression literals.
+     */
+    enum class Language { KOTLIN, JAVA, JS }
 
-    private class Lexer(private val s: String, private val js: Boolean) {
+    fun of(src: String, language: Language): List<Pair<Int, String>> = Lexer(src, language).run { code(untilBrace = false); found }
+
+    private class Lexer(private val s: String, private val language: Language) {
+        private val js = language == Language.JS
+
         val found = ArrayList<Pair<Int, String>>()
         private var i = 0
         private val lineStarts = listOf(0) + s.indices.filter { s[it] == '\n' }.map { it + 1 }
@@ -156,7 +168,7 @@ internal object Literals {
             var depth = 0
             while (i < s.length) {
                 when {
-                    s.startsWith("/*", i) && (depth == 0 || !js) -> { depth++; i += 2 }
+                    s.startsWith("/*", i) && (depth == 0 || language == Language.KOTLIN) -> { depth++; i += 2 }
                     s.startsWith("*/", i) -> { i += 2; if (--depth == 0) return }
                     else -> i++
                 }
@@ -173,15 +185,20 @@ internal object Literals {
         private fun string(delim: String) {
             val start = i
             i += delim.length
-            val templates = if (js) delim == "`" else delim != "'"
+            val templates = when (language) {
+                Language.KOTLIN -> delim != "'"
+                Language.JAVA -> false
+                Language.JS -> delim == "`"
+            }
+            val escapes = delim != "\"\"\"" || language == Language.JAVA
             val text = StringBuilder()
             while (i < s.length) {
+                if (escapes && s[i] == '\\') { text.append(' '); i += 2; continue }
                 if (delim == "\"\"\"" && s.startsWith(delim, i)) {
                     i += delim.length
                     while (i < s.length && s[i] == '"') i++
                     break
                 }
-                if (delim != "\"\"\"" && s[i] == '\\') { text.append(' '); i += 2; continue }
                 if (delim != "\"\"\"" && s.startsWith(delim, i)) { i++; break }
                 if (templates && s.startsWith("\${", i)) { text.append(' '); i += 2; code(untilBrace = true); continue }
                 text.append(s[i])
