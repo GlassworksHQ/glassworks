@@ -11,13 +11,17 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import dev.glassworks.manage.AdbComputers
+import dev.glassworks.manage.AdbKey
 import dev.glassworks.manage.HaSignIn
 import dev.glassworks.manage.LogEntry
 import dev.glassworks.manage.LogcatTail
 import dev.glassworks.manage.ManageHost
 import dev.glassworks.manage.ManageLog
 import dev.glassworks.manage.ManagePage
+import dev.glassworks.manage.ManagePages
 import dev.glassworks.manage.ManageServer
+import dev.glassworks.manage.ManageUsbDebugging
 import dev.glassworks.manage.PaneRow
 import dev.glassworks.manage.paneRow
 import dev.glassworks.pane.CantRun
@@ -29,6 +33,7 @@ import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.pane.shown
 import dev.glassworks.platform.Platform
+import dev.glassworks.platform.UsbDebugging
 import dev.glassworks.platform.WifiLink
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
@@ -86,6 +91,21 @@ open class AppManage(
 
     private val host = Host()
 
+    /**
+     * The computers let in over USB adb (#435), where the app can answer "Allow USB debugging?" itself: a
+     * privileged app such as the Mirror's. Null elsewhere, and the Security page has no such card.
+     */
+    private val adb = if (UsbDebugging.available(app)) AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event) else null
+
+    private val adbRequests = adb?.let { c ->
+        UsbDebugging.Requests(onHeard = { h ->
+            when (h) {
+                is UsbDebugging.Heard.Asked -> AdbKey.parse(h.key)?.let(c::asked)
+                UsbDebugging.Heard.LetInByImage -> c.letInByImage()
+            }
+        }, onError = { Log.w(TAG, it) })
+    }
+
     /** The panes' Blueprints cards; the Manage page links them in a new tab. */
     private val blueprints = PanelBlueprints.forPanel(app, runtime.build, prefs)
 
@@ -100,8 +120,15 @@ open class AppManage(
         qrPaths = setOf("/signin", SignInServer.CONTINUE, "/callback") + own.qrPaths,
         qr = { req -> qr(signIn, req) },
         ownHosts = ::ownHosts,
-        event = { msg -> Log.i(TAG, msg); runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) } },
+        event = ::event,
+        usb = adb?.let { ManageUsbDebugging(it, ManagePages()::time, ::event) },
     )
+
+    /** A line for the Manage page's Log. */
+    private fun event(msg: String) {
+        Log.i(TAG, msg)
+        runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) }
+    }
 
     override fun http(port: Int) = HttpServer(port, server::handle, log = { Log.d(TAG, it) })
 
@@ -113,9 +140,15 @@ open class AppManage(
 
     override val actions: PanelActions get() = host.actions
 
-    override fun startLog() = tail.start()
+    override fun startLog() {
+        tail.start()
+        adbRequests?.start()
+    }
 
-    override fun stopLog() = tail.stop()
+    override fun stopLog() {
+        tail.stop()
+        adbRequests?.stop()
+    }
 
     private inner class Host : ManageHost {
         override val actions: PanelActions = Actions()
