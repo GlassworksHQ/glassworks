@@ -261,6 +261,11 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
+  Panes image lets one adb key in without asking: the project's own key, published with its private
+  half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its
+  place when it builds the image. Before, Kiln's own key never got in, and the install would have
+  stopped at "Wait for adb". The Mirror's install is still test only.
 - **Other apps can no longer change the panel's settings.** Until now any app on the panel could open
   S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or remote
   debugging.

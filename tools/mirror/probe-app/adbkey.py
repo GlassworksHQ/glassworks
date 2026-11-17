@@ -9,8 +9,9 @@ Touches no device and no network. Needs only Python 3 and the openssl CLI.
                                 adb uses in ~/.android; DIR defaults to out/adbkey-test here
                                 (git-ignored). Refuses to overwrite a key.
   adbkey.py fingerprint PUB     prints the public key's fingerprints, never the key
-  adbkey.py fingerprints FILE   one SHA-256 fingerprint per key line of FILE (- for stdin), e.g. the
-                                Mirror's /data/misc/adb/adb_keys read over adb
+  adbkey.py fingerprints FILE   both fingerprints of every adb key in FILE (- for stdin), in order,
+                                whatever is around them: `adb shell dumpsys usb` (its user and system
+                                keys), an adb_keys file, \r\n line ends
   adbkey.py check KEY PUB       whether PUB is KEY's public half, in adb's format ("match" or "differ")
 
 Only fingerprints are printed: the SHA-256 prefix the probe logs, and the MD5 form Android's
@@ -40,6 +41,11 @@ def adb_public(private_key_path):
     blob = (words.to_bytes(4, "little") + n0inv.to_bytes(4, "little") + n.to_bytes(256, "little")
             + rr.to_bytes(256, "little") + (65537).to_bytes(4, "little"))
     return base64.b64encode(blob).decode()
+
+
+# A 2048-bit adb key in base64: RSAPublicKey is 524 bytes (700 base64 characters, one "=") and starts
+# with len = 64 words, which encodes as "QAAAA".
+KEY_RE = re.compile(r"QAAAA[A-Za-z0-9+/]{694}=")
 
 
 def fingerprints(pub_line):
@@ -80,10 +86,13 @@ def main(argv):
         sha, md5 = fingerprints(open(argv[1]).read())
         print(f"{sha}\nmd5 {md5}")
     elif len(argv) == 2 and argv[0] == "fingerprints":
-        lines = (sys.stdin if argv[1] == "-" else open(argv[1])).read().splitlines()
-        for line in (l.strip() for l in lines):
-            if line:
-                print(fingerprints(line)[0])
+        text = (sys.stdin if argv[1] == "-" else open(argv[1])).read()
+        keys = KEY_RE.findall(text)
+        if not keys:
+            raise SystemExit("no adb key in the input")
+        for key in keys:
+            sha, md5 = fingerprints(key)
+            print(f"{sha}  md5 {md5}")
     elif len(argv) == 3 and argv[0] == "check":
         print("match" if adb_public(argv[1]) == open(argv[2]).read().split()[0] else "differ")
     else:
