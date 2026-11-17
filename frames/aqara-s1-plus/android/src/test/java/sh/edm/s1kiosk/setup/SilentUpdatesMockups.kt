@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.setup
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import dev.glassworks.pane.PaneChoice
 import dev.glassworks.update.SilentUpdates
@@ -33,7 +34,7 @@ class SilentUpdatesMockups {
             SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { null }), emptyList()),
             SetupPane(PaneChoice("Updates", "Silent updates", on = { true }, apply = { null }), listOf(step)),
         )
-        val s = SetupOverlay(a, panes, "Pixel Tablet")
+        val s = SetupOverlay(a, TestFrames.tablet(a), panes)
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(
             step = SilentUpdatesStep.ID, done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN, SetupFlow.PANES),

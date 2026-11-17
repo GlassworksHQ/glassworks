@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.settings
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -8,8 +9,6 @@ import android.hardware.Sensor
 import android.hardware.SensorManager
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
-import dev.glassworks.frame.Input
-import dev.glassworks.frame.Orientation
 import dev.glassworks.manage.ManageFixture
 import dev.glassworks.pane.BLUEPRINTS
 import dev.glassworks.pane.Blueprint
@@ -141,12 +140,7 @@ class ScreenByFrameMockups {
     @Test @Config(qualifiers = "w480dp-h960dp-port-hdpi")
     fun mirror() {
         assumeTrue(Mockup.dir != null)
-        tablet("Mirror")
         features(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_CAMERA_ANY)
-        val frame = object : Frame by generic() {
-            override val input = Input.NONE
-            override val orientation = Orientation.PORTRAIT
-        }
-        shoot("mirror", frame, Mockup.H, Mockup.W)
+        shoot("mirror", TestFrames.mirror(app, ProximityPresence("test"), AmbientLight("test")), Mockup.H, Mockup.W)
     }
 }

@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.settings
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.view.ViewGroup
 import dev.glassworks.bluetoothproxy.BluetoothProxyDefinition
@@ -29,7 +30,6 @@ import sh.edm.s1kiosk.setup.SetupFlow
 import sh.edm.s1kiosk.setup.SetupOverlay
 import sh.edm.s1kiosk.setup.SetupPane
 import sh.edm.s1kiosk.setup.WifiSetupStatus
-import sh.edm.s1kiosk.setup.s1SetupOverlay
 import sh.edm.s1kiosk.ui.Mockup
 
 /**
@@ -112,7 +112,7 @@ class BluetoothProxyMockups {
     /** Setup's Panes step with [cards]; [scrolled]: the list scrolled to its end. */
     private fun setup(name: String, cards: List<Pair<String, String>>, scrolled: Boolean = false) {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a, cards.mapIndexed { i, (t, d) -> SetupPane(PaneChoice(t, d, on = { i % 3 != 2 }, apply = { null }), emptyList()) })
+        val s = SetupOverlay(a, TestFrames.s1(), cards.mapIndexed { i, (t, d) -> SetupPane(PaneChoice(t, d, on = { i % 3 != 2 }, apply = { null }), emptyList()) })
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(
             step = SetupFlow.PANES, done = setOf(SetupFlow.WIFI, SetupFlow.HA),

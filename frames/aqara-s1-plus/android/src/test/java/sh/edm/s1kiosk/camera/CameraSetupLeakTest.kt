@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.camera
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.view.View
 import android.view.ViewGroup
@@ -24,7 +25,6 @@ import sh.edm.s1kiosk.setup.SetupOverlay
 import sh.edm.s1kiosk.setup.SetupPane
 import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
-import sh.edm.s1kiosk.setup.s1SetupOverlay
 import sh.edm.s1kiosk.ui.Mockup
 
 /**
@@ -74,7 +74,7 @@ class CameraSetupLeakTest {
             SetupPane(PaneChoice("Voice", "Assist and timers", on = { true }, apply = { null }), emptyList()),
             SetupPane(def.setupChoice!!, def.setupSteps),
         )
-        val s = s1SetupOverlay(a, panes)
+        val s = SetupOverlay(a, TestFrames.s1(), panes)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         val m = SetupOverlay.Model(
             step = SetupFlow.SIGNIN, done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.PANES, "camera"),

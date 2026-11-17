@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.setup
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.content.Context
 import android.os.Looper
@@ -70,7 +71,7 @@ class SetupPanesTest {
 
     private fun overlay(ps: List<SetupPane> = panes, m: SetupOverlay.Model = model(SetupFlow.PANES)): SetupOverlay {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a, ps)
+        val s = SetupOverlay(a, TestFrames.s1(), ps)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(m)
         Mockup.idle()

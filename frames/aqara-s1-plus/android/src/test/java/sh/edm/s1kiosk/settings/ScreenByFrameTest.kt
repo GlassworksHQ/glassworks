@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.settings
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -8,7 +9,6 @@ import android.hardware.Sensor
 import android.hardware.SensorManager
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
-import dev.glassworks.frame.Input
 import dev.glassworks.manage.ManageFixture
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SettingsChange
@@ -64,10 +64,6 @@ class ScreenByFrameTest {
     private fun camera() = shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_CAMERA_ANY, true)
 
     private fun generic() = GenericAndroid(app, presence = ProximityPresence("test"), light = AmbientLight("test"))
-
-    private fun noTouch(frame: Frame) = object : Frame by frame {
-        override val input = Input.NONE
-    }
 
     private fun definitions(frame: Frame): List<PaneDefinition> =
         KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
@@ -155,7 +151,7 @@ class ScreenByFrameTest {
     @Test fun theMirrorHasNoLinkToAndroidsSettings() {
         camera()
         assertTrue("a tablet has it, on both", SettingsMenu.ANDROID_TITLE in screen(generic()).second)
-        val mirror = noTouch(generic())
+        val mirror = TestFrames.mirror(app, ProximityPresence("test"), AmbientLight("test"))
         assertFalse(hardware(mirror).touch)
         val (rows, html) = screen(mirror)
         assertFalse(rows.titles().toString(), SettingsMenu.ANDROID_TITLE in rows.titles())

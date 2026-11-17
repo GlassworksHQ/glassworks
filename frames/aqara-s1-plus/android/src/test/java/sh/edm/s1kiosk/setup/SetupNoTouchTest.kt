@@ -6,7 +6,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import dev.glassworks.frame.Frame
 import dev.glassworks.frame.Input
+import org.robolectric.RuntimeEnvironment
+import sh.edm.s1kiosk.frame.TestFrames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,12 +34,14 @@ class SetupNoTouchTest {
         SetupOverlay.Model(step = step, done = done, wifi = wifi, haUrl = "http://homeassistant.local:8123",
             haSource = "mdns", panelIp = panelIp, signedIn = signedIn)
 
+    private fun theMirror() = TestFrames.mirror(RuntimeEnvironment.getApplication())
+
     private fun screen(
-        step: String, input: Input, wifi: WifiSetupStatus.Snapshot = online, panelIp: String? = ip, done: Set<String> = emptySet(),
+        step: String, frame: Frame, wifi: WifiSetupStatus.Snapshot = online, panelIp: String? = ip, done: Set<String> = emptySet(),
         signedIn: Boolean = false, setUp: (SetupOverlay) -> Unit = {},
     ): SetupOverlay {
         val a = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
-        val s = s1SetupOverlay(a).also { it.input = input }.also(setUp)
+        val s = SetupOverlay(a, frame).also(setUp)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(model(step, wifi, panelIp, done, signedIn))
         return s
@@ -68,7 +73,7 @@ class SetupNoTouchTest {
 
     @Test fun everyStepPointsAtTheSetupPageAndNothingTakesATap() {
         for (step in listOf(SetupFlow.HA, SetupFlow.PANES, "radio")) {
-            val s = screen(step, Input.NONE)
+            val s = screen(step, theMirror())
             val texts = shown(s).map { it.first }
             assertTrue("$step: $texts", "Scan to set it up." in texts)
             assertTrue("$step: $texts", texts.any { "http://$ip:8099/setup" in it })
@@ -76,8 +81,19 @@ class SetupNoTouchTest {
         }
     }
 
+    /** #497: the Mirror's step names the Mirror, as Home Assistant will, not the S1. */
+    @Test fun theHomeAssistantStepNamesTheDeviceAsHomeAssistantShowsIt() {
+        val names = listOf(theMirror() to "lululemon Studio Mirror", TestFrames.s1() to "Aqara S1 Plus")
+        for ((frame, name) in names) {
+            val s = screen(SetupFlow.HA, frame, done = setOf(SetupFlow.WIFI, SetupFlow.SIGNIN), signedIn = true)
+            val texts = shown(s).map { it.first }
+            assertEquals(texts.toString(), 1, texts.count { name in it })
+            assertTrue(texts.toString(), names.map { it.second }.filter { it != name }.none { other -> texts.any { other in it } })
+        }
+    }
+
     @Test fun signedInTheHomeAssistantStepWaitsForHomeAssistantInsteadOfTheCode() {
-        val s = screen(SetupFlow.HA, Input.NONE, done = setOf(SetupFlow.WIFI, SetupFlow.SIGNIN), signedIn = true)
+        val s = screen(SetupFlow.HA, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.SIGNIN), signedIn = true)
         val texts = shown(s).map { it.first }
         assertTrue(texts.toString(), "Waiting for Home Assistant to add it…" in texts)
         assertTrue(texts.toString(), texts.any { "Devices & services" in it && "discovered" in it && "re-authenticate" in it })
@@ -88,13 +104,13 @@ class SetupNoTouchTest {
     }
 
     @Test fun onceAddedTheNextStepPointsAtTheSetupPageAgain() {
-        val s = screen(SetupFlow.PANES, Input.NONE, done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN), signedIn = true)
+        val s = screen(SetupFlow.PANES, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN), signedIn = true)
         assertTrue("Scan to set it up." in shown(s).map { it.first })
     }
 
     @Test fun theSetupScreenWakesAScreenNothingElseCanWakeOnceEachTimeItAppears() {
         val wakes = ArrayList<String>()
-        val s = screen(SetupFlow.HA, Input.NONE) { it.presenceSensor = false; it.wakeScreen = { r -> wakes += r } }
+        val s = screen(SetupFlow.HA, theMirror()) { it.presenceSensor = false; it.wakeScreen = { r -> wakes += r } }
         assertEquals(listOf("setup"), wakes)
         s.render(model(SetupFlow.HA, signedIn = true))
         assertEquals("not again while it stays up", listOf("setup"), wakes)
@@ -115,7 +131,7 @@ class SetupNoTouchTest {
         val d = SetupState.decide(i)
         assertTrue(d.reasons.toString(), d.show)
         val wakes = ArrayList<String>()
-        screen(d.step, Input.NONE, wifi = wifi, panelIp = panelIp, done = d.done, signedIn = i.signedIn) {
+        screen(d.step, theMirror(), wifi = wifi, panelIp = panelIp, done = d.done, signedIn = i.signedIn) {
             it.presenceSensor = false; it.wakeScreen = { r -> wakes += r }
         }
         return wakes
@@ -132,33 +148,33 @@ class SetupNoTouchTest {
 
     @Test fun aScreenThatCanBeWokenOtherwiseIsLeftAlone() {
         val wakes = ArrayList<String>()
-        screen(SetupFlow.HA, Input.NONE) { it.presenceSensor = true; it.wakeScreen = { r -> wakes += r } }
-        screen(SetupFlow.HA, Input.TOUCH) { it.presenceSensor = false; it.wakeScreen = { r -> wakes += r } }
+        screen(SetupFlow.HA, theMirror()) { it.presenceSensor = true; it.wakeScreen = { r -> wakes += r } }
+        screen(SetupFlow.HA, TestFrames.s1()) { it.presenceSensor = false; it.wakeScreen = { r -> wakes += r } }
         assertEquals(emptyList<String>(), wakes)
     }
 
     @Test fun withoutWifiItSaysToUseKiln() {
-        val s = screen(SetupFlow.WIFI, Input.NONE, wifi = offline, panelIp = null)
+        val s = screen(SetupFlow.WIFI, theMirror(), wifi = offline, panelIp = null)
         val texts = shown(s).map { it.first }
         assertTrue(texts.toString(), "Waiting for Wi-Fi." in texts)
         assertEquals(emptyList<String>(), taps(s))
     }
 
     @Test fun signInKeepsItsPhoneCodeWithoutTheOnPanelWay() {
-        val s = screen(SetupFlow.SIGNIN, Input.NONE)
+        val s = screen(SetupFlow.SIGNIN, theMirror())
         val texts = shown(s).map { it.first }
         assertTrue(texts.toString(), "Scan to sign in." in texts)
         assertTrue(texts.toString(), "Sign in on this panel instead" !in texts)
     }
 
     @Test fun signInDoneHasNoContinueToTap() {
-        val s = screen(SetupFlow.SIGNIN, Input.NONE, done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN))
+        val s = screen(SetupFlow.SIGNIN, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN))
         assertTrue(shown(s).map { it.first }.toString(), "Signed in." in shown(s).map { it.first })
         assertEquals(emptyList<String>(), taps(s))
     }
 
     @Test fun aTouchFrameKeepsItsButtons() {
-        val taps = taps(screen(SetupFlow.HA, Input.TOUCH))
+        val taps = taps(screen(SetupFlow.HA, TestFrames.s1()))
         assertTrue(taps.toString(), "Skip" in taps)
     }
 
