@@ -64,6 +64,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
   A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
   computer until Glassworks for Android has a release.
+- **Know when the tablet is on its dock.** A Pixel Tablet now has a *Docked* sensor in Home Assistant: on
+  while it sits on its dock, off when you lift it off. Automate on it, for example to
+  show another dashboard while someone holds the tablet. Other tablets get it once they have been on a dock;
+  the S1 and ordinary tablets have none.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on

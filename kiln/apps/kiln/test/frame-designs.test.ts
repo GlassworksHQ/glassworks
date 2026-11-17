@@ -64,6 +64,7 @@ describe('frame designs', () => {
     expect(f.abis?.length, 'abis').toBeGreaterThan(0);
     expect(f.abis?.filter((a) => !(ABIS as readonly string[]).includes(a)), 'abis Android doesn\'t name').toEqual([]);
     expect(new Set(f.abis).size, 'abis listed twice').toBe(f.abis?.length);
+    expect([undefined, true], 'dock: true, or left out').toContain(f.dock);
     if (f.recovery) expect(existsSync(join(frames, id, 'design', f.recovery)), f.recovery).toBe(true);
     if (f.kiln) expect(f.kiln).toBe(`/${id}`);
     if (f.kiln) expect(f.install.href, 'install.href on a frame Kiln installs').toBeUndefined();

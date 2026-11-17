@@ -150,6 +150,7 @@ open the entity, and turn on *Enabled*.
 |---|---|---|---|---|---|
 | Presence | `presence` | core | none | on | Automations |
 | Illuminance | `illuminance` | core | none | on | Automations |
+| Docked | `docked` | core | none | on | Automations: what the panel does on and off its dock. Only on a device that docks ([Docked](#docked)) |
 | Screen | `screen` | core | none | on | Dashboards and automations |
 | Speaker | `speaker` | core | none | on | Dashboards, Music Assistant, announcements |
 | Reload dashboard | `reload_dashboard` | core | none | on | Used often |
@@ -252,6 +253,7 @@ So on a panel HA already has:
 | switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
 | binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
 | sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
+| binary_sensor `Docked` (plug) | `docked` | on while the device sits on its dock, off once it's lifted off; only on a device that docks ([Docked](#docked)) |
 | select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522) |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
@@ -331,6 +333,37 @@ defaults, as before. The Mirror and Pixel Tablet columns come from the frames' h
 
 Plus `Block Aqara cloud` and `Aqara cloud daemon` ([below](#aqara-cloud)), the wall base entities, and the entities HA adds itself for a voice device: `assist_satellite.<device>_assist_satellite`,
 *Assist pipeline* and *Wake word* selects (two of each), *Finished speaking detection*.
+
+### Docked
+
+A tablet on a dock is a wall panel; lifted off, it's a tablet in someone's hands. *Docked* tells Home
+Assistant which, so an automation can, say, show another dashboard or stop announcements while it's off
+its dock. It is a binary sensor with the `plug` device class (HA shows *Plugged in* and *Unplugged*),
+no category, and on by default, because people automate on it ([Categories and defaults](#categories-and-defaults)).
+
+**On** when either says so (`dev.glassworks.dock.Docked.of`):
+
+1. The battery charges from a dock: the sticky `ACTION_BATTERY_CHANGED`'s `EXTRA_PLUGGED` is
+   `BATTERY_PLUGGED_DOCK`. Android 13 and later only; below it no value means a dock. A Pixel Tablet on its
+   charging speaker dock says this (`dumpsys battery`: `Dock powered: true`, read on one 2026-11-17).
+2. The sticky `ACTION_DOCK_EVENT`'s `EXTRA_DOCK_STATE` is any dock (desk, car, low-end or high-end desk),
+   not `EXTRA_DOCK_STATE_UNDOCKED`. Whether the Pixel Tablet sends it is not known yet.
+
+It follows both broadcasts as they come (`DockWatcher`), while the app runs. Nothing polls, and nothing
+wakes the device: Android delivers them to the app's registered receiver.
+
+**Only where it means something.** Home Assistant gets the entity when any of these holds
+(`Docked.hasEntity`, `GenericAndroid.dockOf`):
+
+| Rule | Who it covers |
+|---|---|
+| The frame says the device docks: `"dock": true` in its `frame.json` ([frames/README.md](../frames/README.md)), and `GenericAndroid.KNOWN` by model | The Pixel Tablet (`google-pixel-tablet`) |
+| Google's dock manager, `com.google.android.apps.nest.dockmanager.app`, is installed (the app's manifest lists it under `<queries>`) | Google's tablets with a dock, under another model name |
+| The device has reported a dock at least once. The app keeps that (`dock_seen`), so the entity stays after a restart, off its dock too | Other brands' docks |
+
+Otherwise there's no entity, so an ordinary tablet's device page doesn't show one that is always off. The
+S1 frame never has it and listens for no dock. A device that gets it from the third rule gets it the
+moment it first docks: the panel lists its entities again and HA adds *Docked*.
 
 ### Panes on and off
 
