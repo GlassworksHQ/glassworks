@@ -486,8 +486,9 @@ class PanelDevice(
 
     /**
      * Whether the device has what the core entity [objectId] reads or sets (#476). A frame without it never lists
-     * it, so Home Assistant shows one it had before as unavailable. Presence from the camera pane is the pane's
-     * own `camera_presence`, listed while the pane can run, on or off, as every pane's entities are.
+     * it, so Home Assistant removes one it had before on the next reconnect, and gives it back its old id if it
+     * returns. Presence from the camera pane is the pane's own `camera_presence`, listed while the pane can run,
+     * on or off, as every pane's entities are.
      */
     private fun ScreenHardware.backs(objectId: String): Boolean = when (objectId) {
         "presence" -> presence is ScreenHardware.Presence.Sensor
