@@ -39,14 +39,24 @@ setting did, for any number of panels.
    Screen page.
 2. Make an automation from it. Pick each panel's **Idle timeout** (`number.<panel>_idle_timeout`) and,
    to dim the screens too, each panel's **Max auto brightness** (`number.<panel>_max_auto_brightness`).
+   The first list offers only duration numbers. The second can't be narrowed in Home Assistant's picker,
+   so pick only *Max auto brightness* there: the automation skips any number that isn't in %.
 3. **Night is when** takes any condition. It starts as a Time condition from 22:00 to 07:00. For the sun,
    replace it with a Sun condition: after sunset, before sunrise. Any other condition works too, such
    as an alarm being armed.
 4. The defaults are the old setting's: 20 s and 20% at night, the panel's own 120 s and 100% by day.
 
-It checks once a minute and changes only a panel whose value differs, so a panel that was off or
-restarting catches up within a minute. It keeps nothing between runs, so a restart of Home Assistant in
-the night loses nothing. *Max auto brightness* limits the brightness that follows the room's light: a
+It checks once a minute, and moves a panel only between your two values: at night, one still at the day
+value goes to the night value; by day, one still at the night value goes back. So it acts once when night
+starts and once when it ends. A value you set by hand (say 5 minutes at 14:00) is neither, so it stays,
+day and night, until you set the panel back to one of the two. A panel that is at some other value when
+you create the automation stays there too: set it to the day values once. The panel's own value is the
+automation's memory, so a restart of Home Assistant in the night loses nothing, and a panel that was off
+or restarting catches up within a minute.
+
+An idle timeout above 0 from Home Assistant also turns *Screen mode* back to `presence`, as the panel's own
+**Turn off when idle** does: a panel set to stay on (`always`) would otherwise never turn off. So a panel
+you keep always on doesn't belong in this automation. *Max auto brightness* limits the brightness that follows the room's light: a
 brightness you set on the panel's `Screen` light, and a screen held on for a high or critical
 notification, don't follow it.
 

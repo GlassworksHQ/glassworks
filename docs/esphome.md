@@ -242,7 +242,7 @@ So on a panel HA already has:
 | binary_sensor `Presence` (occupancy) | `presence` | VI5300 ToF "near" |
 | sensor `Illuminance` (lx) | `illuminance` | MK6212 light sensor |
 | select `Screen mode` | `screen_mode` | `presence` / `always` |
-| number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
+| number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
 | number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |
 | text `Dashboard URL` | `dashboard_url` | sets + loads the dashboard; `auto` (default) = HA's root on the discovered instance |

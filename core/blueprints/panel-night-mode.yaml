@@ -4,9 +4,10 @@
 # core/src/main/java/dev/glassworks/screen/page.json, offered on the panel's Screen settings.
 # Not yet run on a panel (2026-11-17).
 #
-# It checks once a minute and writes only the entities whose value differs, so a panel that was offline
-# or restarted catches up within a minute, and nothing is stored between runs: a Home Assistant restart
-# in the middle of the night loses nothing.
+# It checks once a minute. At night it moves a panel that is at the day value to the night value; by day,
+# one at the night value back to the day value. So it acts once at each change of night, and a value set
+# by hand (anything else) stays. The panel's own value is the memory: nothing is stored between runs, a
+# Home Assistant restart in the night loses nothing, and a panel that was off catches up within a minute.
 blueprint:
   name: Panel night mode
   description: >-
@@ -14,8 +15,9 @@ blueprint:
     your day settings. Night is whatever you pick: between two times (22:00 to 07:00 to start with),
     from sunset to sunrise with a Sun condition, or any condition Home Assistant can check, like
     an alarm being armed. Pick each panel's Idle timeout and Max auto brightness; any number of panels
-    works. A panel that Home Assistant added before this blueprint has its Idle timeout entity off:
-    enable it on the panel's device page first.
+    works. It moves a panel between your day and night values only: a value you set by hand stays until
+    you set it back. A panel that Home Assistant added before this blueprint has its Idle timeout entity
+    off: enable it on the panel's device page first.
   domain: automation
   homeassistant:
     min_version: "2024.10.0"
@@ -24,18 +26,20 @@ blueprint:
       name: The panels' Idle timeout
       description: >-
         One per panel: number.<panel>_idle_timeout. The screen turns off after this long with nobody
-        near and no touch.
+        near and no touch. Only a panel's duration numbers are offered.
       selector:
         entity:
           multiple: true
           filter:
             - integration: esphome
               domain: number
+              device_class: duration
     max_brightness:
       name: The panels' Max auto brightness (optional)
       description: >-
-        One per panel: number.<panel>_max_auto_brightness. It limits how bright the screen gets while its
-        brightness follows the room's light. Leave it empty to change only the idle timeout.
+        One per panel: its "Max auto brightness", number.<panel>_max_auto_brightness, and nothing else. It
+        limits how bright the screen gets while its brightness follows the room's light. Any other number
+        is skipped (only this one is in %). Leave it empty to change only the idle timeout.
       default: []
       selector:
         entity:
@@ -116,40 +120,47 @@ actions:
   - if: !input night
     then:
       - variables:
-          idle: "{{ night_idle }}"
-          brightness: "{{ night_brightness }}"
+          idle_from: "{{ day_idle }}"
+          idle_to: "{{ night_idle }}"
+          brightness_from: "{{ day_brightness }}"
+          brightness_to: "{{ night_brightness }}"
       - &apply
         sequence:
-          # Only the panels that are there and not already at the value: no write every minute.
+          # A panel that is there, of the right kind, and still at the other time's value. A value set by
+          # hand is neither, so it stays; a panel already moved is at the new value, so nothing is written.
           - variables:
-              idle_stale: >-
+              idle_move: >-
                 {% set ns = namespace(out=[]) %}
-                {% for e in idle_timeouts if has_value(e) and states(e) | float(-1) != idle | float %}
+                {% for e in idle_timeouts if has_value(e) and state_attr(e, 'device_class') == 'duration'
+                   and idle_from | float != idle_to | float and states(e) | float(-1) == idle_from | float %}
                 {% set ns.out = ns.out + [e] %}
                 {% endfor %}
                 {{ ns.out }}
-              brightness_stale: >-
+              brightness_move: >-
                 {% set ns = namespace(out=[]) %}
-                {% for e in max_brightness if has_value(e) and states(e) | float(-1) != brightness | float %}
+                {% for e in max_brightness if has_value(e) and state_attr(e, 'unit_of_measurement') == '%'
+                   and brightness_from | float != brightness_to | float and states(e) | float(-1) == brightness_from | float %}
                 {% set ns.out = ns.out + [e] %}
                 {% endfor %}
                 {{ ns.out }}
-          - if: "{{ idle_stale | count > 0 }}"
+          - if: "{{ idle_move | count > 0 }}"
             then:
               - action: number.set_value
                 target:
-                  entity_id: "{{ idle_stale }}"
+                  entity_id: "{{ idle_move }}"
                 data:
-                  value: "{{ idle }}"
-          - if: "{{ brightness_stale | count > 0 }}"
+                  value: "{{ idle_to }}"
+          - if: "{{ brightness_move | count > 0 }}"
             then:
               - action: number.set_value
                 target:
-                  entity_id: "{{ brightness_stale }}"
+                  entity_id: "{{ brightness_move }}"
                 data:
-                  value: "{{ brightness }}"
+                  value: "{{ brightness_to }}"
     else:
       - variables:
-          idle: "{{ day_idle }}"
-          brightness: "{{ day_brightness }}"
+          idle_from: "{{ night_idle }}"
+          idle_to: "{{ day_idle }}"
+          brightness_from: "{{ night_brightness }}"
+          brightness_to: "{{ day_brightness }}"
       - *apply

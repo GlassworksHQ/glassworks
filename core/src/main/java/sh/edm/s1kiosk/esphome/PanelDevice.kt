@@ -511,10 +511,13 @@ class PanelDevice(
             get = { prefs.screenMode }, set = { prefs.screenMode = it },
         ),
         // On by default, with Max auto brightness: Home Assistant's night mode (the Panel night mode blueprint, #473) sets both.
+        // A timeout above 0 puts the screen mode back to presence, as the panel's own "Turn off when idle" row does:
+        // in "always" nothing would turn the screen off.
         NumberEntity(
             "idle_timeout", "Idle timeout", "mdi:timer-outline", min = 0f, max = 3600f, step = 5f,
             unit = "s", mode = 1, deviceClass = "duration",
-            get = { prefs.idleOffSec.toFloat() }, set = { prefs.idleOffSec = it.toInt() },
+            get = { prefs.idleOffSec.toFloat() },
+            set = { prefs.idleOffSec = it.toInt(); if (prefs.idleOffSec > 0) prefs.screenMode = "presence" },
         ),
         NumberEntity(
             "max_brightness", "Max auto brightness", "mdi:brightness-percent", min = 5f, max = 100f, step = 5f,

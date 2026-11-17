@@ -98,12 +98,19 @@ class BlueprintCatalogTest {
         val l = listed.single { it.yaml.name == "panel-night-mode.yaml" }
         assertEquals("screen", l.pane)
         val inputs = blueprintBlock(l.yaml)["input"] as Map<String, Map<String, Any?>>
-        for (k in listOf("idle_timeouts", "max_brightness")) {
+        // Only the panel's Idle timeout is a duration. Max auto brightness has no device class to filter on: the
+        // body skips any number not in %, which only it is, so Presence range or Mic gain are never rewritten.
+        val filters = mapOf(
+            "idle_timeouts" to mapOf("integration" to "esphome", "domain" to "number", "device_class" to "duration"),
+            "max_brightness" to mapOf("integration" to "esphome", "domain" to "number"),
+        )
+        for ((k, filter) in filters) {
             val entity = (inputs.getValue(k)["selector"] as Map<String, Any?>)["entity"] as? Map<String, Any?>
                 ?: throw AssertionError("$k: an entity selector")
             assertEquals("$k: any number of panels", true, entity["multiple"])
-            assertEquals("$k: the panels' ESPHome numbers", listOf(mapOf("integration" to "esphome", "domain" to "number")), entity["filter"])
+            assertEquals("$k: the panels' ESPHome numbers of that kind", listOf(filter), entity["filter"])
         }
+        assertTrue("max_brightness says to pick only Max auto brightness", "Max auto brightness" in inputs.getValue("max_brightness")["description"] as String)
         assertTrue("idle_timeouts is required", "default" !in inputs.getValue("idle_timeouts"))
         assertEquals(emptyList<Any>(), inputs.getValue("max_brightness")["default"])
         assertTrue("night: a condition selector", (inputs.getValue("night")["selector"] as Map<String, Any?>).containsKey("condition"))
@@ -111,7 +118,8 @@ class BlueprintCatalogTest {
         assertEquals(listOf(20, 120, 20, 100), listOf("night_idle", "day_idle", "night_brightness", "day_brightness").map { inputs.getValue(it)["default"] })
         val body = l.yaml.readText().substringAfter("\nmode:")
         assertTrue("no entity id in the body", Regex("""entity_id:\s*\[?\s*[a-z_]+\.""").find(body) == null)
-        assertTrue("it sets the entities it was given", "entity_id: \"{{ idle_stale }}\"" in body && "entity_id: \"{{ brightness_stale }}\"" in body)
+        assertTrue("it sets the entities it was given", "entity_id: \"{{ idle_move }}\"" in body && "entity_id: \"{{ brightness_move }}\"" in body)
+        assertTrue("it checks each entity's kind", "state_attr(e, 'device_class') == 'duration'" in body && "state_attr(e, 'unit_of_measurement') == '%'" in body)
     }
 
     @Test

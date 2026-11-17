@@ -11,9 +11,11 @@ below as the release notes.
 - **Panel night mode, a blueprint for Home Assistant.** At night your panels turn their screen off
   sooner and keep it dimmer, and in the morning they go back to your day settings. Night can be two
   times, sunset to sunrise, or any condition Home Assistant can check, and one automation covers all
-  your panels. Add it from the panel's **Settings → Screen** or the Manage page. A new *Max auto
-  brightness* number in Home Assistant sets how bright the screen may get, and *Idle timeout* is now
-  on by default for new panels.
+  your panels. It changes a panel only when night starts and ends, so a value you set by hand stays.
+  Add it from the panel's **Settings → Screen** or the Manage page. A new *Max auto brightness* number
+  in Home Assistant sets how bright the screen may get, and *Idle timeout* is now on by default for new
+  panels. Setting *Idle timeout* above 0 from Home Assistant also turns *Screen mode* back to presence,
+  as the panel's own **Turn off when idle** does.
 - **The panel opens its own Wi-Fi for setup when no Wi-Fi works.** With no connection 3 minutes after it
   starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
   its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
@@ -479,14 +481,6 @@ below as the release notes.
   all the way to the screen edges.
 
 ### Changed
-- **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
-  window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
-  Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
-  keeps the same idle timeout day and night, and brightness is no longer capped at 20% at night, even
-  if you had changed those settings. To get them back, add the **Panel night mode** blueprint from
-  **Settings → Screen** ([how](docs/blueprints.md#panel-night-mode)). On a panel Home Assistant already
-  has, turn its *Idle timeout* entity on first. Your other screen settings stay as they were. Dashboards
-  that read `window.s1kiosk.night` get nothing there now.
 - **Updates are found among the repo's other releases.** The panel now picks its own newest release
   (tag `v1.2.3` or `aqara-s1-plus-v1.2.3`) instead of whatever release is newest, so releases of
   other devices and libraries in the same repo can't hide an update.
@@ -535,14 +529,6 @@ below as the release notes.
   chimes.
 
 ### Changed
-- **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
-  window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
-  Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
-  keeps the same idle timeout day and night, and brightness is no longer capped at 20% at night, even
-  if you had changed those settings. To get them back, add the **Panel night mode** blueprint from
-  **Settings → Screen** ([how](docs/blueprints.md#panel-night-mode)). On a panel Home Assistant already
-  has, turn its *Idle timeout* entity on first. Your other screen settings stay as they were. Dashboards
-  that read `window.s1kiosk.night` get nothing there now.
 - **New typeface: Inter**, bundled with the app (SIL Open Font License), on the voice assistant, the
   timers, the settings menu and the setup and loading screens, matching the boot animation.
 - The repeater roles are now called *Zigbee router (repeater)* and *Thread router (repeater)*
@@ -662,14 +648,6 @@ below as the release notes.
   instead of 15 minutes later.
 
 ### Changed
-- **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
-  window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
-  Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
-  keeps the same idle timeout day and night, and brightness is no longer capped at 20% at night, even
-  if you had changed those settings. To get them back, add the **Panel night mode** blueprint from
-  **Settings → Screen** ([how](docs/blueprints.md#panel-night-mode)). On a panel Home Assistant already
-  has, turn its *Idle timeout* entity on first. Your other screen settings stay as they were. Dashboards
-  that read `window.s1kiosk.night` get nothing there now.
 - The app no longer includes Google's Play services libraries, which came with the built-in browser
   but could never run on the panel.
 - The Zigbee coordinator now waits until the radio's start-up message is cleared before letting a
@@ -689,14 +667,6 @@ below as the release notes.
 **Only Home Assistant can reach the radio now, and update notes no longer get cut off.**
 
 ### Changed
-- **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
-  window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
-  Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
-  keeps the same idle timeout day and night, and brightness is no longer capped at 20% at night, even
-  if you had changed those settings. To get them back, add the **Panel night mode** blueprint from
-  **Settings → Screen** ([how](docs/blueprints.md#panel-night-mode)). On a panel Home Assistant already
-  has, turn its *Idle timeout* entity on first. Your other screen settings stay as they were. Dashboards
-  that read `window.s1kiosk.night` get nothing there now.
 - **The radio's network ports only accept Home Assistant.** The Zigbee coordinator (port 6638) and the
   Thread border router's REST API (port 8081, which can hand out the Thread network key) used to accept
   anyone on the network. The panel now learns Home Assistant's address from its encrypted ESPHome
@@ -728,14 +698,6 @@ below as the release notes.
 - The web installer explains, for the mode you pick, what to do next in Home Assistant.
 
 ### Changed
-- **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
-  window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
-  Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
-  keeps the same idle timeout day and night, and brightness is no longer capped at 20% at night, even
-  if you had changed those settings. To get them back, add the **Panel night mode** blueprint from
-  **Settings → Screen** ([how](docs/blueprints.md#panel-night-mode)). On a panel Home Assistant already
-  has, turn its *Idle timeout* entity on first. Your other screen settings stay as they were. Dashboards
-  that read `window.s1kiosk.night` get nothing there now.
 - The radio helper waits until the Zigbee stack is really ready before reporting the mode as on, and
   keeps the Zigbee connection alive so a vanished client can't block it.
 - The installer ships a border-router build of OpenThread (REST API, border routing, SRP).
