@@ -119,11 +119,26 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
 
   const dir = mkdtempSync(join(tmpdir(), "gw-dialog-"));
   const unguard = guard(dir);           // Chrome and the fake die with this test, however it ends
-  const port = await freePort(), base = `http://127.0.0.1:${port}`;
-  const fake = spawn(py, [join(PERF, "fakeha.py"), "--port", String(port), "--log", join(dir, "fakeha.jsonl")],
-                     { stdio: ["ignore", "pipe", "pipe"] });
-  let fakeErr = "";
-  fake.stderr.on("data", (d) => { fakeErr += d; });
+  // The fake on two free ports (its own and the relay's). freePort only probes them, so another process
+  // can take one before the fake binds it (#437: "Address already in use" in 1 of 6 runs here): then
+  // the fake exits, and it starts again on others.
+  let port, base, fake, fakeErr = "", banner = "";
+  for (let attempt = 1; ; attempt++) {
+    port = await freePort();
+    base = `http://127.0.0.1:${port}`;
+    fakeErr = "";
+    banner = "";
+    fake = spawn(py, [join(PERF, "fakeha.py"), "--port", String(port), "--log", join(dir, "fakeha.jsonl")],
+                 { stdio: ["ignore", "pipe", "pipe"] });
+    fake.stderr.on("data", (d) => { fakeErr += d; });
+    fake.stdout.on("data", (d) => { banner += d; });
+    const exited = new Promise((r) => fake.once("exit", () => r(true)));
+    const up = await Promise.race([until("the fake", () => banner.includes("WebRTC over"), 60000).then(() => true, () => false),
+                                   exited.then(() => false)]);
+    if (up) break;
+    if (attempt === 3 || !/Address already in use/.test(fakeErr)) throw new Error(`the fake didn't start:\n${fakeErr.slice(-2000)}`);
+    t.diagnostic(`the fake's port was taken (attempt ${attempt}); again on others`);
+  }
   const browser = spawn(chrome(), ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${join(dir, "profile")}`,
     "--no-first-run", "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required", "--mute-audio",
     "--window-size=1280,800", ...(process.env.CI ? ["--no-sandbox"] : []), "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
@@ -135,9 +150,6 @@ test("HA's more-info dialogs open, settle and close on a view at the S1's viewpo
     rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   });
 
-  let banner = "";
-  fake.stdout.on("data", (d) => { banner += d; });
-  await until("the fake", () => banner.includes("WebRTC over"), 60000);
   let err = "";
   browser.stderr.on("data", (d) => { err += d; });
   const wsUrl = await until("Chrome's DevTools", () => (/DevTools listening on (ws:\S+)/.exec(err) || [])[1], 30000);
