@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { describe, expect, it } from 'vitest';
-import { GENERIC, LEGACY, Refused, handOff, installGeneric, planInstall, undoGeneric, type GenericPhase } from '../src';
+import { GENERIC, LEGACY, Refused, SILENT_LINES, handOff, installGeneric, planInstall, undoGeneric, undoSilentUpdates, type GenericPhase } from '../src';
 import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from './fakes';
 
 const GOLDEN = join(__dirname, 'golden/generic-adb-commands.json');
@@ -24,10 +24,13 @@ const LEVELS: Record<string, FakeAndroidOptions> = {
 };
 const apkFor = (sdk: number, abis = sdk >= 26 ? ['arm64-v8a'] : ['armeabi-v7a']) => fakeGenericApk({ app: sdk >= 26 ? GENERIC : LEGACY, abis });
 
-async function run(o: FakeAndroidOptions, extra: { apk?: Uint8Array; homeTimeoutMs?: number } = {}) {
+async function run(o: FakeAndroidOptions, extra: { apk?: Uint8Array; homeTimeoutMs?: number; silentUpdates?: boolean } = {}) {
   const p = new FakeAndroid(o);
   const phases: GenericPhase[] = [];
-  const res = await installGeneric(p, { apk: extra.apk ?? apkFor(o.sdk ?? 34), haUrl: HA, sleep: noSleep, onPhase: (ph) => phases.push(ph), homeTimeoutMs: extra.homeTimeoutMs ?? 60_000, setupTries: 2 });
+  const res = await installGeneric(p, {
+    apk: extra.apk ?? apkFor(o.sdk ?? 34), haUrl: HA, sleep: noSleep, onPhase: (ph) => phases.push(ph), homeTimeoutMs: extra.homeTimeoutMs ?? 60_000, setupTries: 2,
+    ...(extra.silentUpdates !== undefined ? { silentUpdates: extra.silentUpdates } : {}),
+  });
   return { p, res, phases };
 }
 
@@ -43,7 +46,7 @@ describe('the command sequence, per Android version', () => {
     const { p, res, phases } = await run(LEVELS.api23!);
     expect(res.plan.app).toBe(LEGACY);
     expect(res.home).toEqual({ how: 'chooser', state: 'set', home: LEGACY.home });
-    expect(phases).toEqual([{ step: 'read' }, { step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'start' },
+    expect(phases).toEqual([{ step: 'read' }, { step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'updates' }, { step: 'start' },
       { step: 'home', how: 'chooser', pick: LEGACY.name }, { step: 'handoff' }]);
     expect(p.cmds.some((c) => c.startsWith('cmd '))).toBe(false);
   });
@@ -172,6 +175,108 @@ describe('vendor builds: report what didn\'t apply, finish the rest', () => {
     const { res } = await run({ ...LEVELS.api29!, refuseSetHome: true }, { homeTimeoutMs: 0 });
     expect(res.home).toMatchObject({ how: 'chooser', state: 'unconfirmed', home: 'android/com.android.internal.app.ResolverActivity' });
     expect(res.handoff.setupPage).toBeDefined();
+  });
+});
+
+describe('silent updates (#422)', () => {
+  const OP = (pkg: string, mode: string) => `appops set ${pkg} REQUEST_INSTALL_PACKAGES ${mode}`;
+
+  it('Android 12+: allows Install unknown apps by default, reads it back, after the grants and before the start', async () => {
+    const { p, res } = await run(LEVELS.api34!);
+    expect(res.silentUpdates).toEqual({ state: 'allowed', line: SILENT_LINES.allowed });
+    expect(p.installOp).toBe('allow');
+    const at = (c: string) => p.cmds.findIndex((x) => x.startsWith(c));
+    expect(at('pm grant')).toBeLessThan(at(OP(GENERIC.package, 'allow')));
+    expect(at(`appops get ${GENERIC.package} REQUEST_INSTALL_PACKAGES`)).toBeLessThan(at('am start -n'));
+  });
+
+  it('Android 12 (API 31) is the first; Android 11 is left alone and says why', async () => {
+    expect((await run({ ...LEVELS.api34!, sdk: 31, release: '12' })).res.silentUpdates.state).toBe('allowed');
+    const { p, res } = await run({ ...LEVELS.api34!, sdk: 30, release: '11' });
+    expect(res.silentUpdates).toEqual({ state: 'old-android', line: 'No: Android 11 asks for a tap on each update' });
+    expect(p.cmds.some((c) => c.includes('REQUEST_INSTALL_PACKAGES'))).toBe(false);
+  });
+
+  it('the legacy build on Android 6: the same words as the app', async () => {
+    const { p, res } = await run(LEVELS.api23!);
+    expect(res.silentUpdates).toEqual({ state: 'old-android', line: SILENT_LINES.old('6.0.1') });
+    expect(p.cmds.some((c) => c.includes('REQUEST_INSTALL_PACKAGES'))).toBe(false);
+  });
+
+  it('the person keeps a tap per update: nothing set', async () => {
+    const { p, res } = await run(LEVELS.api34!, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'declined', line: SILENT_LINES.off });
+    expect(p.cmds.filter((c) => WRITES.test(c) && c.includes('REQUEST_INSTALL_PACKAGES'))).toEqual([]);
+  });
+
+  it('keeping a tap over an earlier install that allowed it takes the allow back', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'declined', line: SILENT_LINES.off });
+    expect(p.installOp).toBe('default');
+    expect(p.cmds).toContain(OP(GENERIC.package, 'default'));
+  });
+
+  it('an earlier allow the device won\'t take back: refused, and the line says updates stay silent', async () => {
+    const { res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, keepInstallOpOn: true }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.allowed, detail: 'Android still allows it from an earlier install' });
+  });
+
+  it('a build that keeps it off: refused, not fatal', async () => {
+    const { res } = await run({ ...LEVELS.api34!, keepInstallOpOff: true });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.off, detail: 'exit 0, and Android says it is still off' });
+    expect(res.home.state).toBe('set');
+  });
+
+  it('a build of the app that doesn\'t ask for it: not set', async () => {
+    const apk = fakeGenericApk({ abis: ['arm64-v8a'], perms: ['android.permission.RECORD_AUDIO'] });
+    const { p, res } = await run(LEVELS.api34!, { apk });
+    expect(res.silentUpdates.state).toBe('not-asked');
+    expect(p.cmds.some((c) => c.includes('REQUEST_INSTALL_PACKAGES'))).toBe(false);
+  });
+
+  it('undo puts it back to Android\'s default, and leaves the app', async () => {
+    const { p } = await run(LEVELS.api34!);
+    expect(await undoSilentUpdates(p)).toEqual({ app: GENERIC });
+    expect(p.installOp).toBe('default');
+    expect(p.installed).toBeDefined();
+    expect(p.cmds).toContain(OP(GENERIC.package, 'default'));
+  });
+
+  it('keeping a tap when the app-op can\'t be read: refused with why, not declined, and the install goes on', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, installOpGetFailsAfter: 0 }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.unknown, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+    expect(p.installOp).toBe('allow');
+    expect(res.home.state).toBe('set');
+  });
+
+  it('keeping a tap when the readback after the reset fails: refused, and the line says it isn\'t confirmed', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, installOpGetFailsAfter: 1 }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.unknown, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+    expect(p.installOp).toBe('default');
+  });
+
+  it('allowing it when the readback fails: refused, not confirmed, and the install goes on', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installOpGetFailsAfter: 0 });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.unknown, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+    expect(p.installOp).toBe('allow');
+    expect(res.home.state).toBe('set');
+  });
+
+  it('undo throws when the device refuses the reset or its readback', async () => {
+    const p = new FakeAndroid({ ...LEVELS.api34!, installed: 700, installOpAllowed: true, installOpFails: true });
+    await expect(undoSilentUpdates(p)).rejects.toThrow(/panel command failed \(255\): appops set/);
+    expect(p.installOp).toBe('allow');
+  });
+
+  it('undo throws when Android still allows it after the reset', async () => {
+    const p = new FakeAndroid({ ...LEVELS.api34!, installed: 700, installOpAllowed: true, keepInstallOpOn: true });
+    await expect(undoSilentUpdates(p)).rejects.toThrow(/still lets Glassworks install apps/);
+  });
+
+  it('undo with nothing installed changes nothing', async () => {
+    const p = new FakeAndroid({});
+    expect(await undoSilentUpdates(p)).toEqual({});
+    expect(p.cmds.filter((c) => WRITES.test(c))).toEqual([]);
   });
 });
 

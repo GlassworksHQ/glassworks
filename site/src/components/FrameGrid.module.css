@@ -89,3 +89,11 @@
   color: var(--muted);
   font-size: 20px;
 }
+
+/* touch: the "All … ›" link gets a 44 px hit area without moving it */
+@media (max-width: 900px) {
+  .head > a {
+    padding: 12px 0 12px 16px;
+    margin: -12px 0 -12px -16px;
+  }
+}
