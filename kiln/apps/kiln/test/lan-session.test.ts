@@ -2,7 +2,7 @@
 // over the panel's WebSocket; pairing again when the panel ended the session (30 minutes without a change).
 import { NOT_PAIRED, type SetupState } from '@glassworks/setup-channel';
 import { describe, expect, it, vi } from 'vitest';
-import { FULL_RAIL, LanSession, RAN_OUT, SIGN_IN_HERE, type ChannelStream } from '../src/lan/lanSession';
+import { cameBackFromSignIn, FULL_RAIL, LanSession, RAN_OUT, SIGN_IN_HERE, type ChannelStream } from '../src/lan/lanSession';
 import { JOIN_CHECK_MS, stillOnHotspot } from '../src/setup/channelSetup';
 
 const CODE = '482913';
@@ -414,6 +414,16 @@ describe('the panel\'s setup page', () => {
       panel.deadAfter = undefined;
       await lan.retry();
       expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('the page knows it came back by the #signed-in mark, and takes the mark off so a reload doesn\'t hand off again', () => {
+      const loc = { hash: '#signed-in', pathname: '/setup', search: '' };
+      const history = { replaceState: vi.fn((_s: unknown, _t: string, url: string) => { loc.hash = new URL(url, 'http://192.0.2.10:8099').hash; }) };
+      expect(cameBackFromSignIn(loc, history)).toBe(true);
+      expect(history.replaceState).toHaveBeenCalledWith(null, '', '/setup');
+      expect(cameBackFromSignIn(loc, history)).toBe(false); // the reload
+      expect(cameBackFromSignIn({ hash: '', pathname: '/setup', search: '' }, history)).toBe(false);
+      expect(history.replaceState).toHaveBeenCalledTimes(1);
     });
 
     it('back from it, signed in: on at the radio step', async () => {

@@ -378,50 +378,112 @@ class SignInServerTest {
 
     // ------------------------------------------------------------------ the setup page's sign-in (#453)
 
-    /** One request through the router as the phone's browser makes it, with its cookie. */
-    private fun call(s: SignInServer, path: String, cookie: String? = null): SignInServer.Response {
-        val uri = URI(path)
-        val headers = mapOf("host" to "192.0.2.10:8099") + (cookie?.let { mapOf("cookie" to it) } ?: emptyMap())
-        return s.handle(SignInServer.Request("GET", uri.rawPath, OAuth.parseQuery(uri.rawQuery), headers))
+    /** The phone's cookies for the panel, kept as a browser keeps them: by name, a newer one replacing an older. */
+    private class Jar {
+        val cookies = LinkedHashMap<String, String>()
+        fun keep(r: SignInServer.Response) = r.also {
+            val set = it.headers["Set-Cookie"] ?: return@also
+            val (name, value) = set.substringBefore(';').split('=', limit = 2)
+            if (set.contains("Max-Age=0")) cookies.remove(name) else cookies[name] = value
+        }
+        fun header() = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }.ifEmpty { null }
     }
 
-    private fun startFromSetup(s: SignInServer = server): Pair<Map<String, String>, String> {
-        val r = call(s, "${SignInServer.CONTINUE}?then=setup")
+    /** One request through the router as the phone's browser makes it, with its cookies. */
+    private fun call(s: SignInServer, path: String, jar: Jar? = null): SignInServer.Response {
+        val uri = URI(path)
+        val headers = mapOf("host" to "192.0.2.10:8099") + (jar?.header()?.let { mapOf("cookie" to it) } ?: emptyMap())
+        val r = s.handle(SignInServer.Request("GET", uri.rawPath, OAuth.parseQuery(uri.rawQuery), headers))
+        return jar?.keep(r) ?: r
+    }
+
+    private fun start(s: SignInServer, jar: Jar?, then: String = "?then=setup"): Pair<Map<String, String>, String> {
+        val r = call(s, "${SignInServer.CONTINUE}$then", jar)
         assertEquals(302, r.status)
         val q = OAuth.parseQuery(URI(r.headers["Location"]!!).rawQuery)
         assertEquals("HA sees the same redirect_uri as the QR flow", "http://192.0.2.10:8099/callback", q["redirect_uri"])
         return q to q["state"]!!
     }
 
+    private fun callback(s: SignInServer, state: String, jar: Jar?, code: String = "c0de") =
+        call(s, "/callback?code=$code&state=${OAuth.enc(state)}", jar)
+
     private fun text(r: SignInServer.Response) = r.body.toString(Charsets.UTF_8)
+    private fun setupWay(r: SignInServer.Response) = text(r).contains("""<a class="btn" href="/setup">Back to setup</a>""")
 
     @Test
     fun setupPageSignInGoesBackToTheSetupPage() {
-        val (q, state) = startFromSetup()
+        val jar = Jar()
+        val (q, state) = start(server, jar)
+        assertEquals(listOf(SignInServer.handOffCookie(state)), jar.cookies.keys.toList())
         val bind = call(server, "${SignInServer.CONTINUE}?then=setup").headers["Set-Cookie"]!!
-        assertTrue(bind, bind.startsWith("${SignInServer.HANDOFF}=") && bind.contains("Path=/callback") &&
-            bind.contains("HttpOnly") && bind.contains("SameSite=Lax") && bind.contains("Max-Age=1800"))
+        assertTrue(bind, bind.contains("=1; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800"))
         issueCode("c0de", q)
-        val r = call(server, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "gw_setup=s; ${SignInServer.HANDOFF}=$state")
+        val r = callback(server, state, jar)
         assertEquals(200, r.status)
         assertTrue(text(r), text(r).contains("""<meta http-equiv="refresh" content="0;url=/setup#signed-in">"""))
-        assertTrue("the binding cookie goes", r.headers["Set-Cookie"]!!.startsWith("${SignInServer.HANDOFF}=;") && r.headers["Set-Cookie"]!!.contains("Max-Age=0"))
+        assertTrue("the binding cookie goes", jar.cookies.isEmpty())
         assertEquals("RT", signedIn!!.first.refreshToken)
         assertEquals(q["code_challenge"], OAuth.codeChallenge(tokenRequests.single()["code_verifier"]!!))
-        assertEquals("single use", 400, call(server, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "${SignInServer.HANDOFF}=$state").status)
+        assertEquals("single use", 400, callback(server, state, Jar().apply { cookies[SignInServer.handOffCookie(state)] = "1" }).status)
     }
 
     @Test
-    fun setupPageSignInIsRefusedInAnotherBrowser() {
-        for (other in listOf(null, "${SignInServer.HANDOFF}=someone-elses-state")) {
-            val (q, state) = startFromSetup()
+    fun setupPageSignInIsRefusedInAnotherBrowserWithAWayBack() {
+        // the other browser has no cookie, or one for another sign-in of its own
+        val other = Jar()
+        start(server, other)
+        for (jar in listOf(null, other)) {
+            val (q, state) = start(server, Jar())
             issueCode("c0de", q)
-            val r = call(server, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = other)
-            assertEquals("$other", 403, r.status)
-            assertTrue(text(r), text(r).contains("started in another browser"))
+            val r = callback(server, state, jar)
+            assertEquals(403, r.status)
+            assertTrue(text(r), text(r).contains("started in another browser") && setupWay(r))
         }
         assertNull(signedIn)
         assertTrue("the code is never used", tokenRequests.isEmpty())
+    }
+
+    @Test
+    fun startingAnotherSetupSignInKeepsTheFirstOnesBinding() {
+        val jar = Jar()
+        val (q, first) = start(server, jar)
+        start(server, jar) // a second tap, or a cross-site GET to /signin/continue?then=setup in this browser
+        issueCode("c0de", q)
+        val r = callback(server, first, jar)
+        assertEquals(200, r.status)
+        assertEquals("RT", signedIn!!.first.refreshToken)
+    }
+
+    @Test
+    fun aQrSignInAfterASetupOneSpeaksOfTheQrCode() {
+        val jar = Jar()
+        start(server, jar) // started from setup, never finished: its cookie stays
+        val (_, qr) = start(server, jar, then = "")
+        val r = callback(server, qr, jar, code = "refused-by-ha")
+        assertEquals(400, r.status)
+        assertTrue(text(r), text(r).contains("Scan the code on the panel again") && !setupWay(r))
+    }
+
+    @Test
+    fun everyWayOutOfASetupSignInLetsItsCookieGo() {
+        val store = StateStore()
+        val s = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()), { auth, ok -> signedIn = auth to ok },
+            states = store, bindAddress = loopback)
+        for (path in listOf("cancelled", "refused", "expired")) {
+            val jar = Jar()
+            val (q, state) = start(s, jar)
+            val r = when (path) {
+                "cancelled" -> call(s, "/callback?error=access_denied&state=${OAuth.enc(state)}", jar)
+                "refused" -> callback(s, state, jar, code = "refused-by-ha")
+                else -> { store.consume(state); callback(s, state, jar) }
+            }
+            assertTrue("$path: ${text(r)}", r.status >= 400 && setupWay(r) && text(r).contains("Go back to setup"))
+            assertTrue("$path: the cookie goes", jar.cookies.isEmpty())
+            issueCode("c0de", q)
+            assertEquals("$path: the state is used up", 400, callback(s, state, jar).status)
+        }
+        assertNull(signedIn)
     }
 
     @Test
@@ -429,12 +491,13 @@ class SignInServerTest {
         var now = 0L
         val s = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()), { auth, ok -> signedIn = auth to ok },
             states = StateStore(clock = { now }), bindAddress = loopback)
-        val (q, state) = startFromSetup(s)
+        val jar = Jar()
+        val (q, state) = start(s, jar)
         issueCode("c0de", q)
         now = 10 * 60_000L
-        val r = call(s, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "${SignInServer.HANDOFF}=$state")
+        val r = callback(s, state, jar)
         assertEquals(400, r.status)
-        assertTrue(text(r), text(r).contains("expired") && text(r).contains("Go back to setup and sign in again.") && text(r).contains("""<a class="btn" href="/setup">Back to setup</a>"""))
+        assertTrue(text(r), text(r).contains("expired") && text(r).contains("Go back to setup and sign in again.") && setupWay(r))
         assertNull(signedIn)
     }
 
@@ -444,7 +507,7 @@ class SignInServerTest {
         assertNull("no binding cookie for a QR sign-in", r.headers["Set-Cookie"])
         val q = OAuth.parseQuery(URI(r.headers["Location"]!!).rawQuery)
         issueCode("c0de", q)
-        val done = call(server, "/callback?code=c0de&state=${OAuth.enc(q["state"]!!)}")
+        val done = callback(server, q["state"]!!, null)
         assertEquals(200, done.status)
         assertTrue(text(done).contains("Panel signed in") && !text(done).contains("/setup"))
     }

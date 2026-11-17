@@ -4,7 +4,7 @@ import { LAN_CHANNEL_PATH, openWebSocketStream } from '@glassworks/setup-channel
 import { createRoot } from 'react-dom/client';
 import { MarkDefs } from '../components/Mark';
 import { LanPage } from './LanPage';
-import { BACK_FROM_SIGN_IN, LanSession } from './lanSession';
+import { cameBackFromSignIn, LanSession } from './lanSession';
 
 const lan = new LanSession({
   fetch: async (path, init) => {
@@ -18,10 +18,8 @@ const lan = new LanSession({
   },
   openStream: () => openWebSocketStream(`ws://${location.host}${LAN_CHANNEL_PATH}`),
   navigate: (path) => location.assign(path),
-  backFromSignIn: location.hash === BACK_FROM_SIGN_IN,
+  backFromSignIn: cameBackFromSignIn(location, history),
 });
-// a reload from here starts where the panel is, not after Home Assistant again
-if (location.hash === BACK_FROM_SIGN_IN) history.replaceState(null, '', location.pathname);
 
 createRoot(document.getElementById('root')!).render(<><MarkDefs /><LanPage lan={lan} /></>);
 void lan.start();

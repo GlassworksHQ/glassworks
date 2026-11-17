@@ -57,6 +57,12 @@ describe('the rail is the panel\'s own steps (#453)', () => {
     expect(counter(c)).toBe('Done');
   });
 
+  it('a radio step on a rail that left it out (out of date) lists every step, not "1 of 4"', () => {
+    const c = page(setup('radio'), NO_RADIO);
+    expect(steps(c)).toEqual(['Pair with the panel done', 'Wi-Fi done', 'Home Assistant done', 'Radio now', 'Done todo']);
+    expect(counter(c)).toBe('4 of 5');
+  });
+
   it('a panel with a radio lists it', () => {
     const c = page(setup('radio'));
     expect(steps(c)).toEqual(['Pair with the panel done', 'Wi-Fi done', 'Home Assistant done', 'Radio now', 'Done todo']);
