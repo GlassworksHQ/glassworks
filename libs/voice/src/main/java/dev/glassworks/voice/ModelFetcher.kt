@@ -62,11 +62,19 @@ internal class ModelFetcher(
         }
     }
 
-    /** Files of this fetcher's set that are absent or don't match their hash. */
-    fun missing(dir: File): List<String> = files.filter { (name, sha) ->
-        val f = File(dir, name)
-        !f.isFile || f.length() < 8 || sha256(f) != sha
-    }.keys.toList()
+    /**
+     * Files of this fetcher's set that are absent or don't match their hash. First deletes the `.part` files
+     * a killed process left: every load calls this, even one that finds every model and never calls [ensure].
+     */
+    fun missing(dir: File): List<String> {
+        // A live download's part is younger.
+        val stale = System.currentTimeMillis() - STALE_PART_MS
+        dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
+        return files.filter { (name, sha) ->
+            val f = File(dir, name)
+            !f.isFile || f.length() < 8 || sha256(f) != sha
+        }.keys.toList()
+    }
 
     /**
      * Fetches whatever [missing] reports. Each file goes to a `.part` file first and is renamed only
@@ -78,9 +86,6 @@ internal class ModelFetcher(
         val need = missing(dir)
         if (need.isEmpty()) return need
         if (!dir.isDirectory && !dir.mkdirs()) throw ModelDownloadException("cannot create $dir", ModelFailure.Storage)
-        // What a killed process left behind; a live download's part is younger.
-        val stale = System.currentTimeMillis() - STALE_PART_MS
-        dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
         for (name in need) {
             // Its own .part: an engine stopped mid-download (voice off and on) may still be writing one.
             val part = File(dir, "$name.${UUID.randomUUID()}.part")
