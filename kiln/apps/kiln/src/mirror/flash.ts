@@ -1,7 +1,7 @@
 // Installing Glassworks on a Mirror over fastboot (#40, option A), outside React. The person
 // downloads the Glass Panes system.img and selects it. Kiln checks it, builds the two images in a
 // worker (images.ts), and flashes them with the Mirror in fastboot. Then it finishes over adb with
-// this browser's own key. Test only, behind ?apk=local, like the rest of the Mirror's page.
+// this browser's own key, which the patched image lets in without asking. Test only, behind ?apk=local, like the rest of the Mirror's page.
 import type { PanelShell } from '@glassworks/adb';
 import {
   GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, WrongImage, checkFastboot, firstBoot, flashImages, makeOnlyHome,

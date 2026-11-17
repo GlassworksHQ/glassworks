@@ -11,13 +11,13 @@ import { clean, cleanup, debugfs, debugfsCat, fsck, haveTools, load, mke2fs, scr
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
 import { GLASSWORKS } from '../src/app';
-import { FirstBootMirror, fakeMirrorApk } from './fakes';
+import { FirstBootMirror, fakeAdbKey, fakeMirrorApk, fakeServicesJar } from './fakes';
 import {
   GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, makeOnlyHome, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, type FastbootLike,
 } from '../src';
 
 const T = 1_700_000_000;
-const KEY = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';
+const KEY = fakeAdbKey(5, 'kiln@glassworks');
 const MAKE_EXT4FS = ['-O', '^metadata_csum,^64bit,^flex_bg,^dir_index,^huge_file,^dir_nlink,^extra_isize,uninit_bg,resize_inode'];
 
 /** A fake LK with the variables Qualcomm's aboot publishes. */
@@ -72,6 +72,8 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
     const tree = join(dir, 'tree');
     mkdirSync(join(tree, 'priv-app/Launcher3'), { recursive: true });
     mkdirSync(join(tree, 'media'), { recursive: true });
+    mkdirSync(join(tree, 'framework'), { recursive: true });
+    writeFileSync(join(tree, 'framework/services.jar'), await fakeServicesJar());
     writeFileSync(join(tree, 'build.prop'), `ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`);
     writeFileSync(join(tree, 'priv-app/Launcher3/Launcher3.apk'), randomBytes(50_000));
     const raw = join(dir, 'system.raw');

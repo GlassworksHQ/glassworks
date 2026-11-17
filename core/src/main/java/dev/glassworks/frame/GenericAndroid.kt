@@ -4,17 +4,12 @@
 
 package dev.glassworks.frame
 
-import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Point
-import android.hardware.display.DisplayManager
 import android.hardware.input.InputManager
 import android.os.Build
 import android.provider.Settings
-import android.view.Display
 import android.view.InputDevice
-import android.view.Surface
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.SettingsItem
@@ -22,7 +17,7 @@ import dev.glassworks.pane.SettingsSection
 import dev.glassworks.platform.Platform
 import dev.glassworks.screen.LightSource
 import dev.glassworks.screen.PresenceSource
-import dev.glassworks.update.InstallRights
+import dev.glassworks.update.SilentUpdates
 import java.util.concurrent.ScheduledExecutorService
 
 /**
@@ -45,14 +40,11 @@ class GenericAndroid(
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 
     /**
-     * The device's natural orientation (its screen at rotation 0), either way up: landscape on most tablets,
-     * portrait on the lululemon Mirror, whose image sets `ro.sf.hwrotation=270` (#198). Landscape when it can't tell.
+     * A device with a frame of its own stands as that frame says ([KNOWN]: a Pixel Tablet is landscape on its dock, though
+     * its screen is portrait at rotation 0). Any other turns as Android says: the lululemon Mirror's image makes it
+     * portrait (`ro.sf.hwrotation=270`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
      */
-    override val orientation: Orientation get() = runCatching {
-        val d = context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY) ?: return@runCatching null
-        val size = Point().also { @Suppress("DEPRECATION") d.getRealSize(it) }
-        orientationOf(size.x, size.y, d.rotation)
-    }.getOrNull() ?: Orientation.LANDSCAPE
+    override val orientation: Orientation get() = KNOWN[Platform.model] ?: Orientation.ANY
 
     /**
      * [Input.NONE] when Android lists input devices and none is a touchscreen (the Mirror's, #198): setup then works
@@ -67,22 +59,23 @@ class GenericAndroid(
 
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = emptyList<Pane>()
 
-    /** The Device page, named after the device: whether updates install without a tap, device owner, model and Android. */
+    /** The Device page, named after the device: silent updates, device owner, model and Android. */
     override fun deviceSection(context: Context, running: (String) -> Pane?): SettingsSection =
         SettingsSection(DEVICE, friendlyName().ifBlank { "Device" }, listOf(
-            SettingsItem.Info({ UPDATES_TITLE }, { updates(context) }, fixable = { updates(context) == ALLOW_INSTALLS }),
-            SettingsItem.Info({ OWNER_TITLE }, { if (deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
+            silentUpdatesItem { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
+            SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
             SettingsItem.Info({ ANDROID_TITLE }, { Build.VERSION.RELEASE.orEmpty() }),
         ))
 
     companion object {
-        /** The orientation of a screen [width] x [height] px at [rotation] (`Surface.ROTATION_*`) when turned back to 0. */
-        fun orientationOf(width: Int, height: Int, rotation: Int): Orientation {
-            val turned = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
-            val (w, h) = if (turned) height to width else width to height
-            return if (h > w) Orientation.PORTRAIT else Orientation.LANDSCAPE
-        }
+        /**
+         * The devices with a frame, by `Build.MODEL` matched whole (as Kiln's `devices.ts` MODELS), and how each stands:
+         * its frame.json's `display`. `GenericAndroidKnownTest` checks both.
+         */
+        val KNOWN: Map<String, Orientation> = mapOf(
+            "Pixel Tablet" to Orientation.LANDSCAPE, // google-pixel-tablet
+        )
 
         /** [Input.NONE] when there are input devices ([ids]) and none [isTouchscreen]; else [Input.TOUCH]. */
         fun inputOf(ids: IntArray, isTouchscreen: (Int) -> Boolean): Input =
@@ -90,27 +83,19 @@ class GenericAndroid(
 
         /** The Device page's id on every frame. */
         const val DEVICE = "device"
-        const val UPDATES_TITLE = "Updates without a tap"
+        const val SILENT_UPDATES_TITLE = "Silent updates"
         const val OWNER_TITLE = "Device owner"
         const val MODEL_TITLE = "Model"
         const val ANDROID_TITLE = "Android"
-        const val ALLOW_INSTALLS = "Allow “Install unknown apps” for the app in Android's settings"
 
         /**
-         * Whether app updates install with nobody at the screen (#277): as device owner, as a privileged system app
-         * (the Mirror's, #198), or on Android 12 or newer with the install permission.
+         * Every frame's Device page row (#422): whether updates install with nobody at the screen, and how to make
+         * them where they don't. Amber when there's a way. [answer] is null while the frame is still reading it.
          */
-        fun updates(context: Context): String = when {
-            // A device owner installs without a tap on any Android the app runs on (Android 6 and newer).
-            deviceOwner(context) -> "Available: the app is the device owner"
-            // So does a privileged system app (INSTALL_PACKAGES), which Kiln makes of the legacy build on the Mirror.
-            InstallRights.installsPackages(context) -> "Available: the app is a system app with the install permission"
-            !Platform.canInstallWithoutUserAction -> "Not on this Android: it needs Android 12 or newer, the app as device owner, or the app as a system app"
-            !runCatching { context.packageManager.canRequestPackageInstalls() }.getOrDefault(false) -> ALLOW_INSTALLS
-            else -> "Available"
-        }
-
-        fun deviceOwner(context: Context): Boolean =
-            runCatching { context.getSystemService(DevicePolicyManager::class.java)?.isDeviceOwnerApp(context.packageName) == true }.getOrDefault(false)
+        fun silentUpdatesItem(answer: () -> SilentUpdates?) = SettingsItem.Info(
+            { SILENT_UPDATES_TITLE },
+            { answer()?.detail ?: "Checking" },
+            fixable = { answer()?.let { !it.silent && it.fix != null } == true },
+        )
     }
 }

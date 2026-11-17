@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
+  Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
+  system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
+  the Manage page shows the same answer, and where updates ask for a tap, how to change that, such as
+  allowing "Install unknown apps" for the app.
 - **Every device says what kind it is, and the Pixel Tablet is listed.** On glassworks.dev and in Kiln's
   device list, each card now says whether it is a full frame with its own code (the S1), a device frame
   that runs the generic app with its own settings (the Mirror, generic Android), or a tested device that
@@ -92,10 +97,11 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
-- **On a screen that stands portrait, the app is portrait.** On a device that isn't an Aqara S1, the app now
-  follows the screen's natural orientation, either way up: landscape on most tablets as before, portrait on a
-  screen that stands portrait, like the lululemon Mirror's. The S1 stays landscape. On a portrait screen the
-  setup screen stacks into one column: the steps above, the card under them, its QR code under the text.
+- **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
+  The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
+  A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
+  The S1 stays landscape. On a portrait screen the setup screen stacks into one column: the steps above, the
+  card under them, its QR code under the text.
 - **Kiln's technical log words the boot patch differently.** Kiln's boot patcher was rewritten, so the
   patch step now logs a few short lines such as "boot image: page 2048, gzip ramdisk, AVB footer"
   instead of Magisk's own messages. You see them under **Technical log** and in a saved failure
@@ -256,6 +262,11 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
+  Panes image lets one adb key in without asking: the project's own key, published with its private
+  half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its
+  place when it builds the image. Before, Kiln's own key never got in, and the install would have
+  stopped at "Wait for adb". The Mirror's install is still test only.
 - **Other apps can no longer change the panel's settings.** Until now any app on the panel could open
   S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or remote
   debugging.

@@ -29,6 +29,8 @@ export interface Rubric {
     update_levels: { level: string; latency_p95_max_ms: number; frames_band?: Band[] }[];
     camera_pages: string[];
     camera_levels: { level: string; first_frame_max_ms: number; shown_min_pct: number; max_gap_max_ms?: number; stall_total_max_ms?: number }[];
+    /** Rubric 3 (#211): HA's more-info dialog, the slowest of a view's dialogs to settle. */
+    dialog_levels: { level: string; settled_max_ms: number; frames_band?: Band[] }[];
     below: string;
     levels: { level: string; accepts: Record<string, string[]> }[];
     letters: { letter: string; meaning: string; needs: Record<string, string> }[];
@@ -45,6 +47,10 @@ export interface UpdateRun { timed_out?: boolean; latency_n?: number | null; lat
 /** One run's live camera streams (#174), the worst stream's numbers. */
 export interface CameraRun { timed_out?: boolean; stalls_reported?: boolean; uncovered_ms?: number | null; first_frame_ms?: number | null; shown_pct?: number | null; max_gap_ms?: number | null; stall_total_ms?: number | null }
 
+/** One run's more-info dialogs (rubric 3, #211): how many ran and failed, the slowest to settle
+ * (null when one failed), and the open animations' frames. */
+export interface DialogRun { timed_out?: boolean; n?: number | null; failed?: number | null; settled_ms?: number | null; frames?: FrameRun | null }
+
 export interface PageSummary {
   inp_ms?: number | null;
   open_ms?: number | null;
@@ -52,6 +58,7 @@ export interface PageSummary {
   scroll?: { runs?: FrameRun[] } & Record<string, unknown>;
   updates?: { runs?: UpdateRun[] } & Record<string, unknown>;
   camera?: { runs?: CameraRun[] } & Record<string, unknown>;
+  dialog?: { runs?: DialogRun[] } & Record<string, unknown>;   // rubric 3 (#211); absent before Clarity v3
   timed_out_runs?: number;     // runs in which the page didn't finish within the runner's deadline (#202)
 }
 
@@ -65,7 +72,7 @@ export interface Summary {
   not_comparable?: string | null;
 }
 
-export interface TierInputs { inp_ms?: number | null; load_ms?: number | null; blocking_ms?: number | null; scroll_level?: string | null; updates_level?: string | null; camera_level?: string | null }
+export interface TierInputs { inp_ms?: number | null; load_ms?: number | null; blocking_ms?: number | null; scroll_level?: string | null; updates_level?: string | null; camera_level?: string | null; dialog_level?: string | null }
 /** Per task: a band (tap, updates, load) or, for scroll, its level. */
 export type Bands = Record<string, string | null>;
 
@@ -149,6 +156,24 @@ export function updateLevel(run: UpdateRun | null | undefined, rubric: Rubric): 
   return rubric.grade.below;
 }
 
+/** One run's more-info level (rubric 3): the slowest dialog's time to settled and, for premium, the
+ * open animations' frames; `below` when a dialog never opened or settled, or the view didn't get to
+ * them; null when they weren't measured. */
+export function dialogLevel(run: DialogRun | null | undefined, rubric: Rubric): string | null {
+  if (run && run.timed_out) return rubric.grade.below;
+  if (!run || !run.n) return null;
+  if (run.failed || run.settled_ms === null || run.settled_ms === undefined) return rubric.grade.below;
+  for (const lv of rubric.grade.dialog_levels) {
+    if (run.settled_ms > lv.settled_max_ms) continue;
+    if (lv.frames_band) {
+      const b = frameBand(run.frames, rubric);
+      if (b === null || !lv.frames_band.includes(b)) continue;
+    }
+    return lv.level;
+  }
+  return rubric.grade.below;
+}
+
 /** One run's camera level from its worst stream: first frame, frames shown, the longest gap and the
  * gaps over 500 ms added up; `below` when a stream showed no frame; null without a camera record. */
 export function cameraLevel(run: CameraRun | null | undefined, rubric: Rubric): string | null {
@@ -195,6 +220,7 @@ export function tierBands(tier: TierInputs | undefined, rubric: Rubric, page?: s
     load: band(t.load_ms, rubric.metrics.load_ms),
     camera: page !== undefined && rubric.grade.camera_pages.includes(page) ? (t.camera_level ?? null) : "none",
     blocking: band(t.blocking_ms, rubric.metrics.blocking_ms),
+    dialog: t.dialog_level ?? null,
   };
 }
 
@@ -272,6 +298,7 @@ export function summaryInputs(summary: Summary, rubric: Rubric): [Record<string,
       scroll_level: medianLevel((p.scroll?.runs || []).map((r) => scrollLevel(r, rubric)), rubric),
       updates_level: medianLevel((p.updates?.runs || []).map((r) => updateLevel(r, rubric)), rubric),
       camera_level: medianLevel((p.camera?.runs || []).map((r) => cameraLevel(r, rubric)), rubric),
+      dialog_level: medianLevel((p.dialog?.runs || []).map((r) => dialogLevel(r, rubric)), rubric),
     };
   }
   return [tiers, summary.restart_ms ?? null];

@@ -169,9 +169,9 @@ class MainActivity : Activity() {
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
         applyIntent(intent, fromNewIntent = false)
-        // The frame's orientation, either way up (#198). The S1's manifest already asks for landscape: no change there.
-        val portrait = glassworks.frame.orientation == Orientation.PORTRAIT
-        screenOrientation(portrait).let { if (requestedOrientation != it) requestedOrientation = it }
+        // The frame's orientation. The S1's manifest already asks for landscape: no change there.
+        val orientation = glassworks.frame.orientation
+        screenOrientation(orientation).let { if (requestedOrientation != it) requestedOrientation = it }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // 8 bits per channel: the dithered backdrop/voice glows would band again on an RGB565 surface.
@@ -186,7 +186,11 @@ class MainActivity : Activity() {
         // frame's orientation); until it is ready the loading screen draws 8-bit gradients.
         val real = android.graphics.Point().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealSize(it) }
         val (long, short) = maxOf(real.x, real.y) to minOf(real.x, real.y)
-        if (portrait) Backdrop.prewarm(short, long) else Backdrop.prewarm(long, short)
+        when (orientation) {
+            Orientation.LANDSCAPE -> Backdrop.prewarm(long, short)
+            Orientation.PORTRAIT -> Backdrop.prewarm(short, long)
+            Orientation.ANY -> Backdrop.prewarm(real.x, real.y)
+        }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
         setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
@@ -1109,9 +1113,12 @@ class MainActivity : Activity() {
             return true
         }
 
-        /** The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]): either way up. Public for tests. */
-        fun screenOrientation(portrait: Boolean): Int =
-            if (portrait) ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        /** The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]). Public for tests. */
+        fun screenOrientation(orientation: Orientation): Int = when (orientation) {
+            Orientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            Orientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            Orientation.ANY -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        }
 
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()
