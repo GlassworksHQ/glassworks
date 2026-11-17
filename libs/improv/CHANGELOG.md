@@ -5,6 +5,14 @@ What changed in each release of `dev.glassworks:improv` on Maven Central. Versio
 cut from `libs/improv/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
+## [Unreleased]
+
+### Changed
+- **No network name in the logs.** `WifiProvisioner` logs "the chosen network" and the name's length instead
+  of the name, and `WifiProvisioner.Outcome` and the serial session's request print neither the network nor
+  the one a failed join went back to. A join that times out fails with the reason `timed out`, without the
+  name. The `ssid` and `restored` fields are unchanged.
+
 ## [0.1.0] - 2026-11-15
 
 ### Added

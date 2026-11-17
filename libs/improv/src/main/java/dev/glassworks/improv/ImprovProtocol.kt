@@ -192,7 +192,7 @@ public enum class ImprovError(
 
 internal sealed class RpcCommand {
     data class WifiSettings(val ssid: String, val password: String) : RpcCommand() {
-        override fun toString(): String = "WifiSettings(<${ssid.length} char name>, <${password.length} char password>)" // #460
+        override fun toString(): String = "WifiSettings(<${ssid.length} char name>, <${password.length} char password>)" // no network name in a log
     }
     object Identify : RpcCommand()
     object DeviceInfo : RpcCommand()
