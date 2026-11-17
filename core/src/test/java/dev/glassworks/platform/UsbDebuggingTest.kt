@@ -54,7 +54,8 @@ class UsbDebuggingHeardTest {
         override fun destroy() {}
     }
 
-    @Test fun `following while a reader reads, and not after stop`() {
+    /** Only what stop() clears; the race the lock in start() closes has no test. */
+    @Test fun `following is true while a reader reads, and stop clears it`() {
         val out = java.io.PipedOutputStream()
         val input = java.io.PipedInputStream(out)
         val proc = object : Process() {
