@@ -51,6 +51,8 @@ class CameraPaneTest {
         var starts = 0
         val motion = mutableListOf<Boolean>()
         var refuse = false
+        var fit: StreamFit = StreamFit.Size(1280, 720)
+        override fun fit() = fit
         override fun start(signIn: Pair<String, String>): Boolean {
             if (refuse) return false
             starts++; running = signIn; return true
@@ -164,6 +166,24 @@ class CameraPaneTest {
         r.prefs.use = CameraUse.PRESENCE_AND_SNAPSHOTS; r.prefs.onvif = true; r.prefs.signIn = "viewer" to "s3cret"
         r.pane.start()
         assertEquals(CameraPane.STREAM_FAILED, r.pane.problem)
+    }
+
+    /** #479: on a camera that can't feed the encoder, nothing opens, the switch springs back, and the page says why. */
+    @Test fun aCameraThatCantStreamKeepsTheStreamOffAndSaysWhy() {
+        val r = Rig()
+        val why = "The video encoder can't take the camera's 640 × 480 picture"
+        r.stream.fit = StreamFit.Refused(why)
+        r.prefs.use = CameraUse.PRESENCE_AND_SNAPSHOTS; r.prefs.onvif = true; r.prefs.signIn = "viewer" to "s3cret"
+        r.pane.start()
+        assertEquals(0, r.stream.starts)
+        assertFalse(r.pane.plan.stream)
+        assertTrue("presence goes on", r.pane.plan.detect)
+        assertEquals("$why · the stream stays off" to CameraPage.Tone.PROBLEM, CameraPage.status(r.pane.reading()))
+        val onvif = r.pane.entities().filterIsInstance<SwitchEntity>().single { it.objectId == "onvif_stream" }
+        assertEquals("Home Assistant sees it off", false, ProtoMessage(onvif.state().toByteArray()).bool(2))
+        onvif.command(ProtoMessage(ProtoWriter().bool(2, true).toByteArray()))
+        assertFalse("springs back", r.prefs.onvif)
+        assertEquals(0, r.stream.starts)
     }
 
     @Test fun theOnvifSwitchSpringsBackInPresenceOnly() {

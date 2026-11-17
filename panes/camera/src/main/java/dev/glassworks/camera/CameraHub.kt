@@ -21,6 +21,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
+import android.media.MediaCodec
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -78,8 +79,6 @@ class CameraHub(
     private var presenceRange: android.util.Range<Int>? = null
     /** The reader's size: [width] x [height] when the camera lists it ([yuvSizeFor]). */
     private var size = width to height
-    /** The stream's encoder is [width] x [height]: a camera that doesn't list that size gets no encoder. */
-    private val streamable get() = size == width to height
 
     private val wanted get() = sinks.isNotEmpty() || waiters.isNotEmpty() || encoder != null ||
         SystemClock.elapsedRealtime() < lingerUntil
@@ -224,6 +223,22 @@ class CameraHub(
 
     override val streamFps: Int get() = announcedFps(streamRange)
 
+    /**
+     * The reader's size ([yuvSizeFor]) and the stream's ([streamFitFor]): the encoder runs at the reader's size, or
+     * not at all. Read once, like [streamRange]: the stream asks before it opens a port, the hub when it opens the camera.
+     */
+    private val sizes: Pair<Pair<Int, Int>, StreamFit> by lazy {
+        try {
+            val map = cameraId()?.let { manager.getCameraCharacteristics(it).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }
+            val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
+            reader to streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes)
+        } catch (e: Exception) {
+            (width to height) to StreamFit.Size(width, height)
+        }
+    }
+
+    override val streamFit: StreamFit get() = sizes.second
+
     /** Which camera the hub opens, for the page (#117's Camera tile): read once, like [streamRange]. */
     override val lens: CameraFacts.Lens? by lazy {
         try {
@@ -256,8 +271,7 @@ class CameraHub(
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
-        val listed = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.getOutputSizes(ImageFormat.YUV_420_888)
-        size = yuvSizeFor(listed?.map { it.width to it.height }, width to height)
+        size = sizes.first
         val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
         presenceRange = if (!legacy) null else presenceRangeFor(
             c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
@@ -272,9 +286,9 @@ class CameraHub(
             r.setOnImageAvailableListener({ onImage(it) }, handler)
             reader = r
         }
-        // A camera without the encoder's size would refuse the whole session, presence included: presence goes on alone.
-        val encoder = encoder?.takeIf { streamable }
-        if (this.encoder != null && encoder == null) log("camera: no ${width}x$height output, so no stream; presence goes on")
+        // The stream never asks on a camera that can't stream ([CameraStream] opens no port); if it did, presence goes on alone.
+        val encoder = encoder?.takeIf { streamFit is StreamFit.Size }
+        if (this.encoder != null && encoder == null) log("camera: no stream ($streamFit); presence goes on")
         val targets = listOfNotNull(r.surface, encoder)
         val gen = ++generation
         configuring = true

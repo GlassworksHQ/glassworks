@@ -84,6 +84,7 @@ class CameraPane(
             watchers = if (open) stream.watchers() else emptyList(),
             // 0 only without facts; null from the camera means its own rate (streaming with no 15 fps range).
             lens = facts?.lens, frameRate = if (facts == null) 0 else facts.frameRate(),
+            streamFit = stream.fit(),
         )
     }
 
@@ -102,9 +103,9 @@ class CameraPane(
         ),
         SwitchEntity(
             "onvif_stream", "ONVIF stream", "mdi:video-wireless", EntityCategory.CONFIG, disabledByDefault = true,
-            // Refused in Presence only (the approved design): the switch springs back.
-            get = { prefs.onvif && policy.stillsMayLeave },
-            set = { on -> prefs.onvif = on && policy.stillsMayLeave; ctx.publishStates() },
+            // Refused in Presence only (the approved design), and on a camera that can't stream: the switch springs back.
+            get = { prefs.onvif && streamMayTurnOn() },
+            set = { on -> prefs.onvif = on && streamMayTurnOn(); ctx.publishStates() },
         ).apply { authOnly = true },
         sensitivityEntity({ prefs.sensitivity }, { prefs.sensitivity = it }),
     )
@@ -135,7 +136,7 @@ class CameraPane(
         val allowed = permitted()
         // The stream never runs without a sign-in: turned on without one, it waits until the person sets one.
         val signIn = prefs.signIn
-        val next = CameraPlan.of(policy, allowed, ownSensor(), signIn != null)
+        val next = CameraPlan.of(policy, allowed, ownSensor(), signIn != null, stream.fit() is StreamFit.Size)
         if (!allowed && !policy.privacy) problem = NOT_ALLOWED
         else if (problem == NOT_ALLOWED) problem = null
         apply(next, signIn)
@@ -165,6 +166,8 @@ class CameraPane(
         plan = next
         ctx.publishStates()
     }
+
+    private fun streamMayTurnOn() = policy.stillsMayLeave && stream.fit() is StreamFit.Size
 
     private fun onReading(isNear: Boolean, raw: Float) {
         if (raw >= 0f && problem != null && problem != NOT_ALLOWED && problem != STREAM_FAILED) problem = null

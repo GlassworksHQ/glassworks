@@ -19,6 +19,7 @@ import dev.glassworks.camera.FrameSink
 import dev.glassworks.camera.FrameSource
 import dev.glassworks.camera.LumaFrame
 import dev.glassworks.camera.StreamAddress
+import dev.glassworks.camera.StreamFit
 import dev.glassworks.camera.StreamOutput
 import dev.glassworks.pane.PaneChoice
 import dev.glassworks.pane.PaneContext
@@ -85,23 +86,26 @@ class CameraMockups {
         override fun open(fps: Float, sink: FrameSink): AutoCloseable { this.sink = sink; return AutoCloseable { this.sink = null } }
     }
 
-    private class Stream(val watching: List<String>) : StreamOutput {
+    private class Stream(val watching: List<String>, val fit: StreamFit) : StreamOutput {
         var on = false
         override fun start(signIn: Pair<String, String>): Boolean { on = true; return true }
         override fun stop() { on = false }
         override fun setMotion(active: Boolean) {}
         override fun address() = StreamAddress("192.0.2.41", 8554, 8000)
         override fun watchers() = if (on) watching else emptyList()
+        override fun fit() = fit
     }
 
     /** A camera device's pane in one state, set up as [setUp] says, then started as the panel would. */
-    private inner class Rig(allowed: Boolean = true, watching: List<String> = emptyList(), setUp: (CameraPrefs) -> Unit = {}) {
+    private inner class Rig(
+        allowed: Boolean = true, watching: List<String> = emptyList(), fit: StreamFit = StreamFit.Size(1280, 720), setUp: (CameraPrefs) -> Unit = {},
+    ) {
         val file = PanePrefs(app).paneFile("camera").also { it.edit().clear().commit() }
         val def = CameraDefinition(file, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) }, time = { "14:31" })
         val camera = Camera()
         var now = 0L
         val egress = FrameEgress({ now }, { _, _ -> }, wall = { 0L }) {}
-        val stream = Stream(watching)
+        val stream = Stream(watching, fit)
         val pane: CameraPane
 
         init {
@@ -278,5 +282,23 @@ class CameraMockups {
         setupShot("camera-portrait-04-setup-camera-asks", "camera")
         setupShot("camera-portrait-05-setup-camera-allowed", "camera", allowed = true)
         setupShot("camera-portrait-06-setup-camera-no-touch", "camera", input = Input.NONE)
+    }
+
+    /**
+     * #479: a LEGACY camera, as the Mirror's, in portrait. One that lists no 1280x720 streams at the size it lists; one
+     * whose picture the encoder can't take shows why and keeps the stream off (turned on from adb, with a sign-in).
+     *   ./gradlew :kiosk:testDebugUnitTest --tests '*CameraMockups.legacyCamera' -Ps1MockupDir=<dir>
+     */
+    @Test
+    @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    fun legacyCamera() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        size = 1080 to 1920
+        val on: (CameraPrefs) -> Unit = { it.use = CameraUse.PRESENCE_AND_SNAPSHOTS; it.onvif = true; it.signIn = "glassworks" to "made-up-pass-1234" }
+        val streaming = Rig(watching = listOf("192.0.2.20"), fit = StreamFit.Size(640, 480), setUp = on).someoneWalksUp()
+        shot("camera-479-01-legacy-streams-640x480", menu(streaming), scrollTo = "Watching now")
+        val refused = Rig(fit = StreamFit.Refused("The video encoder can't take the camera's 640 × 480 picture"), setUp = on).someoneWalksUp()
+        shot("camera-479-02-cant-stream-status", menu(refused))
+        shot("camera-479-03-cant-stream-switch", menu(refused), scrollTo = "Watching now")
     }
 }

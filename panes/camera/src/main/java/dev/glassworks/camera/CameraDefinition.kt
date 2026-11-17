@@ -68,6 +68,8 @@ class CameraDefinition(
             problem = null, detecting = false, near = null, nearSince = null, leaving = false, lastStill = null,
             streaming = false, watchers = emptyList(),
         )).copy(address = address)
+        // The camera doesn't change: once per page, as the address.
+        val fit = read().streamFit
         val use = pickers?.let { p -> usePickerItem(p) } ?: SettingsItem.Choice(
             "Camera use", { prefs.use.name },
             { listOf(CameraUse.PRESENCE.name to CameraPrefs.USE_PRESENCE, CameraUse.PRESENCE_AND_SNAPSHOTS.name to CameraPrefs.USE_CAMERA) },
@@ -89,9 +91,9 @@ class CameraDefinition(
                     SettingsItem.Group("ONVIF stream", listOf(
                         // Its line follows privacy and the use: a different line draws the page again (the
                         // overlay's shape has it), so a card tapped above it updates the switch too.
-                        SettingsItem.Switch("Stream over ONVIF and RTSP", CameraPage.streamDetail(prefs.privacy, prefs.use), { prefs.onvif && prefs.policy.stillsMayLeave }) { on, done ->
-                            // Refused under privacy and in Presence only, as from Home Assistant (the approved design).
-                            val no = CameraPage.streamRefusal(prefs.privacy, prefs.use)
+                        SettingsItem.Switch("Stream over ONVIF and RTSP", CameraPage.streamDetail(prefs.privacy, prefs.use, fit), { prefs.onvif && prefs.policy.stillsMayLeave && fit is StreamFit.Size }) { on, done ->
+                            // Refused under privacy, in Presence only and on a camera that can't stream, as from Home Assistant (the approved design).
+                            val no = CameraPage.streamRefusal(prefs.privacy, prefs.use, fit)
                             if (on && no != null) done(no) else { prefs.onvif = on; done(null) }
                         },
                         // The user name shows; the password is write-only on every surface (maintainer, 2026-11-15).
