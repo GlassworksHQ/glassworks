@@ -170,9 +170,10 @@ public class WifiProvisioner(
         runCatching { ctx.registerReceiver(receiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)) }
         main.postDelayed(finish, timeoutMs)
         if (!wm.isWifiEnabled) {
+            val switchOn = wifiSwitchOn(ctx) // the client comes back by itself (see connect)
             @Suppress("DEPRECATION")
-            val ok = runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
-            Log.i(TAG, "scan: Wi-Fi is off: setWifiEnabled(true) -> $ok")
+            val ok = switchOn || runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
+            Log.i(TAG, if (switchOn) "scan: Wi-Fi client is down with the switch on: waiting for it" else "scan: Wi-Fi is off: setWifiEnabled(true) -> $ok")
             // Wi-Fi scans by itself once it is on; ask again shortly in case it doesn't.
             if (ok) main.postDelayed({ if (!finished) requestScan() }, 3_000L)
         } else if (!requestScan()) {
@@ -242,11 +243,15 @@ public class WifiProvisioner(
         preparing?.let { finishPreparing(it, Outcome.Failed("superseded", null)) }
         job?.finish(Outcome.Failed("superseded", null))
         if (!wm.isWifiEnabled) {
+            // The user's switch is on, but the client is down: Android brings it back by itself (e.g. a few seconds
+            // after our setup hotspot stops on a device without STA+AP). Wait for it; asking to turn it on is refused
+            // from Android 10 and would fail the join at once (#418 S1 retest 3, 2026-11-17).
+            val switchOn = wifiSwitchOn(ctx)
             @Suppress("DEPRECATION")
-            val ok = runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
-            Log.i(TAG, "Wi-Fi is off: setWifiEnabled(true) -> $ok")
+            val ok = switchOn || runCatching { wm.setWifiEnabled(true) }.getOrDefault(false)
+            Log.i(TAG, if (switchOn) "Wi-Fi client is down with the switch on: waiting for it" else "Wi-Fi is off: setWifiEnabled(true) -> $ok")
             if (!ok) return cb(Outcome.Failed("Wi-Fi is turned off and could not be turned on", null))
-            onProgress?.invoke("Turning Wi-Fi on…")
+            onProgress?.invoke(if (switchOn) "Waiting for Wi-Fi…" else "Turning Wi-Fi on…")
             val p = Preparing(ssid, password, hidden, cb)
             preparing = p
             main.postDelayed(p, 500)
@@ -483,3 +488,11 @@ public class WifiProvisioner(
         internal const val FIRST_SCAN_WAIT_MS: Long = 6_000L
     }
 }
+
+/**
+ * The user's Wi-Fi switch (`Settings.Global.WIFI_ON`): 1 on, 2 on with airplane mode; 0 off, 3 off by airplane mode
+ * (AOSP WifiSettingsStore, the same values from Android 6 to 10). Unreadable reads as off here, so the old path
+ * (asking Android to turn it on) still runs.
+ */
+internal fun wifiSwitchOn(ctx: Context): Boolean =
+    runCatching { Settings.Global.getInt(ctx.contentResolver, Settings.Global.WIFI_ON) }.getOrNull().let { it == 1 || it == 2 }
