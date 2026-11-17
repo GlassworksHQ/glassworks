@@ -5,24 +5,25 @@ evidence: verified
 
 # Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
 
-**Status (2026-11-16): flashed on a real Mirror once, end to end, with image 1.** Image 2 (below) is
-checked offline only: its run on the unit, and its fully dark sleep, are still to do. Kiln patches the Glass Panes
+**Status (2026-11-17): flashed on a real Mirror end to end, with image 1 (2026-11-16) and image 2 (2026-11-17).**
+Image 2's fully dark sleep is still to check. Kiln patches the Glass Panes
 `system.img` and builds a new `userdata` (`frames/lululemon-mirror/installer/src/image.ts`). The
 root's first real flash (below) booted it. Its adb came up, but **not through the key Kiln wrote**: the
 image lets in one published key by itself, and its adbd ignores `adb_keys`
 ([Who the image lets in over adb](#who-the-image-lets-in-over-adb), 2026-11-16). Since then Kiln
-patches `services.jar` to let in the installer's own key instead (checked offline; not yet flashed). `ro.sf.hwrotation` turns
+patches `services.jar` to let in the installer's own key instead: on image 2 the Mirror let in only a throwaway key
+(2026-11-17, #443's run). `ro.sf.hwrotation` turns
 **neither the boot animation**, which rendered sideways, **nor Android's UI**: nothing on the image reads it, and
 the first run with the real app came up landscape ([The rotation](#the-rotation-2026-11-17), 2026-11-17). Kiln
 no longer sets it; the first boot locks `user_rotation=3` instead. The frames are now turned
 themselves (#389), and on 2026-11-16 the turned animation ran upright on the glass (the maintainer's
 photo; [first-boot.md](first-boot.md)). The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
 Mirror still waits on an app that runs on API 23. Since 2026-11-16 Kiln installs the legacy build of
-Glassworks for generic Android instead ([The app](#the-app-the-legacy-build-of-glassworks)); it doesn't
-run on a Mirror yet.
+Glassworks for generic Android instead ([The app](#the-app-the-legacy-build-of-glassworks)). It runs on the Mirror:
+the only home screen, upright, with no crashes (2026-11-17, #443's run).
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
-below), and since 2026-11-16 `mirror-android-2` (below, offline only, not yet on the unit) (Android 6.0.1,
+below), and since 2026-11-16 `mirror-android-2` (below; on the unit since 2026-11-17) (Android 6.0.1,
 `userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
 `@glassworks/ext4` (#353), e2fsprogs 1.47.4.
 
@@ -193,8 +194,8 @@ What it changed in the install:
 
 ## Who the image lets in over adb
 
-**Status (2026-11-16): verified on the unit (the root) and in the image (read); Kiln's fix verified
-offline, not yet flashed.** A Mirror has no touchscreen, so "Allow USB debugging?" can't be answered.
+**Status (2026-11-17): verified on the unit (the root) and in the image (read); Kiln's fix verified
+offline, then on the unit: a first boot let in only the throwaway key (2026-11-17, #443's run).** A Mirror has no touchscreen, so "Allow USB debugging?" can't be answered.
 The first real flash came up on adb, and we took that as Kiln's key in `adb_keys` working. It wasn't.
 
 ### What the image does
