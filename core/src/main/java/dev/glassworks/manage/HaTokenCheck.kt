@@ -14,6 +14,8 @@ package dev.glassworks.manage
  * make it ask Home Assistant each time; a sign-in ([check] with `fresh`) always asks. A token Home Assistant didn't
  * confirm is kept as refused for [refusedTtlMs], and at most [maxAsking] questions to Home Assistant run at once,
  * so made-up tokens can't hold the panel's few web workers while Home Assistant is slow or down (verifier on #487).
+ * Whether the address is local is decided once per [ttlMs] for each address, behind the same limit: deciding can
+ * mean a name lookup (CodeRabbit on #487).
  * Only the token's SHA-256 is kept, in memory. The token never goes in a log.
  */
 class HaTokenCheck(
@@ -42,6 +44,11 @@ class HaTokenCheck(
     private class Known(val haBase: String, val user: HaUser?, val atMs: Long)
 
     private val known = LinkedHashMap<String, Known>()
+
+    /** The last address [isLocal] decided on, its answer, and when. */
+    private class Local(val haBase: String, val local: Boolean, val atMs: Long)
+
+    @Volatile private var local: Local? = null
     private val asking = java.util.concurrent.Semaphore(maxAsking)
 
     /**
@@ -51,9 +58,14 @@ class HaTokenCheck(
     fun check(token: String?, fresh: Boolean = false): Result {
         val t = token?.trim()
         if (t.isNullOrEmpty() || t.length > MAX_TOKEN || t.any { it.code <= 0x20 || it.code >= 0x7f }) return Result.Refused
-        val base = haBase()?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() && isLocal(it) } ?: return Result.NoHa
-        val key = SessionStore.hash(t)
+        val base = haBase()?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() } ?: return Result.NoHa
         val now = monoMs()
+        when (isLocalNow(base, now)) {
+            null -> return Result.Busy
+            false -> return Result.NoHa
+            true -> Unit
+        }
+        val key = SessionStore.hash(t)
         val before = synchronized(known) {
             known.entries.removeAll { now - it.value.atMs >= if (it.value.user != null) ttlMs else refusedTtlMs }
             known[key]?.takeIf { it.haBase == base && (it.user == null || !fresh) }
@@ -69,6 +81,17 @@ class HaTokenCheck(
         }
         if (user == null) return Result.Refused
         return if (user.isAdmin) Result.Ok(user, base) else Result.NotAdmin(user.name)
+    }
+
+    /** [isLocal] for [base], from the last [ttlMs]; else decided now under the [maxAsking] limit, or null when that's full. */
+    private fun isLocalNow(base: String, now: Long): Boolean? {
+        local?.takeIf { it.haBase == base && now - it.atMs < ttlMs }?.let { return it.local }
+        if (!asking.tryAcquire()) return null
+        return try {
+            isLocal(base).also { local = Local(base, it, now) }
+        } finally {
+            asking.release()
+        }
     }
 
     companion object {

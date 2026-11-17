@@ -189,7 +189,14 @@ class ManageApiTest {
         val gate = java.util.concurrent.CountDownLatch(1)
         f.userGate = gate
         val waiting = (1..2).map { n -> Thread { page("made-up-token-$n-0123456789").get() }.apply { start() } }
-        while (f.userChecks.size < 2) Thread.sleep(5)
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (f.userChecks.size < 2) {
+            if (System.nanoTime() > deadline) {
+                gate.countDown()
+                throw AssertionError("two checks never reached Home Assistant")
+            }
+            Thread.sleep(5)
+        }
         val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
         try {
             val third = runCatching { pool.submit<dev.glassworks.web.HttpResponse> { page("made-up-token-3-0123456789").get() }.get(3, java.util.concurrent.TimeUnit.SECONDS) }
@@ -204,6 +211,15 @@ class ManageApiTest {
         waiting.forEach { it.join(5_000) }
         f.userGate = null
         assertEquals(200, page().get().status)
+    }
+
+    @Test fun whetherHomeAssistantIsLocalIsDecidedOnceAMinuteNotOnEveryRequest() {
+        f.resolved.clear()
+        for (n in 1..4) page("token-$n-0123456789abcdef").get()
+        assertEquals("one lookup of Home Assistant's address for four tokens", listOf("192.0.2.10"), f.resolved.toList())
+        f.monoMs += 60_000
+        page().get()
+        assertEquals(2, f.resolved.size)
     }
 
     @Test fun thePreflightNeedsNoTokenAndAnswersCors() {
