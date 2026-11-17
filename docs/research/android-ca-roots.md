@@ -63,12 +63,12 @@ each one there?
    With `--with isrgrootx1.pem` (ISRG Root X1 added to every store), every row is OK.
 
 4. **The downloads on the API 23 emulator** (2026-11-17, verified). `system-images;android-23;default;arm64-v8a`,
-   whose CA store is AOSP's. A scratch instrumentation test in the core (not committed: it reaches the internet)
-   fetched each URL with a socket factory over the system trust manager alone ("without"), then with
+   whose CA store is AOSP's. An instrumentation test, `tools/legacy/https-trust-device-check.kt` (copied into the
+   core's androidTest for the run; CI doesn't run it because it reaches the internet), fetched each URL with a socket factory over the system trust manager alone ("without"), then with
    `HttpsTrust.socketFactory` ("with"), and hashed the body:
    ```
    $ ./gradlew --init-script tools/legacy/api23-emulator.gradle :glassworks-core:connectedDebugAndroidTest \
-       -Pandroid.testInstrumentationRunnerArguments.class=dev.glassworks.platform.HttpsTrustDeviceScratch
+       -Pandroid.testInstrumentationRunnerArguments.class=dev.glassworks.platform.HttpsTrustDeviceCheck
    API 23, hasIsrgRootX1=false
    WITHOUT .../micro-wake-word-models/40ff33f…/models/v2/alexa.tflite -> SSLHandshakeException: CertPathValidatorException: Trust anchor for certification path not found.
    WITH    .../micro-wake-word-models/40ff33f…/models/v2/alexa.tflite -> HTTP 200 from raw.githubusercontent.com, 55856 bytes, sha256 9011a815…a723b
@@ -129,8 +129,9 @@ RSA chains on 2026-11-16. Android has it only from Android 14, so if GitHub move
 ## How to reproduce
 
 1. `tools/legacy/ca-roots.sh` (read-only: network and a temporary directory).
-2. On the API 23 arm64 emulator (`system-images;android-23;default;arm64-v8a`), run an instrumentation test like
-   step 4's with `tools/legacy/api23-emulator.gradle`. It touches only the emulator and the internet. The app
+2. On the API 23 arm64 emulator (`system-images;android-23;default;arm64-v8a`), run
+   `tools/legacy/https-trust-device-check.kt` as its header says (with `tools/legacy/api23-emulator.gradle`).
+   It touches only the emulator and the internet. The app
    itself could not be started there: agent-device's `open` and `snapshot` fail on this image (2026-11-17).
 
 ## Open questions

@@ -7,6 +7,8 @@
 #   tools/legacy/ca-roots.sh --with FILE.pem # the same, with FILE's roots added to every store (the bundled ones)
 #   HOSTS="example.com" tools/legacy/ca-roots.sh
 #
+# tools/legacy/https-trust-device-check.kt is the same question asked of a real Android's store (the emulator).
+#
 # Android 6.0.1 kept its store in libcore (luni/src/main/files/cacerts); from 7.0 it is system/ca-certificates (files).
 # The research note is docs/research/android-ca-roots.md.
 set -euo pipefail
@@ -37,8 +39,9 @@ done
 
 printf '| Host | Root it chains to |'; echo "$STORES" | while read -r name _; do printf ' %s |' "$name"; done; echo
 for h in $HOSTS; do
+    # A host that doesn't answer gets a "(no answer)" row; the scan goes on.
     echo | openssl s_client -connect "$h:443" -servername "$h" -showcerts 2>/dev/null |
-        awk -v d="$h" '/BEGIN CERT/{n++} n{print > (d "." n ".pem")} /END CERT/{n=n}'
+        awk -v d="$h" '/BEGIN CERT/{n++} n{print > (d "." n ".pem")} /END CERT/{n=n}' || :
     [ -f "$h.1.pem" ] || { echo "| $h | (no answer) |"; continue; }
     cat "$h".[2-9].pem > "$h.chain.pem" 2>/dev/null || :
     last=$(ls "$h".[0-9].pem | sort -t. -k2 -n | tail -1)
