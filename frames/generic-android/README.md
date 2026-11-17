@@ -268,8 +268,14 @@ The key exists since 2026-11-17: certificate `CN=Glassworks, O=GlassworksHQ` (RS
 signs both builds, `dev.glassworks.generic_android` and `.legacy`. It lives in the `release-signing` environment as
 `GENERIC_KEYSTORE_B64` (the PKCS12 keystore, base64), `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS` and
 `GENERIC_KEY_PASSWORD`, and in the maintainer's password manager. It is never in the repo, and it never changes.
+The keystore is PKCS12, which has one password: `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD` must be the
+same value, or signing fails with "keystore password was incorrect". The certificate's SHA-256 is
+`564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`.
+
 Test builds sign with it too ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), so each one
-updates the last in place, settings kept, and CI fails if an APK carries another certificate.
+updates the last in place, settings kept. CI checks every APK's certificate SHA-256 against the one above, so a new
+key, even with the same name, fails the build. Builds from before 2026-11-17 were signed with a key made for their
+own run: uninstall one before installing a newer build (once; that wipes the app's settings).
 
 ## Panes
 

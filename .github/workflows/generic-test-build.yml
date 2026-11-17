@@ -14,7 +14,8 @@
 #     the Classpath exception), which the maintainer allowed on 2026-11-16 (AGENTS.md, rule 4).
 #   - Signed with Glassworks' release key (`release-signing` environment, GENERIC_* secrets;
 #     frames/generic-android/README.md, "Signing"), so a test build updates any earlier test build or release in
-#     place, settings kept.
+#     place, settings kept. Once only: a build from before 2026-11-17 was signed with a key made for its own run,
+#     so uninstall it first (that wipes the app's settings).
 #   - 0.1.0 for each ABI the frame runs, and 0.1.1 for arm64-v8a, so an update in place can be tried.
 #   - Kept for 3 days; the repo is public. Only pushes (write access) and manual runs trigger it, so pull requests
 #     from forks never get the key.
@@ -93,6 +94,9 @@ jobs:
         run: rm -f "$RUNNER_TEMP/glassworks-release.jks"
 
       - name: Verify and checksum
+        env:
+          # Glassworks' release certificate (CN=Glassworks, O=GlassworksHQ, 2026-11-17). Public, not a secret.
+          GLASSWORKS_CERT_SHA256: 564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa
         run: |
           apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
           aapt2="$(dirname "$apksigner")/aapt2"
@@ -100,8 +104,12 @@ jobs:
           cd generic-dist
           for apk in *.apk; do
             "$apksigner" verify "$apk"
-            "$apksigner" verify --print-certs "$apk" | grep -q 'certificate DN: CN=Glassworks, O=GlassworksHQ' \
-              || { echo "::error::$apk isn't signed with Glassworks' release key"; exit 1; }
+            # The certificate's SHA-256, not its name: a new key with the same name must fail here, or every
+            # installed build would refuse the next update (frames/generic-android/README.md, "Signing").
+            certs="$("$apksigner" verify --print-certs "$apk")"
+            signers="$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' <<< "$certs")"
+            [ "$signers" = 1 ] && grep -qx "Signer #1 certificate SHA-256 digest: $GLASSWORKS_CERT_SHA256" <<< "$certs" \
+              || { echo "::error::$apk isn't signed with Glassworks' release key alone"; exit 1; }
             badging="$("$aapt2" dump badging "$apk")"
             case "$apk" in
               glassworks-generic-legacy-test-*) id=dev.glassworks.generic_android.legacy min=23
