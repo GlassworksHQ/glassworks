@@ -59,6 +59,8 @@ import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
 import sh.edm.s1kiosk.improv.ImprovController
 import sh.edm.s1kiosk.improv.ImprovWifiStatus
+import dev.glassworks.web.LocalName
+import dev.glassworks.web.LocalRoute
 import org.json.JSONObject
 import kotlin.system.exitProcess
 
@@ -157,9 +159,14 @@ class MainActivity : Activity() {
             setupOverlay.tick() // the panes' steps follow their state
             if (resumed) requestRuntimePermissions() // a pane turned on since (from Home Assistant) asks once
             refreshOffline()
+            // #449: a frame with no presence sensor has nothing to wake it, so it stays on through setup and the
+            // connecting screen. The S1's sensor wakes it as before.
+            glassworks.screen.stayOn(NOT_READY, !presenceSensor && (setupOverlay.isShowing || loadingOverlay.isShowing))
             handler.postDelayed(this, SETUP_TICK_MS)
         }
     }
+
+    private val presenceSensor by lazy { glassworks.presence.ownSensor(this) }
 
     // Hidden settings gesture: 5 taps in the top-left corner within 3 s.
     private var cornerTaps = 0
@@ -289,11 +296,24 @@ class MainActivity : Activity() {
             refreshSetup()
             return
         }
+        val route = prefs.dashboardRoute
+        if (!prefs.isAutoUrl && route != loggedRoute) {
+            loggedRoute = route
+            when (route) {
+                is LocalRoute.ByAddress -> Log.i(TAG, "Dashboard through ${route.address}: Android can't resolve ${route.name} before 12")
+                is LocalRoute.NoAddressYet -> Log.i(TAG, "Dashboard at ${route.name} as set: Android can't resolve it before 12, and Home Assistant's address isn't known yet")
+                is LocalRoute.KeptForCertificate -> Log.i(TAG, "Dashboard at ${route.name} as set, though Android can't resolve it before 12: https, and its certificate is for the name")
+                is LocalRoute.AsSet -> Unit
+            }
+        }
         dashboardLoadAt = SystemClock.elapsedRealtime()
         page?.load(externalize(url))
     }
 
     private var dashboardLoadAt = 0L
+
+    /** The last [KioskPrefs.dashboardRoute] [loadDashboard] logged: a line when it changes, not every retry. */
+    private var loggedRoute: LocalRoute? = null
 
     // ---- notifications (#118): the overlay, a view full screen and the way back
 
@@ -551,7 +571,7 @@ class MainActivity : Activity() {
     private var pageStoppedAt = 0L
 
     /** The host the dashboard loads from, for the connecting screen ("" before one is known). */
-    private fun dashboardHost(): String = (currentUrl ?: prefs.url).takeIf { it.startsWith("http") }?.let { Uri.parse(it).host }.orEmpty()
+    private fun dashboardHost(): String = prefs.shownHost(currentUrl ?: prefs.url)
 
     private fun hasNetwork(): Boolean {
         val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return true
@@ -689,9 +709,10 @@ class MainActivity : Activity() {
 
     /** Discovery (or manual entry) found Home Assistant. */
     private fun onHaFound(url: String) {
-        Log.i(TAG, "Home Assistant at $url (dashboard setting: ${prefs.urlSetting})")
+        val setting = if (prefs.isAutoUrl) KioskPrefs.AUTO else LocalName.forLog(prefs.urlSetting)
+        Log.i(TAG, "Home Assistant at ${LocalName.forLog(url)} (dashboard setting: $setting)")
         refreshSetup()
-        if (!prefs.isAutoUrl) return
+        if (!prefs.loadsFoundAddress) return
         val started = glassworks.engine.started
         if (prefs.engineStart() != KioskPrefs.engineStart(started?.secureHosts.orEmpty(), started?.dashboard)) {
             // The HA host must be in dom.securecontext.allowlist (mic), which Gecko reads at startup, and the legacy
@@ -1047,7 +1068,7 @@ class MainActivity : Activity() {
             frontendLoading = false
             pageStartedAt = SystemClock.uptimeMillis()
             offlineShown = false
-            if (url.startsWith("http")) loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, Uri.parse(url).host ?: ""))
+            if (url.startsWith("http")) loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
         }
 
         override fun onPageStop(success: Boolean) {
@@ -1060,6 +1081,7 @@ class MainActivity : Activity() {
                 if (hasNetwork()) {
                     offlineShown = false
                     loadingOverlay.show(LoadingOverlay.State.Unreachable(dashboardHost(), SystemClock.elapsedRealtime() + RETRY_MS))
+                    if (prefs.loadsFoundAddress) glassworks.discovery?.findAgain() // DHCP may have moved Home Assistant (#449)
                 } else {
                     showOffline() // "Connecting to Wi-Fi…" after a reboot, the setup hint when there's nothing to wait for
                 }
@@ -1201,6 +1223,7 @@ class MainActivity : Activity() {
         glassworks.screen.onKeepScreenOn = null
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
+        glassworks.screen.stayOn(NOT_READY, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -1238,5 +1261,7 @@ class MainActivity : Activity() {
         const val LAUNCH_FALLBACK_MS = 45_000L
         private const val SETUP_TICK_MS = 2_000L
         private const val SETTINGS_TICK_MS = 2_000L
+        /** The [dev.glassworks.screen.ScreenPolicy.stayOn] reason while setup or the connecting screen is up (#449). */
+        private const val NOT_READY = "not ready"
     }
 }

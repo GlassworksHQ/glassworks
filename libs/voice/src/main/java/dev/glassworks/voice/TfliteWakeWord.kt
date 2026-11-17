@@ -8,8 +8,11 @@ import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
-/** Thrown when model files are missing or unreadable. */
-internal class ModelsMissingException(message: String) : Exception(message)
+/** Thrown when a model isn't on the device, or couldn't be downloaded ([failure] says why). */
+internal class ModelsMissingException(message: String, val failure: ModelFailure = ModelFailure.Missing) : Exception(message)
+
+/** TensorFlow Lite couldn't run a model that is there: its native library is missing, or it refused the model. */
+internal class WakeEngineException(message: String, cause: Throwable) : Exception(message, cause)
 
 /**
  * openWakeWord with TFLite: melspectrogram.tflite -> embedding_model.tflite -> wake model. The legacy
@@ -34,7 +37,7 @@ internal class TfliteWakeWord private constructor(
 
         fun modelName(modelFile: String): String = modelFile.removeSuffix(".tflite")
 
-        @Throws(ModelsMissingException::class)
+        @Throws(ModelsMissingException::class, WakeEngineException::class)
         fun load(dir: File, wakeModelFile: String): TfliteWakeWord {
             val files = listOf(MELSPEC_FILE, EMBEDDING_FILE, wakeModelFile).map { File(dir, it) }
             val missing = files.filter { !it.isFile || it.length() < 8 }
@@ -57,7 +60,7 @@ internal class TfliteWakeWord private constructor(
                 loaded += Interpreter(map(files[2]), opts())
             } catch (e: Throwable) {
                 loaded.forEach { it.close() }
-                throw ModelsMissingException("Failed to load TFLite models from $dir: ${e.message}")
+                throw WakeEngineException("Failed to load TFLite models from $dir: ${e.message}", e)
             }
             return TfliteWakeWord(modelName(wakeModelFile), loaded[0], loaded[1], loaded[2])
         }

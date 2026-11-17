@@ -57,12 +57,15 @@ object OAuth {
             "&code_challenge=" + enc(codeChallenge) +
             "&code_challenge_method=S256"
 
-    /** `http://h:8123/` or `http://h:8123/lovelace/x` → `http://h:8123` (scheme://host[:port]). */
+    /**
+     * `http://h:8123/` or `http://h:8123/lovelace/x` → `http://h:8123` (scheme://host[:port]). A user and password in the
+     * URL aren't part of its origin: they stay out of the base the panel logs, shows and signs in to (#449).
+     */
     fun origin(url: String): String? = try {
         val u = URI(url.trim())
         val scheme = u.scheme?.lowercase()
         if ((scheme != "http" && scheme != "https") || u.host.isNullOrEmpty()) null
-        else scheme + "://" + u.rawAuthority.lowercase()
+        else scheme + "://" + u.rawAuthority.substringAfterLast('@').lowercase()
     } catch (_: Exception) {
         null
     }

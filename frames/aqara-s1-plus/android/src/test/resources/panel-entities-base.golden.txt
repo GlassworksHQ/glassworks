@@ -70,6 +70,7 @@ update_status|971991635|TextSensorEntity|Update status|mdi:update||DIAGNOSTIC|au
 uptime|-54133543|SensorEntity|Uptime||timestamp|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 voice|2140916217|SwitchEntity|Voice|mdi:microphone-message||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 voice_overlay|1110557810|SwitchEntity|Voice overlay|mdi:message-badge-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+voice_status|-1830052708|TextSensorEntity|Voice status|mdi:microphone-message||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 wake_sound|-735348603|SwitchEntity|Wake sound|mdi:bell-ring-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wake_word_threshold|949390898|NumberEntity|Wake word threshold|mdi:account-voice||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wall_base|1607671203|SwitchEntity|Wall base|mdi:light-switch||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
@@ -154,6 +155,7 @@ update_status|971991635|TextSensorEntity|Update status|mdi:update||DIAGNOSTIC|au
 uptime|-54133543|SensorEntity|Uptime||timestamp|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 voice|2140916217|SwitchEntity|Voice|mdi:microphone-message||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 voice_overlay|1110557810|SwitchEntity|Voice overlay|mdi:message-badge-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+voice_status|-1830052708|TextSensorEntity|Voice status|mdi:microphone-message||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 wake_sound|-735348603|SwitchEntity|Wake sound|mdi:bell-ring-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wake_word_threshold|949390898|NumberEntity|Wake word threshold|mdi:account-voice||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wall_base|1607671203|SwitchEntity|Wall base|mdi:light-switch||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
@@ -240,6 +242,7 @@ update_status|971991635|TextSensorEntity|Update status|mdi:update||DIAGNOSTIC|au
 uptime|-54133543|SensorEntity|Uptime||timestamp|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 voice|2140916217|SwitchEntity|Voice|mdi:microphone-message||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 voice_overlay|1110557810|SwitchEntity|Voice overlay|mdi:message-badge-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+voice_status|-1830052708|TextSensorEntity|Voice status|mdi:microphone-message||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 wake_sound|-735348603|SwitchEntity|Wake sound|mdi:bell-ring-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wake_word_threshold|949390898|NumberEntity|Wake word threshold|mdi:account-voice||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wall_base|1607671203|SwitchEntity|Wall base|mdi:light-switch||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
@@ -317,6 +320,7 @@ update_status|971991635|TextSensorEntity|Update status|mdi:update||DIAGNOSTIC|au
 uptime|-54133543|SensorEntity|Uptime||timestamp|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 voice|2140916217|SwitchEntity|Voice|mdi:microphone-message||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 voice_overlay|1110557810|SwitchEntity|Voice overlay|mdi:message-badge-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+voice_status|-1830052708|TextSensorEntity|Voice status|mdi:microphone-message||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 wake_sound|-735348603|SwitchEntity|Wake sound|mdi:bell-ring-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wake_word_threshold|949390898|NumberEntity|Wake word threshold|mdi:account-voice||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wall_base|1607671203|SwitchEntity|Wall base|mdi:light-switch||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
@@ -394,6 +398,7 @@ update_status|971991635|TextSensorEntity|Update status|mdi:update||DIAGNOSTIC|au
 uptime|-54133543|SensorEntity|Uptime||timestamp|DIAGNOSTIC|authOnly=false|options=|eventTypes=
 voice|2140916217|SwitchEntity|Voice|mdi:microphone-message||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 voice_overlay|1110557810|SwitchEntity|Voice overlay|mdi:message-badge-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+voice_status|-1830052708|TextSensorEntity|Voice status|mdi:microphone-message||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 wake_sound|-735348603|SwitchEntity|Wake sound|mdi:bell-ring-outline||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wake_word_threshold|949390898|NumberEntity|Wake word threshold|mdi:account-voice||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 wall_base|1607671203|SwitchEntity|Wall base|mdi:light-switch||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault

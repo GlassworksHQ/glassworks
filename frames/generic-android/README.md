@@ -58,7 +58,8 @@ On a screen without touch (the lululemon Mirror) its setup step never waits: the
 Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream runs at a size the camera lists, or
 stays off with the reason on the Camera page; presence works either way. The screen follows Android's standard proximity sensor (near means under
 5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
-no proximity sensor; then the screen goes off after the idle time and wakes on a touch.
+no proximity sensor; then the screen goes off after the idle time and wakes on a touch. Until setup is done and
+the dashboard has loaded, it stays on (#449).
 
 | | S1 Kiosk on a tablet | Glassworks for generic Android |
 |---|---|---|

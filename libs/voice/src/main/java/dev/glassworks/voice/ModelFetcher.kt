@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.UUID
 
 /**
  * Downloads the wake word models the panel is missing from where their authors publish them, and
@@ -42,13 +43,14 @@ internal class ModelFetcher(
             "hey_mycroft_v0.1.tflite" to "bf9e43136afd3ca323698820a6e32a47f885ef4c30a3b8b577ec71688a9d64d8",
         )
         private const val MAX_BYTES = 8L * 1024 * 1024
+        private const val STALE_PART_MS = 10 * 60_000L
 
-        private fun httpGet(url: URL): InputStream {
+        fun httpGet(url: URL): InputStream {
             val c = url.openConnection() as HttpURLConnection
             c.connectTimeout = 15_000
             c.readTimeout = 30_000
             c.instanceFollowRedirects = true // github.com -> release-assets.githubusercontent.com (both https)
-            if (c.responseCode != 200) throw IOException("HTTP ${c.responseCode} for $url")
+            if (c.responseCode != 200) throw HttpStatusException(c.responseCode)
             return c.inputStream
         }
 
@@ -69,36 +71,54 @@ internal class ModelFetcher(
     /**
      * Fetches whatever [missing] reports. Each file goes to a `.part` file first and is renamed only
      * after its SHA-256 matched, so a half download never looks like a model. Returns the names fetched.
+     * A failure is a [ModelDownloadException] that says why ([modelFailureOf]).
      */
     @Throws(IOException::class)
     fun ensure(dir: File): List<String> {
         val need = missing(dir)
         if (need.isEmpty()) return need
-        if (!dir.isDirectory && !dir.mkdirs()) throw IOException("cannot create $dir")
+        if (!dir.isDirectory && !dir.mkdirs()) throw ModelDownloadException("cannot create $dir", ModelFailure.Storage)
+        // What a killed process left behind; a live download's part is younger.
+        val stale = System.currentTimeMillis() - STALE_PART_MS
+        dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
         for (name in need) {
-            val part = File(dir, "$name.part")
+            // Its own .part: an engine stopped mid-download (voice off and on) may still be writing one.
+            val part = File(dir, "$name.${UUID.randomUUID()}.part")
             try {
-                open(URL("$base/$name")).use { input ->
-                    part.outputStream().use { out ->
+                val input = download { open(URL("$base/$name")) }
+                input.use {
+                    val out = save { part.outputStream() }
+                    save { out.use {
                         val buf = ByteArray(64 * 1024)
                         var total = 0L
                         while (true) {
-                            val n = input.read(buf)
+                            val n = download { input.read(buf) }
                             if (n < 0) break
                             total += n
-                            if (total > MAX_BYTES) throw IOException("$name is larger than expected")
-                            out.write(buf, 0, n)
+                            if (total > MAX_BYTES) throw ModelDownloadException("$name is larger than expected", ModelFailure.CheckFailed)
+                            save { out.write(buf, 0, n) }
                         }
-                    }
+                    } }
                 }
-                val got = sha256(part)
-                if (got != files.getValue(name)) throw IOException("$name failed its SHA-256 check (got ${got.take(16)}…)")
-                if (!part.renameTo(File(dir, name))) throw IOException("cannot rename $part")
+                val got = save { sha256(part) }
+                if (got != files.getValue(name)) {
+                    throw ModelDownloadException("$name failed its SHA-256 check (got ${got.take(16)}…)", ModelFailure.CheckFailed)
+                }
+                if (!part.renameTo(File(dir, name))) throw ModelDownloadException("cannot rename $part", ModelFailure.Storage)
                 VoiceLog.i("Downloaded wake word model $name")
             } finally {
                 part.delete()
             }
         }
         return need
+    }
+
+    private inline fun <T> download(block: () -> T): T = try { block() } catch (e: IOException) {
+        throw e as? ModelDownloadException ?: ModelDownloadException(e.message ?: e.toString(), modelFailureOf(e), e)
+    }
+
+    /** A local file step: its failure is Storage, unless it is already a classified download failure inside it. */
+    private inline fun <T> save(block: () -> T): T = try { block() } catch (e: IOException) {
+        throw e as? ModelDownloadException ?: ModelDownloadException(e.message ?: e.toString(), ModelFailure.Storage, e)
     }
 }

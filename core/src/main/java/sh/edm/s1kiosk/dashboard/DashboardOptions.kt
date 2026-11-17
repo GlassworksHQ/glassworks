@@ -98,14 +98,18 @@ object DashboardOptions {
      * The new dashboard setting for a chosen [option], or null when nothing changes ([CUSTOM], the
      * option that is already current, unknown options, HA unknown). Always on [haBase]'s host, so the
      * secure-context hosts don't change (no restart). [DEFAULT] goes back to `auto` when the
-     * discovered HA ([haUrl]) is that same host, else `<haBase>/`.
+     * discovered HA ([haUrl]) is that same host, else `<haBase>/`. A user and password in [urlSetting] stay in the
+     * new setting, which never goes back to `auto` then: [haBase], an origin, holds neither (#449).
      */
     fun urlFor(option: String, urlSetting: String, haBase: String?, haUrl: String, list: List<Dashboard>): String? {
         if (option == CUSTOM) return null
         if (option == currentOption(urlSetting, haBase, list)) return null
-        val base = haBase?.let(OAuth::trimBase) ?: return null
+        val origin = haBase?.let(OAuth::trimBase) ?: return null
+        val userInfo = try { URI(urlSetting.trim()).rawUserInfo } catch (_: Exception) { null }
+        val base = userInfo?.let { origin.replaceFirst("://", "://$it@") } ?: origin
         if (option == DEFAULT) {
-            return if (haUrl.isNotEmpty() && OAuth.origin(haUrl) == OAuth.origin(base)) KioskPrefs.AUTO else "$base/"
+            val sameAsFound = haUrl.isNotEmpty() && OAuth.origin(haUrl) == OAuth.origin(origin)
+            return if (sameAsFound && userInfo == null) KioskPrefs.AUTO else "$base/"
         }
         val d = labels(list)[option] ?: return null
         return "$base/${d.urlPath}"

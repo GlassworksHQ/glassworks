@@ -90,20 +90,20 @@ internal class MicroWakeWord private constructor(
 ) : WakeDetector {
 
     companion object {
-        @Throws(ModelsMissingException::class)
+        @Throws(ModelsMissingException::class, WakeEngineException::class)
         fun load(file: File, model: MicroModel): MicroWakeWord {
             if (!file.isFile) throw ModelsMissingException("Wake word model missing: $file")
             val interpreter = try {
                 val buf = FileInputStream(file).use { it.channel.map(FileChannel.MapMode.READ_ONLY, 0, file.length()) }
                 Interpreter(buf, Interpreter.Options().setNumThreads(1))
             } catch (e: Throwable) {
-                throw ModelsMissingException("Failed to load $file: ${e.message}")
+                throw WakeEngineException("Failed to load $file: ${e.message}", e)
             }
             return try {
                 MicroWakeWord(interpreter, model)
             } catch (e: Throwable) {
                 interpreter.close()
-                throw ModelsMissingException("Unexpected microWakeWord model $file: ${e.message}")
+                throw WakeEngineException("Unexpected microWakeWord model $file: ${e.message}", e)
             }
         }
     }
