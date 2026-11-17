@@ -38,6 +38,8 @@ class BluetoothProxyPane(
     private val radio: ProxyRadio,
     private val exec: ScheduledExecutorService,
     connect: Boolean = false,
+    /** The adapter's MAC for Home Assistant, or null for the fallback ([AdapterMac]). */
+    private val adapterMac: () -> String? = { null },
 ) : Pane {
     override val id = "bluetooth-proxy"
 
@@ -121,6 +123,7 @@ class BluetoothProxyPane(
     private fun attach() {
         val s = server ?: return
         if (engine != null || radio.unavailable() == ScanFailure.NO_BLE) return
+        s.bluetoothMacAddress = adapterMac()
         engine = BluetoothProxyEngine(s, radio.newScanner(), ScanPower.LOW_LATENCY).also { s.bluetooth = it }
         if (connect) attachLinks()
     }

@@ -19,6 +19,14 @@ class BluetoothProxyPrefs(private val sp: SharedPreferences) {
         get() = sp.getBoolean(KEY_CONNECT, DEFAULT_CONNECT)
         set(value) { sp.edit().putBoolean(KEY_CONNECT, value).apply() }
 
+    /**
+     * The Bluetooth adapter's MAC the proxy first sent Home Assistant ([AdapterMac]), kept so the scanner
+     * HA keys on it never changes back. Null until one was found. Never logged.
+     */
+    var adapterMac: String?
+        get() = sp.getString(KEY_ADAPTER_MAC, null)
+        set(value) { sp.edit().putString(KEY_ADAPTER_MAC, value).apply() }
+
     companion object {
         /** Panels keep it, and it is the adb extra: never rename it. */
         const val KEY_ENABLED = "bluetooth_proxy_enabled"
@@ -26,5 +34,7 @@ class BluetoothProxyPrefs(private val sp: SharedPreferences) {
         /** Panels keep it: never rename it. */
         const val KEY_CONNECT = "bluetooth_proxy_connect"
         const val DEFAULT_CONNECT = false
+        /** Panels keep it: never rename it. */
+        const val KEY_ADAPTER_MAC = "bluetooth_proxy_adapter_mac"
     }
 }

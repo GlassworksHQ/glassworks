@@ -7,6 +7,7 @@
     "dev": "node scripts/api-docs.mjs && next dev",
     "build": "node scripts/api-docs.mjs && next build && pagefind --site .next/server/app --output-path .next/static/pagefind",
     "start": "next start",
+    "test": "vitest run",
     "lint": "eslint",
     "api-docs": "node scripts/api-docs.mjs",
     "brand": "node scripts/brand/generate.mjs",

@@ -23,6 +23,7 @@ install inside `site/`):
 npm run dev -w site          # http://localhost:3000
 npm run lint -w site
 npm run typecheck -w site
+npm test -w site             # vitest: src/lib/*.test.ts
 npm run build -w site        # every route is static; this is what Vercel runs
 npm run check:seo -w site    # after a build: every page has a title, description, canonical and preview
 npm run check:trace -w site  # after a build: each route's bundle has every published file and loads its external modules on its own
@@ -43,10 +44,11 @@ files change.
 2. **No data is written by hand in `site/`.** Frames come from `../frames/<id>/design/frame.json`,
    panes from `@glassworks/frame-card` (each pane's `pane.json`), Clarity's grade from
    `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric, the latest
-   release from `../CHANGELOG.md`. Blueprints are read from GitHub at the latest release tag when the
-   site is built (`src/lib/blueprints.ts`), so the build needs github.com; `BLUEPRINTS_REF=<tag or
-   commit>` builds from another ref. The docs are the repo's own Markdown: `src/lib/docs/sources.ts`
-   maps each file to its URL and nav group, and the site never keeps a copy. A doc's text changes in
+   release from `../CHANGELOG.md`. Blueprints are the app's own list (its `blueprints.json` asset),
+   read from GitHub at the latest release tag when the site is built (`src/lib/blueprints.ts`), so the
+   build needs github.com; `BLUEPRINTS_REF=<tag or commit>` builds from another ref. The docs are the
+   repo's own Markdown: `src/lib/docs/sources.ts` maps each file to its URL and nav group, and the site
+   never keeps a copy. A doc's text changes in
    the Markdown, on GitHub; a new doc gets a line in `sources.ts`. A data change
    and the page that shows it go in one PR. The site's own words for that data are in
    `src/lib/frameText.ts`. The libraries' API reference is each release's Dokka HTML, from its

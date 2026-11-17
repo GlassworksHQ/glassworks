@@ -185,7 +185,7 @@ Status words:
 - **Not yet**: no decision either way.
 - **Not planned**: we won't, for the reason given.
 
-**Count for esphome-api** (against ESPHome 2026.10.2): 30 supported, 9 partial, 0 planned, 17 not yet, 15 not planned.
+**Count for esphome-api** (against ESPHome 2026.10.2): 31 supported, 9 partial, 0 planned, 16 not yet, 15 not planned.
 
 `tools/check-parity-tables.py` checks these words and the count. `ParityTableTest` checks that the
 entity types marked Supported or Partial are exactly the ones the server lists.
@@ -288,7 +288,7 @@ The messages are here; the Android scanner and its own comparison are in
 | Clearing the GATT cache | `BluetoothDeviceRequest` clear cache, `BluetoothDeviceClearCacheResponse` (88) | Not yet | | Answered "failed" at once |
 | Connection parameters | `BluetoothSetConnectionParamsRequest`, its response (145, 146) | Not yet | | |
 | Scanner state and mode | `BluetoothScannerStateResponse`, `BluetoothScannerSetModeRequest` (126, 127) | Not planned: Android apps can't switch to a passive scan | | |
-| Bluetooth MAC address | `bluetooth_mac_address` in DeviceInfo and capabilities | Not yet | | HA keys the scanner on the device MAC instead. Decided with GATT ([#246](https://github.com/GlassworksHQ/glassworks/issues/246)) |
+| Bluetooth MAC address | `bluetooth_mac_address` in DeviceInfo (18) and the capabilities' `mac_address` | Supported | Unreleased | `ApiServer.bluetoothMacAddress`, sent with the proxy only. Unset, HA keys the scanner on the device MAC, as before |
 
 ### Other proxies and newer messages
 

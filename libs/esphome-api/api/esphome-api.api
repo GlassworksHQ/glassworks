@@ -90,6 +90,7 @@ public final class dev/glassworks/esphome/ApiServer {
 	public fun <init> (ILkotlin/jvm/functions/Function0;Ljava/util/List;[B)V
 	public final fun getBluetooth ()Ldev/glassworks/esphome/BluetoothProxyHandler;
 	public final fun getBluetoothConnections ()Ldev/glassworks/esphome/BluetoothConnectionHandler;
+	public final fun getBluetoothMacAddress ()Ljava/lang/String;
 	public final fun getEncrypted ()Z
 	public final fun getHasSubscriber ()Z
 	public final fun getKeyed ()Z
@@ -113,6 +114,7 @@ public final class dev/glassworks/esphome/ApiServer {
 	public final fun sendVoice (ILdev/glassworks/esphome/ProtoWriter;)Z
 	public final fun setBluetooth (Ldev/glassworks/esphome/BluetoothProxyHandler;)V
 	public final fun setBluetoothConnections (Ldev/glassworks/esphome/BluetoothConnectionHandler;)V
+	public final fun setBluetoothMacAddress (Ljava/lang/String;)V
 	public final fun setEntities (Ljava/util/List;)V
 	public final fun setOnClientHello (Lkotlin/jvm/functions/Function2;)V
 	public final fun setOnCommand (Lkotlin/jvm/functions/Function0;)V
