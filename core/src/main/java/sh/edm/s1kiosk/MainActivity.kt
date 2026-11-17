@@ -520,7 +520,7 @@ class MainActivity : Activity() {
     private var pageStoppedAt = 0L
 
     /** The host the dashboard loads from, for the connecting screen ("" before one is known). */
-    private fun dashboardHost(): String = (currentUrl ?: prefs.url).takeIf { it.startsWith("http") }?.let { Uri.parse(it).host }.orEmpty()
+    private fun dashboardHost(): String = prefs.shownHost(currentUrl ?: prefs.url)
 
     private fun hasNetwork(): Boolean {
         val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return true
@@ -978,7 +978,7 @@ class MainActivity : Activity() {
             frontendLoading = false
             pageStartedAt = SystemClock.uptimeMillis()
             offlineShown = false
-            if (url.startsWith("http")) loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, Uri.parse(url).host ?: ""))
+            if (url.startsWith("http")) loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
         }
 
         override fun onPageStop(success: Boolean) {

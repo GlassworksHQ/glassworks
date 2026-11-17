@@ -61,6 +61,16 @@ class KioskPrefs(
     val dashboardRoute: LocalRoute get() = LocalName.route(urlSetting, haUrl, platform.resolvesLocalNames)
 
     /**
+     * The host the connecting screen names for a page at [url]: the `.local` name the person entered where the panel
+     * reaches it by address (#449), else the page's own host. "" for no web page.
+     */
+    fun shownHost(url: String?): String {
+        val host = url?.takeIf { it.startsWith("http") }?.let { Uri.parse(it).host }.orEmpty()
+        val r = dashboardRoute as? LocalRoute.ByAddress ?: return host
+        return if (host.isNotEmpty() && host == Uri.parse(r.url).host) r.name else host
+    }
+
+    /**
      * The dashboard loads through the address discovery found, or waits for one: a load error may mean that address
      * changed, or that discovery hasn't found it yet.
      */

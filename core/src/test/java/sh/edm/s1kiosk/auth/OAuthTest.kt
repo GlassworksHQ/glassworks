@@ -69,6 +69,7 @@ class OAuthTest {
     fun origin() {
         assertEquals("http://192.168.1.100:8123", OAuth.origin("http://192.168.1.100:8123/s1-panel/home"))
         assertEquals("https://ha.example.com", OAuth.origin("https://HA.example.com/"))
+        assertEquals("a user and password aren't part of it", "http://192.0.2.10:8123", OAuth.origin("http://user:secret@192.0.2.10:8123/"))
         assertNull(OAuth.origin("ftp://x/"))
         assertNull(OAuth.origin("auto"))
     }

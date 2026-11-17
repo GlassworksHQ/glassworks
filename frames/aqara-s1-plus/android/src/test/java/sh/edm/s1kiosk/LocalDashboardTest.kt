@@ -1,7 +1,13 @@
 package sh.edm.s1kiosk
 
 import android.content.Intent
+import android.os.Looper
+import dev.glassworks.esphome.ProtoMessage
+import dev.glassworks.esphome.ProtoWriter
+import dev.glassworks.esphome.SelectEntity
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.platform.PlatformApi
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -9,10 +15,17 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.dashboard.Dashboard
 import sh.edm.s1kiosk.dashboard.DashboardOptions
 import sh.edm.s1kiosk.discovery.HaDiscovery
+import sh.edm.s1kiosk.esphome.ManualExecutor
+import sh.edm.s1kiosk.esphome.PanelDevice
+import sh.edm.s1kiosk.esphome.RecordingMdns
+import sh.edm.s1kiosk.frame.AqaraS1Plus
+import java.net.InetAddress
 import sh.edm.s1kiosk.gecko.GeckoPinHarness
 import sh.edm.s1kiosk.gecko.GeckoShadows
 
@@ -41,6 +54,10 @@ class LocalDashboardTest {
     })
 
     private fun GeckoPinHarness.loads() = events.filter { it.startsWith("s1.load ") }
+
+    private val stops = ArrayList<() -> Unit>()
+
+    @After fun tearDown() = stops.forEach { runCatching { it() } }
 
     @Test @Config(sdk = [29])
     fun `below Android 12 the dashboard loads through the address found`() = harness().use { h ->
@@ -84,6 +101,47 @@ class LocalDashboardTest {
         assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("https, and its certificate is for the name") })
     }
 
+    @Test @Config(sdk = [29])
+    fun `the connecting screen names homeassistant_local, not the address it loads`() = harness().use { h ->
+        h.progress.onPageStart(h.session, "http://192.0.2.10:8123/lovelace/0")
+        assertTrue(h.loadingTexts().toString(), "Connecting to Home Assistant · homeassistant.local" in h.loadingTexts())
+    }
+
+    /** Through the real PanelDevice: Home Assistant picks a dashboard in the panel's Dashboard select. */
+    @Test @Config(sdk = [29])
+    fun `picking a dashboard in Home Assistant saves the local name, not the address`() {
+        val app = RuntimeEnvironment.getApplication()
+        KioskPrefs(app).apply {
+            urlSetting = "http://homeassistant.local:8123/"
+            setHaUrl(found, HaDiscovery.SOURCE_MDNS)
+            dashboardsJson = DashboardOptions.toJson(listOf(Dashboard("tablet", "Tablet")))
+        }
+        PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
+        val runtime = KioskApp.runtime(AqaraS1Plus(), AppBuild("1.0.0", 10000, debug = false))
+        val sent = ArrayList<Intent>()
+        runtime.commandSink = { sent += it }
+        val exec = ManualExecutor()
+        val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = RecordingMdns(),
+            apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress()).also { stops += it::stop }
+        device.start()
+        exec.runDue()
+
+        val select = device.entityList().filterIsInstance<SelectEntity>().single { it.objectId == "dashboard" }
+        assertEquals("the setting's dashboard, matched by name", "Default", select.shownState())
+        select.command(ProtoMessage(ProtoWriter().fixed32(1, select.key, true).string(2, "Tablet").toByteArray()))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("http://homeassistant.local:8123/tablet", sent.single().getStringExtra("url"))
+    }
+
+    @Test fun `a user and password in the setting stay out of Home Assistant's base`() {
+        val app = RuntimeEnvironment.getApplication()
+        KioskPrefs(app).apply { urlSetting = "http://user:secret@homeassistant.local:8123/"; setHaUrl(found, HaDiscovery.SOURCE_MDNS) }
+        val old = KioskPrefs(app, platform = PlatformApi(23))
+        assertEquals("http://user:secret@192.0.2.10:8123/", old.url)
+        assertEquals("the sign-in's base, as logged and stored", found, old.haBase)
+        assertEquals("http://homeassistant.local:8123", old.settingBase)
+    }
+
     @Test fun `the engine's hosts, Home Assistant's base and the dashboard select follow the platform`() {
         val app = RuntimeEnvironment.getApplication()
         KioskPrefs(app).apply { urlSetting = setting; setHaUrl(found, HaDiscovery.SOURCE_MDNS) }
@@ -91,10 +149,7 @@ class LocalDashboardTest {
         assertEquals(listOf("192.0.2.10"), old.secureHosts())
         assertEquals(found, old.haBase)
         assertTrue(old.loadsFoundAddress)
-        // The select compares with the setting and writes it: it keeps the name, so a choice doesn't save the address.
-        val list = listOf(Dashboard("tablet", "Tablet"))
         assertEquals("http://homeassistant.local:8123", old.settingBase)
-        assertEquals("http://homeassistant.local:8123/tablet", DashboardOptions.urlFor("Tablet", old.urlSetting, old.settingBase, old.haUrl, list))
 
         // No address yet: a failed load browses again, and the first address found is loaded.
         KioskPrefs(app).setHaUrl("", HaDiscovery.SOURCE_MDNS)
