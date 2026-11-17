@@ -46,6 +46,14 @@ class HaDiscovery(
         exec.execute { startBrowse() }
     }
 
+    /**
+     * Browses again, unless a browse is running: the dashboard failed to load through the address found before, and
+     * DHCP may have moved Home Assistant (#449). An mDNS answer with a new address replaces the old one.
+     */
+    fun findAgain() {
+        if (!exec.isShutdown) runCatching { exec.execute { startBrowse() } }
+    }
+
     fun stop() {
         exec.execute { stopBrowse() }
         exec.shutdown()

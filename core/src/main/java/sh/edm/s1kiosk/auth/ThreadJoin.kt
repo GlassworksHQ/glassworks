@@ -29,6 +29,11 @@ class ThreadJoin(
     private val exec: Executor,
     private val armMs: Long = 10 * 60_000L,
     private val clock: () -> Long = System::currentTimeMillis,
+    /**
+     * The base the panel's own sign-in is for (StoredAuth.haBase). Its token goes only there: [haBase] can be an
+     * address discovery found (#449), which another device on the network could have answered with.
+     */
+    private val tokenBase: () -> String? = haBase,
 ) {
     sealed class State {
         object Idle : State() { override fun toString() = "Idle" }
@@ -92,6 +97,11 @@ class ThreadJoin(
         }
         val base = haBase()
         if (base == null) { set(State.Failed("Home Assistant's address isn't known yet")); return }
+        val signedInTo = tokenBase()
+        if (signedInTo != null && OAuth.origin(signedInTo) != OAuth.origin(base)) {
+            needsAdmin("the panel's sign-in is for another Home Assistant address")
+            return
+        }
         // Applies a result only if no newer attempt (another start, or an admin's sign-in) came since.
         fun current(apply: () -> Unit) = synchronized(this) { if (attempt == mine) apply() }
         panelToken { token ->
