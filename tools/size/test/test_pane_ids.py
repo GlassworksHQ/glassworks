@@ -28,6 +28,13 @@ class PaneIdsTest(unittest.TestCase):
         )
         self.assertEqual({"my-pane"}, ids_of(kotlin))
 
+    def test_a_pane_that_takes_a_setup_step_is_still_a_pane(self):
+        kotlin = (
+            "class Def(private val step: SetupStep, private val f: (Int) -> Unit = {}) : PaneDefinition {\n"
+            '    override val id = "new-pane"\n}\n'
+        )
+        self.assertEqual({"new-pane"}, ids_of(kotlin))
+
     def test_a_pane_after_a_class_without_modifiers_is_still_read(self):
         kotlin = (
             'class A : PaneDefinition {\n    override val id = "a"\n}\n\n'
