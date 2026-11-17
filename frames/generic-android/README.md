@@ -98,7 +98,7 @@ Status: it builds (CI builds and checks it on every change, and test builds publ
 starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
 release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
 What waits: a first device run and a release job: `release.yml` doesn't build
-the generic app or its legacy build yet, and the app has no release key.
+the generic app or its legacy build yet. The release key exists ([Signing](#signing)).
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
@@ -262,9 +262,14 @@ from the environment only, as S1 Kiosk's reads its `S1_*` variables:
 | `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS`, `GENERIC_KEY_PASSWORD` | Its password, the key's alias and the key's password |
 | `GENERIC_REQUIRE_RELEASE_SIGNING=true` | Fail the build when no key is set, instead of an unsigned APK |
 
-None set: the release APK is unsigned. Some but not all set: the build fails. No release key exists yet; the
-maintainer makes it before the first release, keeps it out of the repo, and from then on never changes it.
-Test builds sign with a key made for each run ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)).
+None set: the release APK is unsigned. Some but not all set: the build fails.
+
+The key exists since 2026-11-17: certificate `CN=Glassworks, O=GlassworksHQ` (RSA 4096, valid to 2054). One key
+signs both builds, `dev.glassworks.generic_android` and `.legacy`. It lives in the `release-signing` environment as
+`GENERIC_KEYSTORE_B64` (the PKCS12 keystore, base64), `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS` and
+`GENERIC_KEY_PASSWORD`, and in the maintainer's password manager. It is never in the repo, and it never changes.
+Test builds sign with it too ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), so each one
+updates the last in place, settings kept, and CI fails if an APK carries another certificate.
 
 ## Panes
 
