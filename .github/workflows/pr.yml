@@ -736,7 +736,7 @@ jobs:
         # Fails closed like libs-publish's: without a base commit, or when git diff fails, it runs.
         run: |
           paths="frames/generic-android core pane-api panes libs engines testing build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle
-            LICENSE LICENSES THIRD-PARTY-NOTICES.md tools/size .github/workflows/pr.yml"
+            LICENSE LICENSES THIRD-PARTY-NOTICES.md tools/size tools/legacy/apk-icons.py .github/workflows/pr.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); checking the size."
             echo "run=true" >> "$GITHUB_OUTPUT"
