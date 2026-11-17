@@ -28,6 +28,7 @@ import dev.glassworks.pane.intentExtras
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
+import dev.glassworks.frame.Input
 import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
@@ -352,6 +353,9 @@ class MainActivity : Activity() {
             dashboardLoaded = currentUrl.let { u -> u != null && FrontendUrls.sameOrigin(u, prefs.haBase) && !FrontendUrls.isAuthorizePage(u, prefs.haBase) },
             improv = ImprovController.setupFacts,
             installer = ImprovController.installerWifi,
+            input = setupOverlay.input,
+            // Read only where it counts (a frame without touch, offline): the S1 makes no extra Wi-Fi calls.
+            joinExpected = !w.online && setupOverlay.input == Input.NONE && OfflineText.expectsJoin(offlineFacts()),
             neverSetUp = SetupState.neverSetUp(
                 haKnown = prefs.haBase != null, haSeen = prefs.haSeen || SetupSignals.haSubscribed,
                 apiKeySet = prefs.apiEncryption, haSkipped = prefs.haSetupSkipped, paneStepDone = steps.any { it.done },
@@ -506,11 +510,11 @@ class MainActivity : Activity() {
 
     /** A failed load without a network: "Connecting to Wi-Fi…" while a join is underway or expected. */
     private fun showOffline() {
-        val t = OfflineText.decide(offlineFacts(), ImprovController.BOOT_GRACE_MS)
+        val t = OfflineText.decide(offlineFacts(), ImprovController.BOOT_GRACE_MS, setupOverlay.input)
         offlineShown = true
         loadingOverlay.show(
             if (t.connecting) LoadingOverlay.State.Connecting(t.title, t.detail, host = false)
-            else LoadingOverlay.State.Offline(t.title, t.detail, OfflineText.SETUP_ACTION),
+            else LoadingOverlay.State.Offline(t.title, t.detail, t.action),
         )
     }
 
@@ -542,14 +546,24 @@ class MainActivity : Activity() {
         }
         val supplicant = runCatching { wm?.connectionInfo?.supplicantState?.name }.getOrNull()
         val detailed = runCatching { cm?.getNetworkInfo(android.net.ConnectivityManager.TYPE_WIFI)?.detailedState?.name }.getOrNull()
+        // A failed read is "can't tell", never "off" (#448: a Mirror with Wi-Fi on said "Wi-Fi is off").
+        val wifiState = runCatching { wm?.wifiState }
+        val wifiRead = wifiState.exceptionOrNull()?.toString() ?: "state ${wifiState.getOrNull()}"
+        if (wifiRead != lastWifiRead) {
+            lastWifiRead = wifiRead
+            Log.i(TAG, "Offline: Wi-Fi $wifiRead")
+        }
         return OfflineText.Facts(
-            wifiEnabled = runCatching { wm?.isWifiEnabled == true }.getOrDefault(false),
+            wifiEnabled = OfflineText.wifiEnabled(wifiState.getOrNull()),
             savedNetwork = saved,
             joining = OfflineText.joining(supplicant, detailed),
             wasOnlineBefore = prefs.wifiSeen || prefs.haSeen,
             offlineForMs = if (offlineSince == 0L) 0L else now - offlineSince,
         )
     }
+
+    /** The last Wi-Fi read [offlineFacts] logged: a line when it changes, not every tick. */
+    private var lastWifiRead: String? = null
 
     private fun isDeviceOwner(): Boolean = runCatching {
         getSystemService(android.app.admin.DevicePolicyManager::class.java).isDeviceOwnerApp(packageName)

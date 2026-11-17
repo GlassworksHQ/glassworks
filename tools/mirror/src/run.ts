@@ -145,12 +145,12 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         if (!r.ok) throw new Error('the fastboot checks failed. Nothing was written.');
         userdataBytes = o.userdataBytes ?? r.userdataBytes;
       }],
-      [`Build the images (${ours.name}, boot animation, rotation, services.jar trusting the adb key; a fresh userdata)`, async () => {
+      [`Build the images (${ours.name}, boot animation, services.jar trusting the adb key; a fresh userdata)`, async () => {
         // patched in place: a build that fails ends the run, and the next run loads and checks the file again
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, hwrotation: 270, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); });
         } finally { sys.close(); ud.close(); }
         d.log(`    ${sysOut}, ${udOut}`);
@@ -165,7 +165,7 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
           await sleep(2000);
         }
       }],
-      ['First boot: permissions, Home Assistant, Wi-Fi, the only home screen', async () => {
+      ['First boot: permissions, portrait, Home Assistant, Wi-Fi, the only home screen', async () => {
         const p = await d.waitForAdb();
         res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
       }],

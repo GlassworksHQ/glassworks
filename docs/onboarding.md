@@ -553,7 +553,9 @@ in."), with the way to change it second ("Use another network", "Add it by hand"
 that already works (the desk panel: Wi-Fi, ESPHome connection from HA, a saved URL, a cookie
 session without a refresh token):
 - offline for 30 s (boot grace; a short Wi-Fi dropout doesn't trigger it), or offline at all on a panel
-  that was never set up (no grace there: a fresh panel goes straight to the Wi-Fi step);
+  that was never set up (no grace there: a fresh panel goes straight to the Wi-Fi step). On a screen
+  without touch (the Mirror), no grace either unless Wi-Fi is joining or has a network to join: the
+  loading screen's offline text would point at a button nobody can press (#448);
 - online but HA isn't known at all (no saved URL, nothing discovered);
 - HA never added the panel: no HA client connected within 2 min of startup *and* no `ha_seen`, no
   API key, not skipped;
