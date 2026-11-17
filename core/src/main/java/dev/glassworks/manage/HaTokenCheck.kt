@@ -66,8 +66,10 @@ class HaTokenCheck(
             true -> Unit
         }
         val key = SessionStore.hash(t)
+        // Again: deciding can take a name lookup's time, and an answer must not outlive its minute by that much.
+        val checkedAt = monoMs()
         val before = synchronized(known) {
-            known.entries.removeAll { now - it.value.atMs >= if (it.value.user != null) ttlMs else refusedTtlMs }
+            known.entries.removeAll { checkedAt - it.value.atMs >= if (it.value.user != null) ttlMs else refusedTtlMs }
             known[key]?.takeIf { it.haBase == base && (it.user == null || !fresh) }
         }
         val user = if (before != null) before.user else {

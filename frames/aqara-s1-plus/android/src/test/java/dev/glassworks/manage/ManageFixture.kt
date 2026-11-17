@@ -61,7 +61,9 @@ class ManageFixture(
     }
     /** Every name the panel looked up to decide whether Home Assistant is local. */
     val resolved = Collections.synchronizedList(ArrayList<String>())
-    val signIn = HaSignIn(gateway, resolve = { resolved += it; listOf(InetAddress.getByName(it)) }, clock = { now },
+    /** How long each of those lookups takes, on [monoMs]. */
+    var lookupMs = 0L
+    val signIn = HaSignIn(gateway, resolve = { resolved += it; monoMs += lookupMs; listOf(InetAddress.getByName(it)) }, clock = { now },
         local = { HaSignIn.isLocalAddress(it) || it.hostAddress.startsWith("192.0.2.") }, warn = { warnings += it })
 
     val warnings = Collections.synchronizedList(ArrayList<String>())

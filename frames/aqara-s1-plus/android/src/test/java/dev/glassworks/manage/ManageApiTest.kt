@@ -222,6 +222,16 @@ class ManageApiTest {
         assertEquals(2, f.resolved.size)
     }
 
+    @Test fun aSlowLookupDoesntStretchAnAnswersMinute() {
+        f.lookupMs = 5_000
+        assertEquals(200, page().get().status)
+        f.refusedTokens += token
+        // The address was decided at 0 and the answer kept at 5 s; at 60 s the lookup runs again and takes 5 s.
+        f.monoMs = 60_000
+        assertEquals("the answer kept at 5 s is 60 s old once the lookup is done", 401, page().get().status)
+        assertEquals(2, f.userChecks.size)
+    }
+
     @Test fun thePreflightNeedsNoTokenAndAnswersCors() {
         val r = f.Browser().send("OPTIONS", ManageApi.SETTINGS, emptyMap(), mapOf("origin" to "http://192.0.2.41:8099",
             "access-control-request-method" to "POST", "access-control-request-headers" to "authorization", "access-control-request-private-network" to "true"))
