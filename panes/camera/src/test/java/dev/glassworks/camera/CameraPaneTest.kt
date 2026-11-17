@@ -8,6 +8,7 @@ import android.app.Application
 import android.content.Context
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
+import dev.glassworks.pane.SettingsItem
 import dev.glassworks.platform.AppBuild
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -183,6 +184,24 @@ class CameraPaneTest {
         assertEquals("Home Assistant sees it off", false, ProtoMessage(onvif.state().toByteArray()).bool(2))
         onvif.command(ProtoMessage(ProtoWriter().bool(2, true).toByteArray()))
         assertFalse("springs back", r.prefs.onvif)
+        assertEquals(0, r.stream.starts)
+    }
+
+    /** Verifier F8 on #485: the page's switch refuses as Home Assistant's does, and says why. */
+    @Test fun thePagesStreamSwitchIsRefusedOnACameraThatCantStream() {
+        val r = Rig()
+        val why = "The video encoder can't take the camera's 640 × 480 picture"
+        r.stream.fit = StreamFit.Refused(why)
+        r.prefs.use = CameraUse.PRESENCE_AND_SNAPSHOTS
+        r.pane.start()
+        val switch = CameraDefinition(file).settings(r.pane).single().items.filterIsInstance<SettingsItem.Group>()
+            .single { it.title == "ONVIF stream" }.items.filterIsInstance<SettingsItem.Switch>().single()
+        assertEquals("$why.", switch.detail)
+        var answer: String? = "not answered"
+        switch.save(true) { answer = it }
+        assertEquals("$why.", answer)
+        assertFalse(r.prefs.onvif)
+        assertFalse(switch.value())
         assertEquals(0, r.stream.starts)
     }
 

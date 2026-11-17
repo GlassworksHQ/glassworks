@@ -17,7 +17,8 @@ fun announcedFps(range: IntRange?): Int = range?.last ?: 0
 
 /**
  * The size the hub reads frames at: [want] when the camera lists it for YUV ([sizes], width to height), else the
- * listed size nearest it in area, up to 1920x1080, else the smallest it lists. A LEGACY camera (Android 6's, on the
+ * listed size nearest it in area among those up to 1920x1080. A camera that lists nothing that small gets the
+ * smallest size it lists, which can be larger. A LEGACY camera (Android 6's, on the
  * Camera1 shim) refuses a session at a size it doesn't list. With no list, [want].
  */
 fun yuvSizeFor(sizes: List<Pair<Int, Int>>?, want: Pair<Int, Int>): Pair<Int, Int> {

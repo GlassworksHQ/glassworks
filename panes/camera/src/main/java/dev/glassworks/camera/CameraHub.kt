@@ -81,6 +81,8 @@ class CameraHub(
     private var size = width to height
     /** The stream on the open camera, read with [size]: the session never looks the camera up again. */
     private var openFit: StreamFit = StreamFit.Refused(SIZES_UNREADABLE)
+    /** The open camera can be unplugged and another put in under the same id. */
+    private var external = false
 
     private val wanted get() = sinks.isNotEmpty() || waiters.isNotEmpty() || encoder != null ||
         SystemClock.elapsedRealtime() < lingerUntil
@@ -227,24 +229,31 @@ class CameraHub(
 
     private class Sizes(val id: String?, val reader: Pair<Int, Int>, val fit: StreamFit)
 
-    /** The last [sizes] read, for the camera it was read from. */
+    /**
+     * The last sizes [read], kept with the camera it was read from. Cleared when opening a camera fails ([fail]) and
+     * when an external camera closes, so a camera that went or was replaced is read again.
+     */
     @Volatile private var sizesRead: Sizes? = null
 
     /**
-     * Camera [id]'s reader size ([yuvSizeFor]) and stream ([streamFitFor]): the encoder runs at the reader's size, or
-     * not at all. The stream asks before it opens a port, the hub when it opens the camera. Kept for that camera, so
-     * another one (a removable camera) is read again. A read that throws is not kept, so the next ask reads again.
+     * The reader size ([yuvSizeFor]) and stream ([streamFitFor]) of camera [id] (null: the panel has none now): the
+     * encoder runs at the reader's size, or not at all. The stream asks before it opens a port, the hub when it opens
+     * the camera. Neither no camera nor a read that throws is kept, so the next ask reads again.
      */
-    private fun sizes(id: String? = cameraId()): Sizes = sizesRead?.takeIf { it.id == id } ?: run {
-        val map = id?.let { manager.getCameraCharacteristics(it).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }
+    private fun read(id: String?): Sizes {
+        if (id == null) return Sizes(null, width to height, StreamFit.Refused(NO_CAMERA))
+        val map = manager.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
-        Sizes(id, reader, streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes))
+        return Sizes(id, reader, streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes))
             .also { sizesRead = it }
     }
 
-    /** No stream while the camera's sizes can't be read: the pane asks again on its next check. */
+    /**
+     * No stream while the camera's sizes can't be read: the pane asks again on its next check. Kept sizes answer
+     * without asking the camera service, so the page's refresh costs no binder call.
+     */
     override val streamFit: StreamFit get() = try {
-        sizes().fit
+        (sizesRead ?: read(cameraId())).fit
     } catch (e: Exception) {
         log("camera: sizes unreadable (${e.javaClass.simpleName})")
         StreamFit.Refused(SIZES_UNREADABLE)
@@ -282,9 +291,10 @@ class CameraHub(
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
-        val read = sizes(id) // throws to openCamera, which retries
+        val read = sizesRead?.takeIf { it.id == id } ?: read(id) // throws to openCamera, which retries
         size = read.reader
         openFit = read.fit
+        external = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_EXTERNAL
         val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
         presenceRange = if (!legacy) null else presenceRangeFor(
             c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
@@ -388,6 +398,7 @@ class CameraHub(
     /** Tells presence the camera is gone, answers waiting stills, and tries again later while it is still wanted. */
     private fun fail(why: String) {
         log("camera: $why")
+        sizesRead = null
         closeCamera()
         sinks.forEach { it.sink.lost(why) }
         waiters.forEach { it.latch.countDown() }
@@ -414,6 +425,7 @@ class CameraHub(
         closeSession()
         try { device?.close() } catch (_: Exception) {}
         if (device != null) log("camera closed")
+        if (device != null && external) sizesRead = null
         device = null
         try { reader?.close() } catch (_: Exception) {}
         reader = null
@@ -431,5 +443,6 @@ class CameraHub(
         const val RETRY_MS = 5_000L
         const val DETACH_WAIT_MS = 1_000L
         const val SIZES_UNREADABLE = "The panel couldn't read the camera's sizes"
+        const val NO_CAMERA = "The panel has no camera now"
     }
 }
