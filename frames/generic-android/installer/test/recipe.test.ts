@@ -206,7 +206,19 @@ describe('silent updates (#422)', () => {
   it('the person keeps a tap per update: nothing set', async () => {
     const { p, res } = await run(LEVELS.api34!, { silentUpdates: false });
     expect(res.silentUpdates).toEqual({ state: 'declined', line: SILENT_LINES.off });
-    expect(p.cmds.some((c) => c.includes('REQUEST_INSTALL_PACKAGES'))).toBe(false);
+    expect(p.cmds.filter((c) => WRITES.test(c) && c.includes('REQUEST_INSTALL_PACKAGES'))).toEqual([]);
+  });
+
+  it('keeping a tap over an earlier install that allowed it takes the allow back', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'declined', line: SILENT_LINES.off });
+    expect(p.installOp).toBe('default');
+    expect(p.cmds).toContain(OP(GENERIC.package, 'default'));
+  });
+
+  it('an earlier allow the device won\'t take back: refused, and the line says updates stay silent', async () => {
+    const { res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, keepInstallOpOn: true }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.allowed, detail: 'Android still allows it from an earlier install' });
   });
 
   it('a build that keeps it off: refused, not fatal', async () => {
@@ -228,6 +240,17 @@ describe('silent updates (#422)', () => {
     expect(p.installOp).toBe('default');
     expect(p.installed).toBeDefined();
     expect(p.cmds).toContain(OP(GENERIC.package, 'default'));
+  });
+
+  it('undo throws when the device refuses the reset or its readback', async () => {
+    const p = new FakeAndroid({ ...LEVELS.api34!, installed: 700, installOpAllowed: true, installOpFails: true });
+    await expect(undoSilentUpdates(p)).rejects.toThrow(/panel command failed \(255\): appops set/);
+    expect(p.installOp).toBe('allow');
+  });
+
+  it('undo throws when Android still allows it after the reset', async () => {
+    const p = new FakeAndroid({ ...LEVELS.api34!, installed: 700, installOpAllowed: true, keepInstallOpOn: true });
+    await expect(undoSilentUpdates(p)).rejects.toThrow(/still lets Glassworks install apps/);
   });
 
   it('undo with nothing installed changes nothing', async () => {

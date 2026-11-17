@@ -77,7 +77,8 @@ export interface Handoff { setupPage?: string; ip?: string; why?: string }
 export interface SilentUpdatesResult {
   /**
    * `allowed`: "Install unknown apps" read back as allowed (Android 12+); `declined`: the person kept a tap per
-   * update; `refused`: the device said no; `old-android`: below Android 12; `not-asked`: this build doesn't ask
+   * update; `refused`: the device didn't take the change (asked to allow it, or to take back an earlier allow);
+   * `old-android`: below Android 12; `not-asked`: this build doesn't ask
    */
   state: 'allowed' | 'declined' | 'refused' | 'old-android' | 'not-asked';
   line: string;
@@ -248,7 +249,19 @@ async function silentUpdates(r: Steps, app: GenericApp, apk: Uint8Array, device:
   if (!asks.has('android.permission.REQUEST_INSTALL_PACKAGES') || !asks.has('android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION')) {
     return { state: 'not-asked', line: SILENT_LINES.off };
   }
-  if (!want) { r.detail('silent updates: kept a tap per update'); return { state: 'declined', line: SILENT_LINES.off }; }
+  if (!want) {
+    // Android keeps the op across an in-place update: an earlier install's "allow" would stay (CodeRabbit on #432).
+    if (new RegExp(`${INSTALL_OP}: allow`).test(await r.try(`appops get ${app.package} ${INSTALL_OP}`))) {
+      r.step('Updates ask for a tap');
+      await r.p.run(`appops set ${app.package} ${INSTALL_OP} default`);
+      if (new RegExp(`${INSTALL_OP}: allow`).test(await r.try(`appops get ${app.package} ${INSTALL_OP}`))) {
+        r.detail('Install unknown apps: still allowed');
+        return { state: 'refused', line: SILENT_LINES.allowed, detail: 'Android still allows it from an earlier install' };
+      }
+    }
+    r.detail('silent updates: kept a tap per update');
+    return { state: 'declined', line: SILENT_LINES.off };
+  }
   r.step('Silent updates');
   const res = await r.p.run(`appops set ${app.package} ${INSTALL_OP} allow`);
   const now = await r.try(`appops get ${app.package} ${INSTALL_OP}`);
@@ -267,8 +280,8 @@ export async function undoSilentUpdates(p: PanelShell, o: { onStep?: StepFn } = 
   for (const app of APPS) {
     if (!(await kioskVersion(p, undefined, app))) continue;
     r.step('Updates ask for a tap again');
-    await r.p.run(`appops set ${app.package} ${INSTALL_OP} default`);
-    const now = await r.try(`appops get ${app.package} ${INSTALL_OP}`);
+    await r.run(`appops set ${app.package} ${INSTALL_OP} default`);
+    const now = await r.run(`appops get ${app.package} ${INSTALL_OP}`);
     if (new RegExp(`${INSTALL_OP}: allow`).test(now)) throw new Error(`Android still lets ${app.name} install apps. Turn it off in Settings → Apps → ${app.name} → Install unknown apps.`);
     return { app };
   }

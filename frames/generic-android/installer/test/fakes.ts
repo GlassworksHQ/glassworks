@@ -44,6 +44,12 @@ export interface FakeAndroidOptions {
   refuseAppops?: boolean;
   /** `appops set … REQUEST_INSTALL_PACKAGES` answers 0 but the build keeps it off (a device policy, a vendor build) */
   keepInstallOpOff?: boolean;
+  /** "Install unknown apps" already allowed, from an earlier install */
+  installOpAllowed?: boolean;
+  /** `appops set` and `appops get` for REQUEST_INSTALL_PACKAGES fail (a vendor build) */
+  installOpFails?: boolean;
+  /** `appops set … default` answers 0 but the op stays allowed */
+  keepInstallOpOn?: boolean;
   refuseAdmin?: boolean;
   /** the other build's device admin is active, left over from it (its package starts with this one's) */
   otherAdmin?: boolean;
@@ -77,6 +83,7 @@ export class FakeAndroid implements PanelShell {
     this.installed = o.installed;
     if (o.installed) { this.home = this.app.home; if (this.app.admin) this.admins.add(this.app.admin); }
     if (o.otherAdmin) this.admins.add((this.app === GENERIC ? LEGACY : GENERIC).admin!);
+    if (o.installOpAllowed) this.installOp = 'allow';
   }
 
   async push(path: string, data: Uint8Array, mode?: number) { this.cmds.push(`push ${path} ${data.length} ${(mode ?? 0o644).toString(8)}`); }
@@ -118,10 +125,14 @@ export class FakeAndroid implements PanelShell {
     }
     if (cmd === `appops get ${PKG} SYSTEM_ALERT_WINDOW`) return ok(`SYSTEM_ALERT_WINDOW: ${this.overlay ? 'allow' : 'default'}\n`);
     if ((m = /^appops set (\S+) REQUEST_INSTALL_PACKAGES (allow|default)$/.exec(cmd)) && m[1] === PKG) {
-      if (!o.keepInstallOpOff || m[2] === 'default') this.installOp = m[2] as 'allow' | 'default';
+      if (o.installOpFails) return { out: 'Error: java.lang.SecurityException: uid 2000 does not have android.permission.MANAGE_APP_OPS_MODES.\n', code: 255 };
+      if (m[2] === 'allow' ? !o.keepInstallOpOff : !o.keepInstallOpOn) this.installOp = m[2] as 'allow' | 'default';
       return ok();
     }
-    if (cmd === `appops get ${PKG} REQUEST_INSTALL_PACKAGES`) return ok(`REQUEST_INSTALL_PACKAGES: ${this.installOp}\n`);
+    if (cmd === `appops get ${PKG} REQUEST_INSTALL_PACKAGES`) {
+      if (o.installOpFails) return { out: 'Error: java.lang.SecurityException\n', code: 255 };
+      return ok(`REQUEST_INSTALL_PACKAGES: ${this.installOp}\n`);
+    }
     if (this.app.admin && cmd === `dpm set-active-admin ${this.app.admin}`) {
       if (o.refuseAdmin) return { out: 'java.lang.SecurityException: Calling identity is not authorized\n', code: 255 };
       if (this.admins.has(this.app.admin)) return { out: 'Exception occurred while executing:\njava.lang.IllegalArgumentException: Admin is already added\n', code: 255 };
