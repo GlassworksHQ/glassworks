@@ -126,6 +126,9 @@ object ImprovController {
     /** The Wi-Fi attempt in flight belongs to the installer (progress goes there), not to Improv. */
     private var installerJoining = false
 
+    /** How the Wi-Fi was last sent since the session started: the done card follows it (#460). */
+    private val joinPath = ImprovDone.JoinPath()
+
     /** Until when a finished join's result may still be on its way to the installer or HA (ms, elapsedRealtime). */
     @Volatile private var settleUntil = 0L
 
@@ -211,7 +214,7 @@ object ImprovController {
         val server = ble ?: ImprovBleServer(app, main, bleListener).also { ble = it }
         val s = ImprovSession(effects)
         session = s
-        reason = why; auto = isAuto; failure = null; progress = null; provisionedUrl = null; connectingSsid = ""
+        reason = why; auto = isAuto; failure = null; progress = null; provisionedUrl = null; connectingSsid = ""; joinPath.sessionStarted()
         startError = null; advertising = false; clients.clear()
         windowEndsAt = now + WINDOW_MS
         s.start(requireAuthorization = true, now = now)
@@ -268,6 +271,8 @@ object ImprovController {
     fun connectFromInstaller(
         ssid: String,
         psk: String,
+        /** Where it came from: Kiln over USB, or the panel's setup page. The done card says so. */
+        via: ImprovDone.Via,
         hidden: Boolean? = null,
         done: ((WifiProvisioner.Outcome) -> Unit)? = null,
     ): Boolean {
@@ -280,10 +285,11 @@ object ImprovController {
         Log.i(TAG, "installer Wi-Fi: joining the chosen network")
         installerWifi = InstallerWifi(ssid, InstallerWifi.Phase.CONNECTING)
         installerJoining = true
+        joinPath.sent(via, ssid)
         app.glassworks.screen.wake("installer wifi")
         app.glassworks.setupHotspot?.configured() // off first: on most devices the radio can't join while it runs (#197)
         refreshOverlay()
-        wifi.connect(ssid, psk, hidden) { outcome -> main.post { onInstallerOutcome(seq, ssid, outcome); done?.invoke(outcome) } }
+        wifi.connect(ssid, psk, hidden) { outcome -> main.post { onInstallerOutcome(seq, ssid, via, outcome); done?.invoke(outcome) } }
         return true
     }
 
@@ -297,7 +303,7 @@ object ImprovController {
         return true
     }
 
-    private fun onInstallerOutcome(seq: Int, ssid: String, o: WifiProvisioner.Outcome) {
+    private fun onInstallerOutcome(seq: Int, ssid: String, via: ImprovDone.Via, o: WifiProvisioner.Outcome) {
         settleUntil = SystemClock.elapsedRealtime() + SETTLE_MS
         val result = when (o) {
             is WifiProvisioner.Outcome.Connected -> {
@@ -311,6 +317,7 @@ object ImprovController {
             }
         }
         if (seq != installerSeq) return // superseded by a newer request: that one is on screen
+        if (o is WifiProvisioner.Outcome.Connected) joinPath.joined() else joinPath.failed(via)
         installerJoining = false
         installerWifi = result
         refreshOverlay()
@@ -385,6 +392,7 @@ object ImprovController {
 
         override fun startWifi(ssid: String, password: String) {
             connectingSsid = ssid
+            joinPath.sent(ImprovDone.Via.BLUETOOTH, ssid)
             failure = null
             progress = null
             installerJoining = false
@@ -407,10 +415,12 @@ object ImprovController {
             is WifiProvisioner.Outcome.Connected -> {
                 provisionedUrl = o.ip?.let { "http://$it:${OAuth.SIGNIN_PORT}/" }
                 Log.i(TAG, "connected to the chosen network via ${o.method}; ip=${o.ip}; redirect=$provisionedUrl")
+                joinPath.joined()
                 s.onWifiResult(true, provisionedUrl, now)
             }
             is WifiProvisioner.Outcome.Failed -> {
                 failure = o.reason + (o.restored?.let { ". Back on $it" } ?: "")
+                joinPath.failed(ImprovDone.Via.BLUETOOTH)
                 Log.w(TAG, "connect failed: $o")
                 s.onWifiResult(false, null, now)
                 windowEndsAt = maxOf(windowEndsAt, now + 2 * 60_000L)
@@ -572,13 +582,15 @@ object ImprovController {
                 accent = ImprovOverlay.AMBER,
                 busy = true,
             )
-            ImprovState.PROVISIONED -> ImprovOverlay.Model(
-                label = "Wi-Fi setup · done",
-                title = if (connectingSsid.isNotEmpty()) "Connected to $connectingSsid" else "Panel is online",
-                body = provisionedUrl?.let { "Continue setup at $it" } ?: "Wi-Fi is set up.",
-                primary = "Done" to { overlay.hide() },
-                accent = ImprovOverlay.GREEN,
-            )
+            ImprovState.PROVISIONED -> {
+                val c = joinPath.card(provisionedUrl)
+                ImprovOverlay.Model(
+                    label = c.label, title = c.title, body = c.body,
+                    primary = "Done" to { overlay.hide() },
+                    accent = ImprovOverlay.GREEN,
+                    mark = c.mark,
+                )
+            }
         }
         overlay.show(m)
     }
