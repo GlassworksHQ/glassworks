@@ -134,10 +134,25 @@ RSA chains on 2026-11-16. Android has it only from Android 14, so if GitHub move
 ## How to reproduce
 
 1. `tools/legacy/ca-roots.sh` (read-only: network and a temporary directory).
-2. On the API 23 arm64 emulator (`system-images;android-23;default;arm64-v8a`), run
-   `tools/legacy/https-trust-device-check.kt` as its header says (with `tools/legacy/api23-emulator.gradle`).
-   It touches only the emulator and the internet. The app
-   itself could not be started there: agent-device's `open` and `snapshot` fail on this image (2026-11-17).
+2. The same on Android 6's own store, from a clean checkout and an Android SDK. It touches only the emulator and
+   the internet, and the last two steps put everything back:
+   ```sh
+   sdkmanager "system-images;android-23;default;arm64-v8a"            # ~3.5 GB
+   echo no | avdmanager create avd -n ca-roots-api23 -k "system-images;android-23;default;arm64-v8a"
+   emulator -avd ca-roots-api23 -no-snapshot &
+   adb -s emulator-5554 wait-for-device
+   until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 3; done
+   cp tools/legacy/https-trust-device-check.kt core/src/androidTest/java/dev/glassworks/platform/HttpsTrustDeviceCheck.kt
+   ANDROID_SERIAL=emulator-5554 ./gradlew --init-script tools/legacy/api23-emulator.gradle \
+     :glassworks-core:connectedDebugAndroidTest \
+     -Pandroid.testInstrumentationRunnerArguments.class=dev.glassworks.platform.HttpsTrustDeviceCheck
+   adb -s emulator-5554 logcat -d -s HttpsScratch:I                    # the lines in step 4 above
+   rm core/src/androidTest/java/dev/glassworks/platform/HttpsTrustDeviceCheck.kt
+   adb -s emulator-5554 emu kill; avdmanager delete avd -n ca-roots-api23
+   ```
+   The test passes when every "WITH" download matches its pinned SHA-256 and the wrong-name and unknown-root
+   fetches are refused. The app itself could not be started there: agent-device's `open` and `snapshot` fail on
+   this image (2026-11-17).
 
 ## Open questions
 

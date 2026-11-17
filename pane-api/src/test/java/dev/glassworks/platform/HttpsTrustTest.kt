@@ -30,6 +30,7 @@ import java.security.KeyPairGenerator
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.cert.CertPathValidator
+import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
 import java.security.cert.PKIXParameters
 import java.security.cert.TrustAnchor
@@ -40,7 +41,8 @@ import java.util.Date
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSocketFactory
 
 /**
@@ -87,16 +89,23 @@ class HttpsTrustTest {
         return try { c.responseCode } finally { c.disconnect() }
     }
 
-    private fun refused(url: URL, factory: SSLSocketFactory) {
-        try {
+    /**
+     * The connection fails because TLS refused the server: the certificate path or its name. A timeout, a refused
+     * connection or any other transport error fails the test instead.
+     */
+    private fun refused(url: URL, factory: SSLSocketFactory, hostname: Boolean = false) {
+        val e = try {
             get(url, factory)
-            fail("$url was trusted")
-        } catch (_: SSLException) {
-            // SSLHandshakeException or SSLPeerUnverifiedException: refused by TLS
+            null
         } catch (e: IOException) {
-            // The JDK's own URL check ("HTTPS hostname wrong"), which some JDKs reach instead. Not a timeout.
-            if ("hostname" !in e.message.orEmpty().lowercase()) throw e
-        }
+            e
+        } ?: return fail("$url was trusted")
+        val byTls = e is SSLHandshakeException || e is SSLPeerUnverifiedException ||
+            generateSequence(e.cause) { it.cause }.any { it is CertificateException }
+        // The JDK's own name check after the handshake (HttpsClient.checkURLSpoofing), which CI's JDK reached once
+        // instead of the handshake's: a plain IOException with this message.
+        val byJdkNameCheck = hostname && e.javaClass == IOException::class.java && e.message.orEmpty().startsWith("HTTPS hostname wrong")
+        assertTrue("$url failed, but not because TLS refused it: $e", byTls || byJdkNameCheck)
     }
 
     private val system = Ca("Made-up System Root")
@@ -120,8 +129,8 @@ class HttpsTrustTest {
     }
 
     @Test fun `a certificate for another host is refused, on either root`() {
-        refused(serve(bundled, bundled.leaf("other.example")), factory)
-        refused(serve(system, system.leaf("other.example")), factory)
+        refused(serve(bundled, bundled.leaf("other.example")), factory, hostname = true)
+        refused(serve(system, system.leaf("other.example")), factory, hostname = true)
     }
 
     @Test fun `the trust manager loads on Android 6 - no type newer than X509TrustManager`() {
