@@ -34,7 +34,7 @@ Each step is printed and waits for `y`. `--yes` answers every question.
     framework lets the key in once it runs. Still `unauthorized` after 6 minutes means adb's server
     isn't answering with the key the image lets in (below).
 11. First boot: permissions, the screen locked upright in portrait (`user_rotation=3`, checked in
-    `dumpsys window`; it stops if Android doesn't turn within 10 s), Home Assistant's address, Wi-Fi,
+    `dumpsys window windows`; it stops if Android doesn't turn within 10 s), Home Assistant's address, Wi-Fi,
     the other launchers hidden.
 12. HOME check (hides the launchers again if HOME didn't open the app). If the APK has no home
     screen of its own, nothing was hidden: the image's launcher stays, and the run exits 1.

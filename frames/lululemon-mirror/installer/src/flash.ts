@@ -130,48 +130,43 @@ export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'
  * hidden: the image's launcher stays the home screen.
  */
 export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean;
-  /** what Android reports after the rotation step, e.g. `rotation 3, 1080x1920` */
-  rotation: string }
+  /** the display rotation Android reports after the rotation step: always MIRROR_ROTATION */
+  rotation: number }
 
 /**
- * The Mirror's 1920x1080 panel stands portrait. Its stock Android stood upright through
- * `user_rotation=3` (Surface.ROTATION_270), locked, read 2026-11-15; and Kiln's boot animation, turned
- * 90 degrees counter-clockwise in the same framebuffer, is upright on the glass (2026-11-16). That
- * setting lives in userdata, which Kiln writes fresh, so the first boot sets it again.
- * (`ro.sf.hwrotation` does nothing on this image: nothing in it reads the property, 2026-11-17.)
+ * The Mirror's 1920x1080 panel stands portrait, upright at user_rotation 3 (Surface.ROTATION_270:
+ * graphics turned 90 degrees counter-clockwise, AOSP 6.0.1 Display.getRotation). Seen upright on the
+ * glass with Kiln's first boot, 2026-11-17. The setting lives in userdata, which Kiln writes fresh, so
+ * the first boot sets it again. (`ro.sf.hwrotation` does nothing on this image: nothing reads it.)
  */
-export const MIRROR_ROTATION = { userRotation: 3, size: '1080x1920' } as const;
+export const MIRROR_ROTATION = 3;
 
-/** Android's display rotation and size, from `dumpsys window` (WindowManagerService's mRotation, the display's cur=). */
-export async function displayRotation(p: PanelShell): Promise<{ rotation?: number; size?: string }> {
-  // Android 6 prints the state saved at the last ANR first, with its own mRotation: drop it
-  const out = (await p.run('dumpsys window')).out.replace(/WINDOW MANAGER LAST ANR[\s\S]*?(?=WINDOW MANAGER )/, '');
-  const rotation = /\bm(?:Current)?Rotation=(\d)\b/.exec(out)?.[1];
-  const size = /\bcur=(\d+x\d+)/.exec(out)?.[1];
-  return { ...(rotation !== undefined ? { rotation: Number(rotation) } : {}), ...(size ? { size } : {}) };
+/**
+ * Android's display rotation: WindowManagerService's mRotation from `dumpsys window windows`, which
+ * prints it every time (dumpWindowsLocked with dumpAll) and holds no saved ANR state. Plain
+ * `dumpsys window` prints it only with dumpAll on Android 6, and its ANR snapshot has an old display.
+ */
+export async function displayRotation(p: PanelShell): Promise<number | undefined> {
+  const m = /(?:^|\s)mRotation=(\d)\b/m.exec((await p.run('dumpsys window windows')).out);
+  return m ? Number(m[1]) : undefined;
 }
 
 /**
  * Locks the screen upright in portrait (no auto-rotate, user_rotation 3) and waits until Android
- * reports it: rotation 3, or, if dumpsys prints no rotation, a 1080x1920 display. Throws after
- * `tries` reads a second apart.
+ * reports rotation 3 exactly: 1 is portrait too, upside down. Throws after `tries` reads a second apart.
  */
 export async function setPortrait(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-  tries = 10): Promise<string> {
+  tries = 10): Promise<number> {
   const r = new Steps(p, onStep);
   await r.run('settings put system accelerometer_rotation 0');
-  await r.run(`settings put system user_rotation ${MIRROR_ROTATION.userRotation}`);
-  let seen: { rotation?: number; size?: string } = {};
+  await r.run(`settings put system user_rotation ${MIRROR_ROTATION}`);
+  let seen: number | undefined;
   for (let i = 0; i < tries; i++) {
     seen = await displayRotation(p);
-    if (seen.rotation === MIRROR_ROTATION.userRotation || (seen.rotation === undefined && seen.size === MIRROR_ROTATION.size)) {
-      const said = `rotation ${seen.rotation ?? '?'}, ${seen.size ?? 'size not reported'}`;
-      r.detail(said);
-      return said;
-    }
+    if (seen === MIRROR_ROTATION) { r.detail(`rotation ${seen}`); return seen; }
     await sleep(1000);
   }
-  throw new Error(`the Mirror's screen didn't turn to portrait: after user_rotation=${MIRROR_ROTATION.userRotation}, Android still reports rotation ${seen.rotation ?? 'unknown'}, ${seen.size ?? 'size unknown'} (${tries} s). Look at the glass, then run the first boot again`);
+  throw new Error(`the Mirror's screen didn't turn to portrait: after user_rotation=${MIRROR_ROTATION}, Android still reports rotation ${seen ?? 'unknown'} (${tries} s). Look at the glass, then run the first boot again`);
 }
 export interface HomeCheck { result: 'set' | 'chooser' | 'other' | 'none'; focused?: string; left: string[] }
 

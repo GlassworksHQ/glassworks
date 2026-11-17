@@ -78,7 +78,7 @@ describe('installing Glassworks over fastboot', () => {
     expect(calls).toEqual([fetched, `build userdata=${USERDATA_BYTES} key=kiln@glassworks`, 'flash system 2', 'flash userdata 1', 'reboot', 'discard']);
     expect(f.state.screen).toBe('adb');
     await f.connectAdb();
-    expect(f.state).toMatchObject({ screen: 'done', firstBoot: { hidden: ['com.android.launcher3'], rotation: 'rotation 3, 1080x1920' } });
+    expect(f.state).toMatchObject({ screen: 'done', firstBoot: { hidden: ['com.android.launcher3'], rotation: 3 } });
     expect(adb.cmds).toContain(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`);
   });
 

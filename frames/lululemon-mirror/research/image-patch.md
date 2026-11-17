@@ -78,7 +78,7 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 | `/priv-app/Glassworks/Glassworks.apk` (until 2026-11-16 `/priv-app/S1Kiosk/S1Kiosk.apk`, which the probe still uses), `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and the app's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK was in `/system/priv-app/S1Kiosk`; the probe there got its privileged permissions ([privileged-app.md](privileged-app.md)) |
 | Its native libraries in `/priv-app/Glassworks/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
 | `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
-| ~~`build.prop`: `ro.sf.hwrotation=270`~~ **Dropped 2026-11-17**: nothing on the image reads it, and the UI stayed landscape with it ([below](#the-rotation-2026-11-17)). The first boot sets `user_rotation=3` over adb instead (`setPortrait`) | The panel is landscape (1920×1080), and the Mirror stands portrait. The stock portrait comes from `user_rotation=3`, locked, which lives in `userdata`, so a fresh `userdata` comes up landscape. The property was meant to turn Android's UI; on this image it turns nothing. The boot animation draws straight to the panel, so its frames are turned themselves (`boot.rotate`) | **Corrected 2026-11-17.** The property turns neither the boot animation (sideways on the first real flash, 2026-11-16, the maintainer's photo) nor the UI (landscape with the real app, 2026-11-17). An earlier version said the UI was portrait with it: that was the probe app asking for portrait itself. The turned boot animation is upright on the glass (2026-11-16, photo). The UI upright at `user_rotation=3` is **untested** with Kiln's first boot: the root's next run checks it |
+| ~~`build.prop`: `ro.sf.hwrotation=270`~~ **Dropped 2026-11-17**: nothing on the image reads it, and the UI stayed landscape with it ([below](#the-rotation-2026-11-17)). The first boot sets `user_rotation=3` over adb instead (`setPortrait`) | The panel is landscape (1920×1080), and the Mirror stands portrait. The stock portrait comes from `user_rotation=3`, locked, which lives in `userdata`, so a fresh `userdata` comes up landscape. The property was meant to turn Android's UI; on this image it turns nothing. The boot animation draws straight to the panel, so its frames are turned themselves (`boot.rotate`) | **Corrected 2026-11-17.** The property turns neither the boot animation (sideways on the first real flash, 2026-11-16, the maintainer's photo) nor the UI (landscape with the real app, 2026-11-17). An earlier version said the UI was portrait with it: that was the probe app asking for portrait itself. The turned boot animation is upright on the glass (2026-11-16, photo). The UI upright at `user_rotation=3`, set by Kiln's first boot: **verified** 2026-11-17 (the maintainer, on the glass) |
 | `/framework/services.jar`: `UsbDebuggingManager` lets in the installer's key (the first `adbKey` line) in place of the Glass Panes project key; same mode, owner and label | The image's own way in over adb is a constant naming the published project key, and its adbd ignores `adb_keys` ([below](#who-the-image-lets-in-over-adb)) | Verified offline (2026-11-16): image 2 patched, `dexdump` verifies the result and prints the same code. Untested on the unit |
 | Nothing removed | The community kiosk isn't in `system` | Verified (read 1) |
 
@@ -265,8 +265,10 @@ project key refused).
 
 ## The rotation (2026-11-17)
 
-**Status: the cause verified (the root, on the unit, read-only); the fix checked off-device; upright
-on the glass not yet seen.**
+**Status (2026-11-17): verified on the unit.** The cause read on the unit (the root, read-only); the
+fix ran on the unit with the legacy build from #443: the first boot logged rotation 3, **the
+maintainer saw the app upright on the glass**, no crash, and still portrait after a reboot (the
+results are on #439).
 
 The first flash with the real legacy build of Glassworks 0.1.0 (the patched pipeline, a throwaway
 key) came up **sideways**: the maintainer saw landscape. Read on the unit afterwards:
@@ -293,15 +295,30 @@ follows the system's rotation (`FULL_USER`).
 
 **What Kiln does now** (`setPortrait` in `installer/src/flash.ts`, on the first boot, before the app
 starts): `settings put system accelerometer_rotation 0`, `settings put system user_rotation 3`, then
-`dumpsys window` once a second until it reports rotation 3 (or, with no rotation printed, a
-`cur=1080x1920` display). After 10 s it stops with "the Mirror's screen didn't turn to portrait".
+`dumpsys window windows` once a second until its `mRotation=` is exactly 3. After 10 s it stops with
+"the Mirror's screen didn't turn to portrait". Why that command (read in the image's `services.jar`,
+`WindowManagerService`, by the #439 verifier, 2026-11-17):
+- plain `dumpsys window` prints `mRotation=` only with `dumpAll` (`dumpWindowsNoHeaderLocked`), so it
+  isn't there; its display's `cur=` size can't tell 3 from 1 (both 1080x1920);
+- plain `dumpsys window` also prints the state saved at the last ANR first (`saveANRStateLocked`,
+  kept 2 h), with its own display contents and an old `cur=`;
+- `dumpsys window windows` calls `dumpWindowsLocked(pw, true, null)`: the live `mRotation=` every
+  time, and no ANR block.
 
-**Why 3 and not 1.** Both are portrait; one is upside down. Two readings point to 3, neither seen on
-the glass with this fix yet:
+The first version (2026-11-17, before the verifier) read plain `dumpsys window` and fell back to the
+size; the run passed, but it would have taken 1 as well.
+
+**Why 3 and not 1.** Both are portrait; one is upside down. **3 is upright: seen on the glass by the
+maintainer, 2026-11-17.** It agrees with what we read before:
 - the stock unit stood upright at `user_rotation=3` (2026-11-15, the community kiosk in daily use);
 - Kiln's boot animation, portrait art turned 90° counter-clockwise into the panel's framebuffer, is
-  upright on the glass (2026-11-16, photo). Android's `ROTATION_270` (3) draws turned 90°
-  counter-clockwise on the panel too.
+  upright on the glass (2026-11-16, photo);
+- AOSP 6.0.1 `core/java/android/view/Display.java:592–608`, `getRotation`'s javadoc: "The angle is
+  the rotation of the drawn graphics on the screen, which is the opposite direction of the physical
+  rotation of the device. For example, if the device is rotated 90 degrees counter-clockwise, to
+  compensate rendering will be rotated by 90 degrees clockwise and thus the returned value here will
+  be `Surface.ROTATION_90`." So `ROTATION_270` (`Surface.java:118`, `= 3`) draws the graphics turned
+  270° clockwise, which is 90° counter-clockwise: the boot animation's turn.
 
 To reproduce the string search: unsparse image 2, then
 `LC_ALL=C grep -a -c hwrotation system.raw` (0), and the same over every entry of every zip under
@@ -330,7 +347,7 @@ Off-device only:
 
 - Does `ro.sf.hwrotation=270` turn the boot animation? **No** (2026-11-16, seen on the unit: sideways).
   The UI? **No** (2026-11-17): nothing on the image reads it, and the real app came up landscape.
-- Is `user_rotation=3` upright on the glass, not upside down (1)? Inferred yes (below); the root's next run checks it.
+- ~~Is `user_rotation=3` upright on the glass, not upside down (1)?~~ Yes (2026-11-17, the maintainer, on the glass).
   The frames are turned in the zip now, and run upright (2026-11-16, photo). Android's UI is portrait.
 - ~~Does the Mirror's LK take sparse FILL chunks?~~ Yes (2026-11-16): the run used FILL (no
   `--no-fill`), and both `system` (5 pieces) and `userdata` (1) flashed. "Try again without FILL"

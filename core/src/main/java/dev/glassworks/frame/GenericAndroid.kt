@@ -41,8 +41,8 @@ class GenericAndroid(
 
     /**
      * A device with a frame of its own stands as that frame says ([KNOWN]: a Pixel Tablet is landscape on its dock, though
-     * its screen is portrait at rotation 0). Any other turns as Android says: the lululemon Mirror's image makes it
-     * portrait (`ro.sf.hwrotation=270`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
+     * its screen is portrait at rotation 0). Any other turns as Android says: Kiln's first boot locks the lululemon
+     * Mirror's Android in portrait (`user_rotation=3`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
      */
     override val orientation: Orientation get() = KNOWN[Platform.model] ?: Orientation.ANY
 

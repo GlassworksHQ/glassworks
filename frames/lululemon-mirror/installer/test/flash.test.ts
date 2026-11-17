@@ -141,7 +141,7 @@ describe('first boot', () => {
   it('checks the image, grants, hides the other launcher, starts Glassworks through its main activity with Home Assistant', async () => {
     const p = new FirstBootMirror();
     const r = await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async () => {} });
-    expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: 'rotation 3, 1080x1920',
+    expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: 3,
       home: { result: 'set', focused: GLASSWORKS.activity, left: [] } });
     const at = (c: string) => p.cmds.findIndex((x) => x.startsWith(c));
     expect(at('pm grant')).toBeLessThan(at(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`));
@@ -165,7 +165,7 @@ describe('first boot', () => {
       `dpm set-active-admin ${pkg}/sh.edm.s1kiosk.AdminReceiver`,
       'settings put system accelerometer_rotation 0',
       'settings put system user_rotation 3',
-      'dumpsys window',
+      'dumpsys window windows',
       `am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`,
       `am start -a android.intent.action.MAIN -c android.intent.category.HOME ${pkg}`,
       'pm list packages com.android.launcher3',
@@ -184,28 +184,28 @@ describe('first boot', () => {
     p.rotationStuck = true;
     const waited: number[] = [];
     await expect(firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async (ms) => { waited.push(ms); } }))
-      .rejects.toThrow(/screen didn't turn to portrait: after user_rotation=3, Android still reports rotation 0, 1920x1080 \(10 s\)/);
+      .rejects.toThrow(/screen didn't turn to portrait: after user_rotation=3, Android still reports rotation 0 \(10 s\)/);
     expect(waited).toEqual(Array(10).fill(1000));
-    expect(p.cmds.filter((c) => c === 'dumpsys window')).toHaveLength(10);
+    expect(p.cmds.filter((c) => c === 'dumpsys window windows')).toHaveLength(10);
     expect(p.cmds.some((c) => c.startsWith('am start'))).toBe(false);
   });
 
-  it('takes rotation 3, or a 1080x1920 display when no rotation is printed; refuses rotation 1 (portrait, upside down)', async () => {
+  it('takes rotation 3 only: refuses 1 (portrait, upside down) and a dump with no mRotation, whatever the size (#439 verifier)', async () => {
     const p = new FirstBootMirror();
-    p.noRotationLine = true;
-    expect(await setPortrait(p, () => {}, async () => {})).toBe('rotation ?, 1080x1920');
-    const flipped = { cmds: [] as string[], async run(c: string) { this.cmds.push(c); return { out: c === 'dumpsys window' ? '    init=1920x1080 240dpi cur=1080x1920 app=1080x1920\n  mRotation=1 mAltOrientation=false\n' : '', code: 0 }; }, async push() {} };
-    await expect(setPortrait(flipped, () => {}, async () => {}, 3)).rejects.toThrow(/still reports rotation 1, 1080x1920 \(3 s\)/);
+    p.userRotation = 1; // what settings put would leave if Android ignored our 3
+    const flip = { run: async (c: string) => ({ out: c === 'dumpsys window windows' ? (await p.run('dumpsys window windows')).out.replace(/mRotation=\d/, 'mRotation=1') : '', code: 0 }), push: async () => {} };
+    await expect(setPortrait(flip, () => {}, async () => {}, 3)).rejects.toThrow(/still reports rotation 1 \(3 s\)/);
+    const none = { run: async (c: string) => ({ out: c === 'dumpsys window windows' ? '  mScreenRect=[0,0][1080,1920]\n  mUserRotation=3\n    init=1920x1080 240dpi cur=1080x1920 app=1080x1920\n' : '', code: 0 }), push: async () => {} };
+    await expect(setPortrait(none, () => {}, async () => {}, 2)).rejects.toThrow(/still reports rotation unknown \(2 s\)/);
   });
 
-  it('reads the live rotation, not the one saved at the last ANR, which Android 6 prints first (#439 review)', async () => {
-    const shell = (out: string) => ({ async run() { return { out, code: 0 }; }, async push() {} });
-    const live = 'WINDOW MANAGER POLICY STATE (dumpsys window policy)\n    mUserRotationMode=1 mUserRotation=3\n'
-      + 'WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)\n    init=1920x1080 240dpi cur=1080x1920 app=1080x1920\n'
-      + 'WINDOW MANAGER WINDOWS (dumpsys window windows)\n  mRotation=3 mAltOrientation=false\n';
-    const saved = 'WINDOW MANAGER LAST ANR (dumpsys window lastanr)\n  ANR time: 17-Nov-2026\n    init=1920x1080 240dpi cur=1920x1080 app=1920x1080\n  mRotation=0 mAltOrientation=false\n\n';
-    expect(await displayRotation(shell(saved + live))).toEqual({ rotation: 3, size: '1080x1920' });
-    expect(await displayRotation(shell('WINDOW MANAGER LAST ANR (dumpsys window lastanr)\n  <no ANR has occurred since boot>\n\n' + live))).toEqual({ rotation: 3, size: '1080x1920' });
+  it('reads mRotation from Android 6\'s dumpsys window windows, not the plain dump (#439 verifier)', async () => {
+    const p = new FirstBootMirror();
+    p.accelerometer = 0; p.userRotation = 3;
+    expect(await displayRotation(p)).toBe(3);
+    expect(p.cmds).toEqual(['dumpsys window windows']);
+    p.userRotation = 0;
+    expect(await displayRotation(p)).toBe(0);
   });
 
   it('says when Launcher3 survives and HOME shows the chooser, and the same step fixes it once hiding works', async () => {
