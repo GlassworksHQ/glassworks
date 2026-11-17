@@ -245,6 +245,13 @@ class AccessTokenCache(private val marginMs: Long = 60_000L, private val clock: 
 /** What is stored after a successful sign-in. Never log [refreshToken]. */
 data class StoredAuth(val haBase: String, val clientId: String, val refreshToken: String) {
     override fun toString() = "StoredAuth(haBase=$haBase, clientId=$clientId, refreshToken=<redacted>)"
+
+    /**
+     * False when the dashboard's Home Assistant ([base]) has another origin than this sign-in's: a DHCP move, https
+     * turned on at the same host, or another Home Assistant (#467). The panel can't prove which device answers
+     * there (discovery trusts the LAN, and HA's mDNS uuid is public), so the token goes to neither address.
+     */
+    fun isFor(base: String?): Boolean = base == null || FrontendUrls.sameOrigin(base, haBase)
 }
 
 /**

@@ -94,6 +94,8 @@ class SetupOverlay(
         val installer: InstallerWifi? = null,
         /** The setup hotspot's part of the Wi-Fi step (#197); null where the app has none, and in a preview. */
         val hotspot: dev.glassworks.setup.HotspotStep.Card? = null,
+        /** Signed in for an address Home Assistant left (#467): Sign in says why it asks again. */
+        val signinMoved: Boolean = false,
     )
 
     var onChooseNetwork: (() -> Unit)? = null
@@ -127,10 +129,11 @@ class SetupOverlay(
     var wakeScreen: (String) -> Unit = { reason -> context.glassworks.screen.wake(reason) }
 
     /**
-     * Home Assistant hasn't added the panel yet (its step isn't done), so it can't wake the screen. A panel that is set
-     * up and only lost Wi-Fi or Home Assistant has it done: the setup screen neither wakes it nor keeps it on (#484).
+     * Home Assistant hasn't added the panel yet (its step isn't done), so it can't wake the screen, or Home Assistant
+     * moved and only a person scanning the Sign in step's code can sign the panel in again (#467). A panel that is set
+     * up and only lost Wi-Fi or Home Assistant has neither: the setup screen neither wakes it nor keeps it on (#484).
      */
-    val needsHomeAssistant: Boolean get() = model?.let { SetupFlow.HA !in it.done } == true
+    val needsHomeAssistant: Boolean get() = model?.let { SetupFlow.HA !in it.done || it.signinMoved } == true
 
     /** True while visible (including the Done fade-out). */
     var isShowing = false
@@ -758,7 +761,8 @@ class SetupOverlay(
         }
         qrGlow.visibility = View.VISIBLE
         cardTitle.text = "Scan to sign in."
-        cardBody.text = "Sign in to Home Assistant on your phone. Nothing to type here."
+        cardBody.text = if (m.signinMoved) "Home Assistant moved to a new address. Sign in again."
+            else "Sign in to Home Assistant on your phone. Nothing to type here."
         plainLeft.text = "Sign in on this panel instead"
         plainLeft.visibility = View.VISIBLE
         plainLeft.setOnClickListener { onUsePanel?.invoke() }
@@ -816,7 +820,8 @@ class SetupOverlay(
 
     private fun reveal() {
         if (isShowing && visibility == View.VISIBLE && alpha == 1f) return
-        // Nothing else can turn this screen on: no touch, no presence sensor, and Home Assistant hasn't added the panel (#484).
+        // Nothing else can turn this screen on: no touch, no presence sensor, and Home Assistant hasn't added the panel
+        // (#484) or has moved (#467).
         if (!isShowing && input == Input.NONE && !presenceSensor && needsHomeAssistant) wakeScreen("setup")
         isShowing = true
         animate().cancel()

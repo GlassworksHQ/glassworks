@@ -66,13 +66,24 @@ object HaAuth {
         if (!::prefs.isInitialized) prefs = KioskPrefs(context.applicationContext)
     }
 
-    val signedIn: Boolean get() = ::prefs.isInitialized && prefs.hasAuth
+    /**
+     * Signed in to the dashboard's Home Assistant: what every screen means by "signed in" (the setup screen, the
+     * phone's setup page, Manage, the settings menu, HA's *Signed in* sensor). False after Home Assistant moved
+     * ([movedAway]), although the old sign-in is still stored (#467).
+     */
+    val signedIn: Boolean get() = stored != null
 
-    /** The HA base URL the stored token belongs to, if signed in. */
+    /** The HA base URL the stored token belongs to, if a sign-in is stored (also after a move). */
     val signedInBase: String? get() = if (::prefs.isInitialized) prefs.auth?.haBase else null
 
-    /** The stored sign-in, if any (its token is redacted from toString). */
-    val stored: StoredAuth? get() = if (::prefs.isInitialized) prefs.auth else null
+    /** The stored sign-in, if it is for the dashboard's Home Assistant (see [signedIn]); its token is redacted from toString. */
+    val stored: StoredAuth? get() = if (::prefs.isInitialized) prefs.auth?.takeIf { it.isFor(prefs.haBase) } else null
+
+    /**
+     * Signed in, but the dashboard's Home Assistant is at another address than the sign-in's ([StoredAuth.isFor]):
+     * no token goes anywhere, and the setup screen asks for the sign-in again (#467).
+     */
+    val movedAway: Boolean get() = ::prefs.isInitialized && prefs.auth?.isFor(prefs.haBase) == false
 
     /** Listener gets the new signed-in state on the main thread. */
     fun addListener(l: (Boolean) -> Unit) { listeners += l }
@@ -166,6 +177,8 @@ object HaAuth {
         exec.execute {
             val auth = prefs.auth
             if (auth == null) { done(Access.Failed("not signed in", signedOut = true)); return@execute }
+            // Before the cache: a cached token must not go out either.
+            if (!auth.isFor(prefs.haBase)) { done(Access.Failed("Home Assistant moved", signedOut = false)); return@execute }
             if (!force) cache.get()?.let { done(Access.Ok(it, cache.secondsLeft())); return@execute }
             when (val r = tokens.refresh(auth)) {
                 is TokenResult.Ok -> {
@@ -193,9 +206,11 @@ object HaAuth {
     fun signOut(reason: String, done: (signedOut: Boolean) -> Unit = {}) {
         exec.execute {
             val auth = prefs.auth
-            if (auth != null) {
-                val ok = tokens.revoke(auth)
-                AuthLog.i("Signed out ($reason); revoke ${if (ok) "sent" else "not reachable"}")
+            when {
+                auth == null -> Unit
+                // Revoking sends the token: never to an address that isn't the sign-in's own.
+                !auth.isFor(prefs.haBase) -> AuthLog.i("Signed out ($reason); Home Assistant moved, so no revoke sent")
+                else -> AuthLog.i("Signed out ($reason); revoke ${if (tokens.revoke(auth)) "sent" else "not reachable"}")
             }
             done(clearLocal())
         }

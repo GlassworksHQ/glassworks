@@ -107,6 +107,8 @@ class GeckoPinHarness(
 
     /** Signs the panel in to [base] with a cached access token, without any network. */
     fun signIn(base: String, accessToken: String = "test-access-token", expiresIn: Long = 1800) {
+        // HaAuth keeps the first test's prefs, whose dashboard address would read as Home Assistant having moved (#467).
+        HaAuth::class.java.getDeclaredField("prefs").apply { isAccessible = true }.set(HaAuth, KioskPrefs(app))
         haAuthPrefs()!!.auth = StoredAuth(base, "http://192.0.2.99/", "test-refresh-token")
         val cache = HaAuth::class.java.getDeclaredField("cache").apply { isAccessible = true }.get(HaAuth)
         cache.javaClass.getMethod("put", String::class.java, Long::class.javaPrimitiveType).invoke(cache, accessToken, expiresIn)

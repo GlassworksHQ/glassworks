@@ -162,7 +162,7 @@ open class AppManage(
             appendLine("Version: ${runtime.build.product} ${s.version} (${runtime.build.versionCode})")
             appendLine("Frame: ${runtime.frame.board}, Android ${Build.VERSION.RELEASE}, ${Build.MODEL}")
             appendLine("Device up: ${SystemClock.elapsedRealtime() / 1000} s; app up ${s.uptimeMs / 1000} s")
-            appendLine("Home Assistant: ${s.haBase ?: "none"}; panel signed in: ${HaAuth.signedIn}; added: ${prefs.haSeen}")
+            appendLine("Home Assistant: ${s.haBase ?: "none"}; panel signed in: ${HaAuth.signedIn}${if (HaAuth.movedAway) " (moved)" else ""}; added: ${prefs.haSeen}")
             for (t in s.tiles) appendLine("${t.label}: ${t.value} (${t.detail})")
             appendLine()
             appendLine("Panes:")

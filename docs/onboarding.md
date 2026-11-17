@@ -395,13 +395,28 @@ This is the part that removes the login screen. Implemented in `auth/` (`OAuth.k
   `success:false`. Fire-and-forget messages are ignored. The callback names match the Companion
   app's `FrontendJsBridge.kt` (`EXPECTED_GET_AUTH_CALLBACK` / `EXPECTED_REVOKE_AUTH_CALLBACK`).
 - The content script installs `window.externalApp` (`createObjectIn` / `exportFunction`) only on
-  pages loaded with `external_auth=1`. The app adds the flag to every top-level HA page load once a
-  refresh token exists (`onLoadRequest`). Tokens are only given to top-level pages on the
-  signed-in HA origin. **Without a refresh token nothing changes**: the GeckoView's own
-  cookie/localStorage session works as before.
+  pages loaded with `external_auth=1`. The app adds the flag to every top-level page load on the
+  signed-in HA origin once a refresh token exists (`onLoadRequest`), so a page on another origin
+  (Home Assistant moved, #467) gets no flag although a token exists. Tokens are only given to
+  top-level pages on the signed-in HA origin. **Without a refresh token nothing changes**: the
+  GeckoView's own cookie/localStorage session works as before.
 - The sign-in screen (now the setup screen's Sign-in step) appears when the GeckoView lands on HA's
-  `/auth/authorize` (logged out) and there is no refresh token, or after a sign-out. It goes away by
+  `/auth/authorize` (logged out) and there is no refresh token, after a sign-out, or when Home
+  Assistant moved (a token is stored, but for another address; see below). It goes away by
   itself when the token arrives. `--ez show_signin true` previews it without touching the session.
+- **Home Assistant moves (#467).** The sign-in is for the origin it was issued at (`ha_base`). When the
+  dashboard's Home Assistant has another origin (DHCP moved it and discovery found the new address, or https
+  was turned on at the same host), the panel asks to sign in again: the Sign-in step shows instead of HA's
+  login page, with "Home Assistant moved to a new address. Sign in again.", and its QR code works on a frame
+  without touch. On a screen nothing else can wake, the step wakes it and keeps it on. The phone's setup page
+  and Manage say the dashboard isn't signed in and offer the sign-in, HA's *Signed in* sensor says `no`, and
+  the settings menu drops its Dashboard sign-in row, as with no sign-in.
+- The token goes to no address other than the one the sign-in is for. While the dashboard is elsewhere it
+  goes nowhere: no refresh, no cached token, no revoke. Signing in again stores a new sign-in. The old refresh
+  token stays in the old Home Assistant, under your profile, Security, Refresh tokens, where you can delete it.
+- The panel never follows a move by itself, because discovery can't prove which device answers at the new
+  address. HA's mDNS `uuid` is public, and anything on the LAN can advertise it with its own `internal_url`
+  and a copy of `/manifest.json`.
 
 The original design notes:
 

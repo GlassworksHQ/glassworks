@@ -296,8 +296,8 @@ So on a panel HA already has:
 | text_sensor `Update status` | `update_status` | diagnostic; e.g. `up to date (1.2.0)`, `1.3.0 available`, `Downloading 1.3.0: 42%`, `Install of 1.3.0 failed: …` |
 | text_sensor `Silent updates` | `silent_updates` | diagnostic; whether app updates install with nobody at the panel, and why: `Yes: …` or `No: …` ([Silent updates](#silent-updates)) |
 | text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
-| text_sensor `Signed in` | `signed_in` | diagnostic; `yes` / `no`: whether a QR sign-in refresh token is stored (never the token) |
-| button `Sign out` | `sign_out` | revokes the refresh token at HA (`/auth/revoke`), deletes it, shows the sign-in screen |
+| text_sensor `Signed in` | `signed_in` | diagnostic; `yes` / `no`: whether the dashboard's Home Assistant has a QR sign-in on the panel (never the token). It says `no` after Home Assistant moved to another address, although the old sign-in is still stored ([onboarding.md](onboarding.md#4-login-without-typing-on-the-panel-qr-sign-in--external-auth-)) |
+| button `Sign out` | `sign_out` | revokes the refresh token at HA (`/auth/revoke`), deletes it, shows the sign-in screen. After Home Assistant moved it skips the revoke, which would send the token to an address that isn't the sign-in's, so the old token stays in the old Home Assistant's profile until deleted there |
 
 #### Screen entities by frame
 
