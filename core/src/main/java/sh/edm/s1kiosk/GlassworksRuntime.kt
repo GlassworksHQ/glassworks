@@ -12,6 +12,7 @@ import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SetupStep
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.platform.HttpsTrust
 import dev.glassworks.screen.PresenceRelay
 import dev.glassworks.screen.ScreenPolicy
 import sh.edm.s1kiosk.auth.HaTokenClient
@@ -44,6 +45,11 @@ class GlassworksRuntime(
     /** The app's own releases, for its updates (#23). Required: an app that left it out would update to another app's APK. */
     override val releases: ReleaseLine,
 ) : Glassworks {
+    init {
+        // Before any component opens a connection: Android 6-7.0 lack the root GitHub's downloads chain to (#456).
+        if (HttpsTrust.install()) Log.i(TAG, "HTTPS: added ${HttpsTrust.roots.size} root(s) the system store lacks")
+    }
+
     override val presence = PresenceRelay(frame.presence)
 
     override val screen = ScreenPolicy(

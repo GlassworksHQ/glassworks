@@ -56,6 +56,13 @@ open class PlatformApi(
     val hasProcessStartTime: Boolean get() = apiLevel >= 24
 
     /**
+     * The system CA store has ISRG Root X1, Let's Encrypt's root (Android 7.1). Below it, HTTPS to a host on it
+     * (raw.githubusercontent.com, GitHub's release assets) fails unless the app adds the root ([HttpsTrust]).
+     * Android 7.0's Network Security Config could add it too, but only from XML for the whole app.
+     */
+    val hasIsrgRootX1: Boolean get() = apiLevel >= 25
+
+    /**
      * The hidden `ActivityManager.getService()` exists (Android 8). Below it, the same service is
      * `ActivityManagerNative.getDefault()`. Only reflection reaches either.
      */
