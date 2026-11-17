@@ -27,6 +27,12 @@ data class AppBuild(
      * default is the S1's, which every S1 build and its tests have always sent.
      */
     val product: String = S1_KIOSK,
+    /**
+     * The small icon of the service's notification, a drawable of the app's that every Android the app runs on
+     * loads. The status bar draws only its alpha, so a silhouette: the generic app's is the mark in white (#198). 0 is
+     * the app's own icon, as the S1's has always shown.
+     */
+    val notificationIcon: Int = 0,
 ) {
     /** The version people see (#263): "0.4.3", or "0.4.3 · test build 28c157d". */
     val shown: String get() = if (testBuild.isEmpty()) versionName else "$versionName · test build $testBuild"

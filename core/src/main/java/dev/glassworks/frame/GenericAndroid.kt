@@ -90,12 +90,15 @@ class GenericAndroid(
 
         /**
          * Every frame's Device page row (#422): whether updates install with nobody at the screen, and how to make
-         * them where they don't. Amber when there's a way. [answer] is null while the frame is still reading it.
+         * them where they don't. Amber when there's a way. [read] gives null while the frame is still reading it.
          */
-        fun silentUpdatesItem(answer: () -> SilentUpdates?) = SettingsItem.Info(
-            { SILENT_UPDATES_TITLE },
-            { answer()?.detail ?: "Checking" },
-            fixable = { answer()?.let { !it.silent && it.fix != null } == true },
-        )
+        fun silentUpdatesItem(read: () -> SilentUpdates?): SettingsItem.Info {
+            val answer = SilentUpdates.Fresh(read = read)
+            return SettingsItem.Info(
+                { SILENT_UPDATES_TITLE },
+                { answer()?.detail ?: "Checking" },
+                fixable = { answer()?.let { !it.silent && it.fix != null } == true },
+            )
+        }
     }
 }

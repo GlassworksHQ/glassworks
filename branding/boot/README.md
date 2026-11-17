@@ -11,6 +11,7 @@ Glassworks stack from #63; the S1's output and what was measured on the S1 are i
 | `target.py` | What a frame gives the generator, and the layout it derives from that. Standard library only |
 | `stack.py` | The design: the stack, the wordmark and the device line, ported from the reference page |
 | `formats.py` | The output formats (`bootanimation.zip`, the Allwinner splash BMP, a preview) and their checks |
+| `app_icon.py` | The generic app's launcher, themed and notification icons, from the brand's `app-icon.svg`, `mark-on-dark.svg` and `mark-mono.svg` (`--png` also renders the Android 6-7 PNGs with `rsvg-convert`). Standard library only |
 | `test/` | Tests for `target.py`; CI runs them |
 
 ## Adding a frame
