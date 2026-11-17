@@ -43,6 +43,9 @@ enum class ProxyPhase(val entityText: String?) {
     }
 }
 
+/** The proxy's GATT connections: [inUse] of [limit] slots. */
+data class ProxyConnections(val inUse: Int, val limit: Int)
+
 /** What the settings page reads and does. [BluetoothProxyDefinition] is the real one; mock-ups pass their own. */
 interface BluetoothProxyModel {
     fun phase(): ProxyPhase

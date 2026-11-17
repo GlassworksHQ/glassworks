@@ -50,6 +50,7 @@ class BluetoothProxyMockups {
             override fun start(power: ScanPower, listener: BleScanner.Listener) {}
             override fun stop() {}
         }
+        override fun newGattRadio() = dev.glassworks.esphome.bluetoothproxy.GattRadio { _, _ -> null }
         override fun unavailable() = why
         override fun turnBluetoothOn() = true
         override fun turnLocationOn() = true

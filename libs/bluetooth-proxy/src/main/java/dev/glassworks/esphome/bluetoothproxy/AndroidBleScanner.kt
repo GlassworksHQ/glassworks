@@ -23,11 +23,13 @@ import dev.glassworks.esphome.EspHomeLog
  * counts the scan as filtered, and a filtered scan keeps running with the screen off and isn't
  * suspended while location is off. Results still need location on (GattService).
  *
+ * With [recent], it remembers the devices it hears, for [AndroidGattRadio] to connect to.
+ *
  * When Bluetooth turns off, Android 10 drops the scan without calling `onScanFailed`. So from the
  * first [start] until [release], the scanner watches the adapter: off ends the current scan with
  * [ScanFailure.BLUETOOTH_OFF], and on tells the listener it may retry now.
  */
-class AndroidBleScanner(context: Context) : BleScanner {
+class AndroidBleScanner(context: Context, private val recent: RecentDevices? = null) : BleScanner {
     private val app = context.applicationContext
     private val adapter: BluetoothAdapter? = app.getSystemService(BluetoothManager::class.java)?.adapter
     private val current = CurrentScan<ScanCallback>()
@@ -89,7 +91,9 @@ class AndroidBleScanner(context: Context) : BleScanner {
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val record = result.scanRecord?.bytes ?: return
-                listener.onAdvertisement(parseAddress(result.device.address), result.rssi, record)
+                val address = parseAddress(result.device.address)
+                recent?.heard(address, result.device)
+                listener.onAdvertisement(address, result.rssi, record)
             }
 
             override fun onBatchScanResults(results: MutableList<ScanResult>) {
