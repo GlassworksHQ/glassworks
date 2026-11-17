@@ -395,12 +395,14 @@ This is the part that removes the login screen. Implemented in `auth/` (`OAuth.k
   `success:false`. Fire-and-forget messages are ignored. The callback names match the Companion
   app's `FrontendJsBridge.kt` (`EXPECTED_GET_AUTH_CALLBACK` / `EXPECTED_REVOKE_AUTH_CALLBACK`).
 - The content script installs `window.externalApp` (`createObjectIn` / `exportFunction`) only on
-  pages loaded with `external_auth=1`. The app adds the flag to every top-level HA page load once a
-  refresh token exists (`onLoadRequest`). Tokens are only given to top-level pages on the
-  signed-in HA origin. **Without a refresh token nothing changes**: the GeckoView's own
-  cookie/localStorage session works as before.
+  pages loaded with `external_auth=1`. The app adds the flag to every top-level page load on the
+  signed-in HA origin once a refresh token exists (`onLoadRequest`), so a page on another origin
+  (Home Assistant moved, #467) gets no flag although a token exists. Tokens are only given to
+  top-level pages on the signed-in HA origin. **Without a refresh token nothing changes**: the
+  GeckoView's own cookie/localStorage session works as before.
 - The sign-in screen (now the setup screen's Sign-in step) appears when the GeckoView lands on HA's
-  `/auth/authorize` (logged out) and there is no refresh token, or after a sign-out. It goes away by
+  `/auth/authorize` (logged out) and there is no refresh token, after a sign-out, or when Home
+  Assistant moved (a token is stored, but for another address; see below). It goes away by
   itself when the token arrives. `--ez show_signin true` previews it without touching the session.
 - **Home Assistant moves (#467).** The sign-in is for the origin it was issued at (`ha_base`). When the
   dashboard's Home Assistant has another origin (DHCP moved it and discovery found the new address, or https

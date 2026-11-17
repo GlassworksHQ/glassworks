@@ -49,7 +49,7 @@ object MenuFixture {
         live: CoreSettings.Live = CoreSettings.Live(),
         running: (String) -> Pane? = { null },
         blueprints: (String) -> SettingsItem.Blueprints? = { null },
-        account: String = "Signed in as Wall panel",
+        account: String? = "Signed in as Wall panel",
         /** Whether Home Assistant has the panel, as the app reads it ([S1Settings.model]). */
         link: () -> HaLink = { HaLink.CONNECTED },
         /** The panel's Wi-Fi address, as "Allow setup over the network" says it; none by default. */

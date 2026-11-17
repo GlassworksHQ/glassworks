@@ -91,9 +91,9 @@ class HaAuthMovedTest {
     }
 
     /**
-     * The phone's setup page (SetupChannelServer), Manage's Home Assistant tile, HA's *Signed in* sensor and the
-     * settings menu's Dashboard sign-in row (DashboardAccount, wired to [HaAuth.stored] as GlassworksRuntime does) read
-     * these: after a move they say "not signed in" and offer the sign-in, as the panel's own screen does.
+     * After a move [HaAuth.signedIn] is false and [HaAuth.stored] null, and the settings menu's Dashboard sign-in row
+     * (DashboardAccount, wired to [HaAuth.stored] as GlassworksRuntime does) shows nothing. The setup page, Manage's
+     * tile and the *Signed in* sensor read [HaAuth.signedIn] directly; this test doesn't draw them.
      */
     @Test fun aMovedSignInReadsAsNotSignedInEverywhere() {
         val row = DashboardAccount({ HaAuth.stored }, { _, done -> done("Alex") })
