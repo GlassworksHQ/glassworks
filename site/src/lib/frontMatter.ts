@@ -5,10 +5,11 @@
  * the file.
  */
 export function frontMatter(file: string, src: string): { data: Record<string, string | boolean>; body: string } {
-  const m = src.match(/^---\n([\s\S]*?)\n---\n/);
+  // CRLF too: a Windows checkout with core.autocrlf hands the build CRLF files
+  const m = src.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   if (!m) return { data: {}, body: src };
   const data: Record<string, string | boolean> = {};
-  for (const line of m[1].split("\n")) {
+  for (const line of m[1].split(/\r?\n/)) {
     if (!line.trim()) continue;
     const kv = line.match(/^(\w+):\s*(.*)$/);
     if (!kv) throw new Error(`${file}: can't read front matter line "${line}"`);

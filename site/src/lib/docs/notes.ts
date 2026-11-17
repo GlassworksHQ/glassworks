@@ -38,7 +38,7 @@ export function noteMeta(file: string, data: Record<string, string | boolean>): 
   const pick = <K extends string>(key: string, words: Record<K, string>): K | undefined => {
     const v = data[key];
     if (v === undefined) return undefined;
-    if (typeof v === "string" && v in words) return v as K;
+    if (typeof v === "string" && Object.hasOwn(words, v)) return v as K;
     errors.push(`${file}: front matter ${key}: "${v}" isn't one of ${Object.keys(words).join(", ")} (site/src/lib/docs/notes.ts)`);
   };
   return { topic: pick("topic", TOPICS), evidence: pick("evidence", EVIDENCE), errors };

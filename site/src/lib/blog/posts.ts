@@ -42,7 +42,7 @@ function read(dir: string): PostSource {
   const name = dir.match(/^(\d{4}-\d{2}-\d{2})-([a-z0-9-]+)$/);
   if (!name) bad(`the folder should be named YYYY-MM-DD-slug`);
   const src = fs.readFileSync(path.join(/* turbopackIgnore: true */ REPO, file), "utf8");
-  if (!src.startsWith("---\n")) bad("no front matter (--- … ---)");
+  if (!/^---\r?\n/.test(src)) bad("no front matter (--- … ---)");
   const { data, body } = frontMatter(file, src);
   const str = (k: string) => {
     const v = data[k];
