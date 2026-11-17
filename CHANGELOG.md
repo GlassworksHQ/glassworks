@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror, the Manage
+  page's **Security** section shows a computer that asks for USB debugging, with its fingerprint, and
+  **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
+  every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
+  records each, with the fingerprint. Needs a Mirror installed with this version.
 - **Voice says when it can't get ready.** When the wake word model doesn't download (no internet, a
   certificate the panel can't verify, an HTTP error), fails its check, can't be saved, or the microphone
   doesn't work or isn't allowed, the Assist page on the panel and on the Manage page says so in words, with
