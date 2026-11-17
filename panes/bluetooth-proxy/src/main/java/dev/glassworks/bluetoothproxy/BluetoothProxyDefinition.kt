@@ -13,6 +13,7 @@ import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
 import dev.glassworks.esphome.bluetoothproxy.ScanFailure
+import dev.glassworks.esphome.bluetoothproxy.bluetoothProxyPermissions
 import java.util.concurrent.ScheduledExecutorService
 
 /**
@@ -28,6 +29,13 @@ class BluetoothProxyDefinition(
     override val id = "bluetooth-proxy"
     override val requires = setOf(Capability.BLUETOOTH_LE)
 
+    /**
+     * Scanning needs location (FINE from Android 10) and, from Android 12, `BLUETOOTH_SCAN`; connecting
+     * needs `BLUETOOTH_CONNECT` from Android 12. Asked for while the pane is on, never on a screen without
+     * touch (the installer grants them there).
+     */
+    override val permissions get() = bluetoothProxyPermissions
+
     override val switch = PaneSwitch(
         file, BluetoothProxyPrefs.KEY_ENABLED, default = BluetoothProxyPrefs.DEFAULT_ENABLED, title = TITLE, detail = "For BLE sensors",
         objectId = "bluetooth_proxy", icon = "mdi:bluetooth", inSetup = true,
@@ -38,16 +46,25 @@ class BluetoothProxyDefinition(
     /** The running pane, for the page. Set by [pane]; the device builds one per run. */
     @Volatile private var live: BluetoothProxyPane? = null
 
+    /**
+     * Holds the saved mode and [live] together: a pane built while the mode changes gets the new value,
+     * or is told it. The pane's own change runs on the device thread, so nothing waits under it.
+     */
+    private val modeLock = Any()
+
     /** The pane for the device's run. [device] is the shell's device thread. */
-    fun pane(ctx: PaneContext, device: ScheduledExecutorService) =
+    fun pane(ctx: PaneContext, device: ScheduledExecutorService) = synchronized(modeLock) {
         BluetoothProxyPane(ctx, radio, device, connect = BluetoothProxyPrefs(file).connect).also { live = it }
+    }
 
     /** "Listen and connect" (#246): kept, and handed to the running pane. */
     var connect: Boolean
         get() = BluetoothProxyPrefs(file).connect
         set(value) {
-            BluetoothProxyPrefs(file).connect = value
-            live?.setConnect(value)
+            synchronized(modeLock) {
+                BluetoothProxyPrefs(file).connect = value
+                live?.setConnect(value)
+            }
         }
 
     /** The connections in use, or null in listen only or while the proxy isn't running. */

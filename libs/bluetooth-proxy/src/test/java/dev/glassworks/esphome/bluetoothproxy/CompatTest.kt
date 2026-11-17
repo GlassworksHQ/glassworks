@@ -14,6 +14,14 @@ class CompatTest {
         )
     }
 
+    @Test fun theProxyAsksForWhatScanningAndConnectingNeed() {
+        assertEquals(setOf("android.permission.ACCESS_FINE_LOCATION"), CompatApi(29).runtimePermissions)
+        assertEquals(
+            setOf("android.permission.BLUETOOTH_SCAN", "android.permission.ACCESS_FINE_LOCATION", "android.permission.BLUETOOTH_CONNECT"),
+            CompatApi(31).runtimePermissions,
+        )
+    }
+
     @Test fun connectingNeedsBluetoothConnectOnlyFromAndroid12() {
         assertEquals(emptyList<String>(), CompatApi(29).connectPermissions)
         assertEquals(listOf("android.permission.BLUETOOTH_CONNECT"), CompatApi(31).connectPermissions)

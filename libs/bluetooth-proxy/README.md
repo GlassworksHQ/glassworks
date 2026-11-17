@@ -46,7 +46,9 @@ settings and entities. Package `dev.glassworks.esphome.bluetoothproxy`, MIT lice
 
 It forwards advertisements, which covers most sensors (thermometers, plant sensors, presence tags).
 With `BluetoothConnectionEngine` it also makes GATT connections for Home Assistant, 3 at a time, for
-devices that need one (locks, SwitchBots, sensors with a key). Untested on a real device yet (#246).
+devices that need one (locks, SwitchBots, sensors with a key). On the S1 (#246), the pane ran on
+2026-11-16 and a GATT connection to one real device worked on 2026-11-17: reads, a write, and the
+link closed cleanly. More than one link at once, and a link kept open between polls, are untested.
 
 ## Use it in your own app
 
@@ -71,7 +73,8 @@ proxy.close()
 
 Before you start it, check `AndroidBleScanner(context).unavailable()`: it says why a scan can't run
 (no BLE, Bluetooth off, a missing permission, location off), or null. The app asks for the runtime
-permissions; the manifest entries come with the library.
+permissions in `bluetoothProxyPermissions` (scanning, and `BLUETOOTH_CONNECT` from Android 12); the
+manifest entries come with the library.
 
 ## What's in it
 
@@ -153,7 +156,7 @@ Status words:
 | Scan timing | `esp32_ble_tracker` `scan_parameters` (interval, window, duration) | Partial: three Android scan modes | Unreleased | `ScanPower`; Android takes no exact interval or window. The engine also restarts the scan every 25 min (Android's 30-minute rule) |
 | Passive scan and mode switching | `STATE_AND_MODE`, `BluetoothScannerStateResponse`, `BluetoothScannerSetModeRequest` (126, 127) | Not planned: Android apps can't stop scan requests | | One ESPHome flag covers both the state report and the switch |
 | Old-style advertisements | `BluetoothLEAdvertisementResponse` (67) | Not planned: raw advertisements replaced them, and HA asks for raw | | |
-| Active connections | `ACTIVE_CONNECTIONS`, `BluetoothDeviceRequest` connect and disconnect (68, 69) | Supported | Unreleased | `BluetoothConnectionEngine`. Untested with a real device ([#246](https://github.com/GlassworksHQ/glassworks/issues/246)) |
+| Active connections | `ACTIVE_CONNECTIONS`, `BluetoothDeviceRequest` connect and disconnect (68, 69) | Supported | Unreleased | `BluetoothConnectionEngine`. One real device and one link verified on the S1 (2026-11-17, [#246](https://github.com/GlassworksHQ/glassworks/issues/246)); more links at once untested |
 | Connection slots | `SubscribeBluetoothConnectionsFreeRequest`, `BluetoothConnectionsFreeResponse` (80, 81) | Supported | Unreleased | 3, like ESPHome's default. The RTL8821CS's own limit isn't known yet |
 | GATT services, read, write, descriptors, notify | 70–79, 82–84 | Supported | Unreleased | One operation at a time per link. 128-bit UUIDs only |
 | Remote caching | `REMOTE_CACHING`, connect with or without cache | Supported | Unreleased | HA keeps the services. A connect "with cache" still finds them, from Android's own cache, because Android needs its objects for every operation |
