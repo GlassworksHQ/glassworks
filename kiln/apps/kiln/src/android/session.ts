@@ -9,7 +9,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import {
-  APPS, OwnFrameRefused, identifyPicked, identifyUsb, installGeneric, planInstall, undoGeneric,
+  APPS, OwnFrameRefused, Refused, identifyPicked, identifyUsb, installGeneric, planInstall, undoGeneric,
   type BrandId, type OwnFrame, type GenericApp, type GenericInstalled, type GenericPhase, type Grant, type Identified, type Plan, type SilentUpdatesResult,
 } from '@glassworks/generic-android-installer';
 
@@ -56,11 +56,14 @@ export interface AndroidState {
   log: string[];
 }
 
+/** The device over adb; `close` lets go of its USB link (Panel has it). */
+export type Device = PanelShell & { close?(): Promise<void> };
+
 export interface AndroidDeps {
   /** WebUSB's device list with no filter. Called inside the click, before any await. */
   findUsb(): Promise<UsbFacts>;
   /** The adb interface: the browser's list, then Allow on the device. Called inside the click. */
-  connect(): Promise<PanelShell>;
+  connect(): Promise<Device>;
   sleep?: (ms: number) => Promise<void>;
   homeTimeoutMs?: number;
   setupTries?: number;
@@ -81,7 +84,12 @@ export class AndroidSession {
   state: AndroidState;
   private listeners = new Set<() => void>();
   private apk?: Uint8Array;
-  private device?: PanelShell;
+  /**
+   * The adb connection, kept only while it is known to work: from Allow through a run, and after a refusal (the
+   * device answered). Done and any other failure let it go, since the cable may be out by then and Panel can't
+   * reconnect: the next run asks the browser for the device again, inside its click.
+   */
+  private device?: Device;
   private picks = 0;
 
   constructor(private readonly d: AndroidDeps, on: boolean) {
@@ -156,9 +164,24 @@ export class AndroidSession {
   /** From the first screen: undo an install (or back to installing). Undo needs USB debugging too, so the same steps follow. */
   setFlow(flow: Flow) { this.set({ flow }); }
 
+  /** Lets go of the device's USB link (a new session replaces this one, or the run ended). */
+  close() { this.release(); }
+
+  private release() {
+    const d = this.device;
+    this.device = undefined;
+    void d?.close?.().catch(() => {});
+  }
+
+  /** Undo from Done: Kiln let go of the device there, so this asks for it again. Must run inside the click. */
+  async undoFromDone(): Promise<void> {
+    this.set({ flow: 'undo' });
+    await this.connect();
+  }
+
   /**
    * "It's on", or Try again: the adb interface and Allow, then read the device, then install or undo.
-   * Must run inside the click. A device still connected from before is used again, without the list.
+   * Must run inside the click. A device kept after a refusal is used again, without the list.
    */
   async connect(): Promise<void> {
     if (this.state.connecting || this.state.screen === 'working') return;
@@ -186,10 +209,7 @@ export class AndroidSession {
     });
   }
 
-  /** From Done, or from the start: take back the device admin and remove the app. */
-  async undo(): Promise<void> {
-    if (!this.device) return;
-    this.set({ flow: 'undo' });
+  private async undo(): Promise<void> {
     await this.work(async () => ({ flow: 'undo', removed: (await undoGeneric(this.device!, { onStep: this.log, sleep: this.d.sleep })).removed }));
   }
 
@@ -197,8 +217,11 @@ export class AndroidSession {
     if (this.state.screen === 'working') return;
     this.set({ screen: 'working', phases: [], granted: undefined, result: undefined, error: undefined, own: undefined });
     try {
-      this.set({ screen: 'done', result: await run() });
+      const result = await run();
+      this.release();
+      this.set({ screen: 'done', result });
     } catch (e) {
+      if (!(e instanceof Refused)) this.release();
       this.log('Stopped');
       this.log('', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message, ...(e instanceof OwnFrameRefused ? { own: e.own } : {}) });

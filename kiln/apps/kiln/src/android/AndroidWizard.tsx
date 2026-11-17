@@ -422,7 +422,7 @@ function Done({ s, session }: { s: AndroidState; session: AndroidSession }) {
         <p className="small">{installed.handoff.why} Finish setting up on the tablet: Glassworks shows its setup screen.</p>
       )}
       <div className="foot">
-        <button type="button" className="link" onClick={() => void session.undo()}>Undo</button>
+        <button type="button" className="link" onClick={() => void session.undoFromDone()}>Undo</button>
         <Log s={s} />
       </div>
     </section>
@@ -442,13 +442,25 @@ function Failed({ s, session }: { s: AndroidState; session: AndroidSession }) {
       </section>
     );
   }
+  return <Stopped s={s} session={session} />;
+}
+
+/** The run stopped. Try again reconnects if the device went away; a refused APK can be swapped here, keeping the device. */
+function Stopped({ s, session }: { s: AndroidState; session: AndroidSession }) {
+  const [repick, setRepick] = useState(false);
+  const blocked = s.flow === 'install' ? session.blocked() : undefined;
   return (
     <section className="card err" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : /Nothing was changed\.$/.test(s.error ?? '') ? 'Kiln can\'t install on this tablet.' : 'The install stopped.'}</h2>
       <pre className="raw">{s.error}</pre>
+      {repick && <ApkField s={s} session={session} />}
+      {repick && blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
         <Log s={s} />
-        <button type="button" className="btn ember" onClick={() => void session.connect()}>Try again</button>
+        <span className="row">
+          {s.flow === 'install' && !repick && <button type="button" className="link" onClick={() => setRepick(true)}>Pick another APK</button>}
+          <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
+        </span>
       </div>
     </section>
   );

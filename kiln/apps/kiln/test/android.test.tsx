@@ -9,7 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { AndroidActivity } from '../src/android/activity';
+import { ANDROID_BASE, AndroidActivity, keptAndroid } from '../src/android/activity';
 import { AndroidWizard, Screens } from '../src/android/AndroidWizard';
 import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from '../src/android/demo';
 import { AndroidSession, androidMode } from '../src/android/session';
@@ -245,6 +245,76 @@ describe('the session', () => {
     expect(s.state.screen).toBe('error');
     expect(s.state.error).toMatch(/Nothing was changed\.$/);
     expect(tablet.cmds.filter((c) => !/^(getprop|dumpsys package)/.test(c))).toEqual([]);
+  });
+
+  /** A tablet whose USB link can go: every command after `pull` throws, as a WebUSB transfer does once the cable is out. */
+  class Pluggable extends FakeAndroid {
+    gone = false;
+    pullAt?: RegExp;
+    close = vi.fn(async () => {});
+    override async run(cmd: string) {
+      if (this.pullAt?.test(cmd)) this.gone = true;
+      if (this.gone) throw new Error('transferIn: the device was disconnected');
+      return super.run(cmd);
+    }
+  }
+  const ready = async (tablet: () => FakeAndroid) => {
+    const connect = vi.fn(() => Promise.resolve(tablet()));
+    const s = new AndroidSession({ findUsb: async () => ({ vendorId: 0x18d1, productName: 'Pixel Tablet' }), connect, sleep: async () => {}, setupTries: 1 }, true);
+    await s.pickApk('a.apk', fakeGenericApk());
+    await s.find();
+    s.toSteps();
+    return { s, connect };
+  };
+
+  it('a cable pulled mid-install: the link is let go, and Try again asks the browser for the tablet again', async () => {
+    const first = new Pluggable();
+    first.pullAt = /^pm install/;
+    const { s, connect } = await ready(() => (connect.mock.calls.length === 1 ? first : new FakeAndroid()));
+    await s.connect();
+    expect(s.state.screen).toBe('error');
+    expect(first.close).toHaveBeenCalledTimes(1);
+    await s.connect();
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(s.state.screen).toBe('done');
+  });
+
+  it('a refused APK keeps the tablet: pick another on the error screen, and Try again needs no list', async () => {
+    const tablet = new FakeAndroid();
+    const { s, connect } = await ready(() => tablet);
+    await s.pickApk('legacy.apk', fakeGenericApk({ app: { ...tablet.app, package: 'dev.glassworks.generic_android.legacy' } as never }));
+    await s.connect();
+    expect(s.state.error).toMatch(/Nothing was changed\.$/);
+    render(<Screens session={s} />);
+    expect(document.querySelector('input[type=file]')).toBeNull();
+    fireEvent.click(screen.getByText('Pick another APK'));
+    expect(document.querySelector('input[type=file]')).toBeTruthy();
+    await act(() => s.pickApk('generic.apk', fakeGenericApk()));
+    await act(async () => { fireEvent.click(screen.getByText('Try again')); });
+    await until(() => heading() === 'Done.');
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('Done lets the tablet go; Undo from Done asks for it again, inside the click', async () => {
+    const tablet = new Pluggable();
+    const { s, connect } = await ready(() => tablet);
+    await s.connect();
+    expect(s.state.screen).toBe('done');
+    expect(tablet.close).toHaveBeenCalledTimes(1);
+    void s.undoFromDone();
+    expect(connect).toHaveBeenCalledTimes(2);
+    await until(() => s.state.screen === 'done' && s.state.flow === 'undo');
+    expect(s.state.result).toMatchObject({ flow: 'undo', removed: [{ package: 'dev.glassworks.generic_android' }] });
+  });
+
+  it('a finished session isn\'t kept: coming back after Done starts a new install', async () => {
+    const done = await androidDemo('done', true);
+    registry.keep(new AndroidActivity(done));
+    const fresh = keptAndroid(() => new AndroidSession({ findUsb: vi.fn(), connect: vi.fn() }, true));
+    expect(fresh.session).not.toBe(done);
+    expect(fresh.session.state.screen).toBe('find');
+    expect(registry.activity(ANDROID_BASE)).toBe(fresh);
+    expect(keptAndroid(() => { throw new Error('a session on its way is kept'); })).toBe(fresh);
   });
 
   it('is kept in Kiln\'s registry: the picker\'s way back while it works, and LeaveGuard while it writes', async () => {

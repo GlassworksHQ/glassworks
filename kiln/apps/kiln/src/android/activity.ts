@@ -22,8 +22,13 @@ export class AndroidActivity implements Activity {
   subscribe(l: () => void): () => void { return this.session.subscribe(l); }
 }
 
-/** The kept session, or a new one (`make`) kept from now on. */
+/**
+ * The kept session, or a new one (`make`) kept from now on. A session that reached Done is finished: it lets go
+ * and a new one starts, so coming back to /android starts another install rather than showing that Done again.
+ */
 export function keptAndroid(make: () => AndroidSession): AndroidActivity {
   const kept = registry.activity(ANDROID_BASE);
-  return kept instanceof AndroidActivity ? kept : registry.keep(new AndroidActivity(make()));
+  if (kept instanceof AndroidActivity && kept.session.state.screen !== 'done') return kept;
+  if (kept instanceof AndroidActivity) kept.session.close();
+  return registry.keep(new AndroidActivity(make()));
 }
