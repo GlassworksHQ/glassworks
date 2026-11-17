@@ -48,8 +48,11 @@ class SetupHotspotPolicy(
         data class On(val since: Long, val until: Long, val asked: Boolean, val armed: Boolean) : State
     }
 
-    /** Why the hotspot last went off: shown on the setup screen, and logged. */
-    enum class Stop { CONNECTED, CONFIGURED, TIMED_OUT, CANCELLED, FAILED }
+    /**
+     * Why the hotspot last went off: shown on the setup screen, and logged. [ANDROID]: Android closed it by itself (on
+     * Android 10, after 10 minutes with nobody on it).
+     */
+    enum class Stop { CONNECTED, CONFIGURED, TIMED_OUT, ANDROID, CANCELLED, FAILED }
 
     /** Have the hotspot on when [on]. Call [update] again after [wakeInMs], or on the next change when null. */
     data class Decision(val on: Boolean, val wakeInMs: Long?)
@@ -82,7 +85,7 @@ class SetupHotspotPolicy(
             }
             else -> s
         }
-        return decision(now)
+        return decision(now, connected)
     }
 
     /**
@@ -106,14 +109,26 @@ class SetupHotspotPolicy(
     /**
      * Wi-Fi details arrived (the setup page, Bluetooth, USB): off, so the panel can join, and armed again. A
      * connection in the next [graceMs] (the old network, before the panel leaves it) keeps it armed: if the new
-     * network then fails, the hotspot comes back [graceMs] after the panel was last connected.
+     * network then fails, the hotspot comes back [graceMs] after the panel was last connected. A connection that
+     * outlasts the hold disarms it as usual: a join that starts only after [graceMs] and fails gets no hotspot until
+     * the next start or an [ask] (docs/manage.md says so).
      */
     fun configured(now: Long) {
         if (state is State.On) lastStop = Stop.CONFIGURED
         state = State.Waiting(now, holdUntil = now + graceMs)
     }
 
-    /** The hotspot didn't start, or Android stopped it: off, until someone asks again. */
+    /**
+     * Android closed the hotspot by itself (S1, Android 10: SoftApManager's 10-minute timeout with no station). As
+     * after [maxOnMs]: the saved network gets [graceMs], then rule 1 again (S1 panel run on e7d2d49d).
+     */
+    fun androidStopped(now: Long) {
+        val s = state as? State.On ?: return
+        lastStop = Stop.ANDROID
+        state = if (s.armed) State.Waiting(now) else State.Idle
+    }
+
+    /** The hotspot didn't start: off, until someone asks again. */
     fun failed() {
         if (state is State.On) lastStop = Stop.FAILED
         state = State.Idle
@@ -125,8 +140,9 @@ class SetupHotspotPolicy(
     /** Time left before the hotspot stops by itself, while it's on. */
     fun leftMs(now: Long): Long? = (state as? State.On)?.let { (it.until - now).coerceAtLeast(0) }
 
-    private fun decision(now: Long): Decision = when (val s = state) {
-        is State.Waiting -> Decision(false, s.since + graceMs - now)
+    private fun decision(now: Long, connected: Boolean): Decision = when (val s = state) {
+        // Connected during a hold: wake at its end too, where a connection that outlasts it disarms (CodeRabbit on #418).
+        is State.Waiting -> Decision(false, minOf(s.since + graceMs, s.holdUntil?.takeIf { connected && it > now } ?: Long.MAX_VALUE) - now)
         State.Idle -> Decision(false, null)
         is State.On -> Decision(true, s.until - now)
     }

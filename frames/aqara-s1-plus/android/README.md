@@ -72,16 +72,17 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   settings menu, laid out like the Manage page: it opens on an Overview (running state, version and
   uptime, Reload dashboard, Restart app, Check for updates, Home Assistant, Wi-Fi, engine and memory
   tiles, every pane with its state). The sidebar has Panel (Home Assistant & dashboard: address, the
-  dashboard's sign-in, full screen, zoom, secure hosts; Screen: presence, idle and night times,
-  brightness, Aqara's own settings; S1 Plus: Block Aqara cloud, the cloud daemon, Aqara's apps, the
+  dashboard's sign-in, full screen, zoom, secure hosts; Screen: presence, idle time,
+  brightness, the Panel night mode blueprint, Aqara's own settings; S1 Plus: Block Aqara cloud, the cloud daemon, Aqara's apps, the
   radio's mode), each pane under Panes with its status dot, and System (Log, About).
   Changes apply as you make them; the few that need a restart offer one.
 - **Kiosk mode for HA**: a built-in Gecko web extension (`engines/engine-gecko/src/main/assets/extension/`) hides the HA dashboard
   header and the sidebar. Add `?kiosk=0` to the URL to show them for one page; while you're editing a
   dashboard they're left visible.
 - **Screen policy from the panel's own sensors** (`dev.glassworks.screen.ScreenPolicy` with the S1 frame's sensors, see
-  [docs/sensors.md](../docs/sensors.md)): wake on approach (VI5300 ToF), off after idle, a night window
-  with a shorter timeout and lower brightness cap, auto-brightness from the MK6212 light sensor. Runs in
+  [docs/sensors.md](../docs/sensors.md)): wake on approach (VI5300 ToF), off after idle,
+  auto-brightness from the MK6212 light sensor. Night is Home Assistant's to decide: the Panel night
+  mode blueprint ([docs/blueprints.md](../../../docs/blueprints.md)) changes the idle timeout and the brightness limit. Runs in
   a foreground `KioskService`, so it works while the screen is off. It replaces Aqara's DND
   screen-off ([frames/aqara-s1-plus/research/screen-policy.md](../research/screen-policy.md)).
 - **Home Assistant integration as an ESPHome device** (native API, voice assistant, screen and kiosk
@@ -102,7 +103,7 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   service for 10 minutes, so HA's `improv_ble` integration or improv-wifi.com can send it Wi-Fi
   details after someone taps **Allow** on the panel. See below and
   [docs/onboarding.md](../../../docs/onboarding.md) (step 1).
-- The page sees live panel state as `window.s1kiosk` (`{presence, proximityRaw, lux, screenOn, night}`)
+- The page sees live panel state as `window.s1kiosk` (`{presence, proximityRaw, lux, screenOn, voice}`)
   plus a `s1kiosk-state` event, so dashboards can react to presence.
 
 ## Build
@@ -168,7 +169,7 @@ $A --ez reload true
 $A --ez settings true      # open the settings dialog
 $A --ez hide_header false  # show HA header/sidebar
 $A --es screen_mode always # or presence (default)
-$A --ei idle_off_sec 120 --ei night_idle_off_sec 20 --es night_window 22:00-07:00
+$A --ei idle_off_sec 120    # screen off after 120 s idle (0 = never)
 $A --ef presence_range_m 1.0   # VI5300 range (needs WRITE_SECURE_SETTINGS)
 $A --es screen off         # or on
 $A --ez test_hold true --ei test_hold_s 1800   # screen on past the idle timeout for 1800 s (at most 3600), brightness unchanged; no setting changes; outlives an app restart, not a reboot; test_hold false ends it (Clarity, #240)
@@ -250,7 +251,8 @@ python3 tools/gecko-eval/gecko_eval.py 'JSON.stringify({w: innerWidth, h: innerH
 Gecko's prefs are written to `files/geckoview-config.yaml` at startup and logged under the
 `S1Kiosk` tag. Sign-in and HA discovery log under `S1Auth` / `S1Discovery`, the Manage page under `S1Manage` ([docs/manage.md](../../../docs/manage.md); its own log keeps the `S1…` lines for 7 days in `files/manage/log/`), the Music Assistant
 player under `S1Sendspin` (with a `sync:` line every 10 s while playing). The Wi-Fi scans the app
-starts while the screen is off log under `S1Kiosk.Wifi`. The secret store logs under `S1Kiosk.Secrets`
+starts while the screen is off log under `S1Kiosk.Wifi`, the setup hotspot (#197) under `S1Kiosk.Hotspot`
+(never its name or key). The secret store logs under `S1Kiosk.Secrets`
 when the Keystore isn't there or a secret no longer opens ([docs/secrets.md](../../../docs/secrets.md)).
 None of them log tokens or keys. Page
 console output goes to logcat (`Isolated Web Content` / `GeckoConsole`).

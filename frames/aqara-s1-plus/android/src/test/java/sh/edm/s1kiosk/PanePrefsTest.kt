@@ -137,6 +137,7 @@ class PanePrefsTest {
             override fun start(power: ScanPower, listener: BleScanner.Listener) {}
             override fun stop() {}
         }
+        override fun newGattRadio() = dev.glassworks.esphome.bluetoothproxy.GattRadio { _, _ -> null }
         override fun unavailable(): ScanFailure? = null
         override fun turnBluetoothOn() = false
         override fun turnLocationOn() = false

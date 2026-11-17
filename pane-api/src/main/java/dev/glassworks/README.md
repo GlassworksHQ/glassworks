@@ -63,7 +63,7 @@ change until Glassworks v1.
 | `SetupStep` | Something first-boot setup waits for from a pane: state plus setup channel requests. |
 | `PaneChoice` | A pane's card on setup's Panes step: a title, a line and a switch. |
 | `SettingsSection` | A section of the settings: typed items (`SettingsItem`) that the panel's menu and the Manage page both draw and change (#242). `settingsOrder` places them; `SettingsChange` checks and applies a change for both. |
-| `ScreenPolicy` | (`dev.glassworks.screen`) Wake on approach, idle off, the night window and its timeout, the brightness curve and the screen mode. It reads the frame's `PresenceSource` and `LightSource` and the app's `ScreenSettings`. One per process, on `GlassworksRuntime.screen`. |
+| `ScreenPolicy` | (`dev.glassworks.screen`) Wake on approach, idle off, the brightness curve up to its limit and the screen mode. It has no clock: Home Assistant sets the idle timeout and the limit at night (#473). It reads the frame's `PresenceSource` and `LightSource` and the app's `ScreenSettings`. One per process, on `GlassworksRuntime.screen`. |
 | `Platform` | (`dev.glassworks.platform`) What the running Android can do, as named queries (`hasNotificationChannels`, `hasWindowInsetsController`, …) and small shims. The only place that reads `Build.VERSION.SDK_INT`. |
 | `NotificationsPane` | (`dev.glassworks.notifications`) Notifications from Home Assistant: the `notify` action, Do not disturb, the rules for each priority, and a tapped button as the bus event `esphome.notification_action`. A core pane, off by default. The panel's overlay draws what its `NotificationsHub` holds. How to use it: [docs/notifications.md](../../../../../../docs/notifications.md). |
 | `DiagnosticsPane` | (`dev.glassworks.diagnostics`) The panel's health as diagnostic entities: CPU, temperature, RAM, storage, Wi-Fi, uptime, the last restart reason. A core pane, so every frame has it. The entities are in [docs/esphome.md](../../../../../../docs/esphome.md#diagnostics). |
@@ -324,6 +324,7 @@ The definition's `id` is the pane's.
 | `setupChoice` | The pane's card on the Panes step, or null. By default the switch's, when it is `inSetup`. A pane with `setupSteps` needs one. |
 | `settings()` | The pane's settings sections, as they are now. Called each time the menu opens. |
 | `extras` | adb intent extras for its settings (`IntentExtra.bool`, `float`, `string`). `restartsApp` for a setting read only at start. The switch's extra comes on its own (`intentExtras()`). |
+| `permissions` | Android's runtime permissions the pane needs while it is on (Assist: the microphone; the camera: the camera). The app asks for them when it starts, only if the app's manifest declares them and only on a screen that takes a tap (`permissionsToAsk()`). Without touch, the installer grants them. |
 
 **A setup step is state plus requests.** `done()` says whether the step is answered; `channelState()`
 is its part of the setup channel's state, under the step's id; `ops` are the requests that answer
@@ -415,6 +416,14 @@ a few words, why the pane can't run now (the radio without its root helper): the
 "Can't run" and its page says why, without a switch. A pane whose `requires` the frame doesn't
 `provide` is `CantRun`: it has no section, so the rail, the Manage page and setup don't show it at all
 (#23; maintainer, 2026-11-15).
+
+**Settings inside a page follow the same rule (#471).** The Screen page shows a row only when the device
+can back it. `ScreenHardware.of` (core) is the one answer both surfaces read: who senses presence (the
+frame's sensor, whose range changes only when `PresenceSource.ranged`; else a pane with `givesPresence`,
+like the camera; else nobody), whether `LightSource.available`, and whether the screen takes a tap.
+Without presence there is no wake switch or range. A pane that could give presence but is off gets a row
+that opens its page. Without a light sensor there is no Brightness row, and without touch no link to
+Android's settings.
 
 **Every pane's page shows its state (#212).** No page says the pane has no settings.
 

@@ -66,7 +66,9 @@ means changing that file in the same PR as the secrets.
 - If it leaks, someone can sign updates your panels would accept, if they can also get them onto a
   panel. Rotate: make a new key, reinstall the panels by hand, and replace the secrets.
 - A copy is in Bitwarden as the secure note "S1 Unleashed signing keys" (keystore, its password,
-  and the radio bundle key), saved and checked byte for byte on 2026-11-11.
+  and the radio bundle key), saved and checked byte for byte on 2026-11-11. Since 2026-11-17 the
+  vault's Glassworks folder also holds "S1 Kiosk release key" and "Glassworks Android release key"
+  (each keystore attached, with its password).
 
 ## 3. Add the four secrets to GitHub (once)
 
@@ -94,7 +96,10 @@ gh secret list --env release-signing --repo GlassworksHQ/glassworks
 ```
 
 The workflow uses only these four secrets, the radio bundle key below, the optional `VERCEL_DEPLOY_HOOK`
-(a Vercel deploy hook URL for the web installer), and the job's own `GITHUB_TOKEN`.
+(a Vercel deploy hook URL for the web installer), and the job's own `GITHUB_TOKEN`. The same `release-signing`
+environment also holds Glassworks' own key for the generic app and its legacy build (`GENERIC_*`, since
+2026-11-17), which only `generic-test-build.yml` uses so far: see
+[frames/generic-android/README.md](../frames/generic-android/README.md#signing).
 
 ### Who can sign
 

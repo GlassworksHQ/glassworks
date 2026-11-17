@@ -83,6 +83,30 @@ approval of 2026-11-15; this note keeps the evidence.
    would ever run. It now compares with `!= ''`. The `buttons` variable renders to a real list
    (`[{'action': 'ask_x_1', 'title': 'Yes'}, ...]`), which `to_json` then sends to the panel.
 
+8. **Panel night mode runs as written** (2026-11-17, verified with Home Assistant core 2026.11.2 from
+   pip, Python 3.14, `tools/blueprints/night-mode-run.sh`). The config check (step 6) doesn't render
+   templates, so the blueprint ran in a scratch Home Assistant for 130 s per case. Template numbers stood
+   in for two panels' *Idle timeout* and *Max auto brightness*; each logs the value it is set to. A third
+   idle timeout that doesn't exist stood for a panel that is off. Night forced on, from 120 s / 100%
+   (panel A) and 20 s / 100% (panel B): it set A's idle to 20 and both limits to 20, left B's idle alone,
+   skipped the missing panel, and wrote nothing on the next once-a-minute run. Night forced off, from
+   20 s / 20%: it set both idles to 120 and A's limit to 100, and nothing after. The stand-ins are not
+   ESPHome numbers, so the selector's `integration: esphome` filter wasn't exercised; it only filters
+   the picker.
+
+9. **Moves only between the two values, and only the right kind of number** (2026-11-17, after the
+   verifier's review of #477). Writing the target value every minute reverted a hand change within a
+   minute (14:00, idle set to 300 on the panel: back to 120). The blueprint now moves a panel only from
+   the other time's value, which makes it act once per change of night without storing anything: the
+   panel's value is the memory, so a Home Assistant restart doesn't matter. The pickers were any ESPHome
+   number; the idle list now needs `device_class: duration` (only *Idle timeout* has it), and since
+   *Max auto brightness* has no device class, the body skips any number not in % (only it is). The run
+   script added a hand-set panel and a Mic gain stand-in (unit `x`, picked in both lists by mistake).
+   Verified on Home Assistant 2026.11.2: at night it moved only panel A (120 s, 100%) and B's limit, left
+   B's hand-set 300 s and the Mic gain stand-in at 120 alone; by day it moved A back and left B's hand-set
+   50% and 300 s alone; no writes on the later runs. Without the kind check the stand-in at 120 would have
+   gone to 20.
+
 ## Result
 
 | Question | Answer |
@@ -100,10 +124,13 @@ approval of 2026-11-15; this note keeps the evidence.
 - The catalog and the YAML's shape: `./gradlew :kiosk:testDebugUnitTest --tests '*BlueprintCatalogTest*'`.
 - Home Assistant's own check: step 6 above. It writes only a temporary folder. Delete `/tmp/ha` after
   (about 600 MB).
+- Panel night mode at run time: `tools/blueprints/night-mode-run.sh /tmp/ha/bin/python` (step 8, about
+  4 minutes).
 
 ## Open questions
 
-- None of the four blueprints has run against a real panel and a real home. The doorbell hasn't met a
+- None of the five blueprints has run against a real panel and a real home. Panel night mode's plan
+  for the S1 is in #473's PR. The doorbell hasn't met a
   real doorbell.
 - The dashboard opens the instance's `/_my_redirect/...` in place (the content script's `navigate`).
   Not yet seen on the S1's Gecko.

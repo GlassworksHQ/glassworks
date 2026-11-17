@@ -92,6 +92,8 @@ class SetupOverlay(
         val improv: WifiStep.ImprovLine = WifiStep.improv(ImprovFacts()),
         /** A Wi-Fi join sent from the computer (web installer), if any. */
         val installer: InstallerWifi? = null,
+        /** The setup hotspot's part of the Wi-Fi step (#197); null where the app has none, and in a preview. */
+        val hotspot: dev.glassworks.setup.HotspotStep.Card? = null,
     )
 
     var onChooseNetwork: (() -> Unit)? = null
@@ -103,6 +105,8 @@ class SetupOverlay(
     var onClosePreview: (() -> Unit)? = null
     /** An inline Improv button (Allow / Not now / Stop / Use Bluetooth / Try again). */
     var onImprovAction: ((WifiStep.Action) -> Unit)? = null
+    /** The setup hotspot's button (Set up from a phone / Allow / Close it / Try again). */
+    var onHotspotAction: ((dev.glassworks.setup.HotspotStep.Action) -> Unit)? = null
     /** Panes applied with Continue. [restart]: a card that only takes effect at start changed. */
     var onPanesDone: (() -> Unit)? = null
     /** A pane's step was answered on the screen ([SetupHost.next]). */
@@ -296,6 +300,14 @@ class SetupOverlay(
         gravity = Gravity.CENTER_VERTICAL
         addView(Pulse(), LinearLayout.LayoutParams(px(44f), px(44f)).apply { marginEnd = px(19f) })
         addView(g.text(17f, MU).apply { text = "Waiting for Home Assistant…" })
+    }
+    /** The same spinner while the setup hotspot starts (#460), with its own line. */
+    private val spotWaitingText = g.text(17f, MU)
+    private val spotWaiting = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(Pulse(), LinearLayout.LayoutParams(px(44f), px(44f)).apply { marginEnd = px(19f) })
+        addView(spotWaitingText, LinearLayout.LayoutParams(0, -2, 1f))
     }
     private val urlField = EditText(context).apply {
         textSize = 18f
@@ -495,8 +507,8 @@ class SetupOverlay(
                 // Neither "on this panel instead" nor a done step's Continue: the next step comes by itself.
                 plainLeft.visibility = View.GONE
                 primary.visibility = View.GONE
-            } else bindFromComputer(m)
-            setContent(null)
+                setContent(null)
+            } else setContent(bindFromComputer(m))
             hideKeyboard()
             return
         }
@@ -550,6 +562,8 @@ class SetupOverlay(
         val w = m.wifi
         val inst = m.installer
         var tile = false
+        val spot = m.hotspot?.takeIf { !w.online && !done }
+        if (spot?.title != null) return bindHotspotCard(spot)
         when {
             w.online || done -> {
                 cardTitle.text = if (w.ethernet) "Connected over Ethernet." else "Connected to ${w.ssid ?: "Wi-Fi"}."
@@ -563,7 +577,7 @@ class SetupOverlay(
             }
             inst?.phase == InstallerWifi.Phase.CONNECTING -> {
                 cardTitle.text = "Connecting to ${inst.ssid}…"
-                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This takes up to 30 seconds.")
+                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This can take up to a minute.")
             }
             else -> {
                 cardTitle.text = if (w.state == WifiSetupStatus.State.CONNECTING) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
@@ -571,8 +585,19 @@ class SetupOverlay(
                 tile = true
             }
         }
-        if (!w.online && inst?.phase == InstallerWifi.Phase.FAILED) showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
-        else w.message?.let { showStatus(it, AMBER) }
+        // The hotspot's line goes with its button (Allow, Try again, Turn on Wi-Fi), so it wins over an older line
+        // (CodeRabbit on #418): a failed installer join, then the Wi-Fi status.
+        val spotStatus = spot?.status
+        when {
+            spotStatus != null -> showStatus(spotStatus, tone(spot.tone))
+            !w.online && inst?.phase == InstallerWifi.Phase.FAILED -> showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
+            else -> w.message?.let { showStatus(it, AMBER) } ?: run { status.visibility = View.GONE } // nor the hotspot card's line from a moment ago
+        }
+        spot?.action?.let { a ->
+            plain.text = a.label
+            plain.visibility = View.VISIBLE
+            plain.setOnClickListener { onHotspotAction?.invoke(a) }
+        }
         ghost.text = "Choose a network"
         ghost.visibility = View.VISIBLE
         ghost.setOnClickListener { onChooseNetwork?.invoke() }
@@ -585,6 +610,45 @@ class SetupOverlay(
             plainLeft.setOnClickListener { onImprovAction?.invoke(a) }
         }
         return improvTile.view
+    }
+
+    /**
+     * The setup hotspot fills the Wi-Fi card: starting (the spinner), on (its QR code, to join it or, once a phone is on
+     * it, to open the setup page), or a start the person asked for that failed (why, in the status line). Returns the
+     * step's own view: the spinner's row while it starts.
+     */
+    private fun bindHotspotCard(spot: dev.glassworks.setup.HotspotStep.Card): View? {
+        spot.label?.let { cardLabel.text = it }
+        cardTitle.text = spot.title
+        if (spot.body == null) cardBody.visibility = View.GONE else cardBody.text = spot.body
+        spot.qr?.let(::showQr)
+        // Also clears a line from a moment ago, on the same step (CodeRabbit on #418).
+        spot.status?.let { showStatus(it, tone(spot.tone)) } ?: run { status.visibility = View.GONE }
+        val content = spot.waiting?.let { spotWaitingText.text = it; spotWaiting }
+        if (input == Input.NONE) return content
+        ghost.text = "Choose a network"
+        ghost.visibility = View.VISIBLE
+        ghost.setOnClickListener { onChooseNetwork?.invoke() }
+        spot.action?.let { a ->
+            plainLeft.text = a.label
+            plainLeft.visibility = View.VISIBLE
+            plainLeft.setOnClickListener { onHotspotAction?.invoke(a) }
+        }
+        return content
+    }
+
+    private fun showQr(text: String) {
+        if (qrFor != text) {
+            qrImage.setImageBitmap(QrCode.bitmap(text, px(200f)))
+            qrFor = text
+        }
+        qrGlow.visibility = View.VISIBLE
+    }
+
+    private fun tone(t: dev.glassworks.setup.HotspotStep.Tone) = when (t) {
+        dev.glassworks.setup.HotspotStep.Tone.MUTED -> MU
+        dev.glassworks.setup.HotspotStep.Tone.AMBER -> AMBER
+        dev.glassworks.setup.HotspotStep.Tone.ROSE -> ROSE
     }
 
     private fun bindHa(m: Model, done: Boolean): View? {
@@ -685,13 +749,20 @@ class SetupOverlay(
         plainLeft.setOnClickListener { onUsePanel?.invoke() }
     }
 
-    /** Without touch ([Input.NONE]): where to set the panel up from a computer, as a QR code and an address. */
-    private fun bindFromComputer(m: Model) {
+    /**
+     * Without touch ([Input.NONE]): where to set the panel up from a computer, as a QR code and an address. Returns the
+     * step's own view, if any.
+     */
+    private fun bindFromComputer(m: Model): View? {
+        // No Wi-Fi works and the panel opens its own: a phone joins it first (#197).
+        m.hotspot?.takeIf { it.title != null && !m.wifi.online }?.let { return bindHotspotCard(it) }
         val ip = m.panelIp
         if (ip == null) {
             cardTitle.text = "Waiting for Wi-Fi."
             cardBody.text = "Put the panel on Wi-Fi with Kiln on a computer, over USB. Then this screen shows where to set it up."
-            return
+            // Why the panel's own Wi-Fi isn't up (Wi-Fi off, Android closed it): nothing to press here, but said (A-N3).
+            m.hotspot?.status?.let { showStatus(it, tone(m.hotspot.tone)) }
+            return null
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
         if (qrFor != url) {
@@ -701,6 +772,7 @@ class SetupOverlay(
         qrGlow.visibility = View.VISIBLE
         cardTitle.text = "Scan to set it up."
         cardBody.text = "Or open $url on a computer on this network. When it asks for a code, the code shows here."
+        return null
     }
 
     private fun showStatus(text: String, color: Int) {

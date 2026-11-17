@@ -36,6 +36,9 @@ object SetupSignals {
         notifyChanged()
     }
 
+    /** Something else the setup screen shows changed: the setup hotspot (#460). Any thread. */
+    fun changed() = notifyChanged()
+
     private fun notifyChanged() {
         main.post { listeners.forEach { runCatching { it() } } }
     }

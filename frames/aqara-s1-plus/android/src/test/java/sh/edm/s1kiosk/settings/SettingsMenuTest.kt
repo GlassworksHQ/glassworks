@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk.settings
 
 import android.app.Application
+import dev.glassworks.pane.SettingsChange
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsPlace
 import dev.glassworks.pane.SettingsSection
@@ -131,8 +132,7 @@ class SettingsMenuTest {
         assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts", "action ${CoreSettings.SETUP_OVER_NETWORK}"), m["dashboard"])
         assertEquals(
             listOf(
-                "Wake when someone's near", "Presence range", "Turn off when idle", "At night", "At night, turn off after",
-                "Brightness", AqaraS1Plus.SETTINGS_TITLE,
+                "Wake when someone's near", "Presence range", "Turn off when idle", "Brightness", AqaraS1Plus.SETTINGS_TITLE,
             ),
             m["screen"],
         )
@@ -145,7 +145,7 @@ class SettingsMenuTest {
         // Maintainer 2026-11-15: which Home Assistant account the dashboard uses, on the Home Assistant & dashboard page.
         val core = CoreSettings(
             KioskPrefs(RuntimeEnvironment.getApplication()), "0.4.3", status = { "" }, deviceSettings = null,
-            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { "Signed in as Alex" },
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { "Signed in as Alex" }, hardware = MenuFixture.S1_HARDWARE,
         )
         val page = core.sections().getValue(SettingsPlace.DASHBOARD)
         assertEquals(CoreSettings.DASHBOARD_TITLE, page.title)
@@ -155,7 +155,7 @@ class SettingsMenuTest {
         // Without a stored sign-in (one made on the panel's own screen leaves none) the row is left out.
         val none = CoreSettings(
             KioskPrefs(RuntimeEnvironment.getApplication()), "0.4.3", status = { "" }, deviceSettings = null,
-            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { null },
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { null }, hardware = MenuFixture.S1_HARDWARE,
         )
         assertTrue(none.sections().getValue(SettingsPlace.DASHBOARD).items.none { it is SettingsItem.Info })
     }
@@ -173,7 +173,7 @@ class SettingsMenuTest {
     fun aqaraSettingsOnlyWhenItResolves() {
         val screen = menu(deviceSettings = false).first { it.id == "screen" }
         assertFalse(AqaraS1Plus.SETTINGS_TITLE in titles(screen.items))
-        assertEquals(6, screen.items.size) // everything else stays
+        assertEquals(4, screen.items.size) // everything else stays
     }
 
     @Test
@@ -199,27 +199,24 @@ class SettingsMenuTest {
             is SettingsItem.Text -> typed[i.title]?.let { v -> i.save(v) { problems += it } }
             is SettingsItem.Switch -> i.save(i.title == "Brightness") { problems += it }
             is SettingsItem.Slider -> i.save(2.1f) { problems += it }
-            is SettingsItem.Duration -> i.save(if (i.title == "Turn off when idle") 300 else 30) { problems += it }
-            is SettingsItem.TimeRange -> i.save("23:00-06:00") { problems += it }
+            is SettingsItem.Duration -> i.save(300) { problems += it }
             else -> {}
         }
-        assertEquals(List(10) { null }, problems)
+        assertEquals(List(8) { null }, problems)
         assertEquals(KioskPrefs.AUTO, prefs.urlSetting) // blank = auto
         assertEquals(1.5f, prefs.zoom)
         assertEquals("ha.local", prefs.extraSecureHosts)
         assertFalse(prefs.hideHeader); assertFalse(prefs.hideSidebar) // one switch for both
         assertEquals("always", prefs.screenMode)
         assertEquals(300, prefs.idleOffSec)
-        assertEquals(30, prefs.nightIdleOffSec)
-        assertEquals("23:00-06:00", prefs.nightWindow)
         assertEquals(2.1f, prefs.presenceRangeM)
         assertTrue(prefs.autoBrightness)
     }
 
     @Test
     fun theScreenPageIsPickedNotTyped() {
-        // #63 round 2: a slider for the presence range, durations from a list with their units, the night
-        // window from steps. Nothing on the page opens the keyboard.
+        // #63 round 2: a slider for the presence range, durations from a list with their units. Nothing on
+        // the page opens the keyboard.
         val screen = menu().first { it.id == "screen" }.items
         assertTrue(screen.none { it is SettingsItem.Text })
         val range = screen.filterIsInstance<SettingsItem.Slider>().single()
@@ -262,11 +259,21 @@ class SettingsMenuTest {
     }
 
     @Test
-    fun aNewNightWindowAppliesToTheBrightnessAtOnce() {
-        // CodeRabbit on #163: the night cap only changed with the next light reading.
-        var refreshed = 0
-        screen(CoreSettings.Live(brightness = { refreshed++ })).filterIsInstance<SettingsItem.TimeRange>().single().save("23:00-06:00") {}
-        assertEquals(1, refreshed)
+    fun theScreenPageHasNoNightOfItsOwn() {
+        // #473: Home Assistant decides when it is night. No row of the Screen page is about it.
+        assertTrue(screen().none { SettingsChange.titleOf(it).contains("night", ignoreCase = true) })
+        assertTrue(screen().none { it is SettingsItem.TimeRange })
+    }
+
+    @Test
+    fun theScreenPageOffersPanelNightModeLast() {
+        // #473: the app's blueprint list (BlueprintCatalogTest writes it) gives the Screen page Panel night mode.
+        val asset = java.io.File(dev.glassworks.testing.RepoFiles.s1App, "src/main/assets/${dev.glassworks.pane.Blueprint.ASSET}").readText()
+        val blueprints = PanelBlueprints({ dev.glassworks.pane.Blueprint.parse(asset) }, "main", { "http://homeassistant.local:8123" }, { dev.glassworks.pane.BlueprintAccess.Checking })
+        val items = MenuFixture.model(app, radioDefinition(app, FixedReadout(off)), blueprints = { blueprints.item(it) {} }).sections.first { it.id == "screen" }.items
+        val card = items.last() as SettingsItem.Blueprints
+        assertEquals(listOf("Panel night mode"), card.list.map { it.name })
+        assertEquals("core/blueprints/panel-night-mode.yaml", card.list.single().path)
     }
 
     @Test

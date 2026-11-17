@@ -4,12 +4,13 @@ import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsItem.TextKind
 import dev.glassworks.pane.SettingsPlace
 import dev.glassworks.pane.SettingsSection
+import dev.glassworks.screen.ScreenHardware
 import sh.edm.s1kiosk.KioskPrefs
 import java.util.Locale
 
 /**
  * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Log and
- * About (#63). Network and Security have nothing yet. Durations and the night window are picked, the
+ * About (#63). Network and Security have nothing yet. Durations are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
  * for a restart, as their adb extras always did.
@@ -24,6 +25,10 @@ class CoreSettings(
     private val licences: SettingsItem.Link,
     /** What the running app does when a setting it follows live changes. */
     private val live: Live = Live(),
+    /** What the device has for the Screen page: rows it can't back are left out ([ScreenHardware.of]). */
+    private val hardware: ScreenHardware,
+    /** The Screen page's Blueprints card (Panel night mode, #473), or null for none. */
+    private val screenBlueprints: SettingsItem.Blueprints? = null,
     /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"); null leaves the row out. */
     private val account: () -> String? = { null },
     /** The app's name, before [version] in About ([dev.glassworks.platform.AppBuild.product]). */
@@ -64,37 +69,13 @@ class CoreSettings(
             ) { prefs.extraSecureHosts = it },
             setupOverNetwork(),
         )),
-        SettingsPlace.SCREEN to SettingsSection("screen", "Screen", listOfNotNull(
-            // 0.4.3's "Screen follows presence" (#63's design names it this): on, the screen wakes when
-            // someone comes close and goes off when idle; off, it stays on. On means both: the screen mode
-            // (HA's `Screen mode` select) and waking on approach (`wake_on_approach`, no other control).
-            switch("Wake when someone's near", "Uses the presence sensor${range()}", { prefs.screenMode == "presence" && prefs.wakeOnApproach }) {
-                prefs.screenMode = if (it) "presence" else "always"
-                if (it) prefs.wakeOnApproach = true
-            },
-            SettingsItem.Slider(
-                "Presence range", value = { prefs.presenceRangeM }, min = 0f, max = RANGE_MAX_M, step = 0.1f,
-                // 0 leaves the sensor's threshold as it is (Vi5300Presence.setRange): no distance to promise.
-                shown = { v -> if (v <= 0f) "The sensor's own setting" else "Up to ${number(v)} m" },
-            ) { v, done ->
-                val old = prefs.presenceRangeM
-                prefs.presenceRangeM = v
-                val why = live.presenceRange()
-                if (why != null) prefs.presenceRangeM = old
-                done(why)
-            },
-            SettingsItem.Duration(
-                "Turn off when idle", value = { prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
-            ) { v, done -> prefs.idleOffSec = v; done(null) },
-            SettingsItem.TimeRange(
-                "At night", value = { prefs.nightWindow },
-                shown = { w -> if (w.isBlank()) "Off" else w.replace("-", " – ") },
-            ) { v, done -> prefs.nightWindow = v; live.brightness(); done(null) }, // the night cap follows the window
-            SettingsItem.Duration(
-                "At night, turn off after", value = { prefs.nightIdleOffSec }, choices = NIGHT_CHOICES, shown = ::afterIdle,
-            ) { v, done -> prefs.nightIdleOffSec = v; done(null) },
-            switch("Brightness", "Follows the room's light", { prefs.autoBrightness }) { prefs.autoBrightness = it; live.brightness() },
-            deviceSettings,
+        SettingsPlace.SCREEN to SettingsSection(SCREEN, "Screen", presence() + listOfNotNull(
+            idle(),
+            if (hardware.light) switch("Brightness", "Follows the room's light", { prefs.autoBrightness }) { prefs.autoBrightness = it; live.brightness() } else null,
+            // Android's settings need a finger on the panel's own screen.
+            deviceSettings?.takeIf { hardware.touch },
+            // Night is Home Assistant's to decide (#473): the blueprint turns the screen off sooner and dims it.
+            screenBlueprints,
         )),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
@@ -104,6 +85,58 @@ class CoreSettings(
             licences,
         )),
     )
+
+    /**
+     * The presence rows, as [hardware] has it (#471): the switch says what senses it, the range shows for a sensor
+     * whose range can change, and a pane that could sense it but is off says so and opens its page. None without.
+     */
+    private fun presence(): List<SettingsItem> = when (val p = hardware.presence) {
+        is ScreenHardware.Presence.Sensor -> listOfNotNull(
+            wake(if (p.ranged) "Uses the presence sensor${range()}" else "Uses the proximity sensor"),
+            if (p.ranged) rangeSlider() else null,
+        )
+        is ScreenHardware.Presence.Pane ->
+            listOf(if (p.on) wake("Uses the ${p.title} pane") else SettingsItem.Link(WAKE_TITLE, "Turn on the ${p.title} pane to use it", section = p.id))
+        ScreenHardware.Presence.None -> emptyList()
+    }
+
+    // 0.4.3's "Screen follows presence" (#63's design names it this): on, the screen wakes when
+    // someone comes close and goes off when idle; off, it stays on. On means both: the screen mode
+    // (HA's `Screen mode` select) and waking on approach (`wake_on_approach`, no other control).
+    private fun wake(detail: String) = switch(WAKE_TITLE, detail, { prefs.screenMode == "presence" && prefs.wakeOnApproach }) {
+        prefs.screenMode = if (it) "presence" else "always"
+        if (it) prefs.wakeOnApproach = true
+    }
+
+    private fun rangeSlider() = SettingsItem.Slider(
+        "Presence range", value = { prefs.presenceRangeM }, min = 0f, max = RANGE_MAX_M, step = 0.1f,
+        // 0 leaves the sensor's threshold as it is (Vi5300Presence.setRange): no distance to promise.
+        shown = { v -> if (v <= 0f) "The sensor's own setting" else "Up to ${number(v)} m" },
+    ) { v, done ->
+        val old = prefs.presenceRangeM
+        prefs.presenceRangeM = v
+        val why = live.presenceRange()
+        if (why != null) prefs.presenceRangeM = old
+        done(why)
+    }
+
+    /**
+     * "Turn off when idle". Without presence it is the screen's only on/off: Home Assistant's `Screen mode` "always"
+     * (which the wake switch also sets) reads as Never, and a time here puts the mode back, so the row says what the screen does.
+     */
+    private fun idle(): SettingsItem.Duration {
+        if (hardware.sensesPresence) return SettingsItem.Duration(
+            "Turn off when idle", value = { prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
+        ) { v, done -> prefs.idleOffSec = v; done(null) }
+        return SettingsItem.Duration(
+            "Turn off when idle", value = { if (prefs.screenMode == "always") 0 else prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
+        ) { v, done ->
+            prefs.idleOffSec = v
+            // Never leaves the mode as it is, so an "always" screen stays on.
+            if (v > 0) prefs.screenMode = "presence"
+            done(null)
+        }
+    }
 
     /**
      * "Allow setup over the network" (#34): pairing for the setup page at `/setup` is open until Home Assistant
@@ -143,7 +176,10 @@ class CoreSettings(
     companion object {
         /** The dashboard's page: where Home Assistant is and how its dashboard shows. */
         const val DASHBOARD_TITLE = "Home Assistant & dashboard"
+        /** The Screen page's id, and its blueprints' `pane` in the app's blueprint list (core/src/main/java/dev/glassworks/screen/page.json). */
+        const val SCREEN = "screen"
         const val ACCOUNT_TITLE = "Dashboard sign-in"
+        const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
         const val LICENCES_TITLE = "Open source licences"
         const val LICENCES_DETAIL = "The open-source software in the app and the radio package"
@@ -151,7 +187,6 @@ class CoreSettings(
         /** The presence sensor's furthest (Home Assistant's `Presence range` number goes as far). */
         const val RANGE_MAX_M = 2.5f
         val IDLE_CHOICES = listOf(30, 60, 120, 300, 600, 1800, 0)
-        val NIGHT_CHOICES = listOf(10, 20, 30, 60, 120, 300)
 
         /** "After 2 minutes", "After 45 s", "Never" (0). */
         fun afterIdle(sec: Int): String = when {

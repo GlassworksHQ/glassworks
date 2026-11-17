@@ -2,8 +2,6 @@ package sh.edm.s1kiosk.setup
 
 import android.content.Context
 import android.content.Intent
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.util.Log
 import dev.glassworks.improv.AdbSocketServer
 import sh.edm.s1kiosk.Glassworks
@@ -11,6 +9,7 @@ import sh.edm.s1kiosk.InstallerGlue
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HaAuth
 import sh.edm.s1kiosk.improv.ImprovController
+import sh.edm.s1kiosk.improv.ImprovDone
 import dev.glassworks.improv.ScannedNetwork
 import java.io.InputStream
 import java.io.OutputStream
@@ -34,7 +33,7 @@ object SetupChannelServer {
 
     fun start(context: Context, runtime: Glassworks) {
         if (server != null) return
-        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime))
+        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime, ImprovDone.Via.COMPUTER))
         server = AdbSocketServer(SetupChannel.SOCKET, TAG) { input, output -> channel { true }.serve(input, output) }.also { it.start() }
     }
 
@@ -52,7 +51,8 @@ object SetupChannelServer {
      * gated by the browser's pairing.
      */
     fun lan(context: Context, runtime: Glassworks): (InputStream, OutputStream, () -> Boolean) -> Unit {
-        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime))
+        // Wi-Fi on this page is the hotspot's case: a panel on a network skips the step.
+        val channel = channels(context, runtime, AndroidBackend(context.applicationContext, runtime, ImprovDone.Via.SETUP_PAGE))
         return { input, output, mayChange -> channel(mayChange).serve(input, output) }
     }
 
@@ -61,7 +61,8 @@ object SetupChannelServer {
         server = null
     }
 
-    private class AndroidBackend(private val ctx: Context, private val runtime: Glassworks) : SetupChannel.Backend {
+    /** [via]: where this channel's Wi-Fi comes from, for the panel's done card. */
+    private class AndroidBackend(private val ctx: Context, private val runtime: Glassworks, private val via: ImprovDone.Via) : SetupChannel.Backend {
         private val prefs = KioskPrefs(ctx)
 
         init { HaAuth.init(ctx) }
@@ -71,7 +72,7 @@ object SetupChannelServer {
             val haUrl = prefs.haBase.orEmpty()
             return ChannelState(
                 ip = ip,
-                online = online(),
+                online = dev.glassworks.platform.NetworkUp.now(ctx),
                 ha = ChannelState.Ha(
                     discovered = ChannelState.discovered(prefs.haUrl, prefs.haUrlSource),
                     url = haUrl,
@@ -81,16 +82,9 @@ object SetupChannelServer {
             )
         }
 
-        /** A Wi-Fi or Ethernet network is up. The panel's own setup hotspot isn't one: Android lists it as no network. */
-        private fun online(): Boolean = runCatching {
-            val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return false
-            @Suppress("DEPRECATION") // allNetworks: the active network can be another one while Wi-Fi is up too
-            (listOfNotNull(cm.activeNetwork) + cm.allNetworks).any { n ->
-                cm.getNetworkCapabilities(n)?.let {
-                    it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || it.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                } == true
-            }
-        }.getOrDefault(false)
+        override fun hotspotNetworks(): List<WifiNetwork>? = runtime.hotspotScan.takeIf { runtime.setupHotspot?.isOn == true }
+
+        override fun wifiRadioLocked(): Boolean = dev.glassworks.platform.WifiRadio.lockedOff(ctx)
 
         /** A fresh scan through Improv's provisioner, as Kiln's USB scan (ImprovSerialServer). */
         override fun scanWifi(): List<WifiNetwork> {
@@ -107,7 +101,7 @@ object SetupChannelServer {
             Log.i(TAG, "Wi-Fi details from the setup page: joining")
             return SetupChannel.Change(afterReply = {
                 InstallerGlue.post {
-                    if (!ImprovController.connectFromInstaller(ssid, password)) Log.w(TAG, "Wi-Fi: the panel's Wi-Fi isn't ready yet")
+                    if (!ImprovController.connectFromInstaller(ssid, password, via)) Log.w(TAG, "Wi-Fi: the panel's Wi-Fi isn't ready yet")
                 }
             })
         }

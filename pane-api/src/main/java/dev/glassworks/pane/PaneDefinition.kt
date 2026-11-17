@@ -21,6 +21,12 @@ interface PaneDefinition {
     val requires: Set<Capability> get() = emptySet()
 
     /**
+     * The pane tells the screen whether someone is near, on a device without a presence sensor of its own
+     * (the camera). The Screen settings say so ([dev.glassworks.screen.ScreenHardware]).
+     */
+    val givesPresence: Boolean get() = false
+
+    /**
      * What first-boot setup waits for, in order. The person answers them on the Panes step, with the
      * pane's [setupChoice]; the installer answers them over the setup channel ([SetupStep.ops]).
      */
@@ -57,6 +63,12 @@ interface PaneDefinition {
 
     /** Intent extras (`adb shell am start … --ez sendspin_flac false`) that change this pane's settings. Its [switch] has its own. */
     val extras: List<IntentExtra> get() = emptyList()
+
+    /**
+     * Android's runtime permissions the pane needs while it is on (`android.permission.CAMERA`). The app asks for them
+     * when it starts ([permissionsToAsk]); a [CantRun] pane needs none.
+     */
+    val permissions: Set<String> get() = emptySet()
 }
 
 /**
@@ -75,6 +87,15 @@ class CantRun(private val definition: PaneDefinition) : PaneDefinition {
             if (provides.containsAll(definition.requires)) definition else CantRun(definition)
     }
 }
+
+/**
+ * The runtime permissions the app asks for when it starts: those the panes that are on need, that the app's manifest
+ * [declared] and Android hasn't [granted] yet, each once. None on a screen that takes no tap ([touch] false: the
+ * lululemon Mirror), where nobody could answer Android's dialog: the installer grants them there (Kiln's `pm grant`).
+ */
+fun List<PaneDefinition>.permissionsToAsk(touch: Boolean, declared: Set<String>, granted: (String) -> Boolean): List<String> =
+    if (!touch) emptyList()
+    else filter { it.switch?.on ?: true }.flatMap { it.permissions }.distinct().filter { it in declared && !granted(it) }
 
 /** Every intent extra of [this] panes: each [PaneDefinition.switch]'s (`--ez voice_enabled false`), then the pane's own. */
 fun List<PaneDefinition>.intentExtras(): List<IntentExtra> = flatMap { listOfNotNull(it.switch?.extra()) + it.extras }

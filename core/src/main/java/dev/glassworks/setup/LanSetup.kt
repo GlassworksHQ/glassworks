@@ -60,6 +60,10 @@ class LanSetup(
     private val unpairedIdleMs: Int = 60_000,
     /** The page's files by name (`index.html`, `setup.js`, `setup.css`, `inter.ttf`), or null when this build has none. */
     private val files: (String) -> ByteArray? = { null },
+    /** A browser ended its setup ([DONE]): setup over the network is finished, and the setup hotspot can close (#197). */
+    private val onDone: () -> Unit = {},
+    /** Sees every request's address: a phone on the setup hotspot shows itself this way (#460). Null where there is none. */
+    private val phoneJoin: PhoneJoin?,
 ) {
     private val random = SecureRandom()
     private val sessions = Sessions()
@@ -76,6 +80,7 @@ class LanSetup(
 
     /** The answer for a request under `/setup/`, or null for one that isn't this class's (the Manage page takes it). */
     fun handle(req: HttpRequest): HttpResponse? {
+        phoneJoin?.request(req.remote)
         val file = pageFile(req.path)
         if (file == null && req.path != PAIR && req.path != DONE && req.path != CHANNEL) return null
         if (!ManageServer.hostAllowed(req.headers["host"], ownHosts())) return HttpResponse.text(400, "Open this page with the panel's address.")
@@ -96,6 +101,7 @@ class LanSetup(
                     val token = req.cookies[COOKIE]
                     if (sessions.end(token, req.remote)) {
                         event("Setup over the network finished")
+                        onDone()
                         held.get()?.takeIf { it.token == token }?.ws?.abort()
                     }
                     json(200, JSONObject().put("ok", true), cookie(""))

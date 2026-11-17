@@ -154,7 +154,7 @@ public data class SerialNetwork(public val ssid: String, public val rssi: Int, p
 
 internal sealed class SerialRpc {
     data class WifiSettings(val ssid: String, val password: String) : SerialRpc() {
-        override fun toString(): String = "WifiSettings(ssid=$ssid, password=<${password.length} chars>)"
+        override fun toString(): String = "WifiSettings(<${ssid.length} char name>, <${password.length} char password>)" // no network name in a log
     }
     object RequestState : SerialRpc()
     object RequestInfo : SerialRpc()

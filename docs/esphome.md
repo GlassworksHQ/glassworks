@@ -150,10 +150,9 @@ open the entity, and turn on *Enabled*.
 | IP address | `ip_address` | core | diagnostic | on | People check it |
 | Silent updates | `silent_updates` | core | diagnostic | on | People check it: whether an update needs someone at the panel |
 | Auto brightness | `auto_brightness` | core | config | off | Set once |
-| Idle timeout | `idle_timeout` | core | config | off | Set once |
-| Night idle timeout | `night_idle_timeout` | core | config | off | Set once |
-| Night window | `night_window` | core | config | off | Set once |
-| Presence range | `presence_range` | core | config | off | Set once, for the room |
+| Idle timeout | `idle_timeout` | core | config | on | Automations: [Panel night mode](blueprints.md) sets it at night |
+| Max auto brightness | `max_brightness` | core | config | on | Automations: [Panel night mode](blueprints.md) lowers it at night |
+| Presence range | `presence_range` | core | config | off | Set once, for the room. Every frame has it today, though only the S1's sensor has a range; [#476](https://github.com/GlassworksHQ/glassworks/issues/476) makes the entities follow the hardware |
 | Zoom | `zoom` | core | config | off | Set once |
 | Dashboard | `dashboard` | core | config | off | Set once. Turn it on to pick a dashboard; the panel has no picker of its own yet |
 | Dashboard URL | `dashboard_url` | core | config | off | Set once |
@@ -243,9 +242,8 @@ So on a panel HA already has:
 | binary_sensor `Presence` (occupancy) | `presence` | VI5300 ToF "near" |
 | sensor `Illuminance` (lx) | `illuminance` | MK6212 light sensor |
 | select `Screen mode` | `screen_mode` | `presence` / `always` |
-| number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never) |
-| number `Night idle timeout` (s) | `night_idle_timeout` | same, inside the night window |
-| text `Night window` | `night_window` | `HH:MM-HH:MM`, empty = off |
+| number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
+| number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
 | number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |
 | text `Dashboard URL` | `dashboard_url` | sets + loads the dashboard; `auto` (default) = HA's root on the discovered instance |
 | select `Dashboard` | `dashboard` | `Default` + every Lovelace dashboard (by title) + `Custom` only while the saved URL matches none; choosing one saves the URL and reloads ([onboarding.md](onboarding.md#5-which-dashboard-)). The list comes from the HA frontend on the panel; when the options change the entity list is rebuilt (debounced 10 s, at most once a minute) and HA reconnects |
@@ -468,10 +466,19 @@ HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. 
 refusal once a minute per client.
 
 The camera's settings can also be set from adb, through an activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
-the stream): `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
+the stream). Its component and the main activity's differ per app:
+
+| App | Camera settings | Main activity |
+|---|---|---|
+| S1 Kiosk | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
+| Glassworks for generic Android | `dev.glassworks.generic_android/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity` |
+| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity` |
+
+For example, on S1 Kiosk: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
-usual `--ez camera_enabled true` on the main activity.
+usual `--ez camera_enabled true` on the main activity, for example
+`adb shell am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --ez camera_enabled true` on the Mirror.
 
 ### App updates
 

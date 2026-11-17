@@ -56,6 +56,13 @@ open class PlatformApi(
     val hasProcessStartTime: Boolean get() = apiLevel >= 24
 
     /**
+     * The system CA store has ISRG Root X1, Let's Encrypt's root (Android 7.1). Below it, HTTPS to a host on it
+     * (raw.githubusercontent.com, GitHub's release assets) fails unless the app adds the root ([HttpsTrust]).
+     * Android 7.0's Network Security Config could add it too, but only from XML for the whole app.
+     */
+    val hasIsrgRootX1: Boolean get() = apiLevel >= 25
+
+    /**
      * The hidden `ActivityManager.getService()` exists (Android 8). Below it, the same service is
      * `ActivityManagerNative.getDefault()`. Only reflection reaches either.
      */
@@ -159,6 +166,12 @@ open class PlatformApi(
 
     /** A local-only hotspot refuses to start while location is off (Android 8 to 12). From 13 the nearby permission replaces it. */
     val hotspotNeedsLocationOn: Boolean get() = apiLevel in 26..32
+
+    /**
+     * An app may turn the Wi-Fi radio on (`WifiManager.setWifiEnabled`). From Android 10, for apps targeting it,
+     * only the device owner or a system app may; the call returns false.
+     */
+    val appCanEnableWifi: Boolean get() = apiLevel < 29
 
     /** A hotspot reservation describes its network as a `SoftApConfiguration` (Android 11). Below it, a `WifiConfiguration`. */
     val hasSoftApConfiguration: Boolean get() = apiLevel >= 30

@@ -424,12 +424,25 @@ class GeckoBehaviourPinTest {
     }
 
     @Test
-    fun `while the startup permission dialog is open, Android cancels a page's request and Gecko hears no`() = harness().use { h ->
-        shadowOf(h.app).denyPermissions(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-        val g = Grant()
-        h.permission.onAndroidPermissionsRequest(h.session, arrayOf(Manifest.permission.CAMERA), g)
-        assertEquals(2, shadowOf(h.activity).lastRequestedPermission.requestCode)
-        assertEquals(listOf("reject"), g.calls)
+    fun `while the startup permission dialog is open, Android cancels a page's request and Gecko hears no`() {
+        // The startup dialog asks for what an enabled pane needs (#461): voice, on a device with a microphone and a speaker.
+        val app = org.robolectric.RuntimeEnvironment.getApplication()
+        listOf(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT).forEach { shadowOf(app.packageManager).setSystemFeature(it, true) }
+        // What S1 Kiosk's own manifest declares, read from its source: this module's tests run without the merged
+        // manifest. A manifest without the microphone would leave the S1 with no prompt, and fails here.
+        val manifest = java.io.File(dev.glassworks.testing.RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
+        shadowOf(app.packageManager).getInternalMutablePackageInfo(app.packageName).requestedPermissions =
+            Regex("""<uses-permission\s+android:name="([^"]+)"""").findAll(manifest).map { it.groupValues[1] }.toList().toTypedArray()
+        shadowOf(app).denyPermissions(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+        harness().use { h ->
+            val startup = shadowOf(h.activity).lastRequestedPermission
+            assertEquals("the startup dialog", 1, startup.requestCode)
+            assertEquals("the S1 asks for the microphone, never its camera (it has none)", listOf(Manifest.permission.RECORD_AUDIO), startup.requestedPermissions.toList())
+            val g = Grant()
+            h.permission.onAndroidPermissionsRequest(h.session, arrayOf(Manifest.permission.CAMERA), g)
+            assertEquals(2, shadowOf(h.activity).lastRequestedPermission.requestCode)
+            assertEquals(listOf("reject"), g.calls)
+        }
     }
 
     @Test
@@ -479,7 +492,7 @@ class GeckoBehaviourPinTest {
         val m = port.posted.single()
         assertEquals("state", m.getString("type"))
         val state = m.getJSONObject("state")
-        assertEquals(setOf("presence", "proximityRaw", "lux", "screenOn", "night", "voice"), state.keys().asSequence().toSet())
+        assertEquals(setOf("presence", "proximityRaw", "lux", "screenOn", "voice"), state.keys().asSequence().toSet())
         assertEquals("off", state.getString("voice"))
     }
 

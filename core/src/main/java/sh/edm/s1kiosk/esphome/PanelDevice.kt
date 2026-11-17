@@ -510,20 +510,20 @@ class PanelDevice(
             "screen_mode", "Screen mode", "mdi:monitor-eye", options = listOf("presence", "always"),
             get = { prefs.screenMode }, set = { prefs.screenMode = it },
         ),
+        // On by default, with Max auto brightness: Home Assistant's night mode (the Panel night mode blueprint, #473) sets both.
+        // A timeout above 0 puts the screen mode back to presence, as the panel's own "Turn off when idle" row does:
+        // in "always" nothing would turn the screen off.
         NumberEntity(
-            "idle_timeout", "Idle timeout", "mdi:timer-outline", disabledByDefault = true, min = 0f, max = 3600f, step = 5f,
+            "idle_timeout", "Idle timeout", "mdi:timer-outline", min = 0f, max = 3600f, step = 5f,
             unit = "s", mode = 1, deviceClass = "duration",
-            get = { prefs.idleOffSec.toFloat() }, set = { prefs.idleOffSec = it.toInt() },
+            get = { prefs.idleOffSec.toFloat() },
+            set = { prefs.idleOffSec = it.toInt(); if (prefs.idleOffSec > 0) prefs.screenMode = "presence" },
         ),
         NumberEntity(
-            "night_idle_timeout", "Night idle timeout", "mdi:timer-sand", disabledByDefault = true, min = 0f, max = 3600f, step = 5f,
-            unit = "s", mode = 1, deviceClass = "duration",
-            get = { prefs.nightIdleOffSec.toFloat() }, set = { prefs.nightIdleOffSec = it.toInt() },
-        ),
-        TextEntity(
-            "night_window", "Night window", "mdi:weather-night", disabledByDefault = true, maxLength = 11,
-            pattern = "^$|^[0-9]{1,2}:[0-9]{2}-[0-9]{1,2}:[0-9]{2}$",
-            get = { prefs.nightWindow }, set = { prefs.nightWindow = it },
+            "max_brightness", "Max auto brightness", "mdi:brightness-percent", min = 5f, max = 100f, step = 5f,
+            unit = "%", mode = 1,
+            get = { Math.round(prefs.maxBrightness * 100f).toFloat() },
+            set = { prefs.maxBrightness = (it / 100f).coerceIn(0.05f, 1f); ui { screen.refreshBrightness(immediate = true) } },
         ),
         NumberEntity(
             "presence_range", "Presence range", "mdi:signal-distance-variant", disabledByDefault = true, min = 0f, max = 2.5f, step = 0.1f,

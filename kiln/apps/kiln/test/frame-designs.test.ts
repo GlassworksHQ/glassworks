@@ -4,8 +4,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, framePanes, geometry, isCapability, isPaneAlias, kindProblems, type FrameDesign } from '@glassworks/frame-card';
-import { FRAMES, RENDERS } from '../src/frames/catalog';
+import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, factProblems, framePanes, geometry, isCapability, isPaneAlias, keyProblems, kindProblems, type FrameDesign } from '@glassworks/frame-card';
+import { FRAMES, MEASURED, RENDERS } from '../src/frames/catalog';
 
 const frames = fileURLToPath(new URL('../../../../frames', import.meta.url));
 const folders = readdirSync(frames, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
@@ -52,6 +52,8 @@ describe('frame designs', () => {
     expect(Object.keys(f.ratings).sort()).toEqual([...RATING_KEYS].sort());
     expect(creditProblems(f), 'credits (frames/README.md#credits)').toEqual([]);
     expect(kindProblems(f, folders.map(read)), 'kind (frames/README.md)').toEqual([]);
+    expect(factProblems(f), 'facts and run (frames/README.md#how-complete-it-is)').toEqual([]);
+    expect(keyProblems(f), 'fields (frames/README.md#designframejson)').toEqual([]);
     // it rates only panes that exist (by id or an old alias); every other pane is worked out, with a reason (#231)
     expect(Object.keys(f.panes).filter((k) => !PANE_IDS.includes(k) && !isPaneAlias(k)), 'panes rated that the app has no pane for').toEqual([]);
     expect((f.provides ?? []).filter((c) => !isCapability(c)), 'provides: unknown capability words').toEqual([]);
@@ -89,5 +91,10 @@ describe('frame designs', () => {
       expect(read(id), id).toMatchObject({ status: 'planned' });
       expect(read(id).kiln, id).toBeUndefined();
     }
+  });
+
+  it('knows which frames have a Clarity result, for the "not measured yet" tag on /android\'s Done', () => {
+    const measured = folders.filter((d) => existsSync(join(frames, d, 'clarity', 'clarity.json')));
+    expect([...MEASURED].sort(), 'change MEASURED in src/frames/catalog.ts').toEqual(measured.sort());
   });
 });

@@ -49,7 +49,11 @@ class LanSetupTest {
         serve = { i, o, may -> SetupChannel(backend, mayChange = may).serve(i, o, pollMs = 50) },
         code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, monoMs = { mono }, wallMs = { wall },
         files = { name -> RepoFiles.file("core/src/main/assets/setup").resolve(name).takeIf { it.exists() }?.readBytes() ?: if (name == "inter.ttf") ByteArray(4) else null },
+        onDone = { dones++ },
+        phoneJoin = null,
     )
+    /** Setups ended with Done: each closes the setup hotspot (#197). */
+    private var dones = 0
     private lateinit var server: HttpServer
     private val host get() = "127.0.0.1:${server.localPort}"
 
@@ -194,7 +198,7 @@ class LanSetupTest {
 
     @Test fun anUnpairedChannelIsClosedSoonWhenIdle() {
         val quick = LanSetup(serve = { i, o, may -> SetupChannel(backend, mayChange = may).serve(i, o, pollMs = 50) },
-            code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, unpairedIdleMs = 300)
+            code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, unpairedIdleMs = 300, phoneJoin = null)
         server.front = quick::handle
         ws().use { c ->
             c.ask("""{"id":1,"op":"state"}""")
@@ -214,11 +218,13 @@ class LanSetupTest {
         ws(session).use { c ->
             assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok"))
             assertEquals(200, post(LanSetup.DONE, cookie = session, remote = "192.0.2.99").status)
+            assertEquals("Done from another address doesn't close the setup hotspot", 0, dones)
             assertTrue("the session is still paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
             assertTrue("and its channel still works", c.ask("""{"id":2,"op":"pairing.arm"}""").getBoolean("ok"))
             assertEquals(200, post(LanSetup.DONE, cookie = session).status)
             assertTrue("done from its own address ends it and drops the channel", c.ended())
         }
+        assertEquals("Done closes the setup hotspot", 1, dones)
         assertFalse(JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
     }
 
@@ -241,7 +247,7 @@ class LanSetupTest {
         assertEquals("font/ttf", get("/setup/inter.ttf", null).headers["Content-Type"])
         assertEquals(405, post("/setup").status)
         assertEquals(400, lan.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to "evil.example")))!!.status)
-        val bare = LanSetup(serve = { _, _, _ -> }, code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { true })
+        val bare = LanSetup(serve = { _, _, _ -> }, code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { true }, phoneJoin = null)
         assertEquals("a build without the page says so", 404, bare.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to host)))!!.status)
     }
 
@@ -375,5 +381,34 @@ class LanSetupTest {
 
     private companion object {
         const val LOOPBACK = "127.0.0.1"
+    }
+
+    /**
+     * A phone on the setup hotspot shows itself by its first request (#460): the request's address goes through
+     * [dev.glassworks.platform.HotspotAddress.isClient] to [SetupHotspot.phoneJoined], and the screen turns to the setup
+     * page's QR code. A request from another network doesn't count.
+     */
+    @Test fun aRequestFromTheHotspotsNetworkIsAPhoneThatJoinedIt() {
+        val net = dev.glassworks.platform.HotspotNetwork("Example-Setup", "abcdefghjkmn")
+        var events: ((dev.glassworks.platform.Hotspot.Event) -> Unit)? = null
+        val hs = SetupHotspot(
+            object : dev.glassworks.platform.Hotspot {
+                override fun start(onEvent: (dev.glassworks.platform.Hotspot.Event) -> Unit) { events = onEvent }
+                override fun stop() { events = null }
+            },
+            connected = { false }, clock = { 0L }, schedule = { _, _ -> {} },
+        )
+        val ap = "192.168.43.1"
+        val addresses = listOf(dev.glassworks.platform.HotspotAddress.Address(ap, 24))
+        val withPhone = LanSetup(serve = { _, _, _ -> }, code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { true },
+            phoneJoin = PhoneJoin({ hs }, { dev.glassworks.platform.HotspotAddress.isClient(it, ap, addresses) }, { it() }))
+        fun from(remote: String) = withPhone.handle(HttpRequest("GET", "/setup", emptyMap(), mapOf("host" to host), remote = remote))
+        assertTrue(hs.ask())
+        events!!(dev.glassworks.platform.Hotspot.Event.Started(net))
+        from("192.0.2.5")
+        assertFalse("another network is no phone on the hotspot", hs.phoneSeen)
+        from("192.168.43.206")
+        assertTrue(hs.phoneSeen)
+        assertEquals((hs.view as SetupHotspot.View.On).phone, true)
     }
 }

@@ -11,6 +11,13 @@ import androidx.annotation.ChecksSdkIntAtLeast
  */
 internal val Compat = CompatApi(Build.VERSION.SDK_INT)
 
+/**
+ * The runtime permissions the proxy needs on this device: to scan ([CompatApi.scanPermissions]) and to
+ * connect (`BLUETOOTH_CONNECT`, Android 12+). An app asks for them while the proxy is on; the manifest
+ * entries come with the library.
+ */
+val bluetoothProxyPermissions: Set<String> get() = Compat.runtimePermissions
+
 /** The capabilities for one API [level]; [Compat] is the running device's. Tests pass a level. */
 internal class CompatApi(private val level: Int) {
     /** `LocationManager.isLocationEnabled` exists (Android 9). Below it, the location mode setting says. */
@@ -30,4 +37,11 @@ internal class CompatApi(private val level: Int) {
         level >= 29 -> listOf(Manifest.permission.ACCESS_FINE_LOCATION)
         else -> listOf(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
+
+    /** The runtime permissions a GATT connection needs: `BLUETOOTH_CONNECT` from Android 12; none below (install-time). */
+    @get:SuppressLint("InlinedApi") // a string constant, asked for only on Android 12+
+    val connectPermissions: List<String> get() = if (level >= 31) listOf(Manifest.permission.BLUETOOTH_CONNECT) else emptyList()
+
+    /** Everything the proxy asks for at runtime: [scanPermissions] and [connectPermissions]. */
+    val runtimePermissions: Set<String> get() = (scanPermissions + connectPermissions).toSet()
 }

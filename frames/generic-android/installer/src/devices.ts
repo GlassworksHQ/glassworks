@@ -170,3 +170,18 @@ export function identifyAdb(d: { manufacturer: string; model: string }): Identif
 export function identifyPicked(id?: BrandId): Identified {
   return { ...identified(id ? brandById(id) : undefined, undefined), pick: false };
 }
+
+/**
+ * A device with a frame of its own, which Kiln installs from that frame's page: the generic app would take its
+ * app's place as the home screen. Matched by `ro.hardware`, the check its own app uses to know its frame.
+ */
+export interface OwnFrame { frame: string; name: string; route: string; hardware: string }
+
+export const OWN_FRAMES: OwnFrame[] = [
+  // AqaraS1Plus.HARDWARE (frames/aqara-s1-plus/android, read 2026-11-14). Its maker and model are Allwinner's SDK
+  // defaults ("Allwinner", "QUAD-CORE R818 EVB2"), so they can't name it.
+  { frame: 'aqara-s1-plus', name: 'Aqara S1 Plus', route: '/aqara-s1-plus', hardware: 'sun50iw10p1' },
+];
+
+/** The frame of its own this device is, from adb's `ro.hardware`; undefined for any other device. */
+export const ownFrame = (d: { hardware: string }): OwnFrame | undefined => OWN_FRAMES.find((f) => f.hardware === d.hardware.trim());

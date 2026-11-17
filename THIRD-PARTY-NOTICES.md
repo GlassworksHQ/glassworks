@@ -225,6 +225,13 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
     with the `@radix-ui/*` packages they use (a subset of those listed under Kiln in section 4): MIT,
     "Copyright (c) 2022 WorkOS". https://github.com/radix-ui/primitives
   - The licence text: `LICENSES/MIT.txt`.
+- `dev.glassworks.platform.HttpsTrust` (in the code, as text): **ISRG Root X1**, Let's Encrypt's root CA
+  certificate, unmodified, from https://letsencrypt.org/certs/isrgrootx1.pem (SHA-256
+  `96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6`, the same file as AOSP's
+  `system/ca-certificates/files/6187b673.0`). A public certificate published for anyone to trust; its
+  publisher attaches no licence terms, and every OS and browser CA store ships it. The app trusts it next to
+  the system store on Android 6 and 7.0 only, which lack it (#456,
+  [android-ca-roots.md](docs/research/android-ca-roots.md)).
 - No machine-learning models are bundled by the app. The wake word models are downloaded by the
   panel at runtime (section 5). GeckoView's `omni.ja` has its own assets, such as the Liberation fonts
   used by its PDF viewer (SIL OFL 1.1). Those are listed in `about:license`.
@@ -233,6 +240,9 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
 ### Not in the APK
 
 - JUnit 4.13.2 (EPL-1.0) and org.json 20250517 (Public Domain) are used only by the unit tests.
+- Bouncy Castle `bcpkix-jdk18on` 1.80 (Bouncy Castle Licence, MIT-style) makes made-up certificates in
+  `HttpsTrustTest`, a unit test only. `pane-api/src/test/resources/dev/glassworks/platform/githubusercontent-chain-2026-11-16.pem`
+  is the public certificate chain `raw.githubusercontent.com` served on 2026-11-16, a test fixture.
 - `panes/assist/src/test/resources/mww_clip.wav` (a unit test fixture, not in the APK): speech
   synthesised with Piper's `en_US-kristin-medium` voice (https://huggingface.co/rhasspy/piper-voices,
   MIT; trained from scratch on public-domain LibriVox recordings) by `tools/voice/mww_reference.py`.

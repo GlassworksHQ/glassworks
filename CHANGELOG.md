@@ -8,6 +8,41 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Panel night mode, a blueprint for Home Assistant.** At night your panels turn their screen off
+  sooner and keep it dimmer, and in the morning they go back to your day settings. Night can be two
+  times, sunset to sunrise, or any condition Home Assistant can check, and one automation covers all
+  your panels. It only switches a panel between your two values: at night one that is still at the
+  day value, by day one still at the night value. A value you set by hand stays, unless it is one of
+  those two. A panel that was off or restarting catches up within a minute of coming back.
+  Add it from the panel's **Settings → Screen** or the Manage page. A new *Max auto brightness* number
+  in Home Assistant sets how bright the screen may get, and *Idle timeout* is now on by default for new
+  panels. Setting *Idle timeout* above 0 from Home Assistant also turns *Screen mode* back to presence,
+  as the panel's own **Turn off when idle** does.
+- **The panel opens its own Wi-Fi for setup when no Wi-Fi works.** With no connection 3 minutes after it
+  starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
+  its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
+  send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
+  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. Android may close it
+  sooner when nobody joins (10 minutes on the S1); it opens again 3 minutes later if no Wi-Fi works. With the
+  panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
+  so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
+  permission first, and says why.
+- **See how complete Glassworks is on each device.** Every frame's page on glassworks.dev has a
+  checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
+  and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the
+  first five decide the word. The S1 is Good today: the wall base's buttons don't reach the panel yet.
+- **The camera pane in Glassworks for generic Android, the Mirror's legacy build included.** On a device
+  with a camera and no proximity sensor of its own, turn the Camera pane on and the screen wakes when someone
+  walks up, with no image leaving the device in Presence only. A device without a camera gets no camera entities. On a screen without
+  touch, such as the lululemon Mirror, setup never waits on the camera step: the use stays Presence only, and
+  Kiln grants the camera. On Android 6-7 the ONVIF stream needs the camera to offer 1280x720; presence works
+  either way. Not yet run on a real Mirror.
+- **Kiln installs Glassworks on any Android tablet, as a test.** At `kiln.glassworks.dev/android?apk=local`, plug
+  the tablet into a computer and Kiln names it, or asks for its brand, then shows how to turn on USB debugging on
+  that brand. After you tap Allow on the tablet, Kiln installs the app, gives it what it can (microphone, screen on
+  and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
+  A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
+  computer until Glassworks for Android has a release.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -108,6 +143,31 @@ below as the release notes.
   generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
+  window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
+  Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
+  keeps the same idle timeout day and night, and brightness is no longer capped at 20% at night, even
+  if you had changed those settings. To get them back, add the **Panel night mode** blueprint from
+  **Settings → Screen** ([how](docs/blueprints.md#panel-night-mode)). On a panel Home Assistant already
+  has, turn its *Idle timeout* entity on first. Your other screen settings stay as they were. Dashboards
+  that read `window.s1kiosk.night` get nothing there now.
+- **The panel's own Wi-Fi says when it is starting, then shows the setup page's QR code once a phone is on it.**
+  **Set up from a phone** now shows "Starting the setup Wi-Fi…" at once, where the screen used to sit unchanged
+  for several seconds. A start that fails says why in the same place, with **Try again**. Once a phone on the
+  panel's Wi-Fi opens a page on the panel, the QR code changes to the setup page's address, so nobody types
+  it. The panel's logs no longer name the Wi-Fi network you pick, nor the panel's own network and
+  its password.
+- **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
+  `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
+  setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
+  shows Kiln's name or its orange colours. The steps and words are the same.
+- **Screen settings show only what the device has.** On a tablet or the Mirror, the Screen page in the
+  panel's settings and on the Manage page no longer shows the S1's presence range. *Wake when someone's
+  near* shows only with a sensor that can wake the screen: a proximity sensor, or the Camera pane, and
+  where the camera could do it but its pane is off, the row says so and opens it. *Brightness* needs a
+  light sensor, and a device without touch has no link to Android's settings. Without presence, *Turn off
+  when idle* is the screen's one on/off: it says Never while Home Assistant's *Screen mode* keeps the screen
+  on, and picking a time there turns that off. The S1's page is unchanged.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
@@ -276,6 +336,9 @@ below as the release notes.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.
+- **No permission prompt the panel doesn't need.** At start, the app asks Android for the microphone only while
+  Voice is on, and for the camera only while the Camera pane is on. On a screen without touch, such as the
+  lululemon Mirror, it never shows Android's prompt: Kiln grants the permissions at install.
 - **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
   pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
   said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
@@ -285,6 +348,12 @@ below as the release notes.
 - **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
   landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
   did, and stops with a clear message if it didn't. The Mirror's install is still test only.
+- **Wake word models and updates download on Android 6 and 7.0.** The lululemon Mirror and other Android
+  6–7.0 devices could not download the wake word models, and would have failed to download an update:
+  their built-in list of trusted certificate authorities is missing the one GitHub's downloads use. The
+  app now adds that one certificate authority on those Android versions, and checks certificates as
+  before. Android 7.1 and newer are unchanged. A device without the fix can't download it either, so
+  install this version with Kiln over USB.
 - **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
   app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
   notification used the app's icon, which only Android 8 and later can draw. The notification now has its
@@ -295,6 +364,14 @@ below as the release notes.
   leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
   button that nobody could press. It now stays on the setup screen, which says how to set it up from a
   computer. On every panel, the offline screen says "Wi-Fi is off" only when Android says so.
+- **The panel's "Wi-Fi setup · done" card says how the Wi-Fi came.** It showed the Bluetooth mark whenever the
+  panel came online while Bluetooth setup was open, also when the Wi-Fi came from the setup page on a phone. Now
+  Bluetooth shows only for Wi-Fi sent over Bluetooth; Wi-Fi from the setup page, from Kiln or from Android's
+  settings shows a Wi-Fi mark and says where it came from.
+- **The phone's setup page no longer waits for news that can't come.** Once it sends your Wi-Fi over the panel's
+  own Wi-Fi, the panel closes that network within moments, and the page with it. The page now says so once:
+  sent, watch the panel's screen, and put the phone back on your own Wi-Fi, instead of steps that seemed to
+  still be updating.
 - **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
   Panes image lets one adb key in without asking: the project's own key, published with its private
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its

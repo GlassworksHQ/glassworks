@@ -571,7 +571,7 @@ Where it goes:
 | `:kiosk-legacy` (the engine's debug test app) | On | Yes. A test build artifact on branches named `legacy`, never released. Allowed too (maintainer, 2026-11-16) |
 
 Test builds publish the legacy APK (`generic-test-build.yml`, arm64-v8a, 0.1.0 and 0.1.1). There's no release yet:
-`release.yml` doesn't build the generic app or its legacy build, and the app has no release key. The app's legacy
+`release.yml` doesn't build the generic app or its legacy build; the release key exists since 2026-11-17. The app's legacy
 release line ([above](#updates-on-the-legacy-build-198-phase-c)) is ready for one.
 
 ## How to reproduce

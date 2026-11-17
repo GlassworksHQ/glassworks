@@ -22,7 +22,7 @@ import sh.edm.s1kiosk.setup.SetupOverlay
 
 /**
  * #449 keeps the setup screen on only where no presence sensor can wake it. The S1 has its VI5300: its setup screen
- * at night still turns off after the 20 s night timeout, as before.
+ * still turns off after a 20 s idle timeout (what HA's night mode sets), as before.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(
@@ -46,9 +46,9 @@ class NotReadyScreenPinTest {
         shadowOf(sm).addSensor(sensor)
     }
 
-    @Test fun theS1sSetupScreenSleepsAtNightAsBefore() {
+    @Test fun theS1sSetupScreenSleepsAsBefore() {
         s1()
-        GeckoPinHarness(prefs = { it.nightWindow = "00:00-23:59" }).use { h ->
+        GeckoPinHarness(prefs = { it.idleOffSec = 20 }).use { h ->
             assertEquals("the S1's frame", "aqara-s1-plus", h.app.glassworksRuntime.frame.board)
             h.advance(5_000)
             assertTrue("a fresh panel shows setup", h.rootChildren().filterIsInstance<SetupOverlay>().single().isShowing)

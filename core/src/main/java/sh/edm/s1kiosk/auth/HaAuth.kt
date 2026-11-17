@@ -114,8 +114,16 @@ object HaAuth {
             code = context.glassworks.panelCode,
             // The ESPHome name, from the MAC PanelDevice saved (a panel that never announced itself has none yet).
             ownHosts = PanelHosts.cached { PanelHosts.now(prefs.deviceMac.takeIf { it.isNotEmpty() }?.let(frame::nodeName)) { msg, e -> AuthLog.w("$msg: $e") } },
-            pairingOpen = { prefs.lanPairingOpen },
+            // The setup hotspot's key shows only on the panel's screen, so anyone on it can see the screen (#197).
+            pairingOpen = { prefs.lanPairingOpen || context.glassworks.setupHotspot?.isOn == true },
             event = { msg -> android.util.Log.i(LAN_TAG, msg) },
+            onDone = { main.post { context.glassworks.setupHotspot?.cancel() } },
+            // A phone on the setup hotspot: the screen then shows the setup page's address (#460).
+            phoneJoin = dev.glassworks.setup.PhoneJoin(
+                hotspot = { context.glassworks.setupHotspot },
+                isClient = { dev.glassworks.platform.HotspotAddress.isClient(context, it) },
+                post = { main.post(it) },
+            ),
             // The page (kiln/apps/kiln/lan) is in the assets; its font is the app's own Inter.
             files = { name ->
                 runCatching {
