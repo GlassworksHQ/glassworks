@@ -106,10 +106,13 @@ jobs:
             "$apksigner" verify "$apk"
             # The certificate's SHA-256, not its name: a new key with the same name must fail here, or every
             # installed build would refuse the next update (frames/generic-android/README.md, "Signing").
-            certs="$("$apksigner" verify --print-certs "$apk")"
-            signers="$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' <<< "$certs")"
-            [ "$signers" = 1 ] && grep -qx "Signer #1 certificate SHA-256 digest: $GLASSWORKS_CERT_SHA256" <<< "$certs" \
-              || { echo "::error::$apk isn't signed with Glassworks' release key alone"; exit 1; }
+            certs="$("$apksigner" verify --print-certs "$apk" 2>&1 || true)"
+            digests="$(sed -n 's/^Signer #[0-9]* certificate SHA-256 digest: //p' <<< "$certs")"
+            if [ "$digests" != "$GLASSWORKS_CERT_SHA256" ]; then
+              echo "::error::$apk isn't signed with Glassworks' release key alone (signers: $(tr '\n' ' ' <<< "$digests"))"
+              grep '^Signer' <<< "$certs" || true
+              exit 1
+            fi
             badging="$("$aapt2" dump badging "$apk")"
             case "$apk" in
               glassworks-generic-legacy-test-*) id=dev.glassworks.generic_android.legacy min=23
