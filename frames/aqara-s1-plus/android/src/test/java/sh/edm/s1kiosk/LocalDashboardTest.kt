@@ -70,6 +70,15 @@ class LocalDashboardTest {
     }
 
     @Test @Config(sdk = [29])
+    fun `a user and password in the setting never reach the log`() = harness("http://user:secret@homeassistant.local:8123/").use { h ->
+        assertEquals(listOf("s1.load http://user:secret@192.0.2.10:8123/"), h.loads())
+        h.newIntent(Intent().putExtra("ha_discovered", found))
+        val logs = h.logs("S1Kiosk")
+        assertTrue(logs.toString(), "Home Assistant at $found (dashboard setting: http://homeassistant.local:8123)" in logs)
+        assertTrue(logs.filter { "secret" in it }.toString(), logs.none { "secret" in it })
+    }
+
+    @Test @Config(sdk = [29])
     fun `https keeps the name its certificate is for, and the log says so`() = harness("https://homeassistant.local:8123/").use { h ->
         assertEquals(listOf("s1.load https://homeassistant.local:8123/"), h.loads())
         assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("https, and its certificate is for the name") })

@@ -49,6 +49,12 @@ class LocalNameTest {
         assertEquals("192.0.2.10:8123", r.address)
     }
 
+    @Test fun `a URL for a log keeps its scheme, host and port only`() {
+        assertEquals("http://homeassistant.local:8123", LocalName.forLog("http://user:secret@homeassistant.local:8123/lovelace/0?token=x#top"))
+        assertEquals("https://192.0.2.10", LocalName.forLog("https://192.0.2.10/"))
+        assertEquals("(not a URL)", LocalName.forLog("not a url"))
+    }
+
     @Test fun `https keeps the name its certificate is for`() {
         assertEquals(LocalRoute.KeptForCertificate("https://homeassistant.local:8123/", "homeassistant.local"), on(23, "https://homeassistant.local:8123/"))
     }

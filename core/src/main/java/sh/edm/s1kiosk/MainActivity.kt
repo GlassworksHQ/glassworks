@@ -53,6 +53,7 @@ import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
 import sh.edm.s1kiosk.improv.ImprovController
 import sh.edm.s1kiosk.improv.ImprovWifiStatus
+import dev.glassworks.web.LocalName
 import dev.glassworks.web.LocalRoute
 import org.json.JSONObject
 import kotlin.system.exitProcess
@@ -657,7 +658,8 @@ class MainActivity : Activity() {
 
     /** Discovery (or manual entry) found Home Assistant. */
     private fun onHaFound(url: String) {
-        Log.i(TAG, "Home Assistant at $url (dashboard setting: ${prefs.urlSetting})")
+        val setting = if (prefs.isAutoUrl) KioskPrefs.AUTO else LocalName.forLog(prefs.urlSetting)
+        Log.i(TAG, "Home Assistant at ${LocalName.forLog(url)} (dashboard setting: $setting)")
         refreshSetup()
         if (!prefs.loadsFoundAddress) return
         val started = glassworks.engine.started

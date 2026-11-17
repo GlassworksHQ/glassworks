@@ -46,5 +46,13 @@ object LocalName {
         return LocalRoute.ByAddress("${u.scheme}://${u.rawUserInfo?.let { "$it@" } ?: ""}$address$rest", name, address)
     }
 
+    /** [url] for a log line: its scheme, host and port, never a user, password, path or query. */
+    fun forLog(url: String): String = try {
+        val u = URI(url.trim())
+        if (u.host == null) "(not a URL)" else "${u.scheme}://${u.host}${if (u.port != -1) ":${u.port}" else ""}"
+    } catch (_: Exception) {
+        "(not a URL)"
+    }
+
     private fun isLocal(host: String) = host.endsWith(".local")
 }
