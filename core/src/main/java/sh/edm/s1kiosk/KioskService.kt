@@ -90,7 +90,8 @@ class KioskService : Service() {
             }
         }
         val d = HaDiscovery(this, UrlConnectionPoster(timeoutMs = 5_000)) { url, source ->
-            // Applied by the activity (dashboard URL "auto": load it, or restart for secure-context hosts).
+            // Applied by the activity (dashboard URL "auto", or a .local one reached by address: load it, or restart for
+            // secure-context hosts).
             main.post { glassworks.commandSink?.invoke(Intent().putExtra("ha_discovered", url).putExtra("ha_source", source)) }
         }
         discovery = d

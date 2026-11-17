@@ -108,6 +108,7 @@ class PrefsPinTest {
         val kiosk = KioskPrefs(ctx)
         val panes = PanePrefs(ctx)
         kiosk.setHaUrl("http://192.0.2.10:8123", "manual")
+        kiosk.shownHost("http://192.0.2.10:8123/")
         kiosk.auth = StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "pin-token")
         kiosk.auth
         kiosk.auth = null
@@ -237,7 +238,7 @@ class PrefsPinTest {
 
         /** Methods with arguments that [exerciseComposite] calls by hand, by class suffix and name. */
         val COMPOSITE = setOf(
-            "KioskPrefs.setHaUrl", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
+            "KioskPrefs.setHaUrl", "KioskPrefs.shownHost", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
             ".save", "PrefsSsStore.putRecord", "PrefsSsStore.touchRecord", "PrefsSsStore.removeRecord",
             "CameraPrefs.setUse", "CameraPrefs.setSignIn",
         )

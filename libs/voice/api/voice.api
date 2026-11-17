@@ -17,6 +17,62 @@ public final class dev/glassworks/voice/MicroModel {
 	public fun toString ()Ljava/lang/String;
 }
 
+public abstract interface class dev/glassworks/voice/ModelFailure {
+}
+
+public final class dev/glassworks/voice/ModelFailure$Certificate : dev/glassworks/voice/ModelFailure {
+	public static final field INSTANCE Ldev/glassworks/voice/ModelFailure$Certificate;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/ModelFailure$CheckFailed : dev/glassworks/voice/ModelFailure {
+	public static final field INSTANCE Ldev/glassworks/voice/ModelFailure$CheckFailed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/ModelFailure$Http : dev/glassworks/voice/ModelFailure {
+	public fun <init> (I)V
+	public final fun component1 ()I
+	public final fun copy (I)Ldev/glassworks/voice/ModelFailure$Http;
+	public static synthetic fun copy$default (Ldev/glassworks/voice/ModelFailure$Http;IILjava/lang/Object;)Ldev/glassworks/voice/ModelFailure$Http;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getStatus ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/ModelFailure$Missing : dev/glassworks/voice/ModelFailure {
+	public static final field INSTANCE Ldev/glassworks/voice/ModelFailure$Missing;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/ModelFailure$Offline : dev/glassworks/voice/ModelFailure {
+	public static final field INSTANCE Ldev/glassworks/voice/ModelFailure$Offline;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/ModelFailure$SecureConnection : dev/glassworks/voice/ModelFailure {
+	public static final field INSTANCE Ldev/glassworks/voice/ModelFailure$SecureConnection;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/ModelFailure$Storage : dev/glassworks/voice/ModelFailure {
+	public static final field INSTANCE Ldev/glassworks/voice/ModelFailure$Storage;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class dev/glassworks/voice/UrlPlayer {
 	public abstract fun play (Ljava/util/List;Lkotlin/jvm/functions/Function1;)V
 	public abstract fun stop ()V
@@ -107,13 +163,17 @@ public final class dev/glassworks/voice/VoiceEngine : dev/glassworks/voice/Voice
 	public fun getController ()Ldev/glassworks/voice/VoiceAssistantController;
 	public fun getOnError ()Lkotlin/jvm/functions/Function1;
 	public fun getOnMicLevel ()Lkotlin/jvm/functions/Function1;
+	public fun getOnReadiness ()Lkotlin/jvm/functions/Function1;
+	public fun getReadiness ()Ldev/glassworks/voice/VoiceReadiness;
 	public fun getThreshold ()F
+	public fun retryNow ()V
 	public fun setActive (Ljava/util/List;)V
 	public fun setController (Ldev/glassworks/voice/VoiceAssistantController;)V
 	public fun setGain (F)V
 	public fun setMuted (Z)V
 	public fun setOnError (Lkotlin/jvm/functions/Function1;)V
 	public fun setOnMicLevel (Lkotlin/jvm/functions/Function1;)V
+	public fun setOnReadiness (Lkotlin/jvm/functions/Function1;)V
 	public fun setThreshold (F)V
 	public fun start (Z)V
 	public fun stop ()V
@@ -199,12 +259,16 @@ public abstract interface class dev/glassworks/voice/VoiceInput : dev/glassworks
 	public abstract fun getController ()Ldev/glassworks/voice/VoiceAssistantController;
 	public abstract fun getOnError ()Lkotlin/jvm/functions/Function1;
 	public abstract fun getOnMicLevel ()Lkotlin/jvm/functions/Function1;
+	public abstract fun getOnReadiness ()Lkotlin/jvm/functions/Function1;
+	public abstract fun getReadiness ()Ldev/glassworks/voice/VoiceReadiness;
 	public abstract fun getThreshold ()F
+	public abstract fun retryNow ()V
 	public abstract fun setController (Ldev/glassworks/voice/VoiceAssistantController;)V
 	public abstract fun setGain (F)V
 	public abstract fun setMuted (Z)V
 	public abstract fun setOnError (Lkotlin/jvm/functions/Function1;)V
 	public abstract fun setOnMicLevel (Lkotlin/jvm/functions/Function1;)V
+	public abstract fun setOnReadiness (Lkotlin/jvm/functions/Function1;)V
 	public abstract fun setThreshold (F)V
 	public abstract fun start (Z)V
 	public abstract fun stop ()V
@@ -212,7 +276,66 @@ public abstract interface class dev/glassworks/voice/VoiceInput : dev/glassworks
 
 public final class dev/glassworks/voice/VoiceInput$DefaultImpls {
 	public static fun getOnMicLevel (Ldev/glassworks/voice/VoiceInput;)Lkotlin/jvm/functions/Function1;
+	public static fun getOnReadiness (Ldev/glassworks/voice/VoiceInput;)Lkotlin/jvm/functions/Function1;
+	public static fun getReadiness (Ldev/glassworks/voice/VoiceInput;)Ldev/glassworks/voice/VoiceReadiness;
+	public static fun retryNow (Ldev/glassworks/voice/VoiceInput;)V
 	public static fun setOnMicLevel (Ldev/glassworks/voice/VoiceInput;Lkotlin/jvm/functions/Function1;)V
+	public static fun setOnReadiness (Ldev/glassworks/voice/VoiceInput;Lkotlin/jvm/functions/Function1;)V
+}
+
+public abstract interface class dev/glassworks/voice/VoiceReadiness {
+}
+
+public final class dev/glassworks/voice/VoiceReadiness$EngineFailed : dev/glassworks/voice/VoiceReadiness {
+	public fun <init> (J)V
+	public final fun component1 ()J
+	public final fun copy (J)Ldev/glassworks/voice/VoiceReadiness$EngineFailed;
+	public static synthetic fun copy$default (Ldev/glassworks/voice/VoiceReadiness$EngineFailed;JILjava/lang/Object;)Ldev/glassworks/voice/VoiceReadiness$EngineFailed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getRetryAtMs ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/VoiceReadiness$MicrophoneNotAllowed : dev/glassworks/voice/VoiceReadiness {
+	public static final field INSTANCE Ldev/glassworks/voice/VoiceReadiness$MicrophoneNotAllowed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/VoiceReadiness$MicrophoneUnavailable : dev/glassworks/voice/VoiceReadiness {
+	public static final field INSTANCE Ldev/glassworks/voice/VoiceReadiness$MicrophoneUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/VoiceReadiness$ModelFailed : dev/glassworks/voice/VoiceReadiness {
+	public fun <init> (Ldev/glassworks/voice/ModelFailure;J)V
+	public final fun component1 ()Ldev/glassworks/voice/ModelFailure;
+	public final fun component2 ()J
+	public final fun copy (Ldev/glassworks/voice/ModelFailure;J)Ldev/glassworks/voice/VoiceReadiness$ModelFailed;
+	public static synthetic fun copy$default (Ldev/glassworks/voice/VoiceReadiness$ModelFailed;Ldev/glassworks/voice/ModelFailure;JILjava/lang/Object;)Ldev/glassworks/voice/VoiceReadiness$ModelFailed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFailure ()Ldev/glassworks/voice/ModelFailure;
+	public final fun getRetryAtMs ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/VoiceReadiness$Ready : dev/glassworks/voice/VoiceReadiness {
+	public static final field INSTANCE Ldev/glassworks/voice/VoiceReadiness$Ready;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class dev/glassworks/voice/VoiceReadiness$Starting : dev/glassworks/voice/VoiceReadiness {
+	public static final field INSTANCE Ldev/glassworks/voice/VoiceReadiness$Starting;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public abstract interface class dev/glassworks/voice/WakeWord {

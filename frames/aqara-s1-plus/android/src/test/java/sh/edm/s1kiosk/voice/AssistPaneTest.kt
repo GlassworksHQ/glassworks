@@ -542,7 +542,7 @@ class AssistPaneTest {
         val p = pane().also { panes += it }
         assertNull(created)
         assertEquals(
-            listOf("mute_microphone", "wake_sound", "voice_overlay", "mic_gain", "wake_word_threshold"),
+            listOf("mute_microphone", "wake_sound", "voice_overlay", "mic_gain", "wake_word_threshold", "voice_status"),
             p.entities().map { it.objectId },
         )
         prefs.micMuted = true
