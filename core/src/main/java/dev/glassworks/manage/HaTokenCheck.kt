@@ -23,7 +23,8 @@ class HaTokenCheck(
     private val max: Int = 32,
 ) {
     sealed class Result {
-        class Ok(val user: HaUser) : Result()
+        /** [haBase]: the Home Assistant address that confirmed [user]. */
+        class Ok(val user: HaUser, val haBase: String) : Result()
         class NotAdmin(val name: String) : Result()
         /** The panel has no Home Assistant address, or one that isn't on the local network. */
         object NoHa : Result()
@@ -51,7 +52,7 @@ class HaTokenCheck(
                 while (known.size > max) known.remove(known.keys.first())
             }
         } ?: return Result.Refused
-        return if (user.isAdmin) Result.Ok(user) else Result.NotAdmin(user.name)
+        return if (user.isAdmin) Result.Ok(user, base) else Result.NotAdmin(user.name)
     }
 
     companion object {

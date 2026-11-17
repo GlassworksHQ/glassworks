@@ -203,14 +203,17 @@ class ManageServer(
             return html(403, PageShell.qrPage(name(), title, PageShell.esc(text), PageShell.Look.PROBLEM,
                 button = """<a class="btn" href="/">Sign in here</a>"""))
         }
-        val user = when (val r = tokens.check(req.form["token"])) {
-            is HaTokenCheck.Result.Ok -> r.user
+        val ok = when (val r = tokens.check(req.form["token"])) {
+            is HaTokenCheck.Result.Ok -> r
             is HaTokenCheck.Result.NotAdmin -> return refused("Administrators only", "${r.name} isn't a Home Assistant administrator. Sign in with an administrator's account.")
             HaTokenCheck.Result.NoHa -> return refused("Can't check who you are", ManageApi.NO_HA)
             HaTokenCheck.Result.Refused -> return refused("Can't sign in", ManageApi.REFUSED)
         }
-        val (token, s) = sessions.create(user.name, SignedInWith.HOME_ASSISTANT, SessionStore.browserName(req.headers["user-agent"]), false, haBase())
-        event("${user.name} signed in with Home Assistant from the Manage page on ${ManageApi.from(req)} (${s.browser})")
+        // Bound to the address that confirmed the user, as haCallback binds its own: if it changed since, start again.
+        val ha = haBase()
+        if (ok.haBase != ha?.trim()?.trimEnd('/')) return refused("Home Assistant's address changed", "Sign in again.")
+        val (token, s) = sessions.create(ok.user.name, SignedInWith.HOME_ASSISTANT, SessionStore.browserName(req.headers["user-agent"]), false, ha)
+        event("${ok.user.name} signed in with Home Assistant from the Manage page on ${ManageApi.from(req)} (${s.browser})")
         // A page from another site posted here: a redirect would still be cross-site for the Strict cookie (see haCallback).
         val next = safeNext(req.form["next"])
         return html(200, PageShell.document(name(), "", """<meta http-equiv="refresh" content="0;url=${PageShell.esc(next)}">"""),

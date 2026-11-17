@@ -215,6 +215,16 @@ class ManageApiTest {
         assertEquals("a link can't sign anyone in", 303, f.Browser().get(ManageServer.HANDOFF + "?token=$token").status)
     }
 
+    @Test fun aHandoffIsBoundToTheAddressThatConfirmedTheUser() {
+        // The first read (the check) sees one address, every later one another: the panel's address changed mid-request.
+        var reads = 0
+        f.haBaseFn = { if (reads++ == 0) "http://192.0.2.10:8123" else "http://192.0.2.11:8123" }
+        val (_, r) = handoff(token)
+        assertEquals(403, r.status)
+        assertTrue(r.text().contains("Home Assistant's address changed"))
+        assertNull(r.headers["Set-Cookie"])
+    }
+
     @Test fun aHandoffGoesOnlyToAPathOnThisPanel() {
         val (_, r) = handoff(token, next = "//evil.example/")
         assertTrue(r.text().contains("url=/\""))
