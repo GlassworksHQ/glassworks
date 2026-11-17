@@ -26,7 +26,13 @@ class ManageUsbDebuggingTest {
     private val allowed = Collections.synchronizedList(ArrayList<String>())
     private val events = Collections.synchronizedList(ArrayList<String>())
     private val file = File(Files.createTempDirectory("adb").toFile(), "adb-computers.json")
-    private val computers = AdbComputers(file, allow = { allowed += it.base64; null }, event = { events += it })
+    /** Android's answer once the approval is sent: a refusal comes back through the log. */
+    private var refuseFor: String? = null
+    private val computers: AdbComputers = AdbComputers(file, allow = { k ->
+        allowed += k.base64
+        refuseFor?.let { computers.refused(k.fingerprint, it) }
+        null
+    }, event = { events += it }, confirmMs = 20)
     private val f = ManageFixture(usb = ManageUsbDebugging(computers, { "09:41" }, { events += it }))
 
     private fun ha() = f.Browser().apply { signInWithHa() }
@@ -133,6 +139,16 @@ class ManageUsbDebuggingTest {
         File(file, "x").apply { parentFile.mkdirs(); writeText("x") }
         assertEquals("/security?usb=notremoved", br.remove(a.fingerprint).headers["Location"])
         assertEquals(listOf(a), computers.list().map { it.key })
+    }
+
+    @Test fun `Android refusing the approval says so, and nothing is listed`() {
+        computers.asked(a)
+        refuseFor = b.fingerprint
+        val br = ha()
+        assertEquals("/security?usb=refused", br.allow(a.fingerprint).headers["Location"])
+        assertTrue(computers.list().isEmpty())
+        assertTrue(br.get("/security?usb=refused").text().contains(ManageUsbDebugging.Result.REFUSED.text))
+        assertFalse(events.any { it.contains("allowed adb key") })
     }
 
     @Test fun `forms without the session's token, from another site, or without a fingerprint are refused`() {
