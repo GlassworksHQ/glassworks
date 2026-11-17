@@ -510,7 +510,7 @@ What Phase B added for the Mirror, from the device and not from frame code (`Gen
 
 | What | How | Tested |
 |---|---|---|
-| Portrait glass | `Frame.orientation` is `ANY` on the Mirror: the app follows Android's rotation (`SCREEN_ORIENTATION_FULL_USER`), and the Mirror's Android stands portrait once Kiln's first boot locks it (`user_rotation=3`, auto-rotate off; `ro.sf.hwrotation` does nothing there, 2026-11-17). The S1's frame keeps landscape, as its manifest asks. Phase B first used the screen at rotation 0, which held a Pixel Tablet portrait on its dock (2026-11-16) | `OrientationTest` (the S1, the Pixel Tablet, the Mirror, an unknown tablet, a turn) |
+| Portrait glass | `Frame.orientation` is `ANY` on the Mirror: the app follows Android's rotation (`SCREEN_ORIENTATION_FULL_USER`), and Kiln's first boot locks the Mirror's Android in portrait (`user_rotation=3`, auto-rotate off; `ro.sf.hwrotation` does nothing there, 2026-11-17). That the app then stands upright on the glass is **untested**: the root's run of #439 checks it. The S1's frame keeps landscape, as its manifest asks. Phase B first used the screen at rotation 0, which held a Pixel Tablet portrait on its dock (2026-11-16) | `OrientationTest` (the S1, the Pixel Tablet, the Mirror, an unknown tablet, a turn) |
 | No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
 | Reboot | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
 

@@ -134,7 +134,10 @@ full table is on #395.
 The run also found that the first boot's Wi-Fi step logged the network's name. It now reads "Wi-Fi:
 the network you entered", and tests check that no log line holds the name or the password.
 
-## The root's test plan (as run above)
+## The root's test plan
+
+Steps 1–4 and 6 ran on 2026-11-16 (above). Step 5 changed on 2026-11-17: rotation 3 and the photo of
+the app upright are **pending** on the root's next run (#439); the run above saw rotation 0.
 
 Flash with this build (Kiln or `tools/mirror/flash-node.ts`), with the Wi-Fi name and password
 given, a Home Assistant address, and an APK that has a home screen on API 23. Then, touching nothing

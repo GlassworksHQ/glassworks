@@ -144,7 +144,8 @@ export const MIRROR_ROTATION = { userRotation: 3, size: '1080x1920' } as const;
 
 /** Android's display rotation and size, from `dumpsys window` (WindowManagerService's mRotation, the display's cur=). */
 export async function displayRotation(p: PanelShell): Promise<{ rotation?: number; size?: string }> {
-  const out = (await p.run('dumpsys window')).out;
+  // Android 6 prints the state saved at the last ANR first, with its own mRotation: drop it
+  const out = (await p.run('dumpsys window')).out.replace(/WINDOW MANAGER LAST ANR[\s\S]*?(?=WINDOW MANAGER )/, '');
   const rotation = /\bm(?:Current)?Rotation=(\d)\b/.exec(out)?.[1];
   const size = /\bcur=(\d+x\d+)/.exec(out)?.[1];
   return { ...(rotation !== undefined ? { rotation: Number(rotation) } : {}), ...(size ? { size } : {}) };

@@ -13,7 +13,7 @@ import { FakeLk } from '@glassworks/fastboot/fake-lk';
 import { GLASSWORKS } from '../src/app';
 import { FirstBootMirror, fakeAdbKey, fakeMirrorApk, fakeServicesJar } from './fakes';
 import {
-  GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, makeOnlyHome, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, setPortrait, type FastbootLike,
+  GLASS_PANES, SYSTEM_BYTES, WrongImage, buildImages, displayRotation, makeOnlyHome, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem, setPortrait, type FastbootLike,
 } from '../src';
 
 const T = 1_700_000_000;
@@ -196,6 +196,16 @@ describe('first boot', () => {
     expect(await setPortrait(p, () => {}, async () => {})).toBe('rotation ?, 1080x1920');
     const flipped = { cmds: [] as string[], async run(c: string) { this.cmds.push(c); return { out: c === 'dumpsys window' ? '    init=1920x1080 240dpi cur=1080x1920 app=1080x1920\n  mRotation=1 mAltOrientation=false\n' : '', code: 0 }; }, async push() {} };
     await expect(setPortrait(flipped, () => {}, async () => {}, 3)).rejects.toThrow(/still reports rotation 1, 1080x1920 \(3 s\)/);
+  });
+
+  it('reads the live rotation, not the one saved at the last ANR, which Android 6 prints first (#439 review)', async () => {
+    const shell = (out: string) => ({ async run() { return { out, code: 0 }; }, async push() {} });
+    const live = 'WINDOW MANAGER POLICY STATE (dumpsys window policy)\n    mUserRotationMode=1 mUserRotation=3\n'
+      + 'WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)\n    init=1920x1080 240dpi cur=1080x1920 app=1080x1920\n'
+      + 'WINDOW MANAGER WINDOWS (dumpsys window windows)\n  mRotation=3 mAltOrientation=false\n';
+    const saved = 'WINDOW MANAGER LAST ANR (dumpsys window lastanr)\n  ANR time: 17-Nov-2026\n    init=1920x1080 240dpi cur=1920x1080 app=1920x1080\n  mRotation=0 mAltOrientation=false\n\n';
+    expect(await displayRotation(shell(saved + live))).toEqual({ rotation: 3, size: '1080x1920' });
+    expect(await displayRotation(shell('WINDOW MANAGER LAST ANR (dumpsys window lastanr)\n  <no ANR has occurred since boot>\n\n' + live))).toEqual({ rotation: 3, size: '1080x1920' });
   });
 
   it('says when Launcher3 survives and HOME shows the chooser, and the same step fixes it once hiding works', async () => {
