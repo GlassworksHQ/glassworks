@@ -301,7 +301,7 @@ class MainActivity : Activity() {
     /** A notification's view, on the panel's own HA: in place when the frontend is already up, else loaded. */
     private fun openInPage(url: String) {
         if (beforeNotificationPage == null) beforeNotificationPage = currentUrl
-        Log.i(TAG, "Notification: opening a view full screen")
+        Log.i(TAG, "Notification: opening a view")
         if (FrontendUrls.sameOrigin(currentUrl, url)) page?.post(navigate(url))
         else page?.load(externalize(url))
     }

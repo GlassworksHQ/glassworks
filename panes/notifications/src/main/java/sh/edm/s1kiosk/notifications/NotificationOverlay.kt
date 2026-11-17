@@ -18,6 +18,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.text.TextUtils
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -25,6 +26,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.glassworks.engine.PageCapture
 import dev.glassworks.frame.Input
 import dev.glassworks.notifications.ImageFetch
 import dev.glassworks.notifications.NotificationImages
@@ -106,6 +108,8 @@ class NotificationOverlay(
     private val loading = HashSet<Long>()
     private val worker: ExecutorService by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "s1-notify-img").apply { isDaemon = true } } }
     private var detached = false
+    /** The window is on screen: false while the activity is stopped, as it is with the screen off. */
+    private var windowShown = false
     private val refold = Runnable { render() }
     private val pageTick = Runnable { renderPage(state.page) }
 
@@ -180,6 +184,13 @@ class NotificationOverlay(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         detached = false
+        windowShown = windowVisibility == VISIBLE
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        windowShown = visibility == VISIBLE
+        if (windowShown) armDeadline() else main.removeCallbacks(captureDeadline)
     }
 
     override fun onDetachedFromWindow() {
@@ -187,6 +198,11 @@ class NotificationOverlay(
         detached = true
         main.removeCallbacks(refold)
         main.removeCallbacks(pageTick)
+        main.removeCallbacks(captureDeadline)
+        capturing = null
+        // Nothing draws it any more.
+        behind?.recycle()
+        behind = null
         super.onDetachedFromWindow()
     }
 
@@ -307,6 +323,7 @@ class NotificationOverlay(
         val was = shownPage
         shownPage = p?.id
         capturing = null
+        main.removeCallbacks(captureDeadline)
         val half = p?.notification?.size == ViewSize.HALF
         val capture = capturePage
         when {
@@ -317,11 +334,15 @@ class NotificationOverlay(
             shownHalf -> onPage?.invoke(p.notification.url)
             was == null && capture != null -> {
                 capturing = p.id
+                armDeadline()
                 capture { b ->
                     if (!detached && capturing == p.id) {
                         capturing = null
+                        main.removeCallbacks(captureDeadline)
                         openHalf(p, b)
                         render()
+                    } else {
+                        b?.recycle()
                     }
                 }
             }
@@ -329,7 +350,26 @@ class NotificationOverlay(
         }
     }
 
+    /**
+     * A picture that is late isn't worth the wait: past the deadline the view opens over the dark backdrop. It counts
+     * only while the window is shown. With the screen off GeckoView holds the capture until the screen is back on
+     * (S1, 2026-11-16: 5.8 s, of which 0.45 s from the activity's resume to the picture; 58-86 ms with the screen on).
+     */
+    private fun armDeadline() {
+        main.removeCallbacks(captureDeadline)
+        if (capturing != null && windowShown) main.postDelayed(captureDeadline, CAPTURE_DEADLINE_MS)
+    }
+
+    private val captureDeadline = Runnable {
+        val p = state.page?.takeIf { it.id == capturing } ?: return@Runnable
+        capturing = null
+        if (Log.isLoggable(PageCapture.TAG, Log.DEBUG)) Log.d(PageCapture.TAG, "capture: past $CAPTURE_DEADLINE_MS ms, the view opens without the picture")
+        openHalf(p, null)
+        render()
+    }
+
     private fun openHalf(p: Entry, picture: Bitmap?) {
+        dropPicture()
         behind = picture
         shownHalf = true
         placePage()
@@ -338,9 +378,20 @@ class NotificationOverlay(
 
     private fun closeHalf() {
         shownHalf = false
-        behind = null
+        dropPicture()
         placed = null
         onPageArea?.invoke(null)
+    }
+
+    /**
+     * Lets the dashboard's picture go (4 MB on the S1). It is recycled after the next frame, which no longer draws it:
+     * a frame already recorded with it must not meet a recycled bitmap.
+     */
+    private fun dropPicture() {
+        val old = behind ?: return
+        behind = null
+        dialog.invalidate()
+        if (isAttachedToWindow) postOnAnimation { main.post { old.recycle() } } else old.recycle()
     }
 
     /** Puts the page in the dialog, above its bar, when that moved (the first time, or the screen's size changed). */
@@ -719,6 +770,8 @@ class NotificationOverlay(
         const val FOOTER_DP = 72f
         const val SHEET_RADIUS_DP = 28f
         const val OPEN_THE_VIEW = "Open the view"
+        /** How long a half view waits for the dashboard's picture, with the screen on, before it opens without it. */
+        const val CAPTURE_DEADLINE_MS = 750L
 
         /** The half view's dialog on a [w] x [h] screen: the long side's half, on the right of a landscape one, at the bottom of a portrait one. */
         fun dialogRect(w: Int, h: Int): Rect = if (side(w, h)) Rect(w / 2, 0, w, h) else Rect(0, h / 2, w, h)

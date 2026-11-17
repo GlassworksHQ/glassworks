@@ -231,7 +231,8 @@ class GeckoEngine(
         }
 
         override fun capture(done: (android.graphics.Bitmap?) -> Unit) {
-            view.capturePixels().accept({ done(it) }, { e -> Log.w(logTag, "page capture failed", e); done(null) })
+            // Engine.Page promises the main thread: post rather than trust which thread GeckoResult completes on.
+            view.capturePixels().accept({ b -> main.post { done(b) } }, { e -> Log.w(logTag, "page capture failed", e); main.post { done(null) } })
         }
 
         private inner class Port(private val port: WebExtension.Port) : PagePort {

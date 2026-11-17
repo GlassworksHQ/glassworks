@@ -2,6 +2,8 @@ package sh.edm.s1kiosk.notifications
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -22,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import sh.edm.s1kiosk.ui.Mockup
 import java.util.concurrent.CompletableFuture
 
@@ -46,6 +49,8 @@ class NotificationOverlayTest {
     private val overlay = Mockup.show(FrameLayout(Mockup.activity())).let { root ->
         NotificationOverlay(root.context, hub, images = null, now = { 0L }).also {
             root.addView(it, FrameLayout.LayoutParams(-1, -1))
+            // Robolectric's window stays GONE; a resumed activity's window on the panel is VISIBLE (the screen on).
+            it.dispatchWindowVisibilityChanged(View.VISIBLE)
             it.onPage = { url -> pages += url }
             hub.addListener { s -> it.update(s) }
         }
@@ -194,6 +199,82 @@ class NotificationOverlayTest {
         assertEquals(listOf<String?>("http://homeassistant.local:8123/fire/0"), pages)
         assertTrue(hub.state.cards.isEmpty())
         assertTrue(shownText().contains("Back now"))
+    }
+
+    /** A picture that never comes doesn't hold the view: past the deadline it opens over the backdrop; a late one is let go. */
+    @Test
+    fun aLateCaptureOpensTheViewWithoutThePicture() {
+        val events = halfHooks()
+        var deliver: ((Bitmap?) -> Unit)? = null
+        overlay.capturePage = { done -> events += "capture"; deliver = done }
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half","timeout":90}""")
+        assertEquals("waiting for the picture", listOf("capture"), events)
+        Mockup.idle()
+        // By now the overlay has had a layout in Robolectric's window, which is shorter than the panel: place by its size.
+        val area = NotificationOverlay.dialogRect(overlay.width, overlay.height).apply { bottom -= 108 }
+        assertEquals(listOf("capture", "area $area", "page http://homeassistant.local:8123/dashboard-door/0"), events)
+        assertTrue(shownText().contains("Closes in 1:30"))
+        val late = Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888)
+        deliver!!(late)
+        assertTrue("a late picture is recycled, not shown", late.isRecycled)
+        assertEquals(3, events.size)
+    }
+
+    /** With the screen off the activity is stopped and GeckoView holds the capture: the deadline counts from the screen on. */
+    @Test
+    fun theDeadlineWaitsForTheScreen() {
+        val events = halfHooks()
+        var deliver: ((Bitmap?) -> Unit)? = null
+        overlay.capturePage = { done -> events += "capture"; deliver = done }
+        overlay.dispatchWindowVisibilityChanged(View.GONE)
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half","timeout":90}""")
+        Mockup.idle()
+        assertEquals("the screen is off: still waiting", listOf("capture"), events)
+        overlay.dispatchWindowVisibilityChanged(View.VISIBLE)
+        val picture = Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888)
+        deliver!!(picture)
+        assertEquals(3, events.size)
+        assertFalse("the picture came in time and is shown", picture.isRecycled)
+    }
+
+    @Test
+    fun thePictureIsLetGoWhenTheViewClosesAndWhenTheOverlayGoes() {
+        val pictures = mutableListOf<Bitmap>()
+        halfHooks()
+        overlay.capturePage = { done -> done(Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888).also { pictures += it }) }
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half"}""")
+        assertFalse(pictures[0].isRecycled)
+        click("Close")
+        Mockup.idle()
+        assertTrue("recycled after Close", pictures[0].isRecycled)
+        center.handle("m", "Garage", """{"url":"/garage/0","size":"half"}""")
+        assertFalse(pictures[1].isRecycled)
+        (overlay.parent as ViewGroup).removeView(overlay)
+        assertTrue("recycled when the overlay goes", pictures[1].isRecycled)
+    }
+
+    /** The S1 run's finding B (2026-11-16): a queued half view after a half view keeps the dimmed picture behind it. */
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aQueuedHalfViewKeepsThePictureAndTheScrim() {
+        val events = halfHooks()
+        overlay.capturePage = { done ->
+            events += "capture"
+            done(Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) })
+        }
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half"}""")
+        center.handle("m", "Garage", """{"url":"/garage/0","size":"half"}""")
+        click("Next")
+        Mockup.idle()
+        assertEquals("Garage", hub.state.page?.notification?.title)
+        assertEquals("one picture, kept", 1, events.count { it == "capture" })
+        val behind = views(overlay).first { it.javaClass.simpleName == "HalfDialog" }
+        assertTrue(behind.isShown)
+        val drawn = Bitmap.createBitmap(1440, 720, Bitmap.Config.ARGB_8888)
+        behind.draw(Canvas(drawn))
+        val left = drawn.getPixel(200, 300)
+        assertTrue("the picture, dimmed: ${Integer.toHexString(left)}", Color.red(left) in 120..180 && Color.green(left) < 30 && Color.alpha(left) == 255)
+        assertEquals("the dialog lets the page show", 0, Color.alpha(drawn.getPixel(1000, 300)))
     }
 
     private fun halfHooks(): MutableList<String> {

@@ -124,7 +124,10 @@ data:
 
 - **Full or half.** Without `size`, the view takes the whole screen. With `"size": "half"` it is a
   dialog over half the screen: a panel on the right of a landscape screen (the S1), a sheet at the
-  bottom of a portrait one. The dashboard stays behind it as a still picture, dimmed.
+  bottom of a portrait one. The dashboard stays behind it as a still picture, dimmed. On the S1 the
+  picture takes under 0.1 s. If it isn't there 0.75 s after the screen is on, the view opens over a
+  plain dark backdrop instead. With the screen off, the picture is taken when the screen comes back
+  on. A normal notification doesn't wake the screen, so that is when someone walks up.
 - **One button.** A bar at the foot of the view shows its title, the time left, and one button. It
   says *Next* when another view is waiting, *Back now* on the last full view, and *Close* on the last
   half one. Tapping outside a half view does the same, and so do Back and the time running out.
