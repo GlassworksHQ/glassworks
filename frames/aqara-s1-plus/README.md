@@ -417,7 +417,7 @@ browser, the radio and the wall base protocol: it's all written up in
 | Zigbee and Thread radio | Beta | Zigbee coordinator or router, and Thread. |
 | Time zone | Beta | Worked out: needs no special hardware. |
 | Diagnostics | Alpha | Worked out: needs no special hardware. Not yet checked on a panel. |
-| Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 (2026-11-14); the pane itself not yet. GATT connections (*Listen and connect*, #246) not yet met the S1. |
+| Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 on 2026-11-14 and the pane on 2026-11-16. GATT connections (*Listen and connect*, #246) worked with one real device on 2026-11-17; more than one link at once is untested. |
 | Notifications | Alpha | Worked out: needs no special hardware (the speaker plays its sounds). First run on the S1 2026-11-14; the critical alert's rerun pending. |
 | Camera | No | Worked out: needs a camera. The S1 has none; its settings say the pane can't run. |
 | Wall base | Alpha | The driver passes against an emulator that Aqara's own `bracket_cli` accepts. It has not yet been tried on a real base ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)). |
