@@ -148,6 +148,21 @@ class ScreenBehaviourPinTest {
         assertEquals(emptyList<Boolean>(), h.keepOnCalls)
     }
 
+    /**
+     * "Turn off when idle: Never" holds at night too (#475's verifier, note 3): up to 0.4.3 the night's own 20 s
+     * timeout still turned the screen off at 23:00. A panel updated with its night keys left in kiosk.xml as well.
+     */
+    @Test fun neverHoldsAtNight() {
+        h.context.getSharedPreferences("kiosk", android.content.Context.MODE_PRIVATE).edit()
+            .putString("night_window", "22:00-07:00").putInt("night_idle_off_sec", 20).commit()
+        prefs.idleOffSec = 0
+        h.setClock(23, 0)
+        h.start()
+        h.userActivity()
+        h.advance(3_600_000)
+        assertEquals(emptyList<Boolean>(), h.keepOnCalls)
+    }
+
     @Test fun alwaysModeNeverTurnsTheScreenOff() {
         prefs.screenMode = "always"
         h.setClock(12, 0)
