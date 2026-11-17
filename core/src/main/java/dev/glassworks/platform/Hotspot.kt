@@ -114,13 +114,23 @@ object HotspotAddress {
         return (r and mask) == (a and mask)
     }
 
-    /** [onSubnet] for the hotspot as it is now ([now]); false while it has no address. */
+    /** One IPv4 address on the device, with its prefix length. */
+    data class Address(val ip: String, val prefix: Int)
+
+    /**
+     * [remote] is another device on the hotspot's network: [ap] is the hotspot's address ([now]), and [addresses] the
+     * device's IPv4 addresses, where its prefix length is found. False while the hotspot has no address.
+     */
+    fun isClient(remote: String?, ap: String?, addresses: List<Address>): Boolean {
+        val own = addresses.firstOrNull { it.ip == ap } ?: return false
+        return onSubnet(remote, own.ip, own.prefix)
+    }
+
+    /** [isClient] for the hotspot and the device's addresses as they are now. */
     fun isClient(context: Context, remote: String?): Boolean = runCatching {
-        val ap = now(context) ?: return false
-        val own = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
-            .flatMap { it.interfaceAddresses }.firstOrNull { it.address is Inet4Address && it.address.hostAddress == ap }
-            ?: return false
-        onSubnet(remote, ap, own.networkPrefixLength.toInt())
+        val addresses = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().flatMap { it.interfaceAddresses }
+            .mapNotNull { a -> (a.address as? Inet4Address)?.hostAddress?.let { Address(it, a.networkPrefixLength.toInt()) } }
+        isClient(remote, now(context), addresses)
     }.getOrDefault(false)
 
     private val WIFI = Regex("""(wlan|ap|swlan|softap)\d+""")
