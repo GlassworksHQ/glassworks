@@ -18,7 +18,8 @@ class PortalHotspot(
     private val hotspot: Hotspot,
     private val portal: Portal,
     private val schedule: (delayMs: Long, run: () -> Unit) -> () -> Unit,
-    private val addresses: () -> PortalAddresses? = PortalAddresses::now,
+    /** The hotspot's addresses now: `{ PortalAddresses.now(context) }` on a device. */
+    private val addresses: () -> PortalAddresses?,
     private val log: (String) -> Unit = {},
     private val recheckMs: Long = 3_000L,
 ) : Hotspot {

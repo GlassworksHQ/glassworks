@@ -31,9 +31,9 @@ data class PortalAddresses(val v4: Inet4Address, val v6: Inet6Address? = null) {
             return PortalAddresses(a4, a6)
         }
 
-        /** [pick] over the device's interfaces now. */
-        fun now(): PortalAddresses? = runCatching {
-            pick(dev.glassworks.platform.HotspotAddress.now(), NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().map { it.inetAddresses.toList() })
+        /** [pick] over the device's interfaces now, at the hotspot's address ([dev.glassworks.platform.HotspotAddress.now]). */
+        fun now(context: android.content.Context): PortalAddresses? = runCatching {
+            pick(dev.glassworks.platform.HotspotAddress.now(context), NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().map { it.inetAddresses.toList() })
         }.getOrNull()
     }
 }

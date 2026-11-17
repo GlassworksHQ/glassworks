@@ -21,6 +21,7 @@ import dev.glassworks.platform.NetworkUp
 import dev.glassworks.platform.Platform
 import dev.glassworks.setup.CaptivePortal
 import dev.glassworks.setup.LanSetup
+import dev.glassworks.setup.PortalAddresses
 import dev.glassworks.setup.PortalHotspot
 import dev.glassworks.setup.SetupHotspot
 import sh.edm.s1kiosk.settings.SettingsMenu
@@ -123,7 +124,7 @@ class KioskService : Service() {
         val hotspot = Hotspot.of(this, main).let { h ->
             if (!glassworks.frame.hotspotPortal) h
             else PortalHotspot(h, CaptivePortal({ ap -> "http://$ap:${OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }, log = { Log.i(HOTSPOT_TAG, it) }), schedule,
-                log = { Log.i(HOTSPOT_TAG, it) })
+                addresses = { PortalAddresses.now(this) }, log = { Log.i(HOTSPOT_TAG, it) })
         }
         val hs = SetupHotspot(
             hotspot = hotspot,
