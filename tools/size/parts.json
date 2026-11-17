@@ -23,7 +23,7 @@
   "assist": {"dex": ["sh.edm.s1kiosk.voice.AssistPane", "sh.edm.s1kiosk.voice.AssistDefinition", "sh.edm.s1kiosk.voice.SpeakerMedia",
                      "sh.edm.s1kiosk.voice.VoicePrefs", "sh.edm.s1kiosk.voice.VoiceUi", "sh.edm.s1kiosk.voice.VoiceLevels",
                      "sh.edm.s1kiosk.voice.AudioLevel", "sh.edm.s1kiosk.voice.LevelSmoother", "sh.edm.s1kiosk.voice.VoiceTexts",
-                     "sh.edm.s1kiosk.voice.MainTextFit", "sh.edm.s1kiosk.voice.TextFade", "sh.edm.s1kiosk.voice.Fader",
+                     "sh.edm.s1kiosk.voice.MainTextFit", "sh.edm.s1kiosk.voice.TextFade", "sh.edm.s1kiosk.voice.Fader", "sh.edm.s1kiosk.voice.VoiceStatus",
                      "dev.glassworks.voice.", "sh.edm.s1kiosk.VoiceOverlay"],
              "_why": "the pane, its engine library (libs/voice, #152: the Assist client, the wake word, the microphone) and its overlay. sh.edm.s1kiosk.voice is shared with the core (ExoAudioPlayer, TtsPlayer, VoiceLog, OrbArt: #352), so the pane's classes are listed one by one; test_apksize checks the list against the sources"},
   "sendspin": {"dex": ["sh.edm.s1kiosk.sendspin.", "dev.glassworks.sendspin."], "_why": "the pane and its engine library (libs/sendspin, #152). The library's WsClient also serves the core's HaThreadClient, and is counted here"},

@@ -175,6 +175,7 @@ open the entity, and turn on *Enabled*.
 | Voice overlay | `voice_overlay` | voice | config | off | Set once |
 | Mic gain | `mic_gain` | voice | config | off | Set once |
 | Wake word threshold | `wake_word_threshold` | voice | config | off | Set once |
+| Voice status | `voice_status` | voice | diagnostic | on | People check it when voice doesn't answer, and automate on it ([When voice can't get ready](#when-voice-cant-get-ready)) |
 | Music Assistant player (Sendspin) | `sendspin` | music | config | off | Set once |
 | Music Assistant player status | `sendspin_status` | music | diagnostic | off | Troubleshooting |
 | Notifications | `notifications` | notifications | config | off | Set once: the pane's on/off. The pane itself is off by default ([notifications.md](notifications.md)) |
@@ -262,6 +263,7 @@ So on a panel HA already has:
 | switch `Voice overlay` | `voice_overlay` | Full-screen overlay during voice runs: an orb that follows the voice, what was heard and the reply; tap anywhere to cancel the run (default on) |
 | number `Mic gain` | `mic_gain` | 0.5–4× |
 | number `Wake word threshold` | `wake_word_threshold` | 0.10–0.99. For a microWakeWord word, the probability cutoff for the mean of the model's last 5 outputs; it starts at the model's own (Okay Nabu and Hey Jarvis 0.97, Mycroft 0.95, Alexa 0.9) and goes back to it when you pick another word. Lower is more sensitive. For a legacy openWakeWord word, openWakeWord's score threshold (default 0.5), as before |
+| text sensor `Voice status` | `voice_status` | Whether the wake word can listen: `Ready`, `Getting ready`, or why not (`Download failed`, `Model check failed`, `Model not saved`, `Model missing`, `Engine failed`, `Microphone not allowed`, `Microphone unavailable`). No state while voice is off. See [When voice can't get ready](#when-voice-cant-get-ready) |
 | select `Radio mode` | `radio_mode` | `Off` (default), `Zigbee coordinator (TCP)`, `Zigbee router (repeater)`, `Thread border router`, `Thread router (repeater)` ([radio.md](../frames/aqara-s1-plus/docs/radio.md); before 0.4.3 the repeaters were `Zigbee router` / `Thread router`, still accepted when sent); without the root helper only `Off` applies, other choices are refused and snap back |
 | text_sensor `Radio status` | `radio_status` | diagnostic; e.g. `Off: Aqara's radio services stopped, radio idle. …`, or the root helper's `ok zigbee_tcp: EZSP on tcp:6638`, plus who may connect and the ZHA / Zigbee2MQTT settings |
 | text `Radio allowed clients` | `radio_allowed_clients` | who may reach the radio's ports besides Home Assistant: addresses or CIDRs, `any`, or empty = Home Assistant only ([radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md#who-may-connect)) |
@@ -623,7 +625,38 @@ Detections only count while idle and 3 s after the previous one. Safety caps: 15
 
 A detection reports the word of the model that fired: while a newly picked word loads, the old one
 keeps listening as itself. If the new word can't load (no network for its model), the old model
-stops, the panel shows the error, and it retries every 30 s.
+stops, and the panel says why ([below](#when-voice-cant-get-ready)) and tries again.
+
+### When voice can't get ready
+
+The panel downloads the wake word models from GitHub the first time it needs them, and checks each
+against a pinned SHA-256. Until a model is there, the wake word doesn't work. Assist started from Home
+Assistant still does, unless the microphone is the problem. Each failure shows in three places:
+
+- **The Assist page** on the panel and on the Manage page: a rose line under the heading that says what
+  went wrong, what to do and when the panel tries again, and a **Try again** row under *Listening* for
+  the failures the panel retries. The pane's chip in the settings list reads *Problem*.
+- **The `voice_status` sensor** in Home Assistant (diagnostic, on by default).
+- **The log** (`S1Voice`, the Manage page's *Voice* source): one line per new failure, with the reason.
+  It never holds a token or a network name.
+
+A failed download or engine start is tried again after 30 s, then 1, 2 and 5 minutes, then every 10
+minutes. Picking another wake word, or **Try again**, tries at once, and the waits start over at 30 s. The microphone is tried every 5 s.
+
+| `voice_status` | The page says | What it means, what to do |
+|---|---|---|
+| `Ready` | Listening for “Okay Nabu” | The wake word listens. |
+| `Getting ready` | Getting “Okay Nabu” ready | The model loads or downloads. It takes a few seconds on a first start. |
+| `Download failed` | …the panel couldn't reach GitHub. Check that it can reach the internet. | No network, no DNS, or a timeout. The panel's network may block GitHub (`github.com`, `raw.githubusercontent.com`). |
+| `Download failed` | …the panel couldn't verify GitHub's certificate. Check the panel's date and time. | A wrong clock, or a CA store too old for GitHub's certificate (Android 6 before #464). |
+| `Download failed` | …the secure connection to GitHub failed. | Another TLS failure, such as a proxy that rewrites HTTPS. |
+| `Download failed` | …GitHub answered HTTP 404. | GitHub refused the file. A 404 or 410 means the model moved; a 5xx usually passes. |
+| `Model check failed` | The wake word model failed its check after the download, so the panel didn't use it. | What came back wasn't the model (a captive portal's page, a proxy). It isn't used. |
+| `Model not saved` | The wake word model couldn't be saved. Free some storage on the panel. | The app's storage is full or not writable. |
+| `Model missing` | The wake word model isn't on the panel. Pick another wake word. | A custom openWakeWord model that the panel can't download. |
+| `Engine failed` | The wake word engine didn't start on this panel. | TensorFlow Lite didn't load or refused the model: a build without it for this CPU. Report it with the log. |
+| `Microphone not allowed` | Voice isn't allowed to use the microphone. Allow Microphone for this app in Android's app settings. | The microphone permission was refused. Kiln and the S1's installer grant it. |
+| `Microphone unavailable` | The microphone doesn't work: the panel has none, another app is using it, or its reads fail. | It doesn't open (none, or another app holds it), or it opens but 3 reads in a row fail. One failed read doesn't count. It recovers on its own once a read works. |
 
 **What HA does with the wake word select.** HA's select (`homeassistant/components/esphome/select.py`,
 2026.11.1) restores its last state, but on every connection it only reads the panel's configuration
