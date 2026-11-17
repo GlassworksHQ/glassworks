@@ -6,6 +6,8 @@
 // 2. Check the APK: Glassworks for API 26+, its legacy build for 23-25, with code for this processor.
 // 3. Install it, or update it in place when the same app is there.
 // 4. Grant what adb's shell can, and read each one back. A grant a vendor build refuses is reported, not fatal.
+//    On Android 12+, unless the person says no, allow "Install unknown apps" too, so updates install with nobody
+//    at the device (#422). Below 12 only a device owner skips the tap, which Kiln doesn't offer yet (#403).
 // 5. Start it, then make it the home screen: `cmd package set-home-activity` on Android 7+, else Android's
 //    chooser and one "Always" tap. Checked by package, as the Mirror's recipe does (#411).
 // 6. Hand over to setup over the LAN (#34): the app's setup channel gives its address, Kiln links its page.
@@ -68,13 +70,29 @@ export interface HomeResult {
 /** The app's setup page on the LAN (#34), or why there is none. */
 export interface Handoff { setupPage?: string; ip?: string; why?: string }
 
-export interface GenericInstalled { plan: Plan; app: AppVersion; updated: boolean; grants: Grant[]; home: HomeResult; handoff: Handoff }
+/**
+ * Whether updates install with nobody at the device (#422), as Kiln left it. `line` is what the app's Device page
+ * and Home Assistant's *Silent updates* say (core SilentUpdates), for Kiln's Done screen.
+ */
+export interface SilentUpdatesResult {
+  /**
+   * `allowed`: "Install unknown apps" read back as allowed (Android 12+); `declined`: the person kept a tap per
+   * update; `refused`: the device said no; `old-android`: below Android 12; `not-asked`: this build doesn't ask
+   */
+  state: 'allowed' | 'declined' | 'refused' | 'old-android' | 'not-asked';
+  line: string;
+  /** for `refused`: what the device answered, one line */
+  detail?: string;
+}
+
+export interface GenericInstalled { plan: Plan; app: AppVersion; updated: boolean; grants: Grant[]; silentUpdates: SilentUpdatesResult; home: HomeResult; handoff: Handoff }
 
 /** The parts of install the screen follows, in order. `home` with `pick`: waiting for the person's tap. */
 export type GenericPhase =
   | { step: 'read' }
   | { step: 'apk'; stage: 'copy' | 'install' }
   | { step: 'grant' }
+  | { step: 'updates' }
   | { step: 'start' }
   | { step: 'home'; how: 'set-home-activity' | 'chooser'; pick?: string }
   | { step: 'handoff' };
@@ -91,6 +109,8 @@ export interface GenericOptions {
   homeTimeoutMs?: number;
   /** how many times to try the app's setup channel after it starts; default 10, a second apart */
   setupTries?: number;
+  /** Android 12+: allow "Install unknown apps", so updates install by themselves (#422). Default on */
+  silentUpdates?: boolean;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -206,6 +226,56 @@ async function grant(r: Steps, app: GenericApp, apk: Uint8Array, sdk: number): P
   return out;
 }
 
+/** Android 12 (API 31): the first where an app can update itself without a tap (core Platform.canInstallWithoutUserAction). */
+export const SILENT_UPDATES_API = 31;
+const INSTALL_OP = 'REQUEST_INSTALL_PACKAGES';
+
+/** The words core SilentUpdates uses for each answer Kiln can leave. */
+export const SILENT_LINES = {
+  allowed: 'Yes: Android 12 or newer lets the app update itself',
+  off: 'No: Android needs “Install unknown apps” allowed for the app',
+  old: (release: string) => `No: Android ${release} asks for a tap on each update`,
+} as const;
+
+/**
+ * Silent updates (#422): on Android 12+, `appops set <app> REQUEST_INSTALL_PACKAGES allow`, read back. The app asks
+ * Android for no user action on its own updates (core UpdateManager), and Android allows it only with this on.
+ * The app is the only thing it lets install, and it installs only its own release, checked by hash and key.
+ */
+async function silentUpdates(r: Steps, app: GenericApp, apk: Uint8Array, device: DeviceFacts, want: boolean): Promise<SilentUpdatesResult> {
+  if (device.sdk < SILENT_UPDATES_API) return { state: 'old-android', line: SILENT_LINES.old(device.release || androidName(device.sdk)) };
+  const asks = new Set(await apkPermissions(apk, device.sdk));
+  if (!asks.has('android.permission.REQUEST_INSTALL_PACKAGES') || !asks.has('android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION')) {
+    return { state: 'not-asked', line: SILENT_LINES.off };
+  }
+  if (!want) { r.detail('silent updates: kept a tap per update'); return { state: 'declined', line: SILENT_LINES.off }; }
+  r.step('Silent updates');
+  const res = await r.p.run(`appops set ${app.package} ${INSTALL_OP} allow`);
+  const now = await r.try(`appops get ${app.package} ${INSTALL_OP}`);
+  if (new RegExp(`${INSTALL_OP}: allow`).test(now)) { r.detail('Install unknown apps: allowed'); return { state: 'allowed', line: SILENT_LINES.allowed }; }
+  const detail = (res.code !== 0 || /Exception|Error/i.test(res.out) ? firstLine(res.out) : '') || `exit ${res.code}, and Android says it is still off`;
+  r.detail(`Install unknown apps: refused: ${detail}`);
+  return { state: 'refused', line: SILENT_LINES.off, detail };
+}
+
+/**
+ * Undo for silent updates alone (#422's Kiln screen E): "Install unknown apps" back to Android's default, read back.
+ * Removing the app (undoGeneric) takes it away too. Throws if Android still allows it.
+ */
+export async function undoSilentUpdates(p: PanelShell, o: { onStep?: StepFn } = {}): Promise<{ app?: GenericApp }> {
+  const r = new Steps(p, o.onStep);
+  for (const app of APPS) {
+    if (!(await kioskVersion(p, undefined, app))) continue;
+    r.step('Updates ask for a tap again');
+    await r.p.run(`appops set ${app.package} ${INSTALL_OP} default`);
+    const now = await r.try(`appops get ${app.package} ${INSTALL_OP}`);
+    if (new RegExp(`${INSTALL_OP}: allow`).test(now)) throw new Error(`Android still lets ${app.name} install apps. Turn it off in Settings → Apps → ${app.name} → Install unknown apps.`);
+    return { app };
+  }
+  r.step('Glassworks is not on this device');
+  return {};
+}
+
 /**
  * The home screen Android resolves HOME to now: `cmd package resolve-activity` (Android 7+), else the "Always"
  * pick. Read-only. Undefined when the lookup fails or names no component.
@@ -309,6 +379,9 @@ export async function installGeneric(p: PanelShell, o: GenericOptions): Promise<
   phase({ step: 'grant' });
   const grants = await grant(r, app, o.apk, device.sdk);
 
+  phase({ step: 'updates' });
+  const silent = await silentUpdates(r, app, o.apk, device, o.silentUpdates ?? true);
+
   phase({ step: 'start' });
   r.step(`Start ${app.name}`);
   await startApp(r, o, app);
@@ -319,7 +392,7 @@ export async function installGeneric(p: PanelShell, o: GenericOptions): Promise<
   r.step('Hand over to setup');
   const handoff = await handOff(p, { tries: o.setupTries, sleep: o.sleep });
   r.detail(handoff.setupPage ? `setup page: ${handoff.setupPage}` : handoff.why ?? '');
-  return { plan, app: version, updated: !!plan.installed, grants, home, handoff };
+  return { plan, app: version, updated: !!plan.installed, grants, silentUpdates: silent, home, handoff };
 }
 
 /**

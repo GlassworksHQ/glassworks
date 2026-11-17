@@ -15,7 +15,8 @@ const RESOLVER = 'android/com.android.internal.app.ResolverActivity';
 /** A stand-in APK of either build, as its manifest is (frames/generic-android/android/src/main). */
 export function fakeGenericApk(o: { app?: GenericApp; package?: string; minSdk?: number; abis?: string[]; perms?: string[] } = {}): Uint8Array {
   const app = o.app ?? GENERIC;
-  const perms = (o.perms ?? ['android.permission.RECORD_AUDIO', 'android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.WRITE_SECURE_SETTINGS', 'android.permission.INTERNET'])
+  const perms = (o.perms ?? ['android.permission.RECORD_AUDIO', 'android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.WRITE_SECURE_SETTINGS', 'android.permission.INTERNET',
+    'android.permission.REQUEST_INSTALL_PACKAGES', 'android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION'])
     .map((name): FakeEl => ({ el: 'uses-permission', attrs: { name } }));
   const tree: FakeEl[] = [...perms, { el: 'application', children: [
     { el: 'activity', attrs: { name: 'sh.edm.s1kiosk.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
@@ -41,6 +42,8 @@ export interface FakeAndroidOptions {
   /** `pm grant` answers 0 but the build doesn't grant it (read back as off) */
   silentlyIgnore?: string[];
   refuseAppops?: boolean;
+  /** `appops set … REQUEST_INSTALL_PACKAGES` answers 0 but the build keeps it off (a device policy, a vendor build) */
+  keepInstallOpOff?: boolean;
   refuseAdmin?: boolean;
   /** the other build's device admin is active, left over from it (its package starts with this one's) */
   otherAdmin?: boolean;
@@ -60,6 +63,8 @@ export class FakeAndroid implements PanelShell {
   installed?: number;
   granted = new Set<string>();
   overlay = false;
+  /** "Install unknown apps" for the app: Android's default until set */
+  installOp: 'allow' | 'default' = 'default';
   admins = new Set<string>();
   /** the home app Android opens; RESOLVER while it would ask */
   home = LAUNCHER;
@@ -112,6 +117,11 @@ export class FakeAndroid implements PanelShell {
       this.overlay = true; return ok();
     }
     if (cmd === `appops get ${PKG} SYSTEM_ALERT_WINDOW`) return ok(`SYSTEM_ALERT_WINDOW: ${this.overlay ? 'allow' : 'default'}\n`);
+    if ((m = /^appops set (\S+) REQUEST_INSTALL_PACKAGES (allow|default)$/.exec(cmd)) && m[1] === PKG) {
+      if (!o.keepInstallOpOff || m[2] === 'default') this.installOp = m[2] as 'allow' | 'default';
+      return ok();
+    }
+    if (cmd === `appops get ${PKG} REQUEST_INSTALL_PACKAGES`) return ok(`REQUEST_INSTALL_PACKAGES: ${this.installOp}\n`);
     if (this.app.admin && cmd === `dpm set-active-admin ${this.app.admin}`) {
       if (o.refuseAdmin) return { out: 'java.lang.SecurityException: Calling identity is not authorized\n', code: 255 };
       if (this.admins.has(this.app.admin)) return { out: 'Exception occurred while executing:\njava.lang.IllegalArgumentException: Admin is already added\n', code: 255 };
@@ -137,7 +147,7 @@ export class FakeAndroid implements PanelShell {
     if (cmd === 'am start -a android.intent.action.MAIN -c android.intent.category.HOME') { this.reads = 0; return ok('Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }\n'); }
     if (cmd === `pm uninstall ${PKG}`) {
       if (this.app.admin && this.admins.has(this.app.admin)) return ok('Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]\n');
-      this.installed = undefined; this.home = LAUNCHER;
+      this.installed = undefined; this.home = LAUNCHER; this.installOp = 'default';
       return ok('Success\n');
     }
     return ok();
