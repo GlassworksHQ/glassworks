@@ -148,7 +148,7 @@ the next one. "Verified" means tested on a real panel in a real home.
 | Set up over the network: the panel's own setup page (`:8099/setup`), paired with a code on its screen ([guide](../../docs/manage.md#set-up-over-the-network)) | 🧪 New · paired, the Home Assistant step, the radio kept and Done on the S1 (2026-11-16); allowing it from the settings and Kiln's link not yet |
 | Set up from a phone with no Wi-Fi: the panel's own setup Wi-Fi, a QR code on its screen ([guide](../../docs/manage.md#the-panels-own-wi-fi)) | 🧪 New · unit tests only; not yet run on a panel |
 | Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
-| Bluetooth proxy for Home Assistant, listening only ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14); the pane itself not yet |
+| Bluetooth proxy for Home Assistant: listen, or listen and connect ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14), the pane on 2026-11-16, and GATT connections with one real device on 2026-11-17; more than one link at once untested |
 | App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |
 | Time zone kept across reboots | ✅ Works (needs the boot software from v0.4.0) |
 | Radio: Zigbee coordinator for **ZHA** | ✅ Verified · keep the radio's network settings ([known issue](#known-issues)) |
