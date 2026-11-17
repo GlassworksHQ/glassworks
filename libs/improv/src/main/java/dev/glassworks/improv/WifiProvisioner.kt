@@ -493,7 +493,14 @@ public class WifiProvisioner(
         public const val RADIO_DIDNT_COME_BACK: String = "The Wi-Fi radio didn't come back. Try again"
 
         /** Android refused the password for the network's security (a non-ASCII WPA2 or WPA3 password, CodeRabbit on #418). */
-        internal const val UNUSABLE_PASSWORD = "Android can't use that password for this network. Check it, and send it again"
+        public const val UNUSABLE_PASSWORD: String = "Android can't use that password for this network. Check it, and send it again"
+
+        /**
+         * True when a [Outcome.Failed] reason already says what to do ([RADIO_DIDNT_COME_BACK], the unusable password), so a
+         * caller adds no "check the password" of its own (#418 verifier).
+         */
+        public fun saysWhatToDo(reason: String): Boolean =
+            reason.startsWith(RADIO_DIDNT_COME_BACK) || reason.startsWith(UNUSABLE_PASSWORD)
     }
 }
 

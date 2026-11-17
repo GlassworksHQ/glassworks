@@ -7,6 +7,10 @@ publish the matching section below as the release notes.
 
 ## [Unreleased]
 
+### Added
+- **`WifiProvisioner.saysWhatToDo(reason)`.** True when a failure reason already tells the user what to do
+  (`RADIO_DIDNT_COME_BACK`, `UNUSABLE_PASSWORD`, both public now), so an app doesn't add "check the password" on top.
+
 ### Fixed
 - **A join right after the device's own hotspot waits for the Wi-Fi client.** With the user's Wi-Fi switch on but
   the client down (a device without STA+AP, a few seconds after its hotspot stops), `WifiProvisioner.connect` waits
