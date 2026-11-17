@@ -48,6 +48,13 @@ class PlatformTest {
     )
 
     @Test
+    fun `the target a silent self-update needs, per Android`() {
+        val docs = mapOf(31 to 29, 32 to 29, 33 to 30, 34 to 31, 35 to 33, 36 to 34, 37 to 35)
+        for (level in 21..30) assertEquals("API $level", null, PlatformApi(level).silentInstallMinTarget)
+        docs.forEach { (level, target) -> assertEquals("API $level", target, PlatformApi(level).silentInstallMinTarget) }
+    }
+
+    @Test
     fun `the setup hotspot - hidden API below Android 8, then local-only, and the permission each needs`() {
         for (level in 21..40) {
             assertEquals("kind at API $level", if (level >= 26) HotspotKind.LOCAL_ONLY else HotspotKind.HIDDEN_AP, PlatformApi(level).hotspotKind)

@@ -78,30 +78,35 @@ first (`adb shell am force-stop <id>`).
 Android 6 and 7 (API 23-25) get a legacy build of this app (#198): GeckoView 144, locked to the panel's Home
 Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a separate app,
 `dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
-updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln will flash it into
-`/system/priv-app` once its Mirror recipe takes this id (today it takes `sh.edm.s1kiosk`).
+updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln's Mirror recipe flashes it into
+`/system/priv-app` under this id (#411).
 
 It is the `legacy` build type of [`android/`](android): the same sources, manifest and key as the release build,
 with its own id, GeckoView 144 (`:engine-gecko-legacy`), minSdk 23 and core library desugaring. A build type, not
 a product flavor, so the release build keeps its tasks (a flavor would rename them and add `BuildConfig.FLAVOR`).
 Desugaring is the module's, though (AGP has no per-variant switch), so it changes the release APK too: no desugared
 library code goes in at minSdk 26, but D8 adds a small dex of inert API stubs, and the APK isn't byte-identical to
-one built without it. Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
+one built without it. Desugaring puts `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception) in the legacy
+APK only, which the maintainer allowed on 2026-11-16 (`AGENTS.md`, rule 4; `THIRD-PARTY-NOTICES.md`). Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
 
 ```sh
 ./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
 # → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
 ```
 
-Status: it builds (CI builds and checks it on every change, without publishing it), and CI's conformance test starts
-the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
+Status: it builds (CI builds and checks it on every change, and test builds publish it), and CI's conformance test
+starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
 release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
-What waits: a first device run, the maintainer's call on `desugar_jdk_libs`, and Kiln's Mirror recipe taking this id.
+What waits: a first device run and a release job: `release.yml` doesn't build
+the generic app or its legacy build yet, and the app has no release key.
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
-- **Orientation:** the screen's natural orientation (rotation 0), either way up. Landscape on most tablets; portrait
-  on the Mirror, whose image sets `ro.sf.hwrotation=270`, and on a tablet that stands portrait at rotation 0.
+- **Orientation:** the device's rotation: Android's auto-rotate, or the way the person locked the screen. The Mirror
+  stands portrait because its image does (`ro.sf.hwrotation=270`, auto-rotate off). A device with a frame of its own
+  stands as its `frame.json`'s `display` says: the Pixel Tablet is landscape, though its screen is portrait at
+  rotation 0. The app knows it by `Build.MODEL`, as Kiln's [`devices.ts`](installer/src/devices.ts) does
+  (`GenericAndroid.KNOWN`; `GenericAndroidKnownTest` keeps the two the same).
 - **Touch:** with input devices listed and no touchscreen among them (the Mirror), setup works from a computer
   instead of the screen (#34).
 Neither build can go on Google Play as it is: each updates itself from the repo's releases, and Play updates
@@ -128,14 +133,15 @@ It installs as a normal app (an APK). It doesn't install from Kiln yet, and ther
 Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403), with no
 screen yet. Given an adb connection and an APK, it reads the device, refuses below Android 6 or the wrong build,
 installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
-admin; the camera too, once a build asks for it) and reads each grant back, makes it the home screen (`cmd package set-home-activity` on Android 7+, else
+admin; the camera too, once a build asks for it) and reads each grant back, allows "Install unknown apps" on Android 12+
+so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else
 Android's chooser), and hands over to setup over the LAN. Its table of brands maps a USB vendor ID, or adb's
 maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
 device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
 
 To try a branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
-([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)). Not the legacy build's yet: its APK
-carries `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception), which waits for the maintainer's call.
+([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), the legacy build's
+(`glassworks-generic-legacy-test-<version>-arm64-v8a-<commit>.apk`) among them.
 
 ## Updates
 
@@ -172,8 +178,10 @@ PackageInstaller. Two routes install it without anyone touching the screen:
 | Device owner | 8.0 or newer | `dpm set-device-owner` over adb, on a device with no accounts |
 | Privileged system app | 6.0 or newer | Nothing: Kiln flashes the app into `/system/priv-app` (the Mirror), where Android grants `INSTALL_PACKAGES` |
 
-Without either, Android asks for a tap on the screen before it installs. The *Update status* sensor
-says which one happens: "Installing 1.2.3 without a tap", or "Installing 1.2.3: waiting for a tap on
+Without one of them, Android asks for a tap on the screen before it installs. The device's page in
+the panel's settings and on the Manage page, and the *Silent updates* sensor in Home Assistant, say
+whether updates install silently, and how to change it
+([esphome.md](../../docs/esphome.md#silent-updates)). The *Update status* sensor says which one happens: "Installing 1.2.3 without a tap", or "Installing 1.2.3: waiting for a tap on
 the screen".
 
 ### Silent self-update (Android 12+)
@@ -182,6 +190,8 @@ The app asks Android to install its own update with no user action (#277). Andro
 
 1. "Install unknown apps" is allowed for the app: *Settings → Apps → Glassworks → Install unknown
    apps*, or `adb shell appops set dev.glassworks.generic_android REQUEST_INSTALL_PACKAGES allow`.
+   Kiln's recipe does this by default on Android 12+ and reads it back; the person can say no
+   (`silentUpdates: false`), and `undoSilentUpdates` sets it back to Android's default (#422).
 2. The app that runs the install has this feature. An app from before it asks for a tap once, and
    the version it installs updates silently from then on.
 3. The new APK targets a recent enough API for the device's Android

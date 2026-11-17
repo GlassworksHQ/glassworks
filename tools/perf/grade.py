@@ -36,6 +36,9 @@ UPDATE_LEVELS = RULES["update_levels"]
 BELOW = RULES["below"]
 CAMERA_LEVELS = RULES["camera_levels"]
 CAMERA_PAGES = RULES["camera_pages"]
+# HA's more-info dialog (rubric 3, #211): good when the slowest of a view's dialogs settles within 1 s
+# of the tile's event, fluid within 2 s; premium adds the 60 fps bar on the open animation's frames.
+DIALOG_LEVELS = RULES["dialog_levels"]
 NO_CAMERA = "none"            # a page without streams: every level accepts it
 TASK_ORDER = [lv["level"] for lv in SCROLL_LEVELS] + [BELOW]
 SCROLL_ORDER = TASK_ORDER
@@ -123,6 +126,25 @@ def update_level(run):
     return BELOW
 
 
+def dialog_level(run):
+    """One run's more-info level (rubric 3): from the slowest dialog's time to settled and, for
+    premium, the open animations' frames; "slow" when a dialog never opened or never settled, or the
+    view didn't get to them; None when they weren't measured."""
+    if run and run.get("timed_out"):
+        return BELOW
+    if not run or not run.get("n"):
+        return None
+    if run.get("failed") or run.get("settled_ms") is None:
+        return BELOW
+    for lv in DIALOG_LEVELS:
+        if run["settled_ms"] > lv["settled_max_ms"]:
+            continue
+        if "frames_band" in lv and frame_band(run.get("frames")) not in lv["frames_band"]:
+            continue
+        return lv["level"]
+    return BELOW
+
+
 def camera_level(run):
     """One run's camera level from its worst stream (#174): first frame, frames shown, the longest gap
     and the gaps over 500 ms added up; "slow" when a stream showed no frame; None when the run has no
@@ -186,6 +208,8 @@ def tier_bands(tier, page=None):
         "camera": tier.get("camera_level") if page in CAMERA_PAGES else NO_CAMERA,
         # Rubric 2: the main thread's blocking from the first screen drawn to usable (TBT's bands).
         "blocking": band(tier.get("blocking_ms"), METRICS["blocking_ms"]),
+        # Rubric 3: HA's more-info dialogs, the median of each run's level.
+        "dialog": tier.get("dialog_level"),
     }
 
 
@@ -203,7 +227,8 @@ def limits(bands, level):
 
 
 def grade(tiers, start_ms):
-    """tiers: {light|typical|heavy: {"inp_ms", "load_ms", "scroll_level", "updates_level", "camera_level"}};
+    """tiers: {light|typical|heavy: {"inp_ms", "load_ms", "blocking_ms", "scroll_level", "updates_level", "camera_level",
+    "dialog_level"}};
     start_ms: the restart, process start to the start view usable (protocol 4; engine ready before
     it). Returns the letter, its plain meaning, each page's bands and level, and what is missing. A
     missing measurement fails whatever needs it, and the grade is then provisional."""
@@ -260,7 +285,8 @@ def summary_inputs(summary):
         tiers[t] = {"inp_ms": p.get("inp_ms"), "load_ms": p.get("open_ms"), "blocking_ms": p.get("blocking_ms"),
                     "scroll_level": median_level(scroll_level(r) for r in (p.get("scroll") or {}).get("runs") or []),
                     "updates_level": median_level(update_level(r) for r in (p.get("updates") or {}).get("runs") or []),
-                    "camera_level": median_level(camera_level(r) for r in (p.get("camera") or {}).get("runs") or [])}
+                    "camera_level": median_level(camera_level(r) for r in (p.get("camera") or {}).get("runs") or []),
+                    "dialog_level": median_level(dialog_level(r) for r in (p.get("dialog") or {}).get("runs") or [])}
     return tiers, summary.get("restart_ms")
 
 

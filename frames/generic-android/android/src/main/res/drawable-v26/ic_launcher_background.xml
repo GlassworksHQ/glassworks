@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Made by branding/boot/app_icon.py from site/public/brand/app-icon.svg; don't edit. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M0,0H108V108H0Z"
+        android:fillColor="#FF0A0B0F" />
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="30.96" android:centerY="26.64" android:gradientRadius="50.4">
+                <item android:offset="0" android:color="#3838BDF8" />
+                <item android:offset="1" android:color="#0038BDF8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M0,0H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="79.92" android:centerY="82.8" android:gradientRadius="50.4">
+                <item android:offset="0" android:color="#33A78BFA" />
+                <item android:offset="1" android:color="#00A78BFA" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

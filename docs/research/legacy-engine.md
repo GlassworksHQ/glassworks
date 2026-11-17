@@ -488,7 +488,7 @@ app is never offered a build that needs Android 8, and a current app is never of
 
 | The app | Android 6–7 | What happens (read from `UpdateManager`, tested where marked) |
 |---|---|---|
-| A privileged system app (`INSTALL_PACKAGES` granted: the Mirror, flashed into `/system/priv-app` by Kiln) | Commits with no prompt | Says "without a tap" (`InstallRights`, `InstallRightsTest`). On the Mirror, #398's probe app updated itself this way and kept its permissions (results in #395, `frames/lululemon-mirror/research/privileged-app.md`) |
+| A privileged system app (`INSTALL_PACKAGES` granted: the Mirror, flashed into `/system/priv-app` by Kiln) | Commits with no prompt | Says "without a tap" (`SilentUpdates`, `SilentUpdatesTest`). On the Mirror, #398's probe app updated itself this way and kept its permissions (results in #395, `frames/lululemon-mirror/research/privileged-app.md`) |
 | The device owner | Commits with no prompt | As before (#277) |
 | An app someone installed | Android asks (`STATUS_PENDING_USER_ACTION`) | `UpdateInstallReceiver` shows the confirmation, as on Android 8–11 |
 
@@ -510,7 +510,7 @@ What Phase B added for the Mirror, from the device and not from frame code (`Gen
 
 | What | How | Tested |
 |---|---|---|
-| Portrait glass | `Frame.orientation`: the screen's natural orientation (rotation 0), which `ro.sf.hwrotation=270` makes portrait on the Mirror. `MainActivity` asks for it, either way up, at start. The S1's frame keeps landscape, as its manifest asks | `OrientationTest` (the S1 unchanged; a portrait screen gets portrait); `GenericAndroidDisplayTest` |
+| Portrait glass | `Frame.orientation` is `ANY` on the Mirror: the app follows Android's rotation (`SCREEN_ORIENTATION_FULL_USER`), and the Mirror's Android stands portrait (`ro.sf.hwrotation=270`, auto-rotate off). The S1's frame keeps landscape, as its manifest asks. Phase B first used the screen at rotation 0, which held a Pixel Tablet portrait on its dock (2026-11-16) | `OrientationTest` (the S1, the Pixel Tablet, the Mirror, an unknown tablet, a turn) |
 | No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
 | Reboot | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
 
@@ -522,6 +522,23 @@ What checks it, besides the unit tests of the shared sources:
 | `size-generic` | It builds for arm64-v8a, with its id, minSdk 23, the three system permissions and GeckoView's native code | `pr.yml` |
 | `api23` | No new call above API 23 in the app's own sources | `pr.yml` |
 | The conformance test on API 23 | The core boots on Android 6 with a fake frame and engine, built at minSdk 23 with desugaring (`tools/legacy/api23-emulator.gradle`) | `core-emulators.yml` |
+
+**Desugaring and its licence.** Core library desugaring compiles the `desugar_jdk_libs` classes the app calls
+(`java.time`, `Base64` and friends) into the legacy APK as `j$.*` (863 classes, #408). That code is GPL-2.0 with the
+Classpath exception. The maintainer allowed it on 2026-11-16, in the generic legacy APK and the engine's debug test
+app, as the one exception to the no-GPL rule (`AGENTS.md`, rule 4); it's in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
+Where it goes:
+
+| Build | Desugaring | `desugar_jdk_libs` code in the APK |
+|---|---|---|
+| Generic legacy (`assembleLegacy`) | On | Yes, the classes it calls |
+| Generic current (`assembleRelease`, minSdk 26) | On, because AGP turns it on per module, not per variant | None. D8 adds a 3.8 kB dex of inert API stubs, so the APK isn't byte-identical to one without desugaring (#408) |
+| S1 Kiosk (`:kiosk`) | Off | None |
+| `:kiosk-legacy` (the engine's debug test app) | On | Yes. A test build artifact on branches named `legacy`, never released. Allowed too (maintainer, 2026-11-16) |
+
+Test builds publish the legacy APK (`generic-test-build.yml`, arm64-v8a, 0.1.0 and 0.1.1). There's no release yet:
+`release.yml` doesn't build the generic app or its legacy build, and the app has no release key. The app's legacy
+release line ([above](#updates-on-the-legacy-build-198-phase-c)) is ready for one.
 
 ## How to reproduce
 
@@ -554,5 +571,5 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
 - GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
 - The app itself on an Android 6-7 device: Phase B's code ran only on Robolectric and an API 23 emulator (no
   GeckoView there: the conformance test's engine is blank).
-- A natural-portrait tablet now shows the app portrait (Phase B's rule), where it was always landscape. Fine for the
-  Mirror; whether small portrait tablets want landscape is a setting for later.
+- The Mirror's `Build.MODEL` and `MANUFACTURER` have never been read on the unit. If the Mirror should lock portrait
+  whatever its Android says, it needs a `GenericAndroid.KNOWN` row, and that needs a real reading first.

@@ -131,8 +131,8 @@ Where a new entity's id comes from depends on Home Assistant's version:
 
 Each entity has a category and a default, following the rule in
 [the pane rules](../pane-api/src/main/java/dev/glassworks/README.md#entities). An entity is enabled
-when HA first adds it only if people reach for it day to day. When HA adds a panel, 15 entities
-are on (22 with a two-channel switch base). The rest are created turned off. To turn one on, open
+when HA first adds it only if people reach for it day to day. When HA adds a panel, 16 entities
+are on (23 with a two-channel switch base). The rest are created turned off. To turn one on, open
 **Settings → Devices & services → ESPHome → Aqara S1 Plus**, select *+N entities not shown*,
 open the entity, and turn on *Enabled*.
 
@@ -148,6 +148,7 @@ open the entity, and turn on *Enabled*.
 | App update | `app_update` | core | config | on | HA shows updates only while it is on |
 | Allow setup over the network | `lan_setup` | core | config | on | The way back to setup from a laptop once HA has the panel |
 | IP address | `ip_address` | core | diagnostic | on | People check it |
+| Silent updates | `silent_updates` | core | diagnostic | on | People check it: whether an update needs someone at the panel |
 | Auto brightness | `auto_brightness` | core | config | off | Set once |
 | Idle timeout | `idle_timeout` | core | config | off | Set once |
 | Night idle timeout | `night_idle_timeout` | core | config | off | Set once |
@@ -283,6 +284,7 @@ So on a panel HA already has:
 | text_sensor `App version` | `app_version` | diagnostic |
 | update `App update` (firmware) | `app_update` | the latest GitHub release vs this app; install from HA ([app updates](#app-updates)) |
 | text_sensor `Update status` | `update_status` | diagnostic; e.g. `up to date (1.2.0)`, `1.3.0 available`, `Downloading 1.3.0: 42%`, `Install of 1.3.0 failed: …` |
+| text_sensor `Silent updates` | `silent_updates` | diagnostic; whether app updates install with nobody at the panel, and why: `Yes: …` or `No: …` ([Silent updates](#silent-updates)) |
 | text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
 | text_sensor `Signed in` | `signed_in` | diagnostic; `yes` / `no`: whether a QR sign-in refresh token is stored (never the token) |
 | button `Sign out` | `sign_out` | revokes the refresh token at HA (`/auth/revoke`), deletes it, shows the sign-in screen |
@@ -527,6 +529,43 @@ usual `--ez camera_enabled true` on the main activity.
   6. Any failure, or a phase stuck for 30 min (download) or 10 min (verify/install), ends with
      `in_progress` off and the reason on top of the summary.
 - A debug build can't update to a release: the keys differ, and the entity says so.
+
+### Silent updates
+
+*Silent updates* (`silent_updates`, a diagnostic text sensor, on) says whether an update from Home
+Assistant installs with nobody at the panel, and why (#422). The panel's settings and the Manage page
+show the same answer on the device's page, with how to change it where there's a way. The answer is
+read again every 15 minutes, so allowing "Install unknown apps" shows within that time.
+
+| State | When | How to change a "No" |
+|---|---|---|
+| `Yes: the boot image's root update service installs them` | The S1, with the root update service in its boot image | |
+| `Yes: the app is a system app that may install apps` | `INSTALL_PACKAGES` granted: the Mirror, from Kiln's image | |
+| `Yes: the app is the device owner` | Any Android the app runs on | |
+| `Yes: Android 12 or newer lets the app update itself` | Android 12+, "Install unknown apps" allowed, and the app targets what this Android needs | |
+| `No: this boot image has no root update service` | The S1 with a boot image from before the service | Update the boot image with Kiln |
+| `No: Android <n> asks for a tap on each update` | Android 6 to 11, not device owner, not a system app | Make the app device owner, on a reset device with no accounts ([generic Android](../frames/generic-android/README.md#device-owner)) |
+| `No: Android needs “Install unknown apps” allowed for the app` | Android 12+ | Allow it in Android's settings, under Apps |
+| `No: Android <n> needs an app that targets API <t>, and this one targets <s>` | Android 12+ newer than the app's target allows | A release with a newer target (and "Install unknown apps", when that's off too), or device owner |
+
+The routes come in the order the app takes them (`dev.glassworks.update.SilentUpdates`). Where they
+come from, read 2026-11-16:
+
+- No prompt for the device owner, an installer holding `INSTALL_PACKAGES`, or root: AOSP
+  `PackageInstallerSession`, android-6.0.1_r1 (constructor) to android-15.0.0_r1
+  (`computeUserActionRequirement`).
+- Android 12+ self-update: the
+  [`setRequireUserAction`](https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setRequireUserAction(int))
+  docs, and the same AOSP method. It needs `USER_ACTION_NOT_REQUIRED`, the declared
+  `UPDATE_PACKAGES_WITHOUT_USER_ACTION` permission, the app updating itself (or the installer of
+  record), "Install unknown apps" allowed (`isInstallDisabledForPackage`), and the new APK's
+  targetSdk: 29 on Android 12, 30 on 13, 31 on 14, 33 on 15, 34 on 16, 35 on 17
+  (`Platform.silentInstallMinTarget`). AOSP's public `main` still asks for 33 after Android 15; the
+  app follows the stricter docs. Past 17 it assumes one more level a year.
+- The answer assumes the next release targets what the running app targets: both come from one build.
+- Not covered: an Android 14+ update owner other than the app (a store that set one; Kiln and adb
+  don't), and Android's 30-second throttle between two silent updates of one app
+  (`SilentUpdatePolicy`). Either makes Android ask, and *Update status* then says "waiting for a tap".
 
 ## Voice assistant
 

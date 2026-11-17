@@ -173,6 +173,7 @@ class NotificationsPane(
             criticalUp = false
             stopAlert()
             releaseScreen()
+            heldView = null // ids restart with the next center: a stale one must not skip a hold (#429 verifier)
         }
         releaseSpeaker()
         hub.detach(c)

@@ -308,6 +308,12 @@ Each view runs in phases, one log line per event:
 5. **Scroll.** 6 swipes while the updates still run. Before each, the view jumps back to its top and
    waits 0.5 s still; each swipe is then the same flick down the view, from 85% to 15% of the
    screen's height in 300 ms. The fling is included.
+6. **More-info dialogs** (Clarity v3, #211). Back at the view's top, while the updates still run, HA's
+   more-info dialog of a light, a thermostat and a sensor with its history graph, one after the
+   other: each opened as a tile's tap opens it, timed until it has settled, read for 1 s, closed again
+   and followed until HA says it closed. See [The more-info dialog](#the-more-info-dialog-clarity-v3-211).
+   On the S1 they add about 10 to 15 s to each view (an estimate from the waits, not yet timed on a
+   panel).
 
 ### How Clarity measures HA's frontend
 
@@ -920,6 +926,116 @@ Its HLS copy: 318 ms, 99.4%. One fix came from this check: aiortc asks a public 
 default and held each answer 5 s waiting for it, so the peer has no ICE servers. Not yet run on a
 panel: the S1's first smoke (above) failed on the loopback relay; see the panel plan in #202's PR.
 
+#### The more-info dialog (Clarity v3, #211)
+
+Tapping a tile opens HA's more-info dialog: its controls, its history graph and its attributes. On a
+slow panel that is one of the delays people feel most, so since Clarity v3 every view opens three of
+them after its swipes (`tiers.json` `DIALOG`): a light's (`light.clarity_2`, its brightness controls),
+a thermostat's (`climate.clarity_0`, its temperature control) and a temperature sensor's
+(`sensor.clarity_10`, its history graph over the last 24 hours). None of them is an entity the live
+stream or the taps change, so every view, and every run, opens the same three dialogs. The thermostat
+is on no card: the fixed home has it for its dialog only.
+
+**What HA does** (read from the frontend at the pinned tag, 20261028.5, and checked in Chrome):
+
+| Step | HA | Source |
+|---|---|---|
+| The tap | A tile's tap ends in `handleAction`, which for more-info fires `hass-more-info` with the entity | `src/panels/lovelace/common/handle-action.ts` |
+| The dialog | The more-info mixin shows `ha-more-info-dialog` (the module is loaded at startup; the element is made on its first open in a load, and each domain's controls on their first use) | `src/state/more-info-mixin.ts`, `src/dialogs/make-dialog-manager.ts` |
+| Dialog or sheet | `ha-more-info-dialog` is an `ha-adaptive-dialog`: a bottom sheet (`ha-bottom-sheet`) when the viewport matches `(max-width: 870px), (max-height: 500px)`, else a centred dialog (`ha-dialog`). The mode is picked when HA first puts it on the page. The S1's CSS viewport, 960 x 480 at the default zoom, is under 500 px high: **a bottom sheet** | `src/components/ha-adaptive-dialog.ts` |
+| The animation | The sheet slides in 300 ms (`BOTTOM_SHEET_ANIMATION_DURATION_MS`); the dialog's `--ha-dialog-show-duration` and `--ha-dialog-hide-duration` default to 200 ms. With `prefers-reduced-motion: reduce` the sheet takes 1 ms and the dialog 0 ms | `src/components/ha-bottom-sheet.ts`, `src/components/ha-dialog.ts` |
+| Its events | Either fires `opened` when it starts to show, `after-show` when its show animation has finished and `closed` when its hide animation has | the same files |
+| The graph | The sensor's history (`history/stream`, the last 24 h) drawn by `ha-chart-base` with ECharts, which grows the line over 500 ms (off with reduced motion) | `src/dialogs/more-info/ha-more-info-history.ts`, `src/components/chart/ha-chart-base.ts` |
+| The close | The dialog's X button calls `closeDialog()` | `src/dialogs/more-info/ha-more-info-dialog.ts` |
+
+**How it is timed.** The harness fires the same `hass-more-info` event from the view, so the
+frontend can't tell it from a tile (no touch: the tap's own cost is the tap task's, as opening a view
+is HA's `navigate()` without a touch). From that moment (`t0`) it follows every animation frame
+(`stats.js` `dialogStep`, `dialogTimes`, with a node test for each timing point against a fake
+dialog). HA's `opened`, `after-show` and `closed` count only when the dialog shows the entity
+measured (`ha-more-info-dialog`'s `_entityId`), and the show and the close only from the element whose
+`opened` counted (`stats.js` `dialogEvent`, #410): an earlier dialog HA shows late, while this one is
+measured, isn't this one's.
+
+| Point | What |
+|---|---|
+| `open_ms` | The first frame after HA's `opened`: the open's response, the first frame of its animation (detail) |
+| `shown_ms` | The first frame after `after-show`: the show animation finished |
+| `graph_ms` | The sensor's: the first frame in which its chart is laid out with its data. ECharts then grows the line for 500 ms on its own clock: that isn't waited for, or the graph's own flourish would be most of what a fast device takes (Chrome on a Mac, 2026-11-16: the data on the page at 35 ms, the animation finished at 880 ms, the sheet shown at 315 ms) |
+| **`settled_ms`** | The first frame that is both shown and, for the sensor, has its graph drawn. **Graded**: the slowest of the view's three |
+| `anim` | The frames of the open animation, from the frame it started in to the frame it finished in: their stats (`frameStats`), `dropped` (refreshes missed) and the longest. The premium level asks them to hold 60 fps |
+| `close_ms` | From `closeDialog()` to the first frame after `closed` (detail) |
+
+A dialog that never opened, or never settled, within `DIALOG.waitMs` (20 s) fails its run: it was
+measured, and the panel didn't show it. The harness closes it anyway, so no dialog outlives its view.
+
+The run's record is the slowest to settle, how many failed, and the three animations' frames pooled
+(`report.py` `dialog_run`); a run with a dialog line lost is not measured. The frames are the page's
+own (rAF): they show the main thread. The sheet's slide is a CSS transform, which Gecko can run on its
+compositor while the main thread is busy, so rAF may count a hitch the screen didn't show. That is why
+they decide only premium, as live updates' pacing does.
+
+**No dialog of one view lands on the next (#410).** HA can still show a dialog after its 20 s. Its
+dialog manager holds a show while its history entry for a dialog is the current one and no dialog is
+open (`history.state.dialog` with an empty `OPEN_DIALOG_STACK`: the close's `history.back()` hasn't
+landed), and retries on a timer (`make-dialog-manager.ts` `showDialog`). On the S1's heavy (s1v3a,
+2026-11-16, PR head 0c9cc43c) that `back()` didn't land while heavy was on screen. In all three runs
+its thermostat's and sensor's dialogs, which "never opened within 20 s", reached HA 0.3 to 0.9 s and
+about 5 s after the next view's navigation (the fake's `config/entity_registry/get` for
+`climate.clarity_0`, then `sensor.clarity_10` with its `history/stream`). They opened on that view,
+and the sensor's sheet stayed open over it until that view's own first dialog replaced it (its history
+subscription was ended only then). So light after heavy opened in 9.1 to 11.6 s (1.0 s when first),
+didn't scroll, and its own light dialog "never opened", in runs 2 and 3. Run 1's view after heavy was
+the HLS copy of typical, not graded. Desktop Firefox showed the same when HA's `history.back()` was
+held back (a scratch test, 2026-11-16).
+
+So, untimed, after a view's dialogs and after the restart's warm-up, the harness waits until HA is
+done with them:
+
+1. Each one it asked for was shown: it opened, or HA asked for its entity's registry entry after the
+   event (HA's dialog does that each time it shows one). One that threw before its event was
+   dispatched was never asked for, so it isn't waited for.
+2. None is open: one that opens is closed, and so is one still open at the limit.
+3. No dialog's history entry is current.
+
+It waits at most `DIALOG.settleMs` (30 s). If HA still holds one, the harness moves to the start view
+(after the warm-up, which is on the start view, a new entry for the same view), where the held dialogs
+land and are closed, and waits as long again. The next view then opens from wherever HA is: the start
+view, or the view again when HA's held `history.back()` lands after the move and takes it back (Chrome,
+2026-11-16). Before each view's navigation the harness checks the same, for at most `DIALOG.beforeMs`
+(10 s). A view that would start on a dialog HA still holds isn't measured: it logs an `error` line
+with its nonce, and none of its tasks is graded in that run. The dialogs HA still hadn't shown then
+are carried to the next view's check, each for one dialog's wait and one settle (`waitMs` +
+`settleMs`, 50 s) from when it was first carried (`stats.js` `carriedShows`). One HA shows late is
+still caught; one it never shows refuses only the views in that time, not every view after it (the
+dialog e2e test gives HA a held show after the next view's check would otherwise have passed). The
+wait itself is `stats.js` `settleLoop`: a dialog still open at the limit is closed before it stops,
+and `closed` counts dialogs, not looks.
+
+None of these waits is in any time. What a dialog did within its 20 s stays its own view's result:
+heavy's dialogs that never opened stay heavy's failures. The `done` line's `settle` and the refdash's
+`dialogs_before` say what happened, and report.md says when a view was moved from. The harness also
+opens a view as HA's `navigate()` does, with the history state `{ from }` alone (`from` is the path
+left), so no key of the entry before, such as a `dialog`, rides into the new one; the dialog e2e test
+checks the state after a navigation.
+
+After each restart, before the first view opens, the harness opens and closes each dialog once on
+the start view, untimed (its lines say `stage: "warmup"`): HA makes the dialog's element on its first
+open in a load, and each domain's controls on their first use. So no view pays for that by coming
+first in the run's order, as the start view's cards bring in every card type's code.
+
+**Checked in Chrome** (2026-11-16, verified; `test/dialog.e2e.test.mjs`): HA's frontend on the fake,
+at the S1's viewport (960 x 480 CSS px, ratio 1.5), shows each as a bottom sheet with its 300 ms
+animation and settles in about 0.3 to 0.4 s; the sensor's graph is drawn 20 to 35 ms after the event.
+With `prefers-reduced-motion` the sheet takes 1 ms and they settle within 40 ms. At 1280 x 800 HA
+shows its centred dialog (200 ms), settled in about 0.22 to 0.26 s (two runs). The fake knows every command they send: the
+entity's registry entry (`config/entity_registry/get`, answered as HA answers an entity with none,
+`not_found`) and the sensor's history.
+
+A panel with `prefers-reduced-motion` on (Android's "Remove animations") opens them with no
+animation: the report says so and the grade is provisional, since the S1's default is off and the
+times aren't comparable.
+
 #### Change to screen
 
 - **When a change was sent.** Each change's context id carries its slot in the stream and how late
@@ -973,6 +1089,7 @@ gets an error, which the frontend handles as it would from HA, and the fake logs
 | Live updates | **Change to screen**: per change, from when the fake sent it (from the stream's schedule; see [Change to screen](#change-to-screen)) to the first frame on screen that can show it. The harness notes when each change reached the page (before HA's own listener), when HA changed the card, and the next animation frame (the frame the change is drawn in); that frame can reach the screen one refresh later at the earliest, so the first SurfaceFlinger present after that is taken (frames presented sooner were already on their way). A change with no frame by the window's end counts as the time from it to the window's end, which is conservative: it may show later still (one less than 250 ms from the end isn't counted). A change that never reached the page in the window counts the same way. One SurfaceFlinger's history doesn't reach isn't counted, and if fewer than half are counted the run isn't. The two clocks are tied by the page's log line to within a few ms, so a value can be a refresh off; the bars are 100 and 200 ms. Each run's level is from the p95 over the window's changes; the page takes the median level. **Frame pacing** over the frames that had a change to draw (a rAF interval counts when it overlaps a change, from when it was due to when it ran plus its transition) decides only the premium level (A+) and is reported. A **live check** at the window's start logs whether the toggle and everything that changes are on screen, and the change log proves the updates ran. If something was off screen or there were no targets, the updates aren't graded (and, if off screen, the taps neither). Since protocol 4 the change log is the fake's schedule, so updates that didn't arrive are never a reason to skip the window: they count | Each view; SurfaceFlinger |
 | Open the view | From the navigation to the view (HA's `navigate()`, as a view tab calls it, in the frontend that is already loaded) to the view's head and every card on its first screen **drawn**, on screen (rubric 2; rubric 1 ran to usable: drawn and the main thread free; see [Open the view](#open-the-view-a-navigation-in-the-loaded-frontend) and [Usable](#usable)). The times come from the page's own clock, tied to logcat's by its log line. If the view never says it was usable, or no frame reached the screen after it, it is "not measured", never 0. (Protocols 1 to 3, and protocol 4 as first written, loaded the whole page for each dashboard) | Each view; SurfaceFlinger |
 | Blocking after the open | Rubric 2: from the first screen drawn to usable (the main thread free for 500 ms), each animation frame's time past 50 ms, added up: Total Blocking Time measured on frames ([Usable](#usable)). A view that never became usable within the runner's deadline blocks for all of it | Each view's page |
+| More-info dialog | Rubric 3: from the event a tile's tap fires to the dialog settled (its show animation finished and, for the sensor, its history graph drawn), the slowest of a light's, a thermostat's and a sensor's; per run, then the median level. A dialog that never opened or settled within 20 s fails the run, and so does a view that didn't get to them. The open animation's frames decide only premium ([The more-info dialog](#the-more-info-dialog-clarity-v3-211)) | Each view's page |
 | Restart | From the app's process start (`Start proc` in logcat) to the reference dashboard's start view being **usable**, as for open the view: the kiosk comes back to it by itself, because the graded part points its dashboard setting there. This is HA's cold load: the app, the websocket, the registries, every card type's code and the first view. Once per run, for the whole frame. The engine being ready (GeckoView's own first page, `about:blank`) is reported, not graded (`engine_ready_ms`). See [Restart: back to a usable dashboard](#restart-back-to-a-usable-dashboard) | logcat; the restart page |
 
 Each graded run is one restart back to the start view, then the four reference views in the run's
@@ -1004,6 +1121,7 @@ and lags the compositor's first scrolled frame.
 
 | What | How |
 |---|---|
+| More-info detail | Per view: each dialog's response (the first frame of its open), when its animation finished, when its graph was drawn, the refreshes its open animation missed and its longest frame, the close, and whether HA showed a bottom sheet or a dialog (Clarity v3) |
 | Animations it can handle | The animation test page's ladder: five families of animated elements, each doubling from 1 to 1024 (CSS transform, CSS opacity, SVG, canvas 2D, HA-like tiles whose numbers change every frame). The report gives the largest count held at 60 fps and at 30 fps. The same page has a scripted scroll stage and a JS workload (an HA-like state update for 400 entities, checked by a checksum) |
 | Android's TTID | The `Displayed …: +Nms` line of each restart |
 | CPU clock per view | Every core's `scaling_cur_freq` every 5 s (`GW_PERF_CPU_CLOCK_S`) from a view's open to its done, and each core's `cpuinfo_max_freq` once, when the sampler starts (read-only `cat`s of `/sys/devices/system/cpu/cpu*/cpufreq/` over adb). The sampler runs while the SurfaceFlinger poller is paused too: it is the one adb call inside timed windows, on purpose, and costs a fraction of a percent of a core. report.md gives each view's median and range in MHz beside the CPU's top clock, or each core's median when they differ (a big.LITTLE CPU's clusters), so a capped or boosted CPU shows (#244: the S1's power HAL holds 1.2 of its 1.608 GHz). The run's file has `cpu_khz` (`[view, time, {cpu number: kHz}]`, the numbers from the sysfs paths, so cpu10 is never taken for cpu2; a reading that crossed into another view, a recovery or the run's end is dropped), `cpu_max_khz` (`{cpu number: kHz}`) and `cpu_clock_s`; report.json has each tier's `cpu_mhz` (cores pooled) and `cpu_mhz_by_core` (by cpu number), and `graded.reference.cpu_max_mhz` and `cpu_clock_s` |
@@ -1075,8 +1193,20 @@ the two middles for an even count):
 | Open the view (the first screen drawn) | ≤ 2.5 s, or up to 4 s | the same | the same |
 | Blocking after it (rubric 2) | ≤ 200 ms, or up to 600 ms | the same | the same |
 | Cameras (typical and heavy only; over WebRTC since protocol 6) | as good | first frame within 2 s, at least 95% of frames shown, no gap over 500 ms | first frame within 4 s, at least 85% shown, stalls under 1 s in all |
+| More-info dialog (rubric 3) | good, and the open animation's frames hold the 60 fps bar | the slowest dialog settled within 1 s | within 2 s |
 
-Below fluid, a measured scroll, live-update or camera level is `slow`. Over WebRTC (graded) a
+**The more-info dialog's bars** (rubric 3, #211, project choices with their sources, set before any
+frame had a dialog result). Good is 1 s: [RAIL](https://web.dev/articles/rail), "beyond 1000
+milliseconds (1 second), users lose focus on the task they are performing". Fluid is 2 s, RAIL's goal
+for a later load ("under 2 seconds"): the dialog fetches its history and builds its content, as a
+small load does. HA's own animation is the floor: 300 ms for the S1's bottom sheet, 200 ms for the
+centred dialog (both settled within 0.4 s in Chrome on a Mac). Premium asks the open animation's frames
+for the 60 fps bar (frames band good), as live updates' premium asks it of theirs; the frames grade
+nothing else, because they are the main thread's ([The more-info
+dialog](#the-more-info-dialog-clarity-v3-211)). The close is reported, not graded: it fetches and
+builds nothing, and its 300 ms is HA's hide animation.
+
+Below fluid, a measured scroll, live-update, camera or more-info level is `slow`. Over WebRTC (graded) a
 camera's gaps and stalls are the receiver's own counts ("What is measured"). Over HLS
 they come from `requestVideoFrameCallback`, which a busy main thread delays while the compositor
 goes on showing frames, so there a stall can be the page's, not the stream's; each stream's
@@ -1146,7 +1276,8 @@ is 83; the test caps it at 85), plus one when the grade is provisional:
    once, with one rounded number, on the lightest page it fails on, and ranked by how far that
    number is past its fluid bar (rubric.json: scroll 30 fps and 67 ms, a change 200 ms, a tap
    200 ms, open the view 4 s, a camera's first frame 4 s, 85% of its frames shown and 1 s of
-   stalls). So the number shown is why it was picked. The lightest page is on purpose: the text
+   stalls, a more-info dialog 2 s: from the runs whose level fails, the late ones' median time, or
+   "doesn't open a more-info dialog fully" when at least as many of them never settled). So the number shown is why it was picked. The lightest page is on purpose: the text
    names the first dashboard that fails, not the worst, so heavy's bigger misses stay in the body. Only a number that fails is quoted: a scroll
    with enough frames on average but uneven ones gives its slowest frames, and a camera its first
    frame, its frames shown or its stalls, whichever is furthest past, from the runs whose camera
@@ -1296,7 +1427,8 @@ run, and the grade is provisional.
 - **Screen brightness** doesn't change the work the app does. Over a long run it can add heat.
 - The reference dashboards use HA's default card types. Custom cards, cameras and maps are heavier
   than the heavy page.
-- The tap test taps one toggle. Real interactions (opening a more-info dialog) do more work.
+- The tap test taps one toggle. Since Clarity v3 the more-info dialog is graded too, from the event
+  the tap fires: three dialogs of HA's own, not a custom card's.
 - The device's busy share at idle includes the runner's own `dumpsys` calls. While a page goes
   live, is tapped or scrolls, the runner doesn't call `dumpsys`.
 - The memory budget's `ok` is `false` if any check fails. It is `null` when none fails but a
@@ -1512,7 +1644,7 @@ spread of the `all-on` samples, the report says "within noise". On the S1:
 | Key | What |
 |---|---|
 | `schema` | `"glassworks.perf/4"`. A field that changes meaning gets a new version (`/4`, 2026-11-12: `grade.bands` carries scroll and live-update levels, rubric v5) |
-| `clarity` | The Clarity version the pages ran, as they recorded it: `2` now, `1` for a v1 run (rebuilt by v2's code it stays `1`, and is re-measured); `null` for a report from before v1 (pre-release) or of mixed versions, which the site shows as "re-measure". See [Versions](#versions) |
+| `clarity` | The Clarity version the pages ran, as they recorded it: `3` now, `2` or `1` for an earlier run (rebuilt by v3's code it keeps its own, and is re-measured); `null` for a report from before v1 (pre-release) or of mixed versions, which the site shows as "re-measure". See [Versions](#versions) |
 | `protocol_version` | The measurement protocol the pages ran (`null` if the runs disagree). See [Protocol and rubric versions](#protocol-and-rubric-versions) |
 | `measured_on` | The run's date (UTC, from the computer that ran it) |
 | `runs_attempted` | Graded runs attempted (`plan.json`), the count each band is over |
@@ -1523,8 +1655,8 @@ spread of the `all-on` samples, the report says "within noise". On the S1:
 | `webrtc_transport` | Protocol 7: `transport` (`lan-udp`, `lan-turn`, `adb`), `chosen_by` (`auto`, `flag`), `reason` (lanprobe.py's), `limited` (over adb with heavy's cameras measured: why heavy's camera result may be the link's; else `null`). `null` before protocol 7 |
 | `fake_ha` | What the fake Home Assistant's log (`fakeha.jsonl`) says: `commands` (the frontend sent), `unknown` and `failed` (per command; any makes the grade provisional), `stream_sent`, `stream_late_max_ms` (the graded views' streams only; over 200 ms, one update interval, is provisional), `stream_late_detail_max_ms` (the views that aren't graded: the HLS copies and a warm-up; detail, a line in report.md, never provisional: #205, s1rtc8's one 2 s burst on typical-hls). Each change belongs to the view open when it was sent. `null` without the log, which is provisional |
 | `ram` | Not graded. RAM on the reference dashboards (`null` if none was sampled): `reference_idle` (`samples`, `app_pss_kb`, `by_role_pss_kb`, `main_kb`, `device_used_pct`, `cpu_app_pct_of_core`), `graded_peak` (`samples`, `app_pss_kb`, `by_role_pss_kb`, `app_rss_hwm_kb`, `mem_available_min_kb`), `panes` (each: `id`, `method` `on-alone`, `samples_on`, `samples_off`, `pss_kb`, `pss_tolerance_kb` (`null` under two samples a side), `pss_measurable`, `by_role_pss_kb`, `cpu_pct_of_core`, `cpu_tolerance_pct`, `cpu_measurable`, `verified`, `excluded`, `boot_samples_on` and `boot_samples_off` (samples `:boot` ran in, left out of the share), `boot_pss_kb` (its median PSS, or `null`), and `off_by: "mute"` when Assist was off by its mute alone; or `id`, `method` and `error` when no sample ran as asked), `screen_off_samples` (idle samples the screen went off in, left out), `panes_waiting` (`id`, `waiting_on`, `note`; empty since #67, kept because this version only adds fields), `panes_not_switched` (`id`, `why`, `note`: a pane not measured on its own, and why), `budget` (the frame's `ram` checks) and `pane_budget` (per pane: `value_kb`, `budget_kb`, `tolerance_kb`, `measurable` (three samples a side and a tolerance at most a quarter of the budget), `ok` (`null` when not measurable: read it as unknown, not as over)). See [RAM](#ram) |
-| `grade` | `grade` (`null` when refused), `meaning`, `headline`, `levels` (per page: `premium`, `good`, `fluid` or `null`), `bands` (per page: `tap` and `load` bands, `scroll` and `updates` levels), `start`, `capped_by_start`, `viewport` (`state`, `reason`), `refused`, `provisional`, `provisional_reasons`, `missing`, `rubric_version`. Computed from `graded` only. `provisional_reasons` are measurement facts: the kiosk's own page never finished loading in a graded run; graded runs failed or are missing; the restart or a task was measured in fewer runs than attempted; a page's live changes rest on a loose clock tie; no swipe ran during the live updates; scrolling rests on rAF only; the fake Home Assistant's log is missing, or it didn't know or failed a command, or sent a graded view's change late; page lines didn't parse or never arrived whole (`bad_page_lines`); swipes were answered with no scroll step back (`lost_scroll_steps`); "measured with a pre-release version of Clarity (protocol N): re-measure"; the pages ran another protocol; "<page>: N camera run(s) whose stalls couldn't be measured (no freeze counts from the receiver, or no frames to measure gaps over): n/a, not measured"; the viewport couldn't be checked |
-| `graded` | `reference`: `start_ms`, `restart_to` (`usable` since protocol 4, else `engine-ready`), `engine_ready_ms` (detail), `start_errors`, `engine_uris`, `android_ttid_ms` (not graded), `launch`, `own_page_states`, `orders` (each run's page order), `warmups`, `protocols`, `bad_page_lines` (page lines that didn't parse or never arrived whole), `lost_scroll_steps` (swipes answered with no scroll step back), `errors`, `runs`, `graded_runs`, `per_run` (each with its `order` and `between`, whether the screen was still before each page opened), and `tiers` with, per page: `inp_ms`, `load_ms` (rubric 2: to the first screen drawn), `blocking_ms` (rubric 2: from the draw to usable, graded), `usable_ms` (detail), `load_errors`, `paint_to_screen_ms`, `scroll` (p95, jank, frozen, fps, n), `scroll_levels` (per run) and `scroll_level` (graded), `scroll_bands` and `scroll_band` (the 60 fps rule, detail), `scroll_runs` (each run's frame stats), `scroll_sources`, `scroll_limited_by`, `scroll_raf_only` (per run), `sf_swipes`, `swipes_moved`, `swipes_at_edge` (left out), `swipes_during_updates` (per run), `scroll_errors`, `scrolled_px`, `first_scroll_ms`, `sf_valid` (per run), `latency_p95_ms` and `latency_median_ms` (change to screen), `updates_levels` (per run) and `updates_level` (graded), `updates_runs` (each run's latency and change frames), `updates` and `updates_bands` (pacing of the frames that had a change to draw, detail), `updates_all_p95_ms` (every frame of the pacing stretch, detail), `updates_errors`, `camera_runs` (each run's worst stream and its `path`, with each stream as `detail`, and as detail `fetches` (the HLS fetch times) and `media` (the decoders the view got, from logcat)), `camera_levels` (per run) and `camera_level` (graded), `camera_fallback` (protocol 6, detail: `path` `hls`, `runs` (each run's worst HLS stream on the view's HLS copy, with its `view`, `media` and `error`), `levels` and `level` as the camera bars would give them; `null` on a page without streams), `state_ticks`, `positions` and `by_position` (the page's results at each place in the order), `fcp_ms`, `nodes`, `cards`, `viewport` |
+| `grade` | `grade` (`null` when refused), `meaning`, `headline`, `levels` (per page: `premium`, `good`, `fluid` or `null`), `bands` (per page: `tap`, `load` and `blocking` bands, `scroll`, `updates`, `camera` and, since Clarity v3, `dialog` levels), `start`, `capped_by_start`, `viewport` (`state`, `reason`), `refused`, `provisional`, `provisional_reasons`, `missing`, `rubric_version`. Computed from `graded` only. `provisional_reasons` are measurement facts: the kiosk's own page never finished loading in a graded run; graded runs failed or are missing; the restart or a task was measured in fewer runs than attempted; a page's live changes rest on a loose clock tie; no swipe ran during the live updates; scrolling rests on rAF only; the fake Home Assistant's log is missing, or it didn't know or failed a command, or sent a graded view's change late; page lines didn't parse or never arrived whole (`bad_page_lines`); swipes were answered with no scroll step back (`lost_scroll_steps`); "measured with a pre-release version of Clarity (protocol N): re-measure"; the pages ran another protocol; "<page>: N camera run(s) whose stalls couldn't be measured (no freeze counts from the receiver, or no frames to measure gaps over): n/a, not measured"; the viewport couldn't be checked |
+| `graded` | `reference`: `start_ms`, `restart_to` (`usable` since protocol 4, else `engine-ready`), `engine_ready_ms` (detail), `start_errors`, `engine_uris`, `android_ttid_ms` (not graded), `launch`, `own_page_states`, `orders` (each run's page order), `warmups`, `protocols`, `bad_page_lines` (page lines that didn't parse or never arrived whole), `lost_scroll_steps` (swipes answered with no scroll step back), `errors`, `runs`, `graded_runs`, `per_run` (each with its `order` and `between`, whether the screen was still before each page opened), and `tiers` with, per page: `inp_ms`, `load_ms` (rubric 2: to the first screen drawn), `blocking_ms` (rubric 2: from the draw to usable, graded), `usable_ms` (detail), `load_errors`, `paint_to_screen_ms`, `scroll` (p95, jank, frozen, fps, n), `scroll_levels` (per run) and `scroll_level` (graded), `scroll_bands` and `scroll_band` (the 60 fps rule, detail), `scroll_runs` (each run's frame stats), `scroll_sources`, `scroll_limited_by`, `scroll_raf_only` (per run), `sf_swipes`, `swipes_moved`, `swipes_at_edge` (left out), `swipes_during_updates` (per run), `scroll_errors`, `scrolled_px`, `first_scroll_ms`, `sf_valid` (per run), `latency_p95_ms` and `latency_median_ms` (change to screen), `updates_levels` (per run) and `updates_level` (graded), `updates_runs` (each run's latency and change frames), `updates` and `updates_bands` (pacing of the frames that had a change to draw, detail), `updates_all_p95_ms` (every frame of the pacing stretch, detail), `updates_errors`, `camera_runs` (each run's worst stream and its `path`, with each stream as `detail`, and as detail `fetches` (the HLS fetch times) and `media` (the decoders the view got, from logcat)), `camera_levels` (per run) and `camera_level` (graded), `camera_fallback` (protocol 6, detail: `path` `hls`, `runs` (each run's worst HLS stream on the view's HLS copy, with its `view`, `media` and `error`), `levels` and `level` as the camera bars would give them; `null` on a page without streams), Clarity v3's more-info dialogs: `dialog_runs` (each run's `n`, `failed`, `settled_ms` (the slowest; `null` when one failed), `frames` (the open animations' frame stats, pooled), and as detail `open_ms`, `close_ms`, `longest_frame_ms`, `dropped`, `modes`, `reduced_motion`, `errors` and each dialog; `{"timed_out": true}` when the view didn't get to them), `dialog_levels` (per run) and `dialog_level` (graded), `dialog_settled_ms`, `dialog_open_ms` and `dialog_close_ms` (spreads), `dialog_errors`, `dialog_settles_away` (#410, detail: each run's `settle` in which the view was left for the start view); `state_ticks`, `positions` and `by_position` (the page's results at each place in the order), `fcp_ms`, `nodes`, `cards`, `viewport` |
 | `detail` | `synthetic`, the animation test page: `ladder` (per family: `held_60fps`, `held_30fps`, `…_at_top`), `steps_without_sf`, `screen_off_runs` (left out of the rest), `scroll`, `scroll_moved`, `js_burst_ms`, `js_band`, `js_checksum_ok`, `page_lcp_ms`, `page_lcp_from`, `per_run` |
 | `real_use` | Not graded. Your dashboard: `app_start_to_dashboard_ms`, `android_ttid_ms`, `launch`, `stop_to_dashboard_ms`, `dashboard_load_ms`, `dashboard_page_stop_ms`, `settle_how`, `errors`, `screen_off_samples`, `per_run`. Then `idle`, `peak`, `memory` (`idle`, `peak`, `budget`) and `panes` |
 
@@ -1546,7 +1678,7 @@ from real use, and nothing device-unique.
 |---|---|
 | `schema` | `"glassworks.perf-summary/3"` |
 | `test` | The test's name, `"Clarity"` (`rubric.json` `name`), so a summary says what measured it |
-| `clarity` | Clarity's version, `2` (`1` for v1, which v2's rules re-measure). Without it the summary is pre-release: `gradeSummary` returns `re-measure` ([Versions](#versions)) |
+| `clarity` | Clarity's version, `3` (`2` and `1` for v2 and v1, which v3's rules re-measure). Without it the summary is pre-release: `gradeSummary` returns `re-measure` ([Versions](#versions)) |
 | `protocol_version` | How it was measured. A site grades it only with a rubric for the same protocol |
 | `report_schema` | The report it came from, `"glassworks.perf/4"` |
 | `measured_on` | The run's date, `YYYY-MM-DD` (UTC) |
@@ -1554,7 +1686,7 @@ from real use, and nothing device-unique.
 | `app_version` | The kiosk's version name |
 | `viewport` | `css` (CSS px), `dpr` (device pixel ratio), `default_dpr` (density / 160) |
 | `runs` | `attempted`, `graded` |
-| `pages` | Per page (`light`, `typical-nocam`, `typical`, `heavy`): `inp_ms` (median), `open_ms` (median; rubric 2: to the first screen drawn), `blocking_ms` (median, rubric 2), `usable_ms` (median, detail; rounded), the graded medians (`inp_ms`, `open_ms`, `blocking_ms`) unrounded since `/3`, `scroll` (`fps`, `p95_ms`, `scrolled_px`: medians; `sf_valid` per run; `runs`: each run's `p95_ms`, `jank_pct`, `frozen_pct`, `fps`, `n`), `updates` (`latency_p95_ms`, `latency_median_ms`: medians of change to screen; `pacing_p95_ms`, detail; `runs`: each run's `latency_n`, `latency_median_ms`, `latency_p95_ms` and `frames`, the stats of the frames that had a change to draw), `scroll.during_updates` (per run, how many swipes ran during the updates), `camera` (`runs`: each run's worst stream's `first_frame_ms`, `shown_pct`, `max_gap_ms`, `stall_total_ms`, and over WebRTC `uncovered_ms` (the most of the window its receiver counts left out), with `stalls_reported` false when the stalls are n/a; empty on a page without streams; `path`: what the graded streams played over, `web_rtc` since protocol 6, `null` without streams; `fallback`: the page's cameras over HLS, detail, `path` and `runs` as above, `null` before protocol 6 and without streams; a run's record is `{"timed_out": true}` with the numbers `null` when the page didn't finish before its streams were measured), `timed_out_runs` (protocol 7: in how many runs the page didn't finish within the runner's deadline; their unmeasured tasks are in the runs as failing: `inp_ms` at the deadline, `blocking_ms` at it when the main thread was never free, `open_ms` at it only when the view was never drawn (drawn but never free keeps its real open), `{"timed_out": true}` records for `scroll`, `updates` and `camera`), `runs` (how many runs measured `tap`, `scroll`, `updates`, `open`, `blocking`, `camera`) |
+| `pages` | Per page (`light`, `typical-nocam`, `typical`, `heavy`): `inp_ms` (median), `open_ms` (median; rubric 2: to the first screen drawn), `blocking_ms` (median, rubric 2), `usable_ms` (median, detail; rounded), the graded medians (`inp_ms`, `open_ms`, `blocking_ms`) unrounded since `/3`, `scroll` (`fps`, `p95_ms`, `scrolled_px`: medians; `sf_valid` per run; `runs`: each run's `p95_ms`, `jank_pct`, `frozen_pct`, `fps`, `n`), `updates` (`latency_p95_ms`, `latency_median_ms`: medians of change to screen; `pacing_p95_ms`, detail; `runs`: each run's `latency_n`, `latency_median_ms`, `latency_p95_ms` and `frames`, the stats of the frames that had a change to draw), `scroll.during_updates` (per run, how many swipes ran during the updates), `camera` (`runs`: each run's worst stream's `first_frame_ms`, `shown_pct`, `max_gap_ms`, `stall_total_ms`, and over WebRTC `uncovered_ms` (the most of the window its receiver counts left out), with `stalls_reported` false when the stalls are n/a; empty on a page without streams; `path`: what the graded streams played over, `web_rtc` since protocol 6, `null` without streams; `fallback`: the page's cameras over HLS, detail, `path` and `runs` as above, `null` before protocol 6 and without streams; a run's record is `{"timed_out": true}` with the numbers `null` when the page didn't finish before its streams were measured), `timed_out_runs` (protocol 7: in how many runs the page didn't finish within the runner's deadline; their unmeasured tasks are in the runs as failing: `inp_ms` at the deadline, `blocking_ms` at it when the main thread was never free, `open_ms` at it only when the view was never drawn (drawn but never free keeps its real open), `{"timed_out": true}` records for `scroll`, `updates` and `camera`), `runs` (how many runs measured `tap`, `scroll`, `updates`, `open`, `blocking`, `camera`, and `dialog` since Clarity v3), `dialog` (Clarity v3, added within `/3`, and only in a summary of a report that has it: `settled_ms`, the median of each run's slowest; `runs`: each run's `n`, `failed`, `settled_ms` and `frames` (`p95_ms`, `jank_pct`, `frozen_pct`, `fps`, `n`), or `{"timed_out": true}`) |
 | `restart_ms` | Process start to a usable reference dashboard (median, unrounded since `/3`; to engine ready before protocol 4) |
 | `gaps` | Measurement facts that leave it short: "1 of 3 graded runs failed or are missing", "heavy: scrolling rests on rAF only in 1 run(s)…". Empty when complete |
 | `not_comparable` | Why the numbers can't be compared with other frames' (e.g. not at the default zoom), or `null` |
@@ -1613,9 +1745,23 @@ fixed 30 s from the view going live; the harness's own waits are paced by animat
 busy main thread delays less than its timers; the taps wait 5 s each; and the runner's per-view
 deadline covers only a view that never became usable ("A view the panel can't finish"). Rubric
 v10 and v11 (2026-11-13) split typical into typical without and with its camera and made each letter
-add one page.
+add one page. Since Clarity v1 the numbers start again (below): protocol 2 and rubric 2 are Clarity
+v2's (the blocking time), protocol 3 and rubric 3 Clarity v3's (the more-info dialog).
 
 ### Versions
+
+**Clarity v3 (#211): protocol 3, rubric 3.** Opening HA's more-info dialog is a graded task (the
+maintainer's decision, 2026-11-13: add it). Protocol 3 opens a light's, a thermostat's and a sensor's
+dialog on each view after its swipes and times each to settled, with the frames of its open animation
+([The more-info dialog](#the-more-info-dialog-clarity-v3-211)); rubric 3 grades the slowest of them
+(good within 1 s, fluid within 2 s, premium with the open animation at 60 fps) in every level, as
+every other task. Nothing else moved: no threshold, no level or letter rule of the other tasks, and the
+views, the swipes, the updates and the taps run as in protocol 2, the dialogs coming after them. The
+fake Home Assistant's home gains the thermostat (on no card) and HA's answer to
+`config/entity_registry/get`. A v2 or v1 result didn't measure the dialog, so it can't be graded by
+rubric 3: `gradeSummary` returns `re-measure` ("measured with Clarity v2; these rules are Clarity v3's"),
+and report.py makes it provisional. The bars were set from their sources before any frame had a
+dialog result; a v3 run of the S1 is still to come.
 
 **Clarity v2 (2026-11-14): protocol 2, rubric 2.** Rubric 1 graded "open the view" (the navigation
 to *usable*: the first screen drawn **and** the main thread free) against LCP's bands. LCP is a
@@ -1676,6 +1822,12 @@ the report and summary are built to carry none, but a run directory's other file
 `summary.py` on the `report.json` beside it, with the committed `report` URL, and fails if the output
 differs by a byte. A hand edit, or a `report.json` changed without regenerating the summary, fails
 CI (#115).
+
+**A published result of an earlier Clarity version stays as it was published** until the frame's
+next run replaces it, and the maintainer decides when that is. The site grades it with the current
+rules, so it shows "Re-measure", not a letter: since Clarity v3, the S1's v2 result (s1rtc10) does.
+`summary.py` now refuses that report as complete, so `test_summary.py` exports it marked and checks
+every byte but `complete`, which stays as it was decided under its own version's rules.
 
 ### Showing the grade
 
@@ -1739,7 +1891,7 @@ load) and `t`:
 | `t` | Fields |
 |---|---|
 | `drawn` | Protocol 2: a reference view's first screen drawn, logged at once: `tier`, `protocol`, `clarity`, `nav_ms`, `usable` (`rendered_tick_ms`, `first_screen_cards`, `head_cards`, as in `refdash`), `origin_epoch_ms`, `epoch_ms`. The runner keeps it as the view's `drawn`; `refdash` follows once the main thread is free |
-| `refdash` | A reference view, usable: `tier` (the view: `start` for the restart page, or `light`, `typical`, `heavy`), `protocol`, `clarity` (`2`; v1: `1`), `frontend` (HA's frontend release), `nodes`, `cards` (the view's cards), `cards_rendered` (how many HA had built when it was usable), `css` (viewport), `dpr`, `scroll_height`, `fcp_ms`, `lcp_ms`, `load_ms` (the frontend's own load: the restart page only, else `null`), `nav_ms` (the navigation to the view; 0 for the frontend's own load), `video_caps` (`mse_h264`, `native_hls`, `rvfc`, `webrtc`: which camera player paths the engine offers), `usable` (`rendered_tick_ms`, the frame in which it was drawn; `first_screen_cards`; `head_cards`, the 10 head cards it waited for; `interactive_ms`, when the main thread's free stretch began; `busy_ms`, protocol 8, the longest a probe waited each second until then; protocol 2: `blocking_ms`, the frames' time past 50 ms from the draw to usable, `long_frames`, how many frames were over 50 ms, and `longest_frame_ms`) (all after `performance.timeOrigin`), `origin_epoch_ms` and `epoch_ms`, which tie the page's clock to logcat's |
+| `refdash` | A reference view, usable: `tier` (the view: `start` for the restart page, or `light`, `typical`, `heavy`), `protocol`, `clarity` (`3`; v2: `2`, v1: `1`), `frontend` (HA's frontend release), `nodes`, `cards` (the view's cards), `cards_rendered` (how many HA had built when it was usable), `css` (viewport), `dpr`, `scroll_height`, `fcp_ms`, `lcp_ms`, `load_ms` (the frontend's own load: the restart page only, else `null`), `nav_ms` (the navigation to the view; 0 for the frontend's own load), `video_caps` (`mse_h264`, `native_hls`, `rvfc`, `webrtc`: which camera player paths the engine offers), `usable` (`rendered_tick_ms`, the frame in which it was drawn; `first_screen_cards`; `head_cards`, the 10 head cards it waited for; `interactive_ms`, when the main thread's free stretch began; `busy_ms`, protocol 8, the longest a probe waited each second until then; protocol 2: `blocking_ms`, the frames' time past 50 ms from the draw to usable, `long_frames`, how many frames were over 50 ms, and `longest_frame_ms`) (all after `performance.timeOrigin`), `origin_epoch_ms` and `epoch_ms`, which tie the page's clock to logcat's |
 | `warmup` | `stage`, `n`. The page goes live; the runner stops polling SurfaceFlinger |
 | `measure` | `stage`, `n`. A window starts. For `updates`, the live check: `moving`, `offscreen`, `targets`, `update_every_ms` |
 | `step` | `stage` (`updates`, `scroll`, or a ladder family), `n`, `window_ms` (the window's length on the page's clock), `raf` (frame stats). For `updates`: `t0` (the window's start on the page's clock), `pacing_ms` (the stretch `raf_times` covers), `from` (`sent`: the changes start when the fake sent them), `stream_at_ms` (when the harness asked for the stream), `raf_times` and `changes` (`[sent, arrived, transition ms, kind, tick]`: every change the fake sent up to the window's end, from its schedule; `arrived` and `tick` are `null` for one that hadn't reached the page when the window was logged; kind 0 a sensor value, 2 an on/off change (1, the clock, was protocol 3's); tick, the animation frame it was drawn in), all ms after `t0`. For `scroll`: `scrolled_px`, `hit_edge`, `changes_during`, `first_scroll_ms`, `raf_intervals`. The runner reads SurfaceFlinger |
@@ -1747,8 +1899,10 @@ load) and `t`:
 | `swipe-ready` | `n`, `x`, `y1`, `y2` (device pixels), `ms`. The runner swipes once |
 | `input` | `stage`, `method`, `taps`, `values`, `inp_ms` |
 | `camera` | Views with streams (#174), logged before the swipes: `stage`, `path` (`web_rtc` or `hls`, protocol 6), `window_ms`, `t0_ms` and `nav_ms` (the window's start and the navigation, page clock; protocol 8), `fps`, `expected`, `found`, and per stream `w`, `h`, `first_frame_ms` (after the navigation), `shown_pct`, `max_gap_ms`, `stall_total_ms`, `frames` (presented, from the decoder), `callbacks` (`requestVideoFrameCallback`), `decoded`, `dropped`, `waiting`, `source`, `stall_presented` (frames presented inside the stalls, from rVFC's `presentedFrames`; `null` without rVFC), `gaps_source` (`webrtc`, `webrtc (bound)`, `webrtc (no freeze counts: n/a)`, `rvfc` or `timeupdate`: where `max_gap_ms` and `stall_total_ms` come from), `stalls_at` (where the stalls were, page clock), `callback_gaps` (WebRTC, protocol 8: the frame callbacks' `max_gap_ms`, `stall_total_ms`, `presented`, `callbacks`, `stalls_at`; detail), `span_ms` (WebRTC: the receiver samples' span, which shown is over), `path`, `others` (the camera's other players: `path`, `first_frame_ms`, `connected`), `webrtc` (WebRTC only: `stats.js` `webrtcStats`); then `fetches` (`segment` and `playlist`: `n`, `queued_ms`, `wait_ms`, `total_ms`, each `median`, `p95`, `max`; `segment.kb`, `segment.arrival_gap_max_ms`; `streams`) |
+| `dialog` | Clarity v3 (#211), one per more-info dialog, after the swipes (and after a restart with `stage` `warmup`, not graded): `stage` (the view), `n`, `of`, `entity`, `kind` (`light`, `climate`, `sensor`), `graph` (whether it has a history graph), `mode` (`bottom-sheet` or `dialog`, as HA showed it), `show_duration_ms` (its show animation, as the page computed it), `reduced_motion`, `opened`, `open_ms`, `shown_ms`, `graph_ms`, `settled_ms` (all after the tile's event; `null` when it didn't happen; `settled_ms`, graded, unrounded), `anim` (the open animation's frame stats), `anim_intervals`, `dropped` (refreshes missed), `longest_frame_ms`, `close_ms`, `close_longest_ms`, `error` and `close_error` (`null`, or why it didn't open, settle or close in time) |
 | `hello`, `js` | Animation test page: `ua`, `dpr`, `css`, `cores`, `load`; the JS workload's `runs`, `median_ms`, `p95_ms`, `checksum`, `expected` |
-| `done`, `error` | `message` on error. At `done` the page has stopped its updates |
+| `settle` | #410: a view whose dialogs HA still held after `DIALOG.settleMs` on it, logged before the move to the start view: `stage`, `ms`, `clean` (`false`), `closed` (dialogs found open and closed), `pending` (the entities HA hadn't shown), `open`, `history` (a dialog's history entry still current). After a restart's warm-up (`stage` `warmup`, no nonce) it is logged again if HA still held one after the move too. The runner keeps those in `refstart-<k>.json` under `warmup_settle`: a `settle` line with no nonce is always the restart's, even when it comes after the runner has opened the first view, as a held warm-up dialog's does (`perfrun.py` `handle`; `test_runner` `FAKE_SETTLE_VIA=warmup`) |
+| `done`, `error` | `message` on error. At `done` the page has stopped its updates. A view's `done` has `settle` (#410, detail, untimed): how HA got done with its dialogs (`ms`, `clean`, `closed`, `pending`, `open`, `history`; with `via: "start"`, `first` (the view's own wait) and `at` (the view HA was on at the end), when it was left for the start view); `null` on a view asked for none |
 
 The restart page logs with an empty nonce (its parts are numbered `restart:<n>`): only `refdash` and
 `done`, kept in `refstart-<k>.json` under `restart_page`. A warm-up view (`--warmup-tier`, none by
@@ -1764,7 +1918,7 @@ The runner and the harness talk through the fake Home Assistant, never through a
 
 | Request | From | What |
 |---|---|---|
-| `/clarity/open?view=&nonce=&run=&vsync=&taps=[&swipes=&warmup=]` | the runner | Open this view next. Checked: a known view, a hex nonce, numbers only; else 400 |
+| `/clarity/open?view=&nonce=&run=&vsync=&taps=[&swipes=&dialogs=&warmup=]` | the runner | Open this view next. Checked: a known view, a hex nonce, numbers only; else 400. `dialogs` (Clarity v3): how many of the more-info dialogs to open, all when absent; the runner sends 0 for the HLS copies and a warm-up view |
 | `/clarity/next?after=<nonce>` | the harness | Waits up to 20 s for a command other than `after` (the last one this page ran); 200 with it, or 204. The command stays until its view's stream stops, so a long poll left behind by a page that died (a force-stopped frontend's) can't use it up |
 | `/clarity/live`, `/clarity/still` | the harness | Start the stream (200 `{"gen": n}`, its generation), or stop it, end the view's command and reset the home |
 | `/clarity/cancel` | the runner | Before each restart: no command, no stream and no changed state is left from a view that was cut short |
@@ -1773,6 +1927,11 @@ Frame statistics are defined once, in `tools/perf/page/stats.js` and `tools/perf
 `tools/perf/test/stats-cases.json` pins both to the same answers.
 
 ## Example: Aqara S1 Plus
+
+**Clarity v3: not yet measured.** The S1's published result below is Clarity v2's, so under v3's
+rules the site shows it as "Re-measure" until a v3 run is published (see [Published
+results](#published-results)). That run is the root's next night-window run on the panel, and its
+result replaces the published one only when the maintainer says so.
 
 **Clarity v2: D** (s1rtc10, 2de8ac20, 3 of 3 runs, protocol 2, rubric 2, the S1 Kiosk build before
 its first release (`pre-v1`), camera video over the LAN (`lan-udp`), measured 2026-11-15 UTC; not
@@ -1919,6 +2078,7 @@ node --test tools/perf/test/page.test.mjs tools/perf/test/grade.test.mjs tools/p
 PY=$(python3 tools/perf/webrtcenv.py)
 "$PY" -m unittest discover -s tools/perf/test -p test_webrtc.py
 GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.e2e.test.mjs
+GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/dialog.e2e.test.mjs     # the more-info dialogs (Clarity v3)
 GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.gecko.test.mjs
 ```
 
@@ -1948,6 +2108,11 @@ process gets its own temp directory and its own block of ports (`GW_PERF_TEST_PO
 share a port, a path or a fake panel, and a result doesn't depend on what runs beside it. A failed
 process prints its whole output. One test or class alone: `cd tools/perf/test && python3 -m unittest
 test_runner.Restart`.
+
+`dialog.e2e.test.mjs` runs HA's real frontend in headless Chrome at the S1's viewport and has the
+harness open the more-info dialogs, as [The more-info dialog](#the-more-info-dialog-clarity-v3-211)
+says: each must open, settle and close, as a bottom sheet there, with and without reduced motion, and
+as a centred dialog at a desktop's viewport; and the fake must know every command they send.
 
 `test_webrtc.py` checks the relay (its credentials, one allocation over TCP) and a whole session
 through the fake's websocket API, with aiortc as a relay-only browser. `webrtc.e2e.test.mjs` runs
