@@ -70,6 +70,25 @@ class NotReadyStaysOnTest {
         })
     }
 
+    /** No network at all. */
+    private fun offline() {
+        val cm = shadowOf(RuntimeEnvironment.getApplication().getSystemService(ConnectivityManager::class.java))
+        cm.clearAllNetworks()
+        cm.setActiveNetworkInfo(null)
+    }
+
+    /** #484: a set-up panel that loses Wi-Fi at night shows setup's Wi-Fi step, and still sleeps on its idle timeout. */
+    @Test fun aSetUpPanelThatLosesWifiSleepsOnItsTimeout() {
+        offline()
+        idle20s { it.urlSetting = dash; it.haSeen = true }.use { h ->
+            h.advance(35_000)
+            assertTrue("offline past the grace: setup shows", h.setup().isShowing)
+            assertFalse("Home Assistant added it before", h.setup().needsHomeAssistant)
+            h.advance(30_000)
+            assertEquals(h.logs("S1Kiosk.Screen").toString(), listOf("sleep (idle 20s) admin=false"), h.sleeps())
+        }
+    }
+
     @Test fun theConnectingScreenStaysOnUntilTheDashboardIsUpThenTheTimeoutCounts() {
         online()
         idle20s { it.urlSetting = dash; it.haSeen = true }.use { h ->

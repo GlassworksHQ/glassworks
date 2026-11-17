@@ -126,6 +126,12 @@ class SetupOverlay(
     /** Turns the screen on ([dev.glassworks.screen.ScreenPolicy.wake]). The runtime's, unless a test sets it. */
     var wakeScreen: (String) -> Unit = { reason -> context.glassworks.screen.wake(reason) }
 
+    /**
+     * Home Assistant hasn't added the panel yet (its step isn't done), so it can't wake the screen. A panel that is set
+     * up and only lost Wi-Fi or Home Assistant has it done: the setup screen neither wakes it nor keeps it on (#484).
+     */
+    val needsHomeAssistant: Boolean get() = model?.let { SetupFlow.HA !in it.done } == true
+
     /** True while visible (including the Done fade-out). */
     var isShowing = false
         private set
@@ -810,9 +816,8 @@ class SetupOverlay(
 
     private fun reveal() {
         if (isShowing && visibility == View.VISIBLE && alpha == 1f) return
-        // Nothing else can turn this screen on: no touch, no presence sensor, and Home Assistant hasn't added the panel,
-        // so it can't either (#484). Once it has, a panel that is set up and only lost Wi-Fi or Home Assistant stays dark.
-        if (!isShowing && input == Input.NONE && !presenceSensor && model?.let { SetupFlow.HA !in it.done } == true) wakeScreen("setup")
+        // Nothing else can turn this screen on: no touch, no presence sensor, and Home Assistant hasn't added the panel (#484).
+        if (!isShowing && input == Input.NONE && !presenceSensor && needsHomeAssistant) wakeScreen("setup")
         isShowing = true
         animate().cancel()
         if (visibility != View.VISIBLE) alpha = 0f
