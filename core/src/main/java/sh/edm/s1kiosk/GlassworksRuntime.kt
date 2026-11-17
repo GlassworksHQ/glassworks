@@ -47,7 +47,10 @@ class GlassworksRuntime(
 ) : Glassworks {
     init {
         // Before any component opens a connection: Android 6-7.0 lack the root GitHub's downloads chain to (#456).
-        if (HttpsTrust.install()) Log.i(TAG, "HTTPS: added ${HttpsTrust.roots.size} root(s) the system store lacks")
+        // install() never throws: a failure leaves HTTPS as the system has it, and the app starts.
+        HttpsTrust.install()
+            .onSuccess { if (it) Log.i(TAG, "HTTPS: added ${HttpsTrust.roots.size} root(s) the system store lacks") }
+            .onFailure { Log.w(TAG, "HTTPS: couldn't add the bundled roots; downloads from hosts on them will fail", it) }
     }
 
     override val presence = PresenceRelay(frame.presence)

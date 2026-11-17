@@ -79,15 +79,24 @@ object HttpsTrust {
     /**
      * Below Android 7.1, makes [roots] trusted next to the system's for every HttpsURLConnection the process opens
      * from now on: the model download, the update check and download, notification pictures and the HA sign-in.
-     * Call it once, before the first connection. Returns whether it did. [set] is for tests.
+     * Call it once, before the first connection. Gives whether it did.
+     *
+     * Never throws: it runs as the app starts, so a device whose KeyStore or TrustManagerFactory refuses the store,
+     * or a class it lacks, gives a failure here and leaves HTTPS as the system has it. [set] and [factory] are for
+     * tests.
      */
     fun install(
         platform: PlatformApi = Platform,
         set: (SSLSocketFactory) -> Unit = HttpsURLConnection::setDefaultSSLSocketFactory,
-    ): Boolean {
-        if (platform.hasIsrgRootX1) return false
-        set(socketFactory(systemTrustManager()))
-        return true
+        factory: () -> SSLSocketFactory = { socketFactory(systemTrustManager()) },
+    ): Result<Boolean> {
+        if (platform.hasIsrgRootX1) return Result.success(false)
+        return try {
+            set(factory())
+            Result.success(true)
+        } catch (t: Throwable) { // not just Exception: a NoClassDefFoundError on Android 6 is an Error
+            Result.failure(t)
+        }
     }
 
     /** TLS with [system] and [extra] as its trust: what [install] gives HttpsURLConnection. */

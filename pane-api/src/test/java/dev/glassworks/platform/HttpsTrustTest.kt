@@ -133,10 +133,26 @@ class HttpsTrustTest {
     @Test fun `install adds the roots below Android 7_1 only`() {
         for (level in 21..40) {
             var set: SSLSocketFactory? = null
-            val did = HttpsTrust.install(PlatformApi(level)) { set = it }
+            val did = HttpsTrust.install(PlatformApi(level), set = { set = it }).getOrThrow()
             assertEquals("installed at API $level", level < 25, did)
             assertEquals("factory set at API $level", level < 25, set != null)
         }
+    }
+
+    @Test fun `a failing install gives a failure, never a throw, and sets nothing`() {
+        // The app calls it while it starts (GlassworksRuntime): a throw there would crash every start.
+        val failures = listOf<() -> SSLSocketFactory>(
+            { throw java.security.KeyStoreException("this device's KeyStore refuses the store") },
+            { throw NoClassDefFoundError("a class this Android lacks") },
+        )
+        for (failing in failures) {
+            var set: SSLSocketFactory? = null
+            val result = HttpsTrust.install(PlatformApi(23), set = { set = it }, factory = failing)
+            assertTrue("install should report the failure", result.isFailure)
+            assertEquals(null, set)
+        }
+        val refusedSet = HttpsTrust.install(PlatformApi(23), set = { throw SecurityException("no") })
+        assertTrue(refusedSet.isFailure)
     }
 
     @Test fun `the chain GitHub serves for raw githubusercontent com validates on the bundled roots alone`() {
@@ -152,7 +168,7 @@ class HttpsTrustTest {
             CertPathValidator.getInstance("PKIX").validate(CertificateFactory.getInstance("X.509").generateCertPath(chain), params)
         }.isSuccess
         assertTrue("GitHub's chain doesn't reach a bundled root", validates(HttpsTrust.roots))
-        assertFalse("the check accepts any anchor", validates(listOf(system.cert)))
+        assertFalse("GitHub's chain validated on an unrelated made-up root, so this check proves nothing", validates(listOf(system.cert)))
     }
 
     @Test fun `the bundled roots are the ones the note names`() {

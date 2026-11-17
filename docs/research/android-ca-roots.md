@@ -102,7 +102,8 @@ each one there?
   Mirror's "latest none" means the check got an answer and found no usable release, not a TLS failure. The
   dashboard is not affected: GeckoView brings its own CA store.
 - **The fix** (`pane-api/.../dev/glassworks/platform/HttpsTrust.kt`): below API 25, `GlassworksRuntime` sets
-  `HttpsURLConnection`'s default `SSLSocketFactory` before any component connects. Its trust manager accepts a
+  `HttpsURLConnection`'s default `SSLSocketFactory` before any component connects. `install()` never throws:
+  if the device's KeyStore or TrustManagerFactory refuses, it logs a warning and HTTPS stays as the system has it. Its trust manager accepts a
   chain the system trusts, else one that reaches a bundled root. It refuses everything else with the system's
   error. Hostname verification is Android's `HostnameVerifier`, unchanged (step 4). It is a plain `X509TrustManager`
   (step 5). Android 7.0's Network Security Config accepts the plain overload because neither app sets a
