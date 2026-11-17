@@ -252,8 +252,19 @@ connection. A lasting one needs the key where this image looks, which is `servic
 
 ### How the app sees who asks (#435, read 2026-11-17)
 
-The app keeps its own list and approves a listed computer each time it connects (the plan in #435,
-verified with a shell loop on the unit 2026-11-17). It needs the asking computer's **full key**: Android
+The app keeps its own list and approves a listed computer each time it connects (the plan in #435).
+The root checked the plan on the unit on 2026-11-17 (verified, recorded in a comment on #435, Glass Panes
+image 2 with the probe as a priv-app holding `MANAGE_USB`). A shell loop on the Mirror played the app: each
+second it checked whether `UsbDebuggingActivity` had focus and whether `dumpsys usb`'s "Last key received"
+was the listed fingerprint, and then ran the probe's `allow-adb-key` with that key. A second adb server on
+the computer, with only a throwaway key, connected four times, with a server restart between each:
+
+| Connection | Result |
+|---|---|
+| 1 | `device` after 4 s, shell ran |
+| 2, 3, 4 | `device` after 3 s each, shell ran |
+
+The app itself, with the system log below in place of the shell loop, is **untested** on the unit. It needs the asking computer's **full key**: Android
 checks the fingerprint, but `allowUsbDebugging` takes the key. `dumpsys usb` gives only the fingerprint.
 Read at `android-6.0.1_r81`, `services/usb/java/com/android/server/usb/UsbDebuggingManager.java`:
 
