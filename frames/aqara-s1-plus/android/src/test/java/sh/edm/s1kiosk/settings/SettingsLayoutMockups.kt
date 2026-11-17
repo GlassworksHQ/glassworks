@@ -68,7 +68,7 @@ class SettingsLayoutMockups {
             // The frame's Device page, after Screen, as S1Settings puts it.
             val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app) { byId[it] }
                 else frame.deviceSection(app) { byId[it] }
-            device?.let { lastDevice = it }
+            device?.let { lastDevice = it; lastFrame = frameName }
             val at = m.sections.indexOfFirst { it.id == "screen" } + 1
             m.copy(frame = frameName, sections = m.sections.toMutableList().apply { if (device != null) add(at, device) })
         }
@@ -89,12 +89,13 @@ class SettingsLayoutMockups {
     }
 
     private var lastDevice: dev.glassworks.pane.SettingsSection? = null
+    private var lastFrame = ""
 
     /** The same Device page on the Manage page (#269), as HTML to render beside the panel's. */
     private fun manageDevice(name: String) {
         val device = lastDevice ?: return
         val f = ManageFixture()
-        f.statusFn = { f.status.copy(sections = listOf(device)) }
+        f.statusFn = { f.status.copy(frame = lastFrame, sections = listOf(device)) }
         val b = f.Browser().also { it.signInWithHa() }
         java.io.File(Mockup.dir!!, "$name-manage.html").writeBytes(b.get("/device").body)
     }
