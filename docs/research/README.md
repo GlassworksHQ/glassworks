@@ -231,6 +231,7 @@ This page is the index of every note. Notes about one device live with its frame
 | [pane-blueprints.md](pane-blueprints.md) | How a pane's blueprints reach Home Assistant without the panel writing to it: HA's admin-only blueprint API, the import and list links, the name an import gets, and HA's own check of the four blueprints, with a script to rerun it |
 | [legacy-engine.md](legacy-engine.md) | The frozen GeckoView 144 on Android 6–7 (API 23–25): what runs, the API diff against 159, APK size per ABI, and the lockdown to the panel's Home Assistant, verified on emulators (#198) |
 | [setup-hotspot-portal-and-name.md](setup-hotspot-portal-and-name.md) | The setup hotspot (#197): what a captive portal and a `Glassworks` network name would take on the S1 (root), generic Android and the Mirror. Read from AOSP and Android's reference, and the S1 run of 2026-11-16 |
+| [ci-emulator-api34.md](ci-emulator-api34.md) | Why `conformance (API 34)` died mid-test: qemu segfaults under `swiftshader_indirect`, and the permission dialog paused MainActivity. Core dumps, the dead ends (memory, rotation) and the pass rates before and after |
 
 ### Aqara S1 Plus ([`frames/aqara-s1-plus/`](../../frames/aqara-s1-plus/README.md#research-notes))
 
