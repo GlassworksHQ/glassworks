@@ -72,7 +72,10 @@ build if one is missing here.
   app calls into the APK's code. Licence: GPL-2.0-only WITH Classpath-exception-2.0 (`LICENSES/GPL-2.0.txt`,
   `LICENSES/Classpath-exception-2.0.txt`): the exception lets the app link it and keep its own licence.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
-  (release 2.1.5). The current builds (minSdk 26) set it up too, but none of its classes go into their APKs.
+  (release 2.1.5). Allowed by the maintainer on 2026-11-16 as the one exception to the repo's no-GPL rule
+  (`AGENTS.md`, rule 4). Only the legacy APK ships its classes. The current generic builds (minSdk 26) set
+  desugaring up too, because AGP turns it on per module, but none of its classes go into their APKs. S1 Kiosk
+  doesn't use it. The legacy engine's debug test APK (`sh.edm.s1kiosk.legacy`, test builds only) has it too.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
   build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
   - `androidx.annotation:annotation-experimental:1.5.1`

@@ -86,17 +86,19 @@ with its own id, GeckoView 144 (`:engine-gecko-legacy`), minSdk 23 and core libr
 a product flavor, so the release build keeps its tasks (a flavor would rename them and add `BuildConfig.FLAVOR`).
 Desugaring is the module's, though (AGP has no per-variant switch), so it changes the release APK too: no desugared
 library code goes in at minSdk 26, but D8 adds a small dex of inert API stubs, and the APK isn't byte-identical to
-one built without it. Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
+one built without it. Desugaring puts `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception) in the legacy
+APK only, which the maintainer allowed on 2026-11-16 (`AGENTS.md`, rule 4; `THIRD-PARTY-NOTICES.md`). Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
 
 ```sh
 ./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
 # → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
 ```
 
-Status: it builds (CI builds and checks it on every change, without publishing it), and CI's conformance test starts
-the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
+Status: it builds (CI builds and checks it on every change, and test builds publish it), and CI's conformance test
+starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
 release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
-What waits: a first device run, the maintainer's call on `desugar_jdk_libs`, and Kiln's Mirror recipe taking this id.
+What waits: a first device run, Kiln's Mirror recipe taking this id, and a release job: `release.yml` doesn't build
+the generic app or its legacy build yet, and the app has no release key.
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
@@ -134,8 +136,8 @@ maker and model, to the brand's steps to turn on USB debugging, each with its so
 device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
 
 To try a branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
-([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)). Not the legacy build's yet: its APK
-carries `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception), which waits for the maintainer's call.
+([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), the legacy build's
+(`glassworks-generic-legacy-test-<version>-arm64-v8a-<commit>.apk`) among them.
 
 ## Updates
 
