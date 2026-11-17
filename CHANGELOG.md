@@ -348,7 +348,8 @@ below as the release notes.
   kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
   Assistant to add the panel, and where: Settings → Devices & services, or the old entry's
   re-authenticate after a reinstall. When the setup screen comes up on a device with no touch and no
-  presence sensor, it also turns the screen on.
+  presence sensor that Home Assistant hasn't added yet, it also turns the screen on. A set-up panel that
+  loses Wi-Fi stays dark.
 - **The Bluetooth proxy says when it can't run.** With the pane on but Bluetooth or location off, or
   the location permission missing, the settings menu and the Manage page said it was running. They
   now say *Can't run* and why.
