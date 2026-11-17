@@ -46,7 +46,8 @@ describe('the command sequence, per Android version', () => {
     const { p, res, phases } = await run(LEVELS.api23!);
     expect(res.plan.app).toBe(LEGACY);
     expect(res.home).toEqual({ how: 'chooser', state: 'set', home: LEGACY.home });
-    expect(phases).toEqual([{ step: 'read' }, { step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'updates' }, { step: 'start' },
+    expect(phases).toEqual([{ step: 'read' }, { step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'updates' },
+      { step: 'granted', grants: res.grants, silentUpdates: res.silentUpdates }, { step: 'start' },
       { step: 'home', how: 'chooser', pick: LEGACY.name }, { step: 'handoff' }]);
     expect(p.cmds.some((c) => c.startsWith('cmd '))).toBe(false);
   });

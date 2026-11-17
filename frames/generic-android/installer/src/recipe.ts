@@ -94,6 +94,8 @@ export type GenericPhase =
   | { step: 'apk'; stage: 'copy' | 'install' }
   | { step: 'grant' }
   | { step: 'updates' }
+  /** each grant and silent updates, as read back from the device */
+  | { step: 'granted'; grants: Grant[]; silentUpdates: SilentUpdatesResult }
   | { step: 'start' }
   | { step: 'home'; how: 'set-home-activity' | 'chooser'; pick?: string }
   | { step: 'handoff' };
@@ -412,6 +414,7 @@ export async function installGeneric(p: PanelShell, o: GenericOptions): Promise<
 
   phase({ step: 'updates' });
   const silent = await silentUpdates(r, app, o.apk, device, o.silentUpdates ?? true);
+  phase({ step: 'granted', grants, silentUpdates: silent });
 
   phase({ step: 'start' });
   r.step(`Start ${app.name}`);
