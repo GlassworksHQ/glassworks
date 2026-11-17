@@ -89,12 +89,14 @@ class HaDiscovery(
         return ok
     }
 
-    private fun store(url: String, source: String) {
-        val changed = prefs.haUrl != url || prefs.haUrlSource != source
-        if (!changed) return
-        Log.i(TAG, "Home Assistant at $url (via $source)")
-        prefs.setHaUrl(url, source)
-        onChanged(url, source)
+    /** [uuid]: Home Assistant's own id from the mDNS record, which the sign-in follows to a new address (#467). */
+    private fun store(url: String, source: String, uuid: String? = null) {
+        val moved = prefs.haUrl != url || prefs.haUrlSource != source
+        if (!moved && prefs.haUrlUuid == uuid.orEmpty()) return
+        Log.i(TAG, "Home Assistant at $url (via $source${if (uuid == null) ", no id" else ""})")
+        prefs.setHaUrl(url, source, uuid)
+        // Only the id is new (a panel from before #467): the page stays as it is.
+        if (moved) onChanged(url, source)
     }
 
     private fun startBrowse() {
@@ -148,10 +150,11 @@ class HaDiscovery(
 
     private fun onResolved(si: NsdServiceInfo) {
         if (prefs.haUrlSource == SOURCE_MANUAL) return
-        val cands = HaUrls.candidates(si.attributes ?: emptyMap(), si.host, si.port)
+        val attrs = si.attributes ?: emptyMap()
+        val cands = HaUrls.candidates(attrs, si.host, si.port)
         Log.i(TAG, "resolved ${si.serviceName}: candidates $cands")
         for (c in cands) {
-            if (probe(c)) { store(c, SOURCE_MDNS); return }
+            if (probe(c)) { store(c, SOURCE_MDNS, HaUrls.uuid(attrs)); return }
         }
     }
 }

@@ -363,6 +363,7 @@ class MainActivity : Activity() {
         if (w.online) offlineSince = 0L else if (offlineSince == 0L) offlineSince = now
         if (w.online && !w.ethernet && !prefs.wifiSeen) prefs.wifiSeen = true
         val steps = paneSteps.map { PaneStepFacts(it.id, it.done(), it.reason, wanted = setupOverlay.wanted(it.id)) }
+        val moved = HaAuth.movedAway
         return SetupInputs(
             online = w.online,
             offlineForMs = if (w.online) 0L else now - offlineSince,
@@ -372,7 +373,8 @@ class MainActivity : Activity() {
             haSkipped = prefs.haSetupSkipped,
             haHelloThisProcess = SetupSignals.haHello,
             uptimeMs = now - (Platform.processStartElapsedMs() ?: createdAt),
-            signedIn = HaAuth.signedIn,
+            signedIn = HaAuth.signedIn && !moved,
+            signinMoved = moved,
             onAuthPage = FrontendUrls.isAuthorizePage(currentUrl, prefs.haBase),
             signedOut = signedOutHere,
             usePanelLogin = usePanelLogin,
@@ -460,6 +462,7 @@ class MainActivity : Activity() {
             haSource = if (prefs.isAutoUrl) prefs.haUrlSource else "",
             panelIp = HaUrls.localIpv4(),
             signedIn = HaAuth.signedIn,
+            signinMoved = !preview && HaAuth.movedAway,
             preview = preview,
             hotspot = if (preview) null else hotspotCard(),
         )

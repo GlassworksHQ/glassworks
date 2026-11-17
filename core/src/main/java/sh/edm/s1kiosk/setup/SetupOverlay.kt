@@ -94,6 +94,8 @@ class SetupOverlay(
         val installer: InstallerWifi? = null,
         /** The setup hotspot's part of the Wi-Fi step (#197); null where the app has none, and in a preview. */
         val hotspot: dev.glassworks.setup.HotspotStep.Card? = null,
+        /** Signed in for an address Home Assistant left (#467): Sign in says why it asks again. */
+        val signinMoved: Boolean = false,
     )
 
     var onChooseNetwork: (() -> Unit)? = null
@@ -743,7 +745,8 @@ class SetupOverlay(
         }
         qrGlow.visibility = View.VISIBLE
         cardTitle.text = "Scan to sign in."
-        cardBody.text = "Sign in to Home Assistant on your phone. Nothing to type here."
+        cardBody.text = if (m.signinMoved) "Home Assistant moved to a new address. Sign in again."
+            else "Sign in to Home Assistant on your phone. Nothing to type here."
         plainLeft.text = "Sign in on this panel instead"
         plainLeft.visibility = View.VISIBLE
         plainLeft.setOnClickListener { onUsePanel?.invoke() }

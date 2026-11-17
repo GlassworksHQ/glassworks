@@ -242,9 +242,12 @@ class AccessTokenCache(private val marginMs: Long = 60_000L, private val clock: 
     fun clear() { token = null; expiresAt = 0L }
 }
 
-/** What is stored after a successful sign-in. Never log [refreshToken]. */
-data class StoredAuth(val haBase: String, val clientId: String, val refreshToken: String) {
-    override fun toString() = "StoredAuth(haBase=$haBase, clientId=$clientId, refreshToken=<redacted>)"
+/**
+ * What is stored after a successful sign-in. Never log [refreshToken]. [haUuid] is the Home Assistant it was issued
+ * by ([HaSeen]), null until the panel saw it at [haBase] (a sign-in from before #467, or HA not seen over mDNS).
+ */
+data class StoredAuth(val haBase: String, val clientId: String, val refreshToken: String, val haUuid: String? = null) {
+    override fun toString() = "StoredAuth(haBase=$haBase, clientId=$clientId, refreshToken=<redacted>, haUuid=$haUuid)"
 }
 
 /**

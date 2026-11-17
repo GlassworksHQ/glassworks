@@ -121,7 +121,7 @@ data class SetupInputs(
     val haHelloThisProcess: Boolean,
     /** Time since the app process started. */
     val uptimeMs: Long,
-    /** A refresh token from the QR sign-in is stored. */
+    /** A refresh token from the QR sign-in is stored, for the dashboard's Home Assistant. */
     val signedIn: Boolean,
     /** The GeckoView is on HA's `/auth/authorize` page. */
     val onAuthPage: Boolean,
@@ -145,6 +145,8 @@ data class SetupInputs(
     val installer: InstallerWifi? = null,
     /** Whether the screen takes a tap (the frame's [dev.glassworks.frame.Frame.input]). */
     val input: Input = Input.TOUCH,
+    /** A sign-in is stored, but Home Assistant moved to an address not confirmed as the same one (HaAuth.movedAway, #467). */
+    val signinMoved: Boolean = false,
     /** Offline, and Wi-Fi is joining or has a network to join ([OfflineText.expectsJoin]). Read only without touch. */
     val joinExpected: Boolean = false,
 )
@@ -181,7 +183,7 @@ data class SetupDecision(
 object SetupState {
 
     fun decide(i: SetupInputs, rules: SetupRules = SetupRules()): SetupDecision {
-        val wantsSignin = !i.signedIn && !i.usePanelLogin && (i.onAuthPage || i.signedOut)
+        val wantsSignin = !i.signedIn && !i.usePanelLogin && (i.onAuthPage || i.signedOut || i.signinMoved)
         val haEverRecorded = i.haSeen || i.apiKeySet || i.haSkipped
 
         val wifiDone = i.online

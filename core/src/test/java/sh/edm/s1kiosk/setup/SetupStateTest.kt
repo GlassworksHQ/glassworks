@@ -42,6 +42,20 @@ class SetupStateTest {
     }
 
     @Test
+    fun aSignInForAnAddressHomeAssistantLeftAsksForTheSignInAgain() {
+        // #467: Home Assistant moved where the panel can't confirm it. MainActivity passes signedIn = false then. The
+        // Sign in step comes before Home Assistant's own login page loads, so a frame without touch can still sign in.
+        val desk = deskPanel(5 * min, haSeen = true, apiKey = true, hello = true).copy(signedIn = true)
+        assertFalse(SetupState.decide(desk).show)
+        val moved = SetupState.decide(desk.copy(signedIn = false, signinMoved = true))
+        assertTrue(moved.show)
+        assertEquals(SetupFlow.SIGNIN, moved.step)
+        assertEquals(listOf("sign-in needed"), moved.reasons)
+        // "Sign in on this panel instead" still wins, as for a first sign-in.
+        assertFalse(SetupState.decide(desk.copy(signedIn = false, signinMoved = true, usePanelLogin = true)).show)
+    }
+
+    @Test
     fun freshOfflinePanelShowsSetupAtOnce() {
         // First boot after the installer: nothing set up, no Wi-Fi yet. No 30 s "waiting" screen.
         val first = fresh.copy(online = false, offlineForMs = 0, uptimeMs = 1_000, neverSetUp = true)
