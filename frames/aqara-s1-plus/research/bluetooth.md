@@ -207,6 +207,23 @@ What it shows:
 | After the install | The LRU list was healthy after both restarts (no #248 crash loop) |
 | Put back | The pane off and `bluetooth_proxy_connect` false, as found; radio `ok thread_router`; the garden back on an ESP32 proxy with *Light intensity* on `auto` |
 
+How each check was made. These are the commands from the run's plan (`ADB` is the platform-tools `adb`, with
+`ANDROID_SERIAL` set to the panel). The run's report gives the results above, not the raw output:
+
+```sh
+R='s/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/<mac>/g'
+# Android's GATT clients: one entry, owned by sh.edm.s1kiosk, while the S1 held the link; none after the close
+$ADB shell dumpsys bluetooth_manager | sed -n '/GATT Client Map/,/GATT Server Map/p' | sed -E "$R"
+# Errors: no "didn't come up", "got no answer" or "connecting failed" line, and no address in any line
+$ADB logcat -d | grep -E "Bluetooth proxy" | sed -E "$R"
+# The S1's allocation is the garden: compare the two addresses in the shell and print only the verdict,
+# with A from the S1 scanner's `allocated` in HA's Bluetooth diagnostics and B from the garden's device page
+[ "$A" = "$B" ] && echo same || echo differs     # same
+```
+
+*Slots*, *free* and *allocated* are from HA's Bluetooth integration diagnostics (downloaded, read only). The times
+are from HA's logbook and the entities' `last_updated`.
+
 What it shows:
 - A device whose integration holds its link works through the S1, and HA hands it to another proxy within a second when the S1 stops.
 - Such a device takes one of the 3 slots for as long as HA uses it through the S1. Two of them would leave one slot for polling devices.
