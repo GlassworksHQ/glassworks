@@ -42,7 +42,7 @@ class GenericAndroid(
 
     override val displayName = deviceFrame?.name
 
-    override val hardware = Hardware(deviceFrame?.brand ?: Platform.manufacturer, deviceFrame?.model ?: Platform.model, Platform.hardware)
+    override val hardware = Hardware(deviceFrame?.brand ?: Platform.manufacturer, deviceFrame?.modelName ?: Platform.model, Platform.hardware)
 
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 

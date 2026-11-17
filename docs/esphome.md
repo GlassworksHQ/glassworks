@@ -107,7 +107,8 @@ The generic frame goes by a device frame only when the device carries that frame
 is never named after it. The Mirror's community image reports the Qualcomm reference board (`ro.product.model`
 "MSM8916 for arm64"), as other MSM8916 devices do. Its mark is lululemon's own signed boot image, which every
 Mirror keeps: `ro.bootimage.build.fingerprint` starts `mirror/mirror/`, on `ro.board.platform` `msm8916`. There,
-the `board` record is `lululemon-mirror` and HA's device info says *Studio Mirror* by *lululemon*.
+the `board` record is `lululemon-mirror`, and HA's device page shows the model *Studio Mirror (Glassworks)* by
+*lululemon* (`PanelDevice` adds the app's product in brackets, as *Pixel Tablet (Glassworks)*).
 `DeviceFrameTest` covers the Mirror, another MSM8916 device, the Pixel Tablet and an unknown device. A Mirror
 added to HA before #454 as `msm8916-for-arm64-…` is renamed in place, as in the table below.
 

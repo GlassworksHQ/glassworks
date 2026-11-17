@@ -11,9 +11,12 @@ package dev.glassworks.frame
  * A mark must never match another device: a wrong name is worse than the ROM's. `DeviceFrameTest` checks each against
  * its frame.json.
  */
-class DeviceFrame(val id: String, val brand: String, val model: String, private val mark: (prop: (String) -> String) -> Boolean) {
-    /** frame.json's `name`: [brand], a space, then [model]. */
-    val name: String get() = "$brand $model"
+class DeviceFrame(val id: String, val brand: String, val modelName: String, private val mark: (prop: (String) -> String) -> Boolean) {
+    /**
+     * frame.json's `name`: [brand], a space, then [modelName], the product's model as Home Assistant's device info gives
+     * it. Not frame.json's `model`, which is the 3D body.
+     */
+    val name: String get() = "$brand $modelName"
 
     companion object {
         /**
