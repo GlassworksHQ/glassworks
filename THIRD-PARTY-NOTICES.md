@@ -73,11 +73,10 @@ build if one is missing here.
   `LICENSES/Classpath-exception-2.0.txt`): the exception lets the app link it and keep its own licence.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
   (release 2.1.5). Allowed by the maintainer on 2026-11-16 as the one exception to the repo's no-GPL rule
-  (`AGENTS.md`, rule 4). Of the apps this repo releases, only the legacy APK ships its classes. The current
-  generic builds (minSdk 26) set desugaring up too, because AGP turns it on per module, but none of its classes go
-  into their APKs. S1 Kiosk doesn't use it. The legacy engine's debug test app (`sh.edm.s1kiosk.legacy`, never
-  released) has its classes too, and test builds on branches named `legacy` upload it. The decision doesn't name
-  that app; whether it covers it is the maintainer's call (#433).
+  (`AGENTS.md`, rule 4), in two apps: this legacy APK, and the legacy engine's debug test app
+  (`sh.edm.s1kiosk.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
+  ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
+  module, but none of its classes go into their APKs. S1 Kiosk doesn't use it.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
   build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
   - `androidx.annotation:annotation-experimental:1.5.1`
@@ -573,7 +572,7 @@ renders above:
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
-| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198) | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
+| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
 | GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
 | libstdc++, libgcc_s | GPL-3.0-or-later WITH GCC-exception-3.1 | installer, radio bundle | The Ubuntu GCC cross source packages: `gcc-11-cross` for the static copies in `otbr-agent`/`ot-ctl`, and those named in `sisdk/NOTICE.txt` for `sisdk/lib/`. All are on https://launchpad.net/ubuntu |

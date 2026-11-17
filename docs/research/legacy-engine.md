@@ -525,15 +525,16 @@ What checks it, besides the unit tests of the shared sources:
 
 **Desugaring and its licence.** Core library desugaring compiles the `desugar_jdk_libs` classes the app calls
 (`java.time`, `Base64` and friends) into the legacy APK as `j$.*` (863 classes, #408). That code is GPL-2.0 with the
-Classpath exception. The maintainer allowed it on 2026-11-16, as the one exception to the no-GPL rule (`AGENTS.md`,
-rule 4); it's in `THIRD-PARTY-NOTICES.md` and `LICENSES/`. Where it goes:
+Classpath exception. The maintainer allowed it on 2026-11-16, in the generic legacy APK and the engine's debug test
+app, as the one exception to the no-GPL rule (`AGENTS.md`, rule 4); it's in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
+Where it goes:
 
 | Build | Desugaring | `desugar_jdk_libs` code in the APK |
 |---|---|---|
 | Generic legacy (`assembleLegacy`) | On | Yes, the classes it calls |
 | Generic current (`assembleRelease`, minSdk 26) | On, because AGP turns it on per module, not per variant | None. D8 adds a 3.8 kB dex of inert API stubs, so the APK isn't byte-identical to one without desugaring (#408) |
 | S1 Kiosk (`:kiosk`) | Off | None |
-| `:kiosk-legacy` (the engine's debug test app) | On | Yes. A test build artifact on branches named `legacy`, never released. The decision names the generic legacy APK only; this one is the maintainer's call (#433) |
+| `:kiosk-legacy` (the engine's debug test app) | On | Yes. A test build artifact on branches named `legacy`, never released. Allowed too (maintainer, 2026-11-16) |
 
 Test builds publish the legacy APK (`generic-test-build.yml`, arm64-v8a, 0.1.0 and 0.1.1). There's no release yet:
 `release.yml` doesn't build the generic app or its legacy build, and the app has no release key. The app's legacy
