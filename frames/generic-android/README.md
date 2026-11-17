@@ -78,8 +78,8 @@ first (`adb shell am force-stop <id>`).
 Android 6 and 7 (API 23-25) get a legacy build of this app (#198): GeckoView 144, locked to the panel's Home
 Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a separate app,
 `dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
-updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln will flash it into
-`/system/priv-app` once its Mirror recipe takes this id (today it takes `sh.edm.s1kiosk`).
+updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln's Mirror recipe flashes it into
+`/system/priv-app` under this id (#411).
 
 It is the `legacy` build type of [`android/`](android): the same sources, manifest and key as the release build,
 with its own id, GeckoView 144 (`:engine-gecko-legacy`), minSdk 23 and core library desugaring. A build type, not
@@ -97,7 +97,7 @@ APK only, which the maintainer allowed on 2026-11-16 (`AGENTS.md`, rule 4; `THIR
 Status: it builds (CI builds and checks it on every change, and test builds publish it), and CI's conformance test
 starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
 release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
-What waits: a first device run, Kiln's Mirror recipe taking this id, and a release job: `release.yml` doesn't build
+What waits: a first device run and a release job: `release.yml` doesn't build
 the generic app or its legacy build yet, and the app has no release key.
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
