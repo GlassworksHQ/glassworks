@@ -35,7 +35,7 @@ class ManageLog(
             old.delete()
             current.renameTo(old)
         }
-        val line = "${e.timeMs}\t${e.level.name[0]}\t${clean(e.source)}\t${clean(Redact.text(e.text))}\n"
+        val line = "${e.timeMs}\t${e.level.name[0]}\t${clean(e.source)}\t${clean(Redact.text(e.text, keepAdbKeys = true))}\n"
         current.appendText(line, Charsets.UTF_8)
     }
 
