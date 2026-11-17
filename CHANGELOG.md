@@ -127,6 +127,10 @@ below as the release notes.
   generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
+  `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
+  setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
+  shows Kiln's name or its orange colours. The steps and words are the same.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
