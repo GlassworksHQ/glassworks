@@ -46,7 +46,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
   if (j && setup.over === 'lan' && j.step !== 'err') {
     return (
       <section className="card" aria-labelledby="h">
-        {/* One polite region from "Sending…" on, so a screen reader hears the change to the last word (CodeRabbit on #470). */}
+        {/* One polite region from "Sending…" on, so a screen reader hears the change to the last word (CodeRabbit on PR 470). */}
         <div role="status" aria-live="polite">
           <h2 id="h">{j.step === 'sent' ? 'Sending to the panel…' : 'Sent to the panel.'}</h2>
           {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
