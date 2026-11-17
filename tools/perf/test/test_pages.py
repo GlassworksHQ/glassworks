@@ -60,7 +60,7 @@ class Pages(unittest.TestCase):
             text = self.read(name)
             with self.subTest(name):
                 self.assertLessEqual({h.lower() for h in re.findall(r"#[0-9a-f]{6}\b|#[0-9a-f]{3}\b", text, re.I)}
-                                     - {"#174", "#202"}, allowed)             # issue numbers in comments
+                                     - {"#174", "#202", "#211", "#410"}, allowed)     # issue numbers in comments
                 self.assertEqual([c for c in re.findall(r"rgba?\([^)]*\)", text) if not c.startswith("rgba(0,0,0,")], [])
                 self.assertNotIn("rnd() * 360", text)
         root = dict(re.findall(r"--([\w-]+):\s*([^;]+);", re.search(r":root \{([^}]*)\}", self.read("index.html")).group(1)))

@@ -601,7 +601,7 @@ class SetupOverlay(
     /** The setup hotspot is on: the card says how to join it, with its QR code, and Close it. */
     private fun bindHotspotOn(spot: dev.glassworks.setup.HotspotStep.Card): View? {
         spot.label?.let { cardLabel.text = it }
-        status.visibility = View.GONE // "Opening…" from a moment ago, on the same step (CodeRabbit on #418)
+        status.visibility = View.GONE // the "Looking for Wi-Fi networks…" line from a moment ago, on the same step (CodeRabbit on #418)
         cardTitle.text = spot.title
         cardBody.text = spot.body
         showQr(spot.qr!!)

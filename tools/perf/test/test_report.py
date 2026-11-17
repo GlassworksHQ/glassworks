@@ -16,6 +16,13 @@ import statistics  # noqa: E402
 import report as R  # noqa: E402
 import summary as S  # noqa: E402
 
+with open(os.path.join(os.path.dirname(HERE), "page", "tiers.json")) as _f:
+    _TIERS = json.load(_f)
+
+
+class T:
+    DIALOGS = _TIERS["DIALOG"]["entities"]     # the more-info dialogs each view opens (Clarity v3, #211)
+
 PKG = "sh.edm.s1kiosk"
 
 MEMINFO_PID = """\
@@ -475,7 +482,31 @@ def updates_step(nav, missed=0, slow=33.333, idle_slow=0, changes=CHANGES, windo
                                    else sorted(w0 + c[1] + present_after for c in changes))}}
 
 
-def tier_entry(tier, inp, scroll_missed=0, updates_missed=0, load_ms=200, fcp_ms=150, dpr=1.5, blocking_ms=40.0):
+def dialog_lines(tier, settled=320.0, graph=40.0, never=None, frames=None):
+    """Clarity v3 (#211): the view's more-info dialogs as the page logs them, after the swipes: each opens
+    in 10 ms, its 300 ms sheet at 60 fps (`frames`: other intervals), shown at 320 ms; the sensor's
+    graph at `graph`, so it settles at the later of the two (`settled` for the others). `never`: the
+    kind of a dialog that never opened."""
+    out = []
+    for i, d in enumerate(T.DIALOGS):
+        if d["kind"] == never:
+            out.append({"t": "dialog", "stage": tier, "n": i, "of": len(T.DIALOGS), "entity": d["entity"], "kind": d["kind"],
+                        "graph": d["graph"], "mode": None, "opened": False, "open_ms": None, "shown_ms": None, "graph_ms": None,
+                        "settled_ms": None, "anim": {"n": 0}, "anim_intervals": [], "dropped": 0, "longest_frame_ms": None,
+                        "close_ms": None, "error": "it never opened within 20 s", "close_error": None})
+            continue
+        iv = frames or [16.667] * 18
+        st = max(320.0, graph) if d["graph"] else settled
+        out.append({"t": "dialog", "stage": tier, "n": i, "of": len(T.DIALOGS), "entity": d["entity"], "kind": d["kind"],
+                    "graph": d["graph"], "mode": "bottom-sheet", "show_duration_ms": 300, "reduced_motion": False,
+                    "opened": True, "open_ms": 10.0, "shown_ms": 320.0, "graph_ms": graph if d["graph"] else None,
+                    "settled_ms": st, "anim": P.frame_stats(iv, 16.667), "anim_intervals": iv,
+                    "dropped": sum(max(0, round(x / 16.667) - 1) for x in iv), "longest_frame_ms": max(iv),
+                    "close_ms": 310.0, "close_longest_ms": 16.7, "error": None, "close_error": None})
+    return out
+
+
+def tier_entry(tier, inp, scroll_missed=0, updates_missed=0, load_ms=200, fcp_ms=150, dpr=1.5, blocking_ms=40.0, dialogs=None):
     """One reference dashboard in a graded run. Its page logs 1 s after navigation and goes live 3 s
     after it; three swipes of 60 frames follow. Its first screen is drawn 150 ms after navigation (on
     screen at 200 ms), its main thread free at 300 ms, and it blocks for `blocking_ms` in between."""
@@ -491,7 +522,92 @@ def tier_entry(tier, inp, scroll_missed=0, updates_missed=0, load_ms=200, fcp_ms
             "step": updates_step(nav, updates_missed),
             "input": {"t": "input", "method": "event-timing", "taps": 10, "inp_ms": inp},
             "camera": camera_line(tier),
-            "swipes": [swipe(nav, i, late(60, scroll_missed)) for i in range(3)]}
+            "swipes": [swipe(nav, i, late(60, scroll_missed)) for i in range(3)],
+            "dialogs": dialog_lines(tier) if dialogs is None else dialogs}
+
+
+class DialogRuns(unittest.TestCase):
+    """Clarity v3 (#211): HA's more-info dialogs in one run: the slowest to settle grades, a dialog that
+    never opened or never settled fails the run, and lost lines leave it not measured."""
+
+    def test_the_slowest_dialog_settles_the_run(self):
+        run, why = R.dialog_run(dialog_lines("light", settled=300.0, graph=700.0))
+        self.assertIsNone(why)
+        self.assertEqual((run["n"], run["failed"], run["settled_ms"]), (3, 0, 700.0))     # the sensor's graph
+        self.assertEqual(run["frames"]["n"], 54)                                         # three animations pooled
+        self.assertEqual(G.dialog_level(run), "premium")
+        self.assertEqual(run["modes"], ["bottom-sheet"])
+
+    def test_a_slow_history_graph(self):
+        run, _ = R.dialog_run(dialog_lines("light", graph=1500.0))
+        self.assertEqual((run["settled_ms"], G.dialog_level(run)), (1500.0, "fluid"))
+        run, _ = R.dialog_run(dialog_lines("light", graph=2400.0))
+        self.assertEqual(G.dialog_level(run), G.BELOW)
+
+    def test_a_dialog_that_never_opened_fails_the_run(self):
+        run, why = R.dialog_run(dialog_lines("light", never="climate"))
+        self.assertIsNone(why)
+        self.assertEqual((run["failed"], run["settled_ms"]), (1, None))
+        self.assertEqual(G.dialog_level(run), G.BELOW)
+        self.assertEqual(run["errors"], ["climate: it never opened within 20 s"])
+
+    def test_lost_lines_are_not_measured(self):
+        run, why = R.dialog_run(dialog_lines("light")[:2])
+        self.assertIsNone(run)
+        self.assertEqual(why, "only 2 of 3 dialog lines arrived")
+        self.assertEqual(R.dialog_run([]), (None, None))                 # a page before Clarity v3
+
+    def test_late_animation_frames_cost_only_premium(self):
+        run, _ = R.dialog_run(dialog_lines("light", frames=[33.333] * 9))
+        self.assertGreater(run["dropped"], 0)
+        self.assertEqual(G.dialog_level(run), "good")
+
+    def test_a_tier_run_carries_it_and_a_timed_out_view_fails_it(self):
+        run = R.tier_run("light", tier_entry("light", 100), load_frames())
+        self.assertEqual(G.dialog_level(run["dialog_run"]), "premium")
+        lost = R.tier_run("light", tier_entry("light", 100, dialogs=dialog_lines("light")[:1]), load_frames())
+        self.assertIsNone(lost["dialog_run"])
+        self.assertEqual(lost["dialog_error"], "only 1 of 3 dialog lines arrived")
+
+    def test_report_md_and_the_headline_say_it(self):
+        failed = R.dialog_run(dialog_lines("heavy", never="sensor"))[0]
+        ok = R.dialog_run(dialog_lines("heavy", graph=1400.0))[0]
+        s_ = {"dialog_runs": [ok, failed, ok], "dialog_settled_ms": P.spread([1400.0, None, 1400.0])}
+        cell = R.dialog_cell(s_, {"dialog": "fluid"})
+        self.assertIn("settled in 1400 ms", cell)
+        self.assertIn("1 of 3 run(s) had one that didn't open fully", cell)
+        self.assertEqual(R.task_phrase("dialog", {"dialog_runs": [ok, ok]}), "a more-info dialog takes 1.4 s to open")
+        self.assertEqual(R.task_phrase("dialog", s_), "a more-info dialog didn't open fully in 1 of 3 run(s)")
+        self.assertEqual(R.task_phrase("dialog", {}), "the more-info dialog wasn't measured")
+        # A view that timed out failed them, measured: never "wasn't measured" (#410's CodeRabbit).
+        self.assertEqual(R.task_phrase("dialog", {"dialog_runs": [{"timed_out": True}]}),
+                         "the view didn't get to its more-info dialogs in 1 of 1 run(s)")
+        self.assertEqual(R.task_phrase("dialog", {"dialog_runs": [ok, {"timed_out": True}]}),
+                         "a more-info dialog didn't open fully in 1 of 2 run(s)")
+        self.assertEqual(R.dialog_cell({}, {}), "n/a (before Clarity v3)")
+
+    def test_a_view_left_for_the_start_view_is_said_and_graded_as_measured(self):
+        """#410 (s1v3a): HA held heavy's thermostat and sensor dialogs past the view; the page left it for
+        the start view before the next view. Detail only: heavy's dialogs stay its failure."""
+        failed = R.dialog_run(dialog_lines("heavy", never="sensor"))[0]
+        away = {"ms": 31200, "clean": True, "closed": 1, "pending": [], "open": False, "history": False, "via": "start",
+                "first": {"ms": 30000, "clean": False, "closed": 0, "pending": ["climate.clarity_0", "sensor.clarity_10"],
+                          "open": False, "history": True}}
+        run = R.tier_run("heavy", dict(tier_entry("heavy", 100, dialogs=dialog_lines("heavy", never="sensor")), settle=away),
+                         load_frames())
+        self.assertEqual(run["dialog_settle"], away)
+        self.assertEqual(run["dialog_run"], failed)                     # the same record, the same failure
+        s_ = {"dialog_runs": [failed, failed], "dialog_settles_away": [away]}
+        lines = R.dialog_detail({"tiers": {"heavy": s_}})
+        self.assertIn("heavy: HA still held climate.clarity_0, sensor.clarity_10 after the view's own wait in 1 of 2 run(s), "
+                      "so the page moved to the start view, untimed, where they came and were closed; the next view "
+                      "opened from wherever HA was then.", lines[-1])
+        # Chrome, 2026-11-16: HA's held history.back() landed after the move and took it back to the view.
+        back = dict(away, at="heavy")
+        line = R.dialog_detail({"tiers": {"heavy": dict(s_, dialog_settles_away=[back])}})[-1]
+        self.assertIn("the next view opened from wherever HA was then (heavy: HA's late history.back() took it back).", line)
+        # A view HA was done with at once says nothing more.
+        self.assertFalse(any("start view" in x for x in R.dialog_detail({"tiers": {"light": {"dialog_runs": [failed]}}})))
 
 
 class CameraStreamsAll(unittest.TestCase):
@@ -535,7 +651,7 @@ class HeldBack(unittest.TestCase):
 
     def test_a_page_held_back_only_by_blocking(self):
         ok = {"inp_ms": 100, "load_ms": 1241, "blocking_ms": 100, "scroll_level": "fluid", "updates_level": "fluid",
-              "camera_level": "good"}
+              "camera_level": "good", "dialog_level": "good"}
         tiers = {"light": dict(ok, camera_level=None), "typical-nocam": dict(ok, blocking_ms=2862.0, camera_level=None),
                  "typical": dict(ok, blocking_ms=2900.0), "heavy": dict(ok, blocking_ms=3100.0)}
         g = G.grade(tiers, 2000)
@@ -563,7 +679,8 @@ class TimedOut(unittest.TestCase):
         run = R.tier_run("heavy", {"nonce": "ab12", "swipes": [], "timed_out_s": 300}, [])
         self.assertNotIn("error", run)
         self.assertEqual((run["load_ms"], run["inp_ms"]), (300000, 300000))
-        self.assertEqual(run["timed_out_tasks"], ["open", "tap", "blocking", "scroll", "updates", "camera"])
+        self.assertEqual(run["timed_out_tasks"], ["open", "tap", "blocking", "scroll", "updates", "dialog", "camera"])
+        self.assertEqual(G.dialog_level(run["dialog_run"]), G.BELOW)     # Clarity v3: it never got to its dialogs
         self.assertEqual(G.scroll_level(run["scroll"]), G.BELOW)
         self.assertEqual(G.update_level(run["updates_run"]), G.BELOW)
         self.assertEqual(G.camera_level(run["camera_run"]), G.BELOW)
@@ -585,7 +702,7 @@ class TimedOut(unittest.TestCase):
         self.assertNotIn("error", run)
         self.assertEqual((run["load_ms"], run["drawn_ms"], run["blocking_ms"], run["inp_ms"]), (200, 150, 300000, 300000))
         self.assertIsNone(run["usable_ms"])
-        self.assertEqual(run["timed_out_tasks"], ["tap", "blocking", "scroll", "updates", "camera"])
+        self.assertEqual(run["timed_out_tasks"], ["tap", "blocking", "scroll", "updates", "dialog", "camera"])
         self.assertEqual(G.band(run["load_ms"], G.METRICS["load_ms"]), "good")
 
     def test_a_drawn_line_of_another_view_is_not_this_ones(self):
@@ -1085,7 +1202,8 @@ class Build(unittest.TestCase):
         g = self.rep["grade"]
         self.assertEqual(g["grade"], "B")
         self.assertEqual(g["levels"], {"light": "premium", "typical-nocam": "premium", "typical": "premium", "heavy": "fluid"})
-        self.assertEqual(g["bands"]["heavy"], {"tap": "good", "scroll": "fluid", "updates": "premium", "load": "good", "camera": "good", "blocking": "good"})
+        self.assertEqual(g["bands"]["heavy"], {"tap": "good", "scroll": "fluid", "updates": "premium", "load": "good", "camera": "good", "blocking": "good",
+                                               "dialog": "premium"})
         self.assertEqual(g["bands"]["light"]["camera"], "none")              # no streams on light (#174)
         heavy = self.rep["graded"]["reference"]["tiers"]["heavy"]
         self.assertEqual(heavy["camera_levels"], ["good", "good", "good"])
@@ -1437,7 +1555,7 @@ class Build(unittest.TestCase):
         re-measured (never graded by v2's rules), in the report and in both graders from its summary."""
         rep = self.build_with(protocol=1, clarity=1)
         self.assertEqual((rep["clarity"], rep["protocol_version"]), (1, 1))
-        why = "measured with Clarity v1; these rules are Clarity v2's: re-measure"
+        why = f"measured with Clarity v1; these rules are Clarity v{G.CLARITY}'s: re-measure"
         self.assertIn(why, rep["grade"]["provisional_reasons"])
         s = S.summarise(rep, allow_provisional=True)
         self.assertEqual((s["clarity"], s["protocol_version"]), (1, 1))
@@ -1450,7 +1568,7 @@ class Build(unittest.TestCase):
 
     def test_this_clarity_is_this_clarity(self):
         self.assertEqual((self.rep["clarity"], self.rep["protocol_version"]), (G.CLARITY, G.PROTOCOL_VERSION))
-        self.assertEqual((G.CLARITY, G.PROTOCOL_VERSION), (2, 2))
+        self.assertEqual((G.CLARITY, G.PROTOCOL_VERSION), (3, 3))     # Clarity v3 (#211): the more-info dialog
 
     def test_js_band_is_reported_but_not_graded(self):
         self.assertEqual(self.rep["detail"]["synthetic"]["js_burst_ms"]["median"], 10.0)
@@ -1571,6 +1689,10 @@ class Build(unittest.TestCase):
         self.assertLess(md.index("| light ("), md.index("## Detail: animations"))
         self.assertLess(md.index("## Detail: animations"), md.index("## Real use on this dashboard"))
         self.assertIn("| css-transform | 4 (4 to 4, n=3) |", md)
+        # Clarity v3 (#211): the more-info dialogs, a column and a detail line.
+        self.assertIn("| More-info dialog |", md)
+        self.assertIn("settled in 320 ms (320 to 320, n=3), premium", md)
+        self.assertIn("heavy: more-info dialogs (detail): the first frame of the open 10 ms", md)
 
     def test_apk_sizes_per_abi(self):
         apk = os.path.join(self.dir, "app.apk")
