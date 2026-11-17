@@ -8,7 +8,7 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, outcome, panelsFrom, pkceChallenge, plan, readPanel } from './panels-core.js';
+import { authorizeUrl, base64url, outcome, panelsFrom, pkceChallenge, plan, readPanel, retrying } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
@@ -143,7 +143,7 @@ function ask(access, types) {
 
 // ------------------------------------------------------------------ the panels
 
-const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down'], refused: ['bad', 'Refused'], stranger: ['bad', 'Not a panel'] };
+const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down'], refused: ['bad', 'Refused'], stranger: ['bad', 'Not a panel'], remote: ['off', 'Not on your network'] };
 
 /** A panel's own Manage page, in a new tab, signed in there with this tab's token (the panel checks it with Home Assistant). */
 async function open(p) {
@@ -151,7 +151,9 @@ async function open(p) {
   if (!p.trusted) return;
   const access = await token().catch(() => null);
   if (!access) return start();
-  const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: '_blank', rel: 'noopener' },
+  // A new tab, without rel: the panel there gets the token in the post anyway, so what window.opener would add (it
+  // could only send this tab elsewhere; it can't read it, being another origin) gives it nothing more.
+  const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: '_blank' },
     h('input', { type: 'hidden', name: 'token', value: access }), h('input', { type: 'hidden', name: 'next', value: '/' }));
   document.body.append(f);
   f.submit();
@@ -239,10 +241,10 @@ async function apply(fromP, toP, rows, asked) {
   for (const r of rows) {
     let o;
     try {
-      const res = await fetch(toP.origin + '/manage/api/settings', {
+      const res = await retrying(() => fetch(toP.origin + '/manage/api/settings', {
         method: 'POST', headers: { Authorization: 'Bearer ' + access },
         body: new URLSearchParams({ section: r.section, key: r.key, value: r.value, ...(asked ? { answer: asked.get(r.section + '\n' + r.key).ask.id } : {}) }),
-      });
+      }));
       o = outcome(res.status, await res.json().catch(() => null));
     } catch {
       o = { state: 'failed', why: "Can't reach " + toP.name + '.' };

@@ -88,6 +88,27 @@ export function manageOrigin(url) {
 }
 
 /**
+ * Whether [hostname] (a URL's, IPv6 in brackets) is on the local network, by the rule the panel's API uses for a
+ * page's Origin (`ManageApi.localOrigin`): a private, loopback or link-local IP address, `localhost` or an mDNS
+ * `.local` name. Names aren't resolved. A panel elsewhere gets no question and no token: over the internet, the
+ * token would cross in clear text.
+ */
+export function localHost(hostname) {
+  const h = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (h === 'localhost' || (h.endsWith('.local') && h.length > 6)) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (v4.slice(1).some((x) => Number(x) > 255)) return false;
+    return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+  }
+  if (!h.includes(':') || !/^[0-9a-f:]+$/.test(h)) return false;
+  if (h === '::1') return true;
+  const first = h.startsWith('::') ? 0 : parseInt(h.split(':')[0], 16);
+  return (first & 0xffc0) === 0xfe80 || (first & 0xfe00) === 0xfc00;
+}
+
+/**
  * The panels among Home Assistant's [devices] (`config/device_registry/list`): ESPHome devices ([entries],
  * `config_entries/get`) whose "Visit" link is a Manage page and that have a model, with their name and area
  * (`config/area_registry/list`). [selfHost]: this page's host, which marks the panel the page is on. This panel
@@ -105,7 +126,8 @@ export function panelsFrom(devices, areas, selfHost, entries) {
     if (!origin || seen.has(origin)) continue;
     seen.add(origin);
     const host = new URL(origin).host;
-    out.push({ id: d.id, name: d.name_by_user || d.name || host, area: area.get(d.area_id) || '', origin, host, model: d.model, self: host === selfHost });
+    out.push({ id: d.id, name: d.name_by_user || d.name || host, area: area.get(d.area_id) || '', origin, host, model: d.model,
+      local: localHost(new URL(origin).hostname), self: host === selfHost });
   }
   return out.sort((a, b) => (b.self - a.self) || a.area.localeCompare(b.area) || a.name.localeCompare(b.name));
 }
@@ -176,21 +198,44 @@ export function hello(p, body) {
 
 const DOWN = "Can't reach it. It may be off, or on a version from before this page: update it.";
 const STRANGER = "It doesn't answer as the panel Home Assistant lists at this address, so it gets no sign-in.";
+const REMOTE = "Its address isn't on your network, so the page doesn't contact it or send it a sign-in.";
+
+/** How many times a call that answers 503 with Retry-After is made in all, and the longest wait between, in s. */
+export const TRIES = 3;
+const MAX_WAIT_S = 5;
 
 /**
- * [p]'s settings, or why not, each step within [ms]: a panel that's down shows as down, the rest carry on. First
- * the token-free [hello]; the token goes only to a panel that passes it, and [p] comes back `trusted` then.
+ * [call] again while it answers 503 with Retry-After (a panel still asking Home Assistant about other sign-ins),
+ * at most [TRIES] times in all, waiting what it asks, up to [MAX_WAIT_S] s. The last answer otherwise.
  */
-export async function readPanel(p, access, fetchFn = fetch, ms = 6_000) {
+export async function retrying(call, sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))) {
+  for (let i = 1; ; i++) {
+    const r = await call();
+    const header = r.status === 503 && r.headers ? r.headers.get('Retry-After') : null;
+    const after = header == null || String(header).trim() === '' ? NaN : Number(header);
+    if (i >= TRIES || !Number.isFinite(after) || after < 0) return r;
+    await sleep(Math.min(after, MAX_WAIT_S) * 1000);
+  }
+}
+
+/**
+ * [p]'s settings, or why not, each step within [ms]: a panel that's down shows as down, the rest carry on. Nothing
+ * for a panel off the local network ([localHost]). Then the token-free [hello]; the token goes only to a panel that
+ * passes it, and [p] comes back `trusted` then. A busy panel's 503 is tried again ([retrying]).
+ */
+export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined) {
+  if (!p.local) return { ...p, trusted: false, reach: { state: 'remote', why: REMOTE }, settings: null };
   const get = async (path, headers) => {
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(), ms);
-    try {
-      const r = await fetchFn(p.origin + path, { headers, signal: c.signal });
-      return { status: r.status, body: await r.json().catch(() => null) };
-    } finally {
-      clearTimeout(t);
-    }
+    const r = await retrying(async () => {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), ms);
+      try {
+        return await fetchFn(p.origin + path, { headers, signal: c.signal });
+      } finally {
+        clearTimeout(t);
+      }
+    }, sleep);
+    return { status: r.status, body: await r.json().catch(() => null) };
   };
   let hi;
   try {

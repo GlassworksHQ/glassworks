@@ -38,14 +38,14 @@ const idle = (s, choices) => ({ key: 'Turn off when idle', title: 'Turn off when
 const range = (m) => ({ key: 'Presence range', title: 'Presence range', kind: 'slider', value: String(m), shown: 'Up to ' + m + ' m', min: '0', max: '2.5', step: '0.1' });
 const wake = (id, ids) => ({ key: 'Wake word', title: 'Wake word', kind: 'choice', value: id, shown: { okay_nabu: 'Okay Nabu', hey_jarvis: 'Hey Jarvis' }[id], options: ids.map((i) => [i, { okay_nabu: 'Okay Nabu', hey_jarvis: 'Hey Jarvis' }[i]]) });
 const panels = {
-  '192.0.2.40:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.2', sections: [
+  'kitchen-panel.local:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.2', sections: [
     { id: 'dashboard', title: 'Home Assistant & dashboard', items: [sw('Full screen', true)] },
     { id: 'screen', title: 'Screen', items: [sw('Wakes when someone comes close', true), range(1.2), idle(300, [30, 60, 120, 300, 600, 0]), sw('Brightness', true)] },
     { id: 'assist', title: 'Voice', items: [sw('on', true), wake('hey_jarvis', ['okay_nabu', 'hey_jarvis']), sw('Wake sound', false)] },
     { id: 'radio', title: 'Radio', items: [sw('on', true)] },
     { id: 'camera', title: 'Camera', items: [{ key: 'Stream sign-in', title: 'Stream sign-in', kind: 'sign-in', set: true }] },
   ] },
-  '192.0.2.41:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.1', sections: [
+  'bedroom-panel.local:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.1', sections: [
     { id: 'dashboard', title: 'Home Assistant & dashboard', items: [sw('Full screen', false)] },
     { id: 'screen', title: 'Screen', items: [sw('Wakes when someone comes close', true), range(0.8), idle(120, [30, 60, 120, 600, 0])] },
     { id: 'assist', title: 'Voice', items: [sw('on', false), wake('okay_nabu', ['okay_nabu', 'hey_jarvis'])] },
@@ -55,20 +55,24 @@ const panels = {
 };
 const S1 = 'Panel Hub S1 Plus (S1 Kiosk)';
 const devices = [
-  { id: 'k', name: 'Aqara S1 Plus', name_by_user: 'Kitchen panel', model: S1, config_entries: ['esp-k'], area_id: 'kitchen', configuration_url: 'http://192.0.2.40:8099', disabled_by: null },
-  { id: 'b', name: 'Aqara S1 Plus', name_by_user: 'Bedroom panel', model: S1, config_entries: ['esp-b'], area_id: 'bedroom', configuration_url: 'http://192.0.2.41:8099', disabled_by: null },
-  { id: 'h', name: 'Pixel Tablet', name_by_user: 'Hallway tablet', model: 'Pixel Tablet (Glassworks)', config_entries: ['esp-h'], area_id: 'hallway', configuration_url: 'http://192.0.2.42:8099', disabled_by: null },
+  { id: 'k', name: 'Aqara S1 Plus', name_by_user: 'Kitchen panel', model: S1, config_entries: ['esp-k'], area_id: 'kitchen', configuration_url: 'http://kitchen-panel.local:8099', disabled_by: null },
+  { id: 'b', name: 'Aqara S1 Plus', name_by_user: 'Bedroom panel', model: S1, config_entries: ['esp-b'], area_id: 'bedroom', configuration_url: 'http://bedroom-panel.local:8099', disabled_by: null },
+  { id: 'h', name: 'Pixel Tablet', name_by_user: 'Hallway tablet', model: 'Pixel Tablet (Glassworks)', config_entries: ['esp-h'], area_id: 'hallway', configuration_url: 'http://hallway-tablet.local:8099', disabled_by: null },
   // In HA as a panel, but what answers at its address says it's something else: it must never get the token.
-  { id: 'g', name: 'Garage panel', model: S1, config_entries: ['esp-g'], area_id: 'garage', configuration_url: 'http://192.0.2.43:8099', disabled_by: null },
+  { id: 'g', name: 'Garage panel', model: S1, config_entries: ['esp-g'], area_id: 'garage', configuration_url: 'http://garage-panel.local:8099', disabled_by: null },
+  // In HA as a panel, at an address off the local network: it must get no request at all.
+  { id: 'o', name: 'Office panel', model: S1, config_entries: ['esp-o'], area_id: 'office', configuration_url: 'http://203.0.113.7:8099', disabled_by: null },
   { id: 'ma', name: 'S1 Panel', model: S1, config_entries: ['ma'], area_id: null, configuration_url: null, disabled_by: null },
 ];
-const entries = [...['k', 'b', 'h', 'g'].map((x) => ({ entry_id: 'esp-' + x, domain: 'esphome' })), { entry_id: 'ma', domain: 'music_assistant' }];
-const hellos = { '192.0.2.40:8099': S1, '192.0.2.41:8099': S1, '192.0.2.43:8099': 'ESP32-CAM' };
+const entries = [...['k', 'b', 'h', 'g', 'o'].map((x) => ({ entry_id: 'esp-' + x, domain: 'esphome' })), { entry_id: 'ma', domain: 'music_assistant' }];
+const hellos = { 'kitchen-panel.local:8099': S1, 'bedroom-panel.local:8099': S1, 'garage-panel.local:8099': 'ESP32-CAM', '203.0.113.7:8099': S1 };
 /** Hosts that got an `Authorization` header, and the PKCE challenge the login page was given. */
 const tokenTo = new Set();
+/** Every host the page sent anything to. */
+const contacted = new Set();
 let challenge = null;
 const initial = JSON.stringify(panels);
-const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }, { area_id: 'garage', name: 'Garage' }];
+const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }, { area_id: 'garage', name: 'Garage' }, { area_id: 'office', name: 'Office' }];
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 const send = (res, status, body, type = 'application/json') => {
@@ -81,6 +85,7 @@ async function handle(req, res) {
   const u = new URL(req.url, 'http://' + req.headers.host);
   if (req.method === 'OPTIONS') return send(res, 204, '');
   if (req.headers.authorization) tokenTo.add(u.host);
+  contacted.add(u.host);
   if (u.host === HA) {
     if (u.pathname === '/auth/authorize') {
       assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
@@ -98,7 +103,7 @@ async function handle(req, res) {
     if (u.pathname === '/auth/revoke') return send(res, 200, '');
   }
   const p = panels[u.host];
-  if (u.host === '192.0.2.40:8099' && u.pathname === '/panels') {
+  if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/panels') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp });
     return res.end(readFileSync(pageFile));
   }
@@ -200,8 +205,8 @@ async function shot(name) {
   console.log('wrote', name);
 }
 
-const PAGE = 'http://192.0.2.40:8099/panels';
-const listed = "document.querySelectorAll('#gw-list .chip').length === 4 && ![...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')";
+const PAGE = 'http://kitchen-panel.local:8099/panels';
+const listed = "document.querySelectorAll('#gw-list .chip').length === 5 && ![...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')";
 try {
   await call('Page.enable');
   await call('Log.enable');
@@ -214,6 +219,7 @@ try {
   await until(listed + " && !document.getElementById('gw-copy').hidden", 'the panels and the copy card');
   await shot('02-panels-and-copy');
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Garage')).querySelector('.chip').textContent"), 'Not a panel');
+  assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Office')).querySelector('.chip').textContent"), 'Not on your network');
   await js("document.querySelector('#gw-copy button[type=submit]').click()");
   await until("document.querySelector('.cpa')", 'the copy result');
   await shot('03-copied-asks-first');
@@ -239,8 +245,9 @@ try {
   await js("fetch('http://203.0.113.9:1234/').catch(() => 0)");
   await sleep(300);
   assert.ok(refused.some((t) => t.includes('203.0.113.9')), 'the served CSP refuses what it should: ' + JSON.stringify(refused));
-  assert.deepEqual([...tokenTo].sort(), ['192.0.2.40:8099', '192.0.2.41:8099'], 'the token went to the two panels that answered as panels, no one else');
-  console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', '));
+  assert.deepEqual([...tokenTo].sort(), ['bedroom-panel.local:8099', 'kitchen-panel.local:8099'], 'the token went to the two panels that answered as panels, no one else');
+  assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
+  console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');
 } finally {
   cdp.close();
   browser.kill();

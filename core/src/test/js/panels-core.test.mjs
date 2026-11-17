@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { accepts, authorizeUrl, hello, manageOrigin, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, sha256 } from '../../main/assets/manage/panels-core.js';
+import { TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -37,6 +37,8 @@ test('the panels, from the device registry: ESPHome devices with a Manage link a
   ];
   const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }];
   const got = panelsFrom(devices, areas, '192.0.2.42:8099', entries);
+  assert.ok(got.every((p) => p.local === false), 'TEST-NET addresses are public: listed, but not local');
+  assert.equal(panelsFrom([device('l', 'http://kitchen-panel.local:8099')], [], '', entries)[0].local, true);
   assert.deepEqual(got.map((p) => [p.name, p.area, p.origin, p.model, p.self]), [
     ['Bedroom panel', 'Bedroom', 'http://192.0.2.42:8099', MODEL, true],
     ['Aqara S1 Plus', 'Kitchen', 'http://192.0.2.41:8099', MODEL, false],
@@ -130,37 +132,76 @@ function net(hosts) {
     seen.push([u.host, u.pathname, (init.headers || {}).Authorization || null]);
     const h = hosts[u.host];
     if (!h) throw new TypeError('Failed to fetch');
-    const [status, body] = h(u.pathname);
-    return { status, json: async () => body };
+    const [status, body, extra] = h(u.pathname);
+    return { status, json: async () => body, headers: { get: (k) => (extra || {})[k.toLowerCase()] ?? null } };
   };
   return { seen, fetchFn };
 }
 
 const settings = { api: 1, version: '0.9.2', sections: [] };
-const panelAt = (host) => ({ origin: 'http://' + host, host, model: MODEL });
+const panelAt = (host) => ({ origin: 'http://' + host, host, model: MODEL, local: localHost(new URL('http://' + host).hostname) });
+const noWait = async () => {};
 
 test('the token goes only to a device that answers its hello as the panel the registry lists', async () => {
   const { seen, fetchFn } = net({
-    '192.0.2.41:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: MODEL }] : [200, settings]),
+    'kitchen-panel.local:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: MODEL }] : [200, settings]),
     // Answers on 8099, but as something else: a camera, or a panel the registry lists with another model.
-    '192.0.2.43:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: 'Pixel Tablet (Glassworks)' }] : [200, settings]),
-    '192.0.2.44:8099': () => [404, null],
+    'garage-panel.local:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: 'Pixel Tablet (Glassworks)' }] : [200, settings]),
+    'hall-panel.local:8099': () => [404, null],
   });
-  const ok = await readPanel(panelAt('192.0.2.41:8099'), 'TOKEN', fetchFn);
+  const ok = await readPanel(panelAt('kitchen-panel.local:8099'), 'TOKEN', fetchFn);
   assert.equal(ok.reach.state, 'up');
   assert.ok(ok.trusted);
-  const other = await readPanel(panelAt('192.0.2.43:8099'), 'TOKEN', fetchFn);
+  const other = await readPanel(panelAt('garage-panel.local:8099'), 'TOKEN', fetchFn);
   assert.equal(other.reach.state, 'stranger');
   assert.ok(!other.trusted);
-  assert.equal((await readPanel(panelAt('192.0.2.44:8099'), 'TOKEN', fetchFn)).reach.state, 'stranger');
-  assert.equal((await readPanel(panelAt('192.0.2.42:8099'), 'TOKEN', fetchFn)).reach.state, 'down');
-  assert.deepEqual(seen.filter(([, , auth]) => auth).map(([host, path]) => host + path), ['192.0.2.41:8099/manage/api/settings'], 'the token went to the matching panel only');
+  assert.equal((await readPanel(panelAt('hall-panel.local:8099'), 'TOKEN', fetchFn)).reach.state, 'stranger');
+  assert.equal((await readPanel(panelAt('bedroom-panel.local:8099'), 'TOKEN', fetchFn)).reach.state, 'down');
+  assert.deepEqual(seen.filter(([, , auth]) => auth).map(([host, path]) => host + path), ['kitchen-panel.local:8099/manage/api/settings'], 'the token went to the matching panel only');
   assert.ok(seen.every(([, path, auth]) => path !== '/manage/api/hello' || auth === null), 'hello never carries the token');
 });
 
 test("a hello matches only Glassworks' own answer with the registry's model", () => {
-  const p = panelAt('192.0.2.41:8099');
+  const p = panelAt('kitchen-panel.local:8099');
   assert.ok(hello(p, { glassworks: true, model: MODEL }));
   for (const no of [null, {}, { model: MODEL }, { glassworks: 'yes', model: MODEL }, { glassworks: true, model: MODEL + ' ' }, { glassworks: true }]) assert.ok(!hello(p, no), JSON.stringify(no));
   assert.ok(!hello({ ...p, model: undefined }, { glassworks: true, model: undefined }));
+});
+
+test('which hosts are on the local network: the panel API\'s own rule', () => {
+  for (const yes of ['10.0.0.41', '172.16.0.1', '172.31.255.254', '192.168.1.20', '127.0.0.1', '169.254.3.4', 'localhost', 'kitchen-panel.local', 'Kitchen-Panel.LOCAL.',
+    '[::1]', '[fe80::1]', '[febf::1]', '[fd00::41]', '[fc00::1]']) assert.ok(localHost(yes), yes);
+  for (const no of ['', null, '192.0.2.41', '203.0.113.7', '172.32.0.1', '172.15.0.1', '8.8.8.8', '10.0.0.41.evil.example', 'local', '.local', 'panel.lan',
+    'homeassistant.example', '[2001:db8::1]', '[fec0::1]', '[::ffff:10.0.0.1]', '999.1.1.1']) assert.ok(!localHost(no), String(no));
+});
+
+test('a panel off the local network gets nothing: no hello, no token', async () => {
+  const { seen, fetchFn } = net({ '203.0.113.7:8099': () => [200, { api: 1, glassworks: true, model: MODEL }] });
+  const r = await readPanel(panelAt('203.0.113.7:8099'), 'TOKEN', fetchFn, 6_000, noWait);
+  assert.equal(r.reach.state, 'remote');
+  assert.ok(!r.trusted);
+  assert.deepEqual(seen, [], 'not contacted at all');
+});
+
+test("a busy panel's 503 with Retry-After is tried again, a bounded number of times", async () => {
+  let n = 0;
+  const { fetchFn } = net({ 'kitchen-panel.local:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: MODEL }]
+    : ++n <= 2 ? [503, { problem: 'busy' }, { 'retry-after': '2' }] : [200, settings]) });
+  const waits = [];
+  const ok = await readPanel(panelAt('kitchen-panel.local:8099'), 'TOKEN', fetchFn, 6_000, async (ms) => waits.push(ms));
+  assert.equal(ok.reach.state, 'up', 'the third try answered');
+  assert.deepEqual(waits, [2000, 2000]);
+
+  let calls = 0;
+  const always = await retrying(async () => (calls++, { status: 503, headers: { get: () => '30' } }), async (ms) => waits.push(ms));
+  assert.equal(always.status, 503);
+  assert.equal(calls, TRIES);
+  assert.deepEqual(waits.slice(2), [5000, 5000], 'a long Retry-After waits at most 5 s');
+
+  let once = 0;
+  await retrying(async () => (once++, { status: 503, headers: { get: () => null } }), noWait);
+  assert.equal(once, 1, 'no Retry-After, no retry');
+  let ok200 = 0;
+  await retrying(async () => (ok200++, { status: 200, headers: { get: () => '1' } }), noWait);
+  assert.equal(ok200, 1);
 });
