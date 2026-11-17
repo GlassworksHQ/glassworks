@@ -40,6 +40,11 @@ object AuthLog {
  *    `<HA>/auth/token` with the same client_id and the PKCE `code_verifier`, and [onSignedIn] gets
  *    the refresh token. The phone sees "Panel signed in ✓".
  *
+ * The setup page (`/setup`, #453) starts the same flow in its own tab with `[CONTINUE]?then=setup`. That
+ * sign-in is bound to the browser with a cookie holding its state, and its callback sends the browser back
+ * to the setup page ([SETUP_RETURN]) instead of showing the done page. A callback for it without that
+ * cookie is refused before the code is used.
+ *
  * `/thread` and `/thread/callback` are the same flow for [ThreadJoin]: an administrator signs in once
  * so the panel can read HA's Thread dataset; the tokens are revoked right after. `/thread` only works
  * while the panel shows its QR code ([ThreadJoin.armed]).
@@ -148,24 +153,33 @@ class SignInServer(
             ?: return page(400, "Bad Request", "Can't sign in", "Open this page with the panel's address (scan the QR code).")
         val clientId = OAuth.clientId(host)
         val redirect = OAuth.redirectUri(host)
-        val sign = states.create(clientId, redirect, ha)
+        val toSetup = req.query["then"] == THEN_SETUP
+        val sign = states.create(clientId, redirect, ha, toSetup = toSetup)
         val location = OAuth.authorizeUrl(ha, clientId, redirect, sign.state, sign.codeChallenge)
+        // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie.
+        val bind = if (toSetup) mapOf("Set-Cookie" to "$HANDOFF=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=600") else emptyMap()
         return Response(
             302, "Found",
-            mapOf("Location" to location, "Cache-Control" to "no-store", "Content-Type" to "text/plain; charset=utf-8"),
+            mapOf("Location" to location, "Cache-Control" to "no-store", "Content-Type" to "text/plain; charset=utf-8") + bind,
             "Redirecting to Home Assistant".toByteArray(),
         )
     }
 
     private fun callback(req: Request): Response {
         val q = req.query
+        val handOff = cookie(req, HANDOFF)
+        // Started on the setup page: every way out of here leads back to it.
+        val back = if (handOff != null) BACK_TO_SETUP else ""
         q["error"]?.let { err ->
-            return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. Scan the code to try again.")
+            return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. Scan the code to try again.", button = back)
         }
         val pending = states.consume(q["state"], PendingSignIn.PURPOSE_SIGNIN)
-            ?: return expired()
+            ?: return expired(back)
+        // Another browser finishing the setup page's sign-in (login CSRF): refused, the code is not used.
+        if (pending.toSetup && handOff != q["state"]) return page(403, "Forbidden", "Can't sign in",
+            "This sign-in was started in another browser. Start it again from the setup page, in this browser.")
         val code = q["code"]?.takeIf { it.isNotEmpty() }
-            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. Scan the code to try again.")
+            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. Scan the code to try again.", button = back)
         return when (val r = tokens.exchangeCode(pending.haBase, pending.clientId, code, pending.codeVerifier)) {
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
@@ -175,20 +189,21 @@ class SignInServer(
                 } catch (t: Throwable) {
                     AuthLog.w("storing the token failed", t)
                     val why = (t as? SignInNotStored)?.let { "${it.message}: its key store isn't available. Try again in a minute." }
-                    return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.")
+                    return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.", button = back)
                 }
                 AuthLog.i("Signed in to ${pending.haBase} (refresh token stored)")
+                if (pending.toSetup) return backToSetup()
                 page(200, "OK", "Panel signed in", "It's loading your dashboard now. You can close this page.", Look.DONE,
                     tile = haTile(pending.haBase, dot = true), footHtml = MANAGE_FOOT)
             }
             is TokenResult.Error -> {
                 AuthLog.w("code exchange failed: ${r.code} (${r.httpStatus})")
                 when {
-                    r.isInvalidCode -> expired()
+                    r.isInvalidCode -> expired(back)
                     r.httpStatus <= 0 -> page(502, "Bad Gateway", "Can't reach Home Assistant",
-                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and scan the code again.")
+                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and scan the code again.", button = back)
                     else -> page(502, "Bad Gateway", "Can't sign in",
-                        "Home Assistant refused the sign-in (${esc(r.code)}). Scan the code to try again.")
+                        "Home Assistant refused the sign-in (${esc(r.code)}). Scan the code to try again.", button = back)
                 }
             }
         }
@@ -210,8 +225,20 @@ class SignInServer(
     private fun notWaiting() = page(409, "Conflict", "Not waiting for a sign-in",
         "Start “Join Home Assistant's Thread network” on the panel first, then scan the code it shows.")
 
-    private fun expired() = page(400, "Bad Request", "This link has expired", "Scan the code on the panel again. It shows a new one.",
-        foot = "Codes last 10 minutes and work once.")
+    private fun expired(button: String = "") = page(400, "Bad Request", "This link has expired", "Scan the code on the panel again. It shows a new one.",
+        button = button, foot = "Codes last 10 minutes and work once.")
+
+    /**
+     * Signed in from the setup page: back to it, at the step after Home Assistant. HA sent the browser here from
+     * another site, so a redirect would still be cross-site and the setup page's Strict cookie wouldn't go with
+     * it. A page that reloads to the setup page is same-site.
+     */
+    private fun backToSetup() = Response(
+        200, "OK",
+        mapOf("Content-Type" to "text/html; charset=utf-8", "Cache-Control" to "no-store",
+            "Set-Cookie" to "$HANDOFF=; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=0") + PageShell.securityHeaders(formAction = "'none'"),
+        PageShell.document(PageShell.PRODUCT_NAME, "", """<meta http-equiv="refresh" content="0;url=$SETUP_RETURN">""").toByteArray(Charsets.UTF_8),
+    )
 
     private fun threadStart(req: Request): Response {
         val join = thread ?: return page(404, "Not Found", "Not found", "This panel only serves the sign-in pages.")
@@ -300,6 +327,20 @@ class SignInServer(
         /** The sign-in and Thread pages' "Continue to Home Assistant": the redirect to HA's sign-in. */
         const val CONTINUE = "/signin/continue"
         const val THREAD_CONTINUE = "/thread/continue"
+
+        /** `[CONTINUE]?then=setup`: the setup page's sign-in, which comes back to it (#453). */
+        const val THEN_SETUP = "setup"
+
+        /** Where a sign-in from the setup page ends: the page, which carries on after Home Assistant. */
+        const val SETUP_RETURN = "/setup#signed-in"
+
+        /** The cookie that binds a setup page's sign-in to its browser: the sign-in's state. */
+        const val HANDOFF = "gw_signin"
+
+        private const val BACK_TO_SETUP = """<a class="btn" href="/setup">Back to setup</a>"""
+
+        private fun cookie(req: Request, name: String): String? =
+            req.headers["cookie"]?.split(';')?.map { it.trim() }?.firstOrNull { it.startsWith("$name=") }?.substringAfter('=')?.takeIf { it.isNotEmpty() }
 
         fun esc(s: String) = PageShell.esc(s)
 

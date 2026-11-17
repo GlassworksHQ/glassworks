@@ -4,27 +4,27 @@
 import lockup from '@glassworks/brand/lockup-on-dark.svg?raw';
 import { useState, useSyncExternalStore } from 'react';
 import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
-import type { LanSession, LanView } from './lanSession';
+import type { LanSession, LanView, RailStep } from './lanSession';
 import { PanelStack, type PlateLook } from './PanelStack';
 
 const LOCKUP = `data:image/svg+xml,${encodeURIComponent(lockup)}`;
 
-const RAIL = ['Pair with the panel', 'Wi-Fi', 'Home Assistant', 'Radio', 'Done'] as const;
+const NAMES: Record<RailStep, string> = { pair: 'Pair with the panel', wifi: 'Wi-Fi', ha: 'Home Assistant', radio: 'Radio', done: 'Done' };
 
-function railAt(v: LanView): number {
-  if (v.at === 'done') return 5;
-  if (v.at !== 'setup') return 0;
-  if (v.setup.phase === 'wifi') return 1;
-  return v.setup.phase === 'radio' || v.setup.phase === 'radio-next' ? 3 : 2;
+function stepOf(v: LanView): RailStep {
+  if (v.at === 'done') return 'done';
+  if (v.at !== 'setup') return 'pair';
+  if (v.setup.phase === 'wifi') return 'wifi';
+  return v.setup.phase === 'radio' || v.setup.phase === 'radio-next' ? 'radio' : 'ha';
 }
 
 /**
  * The stack as the panel's setup screen draws it: the plates set one per step, none on the first and all
  * three on the last; done lights the top plate. A lost panel shows the next plate in rose.
  */
-function stackLooks(v: LanView, at: number): [PlateLook, PlateLook, PlateLook] {
+function stackLooks(v: LanView, at: number, steps: number): [PlateLook, PlateLook, PlateLook] {
   if (v.at === 'done') return ['lit', 'outline', 'outline'];
-  const set = Math.floor((3 * at) / (RAIL.length - 1));
+  const set = Math.floor((3 * at) / (steps - 1));
   const looks = [0, 1, 2].map((i): PlateLook => (2 - i < set ? 'outline' : 'ghost')) as [PlateLook, PlateLook, PlateLook];
   if (v.at === 'lost') looks[Math.max(0, 2 - set)] = 'bad';
   return looks;
@@ -100,22 +100,23 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
 export function LanPage({ lan }: { lan: LanSession }) {
   const st = useSyncExternalStore(lan.subscribe, lan.get, lan.get);
   const v = st.view;
-  const at = railAt(v);
+  const rail = st.rail;
+  const at = v.at === 'done' ? rail.length - 1 : Math.max(0, rail.indexOf(stepOf(v)));
   const paired = v.at === 'setup' || v.at === 'done';
-  const looks = stackLooks(v, at);
+  const looks = stackLooks(v, at, rail.length);
   return (
     <div className="app">
       <header className="top">
         <span className="brand"><img className="lockup" src={LOCKUP} alt="Glassworks" /></span>
-        <span className="narrow small">{at >= RAIL.length ? 'Done' : `${at + 1} of ${RAIL.length}`}</span>
+        <span className="narrow small">{v.at === 'done' ? 'Done' : `${at + 1} of ${rail.length}`}</span>
         <span className={`chip ${paired ? 'ok' : 'work'}`}><span className="dot" />{v.at === 'done' ? 'Set up' : paired ? 'Paired' : 'Not paired'}</span>
       </header>
       <div className="body">
         <nav className="rail" aria-label="Steps">
           <ol className="steps">
-            {RAIL.map((name, i) => {
-              const mark = i < at ? 'done' : i > at ? 'todo' : v.at === 'lost' ? 'bad' : 'now';
-              return <li key={name} className={mark} aria-current={mark === 'now' ? 'step' : undefined}><span className="mk" /><span>{name}</span></li>;
+            {rail.map((step, i) => {
+              const mark = v.at === 'done' || i < at ? 'done' : i > at ? 'todo' : v.at === 'lost' ? 'bad' : 'now';
+              return <li key={step} className={mark} aria-current={mark === 'now' ? 'step' : undefined}><span className="mk" /><span>{NAMES[step]}</span></li>;
             })}
           </ol>
           <div className="rail-stack"><PanelStack looks={looks} width={120} /></div>

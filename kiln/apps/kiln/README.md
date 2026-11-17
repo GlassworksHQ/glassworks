@@ -152,7 +152,7 @@ Kiln's steps read to the panel's colours (always night, one white button, sky to
 
 ```sh
 npm run build:lan -w @glassworks/kiln-app          # writes core/src/main/assets/setup (committed)
-node kiln/apps/kiln/lan/fake-panel.mjs [--closed] [--offline]  # http://localhost:8099/setup against a fake panel; the code is 482913
+node kiln/apps/kiln/lan/fake-panel.mjs [--closed] [--offline] [--no-radio]  # http://localhost:8099/setup against a fake panel; the code is 482913
 ```
 
 CI rebuilds the page and fails when the committed files differ, so commit the build with its sources.
@@ -172,6 +172,14 @@ How it behaves:
   gives the outcome. The page keeps its channel and asks once more 45 s later (`JOIN_CHECK_MS`): an answer
   means the panel's setup Wi-Fi is still up and the join didn't happen, so the page says so, with Try again. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
   as plain HTTP.
+- **Sign in** on the Home Assistant step saves the address, then goes to the panel's sign-in in the same
+  tab (`/signin/continue?then=setup`, #453). The panel binds that sign-in to this browser with a cookie
+  holding its state (single use, 10 minutes, PKCE as for the QR code), refuses its callback from any other
+  browser, and after Home Assistant loads `/setup#signed-in` again. The page reads where setup is from the
+  panel, then goes on to the radio step, or to Done on a panel without a radio. Kiln's wizard still opens a
+  tab: leaving its page would drop the USB connection.
+- The step rail lists the steps the panel has. Before pairing, the page reads the panel's state once over
+  the channel (which answers `state` to anyone) and lets it go; a frame without a radio has no Radio step.
 - Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
   network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.
 - What is left: the panel has no write timeout on the WebSocket. A browser that stops reading while the

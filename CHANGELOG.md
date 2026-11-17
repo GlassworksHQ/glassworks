@@ -170,6 +170,10 @@ below as the release notes.
   *Camera presence*. Home Assistant removes the ones a device can't back on the next reconnect after the
   update; if the hardware comes back, so does the entity, usually with its old id. An automation that used
   one stops working. Nothing changes on the S1.
+- **Phone setup signs in to Home Assistant in the same tab.** On the panel's setup page (`:8099/setup`),
+  **Sign in** now takes you to Home Assistant's sign-in in the same tab and brings you back to the setup
+  page at the next step, instead of leaving you in a second tab. The list of steps shows only the steps
+  your panel has: a panel without a radio no longer lists a Radio step it skips.
 - **The S1's Bluetooth proxy goes by the panel's Bluetooth address.** The proxy now tells Home
   Assistant the panel's own Bluetooth address, as ESPHome proxies do, instead of its network address.
   Home Assistant moves the panel's scanner to the new address by itself, once, with nothing for you to
