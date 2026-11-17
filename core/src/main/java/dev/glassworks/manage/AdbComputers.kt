@@ -163,7 +163,7 @@ class AdbComputers(
     }
 
     /** What [allowAsking] did. */
-    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, REFUSED, UNCONFIRMED, NOT_REMEMBERED }
+    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, REFUSED, REFUSED_NONE_WAITING, UNCONFIRMED, NOT_REMEMBERED }
 
     /**
      * Lets in the computer asking now, if it is still the one the page showed ([shown], its fingerprint). With
@@ -206,7 +206,7 @@ class AdbComputers(
         synchronized(this) {
             s.waiting?.let { w ->
                 event("$who tried to allow ${label(key)} over USB: Android refused it, ${waitingText(w.takeIf { it != NO_ONE })}")
-                return Allowed.REFUSED
+                return if (w == NO_ONE) Allowed.REFUSED_NONE_WAITING else Allowed.REFUSED
             }
             if (!listening()) {
                 event("$who allowed ${label(key)} over USB, but the panel stopped reading Android's log, so it can't tell whether Android took it")
