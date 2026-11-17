@@ -1824,7 +1824,8 @@ CI (#115).
 
 **A published result of an earlier Clarity version stays as it was published** until the frame's
 next run replaces it, and the maintainer decides when that is. The site grades it with the current
-rules, so it shows "Re-measure", not a letter: since Clarity v3, the S1's v2 result (s1rtc10) does.
+rules, so it shows "Re-measure", not a letter. The S1's v2 result (s1rtc10) did, until its Clarity v3 result
+(s1v3c, 2026-11-16, D) replaced it.
 `summary.py` now refuses that report as complete, so `test_summary.py` exports it marked and checks
 every byte but `complete`, which stays as it was decided under its own version's rules.
 
