@@ -42,9 +42,9 @@
 #   size-generic  the same check for Glassworks for generic Android (#23, frames/generic-android): its
 #            release APK for each ABI of its frame.json against frames/generic-android/budgets.json. This
 #            branch only, no change column, so it costs two builds (about 4 minutes); the report is the
-#            job summary. Then its legacy build (#198, arm64-v8a) builds, with its id, minSdk and the
-#            system permissions checked; no budget yet. Only when something that goes into those APKs, or
-#            this file, changes
+#            job summary. Then its legacy build (#198, arm64-v8a) builds, with its id, minSdk, the
+#            system permissions and its icons on API 23 (tools/legacy/apk-icons.py) checked; no budget
+#            yet. Only when something that goes into those APKs, or this file, changes
 #   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
 #            Python image and fails if the committed files differ. A few minutes, so it runs only
 #            when branding/boot, branding/glass-tile, branding/bootlogos.json, the S1's frame.json
@@ -789,6 +789,8 @@ jobs:
             grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::the legacy APK doesn't ask for $perm"; exit 1; }
           done
           unzip -l "$apk" | grep -q "lib/arm64-v8a/libxul.so" || { echo "::error::the legacy APK has no arm64-v8a GeckoView"; exit 1; }
+          # Its icons load on Android 6: the Mirror's first start crashed on one that didn't (#198).
+          python3 tools/legacy/apk-icons.py --aapt2 "$aapt2" "$apk" drawable/ic_notification
           echo "Legacy APK (arm64-v8a): $(stat -c %s "$apk") bytes" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Size and budget
