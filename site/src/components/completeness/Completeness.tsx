@@ -44,7 +44,8 @@ function Items({ title, items, flag }: { title: string; items: CheckItem[]; flag
 /** The frame page's checklist panel. */
 export function CompletenessPanel({ c }: { c: Completeness }) {
   const w = c.word ?? "none";
-  const allExpected = c.items.every((i) => i.unverified);
+  // every item unverified: one line in the head says so instead of a pill on each row
+  const allUnverified = c.items.every((i) => i.unverified);
   return (
     <section className={s.section} aria-labelledby="completeness">
       <div className={`glass ${s.panel}`}>
@@ -58,12 +59,13 @@ export function CompletenessPanel({ c }: { c: Completeness }) {
           </span>
           <span className={s.meaning}>
             {WORD_MEANING[w]} {DECIDES}
-            {allExpected && " These are the values we expect: nothing here has run on a real unit yet."}
+            {c.noRun && " These are the values we expect: nothing here has run on a real unit yet."}
+            {allUnverified && !c.noRun && " Every value here is unverified."}
           </span>
         </div>
         <div className={s.body}>
-          <Items title="Decides the word" items={c.items.filter((i) => i.counts)} flag={!allExpected} />
-          <Items title="Shown, doesn't count" items={c.items.filter((i) => !i.counts)} flag={!allExpected} />
+          <Items title="Decides the word" items={c.items.filter((i) => i.counts)} flag={!allUnverified} />
+          <Items title="Shown, doesn't count" items={c.items.filter((i) => !i.counts)} flag={!allUnverified} />
         </div>
       </div>
     </section>

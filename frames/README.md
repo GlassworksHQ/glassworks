@@ -281,13 +281,13 @@ person saw. It goes in `run`, and a tested device has no `facts`.
 |---|---|---|
 | `on` | The day it ran, `YYYY-MM-DD`. Without it, the values are what we expect and every item says unverified | Proof's panel run |
 | `app` | The app's version, or the test build, that ran (`test build 9755076`) | |
-| `plan` | From `--plan`: `model`, `android` (the version's name), `sdk`, `abi`, `app` (the package). Nothing else: no serial, fingerprint or address, and `factProblems()` refuses any other key | |
-| `install.grants` | From `--install`: `microphone`, `camera`, `secure-settings`, `overlay`, `device-admin`, each `granted`, `not-asked` or `refused` | A refused microphone or camera is missing hardware |
-| `install.silentUpdates` | `--install`'s `silentUpdates.state` | |
+| `plan` | From `--plan`: `model`, `android` (the version's name), `sdk`, `abi`, `app` (the package). Nothing else: no serial, fingerprint or address, and `factProblems()` refuses any other key, here and in each part of `install`, `panel` and `seen` | |
+| `install.grants` | From `--install`: `microphone`, `camera`, `secure-settings`, `overlay`, `device-admin`, each `granted`, `not-asked` or `refused` | A refused microphone or camera is missing hardware, unless `seen.hardware` is recorded (below) |
+| `install.silentUpdates` | `silentUpdates.state` in the JSON `--install` prints | |
 | `install.home` | `{ how, state }`: `set-home-activity` or `chooser`, `set` or `unconfirmed` | Kiosk's `onlyHome` (`set`). USB debugging is always a tap on the device, and the chooser is one more |
 | `install.setupPage` | Kiln handed off to the app's setup page | |
 | `panel.silentUpdates` | Optional until someone reads it: the panel's *Silent updates* sensor afterwards, word for word | Silent updates. Left out, it is ✗ "No panel has reported it yet" |
-| `seen` | What the person saw that neither reports: `hardware`, `kiosk` (all but `onlyHome`), `setup`, `notes` | The same items |
+| `seen` | What the person saw that neither reports: `hardware`, `kiosk` (all but `onlyHome`), `setup`, `notes` | The same items. `seen.hardware` is what they saw last, so it supersedes the install's refusals: a grant given by hand after the install and seen working is `[]`, and a refusal that stayed is written there |
 
 After the run, the root sets `on` and the values it found, and drops the frame's `unverified`. Each
 fact the run didn't cover stays out, and its item says "not checked": a ✗, not an unverified ✓.

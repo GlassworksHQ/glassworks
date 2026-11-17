@@ -175,9 +175,18 @@ describe('a tested device', () => {
   });
 
   it('counts Android\'s home chooser as a tap, and a refused microphone as missing hardware', () => {
-    const r = tested({ install: { ...run.install, home: { how: 'chooser', state: 'set' }, grants: { microphone: 'refused' } } });
+    const r = tested({ install: { ...run.install, home: { how: 'chooser', state: 'set' }, grants: { microphone: 'refused' } }, seen: { ...run.seen, hardware: undefined } });
     expect(item(r, 'install').reason).toMatch(/pick Glassworks as the home app/);
     expect(item(r, 'hardware').reason).toBe('Not yet: the microphone: Android refused it.');
+  });
+
+  it('lets what the person saw later supersede a refusal at install', () => {
+    const refused = { ...run.install, grants: { microphone: 'refused' as const } };
+    // granted by hand after the install, and seen working
+    expect(item(tested({ install: refused, seen: { ...run.seen, hardware: [] } }), 'hardware')).toMatchObject({ state: 'yes' });
+    // still refused when they looked: they write it down
+    expect(item(tested({ install: refused, seen: { ...run.seen, hardware: ['the microphone: Android refused it'] } }), 'hardware').reason)
+      .toBe('Not yet: the microphone: Android refused it.');
   });
 
   it('fails kiosk when Kiln couldn\'t confirm the home screen', () => {
@@ -200,6 +209,14 @@ describe('a tested device', () => {
     expect(c.unverified).toBe(true);
     expect(item(tested({ on: undefined }), 'proof').reason).toMatch(/Panel runs not done yet/);
     expect(completeness(tested(), { base }).unverified).toBe(false);
+  });
+
+  it('says nothing has run only when the run has no day, not when a dated run is marked unverified', () => {
+    expect(completeness(tested({ on: undefined }), { base }).noRun).toBe(true);
+    const dated = completeness(tested({}, { unverified: true }), { base });
+    expect(dated.items.every((i) => i.unverified)).toBe(true);
+    expect(dated.noRun).toBe(false);
+    expect(completeness(frame({ unverified: true })).noRun).toBe(false);
   });
 });
 
@@ -266,6 +283,13 @@ describe('factProblems', () => {
     expect(factProblems({ kind: 'tested', run })).toEqual([
       'run.plan.serial: not part of the record (no serials, fingerprints or addresses)',
       'run.plan.fingerprint: not part of the record (no serials, fingerprints or addresses)',
+    ]);
+  });
+
+  it('rejects a field Kiln\'s home result doesn\'t have', () => {
+    const good = read('google-pixel-tablet').run!;
+    expect(factProblems({ kind: 'tested', run: { ...good, install: { ...good.install, home: { ...good.install.home, serial: 'example' } } } })).toEqual([
+      'run.install.home.serial: not part of the record (no serials, fingerprints or addresses)',
     ]);
   });
 

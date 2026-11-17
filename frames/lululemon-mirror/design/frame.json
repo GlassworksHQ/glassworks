@@ -430,7 +430,7 @@
     "setup": ["computer"],
     "branding": { "bootAnimation": true },
     "panelRuns": false,
-    "unverified": ["install", "silentUpdates", "kiosk", "branding"],
+    "unverified": ["install", "silentUpdates", "kiosk", "setup", "branding"],
     "notes": {
       "install": "Kiln's Mirror recipe runs in test only (/lululemon-mirror?apk=local).",
       "silentUpdates": "Seen with the probe app on 2026-11-16 (privileged-app.md); Glassworks itself hasn't run on a Mirror yet.",

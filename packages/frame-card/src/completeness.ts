@@ -102,6 +102,8 @@ export interface Completeness {
   word: Word | null;
   /** a counted item behind the word isn't from a real unit yet */
   unverified: boolean;
+  /** a tested device whose run has no day: nothing here has run on a real unit. A dated run marked unverified isn't one */
+  noRun: boolean;
   items: CheckItem[];
 }
 
@@ -110,12 +112,14 @@ const list = (xs: readonly string[]) => (xs.length < 2 ? (xs[0] ?? '') : `${xs.s
 
 /** A tested device's facts, from its run. */
 function fromRun(r: FrameRun): FrameFacts {
-  const refused = (['microphone', 'camera'] as const).filter((g) => r.install.grants[g] === 'refused').map((g) => `the ${g}: Android refused it`);
+  // what the person saw later supersedes what Kiln saw at install: a grant refused then and given by hand after
+  // shows as working in `seen.hardware`, a refusal that stayed is written there too
   const seen = r.seen.hardware;
+  const refused = seen ? [] : (['microphone', 'camera'] as const).filter((g) => r.install.grants[g] === 'refused').map((g) => `the ${g}: Android refused it`);
   return {
     install: ['usb-debugging', ...(r.install.home.how === 'chooser' ? (['home-pick'] as const) : [])],
     silentUpdates: r.panel?.silentUpdates,
-    hardware: seen || refused.length ? [...(seen ?? []), ...refused] : undefined,
+    hardware: seen ?? (refused.length ? refused : undefined),
     kiosk: { onlyHome: r.install.home.state === 'set', ...r.seen.kiosk },
     setup: r.seen.setup,
     panelRuns: r.on !== undefined,
@@ -197,7 +201,8 @@ const RULES: Record<CheckKey, (f: FrameDesign, x: FrameFacts, o: { route?: strin
 export function completeness(f: FrameDesign, o: { base?: Pick<FrameDesign, 'kiln'>; clarity?: string } = {}): Completeness {
   const x = factsOf(f);
   const route = f.kiln ?? (f.kind === 'tested' ? o.base?.kiln : undefined);
-  const expected = f.unverified === true || (f.kind === 'tested' && f.run?.on === undefined);
+  const noRun = f.kind === 'tested' && f.run?.on === undefined;
+  const expected = f.unverified === true || noRun;
   const items = CHECKS.map((key): CheckItem => {
     const na = !COUNTED.includes(key) && x.na?.includes(key);
     const v = na ? { state: 'na' as const, reason: x.notes?.[key] ?? '' } : RULES[key](f, x, { route, clarity: o.clarity });
@@ -210,7 +215,7 @@ export function completeness(f: FrameDesign, o: { base?: Pick<FrameDesign, 'kiln
   });
   const counted = items.filter((i) => i.counts);
   const word: Word | null = !ships(f.status) ? null : counted.every((i) => i.state !== 'no') ? 'full' : route ? 'good' : 'basic';
-  return { word, unverified: word !== null && counted.some((i) => i.unverified), items };
+  return { word, unverified: word !== null && counted.some((i) => i.unverified), noRun, items };
 }
 
 /* ---------- checking frame.json ---------- */
@@ -284,6 +289,7 @@ function runProblemsOf(r: unknown, out: string[]) {
     }
     if (!['allowed', 'declined', 'refused', 'old-android', 'not-asked'].includes(i.silentUpdates as string)) out.push('run.install.silentUpdates: should be --install\'s silentUpdates.state');
     const h = i.home;
+    if (isObj(h)) only('run.install.home', h, ['how', 'state'], out);
     if (!isObj(h) || !['set-home-activity', 'chooser'].includes(h.how as string) || !['set', 'unconfirmed'].includes(h.state as string)) out.push('run.install.home: should be { how: set-home-activity or chooser, state: set or unconfirmed }');
     if (typeof i.setupPage !== 'boolean') out.push('run.install.setupPage: should be true or false');
   }
