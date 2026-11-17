@@ -514,7 +514,13 @@ internal fun wifiSwitchOn(ctx: Context): Boolean =
  * for a WPA2 or WPA3 password that isn't ASCII, and the join runs on the main thread, where a throw is a crash
  * (CodeRabbit on #418). Neither the password nor the reason is logged. WEP and EAP never come here.
  */
-internal fun suggestion(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion? = runCatching {
+internal fun suggestion(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion? {
+    if (!Compat.hasNetworkSuggestions) return null // Android 10+, as its caller checks too; lint reads this one
+    return runCatching { suggestionOrThrow(ssid, security, password, hidden) }.getOrNull()
+}
+
+@androidx.annotation.RequiresApi(29)
+private fun suggestionOrThrow(ssid: String, security: WifiSecurity, password: String, hidden: Boolean): WifiNetworkSuggestion {
     val b = WifiNetworkSuggestion.Builder().setSsid(ssid).setIsHiddenSsid(hidden)
     when (security) {
         WifiSecurity.PSK -> b.setWpa2Passphrase(password)
@@ -522,5 +528,5 @@ internal fun suggestion(ssid: String, security: WifiSecurity, password: String, 
         WifiSecurity.OWE -> b.setIsEnhancedOpen(true)
         WifiSecurity.OPEN, WifiSecurity.WEP, WifiSecurity.EAP -> {}
     }
-    b.build()
-}.getOrNull()
+    return b.build()
+}
