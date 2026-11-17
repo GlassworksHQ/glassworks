@@ -290,7 +290,9 @@ So on a panel HA already has:
 #### Screen entities by frame
 
 The screen's entities follow the device's hardware (#476), from the same facts as the panel's **Settings → Screen**
-and the Manage page: an entity the device can't back isn't listed. A device lists them when the app starts.
+and the Manage page: an entity the device can't back isn't listed. A device lists them when the app starts. A light
+sensor that Android lists only later (a sensor service that starts late) adds its three entities with its first
+reading, and Home Assistant lists them again.
 
 | Entity | object_id | Needs | S1 | Pixel Tablet | Mirror | Other Android devices |
 |---|---|---|---|---|---|---|
@@ -306,9 +308,10 @@ state, and the entity list stays the same (as for every pane, [Panes on and off]
 So turning the Camera pane on or off never makes Home Assistant reconnect. On a device that has both
 its own sensor and a camera, `presence` is the sensor's and `camera_presence` the camera's.
 
-Before #476 every device listed all of them. After the update, a device drops the ones it can't back. Home Assistant keeps those in its registry, shown as unavailable,
-as it does for a [wall base](#wall-base-entities) entity that goes away. Delete them from the entity's
-settings in HA if you like. The S1 lists the same entities, with the same object ids, order and
+Before #476 every device listed all of them. After the update, a device drops the ones it can't back, and
+Home Assistant removes them on the next reconnect (`esphome/entry_data.py` and `entity.py`, 2026.11: the
+entity registry's `async_remove`). If the hardware comes back, so does the entity, with the same id. An
+automation that used one stops working. The S1 lists the same entities, with the same object ids, order and
 defaults, as before. The Mirror and Pixel Tablet columns come from the frames' hardware and the tests
 (`FrameEntitiesTest`), not yet checked on those devices (2026-11-17).
 
@@ -433,8 +436,9 @@ Rename them in HA.
 
 When the detected base changes (none ↔ switch, channel count) and stays changed for 5 s, the panel
 rebuilds its entity list and sends `DisconnectRequest` to every API client. HA reconnects (after
-its short "expected disconnect" cool-down), lists the entities again and adds the new ones. Removed
-entities stay in HA's registry, shown as unavailable/removed. The last layout is persisted, so
+its short "expected disconnect" cool-down), lists the entities again and adds the new ones. It removes
+the ones that went away from its entity registry, as for [a frame's screen entities](#screen-entities-by-frame),
+and they come back with the same id when the base does. The last layout is persisted, so
 restarting the app with the same base doesn't trigger this.
 
 The **Dashboard** select uses the same mechanism: its options are only sent in the entity listing,

@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.hardware.input.InputManager
+import android.os.Looper
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
@@ -15,18 +16,22 @@ import dev.glassworks.screen.ProximityPresence
 import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.SensorEventBuilder
 import org.robolectric.shadows.ShadowInputDevice
 import org.robolectric.shadows.ShadowSensor
 import sh.edm.s1kiosk.KioskApp
+import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import java.net.InetAddress
 
 /**
  * #476: Home Assistant gets the screen entities a device can back, from the same facts as its Screen settings
@@ -35,7 +40,8 @@ import sh.edm.s1kiosk.frame.AqaraS1Plus
  * frame's own sensor. With only a camera, presence is the camera pane's `camera_presence`, listed on or off.
  *
  * Each case builds the real list through [PanelDevice.initEntities], as [PanelEntitiesPinTest] does. The
- * whole list of each frame is pinned in `frame-entities.golden.txt` (object ids, sorted); regenerate it with
+ * whole list of each frame is pinned in `frame-entities.golden.txt` (object ids, in the order Home Assistant gets
+ * them); regenerate it with
  * `./gradlew :kiosk:testDebugUnitTest --tests '*FrameEntitiesTest*' -Ps1RegenGolden=true`.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -87,9 +93,50 @@ class FrameEntitiesTest {
         assertEquals(on, entityIds(tablet))
     }
 
-    /** Every frame's whole list, so a review sees each entity a frame gains or loses. */
+    /**
+     * A light sensor Android lists only after the list was built (a sensor HAL that starts late) adds its entities
+     * with its first reading, in the S1's order, and HA lists them again. Once: a second reading keeps the list.
+     */
+    @Test fun aLateLightSensorAddsItsEntitiesWithItsFirstReading() {
+        reset()
+        KioskPrefs(app).deviceMac = "02:00:00:00:00:01"
+        val runtime = KioskApp.runtime(generic(), build = AppBuild("1.0.0", 10000, debug = false))
+        val exec = ManualExecutor()
+        val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = RecordingMdns(),
+            apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress())
+        try {
+            device.start()
+            exec.runDue()
+            val before = device.entityList().map { it.objectId }
+            assertEquals(listOf("screen", "screen_mode", "idle_timeout"), before.filter { it in screenIds })
+
+            val sensors = app.getSystemService(SensorManager::class.java)
+            val light = ShadowSensor.newInstance(Sensor.TYPE_LIGHT)
+            shadowOf(sensors).addSensor(light)
+            runtime.screen.start(app)
+            fun reading(lux: Float) {
+                shadowOf(sensors).sendSensorEventToListeners(SensorEventBuilder.newBuilder().setSensor(light).setValues(floatArrayOf(lux)).setTimestamp(0).build())
+                shadowOf(Looper.getMainLooper()).idle()
+                exec.runDue()
+            }
+            reading(300f)
+            val after = device.entityList()
+            assertEquals(
+                listOf("screen", "auto_brightness", "illuminance", "screen_mode", "idle_timeout", "max_brightness"),
+                after.map { it.objectId }.filter { it in screenIds },
+            )
+            assertEquals("nothing else changes", before, after.map { it.objectId }.filter { it !in setOf("auto_brightness", "illuminance", "max_brightness") })
+            reading(5f)
+            assertSame(after, device.entityList())
+        } finally {
+            runtime.screen.stop()
+            device.stop()
+        }
+    }
+
+    /** Every frame's whole list, in order, so a review sees each entity a frame gains, loses or moves. */
     @Test fun everyFrameMatchesGolden() {
-        val actual = cases.joinToString("") { c -> "## ${c.name}\n" + entityIds(c).sorted().joinToString("") { "$it\n" } + "\n" }
+        val actual = cases.joinToString("") { c -> "## ${c.name}\n" + entityIds(c).joinToString("") { "$it\n" } + "\n" }
         if (System.getProperty("s1.regenGolden") == "true") {
             RepoFiles.inModule("src/test/resources/$GOLDEN").writeText(actual)
             return
@@ -99,8 +146,8 @@ class FrameEntitiesTest {
         assertEquals(golden, actual)
     }
 
-    private fun entityIds(c: Case): List<String> {
-        // A fresh device each time: Robolectric resets the shadows only between tests.
+    /** A fresh device: Robolectric resets the shadows only between tests. */
+    private fun reset() {
         shadowOf(app.getSystemService(SensorManager::class.java)).apply {
             getSensorList(Sensor.TYPE_ALL).forEach { removeSensor(it) }
         }
@@ -111,6 +158,10 @@ class FrameEntitiesTest {
         }
         shadowOf(app.packageManager).setSystemFeature(PackageManager.FEATURE_CAMERA_ANY, false)
         PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
+    }
+
+    private fun entityIds(c: Case): List<String> {
+        reset()
         c.setup()
         val frame = c.frame()
         if (c.name.startsWith("lululemon-mirror")) assertEquals(Input.NONE, frame.input)

@@ -124,6 +124,8 @@ class PanelDevice(
     val nodeName: String? get() = if (::identity.isInitialized) identity.name else null
     private lateinit var entities: List<ApiEntity>
     private lateinit var coreEntities: List<ApiEntity>
+    /** What the device has for the screen's entities ([backs]). esphome-main. */
+    private lateinit var hardware: ScreenHardware
     private val voicePlayer = ExoAudioPlayer(context, "voice", AudioAttributes.USAGE_ASSISTANT)
     private val mediaPlayer = ExoAudioPlayer(context, "media", AudioAttributes.USAGE_MEDIA)
     private var chimePlayer: TtsPlayer? = null
@@ -141,7 +143,7 @@ class PanelDevice(
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         exec.execute { onPrefChanged(key) }
     }
-    private val screenListener: () -> Unit = { exec.execute { server?.publishStates() } }
+    private val screenListener: () -> Unit = { exec.execute { onScreenChanged() } }
     private val authListener: (Boolean) -> Unit = { exec.execute { server?.publishStates() } }
     private val dashboardsListener: (List<Dashboard>) -> Unit = { exec.execute { checkDashboards() } }
 
@@ -258,13 +260,31 @@ class PanelDevice(
         val host = Host(paneContext, cantRun).also { host = it }
         panes = buildPanes(host).filter { it.id !in cantRun }
         runtime.panes = panes
-        // The screen's entities the device can back (#476), from the facts its settings and the Manage page show;
-        // every pane's on/off, also while the pane is off.
-        val hardware = ScreenHardware.of(frame, runtime.paneDefinitions(ctx), ctx)
-        coreEntities = buildEntities().filter { hardware.backs(it.objectId) } + switches.values.map { it.entity() }
+        // The screen's entities the device can back (#476), from the facts its settings and the Manage page show.
+        hardware = ScreenHardware.of(frame, runtime.paneDefinitions(ctx), ctx)
+        coreEntities = coreEntities()
         appliedDashboards = DashboardOptions.parse(prefs.dashboardsJson).orEmpty()
         dashboardRebuild = StableChange(dashboardOptions(appliedDashboards))
         entities = assemble()
+    }
+
+    /** The core's entities the device can back, and every pane's on/off, also while the pane is off. */
+    private fun coreEntities(): List<ApiEntity> =
+        buildEntities().filter { hardware.backs(it.objectId) } + switches.values.map { it.entity() }
+
+    /**
+     * esphome-main, on every change of the screen. A light sensor that Android listed only after the entity list was
+     * built (a sensor HAL that starts late) adds its entities with its first reading, once, and Home Assistant
+     * lists them again.
+     */
+    private fun onScreenChanged() {
+        if (!hardware.light && !screen.lux.isNaN()) {
+            hardware = hardware.copy(light = true)
+            EspHomeLog.i("First light reading: adding the light sensor's entities")
+            coreEntities = coreEntities()
+            rebuildEntities()
+        }
+        server?.publishStates()
     }
 
     /** The entities Home Assistant gets now. Public for tests. */
