@@ -59,17 +59,22 @@ object UsbDebugging {
 
         /** The Glass Panes image let its owner's key in by itself (its services.jar, image-patch.md). */
         data object LetInByImage : Heard
+
+        /** Android refused an approval of [got]: [waiting] is the computer it waits on, null when none (`:241`). */
+        data class Refused(val got: String, val waiting: String?) : Heard
     }
 
     /** One system log line as [Heard], or null when it says neither. */
-    fun heard(line: String): Heard? = when {
-        ASKED in line -> Heard.Asked(line.substringAfter(ASKED).trim())
-        OWNER in line -> Heard.LetInByImage
-        else -> null
+    fun heard(line: String): Heard? {
+        if (ASKED in line) return Heard.Asked(line.substringAfter(ASKED).trim())
+        if (OWNER in line) return Heard.LetInByImage
+        val r = REFUSED.find(line) ?: return null
+        return Heard.Refused(r.groupValues[1], r.groupValues[2].takeIf { it != "null" })
     }
 
     private const val ASKED = "Received public key: "
     private const val OWNER = "Authorizing the Mirror owner's ADB key"
+    private val REFUSED = Regex("Fingerprints do not match\\. Got ([0-9A-F:]+), expected (\\S+)")
 
     /**
      * Follows the system log for computers asking ([heard]) while started, starting it again when it ends. `-T 1`:

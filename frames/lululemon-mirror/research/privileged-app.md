@@ -272,8 +272,14 @@ Read at `android-6.0.1_r81`, `services/usb/java/com/android/server/usb/UsbDebugg
 |---|---|---|
 | 138 | `Slog.d(TAG, "Received public key: " + key)`, once per computer asking, before `MESSAGE_ADB_CONFIRM` | Reads the system log (`READ_LOGS`, `signature\|privileged\|development`): each line is a new request with the full key. No polling |
 | 139–141, 279 | The confirm message goes on the same handler, and sets `mFingerprints` | The app's `allowUsbDebugging` call comes after the log line, so Android has set the fingerprint first |
+| 240–243 | A key that isn't the one asking: logs `Fingerprints do not match. Got <fp>, expected <fp>` and does nothing. A match logs nothing | Allow waits 3 s for that line: only without it does the page say the computer is in and save it to the list |
 | 246 | `writeKey` only when `alwaysAllow` is set | The app passes `false`: `adb_keys` doesn't grow, and Remove takes a computer out for good |
 | 458 | `dump` prints "Last key received" as the fingerprint only | Not used: it can't supply the key, and it doesn't change when the same computer asks again |
+
+**Any app can write these lines.** Logging under the `UsbDebuggingManager` tag needs no permission, so another
+app on the panel can forge a request or a refusal. That can only mislead the card: a forged request shows a
+computer that isn't asking, and Android refuses its approval because the fingerprint isn't the one it waits on
+(lines 240–243). A forged refusal makes Allow report a failure. Neither lets a computer in.
 
 **Untested on the unit:** that the Glass Panes image's `services.jar` still logs line 138 (its
 `handleMessage` was changed, [image-patch.md](image-patch.md#what-the-image-does); `listenToSocket` wasn't

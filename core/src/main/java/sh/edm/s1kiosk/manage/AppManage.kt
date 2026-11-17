@@ -103,6 +103,7 @@ open class AppManage(
             when (h) {
                 is UsbDebugging.Heard.Asked -> AdbKey.parse(h.key)?.let(c::asked)
                 UsbDebugging.Heard.LetInByImage -> c.letInByImage()
+                is UsbDebugging.Heard.Refused -> c.refused(h.got, h.waiting)
             }
         }, onError = { Log.w(TAG, it) })
     }

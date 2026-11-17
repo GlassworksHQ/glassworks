@@ -8,6 +8,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * A computer's adb public key, as `~/.android/adbkey.pub` holds it and adbd hands it to Android:
@@ -70,17 +72,21 @@ class AdbKey private constructor(val base64: String, val name: String?, bytes: B
  *
  * [allow] asks Android to let [AdbKey] in for this connection. Android takes it only from the computer that asked
  * last, matched by fingerprint, so the app can never let in a computer that isn't plugged in and asking.
+ * Android says nothing when it lets a computer in, and logs "Fingerprints do not match" when it doesn't
+ * ([refused]). So Allow waits [confirmMs] for that line before it says the computer is in, or puts it on the list.
  * Nothing goes to `adb_keys`, so Remove takes a computer out for good. Thread-safe.
  */
 class AdbComputers(
     private val file: File,
-    /** Android's approval of the computer asking now; null when Android took it, else why not. */
+    /** Sends Android the approval of the computer asking now; null when the call went through, else why not. */
     private val allow: (AdbKey) -> String?,
     private val event: (String) -> Unit,
     private val clock: () -> Long = System::currentTimeMillis,
     /** How long a computer's question shows on the page. Android keeps it until the next computer asks. */
     private val askingMs: Long = 10 * 60_000L,
     private val max: Int = 20,
+    /** How long Allow waits for Android's refusal before it counts the approval as taken. */
+    private val confirmMs: Long = 3_000L,
 ) {
     /** A computer on the list: its key, who added it and when. */
     data class Listed(val key: AdbKey, val addedMs: Long, val by: String)
@@ -88,8 +94,15 @@ class AdbComputers(
     /** The last computer that asked, and how it was answered, if it was. */
     private data class Request(val key: AdbKey, val atMs: Long, val answered: Boolean)
 
+    /** An approval Allow has sent and waits on: Android's refusal of [fingerprint] ends the wait. */
+    private class Sent(val fingerprint: String) {
+        val answered = CountDownLatch(1)
+        @Volatile var waiting: String? = null
+    }
+
     private val listed = LinkedHashMap<String, Listed>()
     private var last: Request? = null
+    private var sent: Sent? = null
 
     init { load() }
 
@@ -110,8 +123,23 @@ class AdbComputers(
         }
         val problem = allow(on.key)
         last = Request(key, clock(), answered = problem == null)
-        event(if (problem == null) "Let in ${label(on.key)} over USB: it's on the allowed list"
+        event(if (problem == null) "Asked Android to let in ${label(on.key)} over USB: it's on the allowed list"
             else "Couldn't let in ${label(on.key)} over USB: $problem")
+    }
+
+    /**
+     * Android refused the approval of [got]: [waiting] is the computer it waits on, or null when none. Allow, if it
+     * waits on [got], fails; any other refusal goes to the Log.
+     */
+    @Synchronized
+    fun refused(got: String, waiting: String?) {
+        val s = sent
+        if (s != null && s.fingerprint == got) {
+            s.waiting = waiting ?: NO_ONE
+            s.answered.countDown()
+            return
+        }
+        event("Android didn't let in adb key $got over USB: ${waitingText(waiting)}")
     }
 
     /** The image let the computer that asked in itself (the owner's key): nothing to answer. */
@@ -121,50 +149,68 @@ class AdbComputers(
     }
 
     /** What [allowAsking] did. */
-    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, NOT_REMEMBERED }
+    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, REFUSED, NOT_REMEMBERED }
 
     /**
      * Lets in the computer asking now, if it is still the one the page showed ([shown], its fingerprint). With
-     * [remember] it goes on the list too, so it gets in each time it connects.
+     * [remember] it goes on the list too, so it gets in each time it connects. Blocks up to [confirmMs].
      */
-    @Synchronized
     fun allowAsking(shown: String, remember: Boolean, who: String): Allowed {
-        val key = asking()
-        if (key == null) {
-            event("$who tried to allow adb key $shown over USB: refused, no computer is asking now")
-            return Allowed.NONE
+        val key: AdbKey
+        val s: Sent
+        synchronized(this) {
+            key = asking() ?: run {
+                event("$who tried to allow adb key $shown over USB: refused, no computer is asking now")
+                return Allowed.NONE
+            }
+            if (key.fingerprint != shown) {
+                event("$who tried to allow adb key $shown over USB: refused, adb key ${key.fingerprint} asked since")
+                return Allowed.CHANGED
+            }
+            if (remember && key.fingerprint !in listed && listed.size >= max) {
+                event("$who tried to add ${label(key)} to the allowed list: refused, the list holds $max")
+                return Allowed.FULL
+            }
+            s = Sent(key.fingerprint)
+            sent = s
         }
-        if (key.fingerprint != shown) {
-            event("$who tried to allow adb key $shown over USB: refused, adb key ${key.fingerprint} asked since")
-            return Allowed.CHANGED
+        try {
+            allow(key)?.let { why ->
+                event("$who couldn't allow ${label(key)} over USB: $why")
+                return Allowed.FAILED
+            }
+            s.answered.await(confirmMs, TimeUnit.MILLISECONDS)
+        } finally {
+            synchronized(this) { if (sent === s) sent = null }
         }
-        if (remember && key.fingerprint !in listed && listed.size >= max) {
-            event("$who tried to add ${label(key)} to the allowed list: refused, the list holds $max")
-            return Allowed.FULL
-        }
-        allow(key)?.let { why ->
-            event("$who couldn't allow ${label(key)} over USB: $why")
-            return Allowed.FAILED
-        }
-        last = last?.copy(answered = true)
-        if (!remember) {
-            event("$who allowed ${label(key)} over USB, for this connection")
-            return Allowed.ONCE
-        }
-        // Already listed (its automatic approval failed): the list stays as it is.
-        if (key.fingerprint in listed) {
-            event("$who allowed ${label(key)} over USB; it's on the allowed list already")
+        synchronized(this) {
+            s.waiting?.let { w ->
+                event("$who tried to allow ${label(key)} over USB: Android refused it, ${waitingText(w.takeIf { it != NO_ONE })}")
+                return Allowed.REFUSED
+            }
+            last = last?.takeIf { it.key == key }?.copy(answered = true) ?: last
+            if (!remember) {
+                event("$who allowed ${label(key)} over USB, for this connection")
+                return Allowed.ONCE
+            }
+            // Already listed (its automatic approval failed): the list stays as it is.
+            if (key.fingerprint in listed) {
+                event("$who allowed ${label(key)} over USB; it's on the allowed list already")
+                return Allowed.FROM_NOW_ON
+            }
+            listed[key.fingerprint] = Listed(key, clock(), who)
+            if (!save()) {
+                listed.remove(key.fingerprint)
+                event("$who allowed ${label(key)} over USB, for this connection: the allowed list couldn't be saved")
+                return Allowed.NOT_REMEMBERED
+            }
+            event("$who allowed ${label(key)} over USB, from now on")
             return Allowed.FROM_NOW_ON
         }
-        listed[key.fingerprint] = Listed(key, clock(), who)
-        if (!save()) {
-            listed.remove(key.fingerprint)
-            event("$who allowed ${label(key)} over USB, for this connection: the allowed list couldn't be saved")
-            return Allowed.NOT_REMEMBERED
-        }
-        event("$who allowed ${label(key)} over USB, from now on")
-        return Allowed.FROM_NOW_ON
     }
+
+    private fun waitingText(waiting: String?) =
+        if (waiting != null && FINGERPRINT.matches(waiting)) "adb key $waiting is the one waiting" else "no computer is waiting"
 
     /** What [remove] did. */
     enum class Removed { DONE, NOT_LISTED, NOT_SAVED }
@@ -209,6 +255,9 @@ class AdbComputers(
     }
 
     companion object {
+        private const val NO_ONE = "-"
+        private val FINGERPRINT = Regex("(?:[0-9A-F]{2}:){15}[0-9A-F]{2}")
+
         /** A computer as the log names it: the fingerprint ([Redact] keeps it after "adb key"), never the key. */
         fun label(key: AdbKey) = "adb key ${key.fingerprint}" + (key.name?.let { " ($it)" } ?: "")
     }
