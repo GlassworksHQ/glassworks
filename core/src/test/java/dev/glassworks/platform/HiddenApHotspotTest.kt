@@ -47,7 +47,10 @@ class HiddenApHotspotTest {
     private val net = HotspotNetwork("Glassworks-TEST", "abcdefghjkmn")
     private val events = mutableListOf<Hotspot.Event>()
 
-    private fun hotspot(d: FakeDevice) = HiddenApHotspot(d, handler, newNetwork = { net }, startTimeoutMs = 5_000)
+    /** The hotspot interface's address, as the hotspot reads it; null until tethering gives it one. */
+    private var address: String? = "192.168.43.1"
+
+    private fun hotspot(d: FakeDevice) = HiddenApHotspot(d, handler, address = { address }, newNetwork = { net }, startTimeoutMs = 5_000)
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
@@ -124,6 +127,58 @@ class HiddenApHotspotTest {
         assertFalse(d.apOn)
         assertEquals("Home hotspot", d.config)
         assertTrue(d.wifiOn)
+    }
+
+    @Test
+    fun `up with no address in 5 s (Android 7-1 not tethering it) is a clear failure, and nothing stays changed`() {
+        address = null
+        val d = FakeDevice(wifiOn = true)
+        hotspot(d).start { events += it }
+        d.listener!!(ApControls.State.ENABLED)
+        assertEquals("not started without an address", emptyList<Hotspot.Event>(), events)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(6))
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Failed(HotspotFailure.NOT_TETHERED)), events)
+        assertFalse(d.apOn)
+        assertEquals("Home hotspot", d.config)
+        assertTrue(d.wifiOn)
+    }
+
+    @Test
+    fun `Android ending the AP during the address wait fails it at once, and nothing stays changed`() {
+        address = null
+        val d = FakeDevice(wifiOn = true)
+        hotspot(d).start { events += it }
+        d.listener!!(ApControls.State.ENABLED)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        d.listener!!(ApControls.State.DISABLED)
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Failed(HotspotFailure.FAILED)), events)
+        assertFalse(d.apOn)
+        assertEquals("Home hotspot", d.config)
+        assertTrue("the client is back at once, not after the 5 s wait", d.wifiOn)
+        assertNull(d.listener)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(30))
+        assertEquals("no NOT_TETHERED later", 1, events.size)
+    }
+
+    @Test
+    fun `the old state Android repeats before the AP is up doesn't end the start`() {
+        val d = FakeDevice(wifiOn = true)
+        hotspot(d).start { events += it }
+        d.listener!!(ApControls.State.DISABLED)
+        d.listener!!(ApControls.State.ENABLED)
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Started(net)), events)
+    }
+
+    @Test
+    fun `an address that comes a moment after the AP is up starts it`() {
+        address = null
+        val d = FakeDevice(wifiOn = true)
+        hotspot(d).start { events += it }
+        d.listener!!(ApControls.State.ENABLED)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_200))
+        address = "192.168.43.1"
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(600))
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Started(net)), events)
     }
 
     @Test

@@ -5,6 +5,8 @@
 package dev.glassworks.platform
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Handler
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -33,7 +35,7 @@ interface Hotspot {
         /** The way this Android allows ([PlatformApi.hotspotKind]). */
         fun of(context: Context, handler: Handler, platform: PlatformApi = Platform): Hotspot = when (platform.hotspotKind) {
             HotspotKind.LOCAL_ONLY -> LocalOnlyHotspot(context, handler, platform)
-            HotspotKind.HIDDEN_AP -> HiddenApHotspot(ReflectedAp(context, handler), handler)
+            HotspotKind.HIDDEN_AP -> HiddenApHotspot(ReflectedAp(context, handler), handler, address = { HotspotAddress.now(context) })
         }
     }
 }
@@ -58,6 +60,8 @@ enum class HotspotFailure(val text: String) {
     TETHERING_ON("Android's own hotspot is on. Turn it off to open the setup Wi-Fi."),
     NOT_ALLOWED("This device doesn't let apps open a Wi-Fi hotspot."),
     NO_CHANNEL("No free Wi-Fi channel for the setup Wi-Fi."),
+    NOT_TETHERED("The setup Wi-Fi started, but Android gave it no address, so a phone couldn't reach the panel."),
+    WIFI_OFF("The panel's Wi-Fi is turned off, and the panel can't turn it on itself. Turn on Wi-Fi first."),
     FAILED("The setup Wi-Fi didn't start."),
 }
 
@@ -69,19 +73,34 @@ object HotspotAddress {
     /**
      * The panel's IPv4 address on its hotspot, or null before it has one. Only Wi-Fi interfaces count (`wlan0`,
      * `ap0`, `swlan0`, `softap0`), and only private addresses: a tablet's mobile data has a 10.x address too,
-     * on `rmnet`. An interface named for an access point wins over `wlan`.
+     * on `rmnet`.
+     *
+     * [client] holds the IPv4 addresses of Android's own Wi-Fi networks (the client side). Those never count, but the
+     * interface they sit on still does: on the S1 the AP itself is `wlan0`, and Android may still list a client network
+     * there for a while (#418 verifier; measured in docs/research/setup-hotspot-portal-and-name.md). Among the addresses
+     * left, name order picks: an interface named for an access point first, then the highest `wlan` (with the client
+     * still up on `wlan0`, AOSP puts the AP on `wlan1`).
      */
-    fun pick(interfaces: List<Interface>): String? = interfaces
+    fun pick(interfaces: List<Interface>, client: Set<String> = emptySet()): String? = interfaces
         .filter { it.up && WIFI.matches(it.name) }
-        .sortedBy { if (it.name.startsWith("wlan")) 1 else 0 }
-        .firstNotNullOfOrNull { i -> i.ipv4.firstOrNull(::private) }
+        .sortedWith(compareBy({ it.name.startsWith("wlan") }, { -(it.name.removePrefix("wlan").toIntOrNull() ?: 0) }))
+        .firstNotNullOfOrNull { i -> i.ipv4.firstOrNull { private(it) && it !in client } }
 
-    /** [pick] over the device's interfaces now. */
-    fun now(): String? = runCatching {
+    /** [pick] over the device's interfaces now, leaving out the addresses [context]'s Wi-Fi client networks have. */
+    fun now(context: Context): String? = runCatching {
         pick(NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().map { i ->
             Interface(i.name, i.isUp, i.inetAddresses.toList().filterIsInstance<Inet4Address>().mapNotNull { it.hostAddress })
-        })
+        }, clientAddresses(context))
     }.getOrNull()
+
+    /** The IPv4 addresses of Android's own Wi-Fi networks: the client's, never our AP's (Android lists no network for it). */
+    @Suppress("DEPRECATION") // allNetworks: every Wi-Fi network, not only the default one
+    private fun clientAddresses(context: Context): Set<String> = runCatching {
+        val cm = context.applicationContext.getSystemService(ConnectivityManager::class.java) ?: return emptySet()
+        cm.allNetworks.filter { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+            .flatMap { cm.getLinkProperties(it)?.linkAddresses.orEmpty() }
+            .mapNotNull { (it.address as? Inet4Address)?.hostAddress }.toSet()
+    }.getOrDefault(emptySet())
 
     private val WIFI = Regex("""(wlan|ap|swlan|softap)\d+""")
 

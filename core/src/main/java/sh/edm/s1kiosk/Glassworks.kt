@@ -82,6 +82,19 @@ interface Glassworks {
     var discovery: HaDiscovery?
 
     /**
+     * The setup hotspot (#197), set while KioskService runs (it needs the service's foreground). The setup screen
+     * draws it and asks for it; Wi-Fi details, setup's end and the setup page's Done stop it. Set and used on the main
+     * thread; other threads (the setup page's pairing gate) read only its `isOn`.
+     */
+    var setupHotspot: dev.glassworks.setup.SetupHotspot?
+
+    /**
+     * The networks the panel saw just before its setup hotspot started: while it runs, the radio can't scan on most
+     * devices (S1 panel run, 2026-11-16), so the setup page lists these. Any thread.
+     */
+    var hotspotScan: List<sh.edm.s1kiosk.setup.WifiNetwork>
+
+    /**
      * Applies an intent's extras in the running activity (main thread), like onNewIntent. Used by the
      * ESPHome device so Home Assistant can drive the kiosk without starting activities from the background.
      */

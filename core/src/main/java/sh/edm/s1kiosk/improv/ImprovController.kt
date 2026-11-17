@@ -280,6 +280,7 @@ object ImprovController {
         installerWifi = InstallerWifi(ssid, InstallerWifi.Phase.CONNECTING)
         installerJoining = true
         app.glassworks.screen.wake("installer wifi")
+        app.glassworks.setupHotspot?.configured() // off first: on most devices the radio can't join while it runs (#197)
         refreshOverlay()
         wifi.connect(ssid, psk, hidden) { outcome -> main.post { onInstallerOutcome(seq, ssid, outcome); done?.invoke(outcome) } }
         return true
@@ -386,6 +387,7 @@ object ImprovController {
             failure = null
             progress = null
             installerJoining = false
+            app.glassworks.setupHotspot?.configured()
             refreshOverlay()
             wifi.connect(ssid, password) { outcome -> main.post { onWifiOutcome(outcome) } }
         }
@@ -555,7 +557,7 @@ object ImprovController {
                 ImprovOverlay.Model(
                     label = "Wi-Fi setup · allowed for ${left / 60}:${"%02d".format(left % 60)}",
                     title = if (fail != null) "Couldn't connect to $connectingSsid" else "Ready for Wi-Fi details",
-                    body = if (fail != null) "$fail. Check the password and send it again." else
+                    body = if (fail != null) "$fail." + (if (WifiProvisioner.saysWhatToDo(fail)) "" else " Check the password and send it again.") else
                         "Open the “Improv via BLE” discovery for this panel in Home Assistant and enter your Wi-Fi." +
                             if (!wifi.legacyApiAllowed) " You'll then be asked to approve the network in a notification." else "",
                     secondary = "Stop" to { stop("stopped on panel") },
@@ -565,7 +567,7 @@ object ImprovController {
             ImprovState.PROVISIONING -> ImprovOverlay.Model(
                 label = "Wi-Fi setup",
                 title = "Connecting to $connectingSsid…",
-                body = progress ?: "This takes up to 30 seconds.",
+                body = progress ?: "This can take up to a minute.",
                 accent = ImprovOverlay.AMBER,
                 busy = true,
             )

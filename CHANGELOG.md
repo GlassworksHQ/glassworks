@@ -8,6 +8,15 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **The panel opens its own Wi-Fi for setup when no Wi-Fi works.** With no connection 3 minutes after it
+  starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
+  its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
+  send your Wi-Fi from the setup page. It never runs while the panel is connected, and it closes when Wi-Fi
+  is set, after 15 minutes, or with **Close it**; then the panel tries your Wi-Fi again. Android may close it
+  sooner when nobody joins (10 minutes on the S1); it opens again 3 minutes later if no Wi-Fi works. With the
+  panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
+  so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
+  permission first, and says why.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
