@@ -68,10 +68,13 @@ class AdbComputersTest {
     /** What Android does once the approval is sent (its refusal comes back through the log). */
     private var android: (AdbComputers, AdbKey) -> Unit = { _, _ -> }
 
+    /** Whether the panel reads Android's log now. */
+    private var listening = true
+
     private fun computers(): AdbComputers {
         lateinit var c: AdbComputers
-        c = AdbComputers(file, allow = { k -> allowed += k.base64; refuse.also { if (it == null) android(c, k) } }, event = { events += it },
-            clock = { now }, confirmMs = 50)
+        c = AdbComputers(file, allow = { k -> synchronized(allowed) { allowed += k.base64 }; refuse.also { if (it == null) android(c, k) } }, event = { events += it },
+            clock = { now }, confirmMs = 50, listening = { listening })
         return c
     }
 
@@ -190,14 +193,52 @@ class AdbComputersTest {
         assertEquals(listOf(a), c.list().map { it.key })
     }
 
-    @Test fun `a refusal of another approval, or of the automatic one, goes to the Log`() {
+    @Test fun `a refused automatic approval is sent once more, then the computer shows as asking`() {
         val c = computers()
         c.asked(a)
         c.allowAsking(a.fingerprint, remember = true, who = "Alex")
+        allowed.clear()
         c.asked(a)
+        assertNull(c.asking())
         c.refused(a.fingerprint, null)
+        assertEquals("sent again", listOf(a.base64, a.base64), allowed)
+        assertNull(c.asking())
+        c.refused(a.fingerprint, null)
+        assertEquals("not a third time", 2, allowed.size)
         assertEquals("Android didn't let in adb key ${a.fingerprint} over USB: no computer is waiting", events.last())
+        assertEquals("for Allow on the page", a, c.asking())
         assertEquals("the list stays", listOf(a), c.list().map { it.key })
+    }
+
+    @Test fun `while the panel can't read Android's log, Allow sends and saves nothing`() {
+        val c = computers()
+        c.asked(a)
+        listening = false
+        assertEquals(AdbComputers.Allowed.UNCONFIRMED, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
+        assertTrue(allowed.isEmpty())
+        assertEquals("still asking", a, c.asking())
+        listening = true
+        android = { _, _ -> listening = false }
+        assertEquals("the reader stopped while it waited", AdbComputers.Allowed.UNCONFIRMED, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
+        assertTrue(c.list().isEmpty())
+    }
+
+    @Test fun `two Allows at once each get their own answer`() {
+        val c = computers()
+        c.asked(a)
+        val second = java.util.concurrent.atomic.AtomicReference<AdbComputers.Allowed>()
+        var other: Thread? = null
+        android = { comp, k ->
+            if (other == null) {
+                other = Thread { second.set(comp.allowAsking(a.fingerprint, remember = true, who = "Sam")) }.apply { start() }
+                Thread.sleep(30)
+                comp.refused(k.fingerprint, b.fingerprint)
+            }
+        }
+        assertEquals("the first one's refusal reaches the first one", AdbComputers.Allowed.REFUSED, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
+        other!!.join(5_000)
+        assertEquals(AdbComputers.Allowed.FROM_NOW_ON, second.get())
+        assertEquals(listOf("Sam"), c.list().map { it.by })
     }
 
     /** Makes the list's file unwritable: a folder with something in it where the file goes. */
