@@ -315,6 +315,9 @@ class ManageApiTest {
         for (n in 1..8) f.refusedTokens += "made-up-$n-0123456789"
         val answers = (1..8).map { n -> post("made-up-$n-0123456789").status }
         assertEquals(List(5) { 403 } + List(3) { 429 }, answers)
+        val paused = post("made-up-1-0123456789")
+        assertEquals("10", paused.headers["Retry-After"])
+        assertEquals("the title and the line under it say different things", 1, Regex("Try again in a few seconds").findAll(paused.text()).count())
         assertEquals("five questions to Home Assistant, not eight", 5, f.userChecks.size)
         assertEquals("another computer isn't held up", 200, post(token, remote = "192.0.2.78").status)
         f.monoMs += ManageServer.HANDOFF_WINDOW_MS

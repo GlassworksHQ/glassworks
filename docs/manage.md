@@ -259,8 +259,8 @@ and there are no shared keys and no leader.
   It keeps the answer for a minute, so a token revoked in Home Assistant still works here for up to a minute.
   A token Home Assistant didn't confirm stays refused for 10 seconds, except for a sign-in from another panel's
   page, which always asks. The panel asks Home Assistant about at most two tokens at a time: while Home Assistant
-  is slow, the rest are told to try again in a moment. One computer can start at most five such sign-ins in
-  10 seconds; then it waits.
+  is slow, the rest are told to try again in a moment. One address (one computer, usually) can start at most
+  five such sign-ins in 10 seconds; then it waits.
   Whether other Home Assistant users get a say is still open.
 - **What it reads.** Every setting the page can change, with its value as text, the way the page's forms send
   it. A sign-in (a camera's) says only whether it is set: no password or user name leaves the panel.

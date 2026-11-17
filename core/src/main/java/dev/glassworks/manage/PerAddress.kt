@@ -6,7 +6,9 @@ package dev.glassworks.manage
 
 /**
  * At most [count] tries per address in any [windowMs], on a monotonic clock. Remembers [maxAddresses] addresses,
- * the least recent going first, so a flood from many addresses can't grow it. Thread-safe.
+ * the least recently seen going first, so a flood from many addresses can't grow it. That cap bounds memory, not
+ * the rate: with more than [maxAddresses] addresses trying at once, an address that was forgotten starts a fresh
+ * window when it comes back. Thread-safe.
  */
 class PerAddress(private val count: Int, private val windowMs: Long, private val maxAddresses: Int = 64) {
     private val tries = LinkedHashMap<String, ArrayDeque<Long>>(16, 0.75f, true)
