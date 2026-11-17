@@ -33,7 +33,10 @@ class SilentUpdatesStep(
     override val title = "Silent updates"
     override val reason = "updates ask for a tap, and the person can change that"
 
-    /** A screen showed the step: it stays until answered, so the person sees "On" after allowing it. */
+    /**
+     * The step's card was drawn (not in a preview): it stays until answered, so the person sees "On" after allowing
+     * it. Set in bind, not when the screen is made: the setup screen makes every step's screen at its first tick.
+     */
     @Volatile private var shown = false
 
     override fun done(): Boolean = answered() || (!shown && offer(answer()) == null)
@@ -46,10 +49,7 @@ class SilentUpdatesStep(
     /** For the setup channel and the LAN page: answers the step, as "Not now" does. */
     override val ops = mapOf("answer" to SetupOp { markAnswered(); null })
 
-    override fun screen(context: Context, host: SetupHost): SetupScreen {
-        shown = true
-        return Screen(context, host)
-    }
+    override fun screen(context: Context, host: SetupHost): SetupScreen = Screen(context, host)
 
     private inner class Screen(private val context: Context, private val host: SetupHost) : SetupScreen {
         private var lastSilent = answer()?.silent
@@ -57,6 +57,7 @@ class SilentUpdatesStep(
         private var noSettings = false
 
         override fun bind(card: SetupCard, entered: Boolean) {
+            if (!host.preview) shown = true
             val s = answer()
             lastSilent = s?.silent
             when {

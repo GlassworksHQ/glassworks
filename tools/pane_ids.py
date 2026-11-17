@@ -34,16 +34,17 @@ def pane_ids_in(src):
                     texts.append(fh.read())
     consts = {}  # class name -> its companion's ID
     for t in texts:
-        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n\S[^\n]*\bclass \w|\Z)', t, re.S):
+        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n(?=\S)[^\n]*\bclass \w|\Z)', t, re.S):
             m = re.search(r'const val ID = "([a-z0-9-]+)"', body)
             if m:
                 consts[cls] = m.group(1)
     ids = set()
     for t in texts:
-        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n\S[^\n]*\bclass \w|\Z)', t, re.S):
+        for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n(?=\S)[^\n]*\bclass \w|\Z)', t, re.S):
             # A setup step's id names the step, not a pane (#422's SilentUpdatesStep); a pane's own step
-            # reuses the id its pane declares anyway (CameraSetupStep).
-            if "SetupStep" in body.split("{", 1)[0]:
+            # reuses the id its pane declares anyway (CameraSetupStep). The header ends at the brace that ends
+            # its line, so a constructor default such as `= {}` doesn't cut it short.
+            if re.search(r'\bSetupStep\b', re.split(r'\{[ \t]*\n', body, maxsplit=1)[0]):
                 continue
             for ref in re.findall(r'override val id = ([^\n]+)', body):
                 ref = ref.split("//")[0].strip()

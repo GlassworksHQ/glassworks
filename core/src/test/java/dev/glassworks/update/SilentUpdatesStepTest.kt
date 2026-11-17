@@ -69,6 +69,20 @@ class SilentUpdatesStepTest {
         assertFalse(Rig(SilentUpdates.OldAndroid("9")).step.done())
     }
 
+    @Test fun makingItsScreenDoesntShowIt() {
+        // The setup screen makes every step's screen at its first tick, shown or not (CodeRabbit on #431).
+        val r = Rig(SilentUpdates.SelfUpdate)
+        r.step.screen(app, r.host).tick(current = false)
+        assertTrue(r.step.done())
+    }
+
+    @Test fun aPreviewDoesntHoldItOpen() {
+        val r = Rig(SilentUpdates.UnknownAppsOff, preview = true)
+        bound(r)
+        r.answer = SilentUpdates.SelfUpdate
+        assertTrue("a preview changes nothing, this included", r.step.done())
+    }
+
     @Test fun notNowAnswersItForGood() {
         val r = Rig(SilentUpdates.UnknownAppsOff)
         val (_, card) = bound(r)
