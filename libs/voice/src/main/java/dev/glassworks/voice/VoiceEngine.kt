@@ -290,9 +290,14 @@ public class VoiceEngine internal constructor(
     private fun loadLegacy(file: String): WakeDetector = try {
         TfliteWakeWord.load(modelsDir, file)
     } catch (e: Exception) {
-        // Missing, or there but refused by TFLite (a corrupt file): fetch what fails its hash, then load again.
+        // Missing: fetch the set. Refused by TFLite: maybe a corrupt file, so fetch this word's files that fail
+        // their hash; if that download fails too, the engine's error stands.
         if (e !is ModelsMissingException && e !is WakeEngineException) throw e
-        val fetched = try { ModelFetcher().ensure(modelsDir) } catch (io: java.io.IOException) {
+        val fetcher = if (e is WakeEngineException) {
+            ModelFetcher(files = ModelFetcher.FILES.filterKeys { it == file || it == TfliteWakeWord.MELSPEC_FILE || it == TfliteWakeWord.EMBEDDING_FILE })
+        } else ModelFetcher()
+        val fetched = try { fetcher.ensure(modelsDir) } catch (io: java.io.IOException) {
+            if (e is WakeEngineException) throw e
             throw ModelsMissingException("${e.message}; downloading them failed: ${io.message}", modelFailureOf(io))
         }
         if (fetched.isEmpty()) throw e

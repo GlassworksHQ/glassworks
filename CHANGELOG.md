@@ -11,7 +11,7 @@ below as the release notes.
 - **Voice says when it can't get ready.** When the wake word model doesn't download (no internet, a
   certificate the panel can't verify, an HTTP error), fails its check, can't be saved, or the microphone
   doesn't open or isn't allowed, the Assist page on the panel and on the Manage page says so in words, with
-  what to do and when the panel tries again, plus a **Try again** button. A new *Voice status* sensor in Home
+  what to do and when the panel retries. A model or engine failure also gets a **Try again** button. A new *Voice status* sensor in Home
   Assistant reads *Ready*, *Download failed*, *No microphone* and so on, so you can see it on the device page
   or automate on it. A failed download is retried after 30 seconds, then less often, up to every 10 minutes.
 - **The Bluetooth proxy can connect to devices.** Its settings page has a new choice: *Listen only*,
