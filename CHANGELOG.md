@@ -131,6 +131,13 @@ below as the release notes.
   `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
   setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
   shows Kiln's name or its orange colours. The steps and words are the same.
+- **Screen settings show only what the device has.** On a tablet or the Mirror, the Screen page in the
+  panel's settings and on the Manage page no longer shows the S1's presence range. *Wake when someone's
+  near* shows only with a sensor that can wake the screen: a proximity sensor, or the Camera pane, and
+  where the camera could do it but its pane is off, the row says so and opens it. *Brightness* needs a
+  light sensor, and a device without touch has no link to Android's settings. Without presence, *Turn off
+  when idle* is the screen's one on/off: it says Never while Home Assistant's *Screen mode* keeps the screen
+  on, and picking a time there turns that off. The S1's page is unchanged.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.

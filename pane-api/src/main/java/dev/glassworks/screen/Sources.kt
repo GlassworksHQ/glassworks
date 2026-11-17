@@ -22,6 +22,15 @@ interface PresenceSource {
 
     /** Whether this device has the sensor. A frame's source can be wrong about a device it wasn't made for. */
     fun available(context: Context): Boolean = true
+
+    /** Whether [setRange] can change how far it sees. A standard proximity sensor's range is fixed by its hardware. */
+    val ranged: Boolean get() = false
+
+    /**
+     * The frame was made with this sensor (the S1's VI5300), so the Screen settings count it without asking the
+     * device, whose sensor HAL can list it late after boot or a restart. A source for many devices asks ([available]).
+     */
+    val builtIn: Boolean get() = false
 }
 
 /** Ambient light for [ScreenPolicy]'s brightness curve. */
@@ -31,6 +40,9 @@ interface LightSource {
 
     /** Stops reporting. [start] may run again. */
     fun stop(context: Context)
+
+    /** Whether this device has the sensor. */
+    fun available(context: Context): Boolean = true
 }
 
 /** What [ScreenPolicy] reads on every decision. The app keeps these in its own settings file under its own keys. */

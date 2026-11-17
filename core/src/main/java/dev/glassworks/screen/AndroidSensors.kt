@@ -22,15 +22,22 @@ import android.util.Log
 class ProximityPresence(private val logTag: String) : PresenceSource {
     private var registered: SensorEventListener? = null
 
-    override fun available(context: Context): Boolean = sensor(context, Sensor.TYPE_PROXIMITY) != null
+    /**
+     * A sensor whose range is 0 or less can never read near ([near]): a stub some devices list. It counts as none,
+     * so the Screen settings offer no wake row it can't back and the camera pane can stand in (#471).
+     */
+    override fun available(context: Context): Boolean = usable(context) != null
 
     override fun start(context: Context, onReading: (near: Boolean, raw: Float) -> Unit) {
-        val s = sensor(context, Sensor.TYPE_PROXIMITY) ?: return
+        // Not a stub's: its far readings would clear the camera pane's near (ScreenPolicy keeps one flag).
+        val s = usable(context) ?: return
         Log.i(logTag, "proximity: ${s.name} vendor=${s.vendor} max=${s.maximumRange}")
         registered = register(context, s) { cm -> onReading(near(cm, s.maximumRange), cm) }
     }
 
     override fun stop(context: Context) = unregister(context, registered).also { registered = null }
+
+    private fun usable(context: Context): Sensor? = sensor(context, Sensor.TYPE_PROXIMITY)?.takeIf { it.maximumRange > 0f }
 
     /** A standard proximity sensor's range is fixed by its hardware. */
     override fun setRange(context: Context, metres: Float): String? = if (metres <= 0f) null else FIXED_RANGE
@@ -56,6 +63,8 @@ class AmbientLight(private val logTag: String) : LightSource {
     }
 
     override fun stop(context: Context) = unregister(context, registered).also { registered = null }
+
+    override fun available(context: Context): Boolean = sensor(context, Sensor.TYPE_LIGHT) != null
 }
 
 private fun sensor(context: Context, type: Int): Sensor? =

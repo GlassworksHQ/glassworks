@@ -138,7 +138,7 @@ class HaLinkSurfacesTest {
         })
         val manage = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, prefs)
         fun notes(sections: List<SettingsSection>) = sections.flatMap { s -> s.items.filterIsInstance<SettingsItem.States>().filter { it.title == IN_HOME_ASSISTANT }.map { it.shown().note } }
-        fun both() = listOf(notes(S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}).sections), notes(manage.status().sections))
+        fun both() = listOf(notes(S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app).sections), notes(manage.status().sections))
         prefs.haSeen = false
         val never = both()
         assertTrue("some page has the list: $never", never[0].isNotEmpty())
