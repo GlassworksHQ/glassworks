@@ -486,7 +486,7 @@ Presence comes from lighting-insensitive motion on the panel; no image leaves it
 | binary_sensor `Camera presence` (occupancy) | `camera_presence` | none, on | Someone moving in view; ends 8 s after the last movement. Lighting changes don't count |
 | switch `Camera privacy` | `camera_privacy` | none, on | Closes the camera: no presence, no stills, no stream |
 | select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + camera` (snapshots for Home Assistant, and the stream if you turn it on) |
-| switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*; runs only once you set its sign-in on the Camera page; encrypted connections only |
+| switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*, and on a camera whose picture the panel can't encode (the Camera page says why); runs only once you set its sign-in on the Camera page; encrypted connections only. H.264 at 1280×720, or at the size the camera offers when it has no 1280×720 |
 | number `Camera sensitivity` | `camera_sensitivity` | config, off | 1 (least) to 10 (most), default 5 |
 | switch `Camera pane` | `camera_pane` | config, off | The pane's on/off (#67) |
 

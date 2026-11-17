@@ -29,7 +29,8 @@ class ViewerEncoderTest {
         override fun toString() = "encoder $n"
     }
 
-    private inner class Rig(val detach: () -> Unit = {}, val releaseThrows: Boolean = false) {
+    private inner class Rig(val detach: () -> Unit = {}, val releaseThrows: Boolean = false, val fit: StreamFit = StreamFit.Size(1280, 720)) {
+        val sizes = mutableListOf<StreamFit.Size>()
         var now = 0L
         val posted = mutableListOf<Pair<Long, Runnable>>()
         val made = mutableListOf<Encoder>()
@@ -37,8 +38,11 @@ class ViewerEncoderTest {
         val egressSeen = mutableListOf<Boolean>()
         val egress = FrameEgress({ now }, { _, _ -> }) { egressSeen += it }
         val ve = ViewerEncoder(
-            input = { e -> events += "input ${e ?: "none"}"; if (e == null) detach() },
-            encoders = { _, failed -> Encoder(made.size + 1, failed, releaseThrows).also { made += it; events += "made ${it.n}" } },
+            input = object : EncoderInput {
+                override fun setEncoder(encoder: StreamEncoder?) { events += "input ${encoder ?: "none"}"; if (encoder == null) detach() }
+                override val streamFit get() = fit
+            },
+            encoders = { size, _, failed -> sizes += size; Encoder(made.size + 1, failed, releaseThrows).also { made += it; events += "made ${it.n}" } },
             egress = egress, onAccessUnit = { _, _ -> }, watched = { watching },
             clock = { now }, after = { ms, r -> posted += (now + ms) to r },
         )
@@ -62,6 +66,25 @@ class ViewerEncoderTest {
         assertFalse(r.egress.leaving)
         assertEquals("the camera stops drawing into it before it is released",
             listOf("made 1", "input encoder 1", "input none", "release 1"), events)
+    }
+
+    /** #479: a LEGACY camera without 1280x720 streams at the size it lists. */
+    @Test fun theEncoderRunsAtTheCamerasSize() {
+        val r = Rig(fit = StreamFit.Size(640, 480))
+        r.ve.viewers(1)
+        assertEquals(listOf(StreamFit.Size(640, 480)), r.sizes)
+        assertTrue(r.egress.leaving)
+    }
+
+    /** #479: a camera that can't feed the encoder gets none, and the indicator never says images leave. */
+    @Test fun aCameraThatCantStreamGetsNoEncoderAndTheIndicatorStaysOff() {
+        val r = Rig(fit = StreamFit.Refused("The camera can't send its 640 × 480 picture to a video encoder"))
+        r.ve.viewers(1)
+        r.ve.viewers(2)
+        assertEquals(0, r.made.size)
+        assertEquals("the camera is never asked to draw into one", emptyList<String>(), events)
+        assertFalse(r.egress.leaving)
+        assertEquals(emptyList<Boolean>(), r.egressSeen)
     }
 
     @Test fun aReplacementSurvivesTheOldEncodersLateFailure() {

@@ -55,7 +55,8 @@ The app is the Glassworks core with a fixed set of panes: Assist (with its timer
 settings, on the Manage page, in setup or in Home Assistant. The camera pane is off until someone turns it on, as
 in S1 Kiosk; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
 On a screen without touch (the lululemon Mirror) its setup step never waits: the use stays Presence only, and
-Kiln grants the camera. On Android 6-7 its stream needs the camera to list 1280x720; presence works either way. The screen follows Android's standard proximity sensor (near means under
+Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream runs at a size the camera lists, or
+stays off with the reason on the Camera page; presence works either way. The screen follows Android's standard proximity sensor (near means under
 5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
 no proximity sensor; then the screen goes off after the idle time and wakes on a touch. Until setup is done and
 the dashboard has loaded, it stays on (#449).

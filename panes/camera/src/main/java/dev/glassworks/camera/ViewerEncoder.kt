@@ -14,9 +14,9 @@ interface StreamEncoder {
     fun release()
 }
 
-/** Makes an encoder. [onFailure] gets the encoder that failed, so a late report from a replaced one is told apart. */
+/** Makes an encoder at [size]. [onFailure] gets the encoder that failed, so a late report from a replaced one is told apart. */
 fun interface EncoderFactory {
-    fun create(onAccessUnit: (annexB: ByteArray, key: Boolean) -> Unit, onFailure: (StreamEncoder) -> Unit): StreamEncoder
+    fun create(size: StreamFit.Size, onAccessUnit: (annexB: ByteArray, key: Boolean) -> Unit, onFailure: (StreamEncoder) -> Unit): StreamEncoder
 }
 
 /** Where the encoder's input comes from: [CameraHub]. Detaching (null) returns once the camera no longer draws into the old one. */
@@ -25,13 +25,17 @@ fun interface EncoderInput {
 
     /** The frame rate the encoder's input runs at while streaming, for the SDP; 0 when it can't say. */
     val streamFps: Int get() = 0
+
+    /** The size the camera can draw into an encoder at, or why it can't: [CameraHub] reads it from the camera. */
+    val streamFit: StreamFit get() = StreamFit.Size(CameraHub.WIDTH, CameraHub.HEIGHT)
 }
 
 /**
  * The stream's encoder for one RTSP server's life: started when someone watches, stopped when nobody
  * does, replaced when it fails while someone still watches, at most once every [RESTART_MS] (a later
  * attempt is posted, not dropped). Each running encoder holds the privacy indicator on through
- * [egress]. After [close], nothing more happens, so a stopped server's late reports change nothing.
+ * [egress]. After [close], nothing more happens, so a stopped server's late reports change nothing. A camera
+ * that can't stream ([StreamFit.Refused]) gets no encoder, and the indicator stays off.
  *
  * [watched] says whether the server still has viewers; [after] runs a callback later (a Handler).
  */
@@ -72,8 +76,12 @@ internal class ViewerEncoder(
     }
 
     private fun start() {
+        val size = when (val fit = input.streamFit) {
+            is StreamFit.Size -> fit
+            is StreamFit.Refused -> { log("no stream: ${fit.why}"); return }
+        }
         val e = try {
-            encoders.create(onAccessUnit, ::failed)
+            encoders.create(size, onAccessUnit, ::failed)
         } catch (ex: Exception) {
             log("H.264 encoder failed: ${ex.javaClass.simpleName}")
             return

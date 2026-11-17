@@ -46,8 +46,9 @@ below as the release notes.
   with a camera and no proximity sensor of its own, turn the Camera pane on and the screen wakes when someone
   walks up, with no image leaving the device in Presence only. A device without a camera gets no camera entities. On a screen without
   touch, such as the lululemon Mirror, setup never waits on the camera step: the use stays Presence only, and
-  Kiln grants the camera. On Android 6-7 the ONVIF stream needs the camera to offer 1280x720; presence works
-  either way. Not yet run on a real Mirror.
+  Kiln grants the camera. On a camera without 1280x720, such as Android 6-7's, the ONVIF stream runs at a size the
+  camera offers. Where the panel can't encode that size, the Camera page says why and the stream stays off. Presence
+  works either way. Not yet run on a real Mirror.
 - **Kiln installs Glassworks on any Android tablet, as a test.** At `kiln.glassworks.dev/android?apk=local`, plug
   the tablet into a computer and Kiln names it, or asks for its brand, then shows how to turn on USB debugging on
   that brand. After you tap Allow on the tablet, Kiln installs the app, gives it what it can (microphone, screen on

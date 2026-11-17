@@ -17,11 +17,11 @@ data class CameraPlan(val detect: Boolean, val feedScreen: Boolean, val stream: 
         /**
          * [permitted]: Android allows the camera. [ownSensor]: the frame's own presence sensor is on this
          * device, so the screen doesn't use the camera (the approved design). [signedIn]: the stream has
-         * a username and password; there is no default.
+         * a username and password; there is no default. [streams]: the camera can feed the encoder ([StreamFit]).
          */
-        fun of(policy: CameraPolicy, permitted: Boolean, ownSensor: Boolean, signedIn: Boolean): CameraPlan {
+        fun of(policy: CameraPolicy, permitted: Boolean, ownSensor: Boolean, signedIn: Boolean, streams: Boolean): CameraPlan {
             if (!permitted || policy.privacy) return NOTHING
-            val stream = policy.streamMayRun && signedIn
+            val stream = policy.streamMayRun && signedIn && streams
             return CameraPlan(detect = !ownSensor || stream, feedScreen = !ownSensor, stream = stream)
         }
     }

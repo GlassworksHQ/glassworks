@@ -69,7 +69,7 @@ class CameraPageOverlayTest {
         def.prefs.use = CameraUse.PRESENCE_AND_SNAPSHOTS
         def.prefs.onvif = true
         val o = menu(def, pane())
-        val forWhat = CameraPage.streamDetail(false, CameraUse.PRESENCE_AND_SNAPSHOTS)
+        val forWhat = CameraPage.streamDetail(false, CameraUse.PRESENCE_AND_SNAPSHOTS, dev.glassworks.camera.StreamFit.Size(1280, 720))
         Mockup.label(o, forWhat) // drawn
         val cards = o.previewNative(CameraDefinition.USE_KEY)!!.view as CameraUseCards
         val clicked = cards.getChildAt(0).performClick()
