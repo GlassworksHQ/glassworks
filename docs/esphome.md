@@ -153,7 +153,7 @@ open the entity, and turn on *Enabled*.
 | Idle timeout | `idle_timeout` | core | config | off | Set once |
 | Night idle timeout | `night_idle_timeout` | core | config | off | Set once |
 | Night window | `night_window` | core | config | off | Set once |
-| Presence range | `presence_range` | core | config | off | Set once, for the room |
+| Presence range | `presence_range` | core | config | off | Set once, for the room. Every frame has it today, though only the S1's sensor has a range; [#476](https://github.com/GlassworksHQ/glassworks/issues/476) makes the entities follow the hardware |
 | Zoom | `zoom` | core | config | off | Set once |
 | Dashboard | `dashboard` | core | config | off | Set once. Turn it on to pick a dashboard; the panel has no picker of its own yet |
 | Dashboard URL | `dashboard_url` | core | config | off | Set once |

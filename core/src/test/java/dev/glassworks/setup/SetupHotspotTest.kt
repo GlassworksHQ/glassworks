@@ -42,8 +42,11 @@ class SetupHotspotTest {
     /** When set, the scan before a start is held here until the test lets it finish. */
     private var holdScan = false
     private var scanDone: (() -> Unit)? = null
+    private val logged = mutableListOf<String>()
+    private var changes = 0
     private val setup = SetupHotspot(
         hotspot, connected = { connected }, clock = { now },
+        onChange = { changes++ }, log = { logged += it },
         schedule = { d, r -> val w = (now + d) to r; wakes += w; { wakes.remove(w) } },
         blocked = { if (radioLocked) HotspotFailure.WIFI_OFF else null },
         beforeStart = { start -> if (holdScan) scanDone = start else start() },
@@ -284,5 +287,61 @@ class SetupHotspotTest {
         assertFalse(setup.ask())
         at(120 * min)
         assertEquals(1, hotspot.starts)
+    }
+
+    @Test
+    fun `a phone reaching the panel over it turns the screen to the setup page, once per run`() {
+        assertTrue(setup.ask())
+        setup.phoneJoined(setup.runId)
+        assertFalse("not before it is up", setup.phoneSeen)
+        up()
+        assertEquals(View.On(net, 15 * min, asked = true), setup.view)
+        val before = changes
+        setup.phoneJoined(setup.runId)
+        assertEquals(View.On(net, 15 * min, asked = true, phone = true), setup.view)
+        assertEquals("the screen hears of it", before + 1, changes)
+        setup.phoneJoined(setup.runId)
+        assertEquals("once per run", before + 1, changes)
+        assertEquals(1, logged.count { "phone" in it })
+    }
+
+    @Test
+    fun `the next run starts without the phone`() {
+        assertTrue(setup.ask())
+        up()
+        setup.phoneJoined(setup.runId)
+        setup.cancel()
+        setup.phoneJoined(setup.runId)
+        assertFalse("off: nobody to reach", (setup.view as? View.On)?.phone == true)
+        assertTrue(setup.ask())
+        up()
+        assertEquals(View.On(net, 15 * min, asked = true), setup.view)
+    }
+
+    @Test
+    fun `its log names neither the hotspot nor its key`() {
+        assertTrue(setup.ask())
+        up()
+        setup.phoneJoined(setup.runId)
+        setup.cancel()
+        assertTrue("it logged its run", logged.size >= 3)
+        assertTrue(logged.toString(), logged.none { net.ssid in it || net.passphrase in it })
+    }
+
+    @Test
+    fun `a phone seen in one run doesn't count for the next, even when the post comes late`() {
+        assertTrue(setup.ask())
+        up()
+        val posted = mutableListOf<() -> Unit>()
+        // A request from the hotspot's network is checked in run A; the main thread gets to it only later.
+        PhoneJoin({ setup }, { true }, { posted += it }).request("192.168.43.206")
+        setup.cancel()
+        assertTrue(setup.ask())
+        up()
+        posted.forEach { it() }
+        assertFalse("run B has seen no phone", setup.phoneSeen)
+        assertEquals(View.On(net, 15 * min, asked = true), setup.view)
+        PhoneJoin({ setup }, { true }, { it() }).request("192.168.43.206")
+        assertTrue("run B's own phone counts", setup.phoneSeen)
     }
 }
