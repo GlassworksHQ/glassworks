@@ -775,7 +775,7 @@ class SetupOverlay(
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
         // Signed in from the setup page, and only Home Assistant's add is left: nothing to scan any more (#484).
-        if (m.step == SetupFlow.HA && m.signedIn && SetupFlow.HA !in m.done) return bindAddWait(url)
+        if (shown() == SetupFlow.HA && m.signedIn && SetupFlow.HA !in m.done) return bindAddWait(url)
         if (qrFor != url) {
             qrImage.setImageBitmap(QrCode.bitmap(url, px(200f)))
             qrFor = url
@@ -810,8 +810,9 @@ class SetupOverlay(
 
     private fun reveal() {
         if (isShowing && visibility == View.VISIBLE && alpha == 1f) return
-        // Nothing else can turn this screen on: no touch, no presence sensor, and Home Assistant may not have it yet (#484).
-        if (!isShowing && input == Input.NONE && !presenceSensor) wakeScreen("setup")
+        // Nothing else can turn this screen on: no touch, no presence sensor, and Home Assistant hasn't added the panel,
+        // so it can't either (#484). Once it has, a panel that is set up and only lost Wi-Fi or Home Assistant stays dark.
+        if (!isShowing && input == Input.NONE && !presenceSensor && model?.let { SetupFlow.HA !in it.done } == true) wakeScreen("setup")
         isShowing = true
         animate().cancel()
         if (visibility != View.VISIBLE) alpha = 0f

@@ -103,6 +103,33 @@ class SetupNoTouchTest {
         assertEquals("again when it comes back", listOf("setup", "setup"), wakes)
     }
 
+    /** A Mirror's inputs: no touch, Home Assistant known, signed in from the phone, up for 10 minutes. */
+    private val mirror = SetupInputs(
+        online = true, offlineForMs = 0, haKnown = true, haSeen = false, apiKeySet = false, haSkipped = false,
+        haHelloThisProcess = false, uptimeMs = 10 * 60_000L, signedIn = true, onAuthPage = false, signedOut = false,
+        usePanelLogin = false, input = Input.NONE,
+    )
+
+    /** The screen as the app draws it for [i], with what woke it. */
+    private fun wakesFor(i: SetupInputs, wifi: WifiSetupStatus.Snapshot, panelIp: String?): List<String> {
+        val d = SetupState.decide(i)
+        assertTrue(d.reasons.toString(), d.show)
+        val wakes = ArrayList<String>()
+        screen(d.step, Input.NONE, wifi = wifi, panelIp = panelIp, done = d.done, signedIn = i.signedIn) {
+            it.presenceSensor = false; it.wakeScreen = { r -> wakes += r }
+        }
+        return wakes
+    }
+
+    @Test fun aMirrorSignedInAfterAReinstallAndNotAddedYetWakes() {
+        assertEquals(listOf("setup"), wakesFor(mirror, online, ip))
+    }
+
+    @Test fun aMirrorThatIsSetUpAndLosesWifiStaysDark() {
+        val setUp = mirror.copy(haSeen = true, apiKeySet = true, online = false, offlineForMs = 31_000)
+        assertEquals("a Wi-Fi drop at night", emptyList<String>(), wakesFor(setUp, offline, null))
+    }
+
     @Test fun aScreenThatCanBeWokenOtherwiseIsLeftAlone() {
         val wakes = ArrayList<String>()
         screen(SetupFlow.HA, Input.NONE) { it.presenceSensor = true; it.wakeScreen = { r -> wakes += r } }
