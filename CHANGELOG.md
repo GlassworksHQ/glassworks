@@ -106,6 +106,12 @@ below as the release notes.
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
 
 ### Changed
+- **The panel's own Wi-Fi says when it is starting, then shows the setup page's QR code once a phone is on it.**
+  **Set up from a phone** now shows "Starting the setup Wi-Fi…" at once, where the screen used to sit unchanged
+  for several seconds. A start that fails says why in the same place, with **Try again**. Once a phone on the
+  panel's Wi-Fi opens a page on the panel, the QR code changes to the setup page's address, so nobody types
+  it. The panel's logs no longer name the Wi-Fi network you pick, nor the panel's own network and
+  its password.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
