@@ -80,9 +80,9 @@ class Vi5300Presence(
 }
 
 /**
- * The S1's "mk6212 Ambient Light Sensor", in lux. It keeps [LightSource.available]'s default, true: the S1's
- * Home Assistant entities for the light (Auto brightness, Illuminance, Max auto brightness, #476) are listed at
- * start only while it says so, before the sensor HAL may have listed the sensor.
+ * The S1's "mk6212 Ambient Light Sensor", in lux. It keeps [LightSource.available]'s default, true, without asking
+ * Android: the S1's Home Assistant entities for the light (Auto brightness, Illuminance, Max auto brightness, #476)
+ * rely on it, since the sensor HAL can list its sensors late after boot, and the app reads the list once.
  */
 class Mk6212Light : LightSource {
     private var registered: SensorEventListener? = null

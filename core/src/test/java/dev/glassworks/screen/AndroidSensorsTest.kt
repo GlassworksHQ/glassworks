@@ -8,8 +8,6 @@ import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorManager
-import android.os.Looper
-import java.time.Duration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -89,32 +87,4 @@ class AndroidSensorsTest {
         l.stop(app)
         assertEquals(0, shadowOf(sm).listeners.size)
     }
-
-    /** #476: a light sensor Android lists after start (a sensor service that starts late) still reports. */
-    @Test fun aLightSensorListedLateIsFoundOnTheNextLook() {
-        val lux = ArrayList<Float>()
-        val l = AmbientLight("test")
-        l.start(app) { lux += it }
-        assertEquals(0, shadowOf(sm).listeners.size)
-        val s = add(Sensor.TYPE_LIGHT, 10000f)
-        idleFor(AmbientLight.RETRY_MS)
-        send(s, 40f)
-        assertEquals(listOf(40f), lux)
-        l.stop(app)
-        assertEquals(0, shadowOf(sm).listeners.size)
-    }
-
-    @Test fun itStopsLookingAfterFiveMinutesOrAtStop() {
-        val gaveUp = AmbientLight("test")
-        gaveUp.start(app) {}
-        idleFor(AmbientLight.RETRY_MS * AmbientLight.RETRIES)
-        val stopped = AmbientLight("test")
-        stopped.start(app) {}
-        stopped.stop(app)
-        add(Sensor.TYPE_LIGHT, 10000f)
-        idleFor(AmbientLight.RETRY_MS * (AmbientLight.RETRIES + 1))
-        assertEquals("neither registers", 0, shadowOf(sm).listeners.size)
-    }
-
-    private fun idleFor(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))
 }

@@ -5,7 +5,6 @@ import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.hardware.input.InputManager
-import android.os.Looper
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
@@ -16,23 +15,18 @@ import dev.glassworks.screen.ProximityPresence
 import dev.glassworks.testing.RepoFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.SensorEventBuilder
 import org.robolectric.shadows.ShadowInputDevice
 import org.robolectric.shadows.ShadowSensor
 import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
-import java.net.InetAddress
-import java.time.Duration
 
 /**
  * #476: Home Assistant gets the screen entities a device can back, from the same facts as its Screen settings
@@ -92,49 +86,6 @@ class FrameEntitiesTest {
         val on = entityIds(tablet)
         PanePrefs(app).paneFile("camera").edit().putBoolean("camera_enabled", false).commit()
         assertEquals(on, entityIds(tablet))
-    }
-
-    /**
-     * A light sensor Android lists only after the list was built (a sensor HAL that starts late) adds its entities
-     * with its first reading, in the S1's order, and HA lists them again. Once: a second reading keeps the list.
-     */
-    @Test fun aLateLightSensorAddsItsEntitiesWithItsFirstReading() {
-        reset()
-        KioskPrefs(app).deviceMac = "02:00:00:00:00:01"
-        val runtime = KioskApp.runtime(generic(), build = AppBuild("1.0.0", 10000, debug = false))
-        val exec = ManualExecutor()
-        val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = RecordingMdns(),
-            apiPort = 0, apiBindAddress = InetAddress.getLoopbackAddress())
-        try {
-            device.start()
-            exec.runDue()
-            val before = device.entityList().map { it.objectId }
-            assertEquals(listOf("screen", "screen_mode", "idle_timeout"), before.filter { it in screenIds })
-
-            // As KioskService: the screen starts first, with no light sensor listed yet.
-            runtime.screen.start(app)
-            val sensors = app.getSystemService(SensorManager::class.java)
-            val light = ShadowSensor.newInstance(Sensor.TYPE_LIGHT)
-            shadowOf(sensors).addSensor(light)
-            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(AmbientLight.RETRY_MS))
-            fun reading(lux: Float) {
-                shadowOf(sensors).sendSensorEventToListeners(SensorEventBuilder.newBuilder().setSensor(light).setValues(floatArrayOf(lux)).setTimestamp(0).build())
-                shadowOf(Looper.getMainLooper()).idle()
-                exec.runDue()
-            }
-            reading(300f)
-            val after = device.entityList()
-            assertEquals(
-                listOf("screen", "auto_brightness", "illuminance", "screen_mode", "idle_timeout", "max_brightness"),
-                after.map { it.objectId }.filter { it in screenIds },
-            )
-            assertEquals("nothing else changes", before, after.map { it.objectId }.filter { it !in setOf("auto_brightness", "illuminance", "max_brightness") })
-            reading(5f)
-            assertSame(after, device.entityList())
-        } finally {
-            runtime.screen.stop()
-            device.stop()
-        }
     }
 
     /** Every frame's whole list, in order, so a review sees each entity a frame gains, loses or moves. */
