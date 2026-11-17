@@ -120,6 +120,12 @@ class HttpsTrustTest {
         refused(serve(system, system.leaf("other.example")), factory)
     }
 
+    @Test fun `the trust manager loads on Android 6 - no type newer than X509TrustManager`() {
+        // X509ExtendedTrustManager is API 24: a class extending it threw NoClassDefFoundError on the API 23 emulator.
+        assertEquals(Any::class.java, SystemPlusRoots::class.java.superclass)
+        assertEquals(listOf(javax.net.ssl.X509TrustManager::class.java), SystemPlusRoots::class.java.interfaces.toList())
+    }
+
     @Test fun `install adds the roots below Android 7_1 only`() {
         for (level in 21..40) {
             var set: SSLSocketFactory? = null

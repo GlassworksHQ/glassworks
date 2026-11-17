@@ -3,7 +3,7 @@
 **Status (2026-11-17): working.** Android 6.0.1 and 7.0 lack **ISRG Root X1**. GitHub serves its download
 hosts (`raw.githubusercontent.com`, its release assets) on a chain to that root, so the wake word models and
 update APKs failed there. Below Android 7.1 the app now trusts the system store plus a bundled ISRG Root X1
-(#456). Tested on the API 23 emulator. Not yet tested on the Mirror.
+(#456). Verified on the API 23 emulator, whose store is AOSP's. Not yet tested on the Mirror.
 
 Device: lululemon Mirror, Android 6.0.1 (API 23), `dev.glassworks.generic_android.legacy`. Tools: OpenSSL
 3.1.0, AOSP's CA stores at the tags below, `tools/legacy/ca-roots.sh`.
@@ -57,7 +57,32 @@ each one there?
 
    With `--with isrgrootx1.pem` (ISRG Root X1 added to every store), every row is OK.
 
-4. **The app on the API 23 emulator**: see [How to reproduce](#how-to-reproduce).
+4. **The downloads on the API 23 emulator** (2026-11-17, verified). `system-images;android-23;default;arm64-v8a`,
+   whose CA store is AOSP's. A scratch instrumentation test in the core (not committed: it reaches the internet)
+   fetched each URL with a socket factory over the system trust manager alone ("without"), then with
+   `HttpsTrust.socketFactory` ("with"), and hashed the body:
+   ```
+   $ ./gradlew --init-script tools/legacy/api23-emulator.gradle :glassworks-core:connectedDebugAndroidTest \
+       -Pandroid.testInstrumentationRunnerArguments.class=dev.glassworks.platform.HttpsTrustDeviceScratch
+   API 23, hasIsrgRootX1=false
+   WITHOUT .../micro-wake-word-models/40ff33f…/models/v2/alexa.tflite -> SSLHandshakeException: CertPathValidatorException: Trust anchor for certification path not found.
+   WITH    .../micro-wake-word-models/40ff33f…/models/v2/alexa.tflite -> HTTP 200 from raw.githubusercontent.com, 55856 bytes, sha256 9011a815…a723b
+   WITHOUT github.com/dscripka/openWakeWord/releases/download/v0.5.1/alexa_v0.1.tflite -> SSLHandshakeException: … Trust anchor for certification path not found.
+   WITH    github.com/dscripka/openWakeWord/releases/download/v0.5.1/alexa_v0.1.tflite -> HTTP 200 from release-assets.githubusercontent.com, 855312 bytes, sha256 7333a317…48397
+   WITHOUT api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=1 -> HTTP 200 from api.github.com
+   WITH    api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=1 -> HTTP 200 from api.github.com
+   WITH    https://<raw.githubusercontent.com's IP address>/ (a chain to X1, a name that doesn't match) -> SSLPeerUnverifiedException: Hostname … not verified
+   WITH    https://untrusted-root.badssl.com/ -> SSLHandshakeException: … Trust anchor for certification path not found.
+   install()=true, then the default factory -> HTTP 200 from raw.githubusercontent.com, 55856 bytes, sha256 9011a815…a723b
+   ```
+   Both hashes match the ones `ModelFetcher` pins. The openWakeWord download fails on its redirect: github.com
+   itself is trusted. With the root, a wrong hostname and an unknown root are still refused.
+
+5. **A trust manager that extends `X509ExtendedTrustManager` doesn't load on Android 6** (2026-11-17, verified).
+   The first version of the fix extended it, to pass the hostname-aware overloads through. The JVM tests passed;
+   on the API 23 emulator it threw `NoClassDefFoundError: dev.glassworks.platform.SystemPlusRoots`, because the
+   class arrived in Android 7.0 (API 24). In the app that would have crashed `GlassworksRuntime` on every start.
+   The fix is a plain `X509TrustManager`, and `HttpsTrustTest` checks its supertypes.
 
 ## Result
 
@@ -73,8 +98,9 @@ each one there?
 - **The fix** (`pane-api/.../dev/glassworks/platform/HttpsTrust.kt`): below API 25, `GlassworksRuntime` sets
   `HttpsURLConnection`'s default `SSLSocketFactory` before any component connects. Its trust manager accepts a
   chain the system trusts, else one that reaches a bundled root. It refuses everything else with the system's
-  error. Hostname verification is Android's, unchanged. The hostname-aware overloads go to the same overload on
-  both trust managers, so Android 7.0's Network Security Config keeps its checks.
+  error. Hostname verification is Android's `HostnameVerifier`, unchanged (step 4). It is a plain `X509TrustManager`
+  (step 5). Android 7.0's Network Security Config accepts the plain overload because neither app sets a
+  per-domain config.
 - **Android 7.0's Network Security Config** could add the root from XML (`<trust-anchors>`), but not on Android 6.
   One code path for both is simpler.
 
@@ -98,11 +124,12 @@ RSA chains on 2026-11-16. Android has it only from Android 14, so if GitHub move
 ## How to reproduce
 
 1. `tools/legacy/ca-roots.sh` (read-only: network and a temporary directory).
-2. On the API 23 arm64 emulator (`system-images;android-23;default;arm64-v8a`), install the legacy APK signed with
-   the debug key, start it, and read the log:
-   `adb logcat -d | grep -E 'S1Voice|S1Kiosk.Update|HTTPS'`.
+2. On the API 23 arm64 emulator (`system-images;android-23;default;arm64-v8a`), run an instrumentation test like
+   step 4's with `tools/legacy/api23-emulator.gradle`. It touches only the emulator and the internet. The app
+   itself could not be started there: agent-device's `open` and `snapshot` fail on this image (2026-11-17).
 
 ## Open questions
 
-- Not yet tested on the Mirror. The root confirms it there.
+- Not yet tested on the Mirror. The root confirms it there, with the app itself: the emulator ran the trust code
+  in a test process, not the app's start.
 - `SisdkZigbeed` downloads from GitHub too, but it runs only on the S1 (Android 10), so this doesn't affect it.

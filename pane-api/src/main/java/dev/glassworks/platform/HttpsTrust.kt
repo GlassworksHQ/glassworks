@@ -4,17 +4,14 @@
 
 package dev.glassworks.platform
 
-import java.net.Socket
 import java.security.KeyStore
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLEngine
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509ExtendedTrustManager
 import javax.net.ssl.X509TrustManager
 
 /**
@@ -114,32 +111,25 @@ object HttpsTrust {
 }
 
 /**
- * Trusts a server chain [system] trusts, else one [extra] trusts; refuses it with [system]'s error otherwise. Each
- * call goes to the same overload on both, so the hostname-aware ones (a socket or an engine) keep their checks:
- * Network Security Config's on Android 7.0, the endpoint check on the JVM.
+ * Trusts a server chain [system] trusts, else one [extra] trusts; refuses it with [system]'s error otherwise.
+ *
+ * A plain [X509TrustManager]: `X509ExtendedTrustManager` exists only from Android 7.0, and a class that extends it
+ * doesn't load on Android 6 (the API 23 emulator threw NoClassDefFoundError, 2026-11-17). So the hostname-aware
+ * overloads go unused, and the hostname check stays where it is: HttpsURLConnection's HostnameVerifier on Android,
+ * the endpoint check on the JVM. Android 7.0's Network Security Config takes the plain overload too, as long as the
+ * app sets no per-domain config (neither app does).
  */
-internal class SystemPlusRoots(private val system: X509TrustManager, private val extra: X509TrustManager) : X509ExtendedTrustManager() {
-    private inline fun either(check: (X509TrustManager) -> Unit) {
+internal class SystemPlusRoots(private val system: X509TrustManager, private val extra: X509TrustManager) : X509TrustManager {
+    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
         try {
-            check(system)
+            system.checkServerTrusted(chain, authType)
         } catch (e: CertificateException) {
-            try { check(extra) } catch (x: CertificateException) { e.addSuppressed(x); throw e }
+            try { extra.checkServerTrusted(chain, authType) } catch (x: CertificateException) { e.addSuppressed(x); throw e }
         }
     }
 
-    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) =
-        either { it.checkServerTrusted(chain, authType) }
-
-    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String, socket: Socket?) =
-        either { if (it is X509ExtendedTrustManager) it.checkServerTrusted(chain, authType, socket) else it.checkServerTrusted(chain, authType) }
-
-    override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String, engine: SSLEngine?) =
-        either { if (it is X509ExtendedTrustManager) it.checkServerTrusted(chain, authType, engine) else it.checkServerTrusted(chain, authType) }
-
     // The app is never a TLS server that asks for client certificates: the system decides, as before.
     override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = system.checkClientTrusted(chain, authType)
-    override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String, socket: Socket?) = system.checkClientTrusted(chain, authType)
-    override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String, engine: SSLEngine?) = system.checkClientTrusted(chain, authType)
 
     override fun getAcceptedIssuers(): Array<X509Certificate> = system.acceptedIssuers + extra.acceptedIssuers
 }
