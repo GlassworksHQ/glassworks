@@ -1,3 +1,8 @@
+---
+topic: panes
+evidence: verified
+---
+
 # Pane blueprints: can a panel add Home Assistant blueprints without writing to Home Assistant?
 
 **Status (2026-11-15): working off the panel, untested on one.** The four blueprints pass Home

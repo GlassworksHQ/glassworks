@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: verified
+---
+
 # Mirror first boot: how a fresh userdata comes up with nothing to tap
 
 **Status (2026-11-16): verified on the unit.** The root's Mirror run (below) found every claim true on

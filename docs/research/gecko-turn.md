@@ -1,3 +1,8 @@
+---
+topic: perf
+evidence: verified
+---
+
 # Gecko and a TURN relay on loopback: why the S1 never connected to Clarity's WebRTC camera
 
 **Status (2026-11-13): working in Firefox; the S1 run is pending.** Gecko (Firefox, GeckoView) won't use

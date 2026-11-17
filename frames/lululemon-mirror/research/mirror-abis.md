@@ -1,3 +1,8 @@
+---
+topic: android
+evidence: read
+---
+
 # Mirror ABIs: which ABIs does the lululemon Mirror's userspace run?
 
 **Status (2026-11-13): read from the community image, untested on a stock unit.** The Glass Panes

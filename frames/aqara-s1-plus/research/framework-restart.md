@@ -1,3 +1,8 @@
+---
+topic: android
+evidence: verified
+---
+
 # Framework restart: why the S1 sometimes "drops off USB" during app reinstalls and restarts
 
 **Status (2026-11-12): partly understood.** On the S1, a fast run of kiosk process restarts can
