@@ -257,8 +257,10 @@ and there are no shared keys and no leader.
 - **Who may.** Administrators only, as on the page itself. The panel asks its Home Assistant who the token
   belongs to (`auth/current_user`), at the address it uses, and only when that address is on your network.
   It keeps the answer for a minute, so a token revoked in Home Assistant still works here for up to a minute.
-  A token Home Assistant didn't confirm stays refused for 10 seconds, and the panel asks Home Assistant about
-  at most two tokens at a time: while Home Assistant is slow, the rest are told to try again in a moment.
+  A token Home Assistant didn't confirm stays refused for 10 seconds, except for a sign-in from another panel's
+  page, which always asks. The panel asks Home Assistant about at most two tokens at a time: while Home Assistant
+  is slow, the rest are told to try again in a moment. One computer can start at most five such sign-ins in
+  10 seconds; then it waits.
   Whether other Home Assistant users get a say is still open.
 - **What it reads.** Every setting the page can change, with its value as text, the way the page's forms send
   it. A sign-in (a camera's) says only whether it is set: no password or user name leaves the panel.
@@ -270,7 +272,8 @@ and there are no shared keys and no leader.
   the address of the page that sent it.
 - **Signing in from another panel's page.** That page can also sign your browser in here with its token,
   so the panel's own Manage page opens without another Home Assistant sign-in. The panel asks Home Assistant
-  about the token then and there, without the minute-old answer. The sign-in lasts until the browser closes. The panel doesn't keep or revoke the token: it belongs to the other page.
+  about the token then and there, without the minute-old answer or a recent refusal. The sign-in lasts until
+  the browser closes. The panel doesn't keep or revoke the token: it belongs to the other page.
 - **What it can't protect.** The token travels over plain HTTP, as it does to a Home Assistant on
   `http://`. Someone who can read your Wi-Fi traffic could use it until it expires (30 minutes) or the
   other page signs out. The panel never writes the token anywhere, including the Log and the diagnostics.

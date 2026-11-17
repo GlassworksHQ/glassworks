@@ -62,6 +62,8 @@ class ManageServer(
     /** A Home Assistant token another panel's page brings, checked with this panel's own Home Assistant (#466). */
     private val tokens = HaTokenCheck(signIn.gateway, haBase, signIn::isLocal, monoMs)
 
+    private val handoffs = PerAddress(HANDOFFS_PER_WINDOW, HANDOFF_WINDOW_MS)
+
     private val api = ManageApi(host, tokens, ::apply, PENDING, event, ::ask) { id, owner, section, key, value -> answered(id, owner, section, key, value) }
 
     /** A question's answer (#269 verifier): the change it asked about, for one session, until it runs out. */
@@ -198,11 +200,14 @@ class ManageServer(
      * nor revoked: it is the other page's. It comes from another site, so no Origin check; the token is the proof.
      */
     private fun handoff(req: HttpRequest): HttpResponse {
-        fun refused(title: String, text: String): HttpResponse {
-            event("A sign-in from another panel's page was refused: $title")
-            return html(403, PageShell.qrPage(name(), title, PageShell.esc(text), PageShell.Look.PROBLEM,
+        fun refused(title: String, text: String, status: Int = 403, log: Boolean = true): HttpResponse {
+            if (log) event("A sign-in from another panel's page was refused: $title")
+            return html(status, PageShell.qrPage(name(), title, PageShell.esc(text), PageShell.Look.PROBLEM,
                 button = """<a class="btn" href="/">Sign in here</a>"""))
         }
+        // A fresh check asks Home Assistant every time: a page posting made-up tokens over and over (a cross-site form
+        // can) would keep its few questions busy. So a few sign-ins per address at a time, then a pause (verifier on #487).
+        if (!handoffs.allow(req.remote ?: "?", monoMs())) return refused("Try again in a few seconds", HANDOFF_PAUSE, 429, log = false)
         // Asked fresh: an answer kept from before must not start a 12-hour sign-in for a token revoked since.
         val ok = when (val r = tokens.check(req.form["token"], fresh = true)) {
             is HaTokenCheck.Result.Ok -> r
@@ -543,6 +548,11 @@ class ManageServer(
             return if (q.isEmpty()) req.path else req.path + "?" + q.entries.joinToString("&") { (k, v) -> dev.glassworks.web.HttpServer.enc(k) + "=" + dev.glassworks.web.HttpServer.enc(v) }
         }
         const val PRE = "gw_pre"
+
+        /** How many sign-ins from another panel's page one address may start in [HANDOFF_WINDOW_MS]. */
+        const val HANDOFFS_PER_WINDOW = 5
+        const val HANDOFF_WINDOW_MS = 10_000L
+        const val HANDOFF_PAUSE = "Too many sign-ins from this computer in a short time. Try again in a few seconds."
 
         /** Where a page on another panel signs this browser in with its Home Assistant token (#466). */
         const val HANDOFF = "/manage/ha/token"
