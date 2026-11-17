@@ -160,6 +160,12 @@ below as the release notes.
   *Camera presence*. Home Assistant removes the ones a device can't back on the next reconnect after the
   update; if the hardware comes back, so does the entity, usually with its old id. An automation that used
   one stops working. Nothing changes on the S1.
+- **The S1's Bluetooth proxy goes by the panel's Bluetooth address.** The proxy now tells Home
+  Assistant the panel's own Bluetooth address, as ESPHome proxies do, instead of its network address.
+  Home Assistant moves the panel's scanner to the new address by itself, once, with nothing for you to
+  do. If the panel can't read its Bluetooth address (Bluetooth never turned on yet), nothing changes
+  until it can. Going back to an older version moves the scanner back to the network address. Comes
+  with the radio bundle.
 - **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
   window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
   Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
@@ -353,6 +359,10 @@ below as the release notes.
 - **The Bluetooth proxy says when it can't run.** With the pane on but Bluetooth or location off, or
   the location permission missing, the settings menu and the Manage page said it was running. They
   now say *Can't run* and why.
+- **The lululemon Mirror shows in Home Assistant as the Mirror.** Glassworks for generic Android used to
+  name it after the board its image reports, `msm8916-for-arm64`. Now HA finds it as `lululemon-mirror-…`,
+  named "lululemon Studio Mirror", made by lululemon. A Mirror HA already has keeps its entry and entities and
+  takes the new name on its next connection. Any other device keeps its own name.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.
@@ -397,6 +407,17 @@ below as the release notes.
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its
   place when it builds the image. Before, Kiln's own key never got in, and the install would have
   stopped at "Wait for adb". The Mirror's install is still test only.
+- **A `homeassistant.local` dashboard loads on Android 6 to 11.** Android before 12 can't look up
+  `.local` names, so a dashboard set as `http://homeassistant.local:8123` never loaded on the Mirror,
+  and it kept saying it was trying again. The panel now loads it through the address where it found
+  Home Assistant, and the setting stays as you entered it. If that address changes, the panel looks for
+  Home Assistant again. An `https://` address on a `.local` name still loads as set, since its
+  certificate is for the name. Android 12 and later are unchanged.
+- **A panel with no presence sensor stays on until it is set up.** The Mirror turned its screen off 20 s
+  after it started at night, while setup or the connecting screen was up, and nothing could wake it.
+  The screen now stays on until setup is done and the dashboard has loaded, at its usual brightness.
+  After that the idle timeout works as before. Panels with a presence sensor, such as the S1, are
+  unchanged.
 - **Other apps can no longer change the panel's settings.** Until now any app on the panel could open
   S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or remote
   debugging.

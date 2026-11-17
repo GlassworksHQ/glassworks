@@ -94,13 +94,23 @@ conflict" dialog.
 | The frame | Node name (`device_name`, mDNS) | Friendly name (the device page) |
 |---|---|---|
 | `namedBy = FRAME`: one product (the S1) | The frame's id and the suffix: `aqara-s1-plus-a1b2c3` | The frame's name: "Aqara S1 Plus" |
-| `namedBy = MODEL`: many devices (generic-android: any device that isn't an S1) | The model as a host name and the suffix: `pixel-tablet-a1b2c3` | The model: "Pixel Tablet" |
+| `namedBy = MODEL`: many devices (generic-android: any other device) | The model as a host name and the suffix: `pixel-tablet-a1b2c3` | The model: "Pixel Tablet" |
+| A device frame the generic app recognises (`DeviceFrame`): the lululemon Mirror (#454) | As `namedBy = FRAME`: `lululemon-mirror-a1b2c3` | The frame's name: "lululemon Studio Mirror" |
 
 The node name is lowercase `a-z0-9-` and at most 63 characters. It is the same on every start and after
 an update, because the MAC is kept in prefs (`device_mac`). The code is `dev.glassworks.frame.DeviceName`,
 and `DeviceNameTest`, `PanelNameTest` and `GenericFrameTest` test it. The app picks the S1 frame only on the
 S1's hardware (`Build.HARDWARE` `sun50iw10p1`) and the generic one everywhere else. The Music Assistant
 player and Improv use the same friendly name.
+
+The generic frame goes by a device frame only when the device carries that frame's mark, so another device
+is never named after it. The Mirror's community image reports the Qualcomm reference board (`ro.product.model`
+"MSM8916 for arm64"), as other MSM8916 devices do. Its mark is lululemon's own signed boot image, which every
+Mirror keeps: `ro.bootimage.build.fingerprint` starts `mirror/mirror/`, on `ro.board.platform` `msm8916`. There,
+the `board` record is `lululemon-mirror`, and HA's device page shows the model *Studio Mirror (Glassworks)* by
+*lululemon* (`PanelDevice` adds the app's product in brackets, as *Pixel Tablet (Glassworks)*).
+`DeviceFrameTest` covers the Mirror, another MSM8916 device, the Pixel Tablet and an unknown device. A Mirror
+added to HA before #454 as `msm8916-for-arm64-…` is renamed in place, as in the table below.
 
 **After updating** a panel that HA already has (read 2026-11-14 from home-assistant/core 2026.11.0,
 `esphome/manager.py` and `esphome/config_flow.py`, and aioesphomeapi 46.25.0; the dev HA runs
@@ -378,6 +388,12 @@ services › Bluetooth*, and hears the BLE sensors near the panel through it. No
   them on there; the panel's settings page shows both anyway. Both are unavailable while the pane is off.
 - Android hands Bluetooth results to apps only while **location** is on. The settings page offers to
   turn Bluetooth and location on when they are off.
+- **The scanner's address.** On the S1 the proxy tells Home Assistant the panel's own Bluetooth
+  address, as an ESPHome proxy does, read through the root helper (Android hides it from apps). It is
+  read the first time the proxy runs after the app starts, and kept from then on. When it can't be read (no root helper yet,
+  Bluetooth never turned on, an error), the proxy sends none and Home Assistant keys the scanner on the
+  panel's ESPHome MAC, as before. Other frames always do the latter. The first time, Home Assistant
+  moves the panel's scanner to the Bluetooth address by itself; no second scanner appears.
 - The panel never logs or keeps the addresses it hears. They go only to Home Assistant, and only
   over an encrypted connection with the panel's key: Home Assistant 2026.11 and later sets it when
   you add the panel. Without a key, the proxy answers nobody, so no one else on the LAN can listen.
