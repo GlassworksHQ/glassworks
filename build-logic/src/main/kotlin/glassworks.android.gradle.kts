@@ -68,6 +68,7 @@ fun Test.readsRepoFiles(repo: File) {
         "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",
         "frames/aqara-s1-plus/tools/bracket/base_emulator.py", "build.gradle.kts",
         "build-logic/src/main/kotlin/glassworks.android.gradle.kts", // LegacyTestAppManifestTest: the default minSdk
+        "frames/generic-android/installer/src/devices.ts", // GenericAndroidKnownTest: Kiln's models with a frame
     )
     inputs.files(files.map { File(repo, it) }, fileTree(File(repo, "LICENSES")), fileTree(File(repo, "docs")) { include("**/*.md") },
         fileTree(File(repo, "frames")) { include("*/README.md") })
