@@ -132,7 +132,8 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
 
 ## GATT connections (#246)
 
-**Status (2026-11-17): one real GATT device verified on the S1** ([below](#verified-on-the-s1-2026-11-17)).
+**Status (2026-11-17): two real GATT devices verified on the S1, one link at a time**
+([a thermostat](#verified-on-the-s1-2026-11-17), [a garden that holds its link](#verified-a-device-that-holds-its-link-2026-11-17)).
 The connection engine (`libs/bluetooth-proxy` `BluetoothConnectionEngine`, `AndroidGattRadio`) is
 built from what is read below. The link limit and the other open points are still untested.
 
@@ -186,10 +187,39 @@ What it shows:
 - **One link only, so the link limit is still untested.** There was one GATT device.
 - Whether the integration keeps its link open between polls wasn't measured long enough to say. The link stayed up through the 4 minutes of the test.
 
+### Verified: a device that holds its link (2026-11-17)
+
+**Verified** on 2026-11-17, 22:11–22:17 UTC, the root's run (results on #246). Setup:
+- S1 Plus on a test build of `main` at `d7e41b7a` (all of #246's GATT work), radio `thread_router`, Home Assistant 2026.11;
+- the device: an indoor garden (Auk Mini 2) on the custom `auk_mini2` integration, which opens a GATT link and polls over it;
+- two ESP32 proxies on the same network; addresses were compared in the shell only, and none is recorded here.
+
+| What | Result |
+|---|---|
+| Proxy on, *Listen and connect* | HA's Bluetooth diagnostics list the S1 as connectable, `slots: 3, free: 3`. *Bluetooth proxy status* reads `Listening` |
+| The S1 becomes the device's proxy | One of the ESP32 proxies held the link at first. Reloading the garden's config entry (nothing else in HA changed) made HA pick the S1. The S1's allocations then held one address, the garden's, with `free: 2`. Android's GATT client map held one connection, owned by `sh.edm.s1kiosk` |
+| Read | The link came up at 22:14:21; every entity of the garden updated at 22:14:28, **7 s later** |
+| Write, read back | *Sync clock* at 22:15:12; *Clock drift*, read back from the device, changed at 22:15:13.4, **1.4 s later** |
+| Write and undo | *Light intensity* to `dim`, then back to `auto`: HA confirmed each |
+| The link between polls | **Stays open**: one connection for the 80 s from connect until the proxy was turned off. This integration keeps its link, so it holds one slot for as long as HA uses the device through the S1 |
+| Close | The pane turned off from HA at 22:15:43.5. The log reads `Pane bluetooth-proxy off`, then `scan stopped`. HA moved the garden to an ESP32 proxy and refreshed it at 22:15:44.2, **under 1 s later**. Nothing went unavailable, and Android's client map was empty |
+| Errors | None: no Bluetooth proxy errors in logcat, no new `auk_mini2` or Bluetooth errors in HA, no pairing dialog |
+| After the install | The LRU list was healthy after both restarts (no #248 crash loop) |
+| Put back | The pane off and `bluetooth_proxy_connect` false, as found; radio `ok thread_router`; the garden back on an ESP32 proxy with *Light intensity* on `auto` |
+
+What it shows:
+- A device whose integration holds its link works through the S1, and HA hands it to another proxy within a second when the S1 stops.
+- Such a device takes one of the 3 slots for as long as HA uses it through the S1. Two of them would leave one slot for polling devices.
+- Still **one link at a time**. The link was closed by turning the pane off, not by picking *Listen only*.
+
 ### Still open (untested)
 
 - **The link limit.** Android's stack allows 7 GATT links (believed, not checked). The RTL8821CS
-  may hold fewer. The engine starts at 3, like ESPHome. Only one link has been tried (2026-11-17).
+  may hold fewer. The engine starts at 3, like ESPHome. Only one link at a time has been tried, with
+  two devices (2026-11-17).
+- **Picking *Listen only* on the panel's page while a device holds its link.** The garden's link was
+  closed by turning the pane off. The thermostat's closed on *Listen only* (above), but its
+  integration may not hold a link between polls, so that run doesn't show the page closing a held one.
 - **Handles against an ESP32 proxy.** Connect the same device through both and compare the services
   HA caches. A mismatch breaks a cache HA built from the other proxy.
 - **`refresh()` on the panel.** Whether reflection reaches it with target SDK 35, and whether it
