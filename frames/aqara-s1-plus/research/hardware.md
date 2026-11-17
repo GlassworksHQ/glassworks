@@ -1,3 +1,8 @@
+---
+topic: hardware
+evidence: verified
+---
+
 # Hardware
 
 ## SoC / board

@@ -1,3 +1,8 @@
+---
+topic: panes
+evidence: read
+---
+
 # Camera presence: which detector wakes the screen, at what cost?
 
 **Status (2026-11-14): decided, not yet run on a device.** Desk research and model analysis for the

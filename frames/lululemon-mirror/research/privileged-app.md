@@ -1,3 +1,8 @@
+---
+topic: access
+evidence: verified
+---
+
 # Privileged app: does a /system/priv-app app get Android 6's privileged permissions, and keep them after it updates?
 
 **Status (2026-11-16): verified on the unit.** AOSP 6.0.1's package manager grants

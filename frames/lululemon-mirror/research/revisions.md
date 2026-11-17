@@ -1,3 +1,8 @@
+---
+topic: hardware
+evidence: read
+---
+
 # Mirror revisions: which ones are a target, and how not to tell them apart
 
 **Status (2026-11-13): read only, no hardware.** Later revisions of the Mirror are reported to use

@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: verified
+---
+
 # Mirror images: what Kiln changes in the community system image, and what a fresh userdata needs
 
 **Status (2026-11-16): flashed on a real Mirror once, end to end, with image 1.** Image 2 (below) is

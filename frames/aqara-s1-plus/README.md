@@ -121,9 +121,11 @@ announcements, with a calm full-screen overlay while you talk.
 
 **Status: beta.**
 
-**Clarity v2: D**, a good wall panel for light dashboards (measured 2026-11-15 UTC, 3 of 3 runs, not
-provisional). Typical dashboards hold it back: without a camera their view is drawn in 1.2 s, but the main
-thread then stays blocked for 2.9 s. The report is in
+**Clarity v3: D**, a good wall panel for light dashboards (measured 2026-11-17 UTC, 3 of 3 runs, not
+provisional). Typical dashboards hold it back: without a camera their view is drawn in 0.9 s, but the main
+thread then stays blocked for 2.7 s. Home Assistant's more-info dialogs, new in v3, settle in about 1 s on
+light dashboards and 1.2 to 1.4 s on typical ones. On heavy ones the thermostat's never opens within
+20 s, and the sensor's opens in about 4 s in 2 of 3 runs but its history graph isn't drawn. The report is in
 [clarity/report.md](clarity/report.md), and the summary the site grades in
 [clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)). The Clarity
 badge shows the grade once glassworks.dev publishes it.

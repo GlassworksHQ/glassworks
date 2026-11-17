@@ -142,6 +142,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [community-image-terms.md](research/community-image-terms.md): May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open (#40)
 - [mirror-root.md](research/mirror-root.md): Can we root the Mirror dev unit cheaply and safely? The AOSP `su` route is a dead end; a platform test-key app gives uid system with no flash; three `system`-only leads stay open. Nothing flashed (#40)
 - [privileged-app.md](research/privileged-app.md): Does an app in `/system/priv-app` get Android 6's privileged permissions (silent updates, reboot, secure settings) and keep them after it updates? Yes: read from AOSP 6.0.1 and verified on the unit with the probe app (2026-11-16). Whether it can approve a computer's adb key: read; the permission verified on the unit (read-only), the approval untested (#29)
+- [adbd-keys.md](research/adbd-keys.md): Why doesn't adbd accept a key from `/data/misc/adb/adb_keys`? The stock lululemon boot's adbd most likely doesn't verify against that file. The AOSP key-loading timing is ruled out and SELinux is ruled out by the policy; a malformed key file is narrowed, not ruled out. So the `services.jar` rewrite (#426) is the only lever Kiln has without the boot partition, which it never writes (read/inferred, 2026-11-16, #29)
 
 ## Files
 

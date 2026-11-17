@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: read
+---
+
 # Kiln licence audit: which code in the MIT installer comes from GPL projects
 
 **Status (2026-11-16): done (#355).** Both rewrites have landed, written in a clean room from the specs

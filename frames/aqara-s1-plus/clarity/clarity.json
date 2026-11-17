@@ -1,10 +1,10 @@
 {
  "schema": "glassworks.perf-summary/3",
  "test": "Clarity",
- "clarity": 2,
- "protocol_version": 2,
+ "clarity": 3,
+ "protocol_version": 3,
  "report_schema": "glassworks.perf/4",
- "measured_on": "2026-11-15",
+ "measured_on": "2026-11-17",
  "frame": {
   "id": "aqara-s1-plus",
   "name": "Aqara S1 Plus"
@@ -24,14 +24,14 @@
  },
  "pages": {
   "light": {
-   "inp_ms": 64.0,
-   "open_ms": 1414.0,
-   "blocking_ms": 232.92,
-   "usable_ms": 1768,
+   "inp_ms": 72.0,
+   "open_ms": 1068.0,
+   "blocking_ms": 182.96,
+   "usable_ms": 1428,
    "scroll": {
-    "fps": 46.1,
+    "fps": 43.5,
     "p95_ms": 50.0,
-    "scrolled_px": 3368,
+    "scrolled_px": 3366,
     "sf_valid": [
      true,
      true,
@@ -47,72 +47,72 @@
     "runs": [
      {
       "p95_ms": 50.0,
-      "jank_pct": 20.85,
+      "jank_pct": 20.0,
       "frozen_pct": 0.0,
-      "fps": 44.55,
-      "n": 235
+      "fps": 45.21,
+      "n": 240
      },
      {
       "p95_ms": 50.0,
-      "jank_pct": 19.26,
+      "jank_pct": 22.37,
       "frozen_pct": 0.0,
-      "fps": 46.1,
-      "n": 244
+      "fps": 43.5,
+      "n": 228
      },
      {
       "p95_ms": 50.0,
-      "jank_pct": 19.67,
+      "jank_pct": 24.24,
       "frozen_pct": 0.0,
-      "fps": 46.56,
-      "n": 244
+      "fps": 43.25,
+      "n": 231
      }
     ]
    },
    "updates": {
-    "latency_p95_ms": 98.8,
-    "latency_median_ms": 81.3,
+    "latency_p95_ms": 96.4,
+    "latency_median_ms": 80.0,
     "pacing_p95_ms": 66.67,
     "runs": [
      {
       "latency_n": 21,
-      "latency_median_ms": 79.0,
-      "latency_p95_ms": 98.8,
+      "latency_median_ms": 79.2,
+      "latency_p95_ms": 97.0,
       "frames": {
        "p95_ms": 66.67,
-       "jank_pct": 42.86,
+       "jank_pct": 26.67,
        "frozen_pct": 0.0,
-       "fps": 36.56,
-       "n": 14
+       "fps": 40.95,
+       "n": 15
       },
       "sent": 22,
       "arrived": 22
      },
      {
-      "latency_n": 21,
-      "latency_median_ms": 82.6,
-      "latency_p95_ms": 89.0,
+      "latency_n": 22,
+      "latency_median_ms": 83.9,
+      "latency_p95_ms": 96.2,
       "frames": {
-       "p95_ms": 50.0,
+       "p95_ms": 66.67,
        "jank_pct": 37.5,
        "frozen_pct": 0.0,
-       "fps": 40.05,
+       "fps": 38.45,
        "n": 16
       },
-      "sent": 22,
+      "sent": 23,
       "arrived": 22
      },
      {
-      "latency_n": 21,
-      "latency_median_ms": 81.3,
-      "latency_p95_ms": 111.0,
+      "latency_n": 22,
+      "latency_median_ms": 80.0,
+      "latency_p95_ms": 96.4,
       "frames": {
-       "p95_ms": 83.33,
-       "jank_pct": 43.75,
+       "p95_ms": 50.0,
+       "jank_pct": 56.25,
        "frozen_pct": 0.0,
-       "fps": 32.04,
+       "fps": 36.97,
        "n": 16
       },
-      "sent": 22,
+      "sent": 23,
       "arrived": 22
      }
     ]
@@ -129,18 +129,60 @@
     "updates": 3,
     "open": 3,
     "blocking": 3,
-    "camera": 0
+    "camera": 0,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 950,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 871.6399999999994,
+      "frames": {
+       "p95_ms": 283.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 7.28,
+       "n": 4
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 950.460000000021,
+      "frames": {
+       "p95_ms": 300.0,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 7.93,
+       "n": 7
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1126.0800000000163,
+      "frames": {
+       "p95_ms": 1000.0,
+       "jank_pct": 100.0,
+       "frozen_pct": 20.0,
+       "fps": 3.26,
+       "n": 5
+      }
+     }
+    ]
    }
   },
   "typical-nocam": {
-   "inp_ms": 120.0,
-   "open_ms": 1241.0,
-   "blocking_ms": 2862.16,
-   "usable_ms": 5100,
+   "inp_ms": 96.0,
+   "open_ms": 912.0,
+   "blocking_ms": 2729.08,
+   "usable_ms": 4425,
    "scroll": {
-    "fps": 39.3,
+    "fps": 39.1,
     "p95_ms": 66.67,
-    "scrolled_px": 3347,
+    "scrolled_px": 3384,
     "sf_valid": [
      true,
      true,
@@ -156,41 +198,41 @@
     "runs": [
      {
       "p95_ms": 66.67,
-      "jank_pct": 28.43,
+      "jank_pct": 28.57,
       "frozen_pct": 0.0,
-      "fps": 38.31,
-      "n": 204
+      "fps": 39.68,
+      "n": 210
      },
      {
-      "p95_ms": 83.33,
-      "jank_pct": 26.7,
+      "p95_ms": 66.67,
+      "jank_pct": 28.78,
       "frozen_pct": 0.0,
-      "fps": 39.3,
-      "n": 206
+      "fps": 38.49,
+      "n": 205
      },
      {
       "p95_ms": 50.0,
-      "jank_pct": 31.6,
+      "jank_pct": 28.37,
       "frozen_pct": 0.0,
-      "fps": 40.31,
-      "n": 212
+      "fps": 39.06,
+      "n": 208
      }
     ]
    },
    "updates": {
-    "latency_p95_ms": 101.2,
-    "latency_median_ms": 82.3,
+    "latency_p95_ms": 101.6,
+    "latency_median_ms": 84.4,
     "pacing_p95_ms": 83.33,
     "runs": [
      {
       "latency_n": 21,
-      "latency_median_ms": 82.3,
-      "latency_p95_ms": 101.2,
+      "latency_median_ms": 84.4,
+      "latency_p95_ms": 104.8,
       "frames": {
-       "p95_ms": 66.67,
-       "jank_pct": 40.0,
+       "p95_ms": 50.0,
+       "jank_pct": 66.67,
        "frozen_pct": 0.0,
-       "fps": 37.55,
+       "fps": 33.37,
        "n": 15
       },
       "sent": 22,
@@ -198,31 +240,31 @@
      },
      {
       "latency_n": 21,
-      "latency_median_ms": 92.6,
-      "latency_p95_ms": 119.4,
+      "latency_median_ms": 88.0,
+      "latency_p95_ms": 101.6,
       "frames": {
-       "p95_ms": 83.33,
+       "p95_ms": 100.0,
        "jank_pct": 76.92,
        "frozen_pct": 0.0,
-       "fps": 26.9,
+       "fps": 26.03,
        "n": 13
       },
       "sent": 22,
-      "arrived": 22
+      "arrived": 21
      },
      {
-      "latency_n": 21,
-      "latency_median_ms": 80.1,
-      "latency_p95_ms": 96.8,
+      "latency_n": 22,
+      "latency_median_ms": 83.9,
+      "latency_p95_ms": 96.7,
       "frames": {
        "p95_ms": 83.33,
        "jank_pct": 50.0,
        "frozen_pct": 0.0,
-       "fps": 35.04,
+       "fps": 33.63,
        "n": 14
       },
-      "sent": 22,
-      "arrived": 22
+      "sent": 23,
+      "arrived": 23
      }
     ]
    },
@@ -238,18 +280,60 @@
     "updates": 3,
     "open": 3,
     "blocking": 3,
-    "camera": 0
+    "camera": 0,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 1224,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1144.5799999999872,
+      "frames": {
+       "p95_ms": 600.0,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 4.25,
+       "n": 7
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1223.7599999999948,
+      "frames": {
+       "p95_ms": 966.67,
+       "jank_pct": 100.0,
+       "frozen_pct": 50.0,
+       "fps": 1.5,
+       "n": 2
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1279.2000000000116,
+      "frames": {
+       "p95_ms": 333.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 5.67,
+       "n": 5
+      }
+     }
+    ]
    }
   },
   "typical": {
-   "inp_ms": 160.0,
-   "open_ms": 1386.0,
-   "blocking_ms": 3981.6,
-   "usable_ms": 6404,
+   "inp_ms": 176.0,
+   "open_ms": 1320.0,
+   "blocking_ms": 3411.54,
+   "usable_ms": 5692,
    "scroll": {
-    "fps": 26.5,
-    "p95_ms": 100.0,
-    "scrolled_px": 3351,
+    "fps": 27.3,
+    "p95_ms": 83.33,
+    "scrolled_px": 3354,
     "sf_valid": [
      true,
      true,
@@ -264,70 +348,70 @@
     "swipes_at_edge": 0,
     "runs": [
      {
-      "p95_ms": 100.0,
-      "jank_pct": 51.52,
+      "p95_ms": 83.33,
+      "jank_pct": 45.91,
       "frozen_pct": 0.0,
-      "fps": 25.75,
-      "n": 132
+      "fps": 30.82,
+      "n": 159
+     },
+     {
+      "p95_ms": 83.33,
+      "jank_pct": 50.34,
+      "frozen_pct": 0.0,
+      "fps": 27.31,
+      "n": 145
      },
      {
       "p95_ms": 116.67,
-      "jank_pct": 47.48,
+      "jank_pct": 47.73,
       "frozen_pct": 0.0,
-      "fps": 26.52,
-      "n": 139
-     },
-     {
-      "p95_ms": 100.0,
-      "jank_pct": 50.79,
-      "frozen_pct": 0.0,
-      "fps": 26.57,
-      "n": 126
+      "fps": 25.92,
+      "n": 132
      }
     ]
    },
    "updates": {
-    "latency_p95_ms": 114.1,
-    "latency_median_ms": 73.7,
-    "pacing_p95_ms": 83.33,
+    "latency_p95_ms": 121.8,
+    "latency_median_ms": 88.8,
+    "pacing_p95_ms": 100.0,
     "runs": [
      {
       "latency_n": 21,
-      "latency_median_ms": 58.1,
-      "latency_p95_ms": 85.4,
+      "latency_median_ms": 88.8,
+      "latency_p95_ms": 117.6,
       "frames": {
-       "p95_ms": 66.67,
-       "jank_pct": 75.0,
+       "p95_ms": 100.0,
+       "jank_pct": 100.0,
        "frozen_pct": 0.0,
-       "fps": 27.72,
+       "fps": 24.86,
        "n": 12
-      },
-      "sent": 22,
-      "arrived": 21
-     },
-     {
-      "latency_n": 21,
-      "latency_median_ms": 80.8,
-      "latency_p95_ms": 114.1,
-      "frames": {
-       "p95_ms": 83.33,
-       "jank_pct": 64.71,
-       "frozen_pct": 0.0,
-       "fps": 30.94,
-       "n": 17
       },
       "sent": 22,
       "arrived": 22
      },
      {
-      "latency_n": 21,
-      "latency_median_ms": 73.7,
-      "latency_p95_ms": 118.8,
+      "latency_n": 22,
+      "latency_median_ms": 54.0,
+      "latency_p95_ms": 121.8,
       "frames": {
-       "p95_ms": 100.0,
+       "p95_ms": 83.33,
+       "jank_pct": 85.71,
+       "frozen_pct": 0.0,
+       "fps": 26.28,
+       "n": 14
+      },
+      "sent": 23,
+      "arrived": 23
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 100.1,
+      "latency_p95_ms": 125.1,
+      "frames": {
+       "p95_ms": 133.33,
        "jank_pct": 75.0,
        "frozen_pct": 0.0,
-       "fps": 24.03,
+       "fps": 22.53,
        "n": 12
       },
       "sent": 22,
@@ -338,25 +422,25 @@
    "camera": {
     "runs": [
      {
-      "first_frame_ms": 4474.9,
-      "shown_pct": 100,
-      "max_gap_ms": 216.53,
+      "first_frame_ms": 4319.8,
+      "shown_pct": 99.9,
+      "max_gap_ms": 216.71,
       "stall_total_ms": 0,
       "uncovered_ms": 0.0
      },
      {
-      "first_frame_ms": 4501.9,
+      "first_frame_ms": 4376.1,
       "shown_pct": 100,
-      "max_gap_ms": 216.67,
+      "max_gap_ms": 216.69,
       "stall_total_ms": 0,
-      "uncovered_ms": 7
+      "uncovered_ms": 0.0
      },
      {
-      "first_frame_ms": 4236,
+      "first_frame_ms": 4544.9,
       "shown_pct": 100,
       "max_gap_ms": 216.68,
       "stall_total_ms": 0,
-      "uncovered_ms": 0.0
+      "uncovered_ms": 2
      }
     ],
     "path": "web_rtc",
@@ -364,21 +448,21 @@
      "path": "hls",
      "runs": [
       {
-       "first_frame_ms": 6011.9,
+       "first_frame_ms": 5149.4,
        "shown_pct": 100,
        "max_gap_ms": 216.4,
        "stall_total_ms": 0
       },
       {
-       "first_frame_ms": 4832.9,
+       "first_frame_ms": 4437.8,
        "shown_pct": 100,
        "max_gap_ms": 249.7,
        "stall_total_ms": 0
       },
       {
-       "first_frame_ms": 4957.1,
+       "first_frame_ms": 5102,
        "shown_pct": 100,
-       "max_gap_ms": 382.9,
+       "max_gap_ms": 233.1,
        "stall_total_ms": 0
       }
      ]
@@ -391,18 +475,60 @@
     "updates": 3,
     "open": 3,
     "blocking": 3,
-    "camera": 3
+    "camera": 3,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 1431,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1302.7999999999884,
+      "frames": {
+       "p95_ms": 383.33,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 2.61,
+       "n": 1
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1430.6000000000058,
+      "frames": {
+       "p95_ms": 450.0,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 3.9,
+       "n": 5
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 1734.5599999999977,
+      "frames": {
+       "p95_ms": 466.67,
+       "jank_pct": 100.0,
+       "frozen_pct": 0.0,
+       "fps": 5.11,
+       "n": 4
+      }
+     }
+    ]
    }
   },
   "heavy": {
-   "inp_ms": 432.0,
-   "open_ms": 1431.0,
-   "blocking_ms": 34470.84,
-   "usable_ms": 40433,
+   "inp_ms": 416.0,
+   "open_ms": 1232.0,
+   "blocking_ms": 31457.84,
+   "usable_ms": 37187,
    "scroll": {
-    "fps": 4.0,
-    "p95_ms": 433.33,
-    "scrolled_px": 3023,
+    "fps": 4.2,
+    "p95_ms": 416.67,
+    "scrolled_px": 3344,
     "sf_valid": [
      true,
      true,
@@ -411,108 +537,108 @@
     "during_updates": [
      5,
      6,
-     5
+     6
     ],
-    "swipes_moved": 17,
+    "swipes_moved": 18,
     "swipes_at_edge": 0,
     "runs": [
      {
-      "p95_ms": 433.33,
+      "p95_ms": 416.67,
       "jank_pct": 100.0,
       "frozen_pct": 0.0,
-      "fps": 3.03,
-      "n": 7
+      "fps": 3.99,
+      "n": 14
      },
      {
       "p95_ms": 350.0,
       "jank_pct": 100.0,
       "frozen_pct": 0.0,
-      "fps": 4.39,
-      "n": 16
+      "fps": 4.33,
+      "n": 22
      },
      {
-      "p95_ms": 516.67,
+      "p95_ms": 416.67,
       "jank_pct": 100.0,
       "frozen_pct": 0.0,
-      "fps": 4.02,
-      "n": 14
+      "fps": 4.23,
+      "n": 21
      }
     ]
    },
    "updates": {
-    "latency_p95_ms": 1347.0,
-    "latency_median_ms": 670.2,
-    "pacing_p95_ms": 283.33,
+    "latency_p95_ms": 1512.3,
+    "latency_median_ms": 1251.8,
+    "pacing_p95_ms": 300.0,
     "runs": [
      {
       "latency_n": 21,
-      "latency_median_ms": 670.2,
-      "latency_p95_ms": 1347.0,
+      "latency_median_ms": 1257.6,
+      "latency_p95_ms": 1544.8,
       "frames": {
-       "p95_ms": 283.33,
+       "p95_ms": 300.0,
        "jank_pct": 100.0,
        "frozen_pct": 0.0,
-       "fps": 5.94,
-       "n": 9
+       "fps": 3.96,
+       "n": 6
       },
       "sent": 22,
       "arrived": 15
      },
      {
       "latency_n": 20,
-      "latency_median_ms": 1144.5,
-      "latency_p95_ms": 1769.7,
+      "latency_median_ms": 1251.8,
+      "latency_p95_ms": 1512.3,
       "frames": {
-       "p95_ms": 383.33,
+       "p95_ms": 366.67,
        "jank_pct": 100.0,
        "frozen_pct": 0.0,
-       "fps": 3.58,
-       "n": 5
+       "fps": 3.25,
+       "n": 4
       },
       "sent": 22,
-      "arrived": 13
+      "arrived": 16
      },
      {
-      "latency_n": 19,
-      "latency_median_ms": 372.3,
-      "latency_p95_ms": 1019.1,
+      "latency_n": 18,
+      "latency_median_ms": 538.6,
+      "latency_p95_ms": 708.0,
       "frames": {
        "p95_ms": 200.0,
-       "jank_pct": 81.82,
+       "jank_pct": 100.0,
        "frozen_pct": 0.0,
-       "fps": 8.26,
-       "n": 11
+       "fps": 6.01,
+       "n": 9
       },
       "sent": 22,
-      "arrived": 17
+      "arrived": 20
      }
     ]
    },
    "camera": {
     "runs": [
      {
-      "first_frame_ms": 5512.6,
-      "shown_pct": 99.5,
+      "first_frame_ms": 5437,
+      "shown_pct": 99.3,
       "max_gap_ms": null,
       "stall_total_ms": null,
       "stalls_reported": false,
-      "uncovered_ms": 23437
+      "uncovered_ms": 23845
      },
      {
-      "first_frame_ms": 6059.3,
-      "shown_pct": 100,
+      "first_frame_ms": 5413,
+      "shown_pct": 99.9,
       "max_gap_ms": null,
       "stall_total_ms": null,
       "stalls_reported": false,
-      "uncovered_ms": 23553
+      "uncovered_ms": 22718
      },
      {
-      "first_frame_ms": 6294.7,
+      "first_frame_ms": 4817.6,
       "shown_pct": 99.8,
       "max_gap_ms": null,
       "stall_total_ms": null,
       "stalls_reported": false,
-      "uncovered_ms": 24021
+      "uncovered_ms": 22999
      }
     ],
     "path": "web_rtc",
@@ -520,22 +646,22 @@
      "path": "hls",
      "runs": [
       {
-       "first_frame_ms": 5408.6,
-       "shown_pct": 39.5,
-       "max_gap_ms": 12085.6,
-       "stall_total_ms": 21878.4
+       "first_frame_ms": 6161.7,
+       "shown_pct": 39.6,
+       "max_gap_ms": 7041.7,
+       "stall_total_ms": 22468
       },
       {
-       "first_frame_ms": 6504.1,
-       "shown_pct": 38.6,
-       "max_gap_ms": 12185.4,
-       "stall_total_ms": 20154.6
+       "first_frame_ms": 6426.8,
+       "shown_pct": 38.9,
+       "max_gap_ms": 11769.4,
+       "stall_total_ms": 25749.5
       },
       {
-       "first_frame_ms": 6240.9,
-       "shown_pct": 47.8,
-       "max_gap_ms": 7108.3,
-       "stall_total_ms": 20733.1
+       "first_frame_ms": 6579.5,
+       "shown_pct": 37.9,
+       "max_gap_ms": 6525.7,
+       "stall_total_ms": 23186.3
       }
      ]
     }
@@ -547,37 +673,81 @@
     "updates": 3,
     "open": 3,
     "blocking": 3,
-    "camera": 3
+    "camera": 3,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": null,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 2,
+      "settled_ms": null,
+      "frames": {
+       "p95_ms": null,
+       "jank_pct": null,
+       "frozen_pct": null,
+       "fps": null,
+       "n": 0
+      }
+     },
+     {
+      "n": 3,
+      "failed": 2,
+      "settled_ms": null,
+      "frames": {
+       "p95_ms": null,
+       "jank_pct": null,
+       "frozen_pct": null,
+       "fps": null,
+       "n": 0
+      }
+     },
+     {
+      "n": 3,
+      "failed": 2,
+      "settled_ms": null,
+      "frames": {
+       "p95_ms": null,
+       "jank_pct": null,
+       "frozen_pct": null,
+       "fps": null,
+       "n": 0
+      }
+     }
+    ]
    }
   }
  },
- "restart_ms": 14312.0,
+ "restart_ms": 13963.0,
  "gaps": [],
  "not_comparable": null,
  "report": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/clarity/report.md",
  "ram": {
-  "idle_app_pss_kb": 935601,
+  "idle_app_pss_kb": 976721,
   "idle_by_process_pss_kb": {
-   "crashhelper": 7763,
-   "gpu": 236876,
-   "main": 206930,
-   "media": 32716,
-   "tab": 435340,
-   "utility": 16165
+   "crashhelper": 7296,
+   "gpu": 272775,
+   "main": 212058,
+   "media": 29534,
+   "tab": 434713,
+   "utility": 15737
   },
-  "peak_app_pss_kb": 926172,
+  "peak_app_pss_kb": 987113,
   "peak_by_process_pss_kb": {
-   "crashhelper": 7835,
-   "gpu": 248744,
-   "main": 203052,
-   "media": 35818,
-   "tab": 431726,
-   "utility": 16352
+   "crashhelper": 8455,
+   "gpu": 292558,
+   "main": 207267,
+   "media": 35930,
+   "tab": 451276,
+   "utility": 15775
   },
   "panes": [],
   "panes_waiting": [],
   "panes_not_switched": [
    "bluetooth-proxy",
+   "camera",
+   "notifications",
    "radio",
    "timers"
   ],
@@ -589,18 +759,18 @@
    "abis": [
     "armeabi-v7a"
    ],
-   "bytes": 97981342
+   "bytes": 98608387
   }
  ],
  "notes": {
-  "good": "Light dashboards feel good: taps, live updates and opening a view are quick, and scrolling is fluid.",
-  "limits": "Bigger dashboards slow down: typical without a camera blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change.",
+  "good": "Light dashboards feel good: taps, live updates, opening a view and more-info dialogs are quick, and scrolling is fluid.",
+  "limits": "Bigger dashboards slow down: typical without a camera blocks for 2.7 s after it is drawn, and heavy takes 1.5 s to show a change and doesn't open a more-info dialog fully.",
   "causes": [
-   "The likely limit is the browser's main thread: it stays busy (78% of a core on typical with a camera playing), and the page draws too few frames.",
-   "Memory isn't the limit (904 of 988 MB)."
+   "The likely limit is the browser's main thread: it stays busy (82% of a core on typical with a camera playing), and the page draws too few frames.",
+   "Memory isn't the limit (964 of 988 MB)."
   ],
-  "text": "Light dashboards feel good: taps, live updates and opening a view are quick, and scrolling is fluid. Bigger dashboards slow down: typical without a camera blocks for 2.9 s after it is drawn, and heavy takes 430 ms to answer a tap and takes 1.3 s to show a change. The likely limit is the browser's main thread: it stays busy (78% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (904 of 988 MB).",
-  "rubric": 2
+  "text": "Light dashboards feel good: taps, live updates, opening a view and more-info dialogs are quick, and scrolling is fluid. Bigger dashboards slow down: typical without a camera blocks for 2.7 s after it is drawn, and heavy takes 1.5 s to show a change and doesn't open a more-info dialog fully. The likely limit is the browser's main thread: it stays busy (82% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (964 of 988 MB).",
+  "rubric": 3
  },
  "webrtc_transport": {
   "transport": "lan-udp",
