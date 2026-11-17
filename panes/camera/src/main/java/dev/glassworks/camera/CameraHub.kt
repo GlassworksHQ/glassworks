@@ -223,20 +223,26 @@ class CameraHub(
 
     override val streamFps: Int get() = announcedFps(streamRange)
 
+    private class Sizes(val id: String?, val reader: Pair<Int, Int>, val fit: StreamFit)
+
+    /** The last [sizes] read, for the camera it was read from. */
+    @Volatile private var sizesRead: Sizes? = null
+
     /**
-     * The reader's size ([yuvSizeFor]) and the stream's ([streamFitFor]): the encoder runs at the reader's size, or
-     * not at all. The stream asks before it opens a port, the hub when it opens the camera. Kept once read. A read
-     * that throws is not kept (`lazy` reads again on the next ask), so a size the camera never listed can't stick.
+     * Camera [id]'s reader size ([yuvSizeFor]) and stream ([streamFitFor]): the encoder runs at the reader's size, or
+     * not at all. The stream asks before it opens a port, the hub when it opens the camera. Kept for that camera, so
+     * another one (a removable camera) is read again. A read that throws is not kept, so the next ask reads again.
      */
-    private val sizes: Pair<Pair<Int, Int>, StreamFit> by lazy {
-        val map = cameraId()?.let { manager.getCameraCharacteristics(it).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }
+    private fun sizes(id: String? = cameraId()): Sizes = sizesRead?.takeIf { it.id == id } ?: run {
+        val map = id?.let { manager.getCameraCharacteristics(it).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }
         val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
-        reader to streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes)
+        Sizes(id, reader, streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes))
+            .also { sizesRead = it }
     }
 
     /** No stream while the camera's sizes can't be read: the pane asks again on its next check. */
     override val streamFit: StreamFit get() = try {
-        sizes.second
+        sizes().fit
     } catch (e: Exception) {
         log("camera: sizes unreadable (${e.javaClass.simpleName})")
         StreamFit.Refused(SIZES_UNREADABLE)
@@ -274,7 +280,7 @@ class CameraHub(
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
-        size = sizes.first // throws to openCamera, which retries
+        size = sizes(id).reader // throws to openCamera, which retries
         val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
         presenceRange = if (!legacy) null else presenceRangeFor(
             c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
