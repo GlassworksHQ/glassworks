@@ -225,19 +225,22 @@ class CameraHub(
 
     /**
      * The reader's size ([yuvSizeFor]) and the stream's ([streamFitFor]): the encoder runs at the reader's size, or
-     * not at all. Read once, like [streamRange]: the stream asks before it opens a port, the hub when it opens the camera.
+     * not at all. The stream asks before it opens a port, the hub when it opens the camera. Kept once read. A read
+     * that throws is not kept (`lazy` reads again on the next ask), so a size the camera never listed can't stick.
      */
     private val sizes: Pair<Pair<Int, Int>, StreamFit> by lazy {
-        try {
-            val map = cameraId()?.let { manager.getCameraCharacteristics(it).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }
-            val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
-            reader to streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes)
-        } catch (e: Exception) {
-            (width to height) to StreamFit.Size(width, height)
-        }
+        val map = cameraId()?.let { manager.getCameraCharacteristics(it).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) }
+        val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
+        reader to streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes)
     }
 
-    override val streamFit: StreamFit get() = sizes.second
+    /** No stream while the camera's sizes can't be read: the pane asks again on its next check. */
+    override val streamFit: StreamFit get() = try {
+        sizes.second
+    } catch (e: Exception) {
+        log("camera: sizes unreadable (${e.javaClass.simpleName})")
+        StreamFit.Refused(SIZES_UNREADABLE)
+    }
 
     /** Which camera the hub opens, for the page (#117's Camera tile): read once, like [streamRange]. */
     override val lens: CameraFacts.Lens? by lazy {
@@ -271,7 +274,7 @@ class CameraHub(
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
-        size = sizes.first
+        size = sizes.first // throws to openCamera, which retries
         val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
         presenceRange = if (!legacy) null else presenceRangeFor(
             c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
@@ -417,5 +420,6 @@ class CameraHub(
         const val LINGER_MS = 10_000L
         const val RETRY_MS = 5_000L
         const val DETACH_WAIT_MS = 1_000L
+        const val SIZES_UNREADABLE = "The panel couldn't read the camera's sizes"
     }
 }
