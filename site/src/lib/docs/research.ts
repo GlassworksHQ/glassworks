@@ -21,7 +21,10 @@ export type Note = Doc & {
   blurb: string;
 };
 
-export type TopicGroup = { id: Topic | "unsorted"; label: string; notes: Note[] };
+/** What a list row needs of a note: small enough to hand to the /research page's filter. */
+export type NoteItem = Pick<Note, "url" | "title" | "blurb" | "evidence" | "date" | "dateFrom" | "topic" | "frame">;
+
+export type TopicGroup<N extends NoteItem = Note> = { id: Topic | "unsorted"; label: string; notes: N[] };
 
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -83,11 +86,14 @@ export async function getNotes(): Promise<Note[]> {
 }
 
 /** A frame's notes, or the general ones (frame undefined). */
-export const notesOf = (notes: Note[], frame: string | undefined) => notes.filter((n) => n.frame === frame);
+export const notesOf = <N extends NoteItem>(notes: N[], frame: string | undefined) => notes.filter((n) => n.frame === frame);
+
+/** A note as a list row needs it. */
+export const noteItem = ({ url, title, blurb, evidence, date, dateFrom, topic, frame }: Note): NoteItem => ({ url, title, blurb, evidence, date, dateFrom, topic, frame });
 
 /** Notes by topic, in the topics' order; notes without front matter last. */
-export function byTopic(notes: Note[]): TopicGroup[] {
-  const groups: TopicGroup[] = TOPIC_ORDER.map((id) => ({ id, label: TOPICS[id], notes: notes.filter((n) => n.topic === id) }));
+export function byTopic<N extends NoteItem>(notes: N[]): TopicGroup<N>[] {
+  const groups: TopicGroup<N>[] = TOPIC_ORDER.map((id) => ({ id, label: TOPICS[id], notes: notes.filter((n) => n.topic === id) }));
   groups.push({ id: "unsorted", label: "Not sorted yet", notes: notes.filter((n) => !n.topic) });
   return groups.filter((g) => g.notes.length);
 }
