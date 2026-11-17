@@ -147,9 +147,9 @@ class CameraHub(
 
     /** Closes the camera and ends the hub's thread. Nothing may use the hub after. */
     fun release() {
-        manager.unregisterAvailabilityCallback(availability)
         handler.post {
             released = true
+            manager.unregisterAvailabilityCallback(availability)
             sinks.clear(); waiters.forEach { it.latch.countDown() }; waiters.clear(); encoder = null
             closeCamera()
             // An open in flight still calls back: quit only once it has, so it can close that camera.
@@ -246,8 +246,10 @@ class CameraHub(
         private fun changed(cameraId: String) { if (cameraId != openId) sizes.drop() }
     }
 
+    // On the hub's thread, not the caller's: it is the process's first call to the camera service, and the panes are
+    // built on the main thread at start. release() unregisters on the same thread, after it.
     init {
-        manager.registerAvailabilityCallback(availability, handler)
+        handler.post { manager.registerAvailabilityCallback(availability, handler) }
     }
 
     /**
