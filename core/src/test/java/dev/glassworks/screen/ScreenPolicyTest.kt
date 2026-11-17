@@ -235,6 +235,9 @@ class ScreenPolicyTest {
         advance(600_000)
         assertEquals("on far past the 20 s idle timeout", emptyList<Boolean>(), keepOn.filter { !it })
         assertEquals("the brightness limit stays", 0.2f, screen.brightness, 0.001f)
+        light.lux!!(2000f) // a brighter room while it stays on: still under the limit
+        advance(10)
+        assertEquals("the brightness limit stays in a bright room", 0.2f, screen.brightness, 0.001f)
         assertFalse("not a hold", screen.held)
         assertEquals("no wake", null, ShadowPowerManager.getLatestWakeLock())
 
