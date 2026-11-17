@@ -10,7 +10,7 @@ import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from '@glasswor
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
-import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
+import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
 import { fakeAdbKey, fakeServicesJar } from './fakes';
 import { DEXDUMP, disassemble } from './dexdump';
 
@@ -282,7 +282,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
 
   it('builds a fresh userdata that lets only this browser\'s adb key in', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
-    const key = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';
+    const key = fakeAdbKey(12, 'kiln@glassworks');
     await buildUserdata(disk, { adbKey: key, time: T, uuid: new Uint8Array(16).fill(9) });
     const img = join(dir, 'userdata.img');
     await dump(disk, img);
@@ -302,7 +302,8 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
 
   it('writes every key line into adb_keys (repeated --adb-key, #426 review)', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
-    const [a, b] = [fakeAdbKey(1, 'one@host'), fakeAdbKey(2, 'two@host')];
+    const [a, b] = [fakeAdbKey(1, 'one@host'), fakeAdbKey(2, 'second host, a comment with spaces')];
+    expect(adbKeyLines(`${a}\n${b}`)).toEqual([a, b]); // the preflight takes what buildUserdata writes
     await buildUserdata(disk, { adbKey: `${a}\n${b}\n`, time: T });
     const img = join(dir, 'userdata-two.img');
     await dump(disk, img);
@@ -311,7 +312,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
 
   it('saves the person\'s Wi-Fi where Android 6\'s Wi-Fi expects it, owned and labelled as init and file_contexts make it', async () => {
     const disk = new Disk(new MemoryStore(), 4096, 3 * 32768 + 5000);
-    const key = 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks';
+    const key = fakeAdbKey(12, 'kiln@glassworks');
     await buildUserdata(disk, { adbKey: key, time: T, wifi: { ssid: 'Home Net', password: 'not-a-real-password', template: TEMPLATE } });
     const img = join(dir, 'userdata-wifi.img');
     await dump(disk, img);

@@ -55,7 +55,7 @@ describe('the headless install on a fake Mirror', () => {
   }, 60_000);
 
   it('takes repeated --adb-key: every line in adb_keys, only the first trusted in services.jar (#426 review)', async () => {
-    const second = fakeAdbKey(10, 'other@host');
+    const second = fakeAdbKey(10, 'second host');
     const { d, lines, run } = await install({ adbKey: `${KEY}\n${second}` });
     await run;
     expect(d.lk.commands.filter((c) => c.startsWith('flash:'))).toEqual(['flash:system', 'flash:userdata']);

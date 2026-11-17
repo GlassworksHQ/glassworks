@@ -207,8 +207,7 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
 export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: number; uuid?: Uint8Array;
   /** the person's network, saved for Android's Wi-Fi; `template` is the image's /etc/wifi/wpa_supplicant.conf */
   wifi?: { ssid: string; password: string; template: string } }): Promise<Ext4> {
-  const keys = o.adbKey.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (!keys.length || !keys.every((k) => /^[A-Za-z0-9+/=]+( \S+)?$/.test(k))) throw new Error('that isn\'t an adb public key line');
+  const keys = adbKeyLines(o.adbKey); // the same check as the harness's preflight
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const fs = await mkfs(disk, {
     label: 'userdata', time, uuid: o.uuid,

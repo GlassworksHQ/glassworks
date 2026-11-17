@@ -50,6 +50,7 @@ describe('the key fingerprint Android 6 makes', () => {
     expect(adbKeyLines(`${a}\r\n\n${b}\n`)).toEqual([a, b]);
     expect(() => adbKeyLines(`${a}\nQAAA= x@y`)).toThrow(/^adb key 2 of 2: that isn't an adb public key/);
     expect(() => adbKeyLines('\n')).toThrow(/no adb key given/);
+    expect(() => adbKeyLines(`${a}\n${fakeAdbKey(3, 'x\ty')}`)).toThrow(/^adb key 2 of 2: that isn't an adb public key line/);
   });
   it('refuses a line that isn\'t a 524-byte adb key', () => {
     for (const line of ['QAAA= kiln@glassworks', 'not base64!', '', fakeAdbKey().slice(0, 100)]) expect(() => adbFingerprint(line)).toThrow(/isn't an adb public key.*Nothing was changed/);

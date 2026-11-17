@@ -61,6 +61,9 @@ export function adbFingerprint(line: string): string {
   return [...md5(Uint8Array.from(raw, (c) => c.charCodeAt(0)))].map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(':');
 }
 
+/** One adb_keys line: the key in base64, then any comment of printable ASCII, spaces included (adb writes user@host). */
+export const ADB_KEY_LINE = /^[A-Za-z0-9+/=]+( [\x20-\x7e]*)?$/;
+
 /**
  * The adb_keys lines in `text`, each checked as an adb key, in order: the first is the one the image
  * lets in. Throws, naming the line, for any line that isn't one, so a caller can stop before anything
@@ -69,7 +72,12 @@ export function adbFingerprint(line: string): string {
 export function adbKeyLines(text: string): string[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!lines.length) throw new Error(`no adb key given.${done}`);
-  lines.forEach((l, i) => { try { adbFingerprint(l); } catch (e) { throw new Error(`adb key ${i + 1} of ${lines.length}: ${(e as Error).message}`); } });
+  lines.forEach((l, i) => {
+    try {
+      if (!ADB_KEY_LINE.test(l)) throw new Error(`that isn't an adb public key line (base64, then a comment in printable ASCII).${done}`);
+      adbFingerprint(l);
+    } catch (e) { throw new Error(`adb key ${i + 1} of ${lines.length}: ${(e as Error).message}`); }
+  });
   return lines;
 }
 
