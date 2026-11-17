@@ -102,7 +102,8 @@ no cable and no Bluetooth (an iPhone too).
    from a phone** on its Wi-Fi step. It never opens while the panel is on a network.
 2. **Join it.** The setup screen shows a QR code: scan it with the phone's camera to join. The network's name
    and password are under it too, for typing. Then open the address it shows (`http://<address>:8099/setup`)
-   and pair as above. On the S1 the phone opens the page by itself once it joins.
+   and pair as above. On the S1 an iPhone, or an Android 11+ phone that joined from its Wi-Fi settings, opens the
+   page by itself once it joins; Android 10 shows a "Sign in to Wi-Fi network" notification to tap instead.
 3. **Send your Wi-Fi.** The page starts with Wi-Fi, since the panel is on no network. Pick yours and type the
    password. The panel closes its own Wi-Fi and joins; its screen shows how it goes. Put the phone back on
    your own Wi-Fi.
@@ -121,7 +122,7 @@ no cable and no Bluetooth (an iPhone too).
 | Wi-Fi turned off | From Android 10 an app can't turn Wi-Fi on. With the panel's Wi-Fi off, it doesn't open its own: it couldn't join what the phone sends. The setup screen says so, with **Turn on Wi-Fi** |
 | Android 8 and newer | Android's local-only hotspot: Android names it (`AndroidShare_…` on the S1) and picks its key. No setting changes. On Android 13 and newer the panel asks for *Nearby devices* first; on 8 to 12 it needs location on |
 | Android 6 and 7 | A hidden Android call opens it as `Glassworks-…`. The panel puts back the device's own hotspot settings and its Wi-Fi when it closes |
-| The page opens by itself | On the S1: joining the panel's Wi-Fi opens the setup page, like a hotel's Wi-Fi sign-in. While its own Wi-Fi is open, the panel answers the phone's DNS and its web check, and its root helper sends them there (#197, docs/research/setup-hotspot-portal-and-name.md). Elsewhere, open the address on the screen: Android doesn't let an app do this without root |
+| The page opens by itself | On the S1: joining the panel's Wi-Fi brings up the setup page, like a hotel's Wi-Fi sign-in. iOS opens its sign-in sheet. Android 11 and newer open the page by themselves when you joined from the Wi-Fi settings; Android 10, or a join from the camera, shows a "Sign in to Wi-Fi network" notification to tap. While its own Wi-Fi is open, the panel answers the phone's DNS and its web check, and its root helper sends them there (#197, `docs/research/setup-hotspot-portal-and-name.md`). Elsewhere, open the address on the screen: Android doesn't let an app do this without root |
 
 ## Changing settings
 
