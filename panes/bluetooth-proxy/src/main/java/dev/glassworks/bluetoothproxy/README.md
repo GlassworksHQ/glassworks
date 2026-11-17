@@ -49,11 +49,11 @@ one long-running scan, only while HA listens, within Android's limits. This pane
 | | |
 |---|---|
 | `BluetoothProxyDefinition` | The on/off (`bluetooth_proxy_enabled`, off by default), the setup card (none without Bluetooth LE), the settings page, and the model the page reads. |
-| `BluetoothProxyPane` | Gives the engine the device's ESPHome server while the pane is on, and takes it back when it goes off. Both change what DeviceInfo says, so Home Assistant reconnects. Adds *Bluetooth advertisements* and *Bluetooth proxy status* (diagnostic). |
+| `BluetoothProxyPane` | Gives the engine the device's ESPHome server while the pane is on, and takes it back when it goes off. In "Listen and connect" it also runs the connection engine (#246). Each of these changes what DeviceInfo says, so Home Assistant reconnects. Adds *Bluetooth advertisements* and *Bluetooth proxy status* (diagnostic). |
 | `ProxyPhase` | What the proxy is doing, from the switch, Android's state and the engine's status. The page's line and card, and the status entity, all read it. |
 | `ProxyPage` | The page's words, once: its line, card, tiles, note and entities. The frame's view draws them, and `twin` gives the same page as typed items for the Manage page (#269). |
-| `ProxyRadio`, `AndroidProxyRadio` | The device's Bluetooth: the scanner, why it can't scan, and turning Bluetooth and location on. |
-| `BluetoothProxyPrefs` | The pane's one key. |
+| `ProxyRadio`, `AndroidProxyRadio` | The device's Bluetooth: the scanners and the GATT radio (sharing the devices heard), why it can't scan, and turning Bluetooth and location on. |
+| `BluetoothProxyPrefs` | The pane's keys: on/off, and `bluetooth_proxy_connect` ("Listen and connect", off by default). |
 
 The page is the frame's to draw: the definition takes a factory and hands it a
 `BluetoothProxyModel`. On the S1 that is `sh.edm.s1kiosk.settings.BluetoothProxyPage`, as approved on
@@ -62,6 +62,6 @@ tiles, then the pane's entities as Home Assistant shows them. Its words come fro
 section's native item carries `ProxyPage.twin`, so the Manage page shows the same page with its own
 rows, and its card's button turns Bluetooth or location on from a browser too.
 
-**Not yet:** GATT connections (locks, devices that need one), the "Listen only / Listen and connect"
-choice that comes with them, and the connections tile. The entities are in
+**Not yet on the page:** the "Listen only / Listen and connect" choice and the connections tile
+(#246). The entities are in
 [docs/esphome.md](../../../../../../../../docs/esphome.md#bluetooth-proxy).

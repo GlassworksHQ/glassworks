@@ -6,6 +6,7 @@ package dev.glassworks.bluetoothproxy
 
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
+import dev.glassworks.esphome.bluetoothproxy.BluetoothConnectionEngine
 import dev.glassworks.esphome.bluetoothproxy.BluetoothProxyEngine
 import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
 import dev.glassworks.esphome.bluetoothproxy.ScanFailure
@@ -27,11 +28,16 @@ import java.util.concurrent.TimeUnit
  * Starting and stopping changes what DeviceInfo says, so both ask the shell to rebuild the entity
  * list: Home Assistant reconnects and reads DeviceInfo again. The scan runs full time while Home
  * Assistant listens (#121: no Wi-Fi or Sendspin cost measured on the S1, 2026-11-14).
+ *
+ * With [connect] ("Listen and connect", #246), a [BluetoothConnectionEngine] runs next to the scan, and
+ * Home Assistant may make GATT connections through the panel, 3 at a time. Switching it also changes
+ * DeviceInfo's flags, so it rebuilds the entity list too.
  */
 class BluetoothProxyPane(
     private val ctx: PaneContext,
     private val radio: ProxyRadio,
     private val exec: ScheduledExecutorService,
+    connect: Boolean = false,
 ) : Pane {
     override val id = "bluetooth-proxy"
 
@@ -39,12 +45,28 @@ class BluetoothProxyPane(
     private var server: ApiServer? = null
     private var on = false
     private var engine: BluetoothProxyEngine? = null
+    private var connect = connect
+    private var links: BluetoothConnectionEngine? = null
     private var publisher: ScheduledFuture<*>? = null
 
     /** The engine's status, or null while no engine runs. */
     fun status(): ProxyStatus? = synchronized(lock) { engine }?.status
 
     fun phase(): ProxyPhase = ProxyPhase.of(synchronized(lock) { on }, radio.unavailable(), status())
+
+    /** The connections in use and the limit, or null in listen only or while no engine runs. */
+    fun connections(): ProxyConnections? = synchronized(lock) { links }?.let { ProxyConnections(it.inUse, it.limit) }
+
+    /** Listen only, or listen and connect. Home Assistant rereads DeviceInfo when it changes while the proxy runs. */
+    fun setConnect(on: Boolean) {
+        synchronized(lock) {
+            if (connect == on) return
+            connect = on
+            if (!this.on) return
+            if (on) attachLinks() else detachLinks()
+        }
+        ctx.entitiesChanged()
+    }
 
     private val entities = listOf(
         SensorEntity(
@@ -64,6 +86,7 @@ class BluetoothProxyPane(
             if (this.server === server) return
             this.server = server
             if (on) {
+                detachLinks()
                 engine?.close()
                 engine = null
                 attach()
@@ -87,6 +110,7 @@ class BluetoothProxyPane(
             on = false
             publisher?.cancel(false)
             publisher = null
+            detachLinks()
             engine?.close() // also takes it out of the server: DeviceInfo has no proxy flags from now on
             engine = null
         }
@@ -98,6 +122,20 @@ class BluetoothProxyPane(
         val s = server ?: return
         if (engine != null || radio.unavailable() == ScanFailure.NO_BLE) return
         engine = BluetoothProxyEngine(s, radio.newScanner(), ScanPower.LOW_LATENCY).also { s.bluetooth = it }
+        if (connect) attachLinks()
+    }
+
+    /** With [lock]: connections next to a running scan engine. */
+    private fun attachLinks() {
+        val s = server ?: return
+        if (links != null || engine == null) return
+        links = BluetoothConnectionEngine(s, radio.newGattRadio()).also { s.bluetoothConnections = it }
+    }
+
+    /** With [lock]: closes every link and takes the connections out of the server. */
+    private fun detachLinks() {
+        links?.close()
+        links = null
     }
 
     private companion object {

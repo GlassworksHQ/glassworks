@@ -16,7 +16,7 @@ import { Steps, apkInfo, apkPermissions, dropAdmin, kioskVersion, startApp, type
 import { parsePreferredHome } from '@glassworks/lululemon-mirror-installer';
 import { SETUP_SOCKET, SetupChannel, type SetupState } from '@glassworks/setup-channel';
 import { APPS, MIN_API, androidName, appFor, type GenericApp } from './app';
-import { identifyAdb, type Identified } from './devices';
+import { identifyAdb, ownFrame, type Identified, type OwnFrame } from './devices';
 
 /** What adb reads off the device before anything changes. */
 export interface DeviceFacts {
@@ -27,6 +27,8 @@ export interface DeviceFacts {
   manufacturer: string;
   model: string;
   fingerprint: string;
+  /** ro.hardware: how a frame's own app knows its device (ownFrame); empty when the read failed */
+  hardware: string;
 }
 
 export interface AppVersion { name?: string; code: number }
@@ -34,6 +36,13 @@ export interface AppVersion { name?: string; code: number }
 /** Refused before anything changed on the device. */
 export class Refused extends Error {
   constructor(why: string) { super(`${why} Nothing was changed.`); }
+}
+
+/** Refused because the device has a frame of its own, which installs from its own page in Kiln. */
+export class OwnFrameRefused extends Refused {
+  constructor(readonly own: OwnFrame) {
+    super(`This is an ${own.name}, which has its own install in Kiln (${own.route}). Glassworks for Android would take its app's place as the home screen.`);
+  }
 }
 
 /** What install will do, worked out read-only. */
@@ -94,6 +103,8 @@ export type GenericPhase =
   | { step: 'apk'; stage: 'copy' | 'install' }
   | { step: 'grant' }
   | { step: 'updates' }
+  /** each grant and silent updates, as read back from the device */
+  | { step: 'granted'; grants: Grant[]; silentUpdates: SilentUpdatesResult }
   | { step: 'start' }
   | { step: 'home'; how: 'set-home-activity' | 'chooser'; pick?: string }
   | { step: 'handoff' };
@@ -129,16 +140,21 @@ export async function readDevice(p: PanelShell): Promise<DeviceFacts> {
     manufacturer: await prop(p, 'ro.product.manufacturer'),
     model: await prop(p, 'ro.product.model'),
     fingerprint: await prop(p, 'ro.build.fingerprint'),
+    hardware: await (async () => { const r = await p.run('getprop ro.hardware'); return r.code === 0 ? r.out.trim() : ''; })(),
   };
 }
 
 /**
- * Read-only: the build this device needs, and whether `apk` is it. Throws Refused (nothing changed) below
- * Android 6, for an APK that isn't Glassworks, for the other build, or for an APK without code for this
+ * Read-only: the build this device needs, and whether `apk` is it. Throws Refused (nothing changed) on a device
+ * with a frame of its own (OwnFrameRefused), below Android 6, for an APK that isn't Glassworks, for the other build, or for an APK without code for this
  * processor.
  */
 export async function planInstall(p: PanelShell, apk: Uint8Array): Promise<Plan> {
   const device = await readDevice(p);
+  // without ro.hardware Kiln can't rule out a frame of its own (the S1), so it doesn't guess
+  if (!device.hardware) throw new Refused('Kiln couldn\'t read this device\'s hardware (ro.hardware), so it can\'t tell whether it is a panel with its own install, such as the Aqara S1 Plus. Unplug it, plug it in again and try again.');
+  const own = ownFrame(device);
+  if (own) throw new OwnFrameRefused(own);
   const app = appFor(device.sdk);
   if (!app) {
     throw new Refused(`Glassworks needs Android 6 (API ${MIN_API}) or newer, and this device runs Android ${device.release || androidName(device.sdk)} (API ${device.sdk || '?'}).`);
@@ -412,6 +428,7 @@ export async function installGeneric(p: PanelShell, o: GenericOptions): Promise<
 
   phase({ step: 'updates' });
   const silent = await silentUpdates(r, app, o.apk, device, o.silentUpdates ?? true);
+  phase({ step: 'granted', grants, silentUpdates: silent });
 
   phase({ step: 'start' });
   r.step(`Start ${app.name}`);

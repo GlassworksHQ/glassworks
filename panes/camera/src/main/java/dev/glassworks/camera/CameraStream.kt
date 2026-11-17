@@ -60,7 +60,8 @@ class CameraStream(
     private val onvifPort: Int = ONVIF_PORT,
     private val discovery: Boolean = true,
 ) : StreamOutput {
-    private val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    /** Null on a device without Wi-Fi (Ethernet only): WS-Discovery then goes without the multicast lock. */
+    private val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager?
     private val lock = Any()
     private var rtsp: RtspServer? = null
     private var onvif: OnvifServer? = null
@@ -96,7 +97,7 @@ class CameraStream(
             enableDiscovery = discovery,
         )
         return try {
-            multicast = wifi.createMulticastLock("glassworks-onvif").apply { setReferenceCounted(false); acquire() }
+            multicast = wifi?.createMulticastLock("glassworks-onvif")?.apply { setReferenceCounted(false); acquire() }
             viewers = ve
             r.start()
             o.start()

@@ -50,9 +50,12 @@ export interface WifiSteps {
   homeAssistant(): Promise<void>;
 }
 
-/** Under the joining steps on the panel's page: the join closes the panel's setup Wi-Fi, and this page with it. */
+/**
+ * The panel's page once the network is sent: the join closes the panel's setup Wi-Fi, and this page's connection with
+ * it, within moments, so this is the page's last word (issue 460).
+ */
 export const joinNote = (ssid: string) =>
-  `The panel closes its setup Wi-Fi and joins ${ssid}. Its screen shows how it goes. Put this phone back on your own Wi-Fi.`;
+  `The panel is switching to ${ssid} now. This page can't follow it from here, so watch the panel's screen: setup carries on there. Put this phone back on your own Wi-Fi.`;
 
 /** How long after a join the page asks whether the panel is still on its setup Wi-Fi (the join didn't happen). */
 export const JOIN_CHECK_MS = 45_000;

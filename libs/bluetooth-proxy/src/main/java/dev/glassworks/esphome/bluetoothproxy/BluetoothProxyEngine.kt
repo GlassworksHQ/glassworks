@@ -64,9 +64,9 @@ class BluetoothProxyEngine internal constructor(
         fun shutdown()
     }
 
-    internal class ExecutorLoop : Loop {
+    internal class ExecutorLoop(name: String = "bt-proxy") : Loop {
         private val executor: ScheduledExecutorService =
-            Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "bt-proxy").apply { isDaemon = true } }
+            Executors.newSingleThreadScheduledExecutor { r -> Thread(r, name).apply { isDaemon = true } }
         override fun now() = System.nanoTime() / 1_000_000
         // A scan result or a subscription change can still come in after close(); it is dropped.
         override fun execute(task: () -> Unit) {
