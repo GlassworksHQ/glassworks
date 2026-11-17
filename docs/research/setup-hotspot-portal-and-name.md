@@ -1,14 +1,16 @@
 # Setup hotspot: can it pop up the setup page, and can it be called Glassworks?
 
-**Status (2026-11-16): partly working (read and untested for the new parts).** The setup hotspot (#197) works on
+**Status (2026-11-16): partly working. The S1's portal and name are built (#428, #430) and not yet run on a panel.** The setup hotspot (#197) works on
 the S1: an iPhone joined from the QR code and reached the setup page by its address. Two things the maintainer
 wants don't work yet:
 
 - the phone doesn't pop the page up by itself (no captive portal);
 - the network is named by Android (`AndroidShare_NNNN`), not by us.
 
-This note says, per kind of device, what it would take. Nothing here was run on a device: the claims come from
-the S1 panel run of 2026-11-16 (**verified**) and from reading AOSP `android10-release` and newer (**read**).
+This note says, per kind of device, what it would take. The claims come from the S1 panel run of 2026-11-16
+(**verified**), read-only measurements on the same panel on 2026-11-16 (**verified**, in
+[Measured on the S1](#measured-on-the-s1-2026-11-16): logcat, iptables, the kernel config, framework-res), and from
+reading AOSP `android10-release` and newer (**read**). Nothing here changed the panel.
 
 Devices: Aqara S1 Plus (Android 10, root through the boot patch); generic Android 8+ (no root); the lululemon
 Mirror (Android 6.0, our image, the app privileged).
@@ -17,7 +19,9 @@ Mirror (Android 6.0, our image, the app privileged).
 
 1. **Captive portal.** When a phone joins the setup hotspot, can it show its "sign in to network" sheet with the
    setup page, as the maintainer asked (#38)?
-2. **The name.** Can the hotspot be called `Glassworks-XXXX` instead of Android's `AndroidShare_NNNN`?
+2. **The name.** Can the hotspot be called Glassworks instead of Android's `AndroidShare_NNNN`? On the S1 that
+   means `Glassworks_NNNN`, Android's own format with our string; only the Mirror, which names the network itself,
+   uses `Glassworks-XXXX`.
 
 ## What a phone needs for the sign-in sheet
 
@@ -34,7 +38,7 @@ expects. Sources (**read**, 2026-11-16):
 | Phone | Check | Expects | Sheet when |
 |---|---|---|---|
 | iOS | `http://captive.apple.com/hotspot-detect.html` | a page saying `Success` | any other page, for example a 302 to the setup page |
-| Android 10 | `http://connectivitycheck.gstatic.com/generate_204`, with the fallbacks `http://www.google.com/gen_204` and `http://play.googleapis.com/generate_204` (NetworkStack `res/values/config.xml`, lines 20–24) | HTTP 204 | a 200 with content, or a 302 |
+| Android 10 | `http://connectivitycheck.gstatic.com/generate_204`, with the fallbacks `http://www.google.com/gen_204` and `http://play.googleapis.com/generate_204` (NetworkStack `res/values/config.xml`: the check at line 14, the fallbacks at lines 20–23) | HTTP 204 | a 200 with content, or a 302 |
 
 Both checks need two things on the hotspot:
 
@@ -48,7 +52,7 @@ What the phone gets today on Android 10's local-only hotspot:
   `warning: no upstream servers configured` (**verified**, the S1 run's logcat), so every lookup fails and the
   phone never sends a check a redirect could answer.
 - IPv6 too: Android sends router advertisements on the hotspot (`RouterAdvertisementDaemon: RA sendto ff02::1%wlan0`,
-  **verified**) whose RDNSS is the AP's own ULA address (`IpServer.java:536-538`, **read**), and dnsmasq listens there
+  **verified**) whose RDNSS is an address in the AP's ULA prefix, added to the AP interface (`IpServer.java:536-538`, **read**), and dnsmasq listens there
   (**verified**). A phone may ask that one, so a portal must answer DNS over IPv6 as well.
 - No upstream: a local-only hotspot shares no internet, and nothing of ours listens on port 80. The S1 run fits
   that: the iPhone stayed joined, used mobile data for everything else, reached the page only by its address,
@@ -69,11 +73,11 @@ What the phone gets today on Android 10's local-only hotspot:
 
 ## Per kind of device
 
-| Device | Captive portal | Named `Glassworks-XXXX` |
+| Device | Captive portal | A Glassworks name |
 |---|---|---|
-| **S1** (root) | **Possible**: root redirects UDP 53 and TCP 80 on `wlan0` to ports the app listens on | **Possible, untested**: a resource overlay of Android's default name, shipped with the root side |
+| **S1** (root) | **Possible**: root redirects UDP 53 and TCP 80 on `wlan0` to ports the app listens on | **Possible**: `Glassworks_NNNN`, through a resource overlay of Android's default name, shipped with the root side |
 | **Generic Android 8+** (no root) | **No**: an app can't listen below port 1024 or change the DHCP's DNS | **No**: no API an app may call keeps a name it gives (Android 16's public one keeps only band and channel, below) |
-| **Mirror** (Android 6.0, our image) | **Possible with the image**: the same redirect as the S1, from an init script in our image | **Already**: the hidden `setWifiApEnabled` takes our own config (`HiddenApHotspot`, #413) |
+| **Mirror** (Android 6.0, our image) | **Possible with the image**: the same redirect as the S1, from an init script in our image | **Already** `Glassworks-XXXX`: the hidden `setWifiApEnabled` takes our own config (`HiddenApHotspot`, #413) |
 
 ### S1: the captive portal (read, untested)
 
@@ -88,7 +92,7 @@ What the phone gets today on Android 10's local-only hotspot:
   ```
   iptables  -t nat -A S1PORTAL -s 192.168.43.0/24 -d 192.168.43.1/32 -i wlan0 -p udp --dport 53 -j DNAT --to-destination 192.168.43.1:8053
   iptables  -t nat -A S1PORTAL -s 192.168.43.0/24 -d 192.168.43.1/32 -i wlan0 -p tcp --dport 80 -j DNAT --to-destination 192.168.43.1:8098
-  ip6tables -t nat -A S1PORTAL -d <AP's ULA>/128 -i wlan0 -p udp --dport 53 -j DNAT --to-destination [<AP's ULA>]:8053
+  ip6tables -t nat -A S1PORTAL -d <AP interface's ULA address>/128 -i wlan0 -p udp --dport 53 -j DNAT --to-destination [<AP interface's ULA address>]:8053
   ```
   Removed again when it stops. `PREROUTING` runs before local delivery, so this wins over whatever Android's own
   DNS forwarder listens on (**read**, netfilter; **untested** next to netd's own tether chains).
@@ -130,16 +134,21 @@ What the phone gets today on Android 10's local-only hotspot:
   DHCP gives out.
 - **The name:** not possible on any version, for an app without system priority. In detail (**read**, 2026-11-16;
   corrected after the #420 verifier):
-  - **Android 13 to 15:** the overload of `startLocalOnlyHotspot` that takes a `SoftApConfiguration` is
-    `@SystemApi`, with `anyOf = {NETWORK_SETTINGS, NETWORK_SETUP_WIZARD, NEARBY_WIFI_DEVICES}`. The permission isn't
-    what stops an app: the hidden-API rules keep a `@SystemApi` out of an ordinary app's reach.
+  - **Android 11 to 15:** the overload of `startLocalOnlyHotspot` that takes a `SoftApConfiguration` is
+    `@SystemApi`. It first appears in Android 11, with `anyOf = {NETWORK_SETTINGS, NETWORK_SETUP_WIZARD}`
+    (`frameworks/base` `wifi/java/android/net/wifi/WifiManager.java:3191`, `android11-release`; in
+    `packages/modules/Wifi` from 12, `framework/java/android/net/wifi/WifiManager.java:4127`). Android 13 adds
+    `NEARBY_WIFI_DEVICES` to that list. Android 10 has no such overload. The permission isn't what stops an app: the
+    hidden-API rules keep a `@SystemApi` out of an ordinary app's reach.
   - **Android 16:** `WifiManager.startLocalOnlyHotspotWithConfiguration(SoftApConfiguration, Executor,
     LocalOnlyHotspotCallback)` is public (API 36, `@FlaggedApi(FLAG_PUBLIC_BANDS_FOR_LOHS)`, `CHANGE_WIFI_STATE` and
     `NEARBY_WIFI_DEVICES`;
     [`WifiManager` reference](https://developer.android.com/reference/android/net/wifi/WifiManager#startLocalOnlyHotspotWithConfiguration(android.net.wifi.SoftApConfiguration,%20java.util.concurrent.Executor,%20android.net.wifi.WifiManager.LocalOnlyHotspotCallback))).
     But it doesn't keep the name. `LohsSoftApTracker.startForFirstRequestLocked` sets
-    `mIsExclusive = customConfig != null && priority >= PRIORITY_SYSTEM` (`WifiServiceImpl.java`, lines 2934–2936,
-    android16-release). A request that isn't exclusive gets `WifiApConfigStore.generateLocalOnlyHotspotConfig`
+    `mIsExclusive = customConfig != null && priority >= PRIORITY_SYSTEM` when `mFeatureFlags.publicBandsForLohs()`
+    is on and the SDK is at least B (Android 16); without the flag, any custom config is exclusive
+    (`WifiServiceImpl.java`, lines 2934–2939, android16-release). The flag is what makes the API public, so for
+    an app calling it the priority rule always applies. A request that isn't exclusive gets `WifiApConfigStore.generateLocalOnlyHotspotConfig`
     (`WifiApConfigStore.java`, lines 502–570): only the bands and channels carry over, with a random passphrase
     and the SSID `AndroidShare_NNNN`. For an app it is a band and channel API. CodeRabbit's first reading on #420,
     which this note briefly followed, was wrong.
@@ -158,8 +167,8 @@ today.
 
 | | S1 | Generic | Mirror |
 |---|---|---|---|
-| Captive portal | Root redirect plus a DNS responder in the app: its own PR, needs a panel run | Not possible | With its image |
-| `Glassworks` name | Root-side resource overlay: possible, untested, its own PR | Not possible (Android 16's public call keeps only band and channel for an app) | Done |
+| Captive portal | Root redirect plus a DNS responder in the app: built in #428, needs a panel run | Not possible | With its image |
+| `Glassworks` name | `Glassworks_NNNN` through a preinstalled resource overlay: built in #430, needs a panel run | Not possible (Android 16's public call keeps only band and channel for an app) | Done (`Glassworks-XXXX`) |
 
 ## How to reproduce
 
@@ -170,7 +179,7 @@ it changes no setting, and **Close it** ends it):
 adb shell dumpsys wifi | grep -iE 'softap|localonly' | head      # the hotspot is up, and its band
 adb shell ls /sys/class/net                                      # which interface: wlan0 on the S1
 adb shell ip -4 addr show wlan0                                  # its 192.168.43.x/24 address
-adb shell ss -lunp 2>/dev/null | grep ':53 '                     # what (if anything) answers DNS (open question 1)
+adb shell 'grep -i ":0035 " /proc/net/udp /proc/net/udp6'        # sockets on port 53 (hex 0035): what answers DNS
 ```
 
 Then join from a phone with mobile data on, and note whether a sign-in sheet comes up. Nothing here writes to the
