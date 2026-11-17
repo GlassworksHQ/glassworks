@@ -2,8 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-// Screenshots of All panels (#466) with its real script, against fakes: a fake Home Assistant (login, token,
-// websocket) and fake panels, all behind an HTTP proxy in this process, driven in headless Chrome over CDP.
+// Screenshots of All panels (#466) with its real script and the page's real CSP (from the mockup), against fakes: a
+// fake Home Assistant (login with PKCE, token, websocket) and fake panels, all behind an HTTP proxy in this process,
+// driven in headless Chrome over CDP. It fails if the CSP blocks anything the page does, or if the token reaches a
+// device that didn't answer as a panel.
 // Touches nothing else: no real panel or Home Assistant, a temporary Chrome profile. Illustrative values only.
 //
 //   ./gradlew :kiosk:testDebugUnitTest --tests '*ManagePageMockups*' -Ps1MockupDir=/tmp/shots
@@ -13,6 +15,7 @@
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
@@ -20,6 +23,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const [pageFile, out] = process.argv.slice(2);
+const csp = readFileSync(pageFile.replace(/\.html$/, '.csp'), 'utf8').trim();
 if (!pageFile || !out) throw new Error('usage: panels-shots.mjs <13-all-panels.html> <out dir>');
 mkdirSync(out, { recursive: true });
 const assets = join(dirname(fileURLToPath(import.meta.url)), '../../main/assets/manage');
@@ -49,14 +53,22 @@ const panels = {
     { id: 'camera', title: 'Camera', items: [{ key: 'Stream sign-in', title: 'Stream sign-in', kind: 'sign-in', set: false }] },
   ] },
 };
+const S1 = 'Panel Hub S1 Plus (S1 Kiosk)';
 const devices = [
-  { id: 'k', name: 'Aqara S1 Plus', name_by_user: 'Kitchen panel', area_id: 'kitchen', configuration_url: 'http://192.0.2.40:8099', disabled_by: null },
-  { id: 'b', name: 'Aqara S1 Plus', name_by_user: 'Bedroom panel', area_id: 'bedroom', configuration_url: 'http://192.0.2.41:8099', disabled_by: null },
-  { id: 'h', name: 'Pixel Tablet', name_by_user: 'Hallway tablet', area_id: 'hallway', configuration_url: 'http://192.0.2.42:8099', disabled_by: null },
-  { id: 'ma', name: 'S1 Panel', model: 'Panel Hub S1 Plus (S1 Kiosk)', area_id: null, configuration_url: null, disabled_by: null },
+  { id: 'k', name: 'Aqara S1 Plus', name_by_user: 'Kitchen panel', model: S1, config_entries: ['esp-k'], area_id: 'kitchen', configuration_url: 'http://192.0.2.40:8099', disabled_by: null },
+  { id: 'b', name: 'Aqara S1 Plus', name_by_user: 'Bedroom panel', model: S1, config_entries: ['esp-b'], area_id: 'bedroom', configuration_url: 'http://192.0.2.41:8099', disabled_by: null },
+  { id: 'h', name: 'Pixel Tablet', name_by_user: 'Hallway tablet', model: 'Pixel Tablet (Glassworks)', config_entries: ['esp-h'], area_id: 'hallway', configuration_url: 'http://192.0.2.42:8099', disabled_by: null },
+  // In HA as a panel, but what answers at its address says it's something else: it must never get the token.
+  { id: 'g', name: 'Garage panel', model: S1, config_entries: ['esp-g'], area_id: 'garage', configuration_url: 'http://192.0.2.43:8099', disabled_by: null },
+  { id: 'ma', name: 'S1 Panel', model: S1, config_entries: ['ma'], area_id: null, configuration_url: null, disabled_by: null },
 ];
+const entries = [...['k', 'b', 'h', 'g'].map((x) => ({ entry_id: 'esp-' + x, domain: 'esphome' })), { entry_id: 'ma', domain: 'music_assistant' }];
+const hellos = { '192.0.2.40:8099': S1, '192.0.2.41:8099': S1, '192.0.2.43:8099': 'ESP32-CAM' };
+/** Hosts that got an `Authorization` header, and the PKCE challenge the login page was given. */
+const tokenTo = new Set();
+let challenge = null;
 const initial = JSON.stringify(panels);
-const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }];
+const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }, { area_id: 'garage', name: 'Garage' }];
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 const send = (res, status, body, type = 'application/json') => {
@@ -68,23 +80,36 @@ const form = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => (b
 async function handle(req, res) {
   const u = new URL(req.url, 'http://' + req.headers.host);
   if (req.method === 'OPTIONS') return send(res, 204, '');
+  if (req.headers.authorization) tokenTo.add(u.host);
   if (u.host === HA) {
     if (u.pathname === '/auth/authorize') {
+      assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
+      challenge = u.searchParams.get('code_challenge');
       res.writeHead(302, { Location: u.searchParams.get('redirect_uri') + '?code=fake-code&state=' + u.searchParams.get('state') });
       return res.end();
     }
-    if (u.pathname === '/auth/token') return send(res, 200, { access_token: 'fake-access', refresh_token: 'fake-refresh', expires_in: 1800, token_type: 'Bearer' });
+    if (u.pathname === '/auth/token') {
+      const f = await form(req);
+      const verified = f.get('grant_type') !== 'authorization_code' ||
+        createHash('sha256').update(f.get('code_verifier') || '').digest('base64url') === challenge;
+      if (!verified) return send(res, 400, { error: 'invalid_request', error_description: 'PKCE verifier does not match' });
+      return send(res, 200, { access_token: 'fake-access', refresh_token: 'fake-refresh', expires_in: 1800, token_type: 'Bearer' });
+    }
     if (u.pathname === '/auth/revoke') return send(res, 200, '');
   }
   const p = panels[u.host];
-  if (u.host === '192.0.2.40:8099' && u.pathname === '/panels') return send(res, 200, readFileSync(pageFile), 'text/html; charset=utf-8');
+  if (u.host === '192.0.2.40:8099' && u.pathname === '/panels') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp });
+    return res.end(readFileSync(pageFile));
+  }
+  if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
   if (p && u.pathname === '/manage/api/settings') {
     if (req.method === 'GET') return send(res, 200, p);
     const f = await form(req);
     const item = p.sections.find((s) => s.id === f.get('section'))?.items.find((i) => i.key === f.get('key'));
     if (!item) return send(res, 404, { problem: "This panel doesn't have that setting.", missing: true });
-    if (f.get('section') === 'radio' && f.get('confirmed') !== '1') return send(res, 409, { ask: { title: 'Turn the radio on?', detail: 'Zigbee devices on this panel join again.', action: 'Turn on' } });
+    if (f.get('section') === 'radio' && f.get('answer') !== 'ask-1') return send(res, 409, { ask: { title: 'Turn the radio on?', detail: 'Zigbee devices on this panel join again.', action: 'Turn on', id: 'ask-1' } });
     Object.assign(item, { value: f.get('value') }, item.kind === 'switch' ? { shown: f.get('value') === 'on' ? 'On' : 'Off' } : {});
     return send(res, 200, { ok: true, restart: false });
   }
@@ -116,7 +141,7 @@ function websocket(req, socket) {
       buf = buf.subarray(at + 4 + len);
       if (m.type === 'auth') { frame({ type: 'auth_ok' }); continue; }
       const result = { 'auth/current_user': { id: 'u1', name: admin ? 'Alex' : 'Sam', is_admin: admin },
-        'config/device_registry/list': devices, 'config/area_registry/list': areas }[m.type];
+        'config/device_registry/list': devices, 'config/area_registry/list': areas, 'config_entries/get': entries }[m.type];
       frame({ id: m.id, type: 'result', success: true, result });
     }
   });
@@ -141,7 +166,15 @@ const cdp = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebugg
 await new Promise((ok) => cdp.addEventListener('open', ok));
 let id = 0;
 const pending = new Map();
-cdp.addEventListener('message', (e) => { const m = JSON.parse(e.data); pending.get(m.id)?.(m); pending.delete(m.id); });
+/** What the page's CSP refused, from Chrome's log. */
+const refused = [];
+cdp.addEventListener('message', (e) => {
+  const m = JSON.parse(e.data);
+  if (m.method === 'Log.entryAdded' && /Content Security Policy/i.test(m.params.entry.text)) refused.push(m.params.entry.text);
+  if (m.method === 'Runtime.consoleAPICalled' && m.params.args.some((a) => /Content Security Policy/i.test(String(a.value)))) refused.push(m.params.args.map((a) => a.value).join(' '));
+  pending.get(m.id)?.(m);
+  pending.delete(m.id);
+});
 const call = (method, params = {}) => new Promise((ok, no) => { pending.set(++id, (m) => (m.error ? no(new Error(method + ': ' + m.error.message)) : ok(m.result))); cdp.send(JSON.stringify({ id, method, params })); });
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const js = async (expr) => (await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.value;
@@ -168,9 +201,11 @@ async function shot(name) {
 }
 
 const PAGE = 'http://192.0.2.40:8099/panels';
-const listed = "document.querySelectorAll('#gw-list .chip').length === 3 && ![...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')";
+const listed = "document.querySelectorAll('#gw-list .chip').length === 4 && ![...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')";
 try {
   await call('Page.enable');
+  await call('Log.enable');
+  await call('Runtime.enable');
   await look(1440, 'dark');
   await call('Page.navigate', { url: PAGE });
   await until("document.querySelector('#gw-list button')", 'the sign-in button');
@@ -178,6 +213,7 @@ try {
   await js("document.querySelector('#gw-list button').click()");
   await until(listed + " && !document.getElementById('gw-copy').hidden", 'the panels and the copy card');
   await shot('02-panels-and-copy');
+  assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Garage')).querySelector('.chip').textContent"), 'Not a panel');
   await js("document.querySelector('#gw-copy button[type=submit]').click()");
   await until("document.querySelector('.cpa')", 'the copy result');
   await shot('03-copied-asks-first');
@@ -198,6 +234,13 @@ try {
   await call('Page.navigate', { url: PAGE });
   await until("document.querySelector('#gw-list .note')?.textContent.includes('administrator')", 'the non-admin refusal');
   await shot('07-not-admin');
+  assert.deepEqual(refused, [], 'the CSP blocked nothing the page did');
+  // The CSP is on: a request it doesn't allow is refused, and logged.
+  await js("fetch('http://203.0.113.9:1234/').catch(() => 0)");
+  await sleep(300);
+  assert.ok(refused.some((t) => t.includes('203.0.113.9')), 'the served CSP refuses what it should: ' + JSON.stringify(refused));
+  assert.deepEqual([...tokenTo].sort(), ['192.0.2.40:8099', '192.0.2.41:8099'], 'the token went to the two panels that answered as panels, no one else');
+  console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', '));
 } finally {
   cdp.close();
   browser.kill();

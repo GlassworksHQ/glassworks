@@ -5,10 +5,13 @@
 // All panels' logic (#466): node --test core/src/test/js/
 
 import assert from 'node:assert/strict';
+import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { accepts, authorizeUrl, manageOrigin, outcome, panelsFrom, plan, reachability } from '../../main/assets/manage/panels-core.js';
+import { accepts, authorizeUrl, hello, manageOrigin, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, sha256 } from '../../main/assets/manage/panels-core.js';
 
-const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', configuration_url: url, area_id: null, disabled_by: null, ...more });
+const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
+const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
+const entries = [{ entry_id: 'esp', domain: 'esphome' }, { entry_id: 'ma', domain: 'music_assistant' }];
 
 test('a panel is a device whose Visit link is a Manage page on 8099', () => {
   assert.equal(manageOrigin('http://192.0.2.41:8099'), 'http://192.0.2.41:8099');
@@ -19,26 +22,32 @@ test('a panel is a device whose Visit link is a Manage page on 8099', () => {
   }
 });
 
-test('the panels, from the device registry: Music Assistant copies of a panel and disabled ones left out', () => {
+test('the panels, from the device registry: ESPHome devices with a Manage link and a model; Music Assistant copies, other integrations and disabled ones left out', () => {
   const devices = [
     device('b', 'http://192.0.2.42:8099', { name_by_user: 'Bedroom panel', area_id: 'bedroom' }),
     device('a', 'http://192.0.2.41:8099', { name: 'Aqara S1 Plus', area_id: 'kitchen' }),
     // Music Assistant makes a device for a panel's player, with the same model and no Visit link.
-    device('ma', null, { name: 'S1 Panel', model: 'Panel Hub S1 Plus (S1 Kiosk)' }),
+    device('ma', null, { name: 'S1 Panel', config_entries: ['ma'] }),
+    // Another integration's device with a Visit link on 8099 isn't an ESPHome panel.
+    device('other', 'http://192.0.2.44:8099', { config_entries: ['ma'] }),
+    device('nomodel', 'http://192.0.2.45:8099', { model: null }),
     device('off', 'http://192.0.2.43:8099', { disabled_by: 'user' }),
     device('dup', 'http://192.0.2.41:8099/'),
     device('esp', 'http://192.0.2.50'),
   ];
   const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }];
-  const got = panelsFrom(devices, areas, '192.0.2.42:8099');
-  assert.deepEqual(got.map((p) => [p.name, p.area, p.origin, p.self]), [
-    ['Bedroom panel', 'Bedroom', 'http://192.0.2.42:8099', true],
-    ['Aqara S1 Plus', 'Kitchen', 'http://192.0.2.41:8099', false],
+  const got = panelsFrom(devices, areas, '192.0.2.42:8099', entries);
+  assert.deepEqual(got.map((p) => [p.name, p.area, p.origin, p.model, p.self]), [
+    ['Bedroom panel', 'Bedroom', 'http://192.0.2.42:8099', MODEL, true],
+    ['Aqara S1 Plus', 'Kitchen', 'http://192.0.2.41:8099', MODEL, false],
   ]);
+  assert.deepEqual(panelsFrom(devices, areas, '', []), [], 'no ESPHome entries, no panels');
 });
 
 test("HA's login page for this page: client id and redirect on the page's own origin", () => {
-  const u = new URL(authorizeUrl('http://192.0.2.10:8123/', 'http://192.0.2.41:8099', 'abc'));
+  const u = new URL(authorizeUrl('http://192.0.2.10:8123/', 'http://192.0.2.41:8099', 'abc', 'chal'));
+  assert.equal(u.searchParams.get('code_challenge'), 'chal');
+  assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
   assert.equal(u.origin + u.pathname, 'http://192.0.2.10:8123/auth/authorize');
   assert.equal(u.searchParams.get('client_id'), 'http://192.0.2.41:8099/');
   assert.equal(u.searchParams.get('redirect_uri'), 'http://192.0.2.41:8099/panels');
@@ -96,11 +105,62 @@ test('what a panel can take', () => {
 test("a panel's answers, in the page's words", () => {
   assert.deepEqual(outcome(200, { ok: true, restart: true }), { state: 'done', restart: true });
   assert.deepEqual(outcome(202, { pending: true }), { state: 'pending' });
-  assert.equal(outcome(409, { ask: { title: 'Turn the radio off?' } }).ask.title, 'Turn the radio off?');
+  assert.equal(outcome(409, { ask: { title: 'Turn the radio off?', id: 'one-shot' } }).ask.id, 'one-shot');
   assert.equal(outcome(422, { problem: 'Pick one of the choices.' }).why, 'Pick one of the choices.');
   assert.equal(outcome(404, { missing: true }).state, 'failed');
   assert.equal(outcome(500, null).why, "That panel didn't take it (500).");
   assert.deepEqual(reachability(200, { api: 1, version: '0.9.2' }), { state: 'up', version: '0.9.2' });
   assert.equal(reachability(401, { problem: 'Home Assistant didn\'t confirm this sign-in. Sign in again.' }).state, 'refused');
   assert.equal(reachability(404, null).why, 'It refused (404).');
+});
+
+test('PKCE: S256 of the verifier, as RFC 7636 appendix B has it; SHA-256 matches node on every padding length', () => {
+  assert.equal(pkceChallenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'), 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
+  for (let n = 0; n < 200; n++) {
+    const b = randomBytes(n);
+    assert.equal(Buffer.from(sha256(new Uint8Array(b))).toString('hex'), createHash('sha256').update(b).digest('hex'), 'length ' + n);
+  }
+});
+
+/** A fake network: each host's answers, and every request's Authorization header. */
+function net(hosts) {
+  const seen = [];
+  const fetchFn = async (url, init) => {
+    const u = new URL(url);
+    seen.push([u.host, u.pathname, (init.headers || {}).Authorization || null]);
+    const h = hosts[u.host];
+    if (!h) throw new TypeError('Failed to fetch');
+    const [status, body] = h(u.pathname);
+    return { status, json: async () => body };
+  };
+  return { seen, fetchFn };
+}
+
+const settings = { api: 1, version: '0.9.2', sections: [] };
+const panelAt = (host) => ({ origin: 'http://' + host, host, model: MODEL });
+
+test('the token goes only to a device that answers its hello as the panel the registry lists', async () => {
+  const { seen, fetchFn } = net({
+    '192.0.2.41:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: MODEL }] : [200, settings]),
+    // Answers on 8099, but as something else: a camera, or a panel the registry lists with another model.
+    '192.0.2.43:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: 'Pixel Tablet (Glassworks)' }] : [200, settings]),
+    '192.0.2.44:8099': () => [404, null],
+  });
+  const ok = await readPanel(panelAt('192.0.2.41:8099'), 'TOKEN', fetchFn);
+  assert.equal(ok.reach.state, 'up');
+  assert.ok(ok.trusted);
+  const other = await readPanel(panelAt('192.0.2.43:8099'), 'TOKEN', fetchFn);
+  assert.equal(other.reach.state, 'stranger');
+  assert.ok(!other.trusted);
+  assert.equal((await readPanel(panelAt('192.0.2.44:8099'), 'TOKEN', fetchFn)).reach.state, 'stranger');
+  assert.equal((await readPanel(panelAt('192.0.2.42:8099'), 'TOKEN', fetchFn)).reach.state, 'down');
+  assert.deepEqual(seen.filter(([, , auth]) => auth).map(([host, path]) => host + path), ['192.0.2.41:8099/manage/api/settings'], 'the token went to the matching panel only');
+  assert.ok(seen.every(([, path, auth]) => path !== '/manage/api/hello' || auth === null), 'hello never carries the token');
+});
+
+test("a hello matches only Glassworks' own answer with the registry's model", () => {
+  const p = panelAt('192.0.2.41:8099');
+  assert.ok(hello(p, { glassworks: true, model: MODEL }));
+  for (const no of [null, {}, { model: MODEL }, { glassworks: 'yes', model: MODEL }, { glassworks: true, model: MODEL + ' ' }, { glassworks: true }]) assert.ok(!hello(p, no), JSON.stringify(no));
+  assert.ok(!hello({ ...p, model: undefined }, { glassworks: true, model: undefined }));
 });

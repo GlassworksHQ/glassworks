@@ -5,9 +5,10 @@
 // The All panels page (#466). The browser signs in to Home Assistant itself and keeps the token in this tab
 // (sessionStorage). With it, the page lists the panels from Home Assistant's device registry, asks each one
 // for its settings (each panel checks the token with its own Home Assistant), opens a panel's own Manage page
-// signed in, and copies settings from one panel to another. No panel sees another's requests.
+// signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
+// only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, outcome, panelsFrom, plan, reachability } from './panels-core.js';
+import { authorizeUrl, base64url, outcome, panelsFrom, pkceChallenge, plan, readPanel } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
@@ -16,6 +17,7 @@ const copyCard = document.getElementById('gw-copy');
 const clientId = location.origin + '/';
 const KEY = 'gw-ha';
 const STATE = 'gw-ha-state';
+const VERIFIER = 'gw-ha-verifier';
 
 /** Every panel found, with what it answered: { ...panel, reach, settings }. */
 let panels = [];
@@ -84,19 +86,28 @@ async function finishSignIn() {
   if (!q.has('code') && !q.has('error')) return;
   history.replaceState(null, '', location.pathname);
   const want = load(STATE);
+  const verifier = load(VERIFIER);
   keep(STATE, null);
+  keep(VERIFIER, null);
   if (q.has('error')) throw new Error('Sign-in cancelled.');
-  if (!want || q.get('state') !== want) throw new Error('This sign-in has expired. Start again.');
-  const j = await tokenCall({ grant_type: 'authorization_code', code: q.get('code'), client_id: clientId });
+  if (!want || !verifier || q.get('state') !== want) throw new Error('This sign-in has expired. Start again.');
+  const j = await tokenCall({ grant_type: 'authorization_code', code: q.get('code'), client_id: clientId, code_verifier: verifier });
   keep(KEY, JSON.stringify({ ha, access: j.access_token, refresh: j.refresh_token, until: Date.now() + j.expires_in * 1000 }));
 }
 
-function signIn() {
-  const b = new Uint8Array(18);
+function random(n) {
+  const b = new Uint8Array(n);
   crypto.getRandomValues(b);
-  const state = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return base64url(b);
+}
+
+/** To HA's login page, with a state and a PKCE verifier this tab keeps for the way back. */
+function signIn() {
+  const state = random(18);
+  const verifier = random(32);
   keep(STATE, state);
-  location.assign(authorizeUrl(ha, location.origin, state));
+  keep(VERIFIER, verifier);
+  location.assign(authorizeUrl(ha, location.origin, state, pkceChallenge(verifier)));
 }
 
 /** Home Assistant drops the refresh token and every access token made from it: no panel can use them after. */
@@ -132,27 +143,12 @@ function ask(access, types) {
 
 // ------------------------------------------------------------------ the panels
 
-/** A panel's settings, or why not, within 6 seconds: a panel that's down shows as down, the rest carry on. */
-async function readPanel(p, access) {
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), 6_000);
-  try {
-    const r = await fetch(p.origin + '/manage/api/settings', { headers: { Authorization: 'Bearer ' + access }, signal: c.signal });
-    const body = await r.json().catch(() => null);
-    const reach = reachability(r.status, body);
-    return { ...p, reach, settings: reach.state === 'up' ? body : null };
-  } catch {
-    return { ...p, reach: { state: 'down', why: "Can't reach it. It may be off, or on a version from before this page: update it." }, settings: null };
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down'], refused: ['bad', 'Refused'] };
+const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down'], refused: ['bad', 'Refused'], stranger: ['bad', 'Not a panel'] };
 
 /** A panel's own Manage page, in a new tab, signed in there with this tab's token (the panel checks it with Home Assistant). */
 async function open(p) {
   if (p.self) return location.assign('/');
+  if (!p.trusted) return;
   const access = await token().catch(() => null);
   if (!access) return start();
   const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: '_blank', rel: 'noopener' },
@@ -212,11 +208,11 @@ function drawCopy(fromP, toP, result) {
     result ? null : h('button', { class: 'pill primary', type: 'submit', disabled: !send.length }, send.length ? 'Copy to ' + toP.name : 'Nothing to copy'));
   const asks = asked.length ? h('div', { class: 'cpa' }, h('b', {}, 'These ask first on ' + toP.name),
     ...asked.map((r) => { const a = result.get(r.section + '\n' + r.key).ask; return h('p', {}, r.label + ': ' + a.title + ' ' + a.detail); }),
-    h('button', { class: 'pill danger', type: 'button', onclick: () => apply(fromP, toP, asked, true) }, 'Change them too')) : null;
+    h('button', { class: 'pill danger', type: 'button', onclick: () => apply(fromP, toP, asked, result) }, 'Change them too')) : null;
   const form = h('form', { onsubmit: (e) => {
     e.preventDefault();
     const picked = new Set(new FormData(e.target).getAll('c'));
-    apply(fromP, toP, send.filter((r) => picked.has(r.section + '\n' + r.key)), false);
+    apply(fromP, toP, send.filter((r) => picked.has(r.section + '\n' + r.key)), null);
   } }, ...lines, asks, foot);
   copyCard.replaceChildren(
     head('Copy settings', h('span', {}, 'Changes only what you tick, on one panel')),
@@ -232,8 +228,11 @@ function copied(result, toP) {
   return 'Copied ' + n + (n === 1 ? ' setting' : ' settings') + ' to ' + toP.name + '. ';
 }
 
-/** Sends [rows] to [toP], one at a time, then reads its settings again. [confirmed]: the person agreed to the questions. */
-async function apply(fromP, toP, rows, confirmed) {
+/**
+ * Sends [rows] to [toP], one at a time, then reads its settings again. [asked]: the last run's answers, when the
+ * person agreed to its questions: each row goes again with its question's one-shot id.
+ */
+async function apply(fromP, toP, rows, asked) {
   const result = new Map();
   const access = await token().catch(() => null);
   if (!access) return start();
@@ -242,7 +241,7 @@ async function apply(fromP, toP, rows, confirmed) {
     try {
       const res = await fetch(toP.origin + '/manage/api/settings', {
         method: 'POST', headers: { Authorization: 'Bearer ' + access },
-        body: new URLSearchParams({ section: r.section, key: r.key, value: r.value, ...(confirmed ? { confirmed: '1' } : {}) }),
+        body: new URLSearchParams({ section: r.section, key: r.key, value: r.value, ...(asked ? { answer: asked.get(r.section + '\n' + r.key).ask.id } : {}) }),
       });
       o = outcome(res.status, await res.json().catch(() => null));
     } catch {
@@ -273,9 +272,9 @@ async function start() {
       h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
   say(listCard, 'Panels in Home Assistant', 'Asking Home Assistant for the panels…');
-  let me, devices, areas;
+  let me, devices, areas, entries;
   try {
-    [me, devices, areas] = await ask(access, ['auth/current_user', 'config/device_registry/list', 'config/area_registry/list']);
+    [me, devices, areas, entries] = await ask(access, ['auth/current_user', 'config/device_registry/list', 'config/area_registry/list', 'config_entries/get']);
   } catch (e) {
     if (e.signIn) keep(KEY, null);
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: e.signIn ? signIn : start }, e.signIn ? 'Continue with Home Assistant ↗' : 'Try again'));
@@ -285,9 +284,13 @@ async function start() {
       h('button', { class: 'pill', type: 'button', onclick: signOut }, 'Sign out'));
   }
   keep(KEY, JSON.stringify({ ...stored(), user: me.name }));
-  panels = panelsFrom(devices, areas, location.host).map((p) => ({ ...p, reach: { state: 'asking', why: 'Asking it for its settings' } }));
+  panels = panelsFrom(devices, areas, location.host, entries).map((p) => ({ ...p, reach: { state: 'asking', why: 'Asking it for its settings' } }));
   drawList(me.name);
-  access = await token();
+  try {
+    access = await token();
+  } catch (e) {
+    return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
+  }
   panels = await Promise.all(panels.map((p) => readPanel(p, access)));
   drawList(me.name);
   drawCopy();

@@ -252,11 +252,12 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 
 **All panels**, after Overview in the menu, sets up every panel in the house from one page (#466).
 
-1. **Continue with Home Assistant.** This tab signs in to Home Assistant on its own, with an administrator,
-   and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home Assistant too.
-2. **The panels.** The page asks Home Assistant for its devices and lists each one whose **Visit** link is a
-   Manage page (port 8099), with its area, address and version. A panel that doesn't answer within 6 seconds
-   shows as **Down**; the others still work. A panel on a version from before this page shows as Down too.
+1. **Continue with Home Assistant.** This tab signs in to Home Assistant on its own (with PKCE), with an
+   administrator, and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home Assistant too.
+2. **The panels.** The page asks Home Assistant for its devices and lists each ESPHome device whose **Visit**
+   link is a Manage page (port 8099), with its area, address and version. A panel that doesn't answer within
+   6 seconds shows as **Down**; the others still work. A panel on a version from before this page shows as Down
+   too. One that answers as some other device shows as **Not a panel** and gets nothing.
 3. **Manage** opens that panel's own Manage page in a new tab, already signed in.
 4. **Copy settings.** Pick a panel to copy from and one to copy to. The page lists every setting that differs,
    ticked, as *its value now → the new value*. Settings the other panel's version or hardware doesn't have,
@@ -270,7 +271,11 @@ no scripts.
 
 Each panel lets a page on another panel read and change its settings. That page holds a Home
 Assistant access token, and each panel checks it with its own Home Assistant. No panel trusts another,
-and there are no shared keys and no leader.
+and there are no shared keys and no leader. The page gives your Home Assistant token only to devices Home
+Assistant lists as Glassworks panels: an ESPHome device whose Visit link is a Manage page, and that first
+answers a question without the token (`/manage/api/hello`) with the model Home Assistant lists for it. A device
+that someone added to Home Assistant posing as a panel could still pass that; adding one takes a Home Assistant
+administrator.
 
 - **Who may.** Administrators only, as on the page itself. The panel asks its Home Assistant who the token
   belongs to (`auth/current_user`), at the address it uses, and only when that address is on your network.
