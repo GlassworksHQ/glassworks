@@ -52,6 +52,17 @@ class KioskService : Service() {
     private lateinit var foreground: KioskForeground
     private var hotspotNetworks: ConnectivityManager.NetworkCallback? = null
 
+    /** The scan before each hotspot start, into the runtime's list the setup page reads. */
+    private val scanFirst = sh.edm.s1kiosk.setup.HotspotScanStep(
+        scan = { done ->
+            ImprovController.scanFromInstaller { nets ->
+                done(nets.map { sh.edm.s1kiosk.setup.WifiNetwork(it.ssid, it.rssi, secure = it.auth != "NO") })
+            }
+        },
+        store = { glassworks.hotspotScan = it },
+        log = { Log.i(HOTSPOT_TAG, it) },
+    )
+
     override fun onCreate() {
         super.onCreate()
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
@@ -115,12 +126,7 @@ class KioskService : Service() {
                 // Where the app may turn the radio on (Android 9 and older, the device owner), it does: an off radio
                 // couldn't scan nor join. Where it may not, the hotspot is blocked before it gets here.
                 if (!WifiRadio.ensureOn(this)) Log.w(HOTSPOT_TAG, "Wi-Fi is off, and it didn't come on")
-                val asked = ImprovController.scanFromInstaller { nets ->
-                    glassworks.hotspotScan = nets.map { sh.edm.s1kiosk.setup.WifiNetwork(it.ssid, it.rssi, secure = it.auth != "NO") }
-                    Log.i(HOTSPOT_TAG, "scanned before the hotspot: ${nets.size} networks")
-                    start()
-                }
-                if (!asked) start()
+                scanFirst(start)
             },
         )
         glassworks.setupHotspot = hs
