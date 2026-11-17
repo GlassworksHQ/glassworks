@@ -61,7 +61,12 @@ class HiddenApHotspot<C>(
             when (state) {
                 ApControls.State.ENABLED -> if (!started && addressWait == null) waitForAddress(saved, net, onEvent)
                 ApControls.State.FAILED -> { restore(); onEvent(Hotspot.Event.Failed(HotspotFailure.FAILED)) }
-                ApControls.State.DISABLED -> if (started) { restore(); onEvent(Hotspot.Event.Stopped) }
+                ApControls.State.DISABLED -> when {
+                    started -> { restore(); onEvent(Hotspot.Event.Stopped) }
+                    // Up, then down again before it had an address: it never started, and the address isn't why
+                    // (#418 verifier). Before ENABLED a DISABLED is the sticky broadcast's old state, not news.
+                    addressWait != null -> { restore(); onEvent(Hotspot.Event.Failed(HotspotFailure.FAILED)) }
+                }
                 ApControls.State.OTHER -> Unit
             }
         }

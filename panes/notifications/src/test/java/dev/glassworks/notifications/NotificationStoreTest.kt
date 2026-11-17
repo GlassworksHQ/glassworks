@@ -82,21 +82,95 @@ class NotificationStoreTest {
         assertEquals(listOf("fire", "quiet"), store.cards().map { it.notification.title })
     }
 
+    /** #230: the open view keeps the screen, later ones wait their turn, and closing it opens the next. */
     @Test
-    fun oneFullScreenPageAtATime() {
+    fun viewsTakeTheScreenInTurn() {
         val door = store.post(n("door", url = "http://ha/door"), false).entry
         assertEquals(door, store.page())
         assertTrue(store.cards().isEmpty())
         val garage = store.post(n("garage", url = "http://ha/garage"), false).entry
-        assertEquals(garage, store.page())
-        assertTrue(store.list().first { it.id == door.id }.held)
+        assertEquals("the open one keeps the screen", door.id, store.page()?.id)
+        assertFalse("waiting isn't held", store.list().first { it.id == garage.id }.held)
+        store.dismiss(door.id)
+        assertEquals("the next one opens", garage.id, store.page()?.id)
         store.dismiss(garage.id)
-        assertNull("an older page doesn't come back by itself", store.page())
-        store.show(door.id)
+        assertNull(store.page())
+        // A view held by Do not disturb doesn't join the line.
+        val quiet = store.post(n("quiet page", url = "http://ha/q"), doNotDisturb = true).entry
+        assertNull(store.page())
+        assertFalse(store.list().first { it.id == quiet.id }.queued)
+    }
+
+    @Test
+    fun aViewThePersonAskedForOpensInFront() {
+        val door = store.post(n("door", url = "http://ha/door"), false).entry
+        val garage = store.post(n("garage", url = "http://ha/garage"), false).entry
+        val tapped = store.post(n("look", url = "http://ha/look"), false, jump = true).entry
+        assertEquals(tapped.id, store.page()?.id)
+        store.dismiss(tapped.id)
+        assertEquals("the one it covered is next", door.id, store.page()?.id)
+        store.show(garage.id)
+        assertEquals("tapped in the list", garage.id, store.page()?.id)
+    }
+
+    @Test
+    fun aSecondRingKeepsItsPlace() {
+        val door = store.post(n("door", tag = "doorbell", url = "http://ha/door"), false).entry
+        val garage = store.post(n("garage", tag = "garage", url = "http://ha/garage"), false).entry
+        val ring2 = store.post(n("door again", tag = "doorbell", url = "http://ha/door"), false).entry
+        assertEquals("the open one, replaced, stays open", ring2.id, store.page()?.id)
+        val garage2 = store.post(n("garage again", tag = "garage", url = "http://ha/garage"), false).entry
+        store.dismiss(ring2.id)
+        assertEquals(garage2.id, store.page()?.id)
+        assertFalse(store.list().any { it.id == door.id || it.id == garage.id })
+    }
+
+    @Test
+    fun aViewThatRunsOutWhileItWaitsNeverOpens() {
+        store.post(n("door", url = "http://ha/door"), false)
+        val stale = store.post(n("garage", url = "http://ha/garage", timeout = 30), false).entry
+        val later = store.post(n("washer", url = "http://ha/washer"), false).entry
+        t += 31_000
+        assertEquals(listOf(stale.id), store.expire().map { it.id })
+        store.dismiss(store.page()!!.id)
+        assertEquals(later.id, store.page()?.id)
+    }
+
+    @Test
+    fun doNotDisturbTakesWaitingViewsOutOfTheLine() {
+        val door = store.post(n("door", url = "http://ha/door", p = Priority.HIGH), false).entry
+        val garage = store.post(n("garage", url = "http://ha/garage"), false).entry
+        assertTrue(store.holdForDoNotDisturb())
+        assertNull(store.page())
+        store.show(garage.id)
+        assertEquals(garage.id, store.page()?.id)
+        assertTrue(store.list().first { it.id == door.id }.held)
+    }
+
+    /** #230: a critical one is never a view. It is the alert stage, and its view opens from there. */
+    @Test
+    fun aCriticalOneWithAViewIsTheStageUntilItsViewIsOpened() {
+        val door = store.post(n("door", url = "http://ha/door"), false).entry
+        val fire = store.post(n("fire", p = Priority.CRITICAL, url = "http://ha/fire"), false).entry
+        assertEquals(listOf(fire.id), store.cards().map { it.id })
         assertEquals(door.id, store.page()?.id)
-        // A page held by Do not disturb doesn't take the screen.
-        store.post(n("quiet page", url = "http://ha/q"), doNotDisturb = true)
-        assertEquals(door.id, store.page()?.id)
+        val view = store.openView(fire.id)!!
+        assertEquals("http://ha/fire", view.notification.url)
+        assertEquals(ViewSize.FULL, view.notification.size)
+        assertEquals(Sound.NONE, view.notification.sound)
+        assertEquals("in front of the open one", view.id, store.page()?.id)
+        assertTrue("the alert is answered", store.cards().isEmpty())
+        assertNull("a card with no view", store.openView(store.post(n("plain"), false).entry.id))
+    }
+
+    /** CodeRabbit on #429: the view opened from the stage keeps the tag, so clear_notification still closes it. */
+    @Test
+    fun theViewOpenedFromTheStageKeepsItsTag() {
+        val fire = store.post(n("fire", tag = "smoke", p = Priority.CRITICAL, url = "http://ha/fire"), false).entry
+        val view = store.openView(fire.id)!!
+        assertEquals("smoke", view.notification.tag)
+        assertEquals(view.id, store.clear("smoke")?.id)
+        assertNull(store.page())
     }
 
     @Test
@@ -121,12 +195,13 @@ class NotificationStoreTest {
     }
 
     @Test
-    fun aDroppedPageDoesNotTakeTheScreen() {
+    fun aDroppedViewDoesNotTakeTheScreen() {
         val one = NotificationStore({ t }, max = 1)
         val fire = one.post(n("fire", p = Priority.CRITICAL, url = "http://ha/fire"), false).entry
         val p = one.post(n("door", url = "http://ha/door"), false)
         assertEquals(listOf("door"), p.dropped.map { it.notification.title })
-        assertEquals(fire, one.page())
+        assertNull(one.page())
+        assertEquals(listOf(fire), one.cards())
     }
 
     @Test

@@ -216,6 +216,15 @@ adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshot
     --es camera_stream_sign_in 'viewer:a-long-password'   # adb only: camera settings and the stream's sign-in
 ```
 
+A notification's half-screen view (#230) takes a still picture of the dashboard first. What that costs is
+logged only when asked, under `S1Kiosk.ViewCapture`: the time to the picture, its size, and the app's PSS
+before and after, plus where the page was put.
+
+```sh
+adb shell setprop log.tag.S1Kiosk.ViewCapture DEBUG   # off again: setprop log.tag.S1Kiosk.ViewCapture INFO
+adb logcat -s S1Kiosk.ViewCapture
+```
+
 `ImprovActivity` only accepts callers holding `WRITE_SECURE_SETTINGS` (i.e. `adb shell`).
 Joining the new network uses `WifiManager.addNetwork`, which Android 10 allows because the app holds
 the SYSTEM_ALERT_WINDOW app-op (see the install step), or because it's device owner

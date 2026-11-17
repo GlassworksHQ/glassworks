@@ -95,8 +95,8 @@ object WifiStep {
                 if (fail != null) ImprovLine(
                     Phase.FAILED, "$label · allowed for ${clock(f.authLeftMs)}",
                     "Couldn't connect to ${ssid ?: "the network"}",
-                    // A radio that didn't come back isn't the password's fault (#418 verifier).
-                    "${sentence(fail)}" + if (fail.startsWith(WifiProvisioner.RADIO_DIDNT_COME_BACK)) "" else " Check the password and send it again.",
+                    // A reason that says what to do gets no password advice on top (#418 verifier).
+                    "${sentence(fail)}" + if (WifiProvisioner.saysWhatToDo(fail)) "" else " Check the password and send it again.",
                     Tone.ROSE, listOf(Action.STOP),
                 ) else ImprovLine(
                     Phase.AUTHORIZED, "$label · allowed for ${clock(f.authLeftMs)}", "Waiting for Wi-Fi details",

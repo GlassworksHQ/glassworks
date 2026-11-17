@@ -92,6 +92,48 @@ class NotificationCenterTest {
         assertNull(page)
     }
 
+    /** #230: on a screen that takes no tap, a view with no timeout closes by itself after 2 minutes. */
+    @Test
+    fun withoutTouchAViewGetsTwoMinutes() {
+        var touch = false
+        val store = NotificationStore({ t })
+        val c = NotificationCenter(
+            store, out, { reports += it }, { dnd }, { "http://homeassistant.local:8123" }, { t },
+            { delay, action -> timers += delay to action; CompletableFuture<Unit>() as Future<*> }, touch = { touch },
+        )
+        fun timeout(title: String) = store.list().first { it.notification.title == title }.notification.timeoutS
+        c.handle("m", "door", """{"url":"/dashboard-door/0"}""")
+        assertEquals(ViewQueue.NO_TOUCH_VIEW_S, timeout("door"))
+        assertEquals(120_000L, timers.last().first)
+        c.handle("m", "garage", """{"url":"/garage/0","timeout":30}""")
+        assertEquals("its own timeout stays", 30, timeout("garage"))
+        c.handle("m", "washer", "")
+        c.handle("m", "fire", """{"priority":"critical","url":"/fire/0"}""")
+        assertNull("a card gets none", timeout("washer"))
+        assertNull("nor the alert stage", timeout("fire"))
+        touch = true
+        c.handle("m", "hall", """{"url":"/hall/0"}""")
+        assertNull("with touch: none", timeout("hall"))
+    }
+
+    @Test
+    fun theStagesOpenTheViewOpensItInFront() {
+        center.handle("m", "door", """{"url":"/dashboard-door/0"}""")
+        center.handle("Smoke in the kitchen", "Smoke", """{"priority":"critical","url":"/fire/0"}""")
+        val fire = cards.single()
+        center.openView(fire.id)
+        assertEquals("http://homeassistant.local:8123/fire/0", page?.notification?.url)
+        assertTrue(cards.isEmpty())
+    }
+
+    @Test
+    fun aButtonsViewOpensInFrontAtItsSize() {
+        center.handle("m", "door", """{"url":"/dashboard-door/0"}""")
+        center.openPage("Garage", "http://homeassistant.local:8123/garage/0", ViewSize.HALF)
+        assertEquals("http://homeassistant.local:8123/garage/0", page?.notification?.url)
+        assertEquals(ViewSize.HALF, page?.notification?.size)
+    }
+
     @Test
     fun aTimeoutClosesItAndGoesBackToTheDashboard() {
         center.handle("m", "door", """{"url":"/dashboard-door/0","timeout":30}""")

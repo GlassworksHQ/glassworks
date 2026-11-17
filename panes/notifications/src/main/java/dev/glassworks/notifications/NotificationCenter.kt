@@ -68,6 +68,8 @@ class NotificationCenter(
     private val haBase: () -> String?,
     private val now: () -> Long,
     private val schedule: (delayMs: Long, action: () -> Unit) -> Future<*>,
+    /** Whether the screen takes a tap. Without, a view with no `timeout` gets [ViewQueue.NO_TOUCH_VIEW_S] (#230). */
+    private val touch: () -> Boolean = { true },
 ) {
     private val lock = Any()
     private var timer: Future<*>? = null
@@ -88,7 +90,9 @@ class NotificationCenter(
         when (val c = NotifyRequest.parse(message, title, data, haBase())) {
             is NotifyCommand.Clear -> if (store.clear(c.tag) != null) changed()
             is NotifyCommand.Post -> {
-                val p = store.post(c.notification, doNotDisturb())
+                val n = c.notification
+                val view = n.url != null && n.priority != Priority.CRITICAL
+                val p = store.post(if (view && n.timeoutS == null && !touch()) n.copy(timeoutS = ViewQueue.NO_TOUCH_VIEW_S) else n, doNotDisturb())
                 val d = p.entry.delivery
                 // Dropped at once to stay under the store's limit: it isn't on the panel, so it makes no noise.
                 val kept = p.entry !in p.dropped
@@ -115,12 +119,18 @@ class NotificationCenter(
     }
 
     /**
-     * A button's `uri` was tapped: [url] (already checked by [HaUrls]) opens full screen, with the same
-     * way back as a `url` notification. Silent; the person asked for it, so Do not disturb doesn't hold it.
+     * A button's `uri` was tapped: [url] (already checked by [HaUrls]) opens at once, in front, at [size],
+     * with the same way back as a `url` notification. Silent; the person asked for it, so Do not disturb
+     * doesn't hold it.
      */
-    fun openPage(title: String, url: String) {
-        store.post(Notification(title, "", url = url, sound = Sound.NONE), doNotDisturb = false)
+    fun openPage(title: String, url: String, size: ViewSize = ViewSize.FULL) {
+        store.post(Notification(title, "", url = url, sound = Sound.NONE, size = size), doNotDisturb = false, jump = true)
         changed()
+    }
+
+    /** "Open the view" on a critical alert's stage: the alert closes and its view opens full screen (#230). */
+    fun openView(id: Long) {
+        if (store.openView(id) != null) changed()
     }
 
     /**

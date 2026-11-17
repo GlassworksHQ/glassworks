@@ -101,4 +101,12 @@ class WifiStepTest {
             ssid = "Example-WiFi", failure = "Wrong password"))
         assertTrue(wrong.detail, "Check the password" in wrong.detail)
     }
+
+    @Test
+    fun anUnusablePasswordSaysWhatToDoOnce() {
+        val line = WifiStep.improv(ImprovFacts(running = true, advertising = true, state = ImprovState.AUTHORIZED,
+            ssid = "Example-WiFi", failure = dev.glassworks.improv.WifiProvisioner.UNUSABLE_PASSWORD))
+        assertEquals(line.detail, 1, Regex("send it again").findAll(line.detail).count())
+        assertTrue(line.detail, "Check the password" !in line.detail)
+    }
 }
