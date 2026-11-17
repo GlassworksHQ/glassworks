@@ -106,7 +106,10 @@ function ApkField({ s, session }: { s: AndroidState; session: AndroidSession }) 
           <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
         </label>
-        {s.apk?.sha256 && <span className="small">{s.apk.name} · {s.apk.package ?? 'no package'} · {fmtSize(s.apk.size)} · SHA-256 <code>{s.apk.sha256}</code></span>}
+        {s.apk?.sha256 && <>
+          <span className="small">{s.apk.name} · {s.apk.package ?? 'no package'} · {fmtSize(s.apk.size)}</span>
+          <span className="small">SHA-256 <code className="sha" title={s.apk.sha256}>{s.apk.sha256.slice(0, 12)}…{s.apk.sha256.slice(-12)}</code></span>
+        </>}
         {s.apk?.error && <span className="status err" role="alert">{s.apk.error}.</span>}
       </div>
     </div>
@@ -119,15 +122,20 @@ function Find({ s, session }: { s: AndroidState; session: AndroidSession }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? 'Plug in the tablet to undo.' : 'Plug in the tablet.'}</h2>
-      <p className="lede">Use its USB cable, with USB debugging still off. Kiln reads what the tablet is; nothing on it changes.</p>
+      <p className="lede">{s.flow === 'undo'
+        ? 'Kiln takes Glassworks off the tablet over USB, as it put it on: turn on USB debugging, then tap Allow. Kiln reads the tablet first; nothing changes until then.'
+        : 'Use its USB cable, with USB debugging still off. Kiln reads what the tablet is; nothing on it changes.'}</p>
       <ApkField s={s} session={session} />
-      <p className="small">Android 6 or newer, over USB. {WHAT_KILN_DOES}</p>
+      {s.flow === 'install' && <p className="small">Android 6 or newer, over USB. {WHAT_KILN_DOES}</p>}
       {s.finding && <p className="status work" role="status">Pick the tablet in the browser&apos;s list…</p>}
       {s.findError && <p className="status err" role="alert">{s.findError}</p>}
       <div className="foot">
         <span className="links">
           <button type="button" className="link" onClick={() => session.brands()}>Not in the list? Pick your brand</button>
-          {s.flow === 'install' && <><span aria-hidden="true">·</span><button type="button" className="link" onClick={() => session.startUndo()}>Undo an install</button></>}
+          <span aria-hidden="true">·</span>
+          {s.flow === 'install'
+            ? <button type="button" className="link" onClick={() => session.setFlow('undo')}>Undo an install</button>
+            : <button type="button" className="link" onClick={() => session.setFlow('install')}>Install instead</button>}
         </span>
         <button type="button" className="btn ember" disabled={s.finding} onClick={() => void session.find()}>Find it</button>
       </div>
@@ -173,7 +181,7 @@ function Brand({ s, session }: { s: AndroidState; session: AndroidSession }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Which brand is it?</h2>
-      {s.identified?.why && <p className="lede">{s.identified.why}</p>}
+      <p className="lede">{s.identified?.why ?? 'Kiln shows its steps to turn on USB debugging.'}</p>
       <RadioGroup.Root className="brands" value={s.brand ?? ''} onValueChange={(v) => session.pickBrand(v as BrandId | 'other')} aria-labelledby="h">
         {PICKS.map((id) => (
           <RadioGroup.Item key={id} value={id} className="brand-pick">{BRANDS.find((b) => b.id === id)!.name}</RadioGroup.Item>
@@ -183,7 +191,7 @@ function Brand({ s, session }: { s: AndroidState; session: AndroidSession }) {
       <ApkField s={s} session={session} />
       {blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
-        <span className="small">Pick one to see its steps.</span>
+        <span className="links"><button type="button" className="link" onClick={() => session.back()}>Back</button><span aria-hidden="true">·</span>Pick one to see its steps.</span>
         <button type="button" className="btn ember" disabled={!s.brand || !!blocked} onClick={() => session.chooseBrand()}>Continue</button>
       </div>
     </section>
@@ -422,6 +430,18 @@ function Done({ s, session }: { s: AndroidState; session: AndroidSession }) {
 }
 
 function Failed({ s, session }: { s: AndroidState; session: AndroidSession }) {
+  if (s.own) {
+    return (
+      <section className="card err" aria-labelledby="h">
+        <h2 id="h">This is an {s.own.name}.</h2>
+        <p className="lede">It has its own install in Kiln. Glassworks for Android would take its app&apos;s place as the home screen, so Kiln stopped before changing anything.</p>
+        <div className="foot">
+          <Log s={s} />
+          <Link className="btn ember" href={s.own.route}>Go to the {s.own.name}</Link>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="card err" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : /Nothing was changed\.$/.test(s.error ?? '') ? 'Kiln can\'t install on this tablet.' : 'The install stopped.'}</h2>

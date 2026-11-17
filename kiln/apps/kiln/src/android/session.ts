@@ -9,8 +9,8 @@
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import {
-  APPS, identifyPicked, identifyUsb, installGeneric, planInstall, undoGeneric,
-  type BrandId, type GenericApp, type GenericInstalled, type GenericPhase, type Grant, type Identified, type Plan, type SilentUpdatesResult,
+  APPS, OwnFrameRefused, identifyPicked, identifyUsb, installGeneric, planInstall, undoGeneric,
+  type BrandId, type OwnFrame, type GenericApp, type GenericInstalled, type GenericPhase, type Grant, type Identified, type Plan, type SilentUpdatesResult,
 } from '@glassworks/generic-android-installer';
 
 /** Device (find, named, brand), Connect (debug, allow), Install (working), Done; `off` without ?apk=local. */
@@ -36,6 +36,8 @@ export interface AndroidState {
   usbName?: string;
   /** the brand screen's choice before Continue; `other`: Android's general steps */
   brand?: BrandId | 'other';
+  /** where the brand screen's Back goes */
+  brandFrom?: AndroidScreen;
   /** the browser's device list is open (the unclaimed device, or its adb interface and Allow) */
   finding?: boolean;
   findError?: string;
@@ -49,6 +51,8 @@ export interface AndroidState {
   granted?: { grants: Grant[]; silentUpdates: SilentUpdatesResult };
   result?: AndroidResult;
   error?: string;
+  /** the device has a frame of its own: the error screen sends the person to its page */
+  own?: OwnFrame;
   log: string[];
 }
 
@@ -128,14 +132,16 @@ export class AndroidSession {
       const usb = await req;
       const identified = identifyUsb(usb);
       const name = usb.productName?.trim();
-      this.set({ finding: false, identified, ...(name ? { usbName: name } : {}), screen: identified.pick ? 'brand' : 'named', brand: identified.brand?.id });
+      this.set({ finding: false, identified, ...(name ? { usbName: name } : {}), screen: identified.pick ? 'brand' : 'named', brand: identified.brand?.id, brandFrom: 'find' });
     } catch (e) {
       this.set({ finding: false, findError: cancelled(e) ? 'Nothing was picked. Plug the tablet in, then pick it in the list.' : (e as Error).message });
     }
   }
 
   /** The brand screen, from "Not right?", "Different on yours?" or a device Kiln can't name. */
-  brands() { this.set({ screen: 'brand', brand: this.state.identified?.brand?.id }); }
+  brands() { this.set({ screen: 'brand', brand: this.state.identified?.brand?.id, brandFrom: this.state.screen }); }
+  /** Back from the brand screen, to where it was opened (the first screen when Kiln couldn't name the device). */
+  back() { this.set({ screen: this.state.brandFrom ?? 'find' }); }
   pickBrand(brand: BrandId | 'other') { this.set({ brand }); }
   /** Continue on the brand screen: that brand's steps. */
   chooseBrand() {
@@ -147,8 +153,8 @@ export class AndroidSession {
   /** Continue on the named screen. */
   toSteps() { if (!this.blocked()) this.set({ screen: 'debug' }); }
 
-  /** From the device screen: undo an install, which needs USB debugging too. */
-  startUndo() { this.set({ flow: 'undo', screen: this.state.identified ? 'debug' : 'brand' }); }
+  /** From the first screen: undo an install (or back to installing). Undo needs USB debugging too, so the same steps follow. */
+  setFlow(flow: Flow) { this.set({ flow }); }
 
   /**
    * "It's on", or Try again: the adb interface and Allow, then read the device, then install or undo.
@@ -189,12 +195,13 @@ export class AndroidSession {
 
   private async work(run: () => Promise<AndroidResult>): Promise<void> {
     if (this.state.screen === 'working') return;
-    this.set({ screen: 'working', phases: [], granted: undefined, result: undefined, error: undefined });
+    this.set({ screen: 'working', phases: [], granted: undefined, result: undefined, error: undefined, own: undefined });
     try {
       this.set({ screen: 'done', result: await run() });
     } catch (e) {
-      this.log('Stopped', (e as Error).message);
-      this.set({ screen: 'error', error: (e as Error).message });
+      this.log('Stopped');
+      this.log('', (e as Error).message);
+      this.set({ screen: 'error', error: (e as Error).message, ...(e instanceof OwnFrameRefused ? { own: e.own } : {}) });
     }
   }
 }

@@ -151,6 +151,43 @@ describe('the screens', () => {
     expect(rail().map((r) => r.split(':')[0])).toEqual(['Device', 'Connect', 'Undo', 'Done']);
   });
 
+  it('an S1 with debugging on: refused before anything is written, and sent to its own page', async () => {
+    const s = await show('own-frame', 'This is an Aqara S1 Plus.');
+    expect(screen.getByText('Go to the Aqara S1 Plus').getAttribute('href')).toBe('/aqara-s1-plus');
+    expect(embers()).toEqual(['Go to the Aqara S1 Plus']);
+    expect(s.state.log.join('\n')).toMatch(/Nothing was changed\./);
+  });
+
+  it('Undo an install keeps the first screen, says what happens, and goes back to installing', async () => {
+    const s = await show('undo-find', 'Plug in the tablet to undo.');
+    expect(document.querySelector('.lede')?.textContent).toMatch(/takes Glassworks off the tablet over USB/);
+    expect(document.querySelector('input[type=file]')).toBeNull();
+    fireEvent.click(screen.getByText('Install instead'));
+    await until(() => heading() === 'Plug in the tablet.');
+    expect(s.state.flow).toBe('install');
+  });
+
+  it('the brand screen goes back to where it was opened', async () => {
+    const s = await show('brand', 'Which brand is it?');
+    fireEvent.click(screen.getByText('Back'));
+    await until(() => heading() === 'Plug in the tablet.');
+    act(() => s.brands());
+    expect(heading()).toBe('Which brand is it?');
+    expect(document.querySelector('.lede')?.textContent).toBe('It reports Allwinner, the maker of its chip, not its brand.');
+    s.pickBrand('other');
+    act(() => s.chooseBrand());
+    act(() => s.brands());
+    fireEvent.click(screen.getByText('Back'));
+    expect(heading()).toBe('Turn on USB debugging.');
+  });
+
+  it('the APK\'s SHA-256 is shortened on screen, whole in its title', async () => {
+    const s = await show('find', 'Plug in the tablet.');
+    const code = document.querySelector('.well code')!;
+    expect(code.getAttribute('title')).toBe(s.state.apk!.sha256);
+    expect(code.textContent).toBe(`${s.state.apk!.sha256.slice(0, 12)}…${s.state.apk!.sha256.slice(-12)}`);
+  });
+
   it('Undo from Done removes what it installed', async () => {
     const s = await show('done', 'Done.');
     fireEvent.click(screen.getByText('Undo'));

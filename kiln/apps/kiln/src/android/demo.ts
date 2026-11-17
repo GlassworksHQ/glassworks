@@ -5,7 +5,7 @@ import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from '@glasswork
 import { AndroidSession, type UsbFacts } from './session';
 
 export const ANDROID_DEMOS = [
-  'run', 'find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'done', 'done-untested', 'undo-done', 'error',
+  'run', 'find', 'undo-find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'done', 'done-untested', 'undo-done', 'error', 'own-frame',
 ] as const;
 export type AndroidDemo = (typeof ANDROID_DEMOS)[number];
 
@@ -31,6 +31,8 @@ export async function androidDemo(name: AndroidDemo, fast = false): Promise<Andr
     : { ip: '192.0.2.10', picksAfter: 3 };
   if (name === 'vendor') Object.assign(o, { refuseSetHome: true, refuseGrant: ['android.permission.WRITE_SECURE_SETTINGS'], picksAfter: undefined });
   if (name === 'undo-done') o.installed = 600;
+  // an S1 with USB debugging on, as it reads (AqaraS1Plus.kt, 2026-11-14)
+  if (name === 'own-frame') Object.assign(o, { sdk: 29, release: '10', abilist: 'armeabi-v7a,armeabi', manufacturer: 'Allwinner', model: 'QUAD-CORE R818 EVB2', hardware: 'sun50iw10p1' });
   if (name === 'error') o.installFails = 'Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]';
   const hold = name === 'installing' ? /^cmd package set-home-activity / : /^$/;
   const device = new Held(o, hold, fast ? 0 : 60);
@@ -41,9 +43,11 @@ export async function androidDemo(name: AndroidDemo, fast = false): Promise<Andr
     homeTimeoutMs: 10 * 60_000,
     setupTries: 2,
   }, true);
-  await s.pickApk('glassworks-generic-android-arm64-v8a-test.apk', fakeGenericApk({ app: device.app }));
+  const abi = name === 'own-frame' ? 'armeabi-v7a' : 'arm64-v8a';
+  await s.pickApk(`glassworks-generic-android-${abi}-test.apk`, fakeGenericApk({ app: device.app, abis: [abi] }));
   if (name === 'run' || name === 'find') return s;
-  if (name === 'undo-done') { s.startUndo(); }
+  if (name === 'undo-done' || name === 'undo-find') s.setFlow('undo');
+  if (name === 'undo-find') return s;
   await s.find();
   if (name === 'named' || name === 'brand') return s;
   if (untested) { s.pickBrand('other'); s.chooseBrand(); } else s.toSteps();
