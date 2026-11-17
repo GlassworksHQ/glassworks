@@ -24,8 +24,9 @@ class LocalNameTest {
     }
 
     @Test fun `on Android 6 the address stands in for the name, and the rest stays as set`() {
-        assertEquals(LocalRoute.ByAddress("http://192.0.2.10:8123/lovelace/0?kiosk#top", "homeassistant.local"), on(23))
-        assertEquals(LocalRoute.ByAddress("http://192.0.2.10:8123/lovelace/0?kiosk#top", "homeassistant.local"), on(29))
+        val r = LocalRoute.ByAddress("http://192.0.2.10:8123/lovelace/0?kiosk#top", "homeassistant.local", "192.0.2.10:8123")
+        assertEquals(r, on(23))
+        assertEquals(r, on(29))
     }
 
     @Test fun `on Android 12 and later the URL loads as set`() {
@@ -42,14 +43,19 @@ class LocalNameTest {
         assertEquals("http://[2001:db8::10]:8123/", on(23, "http://homeassistant.local:8123/", "http://[2001:db8::10]:8123").url)
     }
 
-    @Test fun `https keeps the name its certificate is for, and says why`() {
-        val r = on(23, "https://homeassistant.local:8123/")
-        assertEquals(LocalRoute.Unresolved("https://homeassistant.local:8123/", "https, and its certificate names homeassistant.local"), r)
+    @Test fun `a user and password in the URL stay in it, and out of the address the log names`() {
+        val r = on(23, "http://user:secret@homeassistant.local:8123/") as LocalRoute.ByAddress
+        assertEquals("http://user:secret@192.0.2.10:8123/", r.url)
+        assertEquals("192.0.2.10:8123", r.address)
     }
 
-    @Test fun `before discovery has an address the URL loads as set, and says why`() {
+    @Test fun `https keeps the name its certificate is for`() {
+        assertEquals(LocalRoute.KeptForCertificate("https://homeassistant.local:8123/", "homeassistant.local"), on(23, "https://homeassistant.local:8123/"))
+    }
+
+    @Test fun `before discovery has an address the URL loads as set`() {
         for (at in listOf(null, "", "http://other.local:8123")) {
-            assertEquals(at.toString(), LocalRoute.Unresolved(dash, "Home Assistant's address isn't known yet"), on(23, at = at))
+            assertEquals(at.toString(), LocalRoute.NoAddressYet(dash, "homeassistant.local"), on(23, at = at))
         }
     }
 

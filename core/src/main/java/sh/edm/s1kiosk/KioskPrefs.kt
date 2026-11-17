@@ -60,8 +60,12 @@ class KioskPrefs(
     /** How [url] reaches a set dashboard URL: as set, or through [haUrl] in place of its `.local` name. */
     val dashboardRoute: LocalRoute get() = LocalName.route(urlSetting, haUrl, platform.resolvesLocalNames)
 
-    /** The dashboard loads through the address discovery found: a load error may mean that address changed. */
-    val loadsFoundAddress: Boolean get() = isAutoUrl || dashboardRoute is LocalRoute.ByAddress
+    /**
+     * The dashboard loads through the address discovery found, or waits for one: a load error may mean that address
+     * changed, or that discovery hasn't found it yet.
+     */
+    val loadsFoundAddress: Boolean
+        get() = isAutoUrl || dashboardRoute.let { it is LocalRoute.ByAddress || it is LocalRoute.NoAddressYet }
 
     /** Home Assistant base URL found by discovery or entered on the sign-in screen (`http://h:8123`). */
     val haUrl: String get() = sp.getString("ha_url", "") ?: ""

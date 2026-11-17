@@ -57,6 +57,7 @@ object HaAuth {
             if (!signedIn) done(null)
             else accessToken(force = false) { a -> done((a as? Access.Ok)?.accessToken) }
         },
+        tokenBase = { signedInBase },
         exec = exec,
     )
 

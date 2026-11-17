@@ -292,8 +292,9 @@ class MainActivity : Activity() {
         if (!prefs.isAutoUrl && route != loggedRoute) {
             loggedRoute = route
             when (route) {
-                is LocalRoute.ByAddress -> Log.i(TAG, "Dashboard through ${route.url}: Android can't resolve ${route.name} before 12")
-                is LocalRoute.Unresolved -> Log.i(TAG, "Dashboard at ${route.url} as set, though Android can't resolve it before 12: ${route.why}")
+                is LocalRoute.ByAddress -> Log.i(TAG, "Dashboard through ${route.address}: Android can't resolve ${route.name} before 12")
+                is LocalRoute.NoAddressYet -> Log.i(TAG, "Dashboard at ${route.name} as set: Android can't resolve it before 12, and Home Assistant's address isn't known yet")
+                is LocalRoute.KeptForCertificate -> Log.i(TAG, "Dashboard at ${route.name} as set, though Android can't resolve it before 12: https, and its certificate is for the name")
                 is LocalRoute.AsSet -> Unit
             }
         }

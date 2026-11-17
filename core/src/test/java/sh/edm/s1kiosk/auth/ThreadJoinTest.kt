@@ -65,6 +65,23 @@ class ThreadJoinTest {
         assertFalse("the QR route expires", j.armed())
     }
 
+    /** #449: the panel's token goes only to the address its sign-in is for, not to one discovery found later. */
+    @Test
+    fun aSignInForAnotherAddressShowsTheQrCodeAndSendsNoToken() {
+        val j = ThreadJoin(
+            client = HaThreadClient { url -> error("no fetch to $url") },
+            tokens = HaTokenClient(http),
+            haBase = { "http://192.0.2.11:8123" },
+            panelToken = { error("no token asked for") },
+            exec = direct,
+            tokenBase = { "http://192.0.2.10:8123" },
+            clock = { now },
+        )
+        j.start()
+        assertTrue(j.armed())
+        assertEquals("the panel's sign-in is for another Home Assistant address", (j.state as ThreadJoin.State.NeedsAdmin).why)
+    }
+
     @Test
     fun notSignedInShowsTheQrCode() {
         val j = join({ error("no fetch without a token") }, panelToken = null)

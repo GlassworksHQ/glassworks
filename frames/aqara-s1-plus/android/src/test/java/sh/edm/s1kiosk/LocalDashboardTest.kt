@@ -46,7 +46,7 @@ class LocalDashboardTest {
     fun `below Android 12 the dashboard loads through the address found`() = harness().use { h ->
         assertEquals(listOf("s1.load http://192.0.2.10:8123/lovelace/0"), h.loads())
         assertEquals("the setting stays as entered", setting, KioskPrefs(h.app).urlSetting)
-        assertTrue(h.logs("S1Kiosk").toString(), "Dashboard through http://192.0.2.10:8123/lovelace/0: Android can't resolve homeassistant.local before 12" in h.logs("S1Kiosk"))
+        assertTrue(h.logs("S1Kiosk").toString(), "Dashboard through 192.0.2.10:8123: Android can't resolve homeassistant.local before 12" in h.logs("S1Kiosk"))
     }
 
     @Test fun `from Android 12 it loads as set`() = harness().use { h ->
@@ -63,7 +63,7 @@ class LocalDashboardTest {
     @Test @Config(sdk = [29])
     fun `before discovery has an address it loads as set, then the first address restarts onto it`() = harness(at = null).use { h ->
         assertEquals(listOf("s1.load $setting"), h.loads())
-        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("Home Assistant's address isn't known yet") })
+        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("and Home Assistant's address isn't known yet") })
         KioskPrefs(h.app).setHaUrl(found, HaDiscovery.SOURCE_MDNS)
         h.newIntent(Intent().putExtra("ha_discovered", found))
         assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.startsWith("restart deferred") })
@@ -72,7 +72,7 @@ class LocalDashboardTest {
     @Test @Config(sdk = [29])
     fun `https keeps the name its certificate is for, and the log says so`() = harness("https://homeassistant.local:8123/").use { h ->
         assertEquals(listOf("s1.load https://homeassistant.local:8123/"), h.loads())
-        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("https, and its certificate names homeassistant.local") })
+        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("https, and its certificate is for the name") })
     }
 
     @Test fun `the engine's hosts, Home Assistant's base and the dashboard select follow the platform`() {
@@ -86,6 +86,11 @@ class LocalDashboardTest {
         val list = listOf(Dashboard("tablet", "Tablet"))
         assertEquals("http://homeassistant.local:8123", old.settingBase)
         assertEquals("http://homeassistant.local:8123/tablet", DashboardOptions.urlFor("Tablet", old.urlSetting, old.settingBase, old.haUrl, list))
+
+        // No address yet: a failed load browses again, and the first address found is loaded.
+        KioskPrefs(app).setHaUrl("", HaDiscovery.SOURCE_MDNS)
+        assertTrue(KioskPrefs(app, platform = PlatformApi(23)).loadsFoundAddress)
+        KioskPrefs(app).setHaUrl(found, HaDiscovery.SOURCE_MDNS)
 
         val new = KioskPrefs(app, platform = PlatformApi(31))
         assertEquals(listOf("homeassistant.local"), new.secureHosts())

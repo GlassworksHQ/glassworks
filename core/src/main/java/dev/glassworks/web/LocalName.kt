@@ -14,11 +14,17 @@ sealed interface LocalRoute {
     /** Not a `.local` host, or Android resolves the name itself: the URL as set. */
     data class AsSet(override val url: String) : LocalRoute
 
-    /** Through the address Home Assistant was found at, in place of [name]. Path, query and port stay as set. */
-    data class ByAddress(override val url: String, val name: String) : LocalRoute
+    /**
+     * Through the address Home Assistant was found at, in place of [name]. Path, query and port stay as set.
+     * [address] is the host and port alone, for the log: the URL may hold a user and password.
+     */
+    data class ByAddress(override val url: String, val name: String, val address: String) : LocalRoute
 
-    /** Android can't resolve the name, and no address can stand in: the URL as set, and [why] for the log. */
-    data class Unresolved(override val url: String, val why: String) : LocalRoute
+    /** Android can't resolve [name], and discovery has no address for it yet: the URL as set, until it has one. */
+    data class NoAddressYet(override val url: String, val name: String) : LocalRoute
+
+    /** An https URL on [name]: its certificate is for the name, so an address can't stand in. The URL as set. */
+    data class KeptForCertificate(override val url: String, val name: String) : LocalRoute
 }
 
 /**
@@ -32,14 +38,12 @@ object LocalName {
         val name = u.host?.lowercase()?.trimEnd('.') ?: return LocalRoute.AsSet(url)
         if (!isLocal(name) || resolvesLocal) return LocalRoute.AsSet(url)
         // The certificate names the .local host: over an address the page would fail its check instead.
-        if (u.scheme.equals("https", ignoreCase = true)) return LocalRoute.Unresolved(url, "https, and its certificate names $name")
-        val address = found?.let { runCatching { URI(it.trim()).host }.getOrNull() }
-        if (address.isNullOrEmpty() || isLocal(address.lowercase().trimEnd('.'))) {
-            return LocalRoute.Unresolved(url, "Home Assistant's address isn't known yet")
-        }
-        val authority = (u.rawUserInfo?.let { "$it@" } ?: "") + address + (if (u.port != -1) ":${u.port}" else "")
+        if (u.scheme.equals("https", ignoreCase = true)) return LocalRoute.KeptForCertificate(url, name)
+        val host = found?.let { runCatching { URI(it.trim()).host }.getOrNull() }
+        if (host.isNullOrEmpty() || isLocal(host.lowercase().trimEnd('.'))) return LocalRoute.NoAddressYet(url, name)
+        val address = host + (if (u.port != -1) ":${u.port}" else "")
         val rest = (u.rawPath ?: "") + (u.rawQuery?.let { "?$it" } ?: "") + (u.rawFragment?.let { "#$it" } ?: "")
-        return LocalRoute.ByAddress("${u.scheme}://$authority$rest", name)
+        return LocalRoute.ByAddress("${u.scheme}://${u.rawUserInfo?.let { "$it@" } ?: ""}$address$rest", name, address)
     }
 
     private fun isLocal(host: String) = host.endsWith(".local")
