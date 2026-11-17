@@ -100,7 +100,7 @@ each new frame's first boot.
 | Frame | Screen (upright) | Panel (`desc.txt`) | Android | Splash | Zip | Measured |
 |---|---|---|---|---|---|---|
 | `aqara-s1-plus` | 1440x720 | 1440x720 | 10 (API 29) | Allwinner | 8.69 MB, trimmed (9 MB budget) | On the panel, 2026-11-12 ([glass-tile](../glass-tile/README.md#what-the-panel-allows)) |
-| `lululemon-mirror` | 1080x1920 | 1920x1080, frames turned 90° (`rotate`) | 6.0.1 (API 23) | None | 11.44 MB, full frames ([lululemon-mirror](../lululemon-mirror/README.md), rebuilt 2026-11-16) | The panel is 1920x1080, natural landscape, turned portrait. `ro.sf.hwrotation=270` turns Android's UI but not the boot animation: the earlier 1080x1920 version rendered sideways on the unit (2026-11-16). The turned frames run upright on the glass (2026-11-16, the maintainer's photo) |
+| `lululemon-mirror` | 1080x1920 | 1920x1080, frames turned 90° (`rotate`) | 6.0.1 (API 23) | None | 11.44 MB, full frames ([lululemon-mirror](../lululemon-mirror/README.md), rebuilt 2026-11-16) | The panel is 1920x1080, natural landscape, turned portrait. Nothing on its image turns the boot animation: the earlier 1080x1920 version rendered sideways on the unit (2026-11-16). (`ro.sf.hwrotation=270` turns nothing there, the UI included; Kiln's first boot sets `user_rotation=3`, 2026-11-17). The turned frames run upright on the glass (2026-11-16, the maintainer's photo) |
 
 ## What the build checks
 
