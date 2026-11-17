@@ -375,4 +375,77 @@ class SignInServerTest {
         assertEquals(200, landing.status)
         for (h in listOf("Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy")) assertEquals(h, r.headers[h], landing.headers[h])
     }
+
+    // ------------------------------------------------------------------ the setup page's sign-in (#453)
+
+    /** One request through the router as the phone's browser makes it, with its cookie. */
+    private fun call(s: SignInServer, path: String, cookie: String? = null): SignInServer.Response {
+        val uri = URI(path)
+        val headers = mapOf("host" to "192.0.2.10:8099") + (cookie?.let { mapOf("cookie" to it) } ?: emptyMap())
+        return s.handle(SignInServer.Request("GET", uri.rawPath, OAuth.parseQuery(uri.rawQuery), headers))
+    }
+
+    private fun startFromSetup(s: SignInServer = server): Pair<Map<String, String>, String> {
+        val r = call(s, "${SignInServer.CONTINUE}?then=setup")
+        assertEquals(302, r.status)
+        val q = OAuth.parseQuery(URI(r.headers["Location"]!!).rawQuery)
+        assertEquals("HA sees the same redirect_uri as the QR flow", "http://192.0.2.10:8099/callback", q["redirect_uri"])
+        return q to q["state"]!!
+    }
+
+    private fun text(r: SignInServer.Response) = r.body.toString(Charsets.UTF_8)
+
+    @Test
+    fun setupPageSignInGoesBackToTheSetupPage() {
+        val (q, state) = startFromSetup()
+        val bind = call(server, "${SignInServer.CONTINUE}?then=setup").headers["Set-Cookie"]!!
+        assertTrue(bind, bind.startsWith("${SignInServer.HANDOFF}=") && bind.contains("Path=/callback") &&
+            bind.contains("HttpOnly") && bind.contains("SameSite=Lax") && bind.contains("Max-Age=600"))
+        issueCode("c0de", q)
+        val r = call(server, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "gw_setup=s; ${SignInServer.HANDOFF}=$state")
+        assertEquals(200, r.status)
+        assertTrue(text(r), text(r).contains("""<meta http-equiv="refresh" content="0;url=/setup#signed-in">"""))
+        assertTrue("the binding cookie goes", r.headers["Set-Cookie"]!!.startsWith("${SignInServer.HANDOFF}=;") && r.headers["Set-Cookie"]!!.contains("Max-Age=0"))
+        assertEquals("RT", signedIn!!.first.refreshToken)
+        assertEquals(q["code_challenge"], OAuth.codeChallenge(tokenRequests.single()["code_verifier"]!!))
+        assertEquals("single use", 400, call(server, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "${SignInServer.HANDOFF}=$state").status)
+    }
+
+    @Test
+    fun setupPageSignInIsRefusedInAnotherBrowser() {
+        for (other in listOf(null, "${SignInServer.HANDOFF}=someone-elses-state")) {
+            val (q, state) = startFromSetup()
+            issueCode("c0de", q)
+            val r = call(server, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = other)
+            assertEquals("$other", 403, r.status)
+            assertTrue(text(r), text(r).contains("started in another browser"))
+        }
+        assertNull(signedIn)
+        assertTrue("the code is never used", tokenRequests.isEmpty())
+    }
+
+    @Test
+    fun setupPageSignInExpiresAfterTenMinutesWithAWayBack() {
+        var now = 0L
+        val s = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()), { auth, ok -> signedIn = auth to ok },
+            states = StateStore(clock = { now }), bindAddress = loopback)
+        val (q, state) = startFromSetup(s)
+        issueCode("c0de", q)
+        now = 10 * 60_000L
+        val r = call(s, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "${SignInServer.HANDOFF}=$state")
+        assertEquals(400, r.status)
+        assertTrue(text(r), text(r).contains("expired") && text(r).contains("""<a class="btn" href="/setup">Back to setup</a>"""))
+        assertNull(signedIn)
+    }
+
+    @Test
+    fun theQrSignInStaysAsItWas() {
+        val r = call(server, SignInServer.CONTINUE)
+        assertNull("no binding cookie for a QR sign-in", r.headers["Set-Cookie"])
+        val q = OAuth.parseQuery(URI(r.headers["Location"]!!).rawQuery)
+        issueCode("c0de", q)
+        val done = call(server, "/callback?code=c0de&state=${OAuth.enc(q["state"]!!)}")
+        assertEquals(200, done.status)
+        assertTrue(text(done).contains("Panel signed in") && !text(done).contains("/setup"))
+    }
 }

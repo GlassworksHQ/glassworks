@@ -123,10 +123,12 @@ data class PendingSignIn(
     val purpose: String = PURPOSE_SIGNIN,
     /** PKCE secret for this sign-in. Never log it. */
     val codeVerifier: String,
+    /** Started from the setup page (#453): the callback goes back to it, and only in the browser that started. */
+    val toSetup: Boolean = false,
 ) {
     override fun toString() =
         "PendingSignIn(clientId=$clientId, redirectUri=$redirectUri, haBase=$haBase, createdAt=$createdAt, " +
-            "purpose=$purpose, codeVerifier=<redacted>)"
+            "purpose=$purpose, toSetup=$toSetup, codeVerifier=<redacted>)"
 
     companion object {
         const val PURPOSE_SIGNIN = "signin"
@@ -149,12 +151,14 @@ class StateStore(
     private val pending = LinkedHashMap<String, PendingSignIn>()
 
     @Synchronized
-    fun create(clientId: String, redirectUri: String, haBase: String, purpose: String = PendingSignIn.PURPOSE_SIGNIN): NewSignIn {
+    fun create(
+        clientId: String, redirectUri: String, haBase: String, purpose: String = PendingSignIn.PURPOSE_SIGNIN, toSetup: Boolean = false,
+    ): NewSignIn {
         prune()
         while (pending.size >= max) pending.remove(pending.keys.first())
         val s = OAuth.randomState()
         val verifier = OAuth.newCodeVerifier()
-        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier)
+        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, toSetup)
         return NewSignIn(s, OAuth.codeChallenge(verifier))
     }
 

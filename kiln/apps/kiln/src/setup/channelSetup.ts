@@ -21,6 +21,11 @@ export interface ChannelSetupDeps {
   app(): Promise<PanelApp | undefined>;
   /** Opens a tab; must run inside the click (popup blockers). */
   openTab?: (url: string) => Window | null;
+  /**
+   * Signs in in this tab instead: the panel's own page goes to the panel's sign-in, which brings the browser back to
+   * it after Home Assistant (issue 453). Kiln's wizard leaves it out: leaving its page would drop the USB connection.
+   */
+  signInHere?: () => void;
 }
 
 /** What the step screens call: the wizard's Session, or the panel page's own controller. */
@@ -225,18 +230,24 @@ export class ChannelSetup {
     this.d.show({ ...cur, joinNote: undefined, joining: { ssid, step: 'err', error: stillOnHotspot(ssid) } });
   }
 
-  /** Sign in: the tab opens inside the click, and is pointed at the panel's sign-in page once the address is saved. */
+  /**
+   * Sign in, once the address is saved: in this tab where [ChannelSetupDeps.signInHere] can, else in a tab that opens
+   * inside the click and is pointed at the panel's sign-in page.
+   */
   signIn(url: string): void {
     const s = this.d.phase();
     if (s.phase !== 'ha') return;
     if (!validHaUrl(url)) { this.haState({ ...this.channel!.state!, ha: s.ha }, { error: NOT_AN_ADDRESS }); return; }
-    const tab = (this.d.openTab ?? ((u) => window.open(u, '_blank')))('about:blank');
-    this.d.show({ ...s, error: undefined, signingIn: true, note: 'Sign in on the tab that opened. This page notices when you are done.' });
+    const here = this.d.signInHere;
+    const tab = here ? null : (this.d.openTab ?? ((u) => window.open(u, '_blank')))('about:blank');
+    const note = here ? 'Opening Home Assistant\'s sign-in. You come back here after it.' : 'Sign in on the tab that opened. This page notices when you are done.';
+    this.d.show({ ...s, error: undefined, signingIn: true, note });
     void (async () => {
       try {
         const st = url === this.channel?.state?.ha.url ? this.channel.state : await this.request((x) => x.setHa(url));
         if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
-        if (tab) tab.location.href = st.ha.signinUrl;
+        if (here) here();
+        else if (tab) tab.location.href = st.ha.signinUrl;
         else if (!window.open(st.ha.signinUrl, '_blank')) throw new Error('The browser blocked the sign-in tab. Allow pop-ups for this page, then sign in again.');
       } catch (e) {
         tab?.close();
@@ -255,6 +266,16 @@ export class ChannelSetup {
       try { await this.request((x) => x.setHa(url)); } catch (e) { this.d.show({ ...s, busy: false, error: (e as Error).message }); return; }
     }
     await this.radio();
+  }
+
+  /**
+   * Back on the page from the panel's sign-in (issue 453): on to the step after Home Assistant when the panel is signed in,
+   * else Home Assistant again. What the page knew went with the navigation; the panel's state has it.
+   */
+  async afterSignIn(): Promise<void> {
+    const st = await this.state().catch(() => undefined);
+    if (st?.ha.signedIn) await this.radio();
+    else await this.homeAssistant();
   }
 
   /** The radio role. */

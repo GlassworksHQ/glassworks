@@ -4,16 +4,16 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LanPage } from '../src/lan/LanPage';
-import type { LanSession, LanView } from '../src/lan/lanSession';
+import { FULL_RAIL, type LanSession, type LanView, type RailStep } from '../src/lan/lanSession';
 
 afterEach(cleanup);
 
-function page(view: LanView) {
-  const state = { view };
+function page(view: LanView, rail: readonly RailStep[] = FULL_RAIL) {
+  const state = { view, rail };
   const lan = { subscribe: () => () => {}, get: () => state } as unknown as LanSession;
   return render(<LanPage lan={lan} />).container;
 }
-const setup = (phase: 'wifi' | 'radio') => ({ at: 'setup', setup: { phase, radio: { mode: 'off', options: [] } } }) as unknown as LanView;
+const setup = (phase: 'wifi' | 'ha' | 'radio') => ({ at: 'setup', setup: { phase, ha: { url: '', signedIn: false }, radio: { mode: 'off', options: [] } } }) as unknown as LanView;
 /** The rail's stack, top plate first. */
 const plates = (c: HTMLElement) => [...c.querySelector('.rail-stack')!.querySelectorAll('path')].reverse().map((p) => p.getAttribute('class'));
 
@@ -36,5 +36,30 @@ describe('the setup page wears the panel\'s look', () => {
 
   it('a panel that stopped answering shows its next plate in rose', () => {
     expect(plates(page({ at: 'lost', error: 'The panel stopped answering.' }))).toEqual(['ps-ghost', 'ps-ghost', 'ps-bad']);
+  });
+});
+
+describe('the rail is the panel\'s own steps (#453)', () => {
+  const NO_RADIO: RailStep[] = ['pair', 'wifi', 'ha', 'done'];
+  const steps = (c: HTMLElement) => [...c.querySelectorAll('.steps li')].map((li) => `${li.textContent} ${li.className}`);
+  const counter = (c: HTMLElement) => c.querySelector('.top .narrow')!.textContent;
+
+  it('a panel without a radio lists no radio step', () => {
+    const c = page(setup('ha'), NO_RADIO);
+    expect(steps(c)).toEqual(['Pair with the panel done', 'Wi-Fi done', 'Home Assistant now', 'Done todo']);
+    expect(counter(c)).toBe('3 of 4');
+    expect(plates(c)).toEqual(['ps-ghost', 'ps-outline', 'ps-outline']);
+  });
+
+  it('and ends on Done with every step done', () => {
+    const c = page({ at: 'done' }, NO_RADIO);
+    expect(steps(c)).toEqual(['Pair with the panel done', 'Wi-Fi done', 'Home Assistant done', 'Done done']);
+    expect(counter(c)).toBe('Done');
+  });
+
+  it('a panel with a radio lists it', () => {
+    const c = page(setup('radio'));
+    expect(steps(c)).toEqual(['Pair with the panel done', 'Wi-Fi done', 'Home Assistant done', 'Radio now', 'Done todo']);
+    expect(counter(c)).toBe('4 of 5');
   });
 });
