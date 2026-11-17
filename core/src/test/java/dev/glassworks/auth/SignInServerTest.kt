@@ -400,7 +400,7 @@ class SignInServerTest {
         val (q, state) = startFromSetup()
         val bind = call(server, "${SignInServer.CONTINUE}?then=setup").headers["Set-Cookie"]!!
         assertTrue(bind, bind.startsWith("${SignInServer.HANDOFF}=") && bind.contains("Path=/callback") &&
-            bind.contains("HttpOnly") && bind.contains("SameSite=Lax") && bind.contains("Max-Age=600"))
+            bind.contains("HttpOnly") && bind.contains("SameSite=Lax") && bind.contains("Max-Age=1800"))
         issueCode("c0de", q)
         val r = call(server, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "gw_setup=s; ${SignInServer.HANDOFF}=$state")
         assertEquals(200, r.status)

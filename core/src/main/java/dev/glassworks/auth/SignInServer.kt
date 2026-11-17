@@ -156,8 +156,9 @@ class SignInServer(
         val toSetup = req.query["then"] == THEN_SETUP
         val sign = states.create(clientId, redirect, ha, toSetup = toSetup)
         val location = OAuth.authorizeUrl(ha, clientId, redirect, sign.state, sign.codeChallenge)
-        // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie.
-        val bind = if (toSetup) mapOf("Set-Cookie" to "$HANDOFF=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=600") else emptyMap()
+        // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. It outlives
+        // the state (10 minutes), so a sign-in that ran out still shows the way back to setup.
+        val bind = if (toSetup) mapOf("Set-Cookie" to "$HANDOFF=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
         return Response(
             302, "Found",
             mapOf("Location" to location, "Cache-Control" to "no-store", "Content-Type" to "text/plain; charset=utf-8") + bind,
