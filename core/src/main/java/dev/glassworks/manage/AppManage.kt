@@ -95,9 +95,10 @@ open class AppManage(
      * The computers let in over USB adb (#435), where the app can answer "Allow USB debugging?" itself: a
      * privileged app such as the Mirror's. Null elsewhere, and the Security page has no such card.
      */
-    private val adb = if (UsbDebugging.available(app)) AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event) else null
+    private val adb: AdbComputers? = if (UsbDebugging.available(app)) AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event,
+        listening = { adbRequests?.following == true }) else null
 
-    private val adbRequests = adb?.let { c ->
+    private val adbRequests: UsbDebugging.Requests? = adb?.let { c ->
         UsbDebugging.Requests(onHeard = { h ->
             when (h) {
                 is UsbDebugging.Heard.Asked -> AdbKey.parse(h.key)?.let(c::asked)
