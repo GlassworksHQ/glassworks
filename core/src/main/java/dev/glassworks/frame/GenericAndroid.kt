@@ -6,14 +6,10 @@ package dev.glassworks.frame
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Point
-import android.hardware.display.DisplayManager
 import android.hardware.input.InputManager
 import android.os.Build
 import android.provider.Settings
-import android.view.Display
 import android.view.InputDevice
-import android.view.Surface
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.SettingsItem
@@ -44,14 +40,11 @@ class GenericAndroid(
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 
     /**
-     * The device's natural orientation (its screen at rotation 0), either way up: landscape on most tablets,
-     * portrait on the lululemon Mirror, whose image sets `ro.sf.hwrotation=270` (#198). Landscape when it can't tell.
+     * A device with a frame of its own stands as that frame says ([KNOWN]: a Pixel Tablet is landscape on its dock, though
+     * its screen is portrait at rotation 0). Any other turns as Android says: the lululemon Mirror's image makes it
+     * portrait (`ro.sf.hwrotation=270`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
      */
-    override val orientation: Orientation get() = runCatching {
-        val d = context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY) ?: return@runCatching null
-        val size = Point().also { @Suppress("DEPRECATION") d.getRealSize(it) }
-        orientationOf(size.x, size.y, d.rotation)
-    }.getOrNull() ?: Orientation.LANDSCAPE
+    override val orientation: Orientation get() = KNOWN[Platform.model] ?: Orientation.ANY
 
     /**
      * [Input.NONE] when Android lists input devices and none is a touchscreen (the Mirror's, #198): setup then works
@@ -76,12 +69,13 @@ class GenericAndroid(
         ))
 
     companion object {
-        /** The orientation of a screen [width] x [height] px at [rotation] (`Surface.ROTATION_*`) when turned back to 0. */
-        fun orientationOf(width: Int, height: Int, rotation: Int): Orientation {
-            val turned = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270
-            val (w, h) = if (turned) height to width else width to height
-            return if (h > w) Orientation.PORTRAIT else Orientation.LANDSCAPE
-        }
+        /**
+         * The devices with a frame, by `Build.MODEL` matched whole (as Kiln's `devices.ts` MODELS), and how each stands:
+         * its frame.json's `display`. `GenericAndroidKnownTest` checks both.
+         */
+        val KNOWN: Map<String, Orientation> = mapOf(
+            "Pixel Tablet" to Orientation.LANDSCAPE, // google-pixel-tablet
+        )
 
         /** [Input.NONE] when there are input devices ([ids]) and none [isTouchscreen]; else [Input.TOUCH]. */
         fun inputOf(ids: IntArray, isTouchscreen: (Int) -> Boolean): Input =
