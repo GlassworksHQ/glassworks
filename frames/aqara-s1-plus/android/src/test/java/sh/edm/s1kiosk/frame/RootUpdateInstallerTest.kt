@@ -39,6 +39,16 @@ class RootUpdateInstallerTest {
         assertTrue(installer(props).present())
     }
 
+    @Test fun aVersionThatIsntANumberMeansNoService() {
+        val props = Props()
+        for (v in listOf("-1", "yes", "1.0", " v2 ", "1-rc")) {
+            props.p["sys.s1kiosk.update.version"] = v
+            assertFalse("'$v'", installer(props).present())
+        }
+        props.p["sys.s1kiosk.update.version"] = " 3\n" // getprop's own whitespace
+        assertTrue(installer(props).present())
+    }
+
     @Test fun onlyAFailedLastInstallIsReported() {
         val props = Props()
         assertNull(installer(props).lastFailure())

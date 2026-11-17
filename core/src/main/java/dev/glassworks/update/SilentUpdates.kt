@@ -9,6 +9,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import dev.glassworks.platform.Platform
 import dev.glassworks.platform.PlatformApi
 
@@ -55,15 +56,39 @@ sealed class SilentUpdates(
 
     data class OldAndroid(val android: String) : SilentUpdates(false, "Android $android asks for a tap on each update", DEVICE_OWNER_FIX)
 
-    /** Android needs the new APK to target [needed]; the next release is assumed to target what this one does ([has]). */
-    data class TargetTooLow(val android: String, val needed: Int, val has: Int) : SilentUpdates(
+    /**
+     * Android needs the new APK to target [needed]; the next release is assumed to target what this one does ([has]).
+     * Without [unknownApps] a newer release alone wouldn't do, so the fix says both.
+     */
+    data class TargetTooLow(val android: String, val needed: Int, val has: Int, val unknownApps: Boolean = true) : SilentUpdates(
         false, "Android $android needs an app that targets API $needed, and this one targets $has",
-        "To change it: wait for a release that targets $needed, or make the app device owner on a reset device with no accounts",
+        "To change it: wait for a release that targets $needed" +
+            (if (unknownApps) "" else " and allow “Install unknown apps” for the app") +
+            ", or make the app device owner on a reset device with no accounts",
     )
 
     data object UnknownAppsOff : SilentUpdates(
         false, "Android needs “Install unknown apps” allowed for the app", "To change it: allow it in Android's settings, under Apps",
     )
+
+    /**
+     * [read] at most once per [maxAgeMs]. The settings row and the setup step ask every couple of seconds, often
+     * twice in a row (its words, then whether it's amber), and each read is a few binder calls.
+     */
+    class Fresh(
+        private val maxAgeMs: Long = 1_000,
+        private val now: () -> Long = SystemClock::elapsedRealtime,
+        private val read: () -> SilentUpdates?,
+    ) : () -> SilentUpdates? {
+        private class Read(val at: Long, val answer: SilentUpdates?)
+        @Volatile private var last: Read? = null
+
+        override fun invoke(): SilentUpdates? {
+            val t = now()
+            last?.takeIf { t - it.at < maxAgeMs }?.let { return it.answer }
+            return read().also { last = Read(t, it) }
+        }
+    }
 
     /** The frame's root update service: [NONE] when the frame has none (every device but the S1). */
     enum class Root { NONE, MISSING, PRESENT }
@@ -93,7 +118,7 @@ sealed class SilentUpdates(
             f.deviceOwner -> DeviceOwner
             f.root == Root.MISSING -> NoRootService
             f.minTarget == null -> OldAndroid(f.android)
-            f.target < f.minTarget -> TargetTooLow(f.android, f.minTarget, f.target)
+            f.target < f.minTarget -> TargetTooLow(f.android, f.minTarget, f.target, f.unknownApps)
             !f.unknownApps -> UnknownAppsOff
             else -> SelfUpdate
         }
