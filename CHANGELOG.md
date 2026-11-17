@@ -292,6 +292,14 @@ below as the release notes.
   leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
   button that nobody could press. It now stays on the setup screen, which says how to set it up from a
   computer. On every panel, the offline screen says "Wi-Fi is off" only when Android says so.
+- **The panel's "Wi-Fi setup · done" card says how the Wi-Fi came.** It showed the Bluetooth mark whenever the
+  panel came online while Bluetooth setup was open, also when the Wi-Fi came from the setup page on a phone. Now
+  Bluetooth shows only for Wi-Fi sent over Bluetooth; Wi-Fi from the setup page, from Kiln or from Android's
+  settings shows a Wi-Fi mark and says where it came from.
+- **The phone's setup page no longer waits for news that can't come.** Once it sends your Wi-Fi over the panel's
+  own Wi-Fi, the panel closes that network within moments, and the page with it. The page now says so once:
+  sent, watch the panel's screen, and put the phone back on your own Wi-Fi, instead of steps that seemed to
+  still be updating.
 - **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
   Panes image lets one adb key in without asking: the project's own key, published with its private
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its

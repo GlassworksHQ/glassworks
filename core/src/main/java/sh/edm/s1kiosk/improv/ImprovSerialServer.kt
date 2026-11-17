@@ -60,7 +60,7 @@ object ImprovSerialServer {
 
         override fun connect(ssid: String, password: String, done: (redirect: String?) -> Unit) {
             InstallerGlue.post {
-                val ok = ImprovController.connectFromInstaller(ssid, password, hidden = null) { o ->
+                val ok = ImprovController.connectFromInstaller(ssid, password, ImprovDone.Via.COMPUTER, hidden = null) { o ->
                     when (o) {
                         is WifiProvisioner.Outcome.Connected -> done(redirectFor(o.ip ?: InstallerGlue.wlanIpv4()))
                         is WifiProvisioner.Outcome.Failed -> done(null)

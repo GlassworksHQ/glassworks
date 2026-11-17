@@ -125,6 +125,9 @@ object ImprovController {
     /** The Wi-Fi attempt in flight belongs to the installer (progress goes there), not to Improv. */
     private var installerJoining = false
 
+    /** How the Wi-Fi was last sent since the session started: the done card follows it (#460). Null: not sent to the app. */
+    private var sentVia: ImprovDone.Via? = null
+
     /** Until when a finished join's result may still be on its way to the installer or HA (ms, elapsedRealtime). */
     @Volatile private var settleUntil = 0L
 
@@ -210,7 +213,7 @@ object ImprovController {
         val server = ble ?: ImprovBleServer(app, main, bleListener).also { ble = it }
         val s = ImprovSession(effects)
         session = s
-        reason = why; auto = isAuto; failure = null; progress = null; provisionedUrl = null; connectingSsid = ""
+        reason = why; auto = isAuto; failure = null; progress = null; provisionedUrl = null; connectingSsid = ""; sentVia = null
         startError = null; advertising = false; clients.clear()
         windowEndsAt = now + WINDOW_MS
         s.start(requireAuthorization = true, now = now)
@@ -267,6 +270,8 @@ object ImprovController {
     fun connectFromInstaller(
         ssid: String,
         psk: String,
+        /** Where it came from: Kiln over USB, or the panel's setup page. The done card says so. */
+        via: ImprovDone.Via,
         hidden: Boolean? = null,
         done: ((WifiProvisioner.Outcome) -> Unit)? = null,
     ): Boolean {
@@ -279,6 +284,7 @@ object ImprovController {
         Log.i(TAG, "installer Wi-Fi: joining the chosen network")
         installerWifi = InstallerWifi(ssid, InstallerWifi.Phase.CONNECTING)
         installerJoining = true
+        sentVia = via
         app.glassworks.screen.wake("installer wifi")
         app.glassworks.setupHotspot?.configured() // off first: on most devices the radio can't join while it runs (#197)
         refreshOverlay()
@@ -384,6 +390,7 @@ object ImprovController {
 
         override fun startWifi(ssid: String, password: String) {
             connectingSsid = ssid
+            sentVia = ImprovDone.Via.BLUETOOTH
             failure = null
             progress = null
             installerJoining = false
@@ -571,13 +578,16 @@ object ImprovController {
                 accent = ImprovOverlay.AMBER,
                 busy = true,
             )
-            ImprovState.PROVISIONED -> ImprovOverlay.Model(
-                label = "Wi-Fi setup · done",
-                title = if (connectingSsid.isNotEmpty()) "Connected to $connectingSsid" else "Panel is online",
-                body = provisionedUrl?.let { "Continue setup at $it" } ?: "Wi-Fi is set up.",
-                primary = "Done" to { overlay.hide() },
-                accent = ImprovOverlay.GREEN,
-            )
+            ImprovState.PROVISIONED -> {
+                val via = sentVia ?: ImprovDone.Via.OTHER
+                val c = ImprovDone.card(via, if (via == ImprovDone.Via.BLUETOOTH) connectingSsid else installerWifi?.ssid, provisionedUrl)
+                ImprovOverlay.Model(
+                    label = c.label, title = c.title, body = c.body,
+                    primary = "Done" to { overlay.hide() },
+                    accent = ImprovOverlay.GREEN,
+                    mark = c.mark,
+                )
+            }
         }
         overlay.show(m)
     }
