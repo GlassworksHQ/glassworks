@@ -267,8 +267,9 @@ project key refused).
 
 **Status (2026-11-17): verified on the unit.** The cause read on the unit (the root, read-only); the
 fix ran on the unit with the legacy build from #443: the first boot logged rotation 3, **the
-maintainer saw the app upright on the glass**, no crash, and still portrait after a reboot (the
-results are on #439).
+maintainer saw the app upright on the glass**, and no crash (the results are on #439). A reboot
+wasn't checked in that run: that the rotation holds after one is **untested**, though
+`user_rotation` lives in `userdata` like every other setting.
 
 The first flash with the real legacy build of Glassworks 0.1.0 (the patched pipeline, a throwaway
 key) came up **sideways**: the maintainer saw landscape. Read on the unit afterwards:

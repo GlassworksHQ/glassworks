@@ -92,7 +92,7 @@ from `system` or the fresh `userdata` it already builds?
 | Wi-Fi on | Overlay: `def_wifi_on` true | `/system/vendor/overlay/GlassworksSettings.apk` | Read: AOSP 6.0.1 PMS and DatabaseHelper |
 | The person's network | `network={ ssid psk key_mgmt=WPA-PSK priority=1 }` after the template; the PSK is PBKDF2-HMAC-SHA1 (passphrase, SSID, 4096, 256 bits), never the password | `userdata`'s `/misc/wifi/wpa_supplicant.conf`, 0660 1000:1010, `wifi_data_file` | Read: AOSP 6.0.1 wifi.c; tests on the IEEE 802.11i vectors |
 | Screen stays on | Overlay: `def_screen_off_timeout` 2147483647 (no timeout in practice) and `def_stay_on_while_plugged_in` true. DatabaseHelper turns that into **1** (AC only), not 7: there is no default that gives 7 | Overlay | Read: `DatabaseHelper.java:2580` |
-| Portrait, no auto-rotate | Overlay: `def_accelerometer_rotation` false. The first boot over adb: `settings put system accelerometer_rotation 0`, `settings put system user_rotation 3`, then `dumpsys window windows` until `mRotation=3` exactly; Kiln stops after 10 s otherwise (`setPortrait`) | Overlay, the first boot | **Corrected 2026-11-17.** This row said rotation stays 0 and `ro.sf.hwrotation=270` makes it portrait, with no `user_rotation` needed. Wrong: the real legacy app came up **sideways** (the maintainer saw landscape), and nothing on the image reads `ro.sf.hwrotation` ([image-patch.md](image-patch.md#the-rotation-2026-11-17)). 3 is upright: **verified** 2026-11-17, the maintainer on the glass, and still portrait after a reboot |
+| Portrait, no auto-rotate | Overlay: `def_accelerometer_rotation` false. The first boot over adb: `settings put system accelerometer_rotation 0`, `settings put system user_rotation 3`, then `dumpsys window windows` until `mRotation=3` exactly; Kiln stops after 10 s otherwise (`setPortrait`) | Overlay, the first boot | **Corrected 2026-11-17.** This row said rotation stays 0 and `ro.sf.hwrotation=270` makes it portrait, with no `user_rotation` needed. Wrong: the real legacy app came up **sideways** (the maintainer saw landscape), and nothing on the image reads `ro.sf.hwrotation` ([image-patch.md](image-patch.md#the-rotation-2026-11-17)). 3 is upright: **verified** 2026-11-17 at the first boot, the maintainer on the glass. After a reboot: **untested** (the run's record on #439 lists it as not checked; the setting lives in `userdata`, so it should hold) |
 | Our app as HOME | Unchanged: `makeOnlyHome` hides the image's launchers only once our app answers HOME, and Kiln refuses an APK without one (#385) | | Verified with the probe app (below). The legacy build of Glassworks, Kiln's app since 2026-11-16, has not run on a Mirror yet |
 
 The overlay is `frames/lululemon-mirror/overlay` (`AndroidManifest.xml`, `res/values/defaults.xml`).
@@ -137,8 +137,8 @@ the network you entered", and tests check that no log line holds the name or the
 ## The root's test plan
 
 Steps 1–4 and 6 ran on 2026-11-16 (above). Step 5 changed on 2026-11-17 and passed that day on the
-root's run of #439: rotation 3, the app upright on the glass, portrait after a reboot. The run above
-(2026-11-16) saw rotation 0.
+root's run of #439 at the first boot: rotation 3, the app upright on the glass. Its "repeat after a
+reboot" part is **untested** (not checked in that run). The run above (2026-11-16) saw rotation 0.
 
 Flash with this build (Kiln or `tools/mirror/flash-node.ts`), with the Wi-Fi name and password
 given, a Home Assistant address, and an APK that has a home screen on API 23. Then, touching nothing
