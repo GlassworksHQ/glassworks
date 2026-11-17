@@ -19,10 +19,18 @@ public sealed interface VoiceReadiness {
     public data object Ready : VoiceReadiness
 
     /** The wake word's model couldn't be had. It tries again at [retryAtMs]. */
-    public data class ModelFailed(val failure: ModelFailure, val retryAtMs: Long) : VoiceReadiness
+    public data class ModelFailed(
+        /** Why. */
+        val failure: ModelFailure,
+        /** When it tries again on its own. */
+        val retryAtMs: Long,
+    ) : VoiceReadiness
 
     /** The wake word engine (TensorFlow Lite) didn't start on this device. It tries again at [retryAtMs]. */
-    public data class EngineFailed(val retryAtMs: Long) : VoiceReadiness
+    public data class EngineFailed(
+        /** When it tries again on its own. */
+        val retryAtMs: Long,
+    ) : VoiceReadiness
 
     /** The app may not use the microphone (RECORD_AUDIO refused). */
     public data object MicrophoneNotAllowed : VoiceReadiness
@@ -43,7 +51,10 @@ public sealed interface ModelFailure {
     public data object SecureConnection : ModelFailure
 
     /** The server answered with HTTP [status]. */
-    public data class Http(val status: Int) : ModelFailure
+    public data class Http(
+        /** The HTTP status code, such as 404. */
+        val status: Int,
+    ) : ModelFailure
 
     /** The download wasn't the model: it failed its SHA-256 check, so it wasn't used. */
     public data object CheckFailed : ModelFailure
