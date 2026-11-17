@@ -20,6 +20,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import java.io.IOException
 import java.math.BigInteger
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -91,7 +92,10 @@ class HttpsTrustTest {
             get(url, factory)
             fail("$url was trusted")
         } catch (_: SSLException) {
-            // an SSLHandshakeException or SSLPeerUnverifiedException: refused by TLS, not a timeout or a refused connection
+            // SSLHandshakeException or SSLPeerUnverifiedException: refused by TLS
+        } catch (e: IOException) {
+            // The JDK's own URL check ("HTTPS hostname wrong"), which some JDKs reach instead. Not a timeout.
+            if ("hostname" !in e.message.orEmpty().lowercase()) throw e
         }
     }
 
