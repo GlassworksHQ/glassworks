@@ -47,6 +47,8 @@ class ImprovOverlay(private val ctx: Context) {
         val secondary: Pair<String, () -> Unit>? = null,
         val accent: Int = SKY,
         val busy: Boolean = false,
+        /** The card's mark: Bluetooth for Improv over BLE, Wi-Fi when the Wi-Fi came another way (#460). */
+        val mark: ImprovDone.Mark = ImprovDone.Mark.BLUETOOTH,
     )
 
     private val d = ctx.resources.displayMetrics.density
@@ -55,7 +57,7 @@ class ImprovOverlay(private val ctx: Context) {
     private var attachedTo: ViewGroup? = null
     private var pulse: ObjectAnimator? = null
 
-    private lateinit var icon: BluetoothGlyph
+    private lateinit var icon: MarkGlyph
     private lateinit var labelView: TextView
     private lateinit var titleView: TextView
     private lateinit var bodyView: TextView
@@ -74,6 +76,7 @@ class ImprovOverlay(private val ctx: Context) {
         bodyView.text = m.body
         icon.color = m.accent
         icon.busy = m.busy
+        icon.mark = m.mark
         buttons.removeAllViews()
         m.secondary?.let { (t, a) -> buttons.addView(button(t, primary = false, a)) }
         m.primary?.let { (t, a) -> buttons.addView(button(t, primary = true, a)) }
@@ -157,7 +160,7 @@ class ImprovOverlay(private val ctx: Context) {
         }
 
         val head = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        icon = BluetoothGlyph(ctx)
+        icon = MarkGlyph(ctx)
         head.addView(icon, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(14) })
         val texts = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         labelView = TextView(ctx).apply {
@@ -214,8 +217,11 @@ class ImprovOverlay(private val ctx: Context) {
     private fun dp(v: Int) = (v * d).toInt()
 
     /** The Bluetooth rune in a rounded tile (like the dashboard's `.room .ic`). */
-    private class BluetoothGlyph(ctx: Context) : View(ctx) {
+    /** The card's mark on its tinted tile: the Bluetooth rune, or the Wi-Fi fan. */
+    private class MarkGlyph(ctx: Context) : View(ctx) {
         var color: Int = SKY
+            set(v) { field = v; invalidate() }
+        var mark = ImprovDone.Mark.BLUETOOTH
             set(v) { field = v; invalidate() }
         var busy = false
             set(v) {
@@ -249,6 +255,7 @@ class ImprovOverlay(private val ctx: Context) {
             c.drawRoundRect(0f, 0f, w, h, 14 * d, 14 * d, tile)
             stroke.color = color
             stroke.strokeWidth = 2.2f * d
+            if (mark == ImprovDone.Mark.WIFI) { wifi(c, w, h); return }
             val cx = w / 2; val top = h * 0.24f; val bot = h * 0.76f; val r = w * 0.15f
             path.reset()
             path.moveTo(cx - r, h * 0.36f)
@@ -258,6 +265,17 @@ class ImprovOverlay(private val ctx: Context) {
             path.lineTo(cx + r, h * 0.38f)
             path.lineTo(cx - r, h * 0.64f)
             c.drawPath(path, stroke)
+        }
+
+        /** Three arcs over a dot, opening upward. */
+        private fun wifi(c: Canvas, w: Float, h: Float) {
+            val cx = w / 2; val cy = h * 0.70f
+            for (r in listOf(0.13f, 0.23f, 0.33f)) {
+                val rr = w * r
+                c.drawArc(cx - rr, cy - rr, cx + rr, cy + rr, 225f, 90f, false, stroke)
+            }
+            tile.color = color
+            c.drawCircle(cx, cy, 1.9f * d, tile)
         }
     }
 

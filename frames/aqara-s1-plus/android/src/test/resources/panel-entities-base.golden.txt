@@ -25,18 +25,17 @@ diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
-idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
 illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=false|options=|eventTypes=
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
+max_brightness|487734873|NumberEntity|Max auto brightness|mdi:brightness-percent||CONFIG|authOnly=false|options=|eventTypes=
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 mute_microphone|-858890227|SwitchEntity|Mute microphone|mdi:microphone-off||CONFIG|authOnly=false|options=|eventTypes=
-night_idle_timeout|1514960004|NumberEntity|Night idle timeout|mdi:timer-sand|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
-night_window|-628240202|TextEntity|Night window|mdi:weather-night||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 notifications|-212671633|SwitchEntity|Notifications|mdi:bell-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 notify|-1603436996|ApiAction|notify|||NONE|authOnly=false|options=|eventTypes=
 open_settings|-1613451641|ButtonEntity|Open device settings|mdi:cog||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -110,18 +109,17 @@ diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
-idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
 illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=false|options=|eventTypes=
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
+max_brightness|487734873|NumberEntity|Max auto brightness|mdi:brightness-percent||CONFIG|authOnly=false|options=|eventTypes=
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 mute_microphone|-858890227|SwitchEntity|Mute microphone|mdi:microphone-off||CONFIG|authOnly=false|options=|eventTypes=
-night_idle_timeout|1514960004|NumberEntity|Night idle timeout|mdi:timer-sand|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
-night_window|-628240202|TextEntity|Night window|mdi:weather-night||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 notifications|-212671633|SwitchEntity|Notifications|mdi:bell-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 notify|-1603436996|ApiAction|notify|||NONE|authOnly=false|options=|eventTypes=
 open_settings|-1613451641|ButtonEntity|Open device settings|mdi:cog||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -197,18 +195,17 @@ diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
-idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
 illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=false|options=|eventTypes=
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
+max_brightness|487734873|NumberEntity|Max auto brightness|mdi:brightness-percent||CONFIG|authOnly=false|options=|eventTypes=
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 mute_microphone|-858890227|SwitchEntity|Mute microphone|mdi:microphone-off||CONFIG|authOnly=false|options=|eventTypes=
-night_idle_timeout|1514960004|NumberEntity|Night idle timeout|mdi:timer-sand|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
-night_window|-628240202|TextEntity|Night window|mdi:weather-night||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 notifications|-212671633|SwitchEntity|Notifications|mdi:bell-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 notify|-1603436996|ApiAction|notify|||NONE|authOnly=false|options=|eventTypes=
 open_settings|-1613451641|ButtonEntity|Open device settings|mdi:cog||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -275,18 +272,17 @@ diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
-idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
 illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=false|options=|eventTypes=
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
+max_brightness|487734873|NumberEntity|Max auto brightness|mdi:brightness-percent||CONFIG|authOnly=false|options=|eventTypes=
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 mute_microphone|-858890227|SwitchEntity|Mute microphone|mdi:microphone-off||CONFIG|authOnly=false|options=|eventTypes=
-night_idle_timeout|1514960004|NumberEntity|Night idle timeout|mdi:timer-sand|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
-night_window|-628240202|TextEntity|Night window|mdi:weather-night||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 notifications|-212671633|SwitchEntity|Notifications|mdi:bell-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 notify|-1603436996|ApiAction|notify|||NONE|authOnly=false|options=|eventTypes=
 open_settings|-1613451641|ButtonEntity|Open device settings|mdi:cog||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -353,18 +349,17 @@ diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
-idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
+idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
 illuminance|-1763685258|SensorEntity|Illuminance||illuminance|NONE|authOnly=false|options=|eventTypes=
 improv_ble|874008966|ButtonEntity|Start Wi-Fi setup (Bluetooth)|mdi:bluetooth-settings||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 ip_address|339278791|TextSensorEntity|IP address|mdi:ip-network||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 keep_time_zone|-552930949|SwitchEntity|Keep time zone|mdi:map-clock-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 lan_setup|332459742|ButtonEntity|Allow setup over the network|mdi:lan-connect||CONFIG|authOnly=false|options=|eventTypes=
 last_restart_reason|8212602|TextSensorEntity|Last restart reason|mdi:restart-alert||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
+max_brightness|487734873|NumberEntity|Max auto brightness|mdi:brightness-percent||CONFIG|authOnly=false|options=|eventTypes=
 memory_available|-647501798|SensorEntity|RAM available|mdi:memory|data_size|DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 mic_gain|456212070|NumberEntity|Mic gain|mdi:microphone-plus||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 mute_microphone|-858890227|SwitchEntity|Mute microphone|mdi:microphone-off||CONFIG|authOnly=false|options=|eventTypes=
-night_idle_timeout|1514960004|NumberEntity|Night idle timeout|mdi:timer-sand|duration|CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
-night_window|-628240202|TextEntity|Night window|mdi:weather-night||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 notifications|-212671633|SwitchEntity|Notifications|mdi:bell-outline||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 notify|-1603436996|ApiAction|notify|||NONE|authOnly=false|options=|eventTypes=
 open_settings|-1613451641|ButtonEntity|Open device settings|mdi:cog||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault

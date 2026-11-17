@@ -130,7 +130,6 @@ class ScreenPinHarness {
     val lux get() = screen.lux
     val brightness get() = screen.brightness
     val screenIsOn get() = screen.screenOn
-    val night get() = screen.isNight()
 
     /** `settings secure proximity_threshold`, or null while nothing wrote it. */
     val proximityThreshold: Int?

@@ -31,3 +31,19 @@
   use_blueprint:
     path: GlassworksHQ/panel-motion-snapshot.yaml
     input: {presence: binary_sensor.kitchen_panel_camera_presence, camera: camera.kitchen_panel_camera, phone: notify.mobile_app_example_phone}
+- id: night
+  alias: night mode
+  use_blueprint:
+    path: GlassworksHQ/panel-night-mode.yaml
+    input:
+      idle_timeouts: [number.kitchen_panel_idle_timeout, number.hall_panel_idle_timeout]
+      max_brightness: [number.kitchen_panel_max_auto_brightness, number.hall_panel_max_auto_brightness]
+- id: night_sun
+  alias: night mode by the sun
+  use_blueprint:
+    path: GlassworksHQ/panel-night-mode.yaml
+    input:
+      idle_timeouts: [number.kitchen_panel_idle_timeout]
+      night: [{condition: sun, after: sunset, before: sunrise}]
+      night_idle: 30
+      night_brightness: 10

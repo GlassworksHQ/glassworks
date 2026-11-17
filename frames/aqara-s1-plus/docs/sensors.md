@@ -41,19 +41,25 @@ See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `sh/edm/s1kiosk/fra
 (the VI5300 range table and the light sensor):
 
 - **Wake on approach**, and the screen stays on while someone is near.
-- **Idle off** after N seconds with nobody near and no touches. A separate shorter timeout applies
-  inside a configurable **night window**. This replaces Aqara's DND logic, which is now disabled
-  via `service call A_device_control 7 i32 0 i32 0`.
-- **Auto-brightness** from lux (log curve, capped lower at night), applied as window brightness.
+- **Idle off** after N seconds with nobody near and no touches. This replaces Aqara's DND logic,
+  which is now disabled via `service call A_device_control 7 i32 0 i32 0`.
+- **Auto-brightness** from lux (log curve, up to *Max auto brightness*), applied as window brightness.
+- **No clock of its own.** Up to 0.4.3 the panel had a night window (22:00–07:00) with a 20 s
+  timeout and a 20% brightness cap. Home Assistant decides when it is night now: the
+  [Panel night mode](../../../docs/blueprints.md) blueprint switches the idle timeout and the brightness
+  limit between the day and night values you configure. It changes a value only when it matches the
+  other period's configured value: at night a panel still at the day value, by day one still at the
+  night value. Any other value, such as 300 s set by hand when the day value is 120 s, stays as it is.
+  It never restores an earlier value of its own.
 - **Presence range** is configurable in metres. It needs
   `pm grant sh.edm.s1kiosk android.permission.WRITE_SECURE_SETTINGS`.
 - Instant screen-off uses `DevicePolicyManager.lockNow()` if the app is a device admin
   (`dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver`). Otherwise it falls back
   to the system screen-off timeout.
 - The live state is exposed to the dashboard page as `window.s1kiosk`
-  (`{presence, proximityRaw, lux, screenOn, night}`) plus a `s1kiosk-state` DOM event.
+  (`{presence, proximityRaw, lux, screenOn, voice}`) plus a `s1kiosk-state` DOM event.
 
 All of this is exposed to Home Assistant through the panel's ESPHome device (presence, illuminance,
-screen light, timeouts, night window, presence range); see [esphome.md](../../../docs/esphome.md).
+screen light, idle timeout, max auto brightness, presence range); see [esphome.md](../../../docs/esphome.md).
 
 Not used yet: the SC7A20 accelerometer (a tap/knock-to-wake idea).

@@ -40,14 +40,11 @@ class ScreenPolicyTest {
         override var manualBrightness = manualBrightness
             set(v) { writes += "manualBrightness"; field = v }
         override val screenMode = "presence"
-        override val idleOffSec = 120
-        override var nightWindow = ""
-        override val nightIdleOffSec = 20
+        override var idleOffSec = 120
         override val wakeOnApproach = true
         override val presenceRangeM = 0f
         override val minBrightness = 0.1f
-        override val maxBrightness = 1f
-        override val nightMaxBrightness = 0.2f
+        override var maxBrightness = 1f
     }
 
     /** Counts starts and stops, and lets a test send a reading while it is started. */
@@ -177,16 +174,16 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
-    @Test fun nightCapsBrightnessUnlessHeld() {
-        assertEquals(0.2f, ScreenPolicy.brightnessCap(night = true, held = false, max = 1f, nightMax = 0.2f))
-        assertEquals(1f, ScreenPolicy.brightnessCap(night = true, held = true, max = 1f, nightMax = 0.2f))
-        assertEquals(0.8f, ScreenPolicy.brightnessCap(night = false, held = false, max = 0.8f, nightMax = 0.2f))
+    @Test fun theLimitCapsBrightnessUnlessHeld() {
+        assertEquals(0.2f, ScreenPolicy.brightnessCap(held = false, max = 0.2f))
+        assertEquals(1f, ScreenPolicy.brightnessCap(held = true, max = 0.2f))
+        assertEquals(1f, ScreenPolicy.brightnessCap(held = false, max = 1f))
     }
 
-    /** A high or critical notification (#118): full brightness at night, at once, and back after release. */
-    @Test fun aHoldLiftsNightDimmingAtOnce() {
+    /** A high or critical notification (#118): full brightness past a night limit Home Assistant set, at once, and back after release. */
+    @Test fun aHoldLiftsTheBrightnessLimitAtOnce() {
         val light = FakeSource()
-        val settings = Settings().apply { nightWindow = "00:00-23:59" }
+        val settings = Settings().apply { maxBrightness = 0.2f }
         val screen = policy(light = light, settings = settings)
         screen.start(context)
         light.lux!!(1000f)
@@ -218,11 +215,11 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
-    /** Clarity's test hold (#240): the screen on past the 20 s night timeout, at the night's brightness. */
-    @Test fun aTestHoldKeepsTheScreenOnAndLeavesNightBrightnessAlone() {
+    /** Clarity's test hold (#240): the screen on past a 20 s night timeout, at the night's brightness limit. */
+    @Test fun aTestHoldKeepsTheScreenOnAndLeavesTheBrightnessLimitAlone() {
         ShadowLog.clear()
         val light = FakeSource()
-        val settings = Settings().apply { nightWindow = "00:00-23:59" }
+        val settings = Settings().apply { idleOffSec = 20; maxBrightness = 0.2f }
         val screen = policy(light = light, settings = settings)
         screen.start(context)
         light.lux!!(1000f)
@@ -372,7 +369,7 @@ class ScreenPolicyTest {
      * outlives the restart, and still expires on time.
      */
     @Test fun aTestHoldOutlivesARestartOfTheApp() {
-        val settings = Settings().apply { nightWindow = "00:00-23:59" }
+        val settings = Settings().apply { idleOffSec = 20 }
         val before = policy(settings = settings)
         before.start(context)
         before.testHold(context, 600)

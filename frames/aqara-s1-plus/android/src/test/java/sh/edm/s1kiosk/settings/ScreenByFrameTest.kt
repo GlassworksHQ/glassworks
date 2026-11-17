@@ -96,7 +96,7 @@ class ScreenByFrameTest {
         assertEquals(ScreenHardware(Presence.Sensor(ranged = true), light = true, touch = true), hardware(AqaraS1Plus()))
         val (rows, html) = screen(AqaraS1Plus())
         assertEquals(
-            listOf(CoreSettings.WAKE_TITLE, "Presence range", "Turn off when idle", "At night", "At night, turn off after", "Brightness", AqaraS1Plus.SETTINGS_TITLE),
+            listOf(CoreSettings.WAKE_TITLE, "Presence range", "Turn off when idle", "Brightness", AqaraS1Plus.SETTINGS_TITLE),
             rows.titles(),
         )
         assertEquals("Uses the presence sensor", rows.wake().detail)
@@ -106,7 +106,7 @@ class ScreenByFrameTest {
     @Test fun aTabletWithNothingShowsNoPresenceLightOrRange() {
         val (rows, html) = screen(generic())
         assertEquals(ScreenHardware(Presence.None, light = false, touch = true), hardware(generic()))
-        assertEquals(listOf("Turn off when idle", "At night", "At night, turn off after", SettingsMenu.ANDROID_TITLE), rows.titles())
+        assertEquals(listOf("Turn off when idle", SettingsMenu.ANDROID_TITLE), rows.titles())
         for (s in listOf("someone's near", "Presence range", "presence sensor", "Brightness", "room's light")) assertFalse(s, s in html)
     }
 
@@ -115,7 +115,7 @@ class ScreenByFrameTest {
         sensor(Sensor.TYPE_LIGHT, "Ambient Light")
         assertEquals(ScreenHardware(Presence.Sensor(ranged = false), light = true, touch = true), hardware(generic()))
         val (rows, html) = screen(generic())
-        assertEquals(listOf(CoreSettings.WAKE_TITLE, "Turn off when idle", "At night", "At night, turn off after", "Brightness", SettingsMenu.ANDROID_TITLE), rows.titles())
+        assertEquals(listOf(CoreSettings.WAKE_TITLE, "Turn off when idle", "Brightness", SettingsMenu.ANDROID_TITLE), rows.titles())
         assertEquals("Uses the proximity sensor", rows.wake().detail)
         assertTrue("Uses the proximity sensor" in html)
         assertFalse("Presence range" in html)

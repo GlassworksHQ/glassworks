@@ -87,7 +87,7 @@ wall, and Glassworks hands them to Home Assistant, simply.**
 
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-core-on-dark.svg"><img alt="Glassworks Core" src="https://www.glassworks.dev/brand/badge-core-on-light.svg" height="30"></picture></a>
 
-What runs on every panel: the ESPHome device, the screen policy (presence, light, idle, night), the
+What runs on every panel: the ESPHome device, the screen policy (presence, light, idle), the
 web engine that shows the dashboard, setup, the Manage page, and the pane host.
 
 - **Device-neutral.** No device paths, no vendor services. That's the frame's job.

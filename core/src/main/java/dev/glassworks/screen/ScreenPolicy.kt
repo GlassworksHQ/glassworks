@@ -17,7 +17,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import java.io.File
-import java.util.Calendar
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.log10
 
@@ -25,13 +24,14 @@ import kotlin.math.log10
  * When the screen is on and how bright it is, from the frame's [presence] and [light] sources.
  *
  *  - Approaching the panel wakes the screen, and it stays on while someone is near.
- *  - After `idleOffSec` with nobody near and no touch, the screen turns off
- *    (`nightIdleOffSec` inside the night window).
- *  - Brightness follows ambient light (log curve), capped lower at night.
- *  - [hold] keeps the screen on at the day's brightness, past night dimming and the idle timeout,
+ *  - After `idleOffSec` with nobody near and no touch, the screen turns off.
+ *  - Brightness follows ambient light (log curve), up to `maxBrightness`.
+ *  - Nothing here knows the time of day (#473): Home Assistant changes the idle timeout and the
+ *    brightness limit at night, with the Panel night mode blueprint.
+ *  - [hold] keeps the screen on at full brightness, past the brightness limit and the idle timeout,
  *    while something urgent is on it (a high or critical notification), until [release].
  *  - [testHold] keeps the screen on past the idle timeout for a test run, and changes nothing else:
- *    brightness and night dimming stay as they are. It ends by itself.
+ *    brightness stays as it is. It ends by itself.
  *
  * Turning the screen off uses DevicePolicyManager.lockNow() when [admin] is an active device admin.
  *
@@ -68,9 +68,8 @@ class ScreenPolicy(
         const val TEST_HOLD_EXTRA = "test_hold"
         const val TEST_HOLD_S_EXTRA = "test_hold_s"
 
-        /** The most automatic brightness may reach: lower at night, unless something [held] the screen. */
-        fun brightnessCap(night: Boolean, held: Boolean, max: Float, nightMax: Float): Float =
-            if (night && !held) minOf(max, nightMax) else max
+        /** The most automatic brightness may reach: [max], or full while something [held] the screen. */
+        fun brightnessCap(held: Boolean, max: Float): Float = if (held) 1f else max
     }
 
     private lateinit var ctx: Context
@@ -154,7 +153,7 @@ class ScreenPolicy(
         applyPresenceRange()
         handler.post(tick)
         // A test restarted the app inside its hold: the new process holds the screen from its start,
-        // before the kiosk's idle timeout (20 s at night) can turn it off.
+        // before the kiosk's idle timeout can turn it off.
         if (!testHeld) testHoldFile(ctx).read(SystemClock.elapsedRealtime(), boot(ctx), TEST_HOLD_MAX_S * 1000L)?.let { end ->
             testHeld = true
             testHoldUntil = end
@@ -194,17 +193,6 @@ class ScreenPolicy(
         if (!keepOn) setKeepOn(true)
     }
 
-    fun isNight(): Boolean {
-        val w = prefs.nightWindow
-        val m = Regex("""^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$""").find(w) ?: return false
-        val (sh, sm, eh, em) = m.destructured
-        val start = sh.toInt() * 60 + sm.toInt()
-        val end = eh.toInt() * 60 + em.toInt()
-        val c = Calendar.getInstance()
-        val now = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE)
-        return if (start <= end) now in start until end else now >= start || now < end
-    }
-
     /**
      * Turns the screen on and keeps it on until the idle timeout counts down from now (#257), also after
      * a lockNow() sleep, when nothing else would keep it on.
@@ -232,7 +220,7 @@ class ScreenPolicy(
     }
 
     /**
-     * Wakes the screen and keeps it on, at the day's maximum brightness, past night dimming and the idle
+     * Wakes the screen and keeps it on, at full brightness, past the brightness limit and the idle
      * timeout, until [release] with the same [reason]. Several reasons can hold it at once.
      */
     fun hold(reason: String) {
@@ -245,7 +233,7 @@ class ScreenPolicy(
     /**
      * Keeps the screen on past the idle timeout for a test run, such as Clarity's (#240), for [seconds]
      * from now, or ends that at once when [seconds] is 0 or less. A new one while it is on moves the end.
-     * Brightness and night dimming stay as they are, so a test measures the panel as it would be. It
+     * Brightness stays as it is, so a test measures the panel as it would be. It
      * changes no setting: it lives in memory and in [TestHoldFile], which carries it through a restart
      * of the app (a test restarts it) and not past a reboot. It ends by itself, so a test that crashed
      * can't leave the screen on, and at [stop].
@@ -327,7 +315,7 @@ class ScreenPolicy(
             }
             val now = SystemClock.elapsedRealtime()
             if (near || holds.isNotEmpty() || testHeld) lastActivity = now
-            val timeoutSec = if (isNight()) prefs.nightIdleOffSec else prefs.idleOffSec
+            val timeoutSec = prefs.idleOffSec
             if (timeoutSec > 0 && keepOn && now - lastActivity >= timeoutSec * 1000L) {
                 sleep("idle ${timeoutSec}s")
             }
@@ -368,9 +356,13 @@ class ScreenPolicy(
         if (prev.isNaN() || kotlin.math.abs(prev - lux) > maxOf(5f, prev * 0.2f)) notifyChanged()
     }
 
-    /** Re-applies the brightness policy after a settings change (main thread). */
-    fun refreshBrightness() {
-        if (started) updateBrightness()
+    /**
+     * Re-applies the brightness policy after a settings change (main thread). [immediate] jumps to the new target
+     * instead of easing toward it: the light sensor reports only changes, so in a steady room no reading would
+     * come to finish the easing (a new Max auto brightness from Home Assistant, #477).
+     */
+    fun refreshBrightness(immediate: Boolean = false) {
+        if (started) updateBrightness(immediate)
     }
 
     /**
@@ -414,7 +406,7 @@ class ScreenPolicy(
             }
             return
         }
-        val max = brightnessCap(isNight(), held, prefs.maxBrightness, prefs.nightMaxBrightness)
+        val max = brightnessCap(held, prefs.maxBrightness)
         val min = minOf(prefs.minBrightness, max)
         // 0 lux -> min, ~1000 lux -> max, logarithmic in between.
         val t = (log10(lux.coerceAtLeast(0f) + 1f) / 3f).coerceIn(0f, 1f)
@@ -429,5 +421,5 @@ class ScreenPolicy(
 
     fun statusLine(): String =
         "presence=${if (near) "near" else "far"} (raw ${proximityRaw}) · lux=${lux} · " +
-            "brightness=${"%.2f".format(brightness)} · night=${isNight()} · admin=${isAdmin}"
+            "brightness=${"%.2f".format(brightness)} · admin=${isAdmin}"
 }

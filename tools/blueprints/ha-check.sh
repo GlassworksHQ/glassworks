@@ -15,7 +15,7 @@ CFG=$(mktemp -d)
 trap 'rm -rf "$CFG"' EXIT
 mkdir -p "$CFG/blueprints/automation/GlassworksHQ"
 shopt -s nullglob
-files=("$ROOT"/panes/*/blueprints/*.yaml "$ROOT"/frames/*/panes/*/blueprints/*.yaml)
+files=("$ROOT"/core/blueprints/*.yaml "$ROOT"/panes/*/blueprints/*.yaml "$ROOT"/frames/*/panes/*/blueprints/*.yaml)
 [ ${#files[@]} -gt 0 ] || { echo "no blueprints found" >&2; exit 1; }
 for f in "${files[@]}"; do
   name=$(basename "$f")

@@ -58,7 +58,7 @@ class EspHomeApiTest {
         var auto = true
         var mode = "presence"
         var idle = 120f
-        var night = "22:00-07:00"
+        var url = "auto"
         var muted = false
         var volume = 1f
         return listOf(
@@ -69,12 +69,12 @@ class EspHomeApiTest {
             SensorEntity("illuminance", "Illuminance", unit = "lx", deviceClass = "illuminance", get = { Float.NaN }),
             SelectEntity("screen_mode", "Screen mode", options = listOf("presence", "always"), get = { mode }, set = { mode = it }),
             dashboardSelect(listOf("Default")),
-            NumberEntity("idle_timeout", "Idle timeout", disabledByDefault = true, min = 0f, max = 3600f, step = 5f, unit = "s",
+            NumberEntity("idle_timeout", "Idle timeout", min = 0f, max = 3600f, step = 5f, unit = "s",
                 get = { idle }, set = { idle = it }),
             NumberEntity("presence_range", "Presence range", disabledByDefault = true, min = 0f, max = 2.5f, step = 0.1f, unit = "m",
                 get = { 0f }, set = {}),
-            TextEntity("night_window", "Night window", disabledByDefault = true, maxLength = 11,
-                pattern = "^$|^[0-9]{1,2}:[0-9]{2}-[0-9]{1,2}:[0-9]{2}$", get = { night }, set = { night = it }),
+            TextEntity("dashboard_url", "Dashboard URL", disabledByDefault = true, minLength = 1, maxLength = 255,
+                get = { url }, set = { url = it }),
             ButtonEntity("reload_dashboard", "Reload dashboard", press = {}),
             MediaPlayerEntity("speaker", "Speaker", formats = listOf("mp3" to 0, "mp3" to 1),
                 featureFlags = MediaPlayerEntity.FEATURE_VOLUME_SET or MediaPlayerEntity.FEATURE_PLAY_MEDIA,

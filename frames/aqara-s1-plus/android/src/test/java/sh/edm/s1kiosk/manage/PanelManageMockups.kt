@@ -56,7 +56,6 @@ class PanelManageMockups {
         }
         for (s in model().sections.filter { it.id !in setOf("log", "about") }) pair(s.id, s.id)
         pair("screen-edit-idle", "screen", "?edit=Turn+off+when+idle") { it.previewEdit("Turn off when idle") }
-        pair("screen-edit-night", "screen", "?edit=At+night") { it.previewEdit("At night") }
         pair("dashboard-edit-address", "dashboard", "?edit=Home+Assistant") { it.previewEdit("Home Assistant") }
         pair("assist-edit-wake-word", "assist", "?edit=Listening%2FWake+word") { it.previewEdit("Wake word") }
         File(out, "overview-manage.html").writeBytes(b.get("/").body)

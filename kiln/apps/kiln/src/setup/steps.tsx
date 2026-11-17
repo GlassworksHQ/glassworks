@@ -41,6 +41,19 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
   const secure = isOther || !!chosen?.secure;
   const j = setup.joining;
 
+  // On the panel's own page the join closes the setup Wi-Fi, and this page's connection with it, within moments: no
+  // step can follow, so the page says so once and stops (issue 460). The 45 s check can still turn it into an error.
+  if (j && setup.over === 'lan' && j.step !== 'err') {
+    return (
+      <section className="card" aria-labelledby="h">
+        {/* One polite region from "Sending…" on, so a screen reader hears the change to the last word (CodeRabbit on PR 470). */}
+        <div role="status" aria-live="polite">
+          <h2 id="h">{j.step === 'sent' ? 'Sending to the panel…' : 'Sent to the panel.'}</h2>
+          {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
+        </div>
+      </section>
+    );
+  }
   if (j) {
     const order = ['sent', 'join', 'ok'] as const;
     const at = j.step === 'err' ? 1 : order.indexOf(j.step);

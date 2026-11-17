@@ -757,8 +757,6 @@ class MainActivity : Activity() {
         }
         intent.getStringExtra("screen_mode")?.let { prefs.screenMode = it }
         if (intent.hasExtra("idle_off_sec")) prefs.idleOffSec = intent.getIntExtra("idle_off_sec", 120)
-        if (intent.hasExtra("night_idle_off_sec")) prefs.nightIdleOffSec = intent.getIntExtra("night_idle_off_sec", 20)
-        intent.getStringExtra("night_window")?.let { prefs.nightWindow = it }
         if (intent.hasExtra("presence_range_m")) {
             prefs.presenceRangeM = intent.getFloatExtra("presence_range_m", 0f)
             glassworks.screen.applyPresenceRange()
@@ -1089,7 +1087,6 @@ class MainActivity : Activity() {
         .put("proximityRaw", glassworks.screen.proximityRaw.let { if (it.isNaN()) JSONObject.NULL else it.toDouble() })
         .put("lux", glassworks.screen.lux.let { if (it.isNaN()) JSONObject.NULL else it.toDouble() })
         .put("screenOn", glassworks.screen.screenOn)
-        .put("night", glassworks.screen.isNight())
         .put("voice", glassworks.voiceState)
 
     private fun pushConfig() {
