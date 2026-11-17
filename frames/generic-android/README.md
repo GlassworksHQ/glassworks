@@ -266,8 +266,8 @@ None set: the release APK is unsigned. Some but not all set: the build fails.
 
 The key exists since 2026-11-17: certificate `CN=Glassworks, O=GlassworksHQ` (RSA 4096, valid to 2054). One key
 signs both builds, `dev.glassworks.generic_android` and `.legacy`. It lives in the `release-signing` environment as
-`GENERIC_KEYSTORE_B64` (the PKCS12 keystore, base64), `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS` and
-`GENERIC_KEY_PASSWORD`, and in the maintainer's password manager. It is never in the repo, and it never changes.
+`GENERIC_KEYSTORE_B64` (the PKCS12 keystore, base64), `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD`
+(the alias, `glassworks`, isn't secret and sits in the workflow), and in the maintainer's password manager. It is never in the repo, and it never changes.
 The keystore is PKCS12, which has one password: `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD` must be the
 same value, or signing fails with "keystore password was incorrect". The certificate's SHA-256 is
 `564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`.

@@ -70,7 +70,7 @@ jobs:
         env:
           GENERIC_REQUIRE_RELEASE_SIGNING: 'true'
           GENERIC_KEYSTORE_PASSWORD: ${{ secrets.GENERIC_KEYSTORE_PASSWORD }}
-          GENERIC_KEY_ALIAS: ${{ secrets.GENERIC_KEY_ALIAS }}
+          GENERIC_KEY_ALIAS: glassworks   # not a secret; as a secret, GitHub would mask every "glassworks" in the log
           GENERIC_KEY_PASSWORD: ${{ secrets.GENERIC_KEY_PASSWORD }}
         run: |
           mkdir -p generic-dist
