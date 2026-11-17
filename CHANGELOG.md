@@ -295,6 +295,9 @@ below as the release notes.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.
+- **No permission prompt the panel doesn't need.** At start, the app asks Android for the microphone only while
+  Voice is on, and for the camera only while the Camera pane is on. On a screen without touch, such as the
+  lululemon Mirror, it never shows Android's prompt: Kiln grants the permissions at install.
 - **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
   pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
   said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked

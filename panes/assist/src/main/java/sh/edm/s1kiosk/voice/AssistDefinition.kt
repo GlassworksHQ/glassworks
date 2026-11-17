@@ -18,6 +18,7 @@ import java.util.Locale
 class AssistDefinition(file: SharedPreferences) : PaneDefinition {
     override val id = "assist"
     override val requires = setOf(Capability.MICROPHONE, Capability.SPEAKER)
+    override val permissions = setOf(android.Manifest.permission.RECORD_AUDIO)
 
     private val prefs = VoicePrefs(file)
 

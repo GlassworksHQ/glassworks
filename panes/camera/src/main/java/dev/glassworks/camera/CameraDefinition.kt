@@ -38,6 +38,7 @@ class CameraDefinition(
 ) : PaneDefinition {
     override val id = CameraPane.ID
     override val requires = setOf(Capability.CAMERA)
+    override val permissions = setOf(android.Manifest.permission.CAMERA)
     val prefs = CameraPrefs(file)
 
     override val switch = PaneSwitch(
