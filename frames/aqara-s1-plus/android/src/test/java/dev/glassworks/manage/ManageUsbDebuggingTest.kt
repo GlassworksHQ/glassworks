@@ -30,7 +30,7 @@ class ManageUsbDebuggingTest {
     private var refuseFor: String? = null
     private val computers: AdbComputers = AdbComputers(file, allow = { k ->
         allowed += k.base64
-        refuseFor?.let { computers.refused(k.fingerprint, it) }
+        refuseFor?.let { computers.refused(k.fingerprint, it.takeIf { w -> w != "null" }) }
         null
     }, event = { events += it }, confirmMs = 20)
     private val f = ManageFixture(usb = ManageUsbDebugging(computers, { "09:41" }, { events += it }))
@@ -159,6 +159,16 @@ class ManageUsbDebuggingTest {
         assertEquals("/security?usb=unconfirmed", br.post(ManageUsbDebugging.ALLOW, mapOf("csrf" to br.csrf(), "fingerprint" to a.fingerprint, "remember" to "1")).headers["Location"])
         assertTrue(allowed.isEmpty())
         assertTrue(br.get("/security?usb=unconfirmed").text().contains(ManageUsbDebugging.Result.UNCONFIRMED.text))
+    }
+
+    @Test fun `Android refusing with no computer waiting says that, as the Log does`() {
+        computers.asked(a)
+        refuseFor = "null"
+        val br = ha()
+        assertEquals("/security?usb=notwaiting", br.allow(a.fingerprint).headers["Location"])
+        assertTrue(br.get("/security?usb=notwaiting").text().contains("no computer is waiting now"))
+        assertTrue(events.last(), events.last().endsWith("Android refused it, no computer is waiting"))
+        assertTrue(computers.list().isEmpty())
     }
 
     @Test fun `forms without the session's token, from another site, or without a fingerprint are refused`() {
