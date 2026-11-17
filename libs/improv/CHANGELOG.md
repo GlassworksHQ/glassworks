@@ -12,6 +12,12 @@ publish the matching section below as the release notes.
   (`RADIO_DIDNT_COME_BACK`, or `UNUSABLE_PASSWORD`, which is public now), so an app doesn't add "check the password"
   on top.
 
+### Changed
+- **No network name in the logs.** `WifiProvisioner` logs "the chosen network" and the name's length instead
+  of the name, and `WifiProvisioner.Outcome` and the serial session's request print neither the network nor
+  the one a failed join went back to. A join that times out fails with the reason `timed out`, without the
+  name. The `ssid` and `restored` fields are unchanged.
+
 ### Fixed
 - **A join right after the device's own hotspot waits for the Wi-Fi client.** With the user's Wi-Fi switch on but
   the client down (a device without STA+AP, a few seconds after its hotspot stops), `WifiProvisioner.connect` waits

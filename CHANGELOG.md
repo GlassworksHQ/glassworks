@@ -133,6 +133,12 @@ below as the release notes.
   generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **The panel's own Wi-Fi says when it is starting, then shows the setup page's QR code once a phone is on it.**
+  **Set up from a phone** now shows "Starting the setup Wi-Fi…" at once, where the screen used to sit unchanged
+  for several seconds. A start that fails says why in the same place, with **Try again**. Once a phone on the
+  panel's Wi-Fi opens a page on the panel, the QR code changes to the setup page's address, so nobody types
+  it. The panel's logs no longer name the Wi-Fi network you pick, nor the panel's own network and
+  its password.
 - **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
   `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
   setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer

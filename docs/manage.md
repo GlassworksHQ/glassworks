@@ -120,6 +120,7 @@ no cable and no Bluetooth (an iPhone too).
 | | |
 |---|---|
 | The network list | The panel scans just before it opens its own Wi-Fi, and the setup page lists what it saw then: on most devices the radio can't scan while it is the access point. A network that isn't listed can be typed under **Other…** |
+| On the panel's screen | **Set up from a phone** shows "Starting the setup Wi-Fi…" at once, then the QR code to join (a few seconds; up to about 20 when the scan is slow). Once a phone on its Wi-Fi opens any page on the panel, the QR code becomes the setup page's address: Android gives an app no list of who joined, so that request is the sign. A start that fails says why there, with **Try again** |
 | Who can join | Anyone who sees the panel's screen: the password shows only there, and changes each time (WPA2). Pairing still needs the code the panel shows |
 | While it's open | On most devices, the S1 among them, the panel's Wi-Fi client is off: it is on no network until the hotspot closes. 2.4 GHz. Android may close it sooner than 15 minutes when nobody joins (10 minutes on the S1); then it counts as closed, and opens again 3 minutes later if no Wi-Fi works |
 | Wi-Fi turned off | From Android 10 an app can't turn Wi-Fi on. With the panel's Wi-Fi off, it doesn't open its own: it couldn't join what the phone sends. The setup screen says so, with **Turn on Wi-Fi** |
