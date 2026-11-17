@@ -4,12 +4,14 @@ import android.Manifest
 import android.app.Application
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowAudioRecord
 import org.robolectric.annotation.Config
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -20,6 +22,8 @@ import java.nio.file.Files
 import java.security.cert.CertPathValidatorException
 import java.security.cert.CertificateException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Semaphore
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLHandshakeException
 
 /** #458: why voice can't get ready, as the engine reports it, and when it tries again. */
@@ -183,6 +187,40 @@ class VoiceReadinessTest {
         e.micReadFailed(-3)
         e.micReadFailed(-3)
         assertEquals("a frame starts the count over", VoiceReadiness.Ready, e.readiness)
+    }
+
+    @Test
+    fun aMutedMicrophoneForgetsItsFailedReads() {
+        // A microphone that opens and waits for audio, so only the test reports failed reads.
+        ShadowAudioRecord.setSource(object : ShadowAudioRecord.AudioRecordSource {
+            override fun readInShortArray(audioData: ShortArray, offsetInShorts: Int, sizeInShorts: Int, isBlocking: Boolean): Int =
+                try { Thread.sleep(60_000); 0 } catch (_: InterruptedException) { 0 }
+        })
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        val closed = Semaphore(0)
+        val e = engine { Quiet }.also { it.onMicLevel = { level -> if (level == 0f) closed.release() } }
+        eventually("ready") { e.readiness == VoiceReadiness.Ready }
+        e.setMuted(false)
+        e.micReadFailed(-3)
+        e.micReadFailed(-3)
+        e.setMuted(true)
+        assertTrue("muted", closed.tryAcquire(5, TimeUnit.SECONDS))
+        e.setMuted(false)
+        e.micReadFailed(-3)
+        assertEquals("the unmuted microphone starts its count over", VoiceReadiness.Ready, e.readiness)
+    }
+
+    @Test
+    fun aLoadThatFindsEveryModelStillClearsWhatAKilledDownloadLeft() {
+        val dir = Files.createTempDirectory("models").toFile()
+        val model = File(dir, "w.tflite").apply { writeBytes(ByteArray(64) { 1 }) }
+        val fetcher = ModelFetcher("https://example.invalid", mapOf("w.tflite" to ModelFetcher.sha256(model)), open = { error("nothing to download") })
+        val killed = File(dir, "w.tflite.killed.part").apply { writeBytes(ByteArray(8)); setLastModified(System.currentTimeMillis() - 11 * 60_000) }
+        val live = File(dir, "w.tflite.live.part").apply { writeBytes(ByteArray(8)) }
+        assertEquals(emptyList<String>(), fetcher.missing(dir))
+        assertEquals(emptyList<String>(), fetcher.ensure(dir))
+        assertFalse("a killed download's part is gone", killed.exists())
+        assertTrue("a live download's part stays", live.exists())
     }
 
     @Test
