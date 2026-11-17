@@ -54,6 +54,26 @@ class UsbDebuggingHeardTest {
         override fun destroy() {}
     }
 
+    @Test fun `following while a reader reads, and not after stop`() {
+        val out = java.io.PipedOutputStream()
+        val input = java.io.PipedInputStream(out)
+        val proc = object : Process() {
+            override fun getInputStream(): InputStream = input
+            override fun getOutputStream(): OutputStream = OutputStream.nullOutputStream()
+            override fun getErrorStream(): InputStream = InputStream.nullInputStream()
+            override fun waitFor() = 0
+            override fun exitValue() = 0
+            override fun destroy() { out.close() }
+        }
+        val r = UsbDebugging.Requests(onHeard = {}, retryMs = 10_000, logcat = { proc })
+        r.start()
+        val until = System.nanoTime() + 5_000_000_000L
+        while (!r.following && System.nanoTime() < until) Thread.sleep(5)
+        assertTrue(r.following)
+        r.stop()
+        assertFalse(r.following)
+    }
+
     @Test fun `after stop, lines a reader had already read never reach the app`() {
         val heard = ArrayList<UsbDebugging.Heard>()
         val first = CountDownLatch(1)
@@ -101,6 +121,16 @@ class UsbDebuggingAvailableTest {
 @Config(sdk = [29], application = Application::class)
 class UsbDebuggingAndroid10Test {
     @Test fun `Android 10 moved it, so the app doesn't offer it`() {
+        val app = RuntimeEnvironment.getApplication()
+        shadowOf(app).grantPermissions("android.permission.MANAGE_USB", "android.permission.READ_LOGS")
+        assertFalse(UsbDebugging.available(app))
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [30], application = Application::class)
+class UsbDebuggingAndroid11Test {
+    @Test fun `nor any later Android`() {
         val app = RuntimeEnvironment.getApplication()
         shadowOf(app).grantPermissions("android.permission.MANAGE_USB", "android.permission.READ_LOGS")
         assertFalse(UsbDebugging.available(app))
