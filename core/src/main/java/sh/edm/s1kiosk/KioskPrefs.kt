@@ -83,12 +83,8 @@ class KioskPrefs(
     /** How [haUrl] was learnt: `mdns`, `esphome`, `manual` (HaDiscovery.SOURCE_*), or "". */
     val haUrlSource: String get() = sp.getString("ha_url_source", "") ?: ""
 
-    /** Home Assistant's uuid from the mDNS record [haUrl] came from ([sh.edm.s1kiosk.auth.HaSeen]), or "". */
-    val haUrlUuid: String get() = sp.getString("ha_url_uuid", "") ?: ""
-
-    fun setHaUrl(url: String, source: String, uuid: String? = null) =
-        sp.edit().putString("ha_url", url).putString("ha_url_source", source)
-            .apply { if (uuid.isNullOrEmpty()) remove("ha_url_uuid") else putString("ha_url_uuid", uuid) }.commit()
+    fun setHaUrl(url: String, source: String) =
+        sp.edit().putString("ha_url", url).putString("ha_url_source", source).commit()
 
     /**
      * The Home Assistant the panel talks to (sign-in, relative media URLs): the origin of the
@@ -150,18 +146,17 @@ class KioskPrefs(
             val rt = authSp.getString("refresh_token", null) ?: return null
             val base = authSp.getString("ha_base", null) ?: return null
             val cid = authSp.getString("client_id", null) ?: return null
-            return StoredAuth(base, cid, rt, authSp.getString("ha_uuid", null))
+            return StoredAuth(base, cid, rt)
         }
         /**
-         * Writes its keys (never `clear()`, which would drop a sealed token the key store can't read
+         * Writes the three keys (never `clear()`, which would drop a sealed token the key store can't read
          * now). Throws [SignInNotStored] when it wasn't stored: a sign-in during a key store outage fails
          * where the person sees it (the sign-in page says the panel couldn't store it), not silently.
          */
         set(v) {
             val e = authSp.edit()
-            if (v == null) e.remove("refresh_token").remove("ha_base").remove("client_id").remove("ha_uuid")
+            if (v == null) e.remove("refresh_token").remove("ha_base").remove("client_id")
             else e.putString("refresh_token", v.refreshToken).putString("ha_base", v.haBase).putString("client_id", v.clientId)
-                .apply { if (v.haUuid == null) remove("ha_uuid") else putString("ha_uuid", v.haUuid) }
             if (!e.commit()) throw SignInNotStored(if (v == null) "The sign-in can't be removed right now" else "The panel can't store the sign-in right now")
         }
 

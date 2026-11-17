@@ -402,21 +402,14 @@ This is the part that removes the login screen. Implemented in `auth/` (`OAuth.k
 - The sign-in screen (now the setup screen's Sign-in step) appears when the GeckoView lands on HA's
   `/auth/authorize` (logged out) and there is no refresh token, or after a sign-out. It goes away by
   itself when the token arrives. `--ez show_signin true` previews it without touching the session.
-- **Home Assistant moves (#467).** A sign-in stores HA's `uuid` (`ha_uuid` in `auth`), and discovery
-  stores the `uuid` of the mDNS record its address came from (`ha_url_uuid`). It is HA's `instance_id`,
-  from TXT `uuid` (`components/zeroconf/__init__.py`). It is the only place HA gives it without a token:
-  `/api/config` needs a token, and its answer has no uuid.
-  - **On http, the panel never follows a moved HA by itself.** When the dashboard's address and the sign-in's
-    differ, it asks to sign in again: the Sign-in step shows instead of HA's login page, with "Home Assistant
-    moved to a new address. Sign in again.", and its QR code works on a frame without touch. mDNS can't prove
-    which device answers: the uuid is public, and anything on the LAN can advertise it with its own address
-    and `internal_url`. Moving the sign-in there would send it the refresh token.
-  - **On https, a domain with a valid certificate is trusted.** When both the sign-in's address and the new one
-    are `https://` and the same uuid answers there, the sign-in moves. Token refresh, external auth and the
-    Thread join then use the new address.
-  - In every other case no token goes out (no refresh, no revoke) until the person signs in again. Another
-    uuid at the sign-in's own address counts too. A sign-in from before has no uuid. It learns it the next
-    time discovery sees HA at the sign-in's own address; that stores the uuid and sends nothing.
+- **Home Assistant moves (#467).** The sign-in is for the origin it was issued at (`ha_base`). When the
+  dashboard's Home Assistant has another origin (DHCP moved it and discovery found the new address, or https
+  was turned on at the same host), the panel asks to sign in again: the Sign-in step shows instead of HA's
+  login page, with "Home Assistant moved to a new address. Sign in again.", and its QR code works on a frame
+  without touch. Until then its token goes to neither address: no refresh, no cached token, no revoke. The
+  panel never follows a move by itself, because discovery can't prove which device answers at the new
+  address. HA's mDNS `uuid` is public, and anything on the LAN can advertise it with its own `internal_url`
+  and a copy of `/manifest.json`.
 
 The original design notes:
 

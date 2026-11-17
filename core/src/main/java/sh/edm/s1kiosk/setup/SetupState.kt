@@ -145,7 +145,7 @@ data class SetupInputs(
     val installer: InstallerWifi? = null,
     /** Whether the screen takes a tap (the frame's [dev.glassworks.frame.Frame.input]). */
     val input: Input = Input.TOUCH,
-    /** A sign-in is stored, but Home Assistant moved to an address not confirmed as the same one (HaAuth.movedAway, #467). */
+    /** A sign-in is stored, but the dashboard's Home Assistant is at another address than its own (HaAuth.movedAway, #467). */
     val signinMoved: Boolean = false,
     /** Offline, and Wi-Fi is joining or has a network to join ([OfflineText.expectsJoin]). Read only without touch. */
     val joinExpected: Boolean = false,

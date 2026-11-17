@@ -23,15 +23,14 @@ import java.util.concurrent.TimeUnit
 
 /**
  * #467 on the production path: the real [HaAuth] and its HTTP client, against two Home Assistants on loopback that
- * record every request. The sign-in is for one, the dashboard and discovery's mDNS record (with the sign-in's uuid,
- * as a spoof on the LAN would claim) point at the other, both on http. [HaAuth.accessToken] and [HaAuth.signOut]
- * must send nothing to either. Each check has a control at the sign-in's own address, where the request does go out.
+ * record every request. The sign-in is for one, the dashboard (discovery's address) is the other: Home Assistant
+ * moved, or a device on the LAN claims to be it. [HaAuth.accessToken] and [HaAuth.signOut] must send nothing to
+ * either, and no cached token goes out. Each check has a control at the sign-in's own address.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class HaAuthMovedTest {
     private val app = RuntimeEnvironment.getApplication()
-    private val ours = "0123456789abcdef0123456789abcdef"
     private val requests: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private lateinit var signedInHa: HttpServer
     private lateinit var dashboardHa: HttpServer
@@ -56,7 +55,7 @@ class HaAuthMovedTest {
         prefs = KioskPrefs(app)
         // HaAuth is process-wide and keeps the first prefs it got: bind it to this test's, as one panel's app has one set.
         HaAuth::class.java.getDeclaredField("prefs").apply { isAccessible = true }.set(HaAuth, prefs)
-        prefs.setHaUrl(dashboardHa.base(), HaDiscovery.SOURCE_MDNS, ours)
+        prefs.setHaUrl(dashboardHa.base(), HaDiscovery.SOURCE_MDNS)
     }
 
     @After fun stop() {
@@ -66,13 +65,19 @@ class HaAuthMovedTest {
     }
 
     private fun signIn(at: String) {
-        prefs.auth = StoredAuth(at, "http://192.0.2.10:8099/", "made-up-refresh-token", ours)
+        prefs.auth = StoredAuth(at, "http://192.0.2.10:8099/", "made-up-refresh-token")
     }
 
-    private fun accessToken(): HaAuth.Access {
+    /** A valid access token in HaAuth's cache, as after a sign-in or a refresh. */
+    private fun cached(token: String) {
+        val cache = HaAuth::class.java.getDeclaredField("cache").apply { isAccessible = true }.get(HaAuth)
+        cache.javaClass.getMethod("put", String::class.java, Long::class.javaPrimitiveType).invoke(cache, token, 1800L)
+    }
+
+    private fun accessToken(force: Boolean = true): HaAuth.Access {
         var out: HaAuth.Access? = null
         val done = CountDownLatch(1)
-        HaAuth.accessToken(force = true) { out = it; done.countDown() }
+        HaAuth.accessToken(force) { out = it; done.countDown() }
         assertTrue("accessToken answered", done.await(10, TimeUnit.SECONDS))
         return out!!
     }
@@ -90,6 +95,19 @@ class HaAuthMovedTest {
         assertEquals(HaAuth.Access.Failed("Home Assistant moved", signedOut = false), accessToken())
         assertEquals(emptyList<String>(), requests.toList())
         assertEquals(signedInHa.base(), prefs.auth?.haBase)
+    }
+
+    @Test fun aMovedHomeAssistantGetsNoCachedTokenEither() {
+        signIn(signedInHa.base())
+        cached("made-up-cached-access")
+        assertEquals(HaAuth.Access.Failed("Home Assistant moved", signedOut = false), accessToken(force = false))
+        assertEquals(emptyList<String>(), requests.toList())
+    }
+
+    @Test fun atItsOwnAddressTheCachedTokenIsUsed() {
+        signIn(dashboardHa.base())
+        cached("made-up-cached-access")
+        assertEquals("made-up-cached-access", (accessToken(force = false) as HaAuth.Access.Ok).accessToken)
     }
 
     @Test fun atItsOwnAddressTheRefreshGoesOut() {

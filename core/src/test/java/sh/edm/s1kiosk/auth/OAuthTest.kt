@@ -175,4 +175,16 @@ class OAuthTest {
         assertTrue(FrontendUrls.isAuthorizePage("http://192.168.1.100:8123/auth/authorize?response_type=code", base))
         assertFalse(FrontendUrls.isAuthorizePage("http://192.168.1.100:8123/lovelace", base))
     }
+
+    @Test
+    fun aSignInIsOnlyForItsOwnOrigin() {
+        // #467: any other origin is Home Assistant having moved (or another device): the token goes to neither.
+        val auth = StoredAuth("http://192.0.2.20:8123", "http://192.0.2.10:8099/", "made-up")
+        assertTrue(auth.isFor(null))
+        assertTrue(auth.isFor("http://192.0.2.20:8123/lovelace/0?kiosk"))
+        assertFalse(auth.isFor("http://192.0.2.21:8123")) // DHCP moved it
+        assertFalse(auth.isFor("https://192.0.2.20:8123")) // https turned on at the same host
+        assertFalse(auth.isFor("http://192.0.2.20:8124"))
+        assertFalse(auth.isFor("http://homeassistant.local:8123"))
+    }
 }

@@ -68,27 +68,17 @@ object HaAuth {
 
     val signedIn: Boolean get() = ::prefs.isInitialized && prefs.hasAuth
 
-    /** The HA base URL the stored token belongs to, if signed in (moved with Home Assistant, see [follow]). */
-    val signedInBase: String? get() = follow()?.first?.haBase
+    /** The HA base URL the stored token belongs to, if signed in. */
+    val signedInBase: String? get() = if (::prefs.isInitialized) prefs.auth?.haBase else null
 
     /** The stored sign-in, if any (its token is redacted from toString). */
-    val stored: StoredAuth? get() = follow()?.first
+    val stored: StoredAuth? get() = if (::prefs.isInitialized) prefs.auth else null
 
     /**
-     * Signed in, but the dashboard's Home Assistant is at another address that isn't confirmed as the one the
-     * sign-in is for: no token goes anywhere, and the setup screen asks for the sign-in again (#467).
+     * Signed in, but the dashboard's Home Assistant is at another address than the sign-in's ([StoredAuth.isFor]):
+     * no token goes anywhere, and the setup screen asks for the sign-in again (#467).
      */
-    val movedAway: Boolean get() = follow()?.second == SignInMove.Unconfirmed
-
-    private val home = FollowedSignIn(
-        load = { prefs.auth },
-        save = { prefs.auth = it },
-        base = { prefs.haBase },
-        seen = { prefs.haUrlUuid.takeIf { it.isNotEmpty() }?.let { HaSeen(prefs.haUrl, it) } },
-    )
-
-    /** The stored sign-in, moved with Home Assistant where it is confirmed ([FollowedSignIn]). */
-    private fun follow(): Pair<StoredAuth, SignInMove>? = if (::prefs.isInitialized) home.now() else null
+    val movedAway: Boolean get() = ::prefs.isInitialized && prefs.auth?.isFor(prefs.haBase) == false
 
     /** Listener gets the new signed-in state on the main thread. */
     fun addListener(l: (Boolean) -> Unit) { listeners += l }
@@ -166,8 +156,7 @@ object HaAuth {
         manage = null
     }
 
-    private fun onSignedIn(signedIn: StoredAuth, first: TokenResult.Ok) {
-        val auth = home.withUuid(signedIn)
+    private fun onSignedIn(auth: StoredAuth, first: TokenResult.Ok) {
         prefs.auth = auth
         cache.put(first.accessToken, first.expiresIn)
         AuthLog.i("Refresh token stored for ${auth.haBase}")
@@ -181,8 +170,10 @@ object HaAuth {
      */
     fun accessToken(force: Boolean, done: (Access) -> Unit) {
         exec.execute {
-            val (auth, move) = follow() ?: run { done(Access.Failed("not signed in", signedOut = true)); return@execute }
-            if (move == SignInMove.Unconfirmed) { done(Access.Failed("Home Assistant moved", signedOut = false)); return@execute }
+            val auth = prefs.auth
+            if (auth == null) { done(Access.Failed("not signed in", signedOut = true)); return@execute }
+            // Before the cache: a cached token must not go out either.
+            if (!auth.isFor(prefs.haBase)) { done(Access.Failed("Home Assistant moved", signedOut = false)); return@execute }
             if (!force) cache.get()?.let { done(Access.Ok(it, cache.secondsLeft())); return@execute }
             when (val r = tokens.refresh(auth)) {
                 is TokenResult.Ok -> {
@@ -209,11 +200,11 @@ object HaAuth {
      */
     fun signOut(reason: String, done: (signedOut: Boolean) -> Unit = {}) {
         exec.execute {
-            val (auth, move) = follow() ?: (null to null)
+            val auth = prefs.auth
             when {
                 auth == null -> Unit
-                // Revoking sends the token: never to an address the sign-in doesn't know is its Home Assistant.
-                move == SignInMove.Unconfirmed -> AuthLog.i("Signed out ($reason); Home Assistant moved, so no revoke sent")
+                // Revoking sends the token: never to an address that isn't the sign-in's own.
+                !auth.isFor(prefs.haBase) -> AuthLog.i("Signed out ($reason); Home Assistant moved, so no revoke sent")
                 else -> AuthLog.i("Signed out ($reason); revoke ${if (tokens.revoke(auth)) "sent" else "not reachable"}")
             }
             done(clearLocal())

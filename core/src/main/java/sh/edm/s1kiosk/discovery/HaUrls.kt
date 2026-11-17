@@ -39,15 +39,6 @@ object HaUrls {
         return out
     }
 
-    /**
-     * The TXT `uuid`: HA's `instance_id` (`uuid4().hex`), which tells one Home Assistant from another whatever its
-     * address (#467). Null when it is missing or isn't 32 hex digits.
-     */
-    fun uuid(txt: Map<String, ByteArray?>): String? =
-        txt["uuid"]?.toString(Charsets.UTF_8)?.trim()?.lowercase()?.takeIf { UUID_RE.matches(it) }
-
-    private val UUID_RE = Regex("^[0-9a-f]{32}$")
-
     /** `http://<ip>:<port>`; IPv6 is bracketed. Link-local / loopback addresses are not useful. */
     fun fromAddress(addr: InetAddress, port: Int = DEFAULT_PORT): String? {
         if (addr.isLoopbackAddress || addr.isAnyLocalAddress || addr.isLinkLocalAddress || addr.isMulticastAddress) return null

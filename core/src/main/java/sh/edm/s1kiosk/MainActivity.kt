@@ -355,6 +355,9 @@ class MainActivity : Activity() {
 
     // ---- first-boot setup screen (docs/onboarding.md step 4; rules in setup/SetupState.kt)
 
+    /** The last [HaAuth.movedAway] logged, so the 2 s setup tick logs each change once (#467). */
+    private var movedLogged = false
+
     /** When this activity was made: the app's start where Android 6 can't say it (#198). */
     private val createdAt = SystemClock.elapsedRealtime()
 
@@ -365,6 +368,11 @@ class MainActivity : Activity() {
         if (w.online && !w.ethernet && !prefs.wifiSeen) prefs.wifiSeen = true
         val steps = paneSteps.map { PaneStepFacts(it.id, it.done(), it.reason, wanted = setupOverlay.wanted(it.id)) }
         val moved = HaAuth.movedAway
+        if (moved != movedLogged) {
+            movedLogged = moved
+            Log.i(TAG, if (moved) "Home Assistant is at another address than the sign-in's: asking to sign in again, no token sent"
+                else "The sign-in matches Home Assistant's address")
+        }
         return SetupInputs(
             online = w.online,
             offlineForMs = if (w.online) 0L else now - offlineSince,

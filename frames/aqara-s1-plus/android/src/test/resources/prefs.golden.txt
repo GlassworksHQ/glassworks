@@ -1,7 +1,6 @@
 # file|key|type|default (see PrefsPinTest)
 auth|client_id|String|null
 auth|ha_base|String|null
-auth|ha_uuid|String|null
 auth|refresh_token|String|null
 kiosk|api_encryption|Boolean|false
 kiosk|api_key|String|""
@@ -25,7 +24,6 @@ kiosk|diagnostics_enabled|Boolean|true
 kiosk|ha_seen|Boolean|false
 kiosk|ha_url|String|""
 kiosk|ha_url_source|String|""
-kiosk|ha_url_uuid|String|""
 kiosk|hide_header|Boolean|true
 kiosk|hide_sidebar|Boolean|true
 kiosk|idle_off_sec|Int|120

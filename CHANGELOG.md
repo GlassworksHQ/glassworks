@@ -370,9 +370,9 @@ below as the release notes.
   named "lululemon Studio Mirror", made by lululemon. A Mirror HA already has keeps its entry and entities and
   takes the new name on its next connection. Any other device keeps its own name.
 - **The panel asks to sign in again when Home Assistant gets a new address.** If your router gave Home
-  Assistant a new address, the dashboard showed Home Assistant's login page, which a panel without touch
-  can't use. Now the setup screen shows the sign-in code and says Home Assistant moved. Over https, with a
-  valid certificate, the panel follows Home Assistant to its new address by itself and stays signed in.
+  Assistant a new address, or you turned on https, the dashboard showed Home Assistant's login page, which a
+  panel without touch can't use. Now the setup screen shows the sign-in code and says Home Assistant moved.
+  The panel sends its sign-in to neither address until you scan the code.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.

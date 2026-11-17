@@ -58,15 +58,4 @@ class HaUrlsTest {
         assertFalse(HaUrls.looksLikeHaManifest(404, "{}"))
         assertFalse(HaUrls.looksLikeHaManifest(200, "<html>"))
     }
-
-    @Test
-    fun uuidIsHomeAssistantsInstanceIdOrNothing() {
-        val id = "0123456789abcdef0123456789abcdef"
-        assertEquals(id, HaUrls.uuid(txt("uuid" to id, "location_name" to "Home")))
-        assertEquals(id, HaUrls.uuid(txt("uuid" to " ${id.uppercase()} ")))
-        assertNull(HaUrls.uuid(txt("location_name" to "Home")))
-        assertNull(HaUrls.uuid(txt("uuid" to "")))
-        assertNull(HaUrls.uuid(txt("uuid" to "not-an-id")))
-        assertNull(HaUrls.uuid(mapOf("uuid" to null)))
-    }
 }
