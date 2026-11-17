@@ -87,12 +87,14 @@ class AdbComputers(
     private val max: Int = 20,
     /** How long Allow waits for Android's refusal before it counts the approval as taken. */
     private val confirmMs: Long = 3_000L,
+    /** Whether Android's log is being read now: without it a refusal can't arrive, and Allow confirms nothing. */
+    private val listening: () -> Boolean = { true },
 ) {
     /** A computer on the list: its key, who added it and when. */
     data class Listed(val key: AdbKey, val addedMs: Long, val by: String)
 
-    /** The last computer that asked, and how it was answered, if it was. */
-    private data class Request(val key: AdbKey, val atMs: Long, val answered: Boolean)
+    /** The last computer that asked, and how it was answered, if it was. [retried]: its automatic approval was sent twice. */
+    private data class Request(val key: AdbKey, val atMs: Long, val answered: Boolean, val retried: Boolean = false)
 
     /** An approval Allow has sent and waits on: Android's refusal of [fingerprint] ends the wait. */
     private class Sent(val fingerprint: String) {
@@ -103,6 +105,9 @@ class AdbComputers(
     private val listed = LinkedHashMap<String, Listed>()
     private var last: Request? = null
     private var sent: Sent? = null
+
+    /** One Allow at a time, so each waits on its own refusal. Not this object's lock: [refused] needs that one meanwhile. */
+    private val attempt = Any()
 
     init { load() }
 
@@ -129,7 +134,9 @@ class AdbComputers(
 
     /**
      * Android refused the approval of [got]: [waiting] is the computer it waits on, or null when none. Allow, if it
-     * waits on [got], fails; any other refusal goes to the Log.
+     * waits on [got], fails. A listed computer's automatic approval is sent once more: the log line that showed it
+     * asking comes before Android queues its question (`UsbDebuggingManager.java:138`–`141`), so the first can
+     * arrive too early. Refused again, it shows as asking, for Allow on the page.
      */
     @Synchronized
     fun refused(got: String, waiting: String?) {
@@ -139,6 +146,13 @@ class AdbComputers(
             s.answered.countDown()
             return
         }
+        val r = last?.takeIf { it.key.fingerprint == got }
+        val on = listed[got]
+        if (r != null && on != null && !r.retried) {
+            last = r.copy(retried = true, answered = allow(on.key) == null)
+            return
+        }
+        if (r != null) last = r.copy(answered = false)
         event("Android didn't let in adb key $got over USB: ${waitingText(waiting)}")
     }
 
@@ -149,13 +163,15 @@ class AdbComputers(
     }
 
     /** What [allowAsking] did. */
-    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, REFUSED, NOT_REMEMBERED }
+    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, REFUSED, UNCONFIRMED, NOT_REMEMBERED }
 
     /**
      * Lets in the computer asking now, if it is still the one the page showed ([shown], its fingerprint). With
      * [remember] it goes on the list too, so it gets in each time it connects. Blocks up to [confirmMs].
      */
-    fun allowAsking(shown: String, remember: Boolean, who: String): Allowed {
+    fun allowAsking(shown: String, remember: Boolean, who: String): Allowed = synchronized(attempt) { attempt(shown, remember, who) }
+
+    private fun attempt(shown: String, remember: Boolean, who: String): Allowed {
         val key: AdbKey
         val s: Sent
         synchronized(this) {
@@ -170,6 +186,10 @@ class AdbComputers(
             if (remember && key.fingerprint !in listed && listed.size >= max) {
                 event("$who tried to add ${label(key)} to the allowed list: refused, the list holds $max")
                 return Allowed.FULL
+            }
+            if (!listening()) {
+                event("$who tried to allow ${label(key)} over USB: not sent, the panel isn't reading Android's log now")
+                return Allowed.UNCONFIRMED
             }
             s = Sent(key.fingerprint)
             sent = s
@@ -187,6 +207,10 @@ class AdbComputers(
             s.waiting?.let { w ->
                 event("$who tried to allow ${label(key)} over USB: Android refused it, ${waitingText(w.takeIf { it != NO_ONE })}")
                 return Allowed.REFUSED
+            }
+            if (!listening()) {
+                event("$who allowed ${label(key)} over USB, but the panel stopped reading Android's log, so it can't tell whether Android took it")
+                return Allowed.UNCONFIRMED
             }
             last = last?.takeIf { it.key == key }?.copy(answered = true) ?: last
             if (!remember) {
