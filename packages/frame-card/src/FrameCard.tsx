@@ -10,7 +10,7 @@
 // heading level (`as`), the name is that heading and its wrappers are divs, for a link on a page.
 import { useRef } from 'react';
 import { DeviceModel } from './DeviceModel';
-import { STAGE_TEXT, cardCredit, cardTags, ships, type FrameDesign, type Stage } from './frame';
+import { KIND_TEXT, STAGE_TEXT, cardCredit, cardTags, ships, type FrameDesign, type Stage } from './frame';
 import s from './FrameCard.module.css';
 
 /** The card's own class: the hover lift, the floating model and the tags. */
@@ -65,7 +65,7 @@ export function useTilt<T extends HTMLElement>() {
 }
 
 /**
- * The card's contents: the model, then the name, stage, aka, summary and tags. With `idPrefix`, the
+ * The card's contents: the model, then the name, stage, kind and aka, summary and tags. With `idPrefix`, the
  * summary and the tags get the ids `<idPrefix>-summary` and `<idPrefix>-tags`, for aria-describedby.
  * `as` makes the name a heading (`h2`…`h4`); leave it out inside a button. `expected` (by default, a
  * frame that doesn't ship yet) tells screen readers the tags are expected, not tested. It is hidden
@@ -90,7 +90,7 @@ export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ship
           <Name className={s.name}>{f.name}</Name>
           <StatusPill stage={f.status} />
         </Box>
-        {f.aka && <span className={s.aka}>{f.aka}</span>}
+        <span className={s.aka}>{KIND_TEXT[f.kind]}{f.aka && ` · ${f.aka}`}</span>
         <span id={idPrefix ? `${idPrefix}-summary` : undefined} className={s.summary}>{f.summary}</span>
         {credit && <span className={s.credit}><Stack />{credit}</span>}
         <span id={idPrefix ? `${idPrefix}-tags` : undefined} className={s.tags}>

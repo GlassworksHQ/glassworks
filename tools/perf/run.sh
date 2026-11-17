@@ -11,9 +11,13 @@
 #     (`--ez voice_enabled`, `--ez sendspin_enabled`, `--ez wall_base_enabled`, `--ez time_zone_enabled`,
 #     `--ez diagnostics_enabled`), restarts the app after each change (`--ez restart true`), and puts
 #     them back to the given settings on exit.
-#   - Sends `--es screen on` (the kiosk's own wake intent) during warm-ups, and Android's wake key
-#     (`input keyevent KEYCODE_WAKEUP`) through each restart, so the screen stays on without changing
-#     the idle timeout.
+#   - Sets the kiosk's test hold (`--ez test_hold true --ei test_hold_s 1800`, #240) at the start,
+#     before each part and each view, and ends it on exit (`--ez test_hold false`): the screen stays
+#     on past the idle timeout, at the brightness it would have anyway, without changing a setting.
+#     The hold outlives a restart of the app and expires by itself.
+#     Refuses to run if the kiosk doesn't say in its log that it took the hold.
+#   - Sends Android's wake key (`input keyevent KEYCODE_WAKEUP`) through each restart, while the app
+#     is down or starting.
 #   - Taps each reference dashboard's "Living room" toggle (`input tap`) and swipes it (`input swipe`),
 #     only where and when the page asks, to measure taps and scrolling.
 #   - Force-stops the app for each cold start (KEYCODE_WAKEUP first, so the screen is on); the app
@@ -64,7 +68,7 @@ while [ $# -gt 0 ]; do
     --restore-dashboard) RESTORE="$2"; shift 2 ;;
     --pane-ram) PANE_RAM="$2"; shift 2 ;;
     --webrtc-transport) WEBRTC_TRANSPORT="$2"; shift 2 ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -e/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -109,6 +113,14 @@ wait_cool() {
 # GW_PERF_TIME_SCALE (clock.py) is for the off-device tests: refused on a real device here, before
 # anything else on it is touched. Without it, this asks the device nothing.
 python3 "$HERE/clock.py" --check || exit 2
+# The kiosk's test hold keeps the screen on for the run (#240). An app without it ignores the extra,
+# and its screen would sleep partway: no fallback.
+release_hold() { run hold --off >/dev/null 2>&1 || true; }
+run hold >/dev/null || {
+  echo "$PACKAGE didn't take Clarity's test hold (--ez test_hold true): install an app built from main after #240" >&2
+  exit 2
+}
+trap release_hold EXIT
 
 if [ -n "$IDLE_ONLY" ]; then
   n=0
@@ -187,6 +199,7 @@ cleanup() {
   [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
   "$ADB" reverse --remove "tcp:$PORT" 2>/dev/null || true
   "$ADB" reverse --remove "tcp:$TURN_PORT" 2>/dev/null || true
+  release_hold
   restored || exit 3
   exit "$status"
 }

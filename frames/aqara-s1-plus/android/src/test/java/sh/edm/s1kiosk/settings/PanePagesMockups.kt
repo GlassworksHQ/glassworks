@@ -84,6 +84,10 @@ class PanePagesMockups {
             o.previewScrollTo(Mockup.label(o, "v4 · root side ready"), alignBottom = true)
         }
         shot("212-12-rail-radio", menu(listOf(panes.radio())), "radio")
+        shot("217-radio-connected-nobody", menu(listOf(panes.radio(connected = "Nobody"))), "radio") { o ->
+            Mockup.layout(o)
+            o.previewScrollTo(Mockup.label(o, "v4 · root side ready"), alignBottom = true)
+        }
         shot("212-07b-off-panes-folded", menu(listOf(panes.radio(), panes.music(), panes.timeZone()), off = setOf("sendspin", "time-zone")), "radio")
         shot("212-07c-off-pane-open", menu(listOf(panes.radio(), panes.music(), panes.timeZone()), off = setOf("sendspin", "time-zone")), "sendspin")
         val tz = panes.timeZone()

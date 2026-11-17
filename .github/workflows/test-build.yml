@@ -53,12 +53,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # app/ today, the repo root after #21's move (tools/release/android-layout.sh).
-      - name: Gradle root
-        run: |
-          root=$(tools/release/android-layout.sh gradle-root)
-          echo "GRADLE_ROOT=$root" >> "$GITHUB_ENV"
-
       - name: ABIs, one APK each (every frame's abis, tools/release/frame-abis.sh)
         run: |
           abis="$(tools/release/frame-abis.sh)"
@@ -99,7 +93,6 @@ jobs:
         run: sdkmanager --install "platforms;android-37.2"
 
       - name: Unit tests
-        working-directory: ${{ env.GRADLE_ROOT }}
         # Every module's JVM unit tests, whatever modules the branch has (AGP 9: debug variant only).
         run: ./gradlew --no-daemon test
 
@@ -113,7 +106,6 @@ jobs:
           echo "S1_KEYSTORE_FILE=$RUNNER_TEMP/s1kiosk-release.jks" >> "$GITHUB_ENV"
 
       - name: Build the signed APKs, one per ABI
-        working-directory: ${{ env.GRADLE_ROOT }}
         env:
           S1_VERSION: ${{ env.VERSION }}
           S1_TEST_BUILD: ${{ env.SHORT_SHA }}
@@ -125,8 +117,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/apk"
           for abi in $ABIS; do
             ./gradlew --no-daemon :kiosk:assembleRelease -Ps1Abi="$abi"
-            apk=$("$GITHUB_WORKSPACE/tools/release/android-layout.sh" file . build/outputs/apk/release/kiosk-release.apk)
-            cp "$apk" "$RUNNER_TEMP/apk/$abi.apk"
+            cp frames/aqara-s1-plus/android/build/outputs/apk/release/kiosk-release.apk "$RUNNER_TEMP/apk/$abi.apk"
           done
 
       # The legacy engine's test APK (#198): the S1 app on GeckoView 144 for Android 6-7, the Mirror's ABI. Only on
@@ -134,7 +125,6 @@ jobs:
       # install over it (uninstall first); applicationId sh.edm.s1kiosk.legacy, so it never touches the S1 app.
       - name: Legacy engine test APK (debug)
         if: contains(github.ref_name, 'legacy')
-        working-directory: ${{ env.GRADLE_ROOT }}
         env:
           S1_TEST_BUILD: ${{ env.SHORT_SHA }}
         run: |

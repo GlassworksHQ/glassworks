@@ -325,6 +325,44 @@ class Provisional(unittest.TestCase):
         self.assertIsNone(N.provisional_sentence(run("s1cam3")))
 
 
+class MoreInfoDialog(unittest.TestCase):
+    """Clarity v3 (#211): the more-info dialog in plain words, a limit with its one number on the
+    lightest page it fails on, ranked by how far past fluid's 2 s it is."""
+
+    def test_a_slow_dialog_is_a_limit_with_its_time(self):
+        rep = fast()
+        tiers = rep["graded"]["reference"]["tiers"]
+        for p in pages(rep):
+            rep["grade"]["bands"][p]["dialog"] = "good"
+        for p, v in (("typical", 2600.0), ("heavy", 4800.0)):
+            tiers[p]["dialog_runs"] = [{"n": 3, "failed": 0, "settled_ms": v}] * 3
+            tiers[p]["dialog_settled_ms"] = {"median": v, "min": v, "max": v, "n": 3}
+            rep["grade"]["bands"][p]["dialog"] = "slow"
+        rep["grade"]["levels"] = {p: (None if p in ("typical", "heavy") else "premium") for p in pages(rep)}
+        n = N.notes(rep)
+        self.assertIn("typical takes 2.6 s to open a more-info dialog", n["limits"])
+        self.assertNotIn("4.8 s", n["limits"])                                    # heavy's bigger miss stays in the body
+        self.assertIn("more-info dialogs", n["good"])                                # the best page's are good: quick
+
+    def test_dialogs_that_dont_open_fully(self):
+        """From the failing runs only, as the grade's median of per-run levels (#410's CodeRabbit)."""
+        ok, fail = {"n": 3, "failed": 0, "settled_ms": 320.0}, {"n": 3, "failed": 1, "settled_ms": None}
+        late = lambda ms: {"n": 3, "failed": 0, "settled_ms": ms}  # noqa: E731
+        t = {"dialog_runs": [fail, fail, ok]}
+        self.assertEqual(N._limit("dialog", t), (10.0, "doesn't open a more-info dialog fully"))
+        # Two runs, one fast and one failed: the median level is slow, and the fast one isn't quoted.
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [ok, fail]}), (10.0, "doesn't open a more-info dialog fully"))
+        # 320 ms, 2.5 s and a failure: slow; the late run's time, not the 1.4 s of all settled ones.
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [ok, late(2500.0), late(2600.0), fail]}),
+                         (1.275, "takes 2.5 s to open a more-info dialog"))
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [ok, late(2400.0), late(2400.0)]}),
+                         (1.2, "takes 2.4 s to open a more-info dialog"))
+        # A view that never got to its dialogs fails them outright.
+        self.assertEqual(N._limit("dialog", {"dialog_runs": [{"timed_out": True}]}), (10.0, "doesn't open a more-info dialog fully"))
+        self.assertIsNone(N._limit("dialog", {"dialog_runs": [ok, ok]}))
+        self.assertIsNone(N._limit("dialog", {}))
+
+
 class TypicalWithoutACamera(unittest.TestCase):
     """Rubric v10 (#205): typical is measured without its camera (C) and with it (B)."""
 

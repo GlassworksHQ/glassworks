@@ -19,7 +19,7 @@
 //                         checkout's kiln/packages/bootpatch to compare two patchers on the same input
 //
 // Needs Node 22.18 or later (it loads the package's TypeScript directly).
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import { homedir } from 'node:os';
@@ -57,11 +57,24 @@ const read = (p) => new Uint8Array(readFileSync(p));
 const sha256 = (d) => createHash('sha256').update(d).digest('hex');
 const fail = (msg) => { console.error(msg); process.exit(1); };
 
+const root = join(REPO, 'frames/aqara-s1-plus/tools/root');
+const radio = join(REPO, 'frames/aqara-s1-plus/tools/radio');
+if (!opt['overlay-dir']) {
+  const buildRadio = 'build the radio first: OTBR_RUNTIME_DIR=/data/s1kiosk/radio/run frames/aqara-s1-plus/tools/radio/build-otbr.sh';
+  for (const [file, how] of [
+    [join(radio, 'out/otbr-agent'), buildRadio], [join(radio, 'out/ot-ctl'), buildRadio], [join(radio, 'out/BUILD-INFO.txt'), buildRadio],
+    [join(root, 'out/s1kiosk_verify'), 'build it first: frames/aqara-s1-plus/tools/root/build-verify.sh'],
+  ]) {
+    if (!existsSync(file)) fail(`missing ${file}: ${how}`);
+  }
+  if (!readFileSync(join(radio, 'out/BUILD-INFO.txt'), 'utf8').includes('/data/s1kiosk/radio/run')) {
+    fail('otbr was built with the wrong OTBR_RUNTIME_DIR (need /data/s1kiosk/radio/run)');
+  }
+}
+
 const apk = read(opt.apk);
 const pinned = JSON.parse(readFileSync(join(REPO, 'kiln/assets.lock.json'), 'utf8')).assets.find((a) => a.name === 'magisk').sha256;
 if (sha256(apk) !== pinned) fail(`${opt.apk} is not the pinned Magisk APK (sha256 ${pinned})`);
-const root = join(REPO, 'frames/aqara-s1-plus/tools/root');
-const radio = join(REPO, 'frames/aqara-s1-plus/tools/radio');
 const from = opt['overlay-dir']
   ? (name) => read(join(opt['overlay-dir'], name))
   : (name) => read({
@@ -71,9 +84,6 @@ const from = opt['overlay-dir']
     's1kiosk_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
   }[name] ?? join(root, name));
 const adbKey = opt['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
-if (!opt['overlay-dir'] && !readFileSync(join(radio, 'out/BUILD-INFO.txt'), 'utf8').includes('/data/s1kiosk/radio/run')) {
-  fail('otbr was built with the wrong OTBR_RUNTIME_DIR (need /data/s1kiosk/radio/run)');
-}
 
 const overlay = s1Overlay({
   radioRc: from('s1kiosk_radio.rc'), radioSh: from('s1kiosk_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),

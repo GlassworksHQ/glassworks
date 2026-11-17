@@ -1,3 +1,8 @@
+---
+topic: android
+evidence: verified
+---
+
 # Aqara / Lumi de-bloat
 
 Removing Aqara's launcher, cloud/telemetry, and extra apps so the panel is a

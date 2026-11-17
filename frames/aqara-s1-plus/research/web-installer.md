@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: untested
+---
+
 # Browser installer (WebUSB) — design
 
 > **Historical note.** This is the spec written *before* the installer was built. The installer now

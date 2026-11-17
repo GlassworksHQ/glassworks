@@ -4,11 +4,13 @@ import type { FrameDesign } from '@glassworks/frame-card';
 import s1Plus from '../../../../../frames/aqara-s1-plus/design/frame.json';
 import mirror from '../../../../../frames/lululemon-mirror/design/frame.json';
 import genericAndroid from '../../../../../frames/generic-android/design/frame.json';
+import pixelTablet from '../../../../../frames/google-pixel-tablet/design/frame.json';
 import s1PlusRender from '../../../../../frames/aqara-s1-plus/design/render.webp';
 import mirrorRender from '../../../../../frames/lululemon-mirror/design/render.webp';
 import genericAndroidRender from '../../../../../frames/generic-android/design/render.webp';
+import pixelTabletRender from '../../../../../frames/google-pixel-tablet/design/render.webp';
 
-export const FRAMES = [s1Plus, mirror, genericAndroid] as FrameDesign[];
+export const FRAMES = [s1Plus, mirror, genericAndroid, pixelTablet] as FrameDesign[];
 
 /** An image import's URL: Next gives `{ src }`, Vite (the tests) a string. */
 const url = (m: string | { src: string }) => (typeof m === 'string' ? m : m.src);
@@ -18,4 +20,5 @@ export const RENDERS: Record<string, string> = {
   [s1Plus.id]: url(s1PlusRender),
   [mirror.id]: url(mirrorRender),
   [genericAndroid.id]: url(genericAndroidRender),
+  [pixelTablet.id]: url(pixelTabletRender),
 };

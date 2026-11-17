@@ -13,8 +13,8 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 
 /**
- * [RepoFiles] finds the same files in today's layout and after #21's split, and fails rather than
- * finding nothing. The split's layouts are made up here; the real repo is today's.
+ * [RepoFiles] finds files across the modules wherever they sit (#21), and fails rather than finding
+ * nothing. The layouts are made up here, beside a check on the real repo.
  */
 class RepoFilesTest {
     private val tmp = createTempDirectory("repo-files").toFile()
@@ -43,25 +43,8 @@ class RepoFilesTest {
         assertEquals("dev/glassworks/platform/Platform.kt", r.packagePath(r.source("dev/glassworks/platform/Platform.kt")))
     }
 
-    /** Today's layout: the app and its libraries under app/. */
-    @Test fun findsTodaysLayout() {
-        val r = tree(
-            "app/kiosk/build.gradle.kts", "app/kiosk/src/main/java/dev/glassworks/platform/Platform.kt",
-            "app/kiosk/src/main/java/sh/edm/s1kiosk/MainActivity.kt", "app/kiosk/src/main/res/font/inter.ttf",
-            "app/kiosk/src/test/resources/prefs.golden.txt", "app/libs/improv/src/main/java/dev/glassworks/improv/Compat.kt",
-            "app/kiosk/build/intermediates/src/main/java/Stale.kt",
-        )
-        touch("app/kiosk/build.gradle.kts", "android { defaultConfig { applicationId = \"sh.edm.s1kiosk\" } }")
-        assertEquals(listOf("app/kiosk", "app/libs/improv"), r.names(r.modules))
-        assertEquals(listOf("app/libs/improv"), r.names(r.libraries))
-        assertEquals("app/kiosk", r.rel(r.s1App))
-        assertEquals(2, r.code(atLeast = 2, inModules = r.appModules).size)
-        assertEquals("app/kiosk/src/main/res/font/inter.ttf", r.rel(r.inModule("src/main/res/font/inter.ttf")))
-        assertEquals("app/kiosk/src/test/resources/prefs.golden.txt", r.rel(r.inModule("src/test/resources/prefs.golden.txt")))
-    }
-
-    /** After the split (#21): the same files, spread over modules in several places. */
-    @Test fun findsTheSplitLayout() {
+    /** The files, spread over modules in several places. */
+    @Test fun findsFilesAcrossTheModules() {
         val r = tree(
             "pane-api/src/main/java/dev/glassworks/platform/Platform.kt", "pane-api/src/main/java/dev/glassworks/pane/Pane.kt",
             "core/src/main/java/dev/glassworks/pane/PaneHost.kt", "core/src/main/res/font/inter.ttf",

@@ -35,6 +35,13 @@ import java.util.concurrent.atomic.AtomicReference
  * Like the Manage page, it answers only to the panel's own names ([ownHosts]: DNS rebinding), takes POSTs
  * only from its own pages, and opens the WebSocket only for a page on the panel's own origin: a browser
  * always sends `Origin` with a WebSocket, so another site is refused. Pure JVM; tests drive [handle].
+ *
+ * The page itself ([PAGE]) is a build of Kiln's setup steps (kiln/apps/kiln/lan), shipped in the APK's
+ * assets and read through [files]. Its CSP lets it load only its own files and open only this WebSocket.
+ *
+ * What is left: an upgraded connection has no write timeout. A browser that stops reading while the panel
+ * writes to it holds its worker until the OS gives up on the TCP send (minutes). A newer paired channel and
+ * [DONE] end such a channel at once ([WebSocketStreams.abort]); an unpaired one has its own single slot.
  */
 class LanSetup(
     /** The setup channel's loop over a connection ([sh.edm.s1kiosk.setup.SetupChannel.serve]); `mayChange` gates every op but `state`. */
@@ -51,6 +58,8 @@ class LanSetup(
     private val maxSessions: Int = 4,
     /** How long an unpaired WebSocket may wait for the browser; a paired one waits [idleMs]. */
     private val unpairedIdleMs: Int = 60_000,
+    /** The page's files by name (`index.html`, `setup.js`, `setup.css`, `inter.ttf`), or null when this build has none. */
+    private val files: (String) -> ByteArray? = { null },
 ) {
     private val random = SecureRandom()
     private val sessions = Sessions()
@@ -63,16 +72,18 @@ class LanSetup(
     private val unpaired = AtomicInteger()
     private val held = AtomicReference<Held?>()
 
-    private class Held(val token: String?, val ws: WebSocketStreams)
+    private class Held(val token: String, val ws: WebSocketStreams)
 
     /** The answer for a request under `/setup/`, or null for one that isn't this class's (the Manage page takes it). */
     fun handle(req: HttpRequest): HttpResponse? {
-        if (req.path != PAIR && req.path != DONE && req.path != CHANNEL) return null
+        val file = pageFile(req.path)
+        if (file == null && req.path != PAIR && req.path != DONE && req.path != CHANNEL) return null
         if (!ManageServer.hostAllowed(req.headers["host"], ownHosts())) return HttpResponse.text(400, "Open this page with the panel's address.")
+        if (file != null) return page(req, file)
         return when (req.path) {
             CHANNEL -> channel(req)
             PAIR -> when (req.method) {
-                "GET" -> json(200, JSONObject().put("ok", true).put("paired", sessions.valid(req.cookies[COOKIE], touch = false)).put("open", pairingOpen()))
+                "GET" -> json(200, JSONObject().put("ok", true).put("paired", sessions.valid(req.cookies[COOKIE], req.remote, touch = false)).put("open", pairingOpen()))
                 "POST" -> if (ManageServer.sameOrigin(req.headers)) pair(req) else notOwnPage()
                 else -> HttpResponse.text(405, "Not allowed.")
             }
@@ -80,9 +91,13 @@ class LanSetup(
                 req.method != "POST" -> HttpResponse.text(405, "Not allowed.")
                 !ManageServer.sameOrigin(req.headers) -> notOwnPage()
                 else -> {
+                    // Only from the address that paired, as every other use of the session: a cookie copied off the
+                    // LAN can't end someone else's setup or drop their channel (#386 verifier).
                     val token = req.cookies[COOKIE]
-                    if (sessions.end(token)) event("Setup over the network finished")
-                    held.get()?.takeIf { it.token == token }?.ws?.abort()
+                    if (sessions.end(token, req.remote)) {
+                        event("Setup over the network finished")
+                        held.get()?.takeIf { it.token == token }?.ws?.abort()
+                    }
                     json(200, JSONObject().put("ok", true), cookie(""))
                 }
             }
@@ -111,7 +126,7 @@ class LanSetup(
         return when (val c = code.check(PURPOSE, id, typed)) {
             PanelCode.Check.Ok -> {
                 event("A browser paired with the panel to set it up over the network (${req.remote ?: "unknown address"})")
-                json(200, JSONObject().put("ok", true).put("paired", true), cookie(sessions.create()))
+                json(200, JSONObject().put("ok", true).put("paired", true), cookie(sessions.create(req.remote)))
             }
             is PanelCode.Check.Wrong -> {
                 event("Wrong code typed to set the panel up over the network")
@@ -128,12 +143,13 @@ class LanSetup(
         val key = WebSocketStreams.key(req) ?: return HttpResponse.text(400, "This address takes a WebSocket only.")
         val origin = req.headers["origin"]
         if (origin == null || !ManageServer.sameOrigin(req.headers)) return notOwnPage()
-        val token = req.cookies[COOKIE]
-        val isPaired = sessions.valid(token, touch = false)
-        if (!isPaired && unpaired.get() >= 1) return HttpResponse.text(503, "Another browser is reading this panel's setup. Try again in a moment.")
-        return HttpResponse.webSocket(key, if (isPaired) idleMs.toInt() else unpairedIdleMs) { ws ->
-            val mine = Held(token, ws)
-            if (isPaired) {
+        // The session this channel runs under, when the browser has paired; an unpaired channel has none.
+        val remote = req.remote
+        val token = req.cookies[COOKIE]?.takeIf { sessions.valid(it, remote, touch = false) }
+        if (token == null && unpaired.get() >= 1) return HttpResponse.text(503, "Another browser is reading this panel's setup. Try again in a moment.")
+        return HttpResponse.webSocket(key, if (token != null) idleMs.toInt() else unpairedIdleMs) { ws ->
+            val mine = token?.let { Held(it, ws) }
+            if (mine != null) {
                 held.getAndSet(mine)?.ws?.abort()
             } else if (unpaired.incrementAndGet() > 1) {
                 unpaired.decrementAndGet()
@@ -141,37 +157,65 @@ class LanSetup(
                 return@webSocket
             }
             try {
-                serve(ws.input, ws.output) { sessions.valid(token, touch = true) }
+                serve(ws.input, ws.output) { token != null && sessions.valid(token, remote, touch = true) }
             } catch (_: IOException) {
                 // The browser went away mid-write, or a newer paired channel took over.
             } finally {
-                if (isPaired) held.compareAndSet(mine, null) else unpaired.decrementAndGet()
+                if (mine != null) held.compareAndSet(mine, null) else unpaired.decrementAndGet()
                 ws.close()
             }
         }
     }
 
-    /** The paired browsers. Only the SHA-256 of each cookie is kept; nothing is written to disk. Thread-safe. */
+    /** The page's file name for [path], or null when [path] isn't the page. */
+    private fun pageFile(path: String): String? = when (path) {
+        PAGE, "$PAGE/" -> "index.html"
+        else -> path.removePrefix("$PAGE/").takeIf { path.startsWith("$PAGE/") && it in PAGE_TYPES }
+    }
+
+    /** [PAGE] and its files: GET only, revalidated on every load, the page under a CSP that names this panel's WebSocket. */
+    private fun page(req: HttpRequest, name: String): HttpResponse {
+        if (req.method != "GET" && req.method != "HEAD") return HttpResponse.text(405, "Not allowed.")
+        val bytes = files(name) ?: return HttpResponse.text(404, "This build of the app has no setup page.")
+        val headers = mapOf("Content-Type" to PAGE_TYPES.getValue(name), "Cache-Control" to "no-cache", "X-Content-Type-Options" to "nosniff") +
+            if (name != "index.html") emptyMap() else mapOf(
+                // The Host header passed hostAllowed: one of the panel's own names, with a port of digits.
+                "Content-Security-Policy" to "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; " +
+                    "connect-src 'self' ws://${req.headers["host"]}; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+                "X-Frame-Options" to "DENY",
+                "Referrer-Policy" to "same-origin",
+            )
+        return HttpResponse(200, headers, bytes)
+    }
+
+    /**
+     * The paired browsers. Only the SHA-256 of each cookie is kept; nothing is written to disk. Thread-safe.
+     *
+     * A session counts only from the address that paired ([Paired.remote]). The page is plain HTTP on the LAN, as
+     * the Manage page is (no certificate a browser trusts for a LAN address), so another device that copies the
+     * cookie off the network can't use it from its own address (CodeRabbit on PR 386).
+     */
     private inner class Sessions {
-        private inner class Paired(val createdMs: Long, var usedMs: Long)
+        private inner class Paired(val createdMs: Long, var usedMs: Long, val remote: String?)
 
         private val byKey = LinkedHashMap<String, Paired>()
 
         @Synchronized
-        fun create(): String {
+        fun create(remote: String?): String {
             val t = token(32)
             val now = monoMs()
-            byKey[SessionStore.hash(t)] = Paired(now, now)
+            byKey[SessionStore.hash(t)] = Paired(now, now, remote)
             while (byKey.size > maxSessions) byKey.remove(byKey.entries.minByOrNull { it.value.usedMs }!!.key)
             return t
         }
 
-        /** A paired browser's cookie, good now. [touch] counts it as used (an op that changes something). */
+        /** A paired browser's cookie, good now and from [remote]. [touch] counts it as used (an op that changes something). */
         @Synchronized
-        fun valid(token: String?, touch: Boolean): Boolean {
+        fun valid(token: String?, remote: String?, touch: Boolean): Boolean {
             if (token.isNullOrEmpty() || token.length > 100) return false
             val k = SessionStore.hash(token)
             val p = byKey[k] ?: return false
+            if (p.remote != remote) return false
             val now = monoMs()
             if (now - p.usedMs >= idleMs || now - p.createdMs >= maxMs) { byKey.remove(k); return false }
             if (touch) p.usedMs = now
@@ -179,7 +223,13 @@ class LanSetup(
         }
 
         @Synchronized
-        fun end(token: String?): Boolean = !token.isNullOrEmpty() && byKey.remove(SessionStore.hash(token)) != null
+        /** Ends [token]'s session when [remote] is the address that paired it. */
+        fun end(token: String?, remote: String?): Boolean {
+            if (token.isNullOrEmpty() || token.length > 100) return false
+            val k = SessionStore.hash(token)
+            if (byKey[k]?.remote != remote) return false
+            return byKey.remove(k) != null
+        }
     }
 
     private fun token(bytes: Int): String =
@@ -204,6 +254,7 @@ class LanSetup(
     )
 
     companion object {
+        const val PAGE = "/setup"
         const val PAIR = "/setup/pair"
         const val DONE = "/setup/done"
         const val CHANNEL = "/setup/channel"
@@ -214,8 +265,16 @@ class LanSetup(
         /** How long a re-arm opens pairing again (the Home Assistant button, the USB op). */
         const val ARM_MS = 30 * 60_000L
 
-        const val PAIRING_OFF = "Home Assistant has added this panel, so pairing over the network is off. Turn it on again with " +
-            "the panel's “Allow setup over the network” button in Home Assistant, or over USB with the installer."
+        /** The page's files ([files]), by name, with their types. */
+        val PAGE_TYPES = mapOf(
+            "index.html" to "text/html; charset=utf-8",
+            "setup.js" to "text/javascript; charset=utf-8",
+            "setup.css" to "text/css; charset=utf-8",
+            "inter.ttf" to "font/ttf",
+        )
+
+        const val PAIRING_OFF = "Pairing is off: Home Assistant has added this panel. Turn it on with Allow setup over the network: " +
+            "in Home Assistant, in the panel's settings, or over USB with Kiln."
         private const val NO_CODE = "That code has run out. Show a new one."
     }
 }

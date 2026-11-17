@@ -1,0 +1,22 @@
+{
+  "name": "@glassworks/generic-android-installer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kiln's recipe for any Android device: read it, pick Glassworks or its legacy build, install, grant what adb can, set the home screen, hand over to setup over the LAN. Headless.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fakes": "./test/fakes.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glassworks/adb": "0.0.0",
+    "@glassworks/app-adb": "0.0.0",
+    "@glassworks/lululemon-mirror-installer": "0.0.0",
+    "@glassworks/setup-channel": "0.0.0"
+  }
+}

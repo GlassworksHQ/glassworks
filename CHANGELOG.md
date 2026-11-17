@@ -8,6 +8,28 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
+  Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
+  system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
+  the Manage page shows the same answer, and where updates ask for a tap, how to change that, such as
+  allowing "Install unknown apps" for the app.
+- **Every device says what kind it is, and the Pixel Tablet is listed.** On glassworks.dev and in Kiln's
+  device list, each card now says whether it is a full frame with its own code (the S1), a device frame
+  that runs the generic app with its own settings (the Mirror, generic Android), or a tested device that
+  runs the generic app as it is. The Google Pixel Tablet is the first tested device. Its support is
+  planned and not yet checked on a real unit.
+- **See who is connected to the Zigbee radio.** In the Zigbee coordinator role, the radio's settings
+  page says who uses the radio now, for example "Home Assistant · 192.0.2.20 · since 14:32", or
+  "Nobody". It follows a connect or disconnect within a few seconds. Home Assistant has the same text as
+  the *Radio connected client* sensor, off by default. Comes with the radio bundle.
+- **Set the panel up from a laptop over Wi-Fi.** The panel serves its own setup page at
+  `http://<panel>:8099/setup`: pair with the 6-digit code the panel shows, then the Home Assistant and
+  radio steps, as in Kiln. No cable and no tap on the panel. Kiln's Done screen links it after an install
+  over USB.
+- **Allow setup over the network again.** Once Home Assistant has added the panel, nobody can pair with
+  it from the network until you allow it for 30 minutes: a new **Allow setup over the network** button on
+  the panel's device page in Home Assistant, the same row in the panel's settings (Home Assistant &
+  dashboard) and on the Manage page, or Kiln over USB.
 - **Kiln credits the projects an install is built on.** On the S1, the first screen, the install and
   the done screen say "Built on sunxi-tools by linux-sunxi and Magisk by topjohnwu", with links to
   both. The frames' pages on glassworks.dev have a "Built on community work" section, and the Mirror's
@@ -73,8 +95,21 @@ below as the release notes.
   keep Home Assistant's in one tap. Voice has the wake word, its threshold, mute, mic gain, the wake
   sound and the overlay. Music shows what plays and its volume. Radio shows its firmware and the root
   helper. A pane with nothing of its own lists its entities as Home Assistant shows them.
+- **Glassworks has its own icon.** The launcher, the home app chooser and Settings show the Glassworks
+  mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
+  Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
+  generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
+  The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
+  A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
+  The S1 stays landscape. On a portrait screen the setup screen stacks into one column: the steps above, the
+  card under them, its QR code under the text.
+- **Kiln's technical log words the boot patch differently.** Kiln's boot patcher was rewritten, so the
+  patch step now logs a few short lines such as "boot image: page 2048, gzip ramdisk, AVB footer"
+  instead of Magisk's own messages. You see them under **Technical log** and in a saved failure
+  report. The patched boot image is the same, byte for byte.
 - **The panel's secrets are encrypted on its storage.** The Home Assistant sign-in, the ESPHome API
   key, the camera password and the Sendspin pairing are sealed with a key in Android's Keystore, so a
   copy of the app's settings files holds none of them. The update keeps them all: the panel stays
@@ -231,6 +266,27 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
+  landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
+  did, and stops with a clear message if it didn't. The Mirror's install is still test only.
+- **Glassworks starts on Android 6 and 7.** On its first start on the lululemon Mirror (Android 6), the
+  app's legacy build crashed six times in a row, and Android stopped it and asked for a home app. Its
+  notification used the app's icon, which only Android 8 and later can draw. The notification now has its
+  own icon, and every icon the app shows has a version Android 6 can draw.
+- **A screen without touch stays on setup when it has no network.** A Mirror with no Wi-Fi saved used to
+  leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
+  button that nobody could press. It now stays on the setup screen, which says how to set it up from a
+  computer. On every panel, the offline screen says "Wi-Fi is off" only when Android says so.
+- **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
+  Panes image lets one adb key in without asking: the project's own key, published with its private
+  half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its
+  place when it builds the image. Before, Kiln's own key never got in, and the install would have
+  stopped at "Wait for adb". The Mirror's install is still test only.
+- **Other apps can no longer change the panel's settings.** Until now any app on the panel could open
+  S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or remote
+  debugging.
+  Now only adb (Kiln, the command line), the boot image's root side and the panel itself can. The
+  launcher icon still opens the app, and the panel still starts it as its home screen.
 - **Kiln's device cards stay still with reduced motion.** With "reduce motion" on in the operating
   system, a card no longer jumps up when you point at it or tab to it.
 - **The Overview's pane list reads cleanly.** On the Manage page, each status chip has its gap

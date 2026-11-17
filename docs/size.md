@@ -24,7 +24,7 @@ on the device by [Clarity](perf.md#ram).
 | Part | What is in it |
 |---|---|
 | Engine (GeckoView) | `org.mozilla.*` and `org.webrtc.*` classes, Gecko's native libraries (`libxul.so` and the rest) and `assets/omni.ja` |
-| Core | Everything else: the shell, `dev.glassworks.*` outside the panes, the ESPHome and Improv libraries, Kotlin, AndroidX, resources, and the core's assets (`assets/extension/`, `assets/dexopt/`, `assets/licenses/`, and `assets/blueprints.json`, every pane's blueprint list that the core's card reads) |
+| Core | Everything else: the shell, `dev.glassworks.*` outside the panes, the ESPHome and Improv libraries, Kotlin, AndroidX, resources, and the core's assets (`assets/extension/`, `assets/dexopt/`, `assets/licenses/`, `assets/blueprints.json`, every pane's blueprint list that the core's card reads, and `assets/setup/`, the setup page the panel serves at `/setup`) |
 | Pane `<id>` | The pane's own classes (its package, and classes elsewhere that only it uses), the libraries only it uses, and its assets under `assets/panes/<id>/` (or a path `parts.json` names for it: the radio's `assets/radio-bundle/`) |
 | Shared library `<name>` | A library more than one part uses, counted once and in nobody's own total |
 | Zip overhead | The APK's own headers and directory |
@@ -79,6 +79,13 @@ Each pane's is about twice its own size then, at least 100 kB; the radio's own s
 bundle (3.49 MB, of which the bundle is 3.32 MB), so its budget is 7.00 MB. These are project
 choices, so that growth is a decision, not a drift. (The first budgets, 2026-11-13, measured a build
 without the bundle, 97.84 MB, which is not what ships; v0.4.3's released APK was 101.08 MB.)
+
+Glassworks for generic Android (#23) has its own budgets, in `frames/generic-android/budgets.json`,
+by the same rules: its 2026-11-15 release build plus about 2.5% (100.82 MB `arm64-v8a`, so 103.40 MB;
+97.88 MB `armeabi-v7a`, so 100.40 MB), and each of its three panes about twice its own size. CI's
+`size-generic` job checks them on every pull request that changes what goes into that APK. It builds this branch only, so its report has no
+change column ("this check builds no base"). Its per-pane RAM budgets wait for a measured run on a
+tablet; the file's `_todo_ram` says what to add.
 
 The release build has R8 off (`frames/aqara-s1-plus/android/build.gradle.kts`, `isMinifyEnabled = false`), so the dex is
 the unshrunk code. Turning R8 on would change these numbers and needs its own PR (GeckoView and the

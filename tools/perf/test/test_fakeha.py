@@ -153,6 +153,30 @@ class FakeHA(unittest.TestCase):
         self.assertIn("light.living_room", ev[0]["event"]["a"])
         self.assertEqual(set(ev[0]["event"]["a"]["sensor.clarity_0"]), {"s", "a", "c", "lc", "lu"})
 
+    def test_the_more_info_dialogs_entities_and_their_commands(self):
+        """Clarity v3 (#211): the dialogs' entities are in the home (the thermostat on no card), each
+        dialog's registry entry is answered as HA answers an entity without one, and the sensor's
+        history covers the 24 h its dialog asks for. None is an unknown command or a failure."""
+        with open(os.path.join(os.path.dirname(HERE), "page", "tiers.json")) as f:
+            dialogs = json.load(f)["DIALOG"]["entities"]
+        ws = self.connect()
+        _, ev = ws.call({"type": "subscribe_entities"})
+        states = ev[0]["event"]["a"]
+        for d in dialogs:
+            self.assertIn(d["entity"], states)
+            res, _ = ws.call({"type": "config/entity_registry/get", "entity_id": d["entity"]})
+            self.assertEqual((res["success"], res["error"]["code"]), (False, "not_found"), d)
+        self.assertEqual(states["climate.clarity_0"]["s"], "heat")
+        self.assertIn("climate", ws.call({"type": "get_config"})[0]["result"]["components"])
+        cards = json.dumps(D.lovelace(D.DASHBOARD))
+        self.assertNotIn("climate.clarity_0", cards)
+        now = time.time()
+        start = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now - 86400))
+        _, ev = ws.call({"type": "history/stream", "entity_ids": ["sensor.clarity_10"], "start_time": start,
+                         "minimal_response": True, "no_attributes": True})
+        self.assertEqual(len(ev[0]["event"]["states"]["sensor.clarity_10"]), 96)
+        self.assertNotIn("config/entity_registry/get", fakeha.Handler.hub.unknown)
+
     def test_the_toggle_flips_the_light(self):
         ws = self.connect()
         _, ev = ws.call({"type": "subscribe_entities"})
@@ -395,8 +419,9 @@ class FakeHA(unittest.TestCase):
         self.assertNotIn("{{", html)
         status, _, js, cache = self.http("GET", m.group(1))
         self.assertIn("window.GW_CLARITY = ", js.decode())
-        self.assertIn('"PROTOCOL": 2', js.decode())
-        self.assertIn('"CLARITY": 2', js.decode())
+        self.assertIn('"PROTOCOL": 3', js.decode())
+        self.assertIn('"CLARITY": 3', js.decode())
+        self.assertIn('"DIALOG": {', js.decode())          # Clarity v3 (#211): the more-info dialogs
         self.assertIn('"HEAD_CARDS": 10', js.decode())
 
     def test_the_harness_is_never_cached_at_a_fixed_url(self):

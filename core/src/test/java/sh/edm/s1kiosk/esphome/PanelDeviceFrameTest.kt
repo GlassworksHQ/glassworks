@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.esphome
 
 import dev.glassworks.frame.Frame
 import dev.glassworks.testing.RepoFiles
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,7 +39,10 @@ class PanelDeviceFrameTest {
         val libPackages = RepoFiles.sources(atLeast = 20, inModules = RepoFiles.libraries) { it.extension == "kt" }
             .mapNotNull { f -> f.useLines { ls -> ls.firstOrNull { it.startsWith("package ") }?.removePrefix("package ")?.trim() } }
             .toSet()
-        val sources = RepoFiles.sources(atLeast = 30, inModules = RepoFiles.appModules) { it.extension == "kt" && RepoFiles.inPackage(it, "dev/glassworks") }
+        // An APK module is an app, not the core: the generic app (#23) builds on the shell in sh.edm.s1kiosk.
+        val apks = RepoFiles.appModules.filter { m -> File(m, "build.gradle.kts").let { it.isFile && "id(\"com.android.application\")" in it.readText() } }
+        assertTrue("found the APK modules", apks.size >= 2)
+        val sources = RepoFiles.sources(atLeast = 30, inModules = RepoFiles.appModules - apks.toSet()) { it.extension == "kt" && RepoFiles.inPackage(it, "dev/glassworks") }
         // Imports, and fully qualified names anywhere else (`sh.edm.s1kiosk.X(...)` needs no import).
         val qualified = Regex("""\bsh\.edm\.[a-z0-9_.]*[a-z0-9_]""")
         val bad = sources.flatMap { f ->

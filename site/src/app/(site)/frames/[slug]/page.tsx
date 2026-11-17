@@ -11,6 +11,8 @@ import { ClarityChipLink } from "@/components/clarity/ClarityChipLink";
 import { CLARITY, clarityFor } from "@/lib/clarity";
 import { frameById, frames, installLink } from "@/lib/frames";
 import { getDocs } from "@/lib/docs";
+import { researchUrl } from "@/lib/docs/research";
+import { KIND_TEXT } from "@glassworks/frame-card";
 import { frameSeo, ratingKeys, ratingText, ships, type Support } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
@@ -53,6 +55,7 @@ async function Device({ params }: { params: Params }) {
   const d = frameById(slug);
   if (!d) notFound();
   const install = installLink(d);
+  const base = d.base ? frameById(d.base) : undefined;
   const c = clarityFor(d.id);
   const live = ships(d.status);
 
@@ -91,7 +94,7 @@ async function Device({ params }: { params: Params }) {
               </ClarityChipLink>
             )}
             <Chip>
-              Frame <code>{d.id}</code>
+              {KIND_TEXT[d.kind]} <code>{d.id}</code>
             </Chip>
           </div>
           <h1 className={s.h1}>{d.name}</h1>
@@ -121,7 +124,15 @@ async function Device({ params }: { params: Params }) {
               </a>
             )}
           </div>
-          <p className={s.how}>{install ? d.install.how : `Not in Kiln yet. ${d.install.how}`}</p>
+          <p className={s.how}>
+            {install ? d.install.how : `Not in Kiln yet. ${d.install.how}`}
+            {base && (
+              <>
+                {" "}
+                A tested device: it runs <Link href={`/frames/${base.id}`}>{base.name}</Link> as it is.
+              </>
+            )}
+          </p>
         </div>
         <HeroModel f={d} />
       </header>
@@ -202,7 +213,7 @@ async function Device({ params }: { params: Params }) {
             {guides.map((g) => (
               <Row key={g.url} href={g.url} title={g.label ?? g.title} sub={g.toc.filter((t) => t.depth === 2).slice(0, 3).map((t) => t.text.replace(/\s*\(.*?\)/g, "")).join(", ")} />
             ))}
-            {notes.length > 0 && <Row href={`/docs/notes#notes-${d.id}`} title="Engineering notes" sub={`${notes.length} notes`} />}
+            {notes.length > 0 && <Row href={researchUrl(d.id)} title="Research" sub={`${notes.length} engineering notes`} />}
             {!guides.length && !notes.length && <Row href={`/docs/frames/${d.id}`} title="About this frame" sub="What it is and how it's put together" />}
           </ListCard>
         </div>

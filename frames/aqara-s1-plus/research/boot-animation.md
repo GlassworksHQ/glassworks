@@ -1,3 +1,8 @@
+---
+topic: display
+evidence: verified
+---
+
 # Boot animation: what Android 10 and the boot image allow
 
 **Status (2026-11-12): working on the S1, through a real boot.** The #63 animation fits the boot

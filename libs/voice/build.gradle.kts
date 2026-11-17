@@ -3,28 +3,20 @@
 // See README.md in this directory.
 plugins {
     id("com.android.library")
+    id("glassworks.android")
     id("org.jetbrains.dokka")
     id("com.vanniktech.maven.publish") // dev.glassworks:voice, set up in the root build.gradle.kts
 }
 
 android {
     namespace = "dev.glassworks.voice"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
     defaultConfig {
         minSdk = 23
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
 // WakeWordCatalogTest reads the host script, which no compile task takes in: a change to it re-runs the tests.
-// The root build declares repo inputs for the Glassworks modules only, not for libs/.
+// glassworks.android declares repo inputs for the Glassworks modules only, not for libs/.
 tasks.withType<Test>().configureEach {
     inputs.file(rootProject.file("tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
         .withPathSensitivity(PathSensitivity.NONE)

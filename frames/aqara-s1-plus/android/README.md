@@ -171,6 +171,7 @@ $A --es screen_mode always # or presence (default)
 $A --ei idle_off_sec 120 --ei night_idle_off_sec 20 --es night_window 22:00-07:00
 $A --ef presence_range_m 1.0   # VI5300 range (needs WRITE_SECURE_SETTINGS)
 $A --es screen off         # or on
+$A --ez test_hold true --ei test_hold_s 1800   # screen on past the idle timeout for 1800 s (at most 3600), brightness unchanged; no setting changes; outlives an app restart, not a reboot; test_hold false ends it (Clarity, #240)
 $A --ez restart true       # restart the app process
 $A --es wake_model okay_nabu --ef wake_threshold 0.9 --ef mic_gain 2.0 --ez mic_muted false  # wake word id (an old *.tflite name maps to its microWakeWord model); the threshold of that word
 $A --es api_key $(openssl rand -base64 32) --ez api_encryption true   # manual ESPHome API key (HA normally provisions one)
@@ -185,6 +186,12 @@ $A --ez sendspin_flac false           # offer only PCM to Music Assistant (defau
 $A --es base_backend auto      # wall base: auto (UART unless Aqara cloud blocking is off) | uart | localservice
 $A --es base_transport tcp:127.0.0.1:9999   # UART backend on frames/aqara-s1-plus/tools/bracket/base_emulator.py (adb reverse); "" = /dev/ttyS3
 ```
+
+Only adb, root, the system (HOME) and the app itself can start `MainActivity`: it takes
+`WRITE_SECURE_SETTINGS`, which adb's shell holds and Android waives for root, the system and the app.
+Another app on the panel can't send these extras. The launcher icon starts the alias
+`sh.edm.s1kiosk.Launcher`, and the app ignores the extras of a start through it
+(logged as `ignored the extras of a start through .Launcher`).
 
 Do **not** change `wm density` to scale the UI. On this panel it breaks GeckoView's surface
 size until reboot. Use `zoom` instead.

@@ -44,21 +44,25 @@ export interface SparseChunk {
     data: Blob | null; // to be populated by consumer
 }
 
+/**
+ * Collects the parts and makes one flat Blob at the end. Upstream wrapped the Blob so far in a new
+ * one on every append: a piece of thousands of chunks became a Blob nested thousands deep, and Node's
+ * Blob reader crashed on it (SIGSEGV) with the Mirror's system.img (2026-11-16). Same bytes.
+ */
 class BlobBuilder {
-    private blob: Blob;
+    private parts: Blob[] = [];
     private type: string;
 
     constructor(type: string = "") {
         this.type = type;
-        this.blob = new Blob([], { type: this.type });
     }
 
     append(blob: Blob) {
-        this.blob = new Blob([this.blob, blob], { type: this.type });
+        this.parts.push(blob);
     }
 
     getBlob(): Blob {
-        return this.blob;
+        return new Blob(this.parts, { type: this.type });
     }
 }
 

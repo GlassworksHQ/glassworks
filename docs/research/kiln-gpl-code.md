@@ -1,11 +1,17 @@
+---
+topic: install
+evidence: read
+---
+
 # Kiln licence audit: which code in the MIT installer comes from GPL projects
 
 **Status (2026-11-16): done (#355).** Both rewrites have landed, written in a clean room from the specs
 in [kiln-cleanroom/](kiln-cleanroom/README.md): `kiln/packages/fel` in #372 and `kiln/packages/bootpatch`
 in #373. Kiln holds no GPL code now. The FEL rewrite booted U-Boot on a real S1 on 2026-11-16. The
 boot patcher's output is byte-identical to the old patcher's on the S1's own stock boot image and on
-all 8 recorded S1 cases. The rest of this note describes the code as it was before the rewrite: until
-then, Kiln's page held code taken from two GPL projects. In `kiln/packages/fel`, four small ARM
+all 8 recorded S1 cases. The rest of this note describes the code as it was before the rewrite, at
+`73fe7d1a`. Some files it names are gone: #372 removed `fel/src/protocol.ts`, and its routines, SPL
+loader and version parsing now live in `routines.ts`, `spl.ts` and `felDevice.ts`. Until the rewrite, Kiln's page held code taken from two GPL projects. In `kiln/packages/fel`, four small ARM
 routines were copied from sunxi-tools (GPL-2.0-or-later) and the SPL loader was translated from it.
 In `kiln/packages/bootpatch`, parts were translated or copied from Magisk v31.1 (GPL-3.0-only). Both
 packages said `"license": "MIT"`.
@@ -45,7 +51,7 @@ licensed upstream, and whether it reaches browsers.
 
 2. **Word-for-word comparison of the FEL package** (2026-11-15, verified). `arrays.py` (under
    [How to reproduce](#how-to-reproduce)) takes each ARM word array in
-   `kiln/packages/fel/src/protocol.ts` and the matching upstream array, in order, and compares them
+   `kiln/packages/fel/src/protocol.ts` (removed in #372) and the matching upstream array, in order, and compares them
    as lists, so it checks order and repeated words:
    ```
    $ python3 -I arrays.py kiln/packages/fel/src/protocol.ts ~/src/sunxi-tools

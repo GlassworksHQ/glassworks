@@ -2,6 +2,7 @@ package sh.edm.s1kiosk
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.pane.Pane
@@ -35,6 +36,14 @@ interface AppParts {
 
     /** The app's activity: the one that shows the dashboard, and that Home Assistant's commands go to. */
     val mainActivity: Class<out Activity>
+
+    /**
+     * Whether the extras of [intent], which started or reached the app's activity, may change settings. Only a
+     * start of [mainActivity] itself, which the app's manifest guards with WRITE_SECURE_SETTINGS (adb, root, the
+     * system and the app get in; other apps don't), may. A launcher alias, which any app can start, may not
+     * (#23, #374); the activity drops its extras.
+     */
+    fun trustsExtras(intent: Intent): Boolean = intent.component?.className == mainActivity.name
 
     /** The file that holds the settings of the pane with id [namespace]. */
     fun paneFile(context: Context, namespace: String): SharedPreferences

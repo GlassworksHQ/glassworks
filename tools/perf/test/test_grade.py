@@ -51,12 +51,12 @@ LOAD = {"good": 1000, "ni": 3000, "poor": 5000}
 BLOCKING = {"good": 100, "ni": 400, "poor": 900}            # rubric 2: Lighthouse's mobile TBT bands (200, 600)
 
 
-def page(tap="good", scroll="premium", updates="premium", load="good", camera="good", blocking="good"):
-    """One page's grade inputs: tap and load as values, scroll, live updates and camera as median run
-    levels (camera counts only on the pages with streams)."""
+def page(tap="good", scroll="premium", updates="premium", load="good", camera="good", blocking="good", dialog="premium"):
+    """One page's grade inputs: tap and load as values, scroll, live updates, camera and the more-info
+    dialog (rubric 3) as median run levels (camera counts only on the pages with streams)."""
     return {"inp_ms": INP[tap] if tap else None, "load_ms": LOAD[load] if load else None,
             "blocking_ms": BLOCKING[blocking] if blocking else None,
-            "scroll_level": scroll, "updates_level": updates, "camera_level": camera}
+            "scroll_level": scroll, "updates_level": updates, "camera_level": camera, "dialog_level": dialog}
 
 
 def pages(light=None, typical=None, heavy=None, nocam=None):
@@ -169,6 +169,50 @@ class PageLevel(unittest.TestCase):
     def test_limits_names_the_task(self):
         self.assertEqual(G.limits(G.tier_bands(page(scroll="fluid", load="poor")), "good"), ["scroll", "load"])
 
+    def test_the_more_info_dialog_counts_on_every_page(self):
+        """Rubric 3 (#211): each level asks the dialog for its own level, as live updates; not measured fails."""
+        for p in G.TIERS:
+            with self.subTest(p):
+                self.assertEqual(G.page_level(G.tier_bands(page(dialog="good"), p)), "good")
+                self.assertEqual(G.page_level(G.tier_bands(page(dialog="fluid"), p)), "fluid")
+                self.assertEqual(G.page_level(G.tier_bands(page(dialog="slow"), p)), None)
+                self.assertEqual(G.page_level(G.tier_bands(page(dialog=None), p)), None)
+        self.assertEqual(G.limits(G.tier_bands(page(dialog="fluid")), "good"), ["dialog"])
+
+
+def dlg(settled, frames=True, failed=0, n=3):
+    """One run's more-info dialogs: the slowest to settle, and whether the open animations hold 60 fps."""
+    return {"n": n, "failed": failed, "settled_ms": settled,
+            "frames": run(59.9, 16.67, n=54) if frames else run(45.0, 33.33, jank=20, n=54)}
+
+
+class DialogLevel(unittest.TestCase):
+    """Rubric 3 (#211): the slowest dialog to settle, 1 s for good (RAIL's focus bound) and 2 s for
+    fluid (RAIL's later load); the open animation's 60 fps bar only for premium."""
+
+    CASES = [
+        ("1 s, the animation at 60 fps", dlg(1000), "premium"),
+        ("1 s, the animation's frames late: good", dlg(1000, frames=False), "good"),
+        ("just over 1 s", dlg(1000.1), "fluid"),
+        ("2 s", dlg(2000), "fluid"),
+        ("just over 2 s", dlg(2000.1), "slow"),
+        ("a slow history graph: settled at 3.5 s", dlg(3500), "slow"),
+        ("a dialog that never opened", dlg(None, failed=1), "slow"),
+        ("one failed, the others quick: the run fails", dlg(300, failed=1), "slow"),
+        ("the view didn't get to them", {"timed_out": True}, "slow"),
+        ("no animation frames (reduced motion): not premium", dict(dlg(300), frames={"n": 0}), "good"),
+        ("not measured", None, None),
+    ]
+
+    def test_each_dialog_level_boundary(self):
+        for name, r, want in self.CASES:
+            with self.subTest(name):
+                self.assertEqual(G.dialog_level(r), want)
+
+    def test_the_bars_are_rubric_json_s(self):
+        self.assertEqual([(lv["level"], lv["settled_max_ms"]) for lv in G.DIALOG_LEVELS],
+                         [("premium", 1000), ("good", 1000), ("fluid", 2000)])
+
 
 class Letter(unittest.TestCase):
     """Each letter's boundary: the frame that just meets a letter gets it, and moving one page one
@@ -221,7 +265,8 @@ class Letter(unittest.TestCase):
         g = G.grade(pages(heavy="drop"), 1000)
         self.assertEqual(g["grade"], "B")                                  # B asks nothing of heavy (rubric v11)
         self.assertTrue(g["provisional"])
-        self.assertEqual(g["missing"], ["heavy.tap", "heavy.scroll", "heavy.updates", "heavy.load", "heavy.camera", "heavy.blocking"])
+        self.assertEqual(g["missing"], ["heavy.tap", "heavy.scroll", "heavy.updates", "heavy.load", "heavy.camera", "heavy.blocking",
+                                        "heavy.dialog"])
 
     def test_nothing_measured_is_e_and_provisional(self):
         g = G.grade({}, None)
@@ -397,6 +442,9 @@ class SharedCases(unittest.TestCase):
             self.assertEqual(G.median_level(c["levels"]), c["level"], c)
         for c in self.data["camera_levels"]:
             self.assertEqual(G.camera_level(c["run"]), c["level"], c["name"])
+        self.assertTrue(self.data["dialog_levels"])
+        for c in self.data["dialog_levels"]:
+            self.assertEqual(G.dialog_level(c["run"]), c["level"], c["name"])
 
     def test_frames_and_median_bands(self):
         for c in self.data["frames"]:

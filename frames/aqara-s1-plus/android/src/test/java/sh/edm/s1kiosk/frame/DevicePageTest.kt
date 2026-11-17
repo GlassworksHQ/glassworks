@@ -46,6 +46,8 @@ class DevicePageTest {
     @Before fun aPixelTablet() {
         ShadowBuild.setManufacturer("Google")
         ShadowBuild.setModel("Pixel Tablet")
+        app.applicationInfo.targetSdkVersion = 35 // the app's; Robolectric's bare Application says 23
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false) // Robolectric keeps it from the last test
     }
 
     private fun titles(s: SettingsSection) = s.items.map { i ->
@@ -77,7 +79,7 @@ class DevicePageTest {
         val s = s1()
         assertEquals("device", s.id)
         assertEquals("S1 Plus", s.title)
-        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Aqara apps", "Radio mode"), titles(s))
+        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Aqara apps", "Radio mode", "Silent updates"), titles(s))
         assertEquals("Turned off: Firmware updater (1 of 2)", s.items.filterIsInstance<SettingsItem.Info>().single { it.title() == "Aqara apps" }.detail())
         val radio = s.items.filterIsInstance<SettingsItem.Link>().single()
         assertEquals("opens the Radio pane", "radio", radio.section)
@@ -109,7 +111,7 @@ class DevicePageTest {
     }
 
     @Test fun aqaraAppsTheAppCantSeeAreLeftOut() {
-        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Radio mode"), titles(s1()))
+        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Radio mode", "Silent updates"), titles(s1()))
     }
 
     @Test fun blockAqaraCloudIsTheWallBasesSettingUnderItsOwnKey() {
@@ -129,14 +131,56 @@ class DevicePageTest {
         assertEquals(setOf("block_aqara_cloud", "aqara_cloud"), sh.edm.s1kiosk.base.WallBaseDefinition.CLOUD_ENTITIES)
     }
 
+    private fun silent(s: SettingsSection) = s.items.filterIsInstance<SettingsItem.Info>().single { it.title() == "Silent updates" }
+
+    @Test fun theS1sSilentUpdatesFollowTheBootImagesRootService() {
+        val row = silent(s1())
+        assertEquals("No: this boot image has no root update service. To change it: update the boot image with Kiln", row.detail())
+        assertTrue("amber: Kiln can fix it", row.fixable())
+        props.values["sys.s1kiosk.update.version"] = "1"
+        val withService = S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app) { null }
+        assertEquals("Yes: the boot image's root update service installs them", silent(withService).detail())
+        assertFalse(silent(withService).fixable())
+    }
+
+    @Test fun aRootServicePropertyThatIsntAVersionMeansNoService() {
+        for (v in listOf("", "0", "-1", "yes", "1.0", " v2 ")) {
+            props.values["sys.s1kiosk.update.version"] = v
+            val row = silent(S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app) { null })
+            assertTrue("'$v': ${row.detail()}", row.detail().startsWith("No: this boot image has no root update service"))
+        }
+        props.values["sys.s1kiosk.update.version"] = " 3\n"
+        val row = silent(S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app) { null })
+        assertTrue("getprop's own whitespace is fine", row.detail().startsWith("Yes: "))
+    }
+
+    @Test fun theS1sSilentUpdatesSayCheckingUntilGetpropLands() {
+        val queued = ArrayList<Runnable>()
+        val device = S1Device(AqaraCloud(run = { "" }), props, reader = { queued += it })
+        assertEquals("Checking", silent(device.section(app) { null }).detail())
+        queued.forEach { it.run() }
+        assertTrue(silent(device.section(app) { null }).detail().startsWith("No: "))
+    }
+
     @Test fun genericAndroidsRows() {
         val s = GenericAndroid(app).deviceSection(app)
         assertEquals("Pixel Tablet", s.title)
-        assertEquals(listOf("Updates without a tap", "Device owner", "Model", "Android"), titles(s))
+        assertEquals(listOf("Silent updates", "Device owner", "Model", "Android"), titles(s))
         val info = s.items.filterIsInstance<SettingsItem.Info>().associate { it.title() to it.detail() }
         assertEquals("Google Pixel Tablet", info["Model"])
         assertEquals("No", info["Device owner"])
-        assertEquals("Robolectric's SDK 34, without the install permission", "Allow “Install unknown apps” for the app in Android's settings", info["Updates without a tap"])
+        assertEquals(
+            "Robolectric's SDK 34, Install unknown apps not allowed",
+            "No: Android needs “Install unknown apps” allowed for the app. To change it: allow it in Android's settings, under Apps", info["Silent updates"],
+        )
+        assertTrue(silent(s).fixable())
+    }
+
+    @Test fun genericAndroidWithInstallUnknownAppsUpdatesItself() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true)
+        val row = silent(GenericAndroid(app).deviceSection(app))
+        assertEquals("Yes: Android 12 or newer lets the app update itself", row.detail())
+        assertFalse(row.fixable())
     }
 
     @Test
@@ -145,15 +189,16 @@ class DevicePageTest {
         // CodeRabbit on #303: a device owner installs silently on any Android the app runs on.
         shadowOf(app.getSystemService(android.app.admin.DevicePolicyManager::class.java)).setDeviceOwner(android.content.ComponentName(app.packageName, "x.Admin"))
         val info = GenericAndroid(app).deviceSection(app).items.filterIsInstance<SettingsItem.Info>().associate { it.title() to it.detail() }
-        assertEquals("Available: the app is the device owner", info["Updates without a tap"])
+        assertEquals("Yes: the app is the device owner", info["Silent updates"])
         assertTrue(info["Device owner"]!!.startsWith("Yes"))
     }
 
     @Test
     @Config(sdk = [29])
-    fun withoutDeviceOwnerAndroid10HasNoUpdatesWithoutATap() {
-        val info = GenericAndroid(app).deviceSection(app).items.filterIsInstance<SettingsItem.Info>().associate { it.title() to it.detail() }
-        assertEquals("Not on this Android: it needs Android 12 or newer, or the app as device owner", info["Updates without a tap"])
+    fun withoutDeviceOwnerAndroid10AsksForATapAndSaysHowToChangeIt() {
+        val row = silent(GenericAndroid(app).deviceSection(app))
+        assertEquals("No: Android 10 asks for a tap on each update. To change it: make the app device owner, on a reset device with no accounts", row.detail())
+        assertTrue(row.fixable())
     }
 
     @Test fun theListIsDebloatShs() {

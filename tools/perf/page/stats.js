@@ -416,9 +416,149 @@
     return rvfc ? { frames: callbacks, source: "rvfc" } : { frames: null, source: "none" };
   }
 
+  // HA's more-info dialog (protocol 3, #211), one animation frame at a time while it opens. obs:
+  // opened (HA's `opened`: the bottom sheet or dialog started to show), shown (HA's `after-show`: its
+  // show animation finished), graph (null when the dialog has no history graph; else whether it is
+  // drawn: its chart laid out with its data). prev: the state so far ({} at first). Each mark is the
+  // first frame in which it held; settled is the first frame in which it is shown and its graph, if
+  // any, drawn. Done at settled.
+  function dialogStep(obs, ts, prev) {
+    const st = Object.assign({ opened: null, shown: null, graph: null, settled: null, done: false }, prev);
+    if (obs.opened && st.opened === null) st.opened = ts;
+    if (obs.shown && st.shown === null) st.shown = ts;
+    if (obs.graph === true && st.graph === null) st.graph = ts;
+    if (st.shown !== null && (obs.graph === null || st.graph !== null)) {
+      st.settled = ts;
+      st.done = true;
+    }
+    return st;
+  }
+
+  // Refreshes a run of frame intervals missed: each interval of k refreshes (to the nearest) missed k - 1.
+  function missedRefreshes(intervalsMs, vsyncMs) {
+    const period = vsyncMs > 0 ? vsyncMs : BUDGET_MS;
+    return intervalsMs.reduce((n, x) => n + Math.max(0, Math.round(x / period) - 1), 0);
+  }
+
+  // One dialog's timing points (#211), all ms after t0, the moment the harness fired the tile's event.
+  // d: t0, frames (every animation frame's time from t0 on), the marks from dialogStep (opened, shown,
+  // graph, settled: frame times or null), and the close: c0 (closeDialog called), closed (the first
+  // frame after HA's `closed`, its hide animation finished, or null), closeFrames. The open animation
+  // runs from the frame it started in (opened) to the frame it finished in (shown); its frames are
+  // what `anim` and `dropped` read. Frames before opened are HA building the dialog: one long frame
+  // there is the open's response, not the animation's.
+  function dialogTimes(d, vsyncMs) {
+    const r1 = (x) => Math.round(x * 10) / 10;
+    // An animation frame's time is when its frame began: one already under way when the event fired
+    // can read a little before t0 (Chrome, 2026-11-16: -0.4 ms), and shows the response at once: 0.
+    const after = (t, from) => (t === null || t === undefined ? null : r1(Math.max(0, t - from)));
+    const end = d.shown !== null ? d.shown : (d.frames.length ? d.frames[d.frames.length - 1] : null);
+    const animStamps = d.opened === null ? [] : d.frames.filter((t) => t >= d.opened && t <= end);
+    const anim = intervals(animStamps);
+    const openStamps = [d.t0].concat(d.frames.filter((t) => t > d.t0 && (d.settled === null || t <= d.settled)));
+    const close = d.c0 === null || d.c0 === undefined ? null
+      : intervals([d.c0].concat((d.closeFrames || []).filter((t) => t > d.c0 && (d.closed === null || t <= d.closed))));
+    return {
+      opened: d.opened !== null,
+      open_ms: after(d.opened, d.t0),
+      shown_ms: after(d.shown, d.t0),
+      graph_ms: after(d.graph, d.t0),
+      // Graded: unrounded, so rounding can't carry it under a bar (2000.04 ms isn't fluid; #410's CodeRabbit).
+      settled_ms: d.settled === null || d.settled === undefined ? null : Math.max(0, d.settled - d.t0),
+      anim: frameStats(anim, vsyncMs),
+      anim_intervals: anim.map(r1),
+      dropped: missedRefreshes(anim, vsyncMs),
+      longest_frame_ms: openStamps.length > 1 ? r1(Math.max.apply(null, intervals(openStamps))) : null,
+      close_ms: d.c0 === null || d.c0 === undefined ? null : after(d.closed, d.c0),
+      close_longest_ms: close && close.length ? r1(Math.max.apply(null, close)) : null,
+    };
+  }
+
+  // HA's more-info dialog's events for one dialog the harness measures (#410's CodeRabbit). ev: the
+  // record so far ({opened, shown, closed, el}, nulls at first); kind: "opened", "shown" (HA's
+  // after-show) or "closed"; seen: {el, entity, at}, the ha-more-info-dialog the event came from, the
+  // entity it shows then and when. An event counts only if the dialog shows the measured entity: a
+  // late show of an earlier dialog, opening while this one is measured, is not this one's. Its show
+  // and close count only from the element whose `opened` counted, after it. Each mark is the first.
+  function dialogEvent(ev, kind, seen, entity) {
+    if (!seen || !seen.el || seen.entity !== entity) return ev;
+    if (kind !== "opened" && (ev.opened === null || seen.el !== ev.el)) return ev;
+    if (ev[kind] !== null) return ev;
+    const out = Object.assign({}, ev);
+    out[kind] = seen.at;
+    if (kind === "opened") out.el = seen.el;
+    return out;
+  }
+
+  // The more-info dialogs the harness asked for that HA hasn't shown yet (#410). fired: [{entity, t0,
+  // opened, expires}], one per tile event; asks: [{entity, at}], HA's registry asks for those entities
+  // (its more-info dialog loads the entity's entry each time it shows one, ha-more-info-dialog.ts
+  // showDialog). One counts as shown once it opened or HA asked for its entity at or after its event:
+  // HA can show it without an `opened` (a sheet already open just changes entity). One carried past
+  // a refused view (carriedShows) is no longer waited for after `expires`. Returns the entities still
+  // waiting in HA at `now`.
+  function pendingShows(fired, asks, now) {
+    return (fired || []).filter((f) => !f.opened && !(asks || []).some((a) => a.entity === f.entity && a.at >= f.t0)
+                                       && !(f.expires !== undefined && now !== undefined && now > f.expires))
+      .map((f) => f.entity);
+  }
+
+  // What the next view's check still waits for after a view's check (#410's CodeRabbit). clean: HA
+  // was done; then nothing. Else the view isn't measured, and the dialogs HA still hadn't shown are
+  // carried to the next view's check, each for keepMs more (one dialog's wait and one settle) from
+  // when it was first carried: one HA shows by then is caught there; one it never shows is dropped
+  // then, so it refuses at most the views in that time, not every view after it.
+  function carriedShows(fired, asks, now, clean, keepMs) {
+    if (clean) return [];
+    const left = new Set(pendingShows(fired, asks, now));
+    return (fired || []).filter((f) => left.has(f.entity) && !f.opened)
+      .map((f) => Object.assign({}, f, { expires: f.expires !== undefined ? f.expires : now + keepMs }));
+  }
+
+  // Waiting for HA's dialogs to be done with (#410), one look at a time: obs {pending (dialogs asked
+  // for that HA hasn't shown), open (a more-info dialog is open), history (HA's history entry for a
+  // dialog is still the current one: its close's history.back() hasn't landed)}, at `now`; st the
+  // state so far ({start}). Idle when nothing is pending, open or in the history: done and clean. One
+  // that is open is to be closed (`close`). Done, not clean, at limitMs.
+  function settleStep(obs, now, st, limitMs) {
+    const s = Object.assign({ start: now, done: false, clean: false, close: false }, st);
+    s.close = !!obs.open;
+    if (!obs.pending && !obs.open && !obs.history) {
+      s.done = true;
+      s.clean = true;
+    } else if (now - s.start >= limitMs) {
+      s.done = true;
+      s.clean = false;
+    }
+    return s;
+  }
+
+  // The wait itself (#410): look() -> {pending: [entities], open, history} each time; close() closes
+  // the dialog open now; now() the clock; wait() until the next look. A dialog open at the limit is
+  // still closed before it stops. `closed` counts dialogs, one per opening (looks in a row that find
+  // one open are one dialog). Returns {ms, clean, closed, pending, open, history}.
+  async function settleLoop(look, close, limitMs, now, wait) {
+    const t0 = now();
+    let st = { start: t0 }, closed = 0, closing = false, o = { pending: [], open: false, history: false };
+    for (;;) {
+      o = look();
+      st = settleStep({ pending: o.pending.length, open: !!o.open, history: !!o.history }, now(), st, limitMs);
+      if (st.close) {
+        if (!closing) closed++;
+        closing = true;
+        close();
+      } else {
+        closing = false;
+      }
+      if (st.done) break;
+      await wait();
+    }
+    return { ms: Math.round(now() - t0), clean: st.clean, closed, pending: o.pending, open: !!o.open, history: !!o.history };
+  }
+
   const api = { BUDGET_MS, FROZEN_MS, LINE_MAX, frameStats, intervals, nearestRank, band, frameBand, measureMs, consoleLines,
                 skyToViolet, usableStep, freeStep, hlsFetches, cardRendered, videoGaps, webrtcWindow, shownFrames,
-                pacedSleep, frameBlocking };
+                pacedSleep, frameBlocking, dialogStep, missedRefreshes, dialogTimes, dialogEvent, pendingShows, carriedShows, settleStep, settleLoop };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.GWStats = api;
 })(this);

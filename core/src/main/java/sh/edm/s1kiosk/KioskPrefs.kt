@@ -270,11 +270,7 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
      * dashboard's origin (the legacy engine holds every page to it, #198). The engine reads both once per process,
      * so when this differs from before a change, the process must restart.
      */
-    fun engineStart(): List<String> = secureHosts() + listOfNotNull(OAuth.origin(url) ?: authority(url))
-
-    /** `scheme://authority` as Android's Uri reads it, for URLs java.net.URI refuses (a non-ASCII host). */
-    private fun authority(url: String): String? =
-        Uri.parse(url.trim()).let { u -> if (u.scheme.isNullOrEmpty() || u.authority.isNullOrEmpty()) null else "${u.scheme}://${u.authority}" }
+    fun engineStart(): List<String> = engineStart(secureHosts(), url)
 
     /** Hosts that Gecko should treat as a secure context, so getUserMedia/AudioWorklet work over http. */
     fun secureHosts(): List<String> {
@@ -286,6 +282,14 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
 
     companion object {
         const val AUTO = "auto"
+
+        /** [engineStart] for [secureHosts] and a dashboard [url]: also what an engine [started][dev.glassworks.engine.Engine.started] with. */
+        fun engineStart(secureHosts: List<String>, url: String?): List<String> =
+            secureHosts + listOfNotNull(url?.let { OAuth.origin(it) ?: authority(it) })
+
+        /** `scheme://authority` as Android's Uri reads it, for URLs java.net.URI refuses (a non-ASCII host). */
+        private fun authority(url: String): String? =
+            Uri.parse(url.trim()).let { u -> if (u.scheme.isNullOrEmpty() || u.authority.isNullOrEmpty()) null else "${u.scheme}://${u.authority}" }
 
         /** Decodes a base64 API key; null unless it is exactly 32 bytes. */
         fun decodeApiKey(b64: String): ByteArray? = try {

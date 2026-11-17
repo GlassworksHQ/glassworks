@@ -58,6 +58,7 @@ data:
 | `timeout` | Seconds until it closes by itself |
 | `url` | A dashboard view on this Home Assistant, opened full screen at once, like `/dashboard-door/0` |
 | `sticky` | `true`: a button press leaves it open |
+| `size` | **Coming** ([#230](https://github.com/GlassworksHQ/glassworks/issues/230)): `half` will open the view as a dialog over half the screen. `full` is the default. The panel takes the key already, and opens every view full screen for now |
 
 Write `data` as a JSON string. A block string is the easiest to read:
 
@@ -207,6 +208,17 @@ Not yet run on a panel (2026-11-15).
 
 `esphome.<panel>_notify` stays in Home Assistant, like every pane's entities (#67), and answers
 "Notifications are off on this panel". Turn them on, and the same scripts work.
+
+## Coming: a view as a dialog
+
+[#230](https://github.com/GlassworksHQ/glassworks/issues/230) adds two things to `url`, and the design
+is waiting for approval:
+
+- `size: half` opens the view as a dialog over half the screen, with the dashboard behind it.
+- A view that arrives while another is open waits its turn, and the bar's button says *Next*.
+
+Until it ships, every view opens full screen, as described above, and a newer view takes the screen
+from an older one. Scripts can send `size` already.
 
 ## What it can't do yet
 
