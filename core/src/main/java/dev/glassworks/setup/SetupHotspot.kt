@@ -121,7 +121,8 @@ class SetupHotspot(
     fun ask(): Boolean {
         if (closed) return false
         error = null
-        blocked()?.let { error = it; onChange(); return false }
+        // As in refresh: while ours runs the parked client isn't Wi-Fi off, so don't read it then.
+        if (run == null) blocked()?.let { error = it; onChange(); return false }
         if (!policy.ask(connected(), clock())) return false
         refresh()
         return true

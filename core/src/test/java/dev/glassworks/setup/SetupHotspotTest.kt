@@ -232,6 +232,21 @@ class SetupHotspotTest {
         setup.refresh()
         scanDone!!()
         assertEquals(1, hotspot.starts)
+        up()
+        at(3 * min + 30_000)
+        assertTrue("still blocked, but ours stays up past the next re-check (#418 delta verifier, M7)", hotspot.on)
+    }
+
+    @Test
+    fun `asking while ours runs doesn't leave a stale Wi-Fi-off line`() {
+        setup.start(); at(3 * min); up()
+        radioLocked = true
+        setup.ask()
+        radioLocked = false
+        at(3 * min + 15 * min + 1_000)
+        val v = setup.view
+        assertTrue(v is View.Off)
+        assertEquals("the client parked by our own AP isn't Wi-Fi off", null, (v as View.Off).error)
     }
 
     @Test
