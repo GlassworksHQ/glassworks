@@ -1,3 +1,8 @@
+---
+topic: android
+evidence: verified
+---
+
 # Install crash loop: why the kiosk can crash-loop for minutes after an install (#248)
 
 **Status (2026-11-14): cause found and reproduced; fix built and its armed panel run passed (#254).** The loop

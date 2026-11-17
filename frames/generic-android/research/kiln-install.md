@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: read
+---
+
 # Kiln on any Android device: which adb commands work on which Android
 
 **Status (2026-11-16): untested on a device.** The recipe (`frames/generic-android/installer`) runs

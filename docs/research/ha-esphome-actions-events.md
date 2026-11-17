@@ -1,3 +1,8 @@
+---
+topic: panes
+evidence: read
+---
+
 # ESPHome actions and events in Home Assistant: what a notification can carry each way
 
 **Status (2026-11-13): read from source; the bus event verified against the real aioesphomeapi

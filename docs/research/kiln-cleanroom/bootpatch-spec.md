@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: read
+---
+
 # Clean-room spec: `kiln/packages/bootpatch`
 
 **Status (2026-11-15): spec ready. The rewrite passes the vectors and the S1 goldens, and waits on a real panel (#355).** This page says what Kiln's boot

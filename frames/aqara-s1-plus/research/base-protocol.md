@@ -1,3 +1,8 @@
+---
+topic: hardware
+evidence: verified
+---
+
 # Wall base UART protocol (`/dev/ttyS3`)
 
 This is the protocol the Panel Hub S1 Plus speaks with its mains wall base (the "bracket"). It was
