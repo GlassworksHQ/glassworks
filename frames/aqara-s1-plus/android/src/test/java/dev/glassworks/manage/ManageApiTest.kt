@@ -309,6 +309,17 @@ class ManageApiTest {
         assertEquals(2, f.userChecks.size)
     }
 
+    @Test fun aHandoffIgnoresAKeptRefusalToo() {
+        // Home Assistant refused the token a moment ago (it was restarting); now it confirms it.
+        f.refusedTokens += token
+        assertEquals(401, page().get().status)
+        f.refusedTokens.clear()
+        assertEquals("the API keeps the refusal for 10 s", 401, page().get().status)
+        val (_, r) = handoff(token)
+        assertEquals(200, r.status)
+        assertTrue(r.headers["Set-Cookie"]!!.startsWith(ManageServer.SESSION + "="))
+    }
+
     @Test fun aHandoffIsBoundToTheAddressThatConfirmedTheUser() {
         // The first read (the check) sees one address, every later one another: the panel's address changed mid-request.
         var reads = 0

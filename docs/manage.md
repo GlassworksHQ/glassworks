@@ -278,6 +278,7 @@ and there are no shared keys and no leader.
 For developers: `GET` and `POST` `/manage/api/settings` with `Authorization: Bearer <token>`, form-encoded
 `section`, `key`, `value` and, for a question's answer, `answer=<id>` (`ManageApi`); `POST /manage/ha/token`
 with `token` and `next` signs the browser in (`ManageServer.HANDOFF`). `GET /manage/api/hello` needs no token
-and answers only that this is a Glassworks panel and its model as Home Assistant shows it. Any page may call
+and answers only that this is a Glassworks panel and its model as Home Assistant shows it. Any page on any site can read it, so a site you visit can learn that a panel answers at an address on your
+network, and its model; no token, setting or name of yours comes with it. Any page may call
 them (CORS `*`): no cookie counts there. Chrome's private-network permission goes only to a page on the local
 network (a private address, `localhost` or a `.local` name).

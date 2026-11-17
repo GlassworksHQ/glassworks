@@ -11,7 +11,7 @@ package dev.glassworks.manage
  * only when that address is on the local network ([HaSignIn.isLocal]), as its own sign-in does.
  *
  * An administrator's answer is kept for [ttlMs] per token, so a page that reads and then changes a panel doesn't
- * make it ask Home Assistant each time; a sign-in ([check] with `fresh`) always asks. A token Home Assistant didn't
+ * make it ask Home Assistant each time; a sign-in ([check] with `fresh`) always asks, past both caches. A token Home Assistant didn't
  * confirm is kept as refused for [refusedTtlMs], and at most [maxAsking] questions to Home Assistant run at once,
  * so made-up tokens can't hold the panel's few web workers while Home Assistant is slow or down (verifier on #487).
  * Whether the address is local is decided once per [ttlMs] for each address, behind the same limit: deciding can
@@ -53,7 +53,8 @@ class HaTokenCheck(
 
     /**
      * [token] as Home Assistant answers for it now, or as it answered in the last [ttlMs] ([refusedTtlMs] for a
-     * refusal). [fresh]: a confirmed answer from before doesn't count, so a token revoked since can't start a sign-in.
+     * refusal). [fresh]: no answer from before counts, so a token revoked since can't start a sign-in, and one Home
+     * Assistant refused while it was down can sign in once it's back. Still under the [maxAsking] limit.
      */
     fun check(token: String?, fresh: Boolean = false): Result {
         val t = token?.trim()
@@ -70,7 +71,7 @@ class HaTokenCheck(
         val checkedAt = monoMs()
         val before = synchronized(known) {
             known.entries.removeAll { checkedAt - it.value.atMs >= if (it.value.user != null) ttlMs else refusedTtlMs }
-            known[key]?.takeIf { it.haBase == base && (it.user == null || !fresh) }
+            known[key]?.takeIf { it.haBase == base && !fresh }
         }
         val user = if (before != null) before.user else {
             if (!asking.tryAcquire()) return Result.Busy
