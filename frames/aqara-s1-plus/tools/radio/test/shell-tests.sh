@@ -82,6 +82,7 @@ w "$T/bin/settings" <<'EOF'
 #!/bin/sh
 echo "$*" >> /t/settings.calls
 [ -e /t/settings-hang ] && [ "$3" = bluetooth_address ] && exec sleep 1000
+[ -e /t/settings-fail ] && [ "$3" = bluetooth_address ] && { echo 02:aa:00:00:00:03; exit 1; }
 case "$1" in
   get) cat "/t/settings.$2.$3" 2>/dev/null || echo 1 ;;
   put) echo "$4" > "/t/settings.$2.$3" ;;
@@ -830,6 +831,9 @@ LOOPS=1 helper S1R_PUB="$BTP" S1R_BT_TIMEOUT=1
 check "a settings call that never returns doesn't stall the loop (bounded, then retried later)" test $(( $(date +%s) - t0 )) -lt 15 -a ! -e "$BTP/bluetooth-address"
 check "...and the radio's status was still set" test -n "$(prop sys.s1kiosk.radio.status)"
 rm -f "$T/settings-hang"; pkill -f "sleep 1000" 2>/dev/null
+touch "$T/settings-fail"; LOOPS=1 helper S1R_PUB="$BTP"
+check "a lookup that prints an address and then fails: nothing written" test ! -e "$BTP/bluetooth-address"
+rm -f "$T/settings-fail"
 rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
 
 echo

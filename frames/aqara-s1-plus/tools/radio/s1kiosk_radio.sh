@@ -1203,7 +1203,9 @@ bt_publish() {
   now_=$(date +%s); [ "$now_" -lt "$BT_NEXT" ] && return 0
   BT_NEXT=$((now_ + ${S1R_BT_EVERY:-60}))
   # Bounded: this runs before enforce, so a `settings` that never returns must not stall supervision.
-  a_=$(timeout ${S1R_BT_TIMEOUT:-10} settings get secure bluetooth_address 2>/dev/null | tr -d '\r')
+  # Its own exit status decides: what a failed or timed-out lookup printed is dropped.
+  a_=$(timeout ${S1R_BT_TIMEOUT:-10} settings get secure bluetooth_address 2>/dev/null) || a_=""
+  a_=$(printf '%s' "$a_" | tr -d '\r')
   bt_valid "$a_" || return 0
   a_=$(echo "$a_" | tr a-f A-F)
   if [ -L "$PUB_DIR" ] || { [ -e "$PUB_DIR" ] && [ ! -d "$PUB_DIR" ]; }; then rm -rf "$PUB_DIR"; fi
