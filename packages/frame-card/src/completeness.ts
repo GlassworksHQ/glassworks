@@ -69,7 +69,7 @@ export interface FrameRun {
   /** what the panel reports after: its *Silent updates* sensor, word for word. Left out until someone reads it */
   panel?: { silentUpdates?: string };
   /** what the person saw on the unit that neither reports */
-  seen: { hardware?: string[]; kiosk?: Partial<Record<Exclude<KioskCheck, 'onlyHome'>, boolean>>; setup?: SetupWay[]; notes?: Partial<Record<CheckKey, string>> };
+  seen: { hardware?: string[]; kiosk?: Partial<Record<KioskCheck, boolean>>; setup?: SetupWay[]; notes?: Partial<Record<CheckKey, string>> };
 }
 
 export type CheckState = 'yes' | 'no' | 'na';
@@ -120,6 +120,7 @@ function fromRun(r: FrameRun): FrameFacts {
     install: ['usb-debugging', ...(r.install.home.how === 'chooser' ? (['home-pick'] as const) : [])],
     silentUpdates: r.panel?.silentUpdates,
     hardware: seen ?? (refused.length ? refused : undefined),
+    // as with hardware, what the person saw last wins: Always tapped on Android's chooser after Kiln said `unconfirmed`
     kiosk: { onlyHome: r.install.home.state === 'set', ...r.seen.kiosk },
     setup: r.seen.setup,
     panelRuns: r.on !== undefined,
@@ -304,7 +305,7 @@ function runProblemsOf(r: unknown, out: string[]) {
   if (!isObj(s)) return out.push('run.seen: should be an object, {} when nothing else was seen');
   only('run.seen', s, ['hardware', 'kiosk', 'setup', 'notes'], out);
   if (s.hardware !== undefined) texts('run.seen.hardware', s.hardware, out);
-  if (s.kiosk !== undefined) bools('run.seen.kiosk', s.kiosk, Object.keys(KIOSK_CHECKS).filter((k) => k !== 'onlyHome'), out);
+  if (s.kiosk !== undefined) bools('run.seen.kiosk', s.kiosk, Object.keys(KIOSK_CHECKS), out);
   if (s.setup !== undefined) words('run.seen.setup', s.setup, Object.keys(SETUP_WAYS), out, true);
   if (s.notes !== undefined) notes('run.seen.notes', s.notes, out);
 }

@@ -195,6 +195,13 @@ describe('a tested device', () => {
     expect(item(tested(), 'kiosk').state).toBe('yes');
   });
 
+  it('lets a later look at the home screen supersede Kiln\'s unconfirmed one', () => {
+    const r = tested({ install: { ...run.install, home: { how: 'chooser', state: 'unconfirmed' } }, seen: { ...run.seen, kiosk: { ...run.seen.kiosk, onlyHome: true } } });
+    expect(factProblems({ kind: 'tested', run: { ...run, seen: { kiosk: { onlyHome: true } } } })).toEqual([]);
+    expect(item(r, 'kiosk').state).toBe('yes');
+    expect(item(r, 'install').reason).toMatch(/pick Glassworks as the home app/);
+  });
+
   it('says nobody read the sensor when the run has no panel report', () => {
     expect(item(tested({ panel: undefined }), 'silentUpdates')).toMatchObject({ state: 'no', reason: 'No panel has reported it yet.', unverified: false });
   });
