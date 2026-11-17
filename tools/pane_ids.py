@@ -41,6 +41,10 @@ def pane_ids_in(src):
     ids = set()
     for t in texts:
         for cls, body in re.findall(r'class (\w+)\b(.*?)(?=\n\S[^\n]*\bclass \w|\Z)', t, re.S):
+            # A setup step's id names the step, not a pane (#422's SilentUpdatesStep); a pane's own step
+            # reuses the id its pane declares anyway (CameraSetupStep).
+            if "SetupStep" in body.split("{", 1)[0]:
+                continue
             for ref in re.findall(r'override val id = ([^\n]+)', body):
                 ref = ref.split("//")[0].strip()
                 lit = re.fullmatch(r'"([a-z0-9-]+)"', ref)
