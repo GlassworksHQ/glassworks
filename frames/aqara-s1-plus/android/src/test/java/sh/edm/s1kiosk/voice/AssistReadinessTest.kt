@@ -135,7 +135,7 @@ class AssistReadinessTest {
             VoiceReadiness.ModelFailed(ModelFailure.Missing, now) to ("Model missing" to "Pick another wake word"),
             VoiceReadiness.EngineFailed(now) to ("Engine failed" to "engine didn't start"),
             VoiceReadiness.MicrophoneNotAllowed to ("Microphone not allowed" to "Allow Microphone for this app"),
-            VoiceReadiness.MicrophoneUnavailable to ("No microphone" to "another app is using it"),
+            VoiceReadiness.MicrophoneUnavailable to ("Microphone unavailable" to "its reads fail"),
         )
         for ((r, want) in cases) {
             failWith(r)

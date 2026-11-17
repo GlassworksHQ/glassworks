@@ -147,6 +147,88 @@ class VoiceReadinessTest {
     }
 
     @Test
+    fun aCorruptLegacyModelWhoseRepairCannotDownloadSaysWhy() {
+        val dir = Files.createTempDirectory("models").toFile()
+        listOf(TfliteWakeWord.MELSPEC_FILE, TfliteWakeWord.EMBEDDING_FILE, "hey_jarvis_v0.1.tflite").forEach { File(dir, it).writeBytes(ByteArray(64) { 7 }) }
+        val e = VoiceEngine(app, VoiceConfig(modelsDir = dir), "hey_jarvis_v0.1", onActiveWordChanged = {}, retryDelay = { 3_600_000L },
+            download = { throw UnknownHostException("github.com") }, loadDetector = null).also { engine = it; it.start(muted = true) }
+        eventually("failed") { e.readiness != VoiceReadiness.Starting }
+        assertEquals("the repair's download failed, not the engine", ModelFailure.Offline, (e.readiness as VoiceReadiness.ModelFailed).failure)
+    }
+
+    @Test
+    fun tryAgainStartsTheBackoffOver() {
+        val waits = CopyOnWriteArrayList<Int>()
+        val dir = Files.createTempDirectory("models").toFile()
+        val e = VoiceEngine(app, VoiceConfig(modelsDir = dir), "okay_nabu", onActiveWordChanged = {}, retryDelay = { waits += it; 3_600_000L }) {
+            throw ModelsMissingException("offline", ModelFailure.Offline)
+        }.also { engine = it; it.start(muted = true) }
+        eventually("failed once") { waits.size == 1 }
+        e.retryNow()
+        eventually("failed after the tap") { waits.size == 2 }
+        assertEquals("the wait after a tap is the first one again", listOf(1, 1), waits.toList())
+    }
+
+    @Test
+    fun aMicrophoneWhoseReadsKeepFailingIsUnavailable() {
+        val e = engine { Quiet }
+        eventually("ready") { e.readiness == VoiceReadiness.Ready }
+        e.micReadFailed(-3)
+        e.micReadFailed(-3)
+        assertEquals("two failed reads can pass", VoiceReadiness.Ready, e.readiness)
+        e.micReadFailed(-3)
+        assertEquals(VoiceReadiness.MicrophoneUnavailable, e.readiness)
+        e.onMicFrame(ShortArray(1280))
+        assertEquals(VoiceReadiness.Ready, e.readiness)
+        e.micReadFailed(-3)
+        e.micReadFailed(-3)
+        assertEquals("a frame starts the count over", VoiceReadiness.Ready, e.readiness)
+    }
+
+    @Test
+    fun stoppedItReadsStartingAgain() {
+        val e = engine { Quiet }
+        eventually("ready") { e.readiness == VoiceReadiness.Ready }
+        e.stop()
+        assertEquals(VoiceReadiness.Starting, e.readiness)
+    }
+
+    @Test
+    fun twoDownloadsOfTheSameModelDoNotSpoilEachOther() {
+        val model = ByteArray(200_000) { (it * 31).toByte() }
+        val dir = Files.createTempDirectory("models").toFile()
+        val tmp = File.createTempFile("model", "").apply { writeBytes(model) }
+        val files = mapOf("w.tflite" to ModelFetcher.sha256(tmp))
+        val halfway = java.util.concurrent.CountDownLatch(1)
+        val goOn = java.util.concurrent.CountDownLatch(1)
+        // The old engine's download: half the model, then it waits while the new engine's runs.
+        val slow = ModelFetcher("https://example.invalid", files, open = {
+            object : java.io.InputStream() {
+                var at = 0
+                override fun read(): Int = error("unused")
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (at >= model.size) return -1
+                    if (at >= model.size / 2 && halfway.count > 0) { halfway.countDown(); goOn.await(5, java.util.concurrent.TimeUnit.SECONDS) }
+                    val n = minOf(len, 4096, model.size - at)
+                    System.arraycopy(model, at, b, off, n); at += n
+                    return n
+                }
+            }
+        })
+        val old = Thread { runCatching { slow.ensure(dir) }.exceptionOrNull()?.let { failures += it } }.apply { start() }
+        assertTrue(halfway.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        val fresh = ModelFetcher("https://example.invalid", files, open = { ByteArrayInputStream(model) })
+        assertEquals(listOf("w.tflite"), fresh.ensure(dir))
+        goOn.countDown()
+        old.join(5_000)
+        assertEquals("the old download finished too", emptyList<Throwable>(), failures.toList())
+        assertEquals(files.getValue("w.tflite"), ModelFetcher.sha256(File(dir, "w.tflite")))
+        assertTrue("no part left", dir.listFiles()!!.none { it.name.endsWith(".part") })
+    }
+
+    private val failures = CopyOnWriteArrayList<Throwable>()
+
+    @Test
     fun aMicrophoneThatWontOpenSaysWhetherItIsAllowed() {
         val e = engine { Quiet }
         eventually("ready") { e.readiness == VoiceReadiness.Ready }

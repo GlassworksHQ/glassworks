@@ -35,7 +35,10 @@ public sealed interface VoiceReadiness {
     /** The app may not use the microphone (RECORD_AUDIO refused). */
     public data object MicrophoneNotAllowed : VoiceReadiness
 
-    /** The microphone doesn't open: none, or another app holds it. It tries again every few seconds. */
+    /**
+     * The microphone doesn't work: it doesn't open (none, or another app holds it), or it opens but its reads
+     * keep failing. It tries again every few seconds.
+     */
     public data object MicrophoneUnavailable : VoiceReadiness
 }
 

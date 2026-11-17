@@ -26,7 +26,7 @@ object VoiceStatus {
         }
         is VoiceReadiness.EngineFailed -> "Engine failed"
         VoiceReadiness.MicrophoneNotAllowed -> "Microphone not allowed"
-        VoiceReadiness.MicrophoneUnavailable -> "No microphone"
+        VoiceReadiness.MicrophoneUnavailable -> "Microphone unavailable"
     }
 
     /** Something keeps voice from working that the page should show in rose. */
@@ -43,7 +43,7 @@ object VoiceStatus {
         is VoiceReadiness.ModelFailed -> "${model(r.failure)} The wake word won't work until the panel has it. ${retry(r.retryAtMs, nowMs)}"
         is VoiceReadiness.EngineFailed -> "The wake word engine didn't start on this panel. Assist from Home Assistant still works. ${retry(r.retryAtMs, nowMs)}"
         VoiceReadiness.MicrophoneNotAllowed -> "Voice isn't allowed to use the microphone. Allow Microphone for this app in Android's app settings."
-        VoiceReadiness.MicrophoneUnavailable -> "The microphone doesn't open: the panel has none, or another app is using it. Trying again every few seconds."
+        VoiceReadiness.MicrophoneUnavailable -> "The microphone doesn't work: the panel has none, another app is using it, or its reads fail. Trying again every few seconds."
         VoiceReadiness.Starting -> if (muted || wakeWord.isEmpty()) AssistDefinition.status(muted, wakeWord)
             else "Getting “${WakeWords.parse(wakeWord)?.phrase ?: wakeWord}” ready"
         VoiceReadiness.Ready, null -> AssistDefinition.status(muted, wakeWord)

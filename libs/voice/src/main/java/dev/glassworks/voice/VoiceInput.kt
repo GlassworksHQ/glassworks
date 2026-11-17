@@ -26,8 +26,8 @@ public interface VoiceInput : WakeWordCatalog {
         set(_) {}
 
     /**
-     * Whether the wake word can listen now, and if not, why. An input that can't tell (a test's fake) keeps
-     * this default, Ready.
+     * Whether the wake word can listen now, and if not, why. Starting before [start] and after [stop]. An input
+     * that can't tell (a test's fake) keeps this default, Ready.
      */
     public val readiness: VoiceReadiness
         get() = VoiceReadiness.Ready

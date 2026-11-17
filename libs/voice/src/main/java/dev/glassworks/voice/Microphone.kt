@@ -20,6 +20,8 @@ internal class Microphone(
     private val onFrame: (ShortArray) -> Unit,
     /** No source opened. It tries again 5 s later. */
     private val onOpenFailed: () -> Unit = { onError("Cannot open the microphone (RECORD_AUDIO granted? mic busy?)") },
+    /** A read failed with this code. It opens the microphone again 1 s later. */
+    private val onReadFailed: (Int) -> Unit = { onError("Microphone read error $it") },
 ) {
     companion object {
         const val RATE = 16_000
@@ -102,7 +104,7 @@ internal class Microphone(
         while (running.get()) {
             val n = rec.read(frame, filled, frameSamples - filled)
             if (n < 0) {
-                onError("Microphone read error $n")
+                onReadFailed(n)
                 return
             }
             filled += n

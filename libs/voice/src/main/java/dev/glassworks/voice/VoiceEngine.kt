@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.os.SystemClock
 import dev.glassworks.esphome.WakeWordInfo
 import java.io.File
+import java.io.InputStream
+import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
@@ -41,6 +43,7 @@ public class VoiceEngine internal constructor(
     initialWord: String,
     private val onActiveWordChanged: (String) -> Unit,
     private val retryDelay: (Int) -> Long = ::retryDelayMs,
+    private val download: (URL) -> InputStream = ModelFetcher::httpGet,
     loadDetector: ((WakeWord) -> WakeDetector)?,
 ) : VoiceInput {
     /**
@@ -49,7 +52,7 @@ public class VoiceEngine internal constructor(
      * app can pass it back as [initialWord] next time.
      */
     public constructor(context: Context, config: VoiceConfig, initialWord: String, onActiveWordChanged: (String) -> Unit) :
-        this(context, config, initialWord, onActiveWordChanged, ::retryDelayMs, null)
+        this(context, config, initialWord, onActiveWordChanged, ::retryDelayMs, ModelFetcher::httpGet, null)
 
     /** A loaded model and the word it detects. */
     private class Loaded(val id: String, val phrase: String, val detector: WakeDetector)
@@ -90,6 +93,9 @@ public class VoiceEngine internal constructor(
     /** The microphone's side of [readiness]: null while it opens (or is closed on purpose). */
     @Volatile private var micProblem: VoiceReadiness? = null
 
+    /** Mic thread: failed reads since the last frame. */
+    private var micReadFailures = 0
+
     /** Executor thread: failed loads in a row, and the next try. */
     private var failures = 0
     private var retry: ScheduledFuture<*>? = null
@@ -119,11 +125,15 @@ public class VoiceEngine internal constructor(
         micProblem = null
         onMicLevel?.invoke(0f) // the microphone is closed: no frame will bring the level down
         clear()
+        // Stopped, it reads Starting again, as before start; a new start reports afresh.
+        model = VoiceReadiness.Starting
+        synchronized(readyLock) { published = null }
     }
 
+    /** A person's tap means "I fixed it": the backoff starts over. */
     override fun retryNow() {
         if (!running) return
-        later { retry?.cancel(false); retry = null; loadModel(showStarting = true) }
+        later { loadAfresh() }
     }
 
     override fun setMuted(m: Boolean) {
@@ -276,7 +286,7 @@ public class VoiceEngine internal constructor(
      */
     private fun loadMicro(model: MicroModel): WakeDetector {
         val file = "${model.id}.tflite"
-        val fetcher = ModelFetcher.micro()
+        val fetcher = ModelFetcher.micro(download)
         if (file in fetcher.missing(microDir)) {
             try {
                 fetcher.ensure(microDir)
@@ -294,10 +304,11 @@ public class VoiceEngine internal constructor(
         // their hash; if that download fails too, the engine's error stands.
         if (e !is ModelsMissingException && e !is WakeEngineException) throw e
         val fetcher = if (e is WakeEngineException) {
-            ModelFetcher(files = ModelFetcher.FILES.filterKeys { it == file || it == TfliteWakeWord.MELSPEC_FILE || it == TfliteWakeWord.EMBEDDING_FILE })
-        } else ModelFetcher()
+            ModelFetcher(files = ModelFetcher.FILES.filterKeys { it == file || it == TfliteWakeWord.MELSPEC_FILE || it == TfliteWakeWord.EMBEDDING_FILE }, open = download)
+        } else ModelFetcher(open = download)
+        // TFLite refused files that pass their hash: the engine's error stands, nothing to repair.
+        if (e is WakeEngineException && fetcher.missing(modelsDir).isEmpty()) throw e
         val fetched = try { fetcher.ensure(modelsDir) } catch (io: java.io.IOException) {
-            if (e is WakeEngineException) throw e
             throw ModelsMissingException("${e.message}; downloading them failed: ${io.message}", modelFailureOf(io))
         }
         if (fetched.isEmpty()) throw e
@@ -306,7 +317,7 @@ public class VoiceEngine internal constructor(
 
     private fun startMic() {
         if (!running || muted || mic != null) return
-        val m = Microphone(gain = gain, onError = ::error, onFrame = ::onMicFrame, onOpenFailed = ::micOpenFailed)
+        val m = Microphone(gain = gain, onError = ::error, onFrame = ::onMicFrame, onOpenFailed = ::micOpenFailed, onReadFailed = ::micReadFailed)
         mic = m
         m.start()
     }
@@ -318,6 +329,18 @@ public class VoiceEngine internal constructor(
         micProblem = null
         publish()
         onMicLevel?.invoke(0f)
+    }
+
+    /**
+     * Mic thread: a read failed, and the microphone opens again 1 s later. One failure can pass; [MIC_READ_FAILURES]
+     * in a row with no frame between (about 3 s) is a microphone that opens but doesn't work.
+     */
+    internal fun micReadFailed(code: Int) {
+        if (++micReadFailures < MIC_READ_FAILURES) { VoiceLog.w("Microphone read error $code"); return }
+        if (micProblem == VoiceReadiness.MicrophoneUnavailable) return
+        micProblem = VoiceReadiness.MicrophoneUnavailable
+        error("The microphone opens but its reads fail (error $code, $micReadFailures in a row)")
+        publish()
     }
 
     /** Mic thread, every 5 s while no source opens. Logged once per reason, not on every try. */
@@ -332,6 +355,7 @@ public class VoiceEngine internal constructor(
 
     /** Mic thread. */
     internal fun onMicFrame(frame: ShortArray) {
+        micReadFailures = 0
         if (micProblem != null) { micProblem = null; publish() }
         val c = controller
         val state = c?.currentState
@@ -385,3 +409,6 @@ public class VoiceEngine internal constructor(
         return out
     }
 }
+
+/** Failed microphone reads in a row, with no frame between, that make it [VoiceReadiness.MicrophoneUnavailable]. */
+private const val MIC_READ_FAILURES = 3

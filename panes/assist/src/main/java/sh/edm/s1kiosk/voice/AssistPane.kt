@@ -93,7 +93,7 @@ class AssistPane(
             "wake_word_threshold", "Wake word threshold", "mdi:account-voice", disabledByDefault = true, min = 0.1f, max = 0.99f, step = 0.01f,
             get = { prefs.threshold }, set = { prefs.threshold = it },
         ),
-        // Whether voice could get ready, and if not why (#458): Ready, Download failed, No microphone, ...
+        // Whether voice could get ready, and if not why (#458): Ready, Download failed, Microphone unavailable, ...
         TextSensorEntity(
             "voice_status", "Voice status", "mdi:microphone-message", EntityCategory.DIAGNOSTIC,
             get = { VoiceStatus.entity(readiness) },

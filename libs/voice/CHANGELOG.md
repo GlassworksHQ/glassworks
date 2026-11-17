@@ -16,5 +16,5 @@ publish the matching section below as the release notes.
   (`WakeWords`, `WakeWord`, `MicroModel`, `WakeWordCatalog`).
 - **`VoiceInput.readiness`.** Whether the wake word can listen, and if not why (`VoiceReadiness`: the
   model's download failed and why (`ModelFailure`), the engine didn't start, the microphone isn't allowed or
-  doesn't open), with `onReadiness` for changes and `retryNow()`. `VoiceEngine` retries a failed load after
+  doesn't work), with `onReadiness` for changes and `retryNow()`. `VoiceEngine` retries a failed load after
   30 s, then 1, 2, 5 and every 10 minutes (#458).
