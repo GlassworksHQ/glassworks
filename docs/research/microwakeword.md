@@ -1,3 +1,8 @@
+---
+topic: panes
+evidence: verified
+---
+
 # microWakeWord on the S1: can it replace openWakeWord, and what does it cost?
 
 **Status (2026-11-13): working; CPU and synthetic-voice detection measured on the panel, false

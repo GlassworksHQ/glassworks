@@ -1,3 +1,8 @@
+---
+topic: install
+evidence: verified
+---
+
 # Clean-room spec: `kiln/packages/fel`
 
 **Status: panel-verified 2026-11-16: the rewrite FEL-booted U-Boot on a real S1 (fastboot answered `sunxi`).** This page says what Kiln's FEL client

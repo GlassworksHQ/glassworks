@@ -1,3 +1,8 @@
+---
+topic: radio
+evidence: read
+---
+
 # A newer radio (RCP) firmware for the S1's EFR32MG21? (research, 2026-11-10)
 
 Question: can a newer Silicon Labs multiprotocol RCP be built for this board, now that the panel has

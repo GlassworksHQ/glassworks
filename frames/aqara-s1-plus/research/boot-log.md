@@ -1,3 +1,8 @@
+---
+topic: boot
+evidence: verified
+---
+
 # Annotated stock boot log
 
 Captured over the 3-pin UART console at **115200 8N1**. Device-unique values
