@@ -28,6 +28,15 @@ enum class ProxyPhase(val entityText: String?) {
     /** Android stopped or refused the scan; the engine tries again. */
     RETRYING("Retrying");
 
+    /** The pane's state while it is on but this phase stops it: Can't run, with the reason. Null otherwise. */
+    val cantRun: String?
+        get() = when (this) {
+            NO_PERMISSION -> "A permission is missing"
+            BLUETOOTH_OFF -> "Bluetooth is off"
+            LOCATION_OFF -> "Location is off"
+            else -> null
+        }
+
     companion object {
         /** [on]: the pane's switch. [unavailable]: why a scan can't run now. [status]: the engine's, null while none runs. */
         fun of(on: Boolean, unavailable: ScanFailure?, status: ProxyStatus?): ProxyPhase = when {
@@ -55,4 +64,8 @@ interface BluetoothProxyModel {
     fun turnBluetoothOn(): Boolean
     /** Turns location on. False where the app may not. */
     fun turnLocationOn(): Boolean
+    /** "Listen and connect" (#246); false is "Listen only". */
+    var connect: Boolean
+    /** The connections in use, or null in listen only or while the proxy isn't running. */
+    fun connections(): ProxyConnections?
 }

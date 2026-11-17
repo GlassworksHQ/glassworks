@@ -329,8 +329,14 @@ proxy. It is off by default. Turn it on in the panel's settings, on setup's Pane
 *Bluetooth proxy* switch. Home Assistant then finds it by itself under *Settings › Devices &
 services › Bluetooth*, and hears the BLE sensors near the panel through it. Nothing is added to HA.
 
-- **Listening only.** It forwards advertisements, which covers thermometers, plant sensors and tags.
-  Devices that need a connection (locks) need an ESP32 proxy for now.
+- **Listen only, or listen and connect.** By default it forwards advertisements, which covers
+  thermometers, plant sensors and tags. Pick *Listen and connect* on its settings page and Home
+  Assistant can also connect through the panel to devices that need it (locks, SwitchBots, sensors
+  with a key), up to 3 at once. The *Connections* tile shows how many are in use. Switching the mode
+  makes Home Assistant reconnect to the panel. The panel never pairs: a device that needs a PIN
+  still needs another proxy. Connections are new and not yet tried with every device (#246).
+- **Can't run** shows in the settings menu and on the Manage page while the pane is on but
+  Bluetooth or location is off, or the app lacks the location permission, with the reason.
 - **It scans only while Home Assistant listens**, full time then. On the S1 that cost nothing
   measurable: Wi-Fi on 5 GHz kept its throughput and Sendspin had no underruns (2026-11-14, #121).
 - *Bluetooth advertisements* is how many it forwarded in the last full minute. *Bluetooth proxy

@@ -33,8 +33,9 @@ Zigbee stack, and the role's buttons: Join and Leave, and **Get it from Home Ass
 repeater. A new role, a new stack and each Leave ask first, with the panel's words. The QR codes stay
 on the panel. The wall base page has the relays'
 switches and each button's last press, or what a base adds when none is mounted. A relay's switch
-shows what the base reports, so reload to see it change. The Bluetooth proxy page shows what the panel's shows: how it's listening, the advertisements and scanner
-tiles, and its entities, with **Turn on Bluetooth** or **Turn on location** when one of them stops it.
+shows what the base reports, so reload to see it change. The Bluetooth proxy page shows what the panel's shows: how it's listening, the advertisements, scanner
+and connections tiles, the mode (*Listen only* or *Listen and connect*), and its entities, with
+**Turn on Bluetooth** or **Turn on location** when one of them stops it.
 The time zone page has everything the panel's has: the zone, picked from a
 list grouped by region, whether the panel keeps it, and Home Assistant's zone, with **Use it** when
 Home Assistant keeps another zone's clock.

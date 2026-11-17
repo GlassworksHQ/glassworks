@@ -19,8 +19,8 @@ import dev.glassworks.pane.SettingsItem
 
 /**
  * The Bluetooth proxy page's words (#121's approved page), once, for the frame's own view and for its
- * typed twin on the Manage page (#269): the status line, the card when something stops it, the two
- * tiles, the note while it's off, and its entities as Home Assistant shows them. Pure.
+ * typed twin on the Manage page (#269): the status line, the card when something stops it, the three
+ * tiles, the mode (#246), the note while it's off, and its entities as Home Assistant shows them. Pure.
  */
 object ProxyPage {
 
@@ -71,6 +71,29 @@ object ProxyPage {
         else -> "Off"
     }
 
+    const val CONNECTIONS = "Connections"
+
+    /** The connections tile: the count, its unit, the line under it, and how full the slots are (null: no meter). */
+    class Connections(val value: String, val unit: String, val line: String, val meter: Float?)
+
+    fun connections(connect: Boolean, c: ProxyConnections?): Connections = when {
+        !connect -> Connections("—", "", "None in listen only", null)
+        c == null -> Connections("0", "of $SLOTS", "None in use", 0f)
+        else -> Connections(c.inUse.toString(), "of ${c.limit}", if (c.inUse > 0) "In use now" else "None in use", c.inUse.toFloat() / c.limit)
+    }
+
+    /** Whether the page offers the mode: while the proxy is on and can run. */
+    fun mode(phase: ProxyPhase) = phase != OFF && phase != NO_BLE
+
+    const val MODE = "Mode"
+    const val LISTEN = "listen"
+    const val CONNECT = "connect"
+    /** The two modes: id, name, and the line under it. */
+    val MODES = listOf(
+        Triple(LISTEN, "Listen only", "Sensors that broadcast: thermometers, plant sensors, tags."),
+        Triple(CONNECT, "Listen and connect", "Also locks and devices Home Assistant has to connect to. Up to $SLOTS at once."),
+    )
+
     /** The note while it's off or can't run, or null. */
     fun note(phase: ProxyPhase): String? = when (phase) {
         NO_BLE -> NO_BLE_NOTE
@@ -107,15 +130,28 @@ object ProxyPage {
                 done(if (ok) null else REFUSED)
             }
         }
-        if (tiles(phase)) items += SettingsItem.Tiles(2) {
+        if (tiles(phase)) items += SettingsItem.Tiles(3) {
             val st = model.status()
             val (n, adsLine) = ads(st)
             val (on, scanLine) = scanner(model.phase(), st)
+            val c = connections(model.connect, model.connections())
             listOf(
                 SettingsItem.Tile(ADS, n, ADS_UNIT, adsLine, history = st?.lastHour?.map { it.toFloat() }),
                 SettingsItem.Tile(SCANNER, on, detail = scanLine),
+                SettingsItem.Tile(CONNECTIONS, c.value, c.unit, c.line, meter = c.meter),
             )
         }
+        if (mode(phase)) items += SettingsItem.Choice(
+            MODE,
+            value = { if (model.connect) CONNECT else LISTEN },
+            options = { MODES.map { (id, name, _) -> id to name } },
+        ) { id, done ->
+            model.connect = id == CONNECT
+            done(null)
+        }
+        // The panel draws both modes with their lines; the Choice's row names the picked one. These rows say
+        // what each does, so a browser explains both too.
+        if (mode(phase)) for ((_, name, line) in MODES) items += SettingsItem.Info({ name }, { line })
         note(phase)?.let { n -> items += SettingsItem.Note { n } }
         if (inHomeAssistant(phase)) {
             items += SettingsItem.States(IN_HOME_ASSISTANT) { entities(model.phase(), model.status()).map { (k, v) -> SettingsItem.StateRow(k, v) } }
@@ -125,6 +161,8 @@ object ProxyPage {
     }
 
     private val TILES = setOf(LISTENING, WAITING, NEEDS_KEY, RETRYING)
+    /** Connection slots, as the engine's `BluetoothConnectionEngine.DEFAULT_LIMIT`. */
+    private const val SLOTS = dev.glassworks.esphome.bluetoothproxy.BluetoothConnectionEngine.DEFAULT_LIMIT
     const val UNAVAILABLE = "Unavailable"
     const val NEEDS_KEY_LINE = "Waiting for Home Assistant: it needs this panel's encryption key. Home Assistant 2026.11 and later sets it when it adds the panel."
     const val OFF_NOTE = "The Bluetooth proxy is off. The panel doesn't scan, and Home Assistant no longer hears devices through it."

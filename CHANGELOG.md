@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **The Bluetooth proxy can connect to devices.** Its settings page has a new choice: *Listen only*,
+  as before, or *Listen and connect*. With the second, Home Assistant can connect through the panel to
+  BLE devices that need a connection, such as locks, SwitchBots and sensors with a key, up to 3 at
+  once. A *Connections* tile shows how many are in use. It stays on *Listen only* until you pick it,
+  and the panel never pairs with a device.
 - **Panel night mode, a blueprint for Home Assistant.** At night your panels turn their screen off
   sooner and keep it dimmer, and in the morning they go back to your day settings. Night can be two
   times, sunset to sunrise, or any condition Home Assistant can check, and one automation covers all
@@ -333,6 +338,9 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **The Bluetooth proxy says when it can't run.** With the pane on but Bluetooth or location off, or
+  the location permission missing, the settings menu and the Manage page said it was running. They
+  now say *Can't run* and why.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.

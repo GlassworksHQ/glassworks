@@ -8,6 +8,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Shader
+import android.graphics.drawable.GradientDrawable
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -34,9 +35,9 @@ import sh.edm.s1kiosk.ui.Glass.Companion.VIOLET
 
 /**
  * The Bluetooth proxy's settings page, as approved on #121 (2026-11-13): a status line with no dot,
- * a card when something stops it (Bluetooth or location off), the advertisements and scanner tiles,
- * then the pane's entities as Home Assistant shows them. The Mode block (listen only, or listen and
- * connect) waits for GATT connections, and so does the connections tile.
+ * a card when something stops it (Bluetooth or location off), the advertisements, scanner and
+ * connections tiles, the mode (listen only, or listen and connect, #246), then the pane's entities as
+ * Home Assistant shows them.
  */
 class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val proxy: BluetoothProxyModel) : SettingsItem.NativeView {
     private val c: Context = host.context
@@ -61,12 +62,29 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
 
     private val ads = Tile(ProxyPage.ADS, ProxyPage.ADS_UNIT)
     private val scanner = Tile(ProxyPage.SCANNER, "")
+    private val conns = Tile(ProxyPage.CONNECTIONS, "")
     private val spark = Spark(c)
+    private val meter = Meter(c)
     private val tiles = LinearLayout(c).apply {
         orientation = LinearLayout.HORIZONTAL
         addView(ads.view.apply { addView(spark, LinearLayout.LayoutParams(-1, px(22f)).apply { topMargin = px(8f) }) }, LinearLayout.LayoutParams(0, -1, 1f))
         addView(scanner.view.apply { addView(View(c), LinearLayout.LayoutParams(-1, px(22f)).apply { topMargin = px(8f) }) },
             LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = px(12f) })
+        addView(conns.view.apply { addView(meter, LinearLayout.LayoutParams(-1, px(22f)).apply { topMargin = px(8f) }) },
+            LinearLayout.LayoutParams(0, -1, 1f).apply { marginStart = px(12f) })
+    }
+
+    /** Listen only, or listen and connect: two rows, the chosen one lifted, as in the time zone picker (#121's mockup). */
+    private val modeRows = ProxyPage.MODES.map { (id, name, detail) -> ModeRow(id, name, detail) }
+    private val mode = LinearLayout(c).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(g.label(ProxyPage.MODE), LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(18f); bottomMargin = px(8f) })
+        addView(LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            background = g.surface(20f)
+            setPadding(px(8f), px(8f), px(8f), px(8f))
+            modeRows.forEachIndexed { i, r -> addView(r.view, LinearLayout.LayoutParams(-1, -2).apply { if (i > 0) topMargin = px(4f) }) }
+        })
     }
 
     private val note = g.text(15f, MU).apply { setLineSpacing(0f, 1.25f) }
@@ -85,6 +103,7 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
         addView(line)
         addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(12f) })
         addView(tiles)
+        addView(mode)
         addView(note)
         addView(inHa)
     }
@@ -107,6 +126,13 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
         ProxyPage.ads(s).let { (v, l) -> ads.set(v, l) }
         spark.values = s?.lastHour.orEmpty()
         ProxyPage.scanner(phase, s).let { (v, l) -> scanner.set(v, l) }
+        val cs = ProxyPage.connections(proxy.connect, proxy.connections())
+        conns.set(cs.value, cs.line, cs.unit)
+        meter.visibility = if (cs.meter != null) View.VISIBLE else View.INVISIBLE
+        meter.fill = cs.meter ?: 0f
+        mode.visibility = if (ProxyPage.mode(phase)) View.VISIBLE else View.GONE
+        val chosen = if (proxy.connect) ProxyPage.CONNECT else ProxyPage.LISTEN
+        modeRows.forEach { it.show(it.modeId == chosen) }
         val (adsState, statusState) = ProxyPage.entities(phase, s).map { it.second }
         adsRow.value(adsState.takeIf { it != ProxyPage.UNAVAILABLE })
         statusRow.value(statusState.takeIf { it != ProxyPage.UNAVAILABLE })
@@ -141,7 +167,11 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
     /** A reading: its name, the value large with its unit, a line under it. */
     private inner class Tile(name: String, private val unit: String) {
         private val value = g.heading(27f).apply { setSingleLine() }
-        private val unitView = g.text(14f, MU).apply { text = unit; setPadding(px(5f), 0, 0, px(4f)) }
+        private val unitView = g.text(14f, MU).apply {
+            text = unit
+            setPadding(px(5f), 0, 0, px(4f))
+            visibility = if (unit.isEmpty()) View.GONE else View.VISIBLE
+        }
         private val sub = g.text(13.5f, MU).apply { setSingleLine() }
         val view = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
@@ -152,14 +182,50 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.BOTTOM
                 addView(value)
-                if (unit.isNotEmpty()) addView(unitView)
+                addView(unitView)
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
             addView(sub, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(1f) })
         }
 
-        fun set(v: String, line: String) {
+        fun set(v: String, line: String, unit: String = this.unit) {
             value.text = v
             sub.text = line
+            unitView.text = unit
+            unitView.visibility = if (unit.isEmpty()) View.GONE else View.VISIBLE
+        }
+    }
+
+    /** One mode: its name and line; picked, the row is lifted and carries the brand's mark. Tapping it picks it. */
+    private inner class ModeRow(val modeId: String, name: String, detail: String) {
+        private val title = g.text(16.5f, TX).apply { text = name }
+        private val line = g.text(14f, MU).apply { text = detail; setLineSpacing(0f, 1.15f) }
+        private val mark = View(c).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(SKY, VIOLET)).apply { shape = GradientDrawable.OVAL }
+        }
+        val view = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(px(16f), px(12f), px(16f), px(12f))
+            isClickable = true
+            contentDescription = name
+            addView(LinearLayout(c).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(title)
+                addView(line, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(4f) })
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(mark, LinearLayout.LayoutParams(px(9f), px(9f)).apply { marginStart = px(12f) })
+            setOnClickListener {
+                proxy.connect = modeId == ProxyPage.CONNECT
+                refresh()
+            }
+        }
+
+        fun show(chosen: Boolean) {
+            view.background = if (chosen) g.surface(14f, Glass.S2) else null
+            title.setTextColor(if (chosen) TX else MU)
+            line.setTextColor(if (chosen) MU else FA)
+            mark.visibility = if (chosen) View.VISIBLE else View.INVISIBLE
+            view.isSelected = chosen
         }
     }
 
@@ -182,6 +248,28 @@ class BluetoothProxyPage(private val host: SettingsItem.NativeHost, private val 
         fun value(v: String?) {
             valueView.text = v ?: "Unavailable"
             valueView.setTextColor(if (v == null) FA else MU)
+        }
+    }
+
+    /** How full the connection slots are: a track, filled in the brand's sky-to-violet (not a status colour). */
+    private class Meter(context: Context) : View(context) {
+        var fill = 0f
+            set(v) { if (v != field) { field = v; invalidate() } }
+        private val dp = resources.displayMetrics.density
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        override fun onDraw(canvas: Canvas) {
+            val h = 6f * dp
+            val top = height - h
+            val r = h / 2
+            paint.shader = null
+            paint.color = Color.argb(30, 255, 255, 255)
+            canvas.drawRoundRect(0f, top, width.toFloat(), height.toFloat(), r, r, paint)
+            if (fill <= 0f) return
+            val w = width * fill.coerceIn(0f, 1f)
+            paint.color = Color.WHITE // opaque: the shader is drawn at the paint's alpha
+            paint.shader = LinearGradient(0f, 0f, width.toFloat(), 0f, SKY, VIOLET, Shader.TileMode.CLAMP)
+            canvas.drawRoundRect(0f, top, w, height.toFloat(), r, r, paint)
         }
     }
 

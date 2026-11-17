@@ -50,8 +50,49 @@ import java.time.Duration
  */
 class PaneFixtures(private val app: Application) {
     private val held = ArrayList<java.util.concurrent.ExecutorService>()
+    private val stops = ArrayList<() -> Unit>()
 
-    fun shutdown() = held.forEach { it.shutdownNow() }
+    fun shutdown() {
+        stops.forEach { runCatching(it) }
+        held.forEach { it.shutdownNow() }
+    }
+
+    /**
+     * The Bluetooth proxy with a usable radio: under Robolectric the S1's own reports no Bluetooth LE, so
+     * its page would be one line. "Listen and connect" is on, so the page draws all three tiles and the mode.
+     */
+    val bluetoothProxyDefinition: dev.glassworks.bluetoothproxy.BluetoothProxyDefinition by lazy {
+        val file = PanePrefs(app).paneFile("bluetooth-proxy")
+        file.edit().putBoolean(dev.glassworks.bluetoothproxy.BluetoothProxyPrefs.KEY_CONNECT, true).commit()
+        val radio = object : dev.glassworks.bluetoothproxy.ProxyRadio {
+            override fun newScanner() = object : dev.glassworks.esphome.bluetoothproxy.BleScanner {
+                override fun start(power: dev.glassworks.esphome.bluetoothproxy.ScanPower, listener: dev.glassworks.esphome.bluetoothproxy.BleScanner.Listener) {}
+                override fun stop() {}
+            }
+            override fun newGattRadio() = dev.glassworks.esphome.bluetoothproxy.GattRadio { _, _ -> null }
+            override fun unavailable(): dev.glassworks.esphome.bluetoothproxy.ScanFailure? = null
+            override fun turnBluetoothOn() = true
+            override fun turnLocationOn() = true
+        }
+        dev.glassworks.bluetoothproxy.BluetoothProxyDefinition(file, radio, page = ::BluetoothProxyPage)
+    }
+
+    /** The proxy running, with Home Assistant subscribed: its page reads Listening. */
+    fun bluetoothProxy(): Pane {
+        val device = Executors.newSingleThreadScheduledExecutor().also { held += it }
+        val pane = bluetoothProxyDefinition.pane(ctx, device)
+        val server = dev.glassworks.esphome.ApiServer(0, { ctx.device }, emptyList(), keys = null)
+        pane.bind(server)
+        pane.start()
+        stops += { pane.stop() }
+        server.bluetooth!!.onSubscribed(true)
+        val until = System.nanoTime() + 5_000_000_000L
+        while (pane.status()?.subscribed != true) {
+            check(System.nanoTime() < until) { "the proxy's engine never took the subscription" }
+            Thread.sleep(5)
+        }
+        return pane
+    }
 
     private val ctx = PaneContext(
         app, PanePrefs(app)::paneFile,
@@ -167,12 +208,13 @@ class PaneFixtures(private val app: Application) {
     fun model(running: List<Pane>, off: Set<String> = emptySet(), link: () -> HaLink = { HaLink.CONNECTED }): () -> KioskSettingsOverlay.Model {
         KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel" }
         val radio = radioDefinition(app, FixedReadout(coordinator, running = true, allowedNow = "192.0.2.20"))
-        val definitions = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app).map { if (it.id == "radio") radio else it }
+        val definitions = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+            .map { when (it.id) { "radio" -> radio; "bluetooth-proxy" -> bluetoothProxyDefinition; else -> it } }
         definitions.forEach { d -> d.switch?.on = d.id !in off }
         val byId = running.associateBy { it.id }
         return { MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = definitions, running = { byId[it] }, link = link) }
     }
 
     /** Every pane the S1 has, running. */
-    fun all(): List<Pane> = listOf(diagnostics(), wallBase(), timeZone(), voice(), music(), radio())
+    fun all(): List<Pane> = listOf(diagnostics(), wallBase(), timeZone(), voice(), music(), radio(), bluetoothProxy())
 }

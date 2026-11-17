@@ -56,11 +56,12 @@ class BluetoothProxyMockups {
         override fun turnLocationOn() = true
     }
 
-    private class Shown(val phase: ProxyPhase, val status: ProxyStatus?) : BluetoothProxyModel {
+    private class Shown(val phase: ProxyPhase, val status: ProxyStatus?, override var connect: Boolean = false, val links: Int? = null) : BluetoothProxyModel {
         override fun phase() = phase
         override fun status() = status
         override fun turnBluetoothOn() = true
         override fun turnLocationOn() = true
+        override fun connections() = links?.let { dev.glassworks.bluetoothproxy.ProxyConnections(it, 3) }
     }
 
     private val hour = listOf(380, 402, 395, 430, 418, 377, 401, 445, 420, 398, 409, 433, 415, 412)
@@ -68,10 +69,10 @@ class BluetoothProxyMockups {
     private val waiting = ProxyStatus(false, false, null, 0, 0, hour.map { 0 })
     private val retrying = ProxyStatus(true, false, ScanFailure.ANDROID_ERROR, 0, 0, hour.map { 0 }, retryInMs = 29_400)
 
-    private fun proxy(on: Boolean, phase: ProxyPhase, status: ProxyStatus?, why: ScanFailure? = null): PaneDefinition {
+    private fun proxy(on: Boolean, phase: ProxyPhase, status: ProxyStatus?, why: ScanFailure? = null, connect: Boolean = false, links: Int? = null): PaneDefinition {
         val file = PanePrefs(app).paneFile("bluetooth-proxy")
         file.edit().putBoolean(BluetoothProxyPrefs.KEY_ENABLED, on).commit()
-        return BluetoothProxyDefinition(file, Radio(why)) { host, _ -> BluetoothProxyPage(host, Shown(phase, status)) }
+        return BluetoothProxyDefinition(file, Radio(why)) { host, _ -> BluetoothProxyPage(host, Shown(phase, status, connect, links)) }
     }
 
     private fun menu(proxy: PaneDefinition?): KioskSettingsOverlay {
@@ -91,6 +92,14 @@ class BluetoothProxyMockups {
         Mockup.idle()
         Mockup.layout(o)
         Mockup.save(name, o)
+    }
+
+    /** The page's scroll, moved down to the mode and the entities. */
+    private fun scrollDown(o: KioskSettingsOverlay) {
+        Mockup.idle()
+        Mockup.layout(o)
+        generateSequence(Mockup.label(o, "Listen and connect") as android.view.View) { it.parent as? android.view.View }
+            .firstOrNull { it is android.widget.ScrollView }?.let { v -> (v as android.widget.ScrollView).scrollTo(0, v.getChildAt(0).height - v.height) }
     }
 
     /** The panes setup offers: today's four, then this pane, #118's Notifications, and two made up to show a longer list. */
@@ -143,6 +152,7 @@ class BluetoothProxyMockups {
         for ((name, m) in listOf(
             "bt-listening" to Shown(ProxyPhase.LISTENING, listening), "bt-waiting" to Shown(ProxyPhase.WAITING, waiting),
             "bt-bluetooth-off" to Shown(ProxyPhase.BLUETOOTH_OFF, waiting), "bt-retrying" to Shown(ProxyPhase.RETRYING, retrying),
+            "bt-listen-and-connect" to Shown(ProxyPhase.LISTENING, listening, connect = true, links = 1),
         )) html(name) { dev.glassworks.bluetoothproxy.ProxyPage.twin(m) }
     }
 
@@ -152,6 +162,9 @@ class BluetoothProxyMockups {
         val id = "bluetooth-proxy"
         shot("bt-00-before-menu", menu(null), "radio")
         shot("bt-01-listening", menu(proxy(true, ProxyPhase.LISTENING, listening)), id)
+        shot("bt-01b-listening-scrolled", menu(proxy(true, ProxyPhase.LISTENING, listening)), id) { scrollDown(it) }
+        shot("bt-02-listen-and-connect", menu(proxy(true, ProxyPhase.LISTENING, listening, connect = true, links = 1)), id)
+        shot("bt-02b-listen-and-connect-scrolled", menu(proxy(true, ProxyPhase.LISTENING, listening, connect = true, links = 1)), id) { scrollDown(it) }
         shot("bt-03-waiting-for-ha", menu(proxy(true, ProxyPhase.WAITING, waiting)), id)
         shot("bt-03b-needs-the-key", menu(proxy(true, ProxyPhase.NEEDS_KEY, waiting.copy(needsKey = true))), id)
         shot("bt-04-bluetooth-off", menu(proxy(true, ProxyPhase.BLUETOOTH_OFF, waiting, ScanFailure.BLUETOOTH_OFF)), id)

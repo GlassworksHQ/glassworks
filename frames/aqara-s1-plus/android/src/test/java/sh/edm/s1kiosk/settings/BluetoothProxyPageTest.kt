@@ -3,10 +3,12 @@ package sh.edm.s1kiosk.settings
 import android.app.Application
 import android.view.View
 import dev.glassworks.bluetoothproxy.BluetoothProxyModel
+import dev.glassworks.bluetoothproxy.ProxyConnections
 import dev.glassworks.bluetoothproxy.ProxyPage
 import dev.glassworks.bluetoothproxy.ProxyPhase
 import dev.glassworks.pane.SettingsItem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +27,9 @@ class BluetoothProxyPageTest {
         override fun status() = status
         override fun turnBluetoothOn() = bluetoothOk.also { asked += "bluetooth" }
         override fun turnLocationOn() = true.also { asked += "location" }
+        override var connect = false
+        var links: ProxyConnections? = null
+        override fun connections() = links
     }
 
     private fun page(m: Model): View {
@@ -93,7 +98,8 @@ class BluetoothProxyPageTest {
                     is SettingsItem.Status -> listOf(i.text())
                     is SettingsItem.Info -> listOf(i.title(), i.detail())
                     is SettingsItem.Action -> listOf(i.title, i.detail(), i.label)
-                    is SettingsItem.Tiles -> i.tiles().flatMap { listOf(it.name, it.value, it.detail) }
+                    is SettingsItem.Tiles -> i.tiles().flatMap { listOf(it.name, it.value, it.unit, it.detail) }
+                    is SettingsItem.Choice -> listOf(i.title) + i.options().map { it.second }
                     is SettingsItem.Note -> listOf(i.text())
                     is SettingsItem.States -> listOf(i.title) + i.rows().flatMap { listOf(it.name, it.value) }
                     else -> error("$phase: no ${i::class.simpleName} on this page")
@@ -120,6 +126,50 @@ class BluetoothProxyPageTest {
         ProxyPage.twin(loc).filterIsInstance<SettingsItem.Action>().single().run { answer = it }
         assertEquals(listOf("location"), loc.asked)
         assertTrue("no button where the app can't fix it", ProxyPage.twin(Model(ProxyPhase.NO_PERMISSION)).none { it is SettingsItem.Action })
+    }
+
+    @Test fun listenOnlyIsTheDefaultAndItsTileSaysSo() {
+        val v = page(Model(ProxyPhase.LISTENING, ProxyStatus(true, true, null, 412, 37)))
+        assertTrue(shown(v, "Connections"))
+        assertTrue(shown(v, "None in listen only"))
+        assertTrue("the picked row", Mockup.label(v, "Listen only").let { (it.parent.parent as View).isSelected })
+    }
+
+    @Test fun pickingListenAndConnectTurnsTheConnectionsOn() {
+        val m = Model(ProxyPhase.LISTENING, ProxyStatus(true, true, null, 412, 37))
+        val v = page(m)
+        (Mockup.label(v, "Listen and connect").parent.parent as View).performClick()
+        assertTrue(m.connect)
+        assertTrue("picked now", (Mockup.label(v, "Listen and connect").parent.parent as View).isSelected)
+        assertTrue(shown(v, "of 3"))
+        assertTrue(shown(v, "None in use"))
+        (Mockup.label(v, "Listen only").parent.parent as View).performClick()
+        assertFalse(m.connect)
+    }
+
+    @Test fun theConnectionsTileCountsTheLinksInUse() {
+        val m = Model(ProxyPhase.LISTENING, ProxyStatus(true, true, null, 412, 37)).apply { connect = true; links = ProxyConnections(1, 3) }
+        val v = page(m)
+        assertTrue(shown(v, "1"))
+        assertTrue(shown(v, "of 3"))
+        assertTrue(shown(v, "In use now"))
+    }
+
+    @Test fun theModeIsOfferedOnlyWhileTheProxyIsOn() {
+        assertFalse(shown(page(Model(ProxyPhase.OFF)), "Listen and connect"))
+        assertFalse(shown(page(Model(ProxyPhase.NO_BLE)), "Listen and connect"))
+        assertTrue(shown(page(Model(ProxyPhase.WAITING)), "Listen and connect"))
+    }
+
+    @Test fun theTwinsModeSavesThePick() {
+        val m = Model(ProxyPhase.LISTENING)
+        val mode = ProxyPage.twin(m).filterIsInstance<SettingsItem.Choice>().single()
+        assertEquals(ProxyPage.LISTEN, mode.value())
+        var answer: String? = "none"
+        mode.save(ProxyPage.CONNECT) { answer = it }
+        assertTrue(m.connect)
+        assertEquals(null, answer)
+        assertEquals(ProxyPage.CONNECT, mode.value())
     }
 
     private fun all(root: View): List<android.widget.TextView> = buildList {
