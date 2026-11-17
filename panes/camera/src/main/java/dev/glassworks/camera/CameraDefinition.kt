@@ -26,7 +26,7 @@ import java.util.Date
  *
  * Where it runs: a card on setup's Panes step, setup's Camera step ([CameraSetupStep]), and the page of
  * #117's approved design. [granted] reads Android's camera permission; [pickers] draws the two use
- * cards (without it, the page offers the use as a list).
+ * cards (without it, the page offers the use as a list). [touch]: the screen takes a tap (the frame's input).
  */
 class CameraDefinition(
     file: SharedPreferences,
@@ -34,9 +34,11 @@ class CameraDefinition(
     private val pickers: CameraUsePickers? = null,
     /** A time of day as the page shows it. */
     private val time: (Long) -> String = { DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) },
+    touch: () -> Boolean = { true },
 ) : PaneDefinition {
     override val id = CameraPane.ID
     override val requires = setOf(Capability.CAMERA)
+    override val permissions = setOf(android.Manifest.permission.CAMERA)
     val prefs = CameraPrefs(file)
 
     override val switch = PaneSwitch(
@@ -44,7 +46,7 @@ class CameraDefinition(
         objectId = "camera_pane", entityName = "Camera pane", icon = "mdi:cctv", inSetup = true, offNote = OFF_NOTE,
     )
 
-    private val step = CameraSetupStep(prefs, on = { switch.on }, turnOff = { switch.on = false }, granted = granted, pickers = pickers)
+    private val step = CameraSetupStep(prefs, on = { switch.on }, turnOff = { switch.on = false }, granted = granted, pickers = pickers, touch = touch)
 
     /** CantRun drops it on a frame without a camera, as it drops the card. */
     override val setupSteps: List<SetupStep> get() = listOf(step)
