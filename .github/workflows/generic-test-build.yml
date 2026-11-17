@@ -112,7 +112,7 @@ jobs:
             digests="$(sed -n 's/^Signer.* certificate SHA-256 digest: //p' <<< "$certs" | sort -u)"
             if [ "$digests" != "$GLASSWORKS_CERT_SHA256" ]; then
               echo "::error::$apk isn't signed with Glassworks' release key alone (signers: $(tr '\n' ' ' <<< "$digests"))"
-              grep '^Signer' <<< "$certs" || true
+              echo "apksigner said:"; head -n 8 <<< "$certs" | cut -c1-200
               exit 1
             fi
             badging="$("$aapt2" dump badging "$apk")"
