@@ -306,6 +306,25 @@ class NotificationOverlayTest {
         }
     }
 
+    /** CodeRabbit on #429: Battery Saver turns animators off past the setting (it stays 1): the bar steps, it doesn't empty. */
+    @Test
+    fun whenTheSystemEndsTheAnimationEarlyTheBarStepsFromWhereItIs() {
+        val effective = ValueAnimator::class.java.getMethod("setDurationScale", Float::class.javaPrimitiveType)
+        effective.invoke(null, 0f)
+        try {
+            center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","timeout":90}""")
+            val bar = timeLeft()
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
+            assertNull("the animation ended at once and let go", slide(bar))
+            assertEquals("not empty: where the time is", 1f, fill(bar).scaleX, 0.001f)
+            t = 30_000
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_100))
+            assertEquals("steps with the text", 60f / 90, fill(bar).scaleX, 0.001f)
+        } finally {
+            effective.invoke(null, 1f)
+        }
+    }
+
     /** CodeRabbit on #429: on a narrow portrait screen the stage's buttons wrap, and each, Dismiss too, keeps its one line. */
     @Test
     @Config(qualifiers = "w480dp-h800dp-port-hdpi")

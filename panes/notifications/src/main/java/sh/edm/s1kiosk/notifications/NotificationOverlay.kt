@@ -1,5 +1,7 @@
 package sh.edm.s1kiosk.notifications
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
@@ -837,13 +839,23 @@ class NotificationOverlay(
                 duration = (left / scale).toLong()
                 interpolator = LinearInterpolator()
                 addUpdateListener { a -> fill.scaleX = wholePixels(a.animatedValue as Float) }
+                // Ended by itself: at the end of the time, or at once where the system turned animations off past
+                // the setting (Battery Saver on Android 10 keeps the setting at 1). The bar steps from where it is.
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(a: Animator) {
+                        if (a !== animator) return
+                        animator = null
+                        step()
+                    }
+                })
                 start()
             }
         }
 
         private fun stop() {
-            animator?.cancel()
+            val a = animator
             animator = null
+            a?.cancel()
         }
 
         override fun onAttachedToWindow() {
