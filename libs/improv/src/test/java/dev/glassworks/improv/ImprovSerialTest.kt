@@ -53,7 +53,7 @@ class ImprovSerialTest {
         assertTrue(ImprovSerial.parseRpc(bytes(1, 2, 3, 0x4e)) is SerialRpc.Invalid) // string overruns
         assertTrue(ImprovSerial.parseRpc(bytes(1, 4, 3, 0x4e, 0x65, 0x74)) is SerialRpc.Invalid) // one string
         assertTrue(ImprovSerial.parseRpc(bytes(1)) is SerialRpc.Invalid)
-        assertEquals("WifiSettings(ssid=Net, password=<6 chars>)", SerialRpc.WifiSettings("Net", "secret").toString())
+        assertEquals("WifiSettings(<3 char name>, <6 char password>)", SerialRpc.WifiSettings("Net", "secret").toString())
     }
 
     @Test

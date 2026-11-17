@@ -107,7 +107,7 @@ class HotspotTest {
         assertFalse("the panel's own address", HotspotAddress.onSubnet("192.168.43.42", "192.168.43.42", 24))
         assertFalse("loopback", HotspotAddress.onSubnet("127.0.0.1", "192.168.43.42", 24))
         assertFalse("another network", HotspotAddress.onSubnet("192.168.44.5", "192.168.43.42", 24))
-        assertTrue("a wider prefix", HotspotAddress.onSubnet("192.168.44.5", "192.168.43.42", 22))
+        assertTrue("a wider prefix", HotspotAddress.onSubnet("192.168.44.5", "192.168.43.42", 21))
         assertFalse(HotspotAddress.onSubnet(null, "192.168.43.42", 24))
         assertFalse("IPv6", HotspotAddress.onSubnet("fe80::1", "192.168.43.42", 24))
         assertFalse("no prefix", HotspotAddress.onSubnet("192.168.43.206", "192.168.43.42", 0))
