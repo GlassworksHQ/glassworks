@@ -262,6 +262,9 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A Mirror flashed by Kiln comes up in portrait, upright.** Its first start came up sideways, in
+  landscape. Kiln now turns the screen to portrait over USB on the first start, checks that Android
+  did, and stops with a clear message if it didn't. The Mirror's install is still test only.
 - **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
   Panes image lets one adb key in without asking: the project's own key, published with its private
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its

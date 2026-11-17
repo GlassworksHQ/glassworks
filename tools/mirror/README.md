@@ -23,7 +23,7 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 3. Load `system.img` (a local file, or `--refract`), and check its size and SHA-256.
 4. `adb reboot bootloader`.
 5. Fastboot checks, read-only: partition sizes and `max-download-size`.
-6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), the boot animation, `ro.sf.hwrotation=270`, the
+6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), the boot animation, the
    settings overlay and `ro.lockscreen.disable.default` (a first boot with nothing to tap),
    `/framework/services.jar` letting in the first `--adb-key` (default `~/.android/adbkey.pub`) in
    place of the Glass Panes project key, and a fresh userdata with the keys in `adb_keys` and, with
@@ -33,7 +33,9 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 10. Wait for adb and `sys.boot_completed`. `unauthorized` for a while after each start is normal: the
     framework lets the key in once it runs. Still `unauthorized` after 6 minutes means adb's server
     isn't answering with the key the image lets in (below).
-11. First boot: permissions, Home Assistant's address, Wi-Fi, the other launchers hidden.
+11. First boot: permissions, the screen locked upright in portrait (`user_rotation=3`, checked in
+    `dumpsys window`; it stops if Android doesn't turn within 10 s), Home Assistant's address, Wi-Fi,
+    the other launchers hidden.
 12. HOME check (hides the launchers again if HOME didn't open the app). If the APK has no home
     screen of its own, nothing was hidden: the image's launcher stays, and the run exits 1.
 13. Screenshot.

@@ -259,6 +259,13 @@ export class FirstBootMirror implements PanelShell {
   hideFails = false;
   /** our app's HOME is off (as the S1 legacy test build's was, 2026-11-16): HOME doesn't resolve in it */
   noHome = false;
+  /** user_rotation and auto-rotate as a fresh userdata has them: 0, landscape (read on the unit 2026-11-17) */
+  userRotation = 0;
+  accelerometer = 1;
+  /** the display doesn't follow user_rotation (the timeout case) */
+  rotationStuck = false;
+  /** dumpsys window prints no mRotation line: only the display's cur= size */
+  noRotationLine = false;
   /** `installed`: our app is there; `ours`: which app (Glassworks by default) */
   constructor(private readonly fp: string = FINGERPRINT, private readonly installed = true, readonly ours: MirrorApp = GLASSWORKS) {}
   async run(cmd: string) {
@@ -266,7 +273,15 @@ export class FirstBootMirror implements PanelShell {
     const ok = (out = '') => ({ out, code: 0 });
     if (cmd === 'getprop sys.boot_completed') return ok('1\n');
     if (cmd === 'getprop ro.build.fingerprint') return ok(`${this.fp}\n`);
-    if (cmd === 'getprop ro.sf.hwrotation') return ok('270\n');
+    const set = /^settings put system (user_rotation|accelerometer_rotation) (\d)$/.exec(cmd);
+    if (set) { if (set[1] === 'user_rotation') this.userRotation = Number(set[2]); else this.accelerometer = Number(set[2]); return ok(); }
+    if (cmd === 'dumpsys window') {
+      // Android 6: DisplayContent's init= and cur= sizes, and WindowManagerService's mRotation
+      const rot = this.rotationStuck || this.accelerometer !== 0 ? 0 : this.userRotation;
+      const cur = rot % 2 ? '1080x1920' : '1920x1080';
+      return ok(`WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)\n  Display: mDisplayId=0\n    init=1920x1080 240dpi cur=${cur} app=${cur} rng=1080x1032-1920x1872\n`
+        + (this.noRotationLine ? '' : `  mRotation=${rot} mAltOrientation=false\n`));
+    }
     const pkg = this.ours.package;
     if (cmd === `dumpsys package ${pkg}`) return ok(this.installed ? '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n' : '');
     if (cmd === 'pm list packages com.android.launcher3') return ok(this.hidden.has('com.android.launcher3') ? '' : 'package:com.android.launcher3\n');

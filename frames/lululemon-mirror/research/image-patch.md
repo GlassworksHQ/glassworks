@@ -7,7 +7,9 @@ root's first real flash (below) booted it. Its adb came up, but **not through th
 image lets in one published key by itself, and its adbd ignores `adb_keys`
 ([Who the image lets in over adb](#who-the-image-lets-in-over-adb), 2026-11-16). Since then Kiln
 patches `services.jar` to let in the installer's own key instead (checked offline; not yet flashed). `ro.sf.hwrotation` turns
-Android's UI but **not the boot animation**, which rendered sideways. The frames are now turned
+**neither the boot animation**, which rendered sideways, **nor Android's UI**: nothing on the image reads it, and
+the first run with the real app came up landscape ([The rotation](#the-rotation-2026-11-17), 2026-11-17). Kiln
+no longer sets it; the first boot locks `user_rotation=3` instead. The frames are now turned
 themselves (#389), and on 2026-11-16 the turned animation ran upright on the glass (the maintainer's
 photo; [first-boot.md](first-boot.md)). The S1 Kiosk build it carried can't be the home screen on Android 6, so a usable
 Mirror still waits on an app that runs on API 23. Since 2026-11-16 Kiln installs the legacy build of
@@ -76,7 +78,7 @@ comes up as Glassworks and lets Kiln in over adb with its own key, with no share
 | `/priv-app/Glassworks/Glassworks.apk` (until 2026-11-16 `/priv-app/S1Kiosk/S1Kiosk.apk`, which the probe still uses), `root:root` 0644, `system_file`; its directory 0755 | A privileged system app: Android 6 grants privileged permissions (`WRITE_SECURE_SETTINGS`, `CHANGE_CONFIGURATION`) to `/system/priv-app` apps with no whitelist (that came in Android 8). It survives a factory reset, and the app's own updates install over it in `/data/app` | Read (AOSP 6 `PackageManagerService`). On the unit (2026-11-16) the APK was in `/system/priv-app/S1Kiosk`; the probe there got its privileged permissions ([privileged-app.md](privileged-app.md)) |
 | Its native libraries in `/priv-app/Glassworks/lib/arm64/` (or `lib/arm/`) | Android 6 doesn't unpack a bundled app's libraries: it looks for `lib/<abi>` next to the APK, as the image's own priv-apps have them. Only the primary ABI the APK has is unpacked (arm64-v8a first) | Read (the image's layout, AOSP 6 `setBundledAppAbisAndRoots`); untested |
 | `/media/bootanimation.zip` (PR 5 makes it) | `bootanimation` reads `/system/media/bootanimation.zip` when there's no `/oem/media` or `/data/local` one, and the Mirror has neither | Read |
-| `build.prop`: `ro.sf.hwrotation=270` | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns Android's UI (SurfaceFlinger's display transform) and makes the panel's natural orientation portrait. It doesn't turn the boot animation, which draws straight to the panel, so its frames are turned themselves (`boot.rotate`). 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Corrected 2026-11-16:** it does **not** turn the boot animation. On the first real flash the portrait 1080x1920 animation rendered sideways (the maintainer's photo). An earlier version of this note said "verified upright": that came from the property, not from looking. The boot animation's frames are now turned themselves (`branding/lululemon-mirror`, `boot.rotate`): upright on the glass (2026-11-16, the maintainer's photo). Android's UI with it is portrait (2026-11-16, [first-boot.md](first-boot.md)) |
+| ~~`build.prop`: `ro.sf.hwrotation=270`~~ **Dropped 2026-11-17**: nothing on the image reads it, and the UI stayed landscape with it ([below](#the-rotation-2026-11-17)). The first boot sets `user_rotation=3` over adb instead | The panel is landscape (1920×1080), and the Mirror stands portrait. Today's portrait comes from `user_rotation=3`, which lives in `userdata`, so a fresh `userdata` would come up landscape. `ro.sf.hwrotation` turns Android's UI (SurfaceFlinger's display transform) and makes the panel's natural orientation portrait. It doesn't turn the boot animation, which draws straight to the panel, so its frames are turned themselves (`boot.rotate`). 270 is the same turn as `user_rotation=3` (both are SurfaceFlinger's `eOrientation270`) | **Corrected 2026-11-16:** it does **not** turn the boot animation. On the first real flash the portrait 1080x1920 animation rendered sideways (the maintainer's photo). An earlier version of this note said "verified upright": that came from the property, not from looking. The boot animation's frames are now turned themselves (`branding/lululemon-mirror`, `boot.rotate`): upright on the glass (2026-11-16, the maintainer's photo). Android's UI with it is portrait (2026-11-16, [first-boot.md](first-boot.md)) |
 | `/framework/services.jar`: `UsbDebuggingManager` lets in the installer's key (the first `adbKey` line) in place of the Glass Panes project key; same mode, owner and label | The image's own way in over adb is a constant naming the published project key, and its adbd ignores `adb_keys` ([below](#who-the-image-lets-in-over-adb)) | Verified offline (2026-11-16): image 2 patched, `dexdump` verifies the result and prints the same code. Untested on the unit |
 | Nothing removed | The community kiosk isn't in `system` | Verified (read 1) |
 
@@ -119,7 +121,7 @@ let anyone in on this image: `services.jar` does that (above).
 
 What a fresh `userdata` loses: the community kiosk (good), the shared key in its `adb_keys` (which
 this adbd ignores anyway), the Mirror's
-Wi-Fi, and the screen rotation (handled by `ro.sf.hwrotation` above). After the first boot, Kiln
+Wi-Fi, and the screen rotation (`user_rotation=3`, which the first boot sets again over adb, [below](#the-rotation-2026-11-17)). After the first boot, Kiln
 gives the app the Wi-Fi (over its Improv socket) and the Home Assistant URL over adb, as it does on
 the S1.
 
@@ -170,7 +172,7 @@ unit); the way back is ready.
 | Fastboot checks | `partition-size:system` is **1,288,491,008** bytes: 314,573 blocks, 19 more than the image. The exact-size check refused it, so the check now takes a partition at least the image's size (#357) |
 | Flash `system` | Sent in 5 pieces (split to `max-download-size`), then `userdata` in 1. The first try stopped with "Cancelled" at about 20 %: the Node `usb` package gives every transfer a 1 s timeout. The harness now gives each transfer 120 s (#370). Kiln's page runs on Chrome's WebUSB, which has no such timeout |
 | Restart | Android started the patched image. adb came up with no prompt. **Confounded** (2026-11-16): the root's computer carries the Glass Panes project key, which the image's `services.jar` lets in by itself, and this image's adbd ignores `adb_keys`. So this row doesn't show that the key Kiln wrote worked. A later flash with a throwaway key alone stayed `unauthorized` ([below](#who-the-image-lets-in-over-adb)) |
-| Rotation | **Corrected:** the first report said the boot animation ran portrait and upright with `ro.sf.hwrotation=270`. The maintainer's photo showed it **sideways**: the property doesn't turn the boot animation. S1 Kiosk is in `/system/priv-app/S1Kiosk` |
+| Rotation | **Corrected:** the first report said the boot animation ran portrait and upright with `ro.sf.hwrotation=270`. The maintainer's photo showed it **sideways**: the property doesn't turn the boot animation. It doesn't turn the UI either (2026-11-17, [below](#the-rotation-2026-11-17)). S1 Kiosk is in `/system/priv-app/S1Kiosk` |
 | HOME | **Didn't resolve to S1 Kiosk.** The legacy test APK (#346) ships `MainActivity`, `BootReceiver` and `KioskService` disabled, because the S1 app calls API 24+ and crashes on API 23; only `EngineCheckActivity` runs. The harness reported "NOT FIXED: HOME". This build can't be the Mirror's launcher: that needs the app on API 23 (the rest of #198, or the generic app on the legacy engine, #23) |
 
 What it changed in the install:
@@ -261,6 +263,50 @@ the other entry and every header as they were.
 Still to do on the unit: the root's plan (flash with a throwaway key, first boot over it, the
 project key refused).
 
+## The rotation (2026-11-17)
+
+**Status: the cause verified (the root, on the unit, read-only); the fix checked off-device; upright
+on the glass not yet seen.**
+
+The first flash with the real legacy build of Glassworks 0.1.0 (the patched pipeline, a throwaway
+key) came up **sideways**: the maintainer saw landscape. Read on the unit afterwards:
+
+| Read | Result |
+|---|---|
+| `build.prop` | `ro.sf.hwrotation=270` (Kiln set it) |
+| `wm size` | 1920x1080 |
+| `dumpsys display` | logical frame 1920x1080, orientation 0 |
+| `dumpsys window` | user rotation mode 1 (locked), user rotation 0, current rotation 0 |
+| `settings get system user_rotation`; `accelerometer_rotation` | null; 0 |
+
+So `ro.sf.hwrotation=270` doesn't turn the UI on this image either. Read 2026-11-17 in image 2
+(unsparsed, `debugfs rdump` of `/framework`, `/app`, `/priv-app`, `/vendor`): the string
+`hwrotation` is in no file of the filesystem (a byte search of the whole raw image), and in no entry
+of its 172 jars and APKs once inflated. SurfaceFlinger (`libsurfaceflinger.so`), the window manager
+(`services.jar`), `framework.jar`, `bootanimation` and the HWC all live there, so nothing that could
+act on the property reads it. Kiln stopped setting it.
+
+The stock unit stood portrait through `user_rotation=3`, locked (read 1 above, 2026-11-15), which
+lives in `userdata`. A fresh `userdata` starts at 0. The probe hid that: it asked for portrait
+itself. The legacy app before #434 held the natural orientation, landscape here. Since #434 it
+follows the system's rotation (`FULL_USER`).
+
+**What Kiln does now** (`setPortrait` in `installer/src/flash.ts`, on the first boot, before the app
+starts): `settings put system accelerometer_rotation 0`, `settings put system user_rotation 3`, then
+`dumpsys window` once a second until it reports rotation 3 (or, with no rotation printed, a
+`cur=1080x1920` display). After 10 s it stops with "the Mirror's screen didn't turn to portrait".
+
+**Why 3 and not 1.** Both are portrait; one is upside down. Two readings point to 3, neither seen on
+the glass with this fix yet:
+- the stock unit stood upright at `user_rotation=3` (2026-11-15, the community kiosk in daily use);
+- Kiln's boot animation, portrait art turned 90° counter-clockwise into the panel's framebuffer, is
+  upright on the glass (2026-11-16, photo). Android's `ROTATION_270` (3) draws turned 90°
+  counter-clockwise on the panel too.
+
+To reproduce the string search: unsparse image 2, then
+`LC_ALL=C grep -a -c hwrotation system.raw` (0), and the same over every entry of every zip under
+`debugfs -R 'rdump /framework out'` (and `/app`, `/priv-app`, `/vendor`).
+
 ## How to reproduce
 
 Off-device only:
@@ -283,6 +329,8 @@ Off-device only:
 - The first real flash with the patched `services.jar`: first boot over the installer's key, the project key refused.
 
 - Does `ro.sf.hwrotation=270` turn the boot animation? **No** (2026-11-16, seen on the unit: sideways).
+  The UI? **No** (2026-11-17): nothing on the image reads it, and the real app came up landscape.
+- Is `user_rotation=3` upright on the glass, not upside down (1)? Inferred yes (below); the root's next run checks it.
   The frames are turned in the zip now, and run upright (2026-11-16, photo). Android's UI is portrait.
 - ~~Does the Mirror's LK take sparse FILL chunks?~~ Yes (2026-11-16): the run used FILL (no
   `--no-fill`), and both `system` (5 pieces) and `userdata` (1) flashed. "Try again without FILL"

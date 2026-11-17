@@ -4,7 +4,7 @@ export {
 } from './recipe';
 export { GLASS_PANES, LABELS, SETTINGS_OVERLAY, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf, type SystemPatch } from './image';
 export {
-  GLASS_PANES_USERDATA, MIRROR_FASTBOOT, focusedActivity, makeOnlyHome, OTHER_HOMES, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, buildImages, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem,
+  GLASS_PANES_USERDATA, MIRROR_FASTBOOT, MIRROR_ROTATION, displayRotation, setPortrait, focusedActivity, makeOnlyHome, OTHER_HOMES, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, buildImages, checkDownload, checkFastboot, firstBoot, flashImages, loadSystem,
   type FastbootLike, type FastbootReport, type FirstBoot, type HomeCheck, type Loaded, type PrepareStep,
 } from './flash';
 

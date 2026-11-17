@@ -33,9 +33,9 @@ class Turned:
 
 class TurnTest(unittest.TestCase):
     def test_the_mirror_turns_its_frames_90_degrees_counter_clockwise(self):
-        # AOSP 6: hwrotation 270 = Transform::ROT_270, right -> up, so upright content is stored turned
-        # 90 deg counter-clockwise (PIL ROTATE_90). Seen sideways on the unit (2026-11-16); the photo of
-        # the turned frames decides it, and rotate: 270 is the fallback.
+        # Upright content is stored turned 90 deg counter-clockwise (PIL ROTATE_90): the photo of the
+        # turned frames on the unit showed them upright (2026-11-16). It is the same turn as Android's
+        # ROTATION_270 (user_rotation=3), which stands the Mirror's UI upright; rotate: 270 is the fallback.
         mirror = from_frame("lululemon-mirror")
         self.assertEqual(mirror.rotate, 90)
         self.assertIs(formats.to_panel(mirror, Turned()), Image.Transpose.ROTATE_90)
