@@ -244,14 +244,22 @@ describe('silent updates (#422)', () => {
 
   it('keeping a tap when the app-op can\'t be read: refused with why, not declined, and the install goes on', async () => {
     const { p, res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, installOpGetFailsAfter: 0 }, { silentUpdates: false });
-    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.off, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.unknown, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
     expect(p.installOp).toBe('allow');
     expect(res.home.state).toBe('set');
   });
 
-  it('keeping a tap when the readback after the reset fails: refused, and the line says it may still be silent', async () => {
-    const { res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, installOpGetFailsAfter: 1 }, { silentUpdates: false });
-    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.allowed, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+  it('keeping a tap when the readback after the reset fails: refused, and the line says it isn\'t confirmed', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installed: 600, installOpAllowed: true, installOpGetFailsAfter: 1 }, { silentUpdates: false });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.unknown, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+    expect(p.installOp).toBe('default');
+  });
+
+  it('allowing it when the readback fails: refused, not confirmed, and the install goes on', async () => {
+    const { p, res } = await run({ ...LEVELS.api34!, installOpGetFailsAfter: 0 });
+    expect(res.silentUpdates).toEqual({ state: 'refused', line: SILENT_LINES.unknown, detail: 'couldn\'t read it: Error: java.lang.SecurityException' });
+    expect(p.installOp).toBe('allow');
+    expect(res.home.state).toBe('set');
   });
 
   it('undo throws when the device refuses the reset or its readback', async () => {

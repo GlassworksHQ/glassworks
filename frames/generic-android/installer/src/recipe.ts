@@ -231,11 +231,15 @@ async function grant(r: Steps, app: GenericApp, apk: Uint8Array, sdk: number): P
 export const SILENT_UPDATES_API = 31;
 const INSTALL_OP = 'REQUEST_INSTALL_PACKAGES';
 
-/** The words core SilentUpdates uses for each answer Kiln can leave. */
+/**
+ * The words core SilentUpdates uses for each answer Kiln can leave. `unknown` when Kiln couldn't read the app-op
+ * back: the app's own Device page and Home Assistant's *Silent updates* still say which it is.
+ */
 export const SILENT_LINES = {
   allowed: 'Yes: Android 12 or newer lets the app update itself',
   off: 'No: Android needs “Install unknown apps” allowed for the app',
   old: (release: string) => `No: Android ${release} asks for a tap on each update`,
+  unknown: 'Not confirmed: Kiln couldn\'t read “Install unknown apps” back. The panel\'s Device page says which it is',
 } as const;
 
 /** "Install unknown apps" for the app, as `appops get` answers; `failed` when it doesn't. */
@@ -261,13 +265,15 @@ async function silentUpdates(r: Steps, app: GenericApp, apk: Uint8Array, device:
     // A read that fails leaves it unknown, so the result says so rather than "declined".
     const before = await readInstallOp(r.p, app);
     if (before !== 'off') {
-      if (before !== 'allow') return { state: 'refused', line: SILENT_LINES.off, detail: before.failed };
+      if (before !== 'allow') return { state: 'refused', line: SILENT_LINES.unknown, detail: before.failed };
       r.step('Updates ask for a tap');
       await r.p.run(`appops set ${app.package} ${INSTALL_OP} default`);
       const after = await readInstallOp(r.p, app);
       if (after !== 'off') {
         r.detail('Install unknown apps: not taken back');
-        return { state: 'refused', line: SILENT_LINES.allowed, detail: after === 'allow' ? 'Android still allows it from an earlier install' : after.failed };
+        return after === 'allow'
+          ? { state: 'refused', line: SILENT_LINES.allowed, detail: 'Android still allows it from an earlier install' }
+          : { state: 'refused', line: SILENT_LINES.unknown, detail: after.failed };
       }
     }
     r.detail('silent updates: kept a tap per update');
@@ -275,8 +281,9 @@ async function silentUpdates(r: Steps, app: GenericApp, apk: Uint8Array, device:
   }
   r.step('Silent updates');
   const res = await r.p.run(`appops set ${app.package} ${INSTALL_OP} allow`);
-  const now = await r.try(`appops get ${app.package} ${INSTALL_OP}`);
-  if (new RegExp(`${INSTALL_OP}: allow`).test(now)) { r.detail('Install unknown apps: allowed'); return { state: 'allowed', line: SILENT_LINES.allowed }; }
+  const now = await readInstallOp(r.p, app);
+  if (now === 'allow') { r.detail('Install unknown apps: allowed'); return { state: 'allowed', line: SILENT_LINES.allowed }; }
+  if (now !== 'off') { r.detail(`Install unknown apps: ${now.failed}`); return { state: 'refused', line: SILENT_LINES.unknown, detail: now.failed }; }
   const detail = (res.code !== 0 || /Exception|Error/i.test(res.out) ? firstLine(res.out) : '') || `exit ${res.code}, and Android says it is still off`;
   r.detail(`Install unknown apps: refused: ${detail}`);
   return { state: 'refused', line: SILENT_LINES.off, detail };
