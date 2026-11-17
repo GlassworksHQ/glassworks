@@ -145,7 +145,7 @@ class SettingsMenuTest {
         // Maintainer 2026-11-15: which Home Assistant account the dashboard uses, on the Home Assistant & dashboard page.
         val core = CoreSettings(
             KioskPrefs(RuntimeEnvironment.getApplication()), "0.4.3", status = { "" }, deviceSettings = null,
-            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { "Signed in as Alex" },
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { "Signed in as Alex" }, hardware = MenuFixture.S1_HARDWARE,
         )
         val page = core.sections().getValue(SettingsPlace.DASHBOARD)
         assertEquals(CoreSettings.DASHBOARD_TITLE, page.title)
@@ -155,7 +155,7 @@ class SettingsMenuTest {
         // Without a stored sign-in (one made on the panel's own screen leaves none) the row is left out.
         val none = CoreSettings(
             KioskPrefs(RuntimeEnvironment.getApplication()), "0.4.3", status = { "" }, deviceSettings = null,
-            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { null },
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, account = { null }, hardware = MenuFixture.S1_HARDWARE,
         )
         assertTrue(none.sections().getValue(SettingsPlace.DASHBOARD).items.none { it is SettingsItem.Info })
     }

@@ -89,6 +89,7 @@ public final class dev/glassworks/esphome/ApiServer {
 	public synthetic fun <init> (ILkotlin/jvm/functions/Function0;Ljava/util/List;Ldev/glassworks/esphome/NoiseKeys;Ljava/net/InetAddress;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun <init> (ILkotlin/jvm/functions/Function0;Ljava/util/List;[B)V
 	public final fun getBluetooth ()Ldev/glassworks/esphome/BluetoothProxyHandler;
+	public final fun getBluetoothConnections ()Ldev/glassworks/esphome/BluetoothConnectionHandler;
 	public final fun getEncrypted ()Z
 	public final fun getHasSubscriber ()Z
 	public final fun getKeyed ()Z
@@ -103,12 +104,15 @@ public final class dev/glassworks/esphome/ApiServer {
 	public final fun getVoice ()Ldev/glassworks/esphome/VoiceAssistantHandler;
 	public final fun publishStates ()V
 	public final fun removeBluetooth (Ldev/glassworks/esphome/BluetoothProxyHandler;)Z
+	public final fun removeBluetoothConnections (Ldev/glassworks/esphome/BluetoothConnectionHandler;)Z
 	public final fun replaceKey ([B)V
 	public final fun sendBluetoothAdvertisements (Ljava/util/List;)Z
+	public final fun sendBluetoothEvent (Ldev/glassworks/esphome/GattEvent;)Z
 	public final fun sendEvent (Ldev/glassworks/esphome/EventEntity;Ljava/lang/String;)Z
 	public final fun sendHomeAssistantEvent (Ldev/glassworks/esphome/HomeAssistantEvent;)Z
 	public final fun sendVoice (ILdev/glassworks/esphome/ProtoWriter;)Z
 	public final fun setBluetooth (Ldev/glassworks/esphome/BluetoothProxyHandler;)V
+	public final fun setBluetoothConnections (Ldev/glassworks/esphome/BluetoothConnectionHandler;)V
 	public final fun setEntities (Ljava/util/List;)V
 	public final fun setOnClientHello (Lkotlin/jvm/functions/Function2;)V
 	public final fun setOnCommand (Lkotlin/jvm/functions/Function0;)V
@@ -132,6 +136,12 @@ public final class dev/glassworks/esphome/BinarySensorEntity : dev/glassworks/es
 	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
 	public fun shownState ()Ljava/lang/String;
 	public fun state ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public abstract interface class dev/glassworks/esphome/BluetoothConnectionHandler {
+	public abstract fun connectionsFree ()Ldev/glassworks/esphome/GattEvent$ConnectionsFree;
+	public abstract fun onRequest (Ldev/glassworks/esphome/GattRequest;)V
+	public abstract fun onSubscriberChanged ()V
 }
 
 public final class dev/glassworks/esphome/BluetoothProxyFeature {
@@ -263,6 +273,146 @@ public final class dev/glassworks/esphome/EventEntity : dev/glassworks/esphome/A
 	public fun getListType ()I
 	public fun getStateType ()I
 	public fun info ()Ldev/glassworks/esphome/ProtoWriter;
+}
+
+public final class dev/glassworks/esphome/GattCharacteristic {
+	public fun <init> (Ljava/util/UUID;IILjava/util/List;)V
+	public final fun getDescriptors ()Ljava/util/List;
+	public final fun getHandle ()I
+	public final fun getProperties ()I
+	public final fun getUuid ()Ljava/util/UUID;
+}
+
+public final class dev/glassworks/esphome/GattDescriptor {
+	public fun <init> (Ljava/util/UUID;I)V
+	public final fun getHandle ()I
+	public final fun getUuid ()Ljava/util/UUID;
+}
+
+public abstract class dev/glassworks/esphome/GattEvent {
+	public static final field CONN_FAIL_ESTABLISH I
+	public static final field CONN_TERMINATE_LOCAL_HOST I
+	public static final field CONN_TIMEOUT I
+	public static final field Companion Ldev/glassworks/esphome/GattEvent$Companion;
+	public static final field GATT_ERROR I
+	public static final field NOT_CONNECTED I
+}
+
+public final class dev/glassworks/esphome/GattEvent$Companion {
+}
+
+public final class dev/glassworks/esphome/GattEvent$Connection : dev/glassworks/esphome/GattEvent {
+	public fun <init> (JZII)V
+	public final fun getAddress ()J
+	public final fun getConnected ()Z
+	public final fun getError ()I
+	public final fun getMtu ()I
+}
+
+public final class dev/glassworks/esphome/GattEvent$ConnectionsFree : dev/glassworks/esphome/GattEvent {
+	public fun <init> (IILjava/util/List;)V
+	public final fun getAllocated ()Ljava/util/List;
+	public final fun getFree ()I
+	public final fun getLimit ()I
+}
+
+public final class dev/glassworks/esphome/GattEvent$Error : dev/glassworks/esphome/GattEvent {
+	public fun <init> (JII)V
+	public final fun getAddress ()J
+	public final fun getError ()I
+	public final fun getHandle ()I
+}
+
+public final class dev/glassworks/esphome/GattEvent$Notification : dev/glassworks/esphome/GattEvent {
+	public fun <init> (JI[B)V
+	public final fun getAddress ()J
+	public final fun getData ()[B
+	public final fun getHandle ()I
+}
+
+public final class dev/glassworks/esphome/GattEvent$NotifySet : dev/glassworks/esphome/GattEvent {
+	public fun <init> (JI)V
+	public final fun getAddress ()J
+	public final fun getHandle ()I
+}
+
+public final class dev/glassworks/esphome/GattEvent$Read : dev/glassworks/esphome/GattEvent {
+	public fun <init> (JI[B)V
+	public final fun getAddress ()J
+	public final fun getData ()[B
+	public final fun getHandle ()I
+}
+
+public final class dev/glassworks/esphome/GattEvent$Services : dev/glassworks/esphome/GattEvent {
+	public fun <init> (JLjava/util/List;)V
+	public final fun getAddress ()J
+	public final fun getServices ()Ljava/util/List;
+}
+
+public final class dev/glassworks/esphome/GattEvent$ServicesDone : dev/glassworks/esphome/GattEvent {
+	public fun <init> (J)V
+	public final fun getAddress ()J
+}
+
+public final class dev/glassworks/esphome/GattEvent$Written : dev/glassworks/esphome/GattEvent {
+	public fun <init> (JI)V
+	public final fun getAddress ()J
+	public final fun getHandle ()I
+}
+
+public abstract class dev/glassworks/esphome/GattRequest {
+	public synthetic fun <init> (JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAddress ()J
+}
+
+public final class dev/glassworks/esphome/GattRequest$Connect : dev/glassworks/esphome/GattRequest {
+	public fun <init> (JIZ)V
+	public final fun getAddressType ()I
+	public final fun getWithCache ()Z
+}
+
+public final class dev/glassworks/esphome/GattRequest$Disconnect : dev/glassworks/esphome/GattRequest {
+	public fun <init> (J)V
+}
+
+public final class dev/glassworks/esphome/GattRequest$GetServices : dev/glassworks/esphome/GattRequest {
+	public fun <init> (J)V
+}
+
+public abstract class dev/glassworks/esphome/GattRequest$Handle : dev/glassworks/esphome/GattRequest {
+	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getHandle ()I
+}
+
+public final class dev/glassworks/esphome/GattRequest$Notify : dev/glassworks/esphome/GattRequest$Handle {
+	public fun <init> (JIZ)V
+	public final fun getEnable ()Z
+}
+
+public final class dev/glassworks/esphome/GattRequest$Read : dev/glassworks/esphome/GattRequest$Handle {
+	public fun <init> (JI)V
+}
+
+public final class dev/glassworks/esphome/GattRequest$ReadDescriptor : dev/glassworks/esphome/GattRequest$Handle {
+	public fun <init> (JI)V
+}
+
+public final class dev/glassworks/esphome/GattRequest$Write : dev/glassworks/esphome/GattRequest$Handle {
+	public fun <init> (JI[BZ)V
+	public final fun getData ()[B
+	public final fun getWithResponse ()Z
+}
+
+public final class dev/glassworks/esphome/GattRequest$WriteDescriptor : dev/glassworks/esphome/GattRequest$Handle {
+	public fun <init> (JI[B)V
+	public final fun getData ()[B
+}
+
+public final class dev/glassworks/esphome/GattService {
+	public fun <init> (Ljava/util/UUID;ILjava/util/List;)V
+	public final fun getCharacteristics ()Ljava/util/List;
+	public final fun getHandle ()I
+	public final fun getUuid ()Ljava/util/UUID;
 }
 
 public final class dev/glassworks/esphome/HomeAssistantEvent {

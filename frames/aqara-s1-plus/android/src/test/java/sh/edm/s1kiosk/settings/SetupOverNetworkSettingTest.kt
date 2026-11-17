@@ -27,7 +27,7 @@ class SetupOverNetworkSettingTest {
         val core = CoreSettings(
             prefs, "1.0.0", status = { "" }, deviceSettings = null,
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
-            panelIp = { ip },
+            panelIp = { ip }, hardware = MenuFixture.S1_HARDWARE,
         )
         return core.sections().getValue(SettingsPlace.DASHBOARD).items.filterIsInstance<SettingsItem.Action>()
             .single { it.title == CoreSettings.SETUP_OVER_NETWORK }
@@ -80,7 +80,7 @@ class SetupOverNetworkSettingTest {
         prefs.haSeen = true
         val section = CoreSettings(
             prefs, "1.0.0", status = { "" }, deviceSettings = null,
-            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, panelIp = { ip },
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, panelIp = { ip }, hardware = MenuFixture.S1_HARDWARE,
         ).sections().getValue(SettingsPlace.DASHBOARD)
         val key = dev.glassworks.pane.SettingsChange.changeable(section).first { (_, i) -> i is SettingsItem.Action && i.title == CoreSettings.SETUP_OVER_NETWORK }.first
         val f = dev.glassworks.manage.ManageFixture()
