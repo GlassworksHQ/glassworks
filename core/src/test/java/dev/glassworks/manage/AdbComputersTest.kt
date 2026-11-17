@@ -176,6 +176,19 @@ class AdbComputersTest {
         assertTrue(c.list().isEmpty())
     }
 
+    @Test fun `a listed computer allowed again from the page keeps its place, also when the list can't be saved`() {
+        val c = computers()
+        c.asked(a)
+        c.allowAsking(a.fingerprint, remember = true, who = "Alex")
+        refuse = "SecurityException: busy"
+        c.asked(a)
+        assertEquals("its automatic approval failed", a, c.asking())
+        refuse = null
+        breakTheFile()
+        assertEquals(AdbComputers.Allowed.FROM_NOW_ON, c.allowAsking(a.fingerprint, remember = true, who = "Sam"))
+        assertEquals(listOf("Alex"), c.list().map { it.by })
+    }
+
     @Test fun `a removal that can't be saved leaves the computer on the list`() {
         val c = computers()
         c.asked(a)
