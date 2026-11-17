@@ -297,7 +297,8 @@ public class ApiServer(
      * proxy does. Home Assistant keys the scanner on it (bleak-esphome connect.py:
      * `bluetooth_mac_address or mac_address`). Null, the default, sends neither, and HA keys the scanner
      * on [DeviceIdentity.macAddress]. Set a real adapter address or null, never a placeholder, and keep
-     * it the same for the device's life: a change makes HA see a new scanner.
+     * it the same for the device's life: on a change, HA moves the device's scanner to the new address
+     * (seen on an S1 with HA 2026.11: the same entry, re-keyed in place), and back again on a change back.
      */
     @Volatile public var bluetoothMacAddress: String? = null
 

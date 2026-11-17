@@ -118,7 +118,7 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
   answers `02:00:00:00:00:00`), so the root helper reads `settings get secure bluetooth_address` and
   publishes it in `/data/s1kiosk-pub/bluetooth-address`. Any failure falls back to the panel's ESPHome
   MAC (the Wi-Fi MAC, or one derived from the serial); the first real one is kept.
-  **Verified on the S1 (2026-11-16, test build `s1-kiosk-test-6c948ce`, the root's run on #396):**
+  **Verified on the S1 (2026-11-16, test build `s1-kiosk-test-6c948ce`, the root's run for #399):**
   - `settings get secure bluetooth_address` (as root) holds the adapter's address, and the helper's
     file matched it;
   - after the app restarted with the file in place, HA **re-keyed the panel's existing scanner entry in

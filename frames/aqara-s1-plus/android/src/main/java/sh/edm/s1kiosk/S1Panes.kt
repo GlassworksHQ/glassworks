@@ -257,7 +257,6 @@ class S1Panes : AppParts {
     }
 }
 
-
 /** The root helpers' app-readable directory (`PUB_DIR` in `s1kiosk_radio.sh` and `s1kiosk_bundle.sh`). */
 internal const val PUB_DIR = "/data/s1kiosk-pub"
 

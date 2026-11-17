@@ -350,7 +350,7 @@ services › Bluetooth*, and hears the BLE sensors near the panel through it. No
   turn Bluetooth and location on when they are off.
 - **The scanner's address.** On the S1 the proxy tells Home Assistant the panel's own Bluetooth
   address, as an ESPHome proxy does, read through the root helper (Android hides it from apps). It is
-  read once when the app starts and kept from then on. When it can't be read (no root helper yet,
+  read the first time the proxy runs after the app starts, and kept from then on. When it can't be read (no root helper yet,
   Bluetooth never turned on, an error), the proxy sends none and Home Assistant keys the scanner on the
   panel's ESPHome MAC, as before. Other frames always do the latter. The first time, Home Assistant
   moves the panel's scanner to the Bluetooth address by itself; no second scanner appears.

@@ -13,10 +13,11 @@ import java.util.concurrent.TimeUnit
  * before. Android 10 hides the adapter's MAC from apps, so the frame says where to read it ([read]; on
  * the S1, the root helper's file). A frame without a way gives none, and always gets the fallback.
  *
- * Settled once per process and then fixed, so HA never sees the scanner change from one connection to
- * the next. The first valid MAC is [kept], and wins at every later start, so a helper that fails or
- * answers late at a later start can't flip HA back to the fallback. So a panel changes scanner at most
- * once: the first start at which the helper has published.
+ * Settled the first time the proxy runs in a process ([value] is lazy) and then fixed, so HA never
+ * sees the address change from one connection to the next. The first valid MAC is [kept], and wins
+ * every later time, so a helper that fails or answers late later on can't flip HA back to the
+ * fallback. So HA moves a panel's scanner to the adapter's address at most once (in place, the same
+ * entry: the S1 run on #399, 2026-11-16): the first time the proxy runs after the helper has published.
  *
  * Every failure is the fallback: no file, an error, no answer within [timeoutMs], or a value that
  * isn't a real address (empty, malformed, all zero, broadcast, Android's `02:00:00:00:00:00`).
