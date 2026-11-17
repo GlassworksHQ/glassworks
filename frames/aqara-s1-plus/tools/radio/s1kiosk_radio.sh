@@ -72,7 +72,7 @@
 # Bluetooth proxy sends it to Home Assistant (bluetooth_mac_address), as an ESPHome proxy does. Once
 # Android knows a real one (settings secure bluetooth_address, after Bluetooth was first on), it is
 # written to $PUB_DIR/bluetooth-address (root 0644, the app reads it). Tried at most once a minute until
-# then, because `settings` starts a JVM. Never logged. Placeholders (all zero, 02:00:00:00:00:00,
+# then, because `settings` starts a JVM, and given 10 s each time. Never logged. Placeholders (all zero, 02:00:00:00:00:00,
 # broadcast) are never written.
 #
 # Who is connected (#217): in the coordinator modes, sys.s1kiosk.radio.peer = "none" | "<address> <epoch
@@ -1202,7 +1202,8 @@ bt_publish() {
   [ -n "$BT_DONE" ] && return 0
   now_=$(date +%s); [ "$now_" -lt "$BT_NEXT" ] && return 0
   BT_NEXT=$((now_ + ${S1R_BT_EVERY:-60}))
-  a_=$(settings get secure bluetooth_address 2>/dev/null | tr -d '\r')
+  # Bounded: this runs before enforce, so a `settings` that never returns must not stall supervision.
+  a_=$(timeout ${S1R_BT_TIMEOUT:-10} settings get secure bluetooth_address 2>/dev/null | tr -d '\r')
   bt_valid "$a_" || return 0
   a_=$(echo "$a_" | tr a-f A-F)
   if [ -L "$PUB_DIR" ] || { [ -e "$PUB_DIR" ] && [ ! -d "$PUB_DIR" ]; }; then rm -rf "$PUB_DIR"; fi

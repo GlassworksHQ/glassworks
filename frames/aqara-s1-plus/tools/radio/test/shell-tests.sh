@@ -81,6 +81,7 @@ EOF
 w "$T/bin/settings" <<'EOF'
 #!/bin/sh
 echo "$*" >> /t/settings.calls
+[ -e /t/settings-hang ] && [ "$3" = bluetooth_address ] && exec sleep 1000
 case "$1" in
   get) cat "/t/settings.$2.$3" 2>/dev/null || echo 1 ;;
   put) echo "$4" > "/t/settings.$2.$3" ;;
@@ -824,6 +825,11 @@ check "once written, asked once per start only" test "$(grep -c 'get secure blue
 echo keep > "$T/not-ours"; rm -f "$BTP/bluetooth-address"; ln -s "$T/not-ours" "$BTP/bluetooth-address"
 LOOPS=1 helper S1R_PUB="$BTP"
 check "a planted symlink is replaced, its target untouched" test ! -L "$BTP/bluetooth-address" -a "$(cat "$T/not-ours")" = keep -a "$(cat "$BTP/bluetooth-address")" = 02:AA:00:00:00:01
+rm -rf "$BTP"; touch "$T/settings-hang"; t0=$(date +%s)
+LOOPS=1 helper S1R_PUB="$BTP" S1R_BT_TIMEOUT=1
+check "a settings call that never returns doesn't stall the loop (bounded, then retried later)" test $(( $(date +%s) - t0 )) -lt 15 -a ! -e "$BTP/bluetooth-address"
+check "...and the radio's status was still set" test -n "$(prop sys.s1kiosk.radio.status)"
+rm -f "$T/settings-hang"; pkill -f "sleep 1000" 2>/dev/null
 rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
 
 echo
