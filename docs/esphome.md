@@ -314,8 +314,8 @@ its own sensor and a camera, `presence` is the sensor's and `camera_presence` th
 
 Before #476 every device listed all of them. After the update, a device drops the ones it can't back, and
 Home Assistant removes them on the next reconnect (`esphome/entry_data.py` and `entity.py`, 2026.11: the
-entity registry's `async_remove`). If the hardware comes back, so does the entity, with the same id. An
-automation that used one stops working. The S1 lists the same entities, with the same object ids, order and
+entity registry's `async_remove`). If the hardware comes back, so does the entity, with its old id
+if no other entity has taken that id meanwhile. An automation that used one stops working. The S1 lists the same entities, with the same object ids, order and
 defaults, as before. The Mirror and Pixel Tablet columns come from the frames' hardware and the tests
 (`FrameEntitiesTest`), not yet checked on those devices (2026-11-17).
 
@@ -442,7 +442,7 @@ When the detected base changes (none ↔ switch, channel count) and stays change
 rebuilds its entity list and sends `DisconnectRequest` to every API client. HA reconnects (after
 its short "expected disconnect" cool-down), lists the entities again and adds the new ones. It removes
 the ones that went away from its entity registry, as for [a frame's screen entities](#screen-entities-by-frame),
-and they come back with the same id when the base does. The last layout is persisted, so
+and they come back when the base does, with their old ids if no other entity has taken them meanwhile. The last layout is persisted, so
 restarting the app with the same base doesn't trigger this.
 
 The **Dashboard** select uses the same mechanism: its options are only sent in the entity listing,
