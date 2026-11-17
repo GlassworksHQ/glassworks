@@ -324,6 +324,7 @@ The definition's `id` is the pane's.
 | `setupChoice` | The pane's card on the Panes step, or null. By default the switch's, when it is `inSetup`. A pane with `setupSteps` needs one. |
 | `settings()` | The pane's settings sections, as they are now. Called each time the menu opens. |
 | `extras` | adb intent extras for its settings (`IntentExtra.bool`, `float`, `string`). `restartsApp` for a setting read only at start. The switch's extra comes on its own (`intentExtras()`). |
+| `permissions` | Android's runtime permissions the pane needs while it is on (Assist: the microphone; the camera: the camera). The app asks for them when it starts, only if the app's manifest declares them and only on a screen that takes a tap (`permissionsToAsk()`). Without touch, the installer grants them. |
 
 **A setup step is state plus requests.** `done()` says whether the step is answered; `channelState()`
 is its part of the setup channel's state, under the step's id; `ops` are the requests that answer
@@ -415,6 +416,14 @@ a few words, why the pane can't run now (the radio without its root helper): the
 "Can't run" and its page says why, without a switch. A pane whose `requires` the frame doesn't
 `provide` is `CantRun`: it has no section, so the rail, the Manage page and setup don't show it at all
 (#23; maintainer, 2026-11-15).
+
+**Settings inside a page follow the same rule (#471).** The Screen page shows a row only when the device
+can back it. `ScreenHardware.of` (core) is the one answer both surfaces read: who senses presence (the
+frame's sensor, whose range changes only when `PresenceSource.ranged`; else a pane with `givesPresence`,
+like the camera; else nobody), whether `LightSource.available`, and whether the screen takes a tap.
+Without presence there is no wake switch or range. A pane that could give presence but is off gets a row
+that opens its page. Without a light sensor there is no Brightness row, and without touch no link to
+Android's settings.
 
 **Every pane's page shows its state (#212).** No page says the pane has no settings.
 

@@ -11,9 +11,20 @@ class BluetoothProxyPrefs(private val sp: SharedPreferences) {
     /** The pane is on ([BluetoothProxyDefinition.switch] writes it). Off until someone turns it on (#67, #121). */
     val enabled: Boolean get() = sp.getBoolean(KEY_ENABLED, DEFAULT_ENABLED)
 
+    /**
+     * "Listen and connect": Home Assistant may also make GATT connections through the proxy (#246). Off,
+     * "Listen only", until someone picks it on the pane's page.
+     */
+    var connect: Boolean
+        get() = sp.getBoolean(KEY_CONNECT, DEFAULT_CONNECT)
+        set(value) { sp.edit().putBoolean(KEY_CONNECT, value).apply() }
+
     companion object {
         /** Panels keep it, and it is the adb extra: never rename it. */
         const val KEY_ENABLED = "bluetooth_proxy_enabled"
         const val DEFAULT_ENABLED = false
+        /** Panels keep it: never rename it. */
+        const val KEY_CONNECT = "bluetooth_proxy_connect"
+        const val DEFAULT_CONNECT = false
     }
 }

@@ -43,6 +43,9 @@ const files = {
   // 512 app icon. The furnace (icon-kiln-*) is Kiln's UI icon, not its favicon (glassworks.dev/brand).
   'src/favicon-kiln.svg': () => read('public/brand/favicon-kiln.svg'),
   'src/app-icon-kiln.svg': () => read('public/brand/app-icon-kiln.svg'),
+  // The Glassworks mark and name on night: the header of the setup page the panel serves (#34), which is
+  // the panel's own page, not Kiln's.
+  'src/lockup-on-dark.svg': () => read('public/brand/lockup-on-dark.svg'),
 };
 
 let differs = 0;

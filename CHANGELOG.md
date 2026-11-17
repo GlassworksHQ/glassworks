@@ -27,6 +27,18 @@ below as the release notes.
   checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
   and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the
   first five decide the word. The S1 is Good today: the wall base's buttons don't reach the panel yet.
+- **The camera pane in Glassworks for generic Android, the Mirror's legacy build included.** On a device
+  with a camera and no proximity sensor of its own, turn the Camera pane on and the screen wakes when someone
+  walks up, with no image leaving the device in Presence only. A device without a camera gets no camera entities. On a screen without
+  touch, such as the lululemon Mirror, setup never waits on the camera step: the use stays Presence only, and
+  Kiln grants the camera. On Android 6-7 the ONVIF stream needs the camera to offer 1280x720; presence works
+  either way. Not yet run on a real Mirror.
+- **Kiln installs Glassworks on any Android tablet, as a test.** At `kiln.glassworks.dev/android?apk=local`, plug
+  the tablet into a computer and Kiln names it, or asks for its brand, then shows how to turn on USB debugging on
+  that brand. After you tap Allow on the tablet, Kiln installs the app, gives it what it can (microphone, screen on
+  and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
+  A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
+  computer until Glassworks for Android has a release.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -127,6 +139,23 @@ below as the release notes.
   generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **The panel's own Wi-Fi says when it is starting, then shows the setup page's QR code once a phone is on it.**
+  **Set up from a phone** now shows "Starting the setup Wi-Fi…" at once, where the screen used to sit unchanged
+  for several seconds. A start that fails says why in the same place, with **Try again**. Once a phone on the
+  panel's Wi-Fi opens a page on the panel, the QR code changes to the setup page's address, so nobody types
+  it. The panel's logs no longer name the Wi-Fi network you pick, nor the panel's own network and
+  its password.
+- **The panel's setup page now looks like the panel, not the installer.** The page the panel serves at
+  `http://<panel>:8099/setup`, also reached from a phone on the panel's setup Wi-Fi, now has the panel's
+  setup-screen look: the Glassworks name and stack, a night background, and one white button. It no longer
+  shows Kiln's name or its orange colours. The steps and words are the same.
+- **Screen settings show only what the device has.** On a tablet or the Mirror, the Screen page in the
+  panel's settings and on the Manage page no longer shows the S1's presence range. *Wake when someone's
+  near* shows only with a sensor that can wake the screen: a proximity sensor, or the Camera pane, and
+  where the camera could do it but its pane is off, the row says so and opens it. *Brightness* needs a
+  light sensor, and a device without touch has no link to Android's settings. Without presence, *Turn off
+  when idle* is the screen's one on/off: it says Never while Home Assistant's *Screen mode* keeps the screen
+  on, and picking a time there turns that off. The S1's page is unchanged.
 - **On a device that isn't an Aqara S1, the app follows the device's rotation; the Mirror stands portrait.**
   The app turns with Android's auto-rotate, or stays as you locked the screen, where it was always landscape.
   A Pixel Tablet stays landscape, as on its dock. The lululemon Mirror stands portrait, as its Android does.
@@ -295,6 +324,9 @@ below as the release notes.
 - **Phone setup finishes on a device without a radio.** On the Mirror and other Android devices, the
   setup page on the phone stopped after sign-in with "The panel stopped answering". It now skips the
   radio step there and goes to Done.
+- **No permission prompt the panel doesn't need.** At start, the app asks Android for the microphone only while
+  Voice is on, and for the camera only while the Camera pane is on. On a screen without touch, such as the
+  lululemon Mirror, it never shows Android's prompt: Kiln grants the permissions at install.
 - **Home Assistant's images show on Android 6 and 7.** On the lululemon Mirror, image entities and other
   pictures from Home Assistant stayed empty when the dashboard was at an `http://` address, and the panel
   said it had blocked content from Home Assistant's own address. The panel's frozen browser engine asked
@@ -320,6 +352,14 @@ below as the release notes.
   leave the setup screen for one that said "Wi-Fi is off", which was not true, with a "Set up Wi-Fi"
   button that nobody could press. It now stays on the setup screen, which says how to set it up from a
   computer. On every panel, the offline screen says "Wi-Fi is off" only when Android says so.
+- **The panel's "Wi-Fi setup · done" card says how the Wi-Fi came.** It showed the Bluetooth mark whenever the
+  panel came online while Bluetooth setup was open, also when the Wi-Fi came from the setup page on a phone. Now
+  Bluetooth shows only for Wi-Fi sent over Bluetooth; Wi-Fi from the setup page, from Kiln or from Android's
+  settings shows a Wi-Fi mark and says where it came from.
+- **The phone's setup page no longer waits for news that can't come.** Once it sends your Wi-Fi over the panel's
+  own Wi-Fi, the panel closes that network within moments, and the page with it. The page now says so once:
+  sent, watch the panel's screen, and put the phone back on your own Wi-Fi, instead of steps that seemed to
+  still be updating.
 - **A Mirror flashed by Kiln lets in only your browser's key, not the shared project key.** The Glass
   Panes image lets one adb key in without asking: the project's own key, published with its private
   half, so anyone with a USB cable could control the Mirror. Kiln now puts your browser's key in its

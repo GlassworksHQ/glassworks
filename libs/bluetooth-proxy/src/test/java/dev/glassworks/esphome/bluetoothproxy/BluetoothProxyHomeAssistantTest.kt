@@ -8,11 +8,16 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import dev.glassworks.esphome.ApiServer
 import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.esphome.GattCharacteristic
+import dev.glassworks.esphome.GattDescriptor
+import dev.glassworks.esphome.GattService
 import dev.glassworks.esphome.MemoryKeyStore
 import dev.glassworks.esphome.NoiseKeys
 import java.io.File
 import java.net.InetAddress
+import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
@@ -101,6 +106,101 @@ class BluetoothProxyHomeAssistantTest {
             assertFalse(engine.status.subscribed)
         } finally {
             engine.close()
+            server.stop()
+        }
+    }
+
+    /**
+     * A radio with one made-up device that answers on its own thread, as Android does: a service at
+     * handle 10, a characteristic (11, read, write, notify) and its CCCD (12). Writing the CCCD sends one
+     * notification.
+     */
+    private class OneDeviceRadio : GattRadio {
+        private val android = Executors.newSingleThreadExecutor()
+        var connects = 0
+
+        override fun connect(address: Long, listener: GattLink.Listener): GattLink {
+            connects++
+            android.execute { listener.onConnectionState(true, 0) }
+            return object : GattLink {
+                var value = byteArrayOf(0x17)
+                var cccd = byteArrayOf(0, 0)
+                fun later(task: () -> Unit): Boolean { android.execute(task); return true }
+                override fun requestMtu(mtu: Int) = later { listener.onMtu(247, 0) }
+                override fun discoverServices() = later { listener.onServicesDiscovered(0) }
+                override fun services() = listOf(GattService(UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb"), 10, listOf(
+                    GattCharacteristic(UUID.fromString("12345678-1234-5678-1234-56789abcdef0"), 11, 0x1A,
+                        listOf(GattDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"), 12))),
+                )))
+                override fun read(handle: Int) = later { listener.onRead(handle, value, 0) }
+                override fun write(handle: Int, data: ByteArray, withResponse: Boolean) = later { value = data; listener.onWritten(handle, 0) }
+                override fun readDescriptor(handle: Int) = later { listener.onDescriptorRead(handle, cccd, 0) }
+                override fun writeDescriptor(handle: Int, data: ByteArray) = later {
+                    cccd = data
+                    listener.onDescriptorWritten(handle, 0)
+                    listener.onNotification(11, byteArrayOf(0x55, 0x66))
+                }
+                override fun setNotify(handle: Int, enable: Boolean) = true
+                override fun disconnect() { android.execute { listener.onConnectionState(false, 0) } }
+                override fun close() = Unit
+            }
+        }
+
+        fun close() = android.shutdownNow()
+    }
+
+    /**
+     * Home Assistant's client makes a GATT connection through the engine (#246): the same script as
+     * esphome-api's EspHomeBluetoothConnectionsTest, against [BluetoothConnectionEngine] with a radio
+     * that answers as Android does. HA sees 3 slots, 2 while linked, and 3 again after each disconnect.
+     */
+    @Test
+    fun homeAssistantConnectsToADeviceThroughTheEngine() {
+        val python = System.getenv("ESPHOME_PYTHON")
+        assumeTrue("set ESPHOME_PYTHON to a python with aioesphomeapi installed", !python.isNullOrBlank())
+
+        val psk = ByteArray(32) { (it * 5 + 3).toByte() }
+        val server = ApiServer(0, { identity }, emptyList(), keys = NoiseKeys(MemoryKeyStore(psk)), bindAddress = InetAddress.getLoopbackAddress())
+        val scan = BluetoothProxyEngine(
+            RadioWithNeighbours(), server::sendBluetoothAdvertisements, ScanPower.LOW_LATENCY,
+            BluetoothProxyEngine.ExecutorLoop(), ScanSchedule.Limits(lingerMs = 300), { server.removeBluetooth(it) },
+        )
+        val radio = OneDeviceRadio()
+        val links = BluetoothConnectionEngine(server, radio)
+        server.bluetooth = scan
+        server.bluetoothConnections = links
+        server.start()
+        try {
+            // Shared with esphome-api, whose own test drives the protocol with a stand-in handler.
+            val script = File("../esphome-api/src/test/resources/esphome_bluetooth_connections.py")
+            assertTrue("the script is at ${script.absolutePath}", script.isFile)
+            val log = File.createTempFile("esphome_bluetooth_connections", ".log").apply { deleteOnExit() }
+            val proc = ProcessBuilder(python, "-I", script.absolutePath, server.localPort.toString(),
+                java.util.Base64.getEncoder().encodeToString(psk), 0x02C0FFEE0001L.toString())
+                .redirectErrorStream(true).redirectOutput(log).start()
+            val finished = try { proc.waitFor(60, TimeUnit.SECONDS) } finally { if (proc.isAlive) proc.destroyForcibly() }
+            val out = log.readText()
+            assertTrue("client timed out:\n$out", finished)
+            assertEquals("client failed:\n$out", 0, proc.exitValue())
+            val r = JSONObject(out.lines().first { it.startsWith("RESULT ") }.removePrefix("RESULT "))
+
+            assertTrue("connectable", r.getBoolean("connectable"))
+            assertTrue(r.getBoolean("remote_caching"))
+            assertFalse(r.getBoolean("pairing"))
+            assertEquals(12, r.getJSONArray("services").getJSONObject(0).getJSONArray("characteristics").getJSONObject(0)
+                .getJSONArray("descriptors").getJSONObject(0).getInt("handle"))
+            assertEquals("17", r.getString("read"))
+            assertEquals("2a", r.getString("read_after_write"))
+            assertEquals("[11,\"5566\"]", r.getJSONArray("notification").toString())
+            assertEquals("0100", r.getString("cccd"))
+            assertEquals("connected at the MTU Android settled on, twice", "[[true,247,0],[false,0,0],[true,247,0],[false,0,0]]", r.getJSONArray("states").toString())
+            assertEquals("[[3,3,0,false],[2,3,1,true],[3,3,0,false],[2,3,1,true],[3,3,0,false]]", r.getJSONArray("free").toString())
+            assertEquals(2, radio.connects)
+            assertEquals("every slot free again", 0, links.inUse)
+        } finally {
+            links.close()
+            scan.close()
+            radio.close()
             server.stop()
         }
     }
