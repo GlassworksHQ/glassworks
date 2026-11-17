@@ -279,8 +279,8 @@ class CameraMockups {
         shot("camera-portrait-01-presence-only", menu(Rig().someoneWalksUp()))
         shot("camera-portrait-02-not-allowed", menu(Rig(allowed = false)))
         shot("camera-portrait-03-privacy-on", menu(Rig { it.privacy = true }))
-        setupShot("camera-portrait-04-setup-camera-asks", "camera")
-        setupShot("camera-portrait-05-setup-camera-allowed", "camera", allowed = true)
+        setupShot("camera-portrait-04-setup-camera-asks", "camera", frame = TestFrames.tablet(app))
+        setupShot("camera-portrait-05-setup-camera-allowed", "camera", allowed = true, frame = TestFrames.tablet(app))
         setupShot("camera-portrait-06-setup-camera-no-touch", "camera", frame = TestFrames.mirror(app))
     }
 

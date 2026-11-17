@@ -108,10 +108,11 @@ class DeviceNamesTest {
                 on a lululemon Mirror
             ""${'"'}
             val c = '"' + "https://example.com/x" // Pixel Tablet
+            val e = "Set up ${'$'}tablet, a reset tablet"
             /* outer /* inner */ val d = "Echo Show" */
         """.trimIndent()
         val texts = Literals.of(kotlin, Literals.Language.KOTLIN)
-        assertEquals(listOf("Aqara", "S1", "lululemon", "Mirror"), texts.flatMap { names(it.second) })
+        assertEquals("a template's name is code, not text", listOf("Aqara", "S1", "lululemon", "Mirror", "tablet"), texts.flatMap { names(it.second) })
         assertEquals("the inner literal's line", 3, texts.single { "Aqara" in it.second }.first)
 
         val js = """var r=/["'`]/g,t=`Not supported by ${'$'}{n} on the Mirror`,u=a/b/c,v="S1 Kiosk ${'$'}{v}",w='Aqara',x=n++/2,y="Pixel""""
@@ -201,6 +202,12 @@ internal object Literals {
                 }
                 if (delim != "\"\"\"" && s.startsWith(delim, i)) { i++; break }
                 if (templates && s.startsWith("\${", i)) { text.append(' '); i += 2; code(untilBrace = true); continue }
+                if (language == Language.KOTLIN && templates && s[i] == '$' && i + 1 < s.length && (s[i + 1].isLetter() || s[i + 1] == '_')) {
+                    text.append(' ')
+                    i++
+                    while (i < s.length && (s[i].isLetterOrDigit() || s[i] == '_')) i++
+                    continue
+                }
                 text.append(s[i])
                 i++
             }
