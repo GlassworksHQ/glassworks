@@ -98,6 +98,7 @@ On the S1 the fork sends exactly what `@glassworks/fastboot` sent before it (che
 | `fromRaw` | Copies each 64 MiB chunk into memory | Keeps each chunk as a slice of the `Blob` | A large `File` stays on disk until its piece is sent |
 | Progress of a sparse image | Counts encoded bytes in places, so it can end below 1 | Counts the bytes written on the device | Bug fix: progress ends at exactly 1 |
 | Reading a Blob | `FileReader` | `blob.arrayBuffer()` | Works in Node, so the tests run |
+| Building a sparse piece | Wraps the Blob so far in a new one for every chunk, so a piece of N chunks is about 2N Blobs deep | Collects the parts, then makes one flat Blob | Bug fix: Node crashed (SIGSEGV) reading a piece of the Mirror's `system.img`, about 3,000 chunks of `make_ext4fs` output (2026-11-16). Same bytes on the wire |
 | `download` and `flash` before the image is sent | Not checked | Checked against the buffer size and the partition size | Unchanged from our client |
 
 ## S1 wire checks

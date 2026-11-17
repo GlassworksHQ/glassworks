@@ -1,13 +1,12 @@
 // Development and preview only (/lululemon-mirror?demo=flash-…): the fastboot install against a
 // simulated Mirror, so each screen can be seen and captured without one. The images aren't built (a
 // stand-in reports progress); the fastboot and first-boot answers are the recipe's fakes.
-import { fakeApk } from '@glassworks/app-adb/fakes';
 import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
-import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
-export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-back', 'flash-run'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
@@ -48,7 +47,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); } }, true);
   const flash = new FlashSession({
     images,
-    imageUrl: 'https://refract.glassworks.dev/glass-panes/mirror-android-1/system.img',
+    imageUrl: 'https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x40000000 : SYSTEM_BYTES),
     requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m; },
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
@@ -62,11 +61,13 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   await flash.downloadImage(); // through the proxy; these three fall back to download-and-select
   if (name === 'flash-proxy-failed') return { flash, mirror };
   if (name === 'flash-checking') { void flash.selectImage(image); return { flash, mirror }; }
-  await mirror.pickApk('kiosk-legacy-debug.apk', fakeApk('sh.edm.s1kiosk'));
+  await mirror.pickApk('generic-android-legacy.apk', fakeMirrorApk());
   flash.setHaUrl('http://homeassistant.local:8123');
   flash.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' });
   if (name === 'flash-wrong') { await flash.selectImage(image); return { flash, mirror }; }
   if (name === 'flash-ready') return { flash, mirror };
+  // a password WPA can't take: refused before fastboot, since the image saves it as the network's PSK
+  if (name === 'flash-wifi-short') { flash.setWifi({ password: 'short' }); return { flash, mirror }; }
   flash.toFastboot();
   if (name === 'flash-fastboot') return { flash, mirror };
   await flash.connectFastboot();

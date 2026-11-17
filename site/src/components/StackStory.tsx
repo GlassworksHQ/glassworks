@@ -233,7 +233,7 @@ export function StackStory({ release, post }: { release: StoryRelease; post?: St
               <a className={s.newPill} href={post.href}>
                 <span className={s.newTag}>New</span>
                 <b>{post.title}</b>
-                <span>Read the post →</span>
+                <span className={s.newRead}>Read the post →</span>
               </a>
             )}
             <span className={s.status}>

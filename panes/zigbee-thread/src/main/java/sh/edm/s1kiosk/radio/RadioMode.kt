@@ -204,6 +204,34 @@ object RadioHelper {
     /** Helper -> app (v3): what the firewall enforces now: "<app|conf> <any|none|addr ...>"; "" in off. */
     const val PROP_ALLOWED = "sys.s1kiosk.radio.allowed"
 
+    /**
+     * Helper -> app (#217): who is connected to the EZSP port now, in the coordinator modes: "none", or
+     * "<address> <epoch seconds first seen>" (one client at most). "" in every other mode and with older
+     * helpers. Re-read every 3 s by the helper.
+     */
+    const val PROP_PEER = "sys.s1kiosk.radio.peer"
+
+    /** [PROP_PEER] parsed. */
+    sealed interface Peer {
+        /** The helper doesn't report one: another mode, or a helper from before #217. */
+        data object NotReported : Peer
+        data object Nobody : Peer
+        data class Connected(val address: String, val sinceEpochSeconds: Long) : Peer
+    }
+
+    fun parsePeer(raw: String?): Peer {
+        val parts = raw?.trim().orEmpty().split(' ').filter { it.isNotEmpty() }
+        return when {
+            parts == listOf("none") -> Peer.Nobody
+            parts.size == 2 -> {
+                val address = RadioAllow.normalizeEntry(parts[0])?.takeIf { '/' !in it }
+                val since = parts[1].toLongOrNull()
+                if (address != null && since != null) Peer.Connected(address, since) else Peer.NotReported
+            }
+            else -> Peer.NotReported
+        }
+    }
+
     data class Status(val state: String, val mode: RadioMode?, val detail: String)
 
     /** [PROP_ALLOWED] parsed. [source]: "app" (from [PROP_ALLOW]) or "conf" (radio.conf RADIO_ALLOW). */

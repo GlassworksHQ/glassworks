@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, framePanes, geometry, isCapability, isPaneAlias, type FrameDesign } from '@glassworks/frame-card';
+import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, framePanes, geometry, isCapability, isPaneAlias, kindProblems, type FrameDesign } from '@glassworks/frame-card';
 import { FRAMES, RENDERS } from '../src/frames/catalog';
 
 const frames = fileURLToPath(new URL('../../../../frames', import.meta.url));
@@ -51,6 +51,7 @@ describe('frame designs', () => {
     }
     expect(Object.keys(f.ratings).sort()).toEqual([...RATING_KEYS].sort());
     expect(creditProblems(f), 'credits (frames/README.md#credits)').toEqual([]);
+    expect(kindProblems(f, folders.map(read)), 'kind (frames/README.md)').toEqual([]);
     // it rates only panes that exist (by id or an old alias); every other pane is worked out, with a reason (#231)
     expect(Object.keys(f.panes).filter((k) => !PANE_IDS.includes(k) && !isPaneAlias(k)), 'panes rated that the app has no pane for').toEqual([]);
     expect((f.provides ?? []).filter((c) => !isCapability(c)), 'provides: unknown capability words').toEqual([]);
@@ -84,7 +85,7 @@ describe('frame designs', () => {
   it('the S1 is installable from Kiln; the planned frames aren\'t', () => {
     expect(read('aqara-s1-plus')).toMatchObject({ status: 'beta', kiln: '/aqara-s1-plus', recovery: 'recovery.json' });
     expect(read('aqara-s1-plus').abis, 'the S1 runs a 32-bit userspace').toEqual(['armeabi-v7a']);
-    for (const id of ['lululemon-mirror', 'generic-android']) {
+    for (const id of ['lululemon-mirror', 'generic-android', 'google-pixel-tablet']) {
       expect(read(id), id).toMatchObject({ status: 'planned' });
       expect(read(id).kiln, id).toBeUndefined();
     }

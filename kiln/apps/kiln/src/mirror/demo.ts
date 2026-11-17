@@ -1,15 +1,17 @@
 // Development and preview only (/lululemon-mirror?demo=…): a simulated Mirror behind the real recipe,
 // so each screen can be seen and captured without one. `run` waits for clicks like the real page (the
-// simulated person taps S1 Kiosk in the chooser a few seconds in); the other names go to one screen.
-import { FakeMirror, MIRROR_KIOSK, type FakeMirrorOptions } from '@glassworks/lululemon-mirror-installer/fakes';
+// simulated person taps Glassworks in the chooser a few seconds in); the other names go to one screen.
+import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
+import { FakeMirror, MIRROR_KIOSK, fakeMirrorApk, type FakeMirrorOptions } from '@glassworks/lululemon-mirror-installer/fakes';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { MirrorSession } from './session';
 
 export const MIRROR_DEMOS = ['run', 'pick', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'home', 'home-clear', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
 export type MirrorDemo = (typeof MIRROR_DEMOS)[number];
 
-const OURS = 'sh.edm.s1kiosk/.MainActivity';
-const APK = fakeApk('sh.edm.s1kiosk'); // a stand-in: a manifest and nothing else
+/** the home component Android records for Glassworks: its Launcher alias */
+const OURS = GLASSWORKS.home;
+const APK = fakeMirrorApk(); // a stand-in: the legacy app's manifest and nothing else
 
 /** `fast`: no delays (the tests). */
 export async function mirrorDemo(name: MirrorDemo, fast = false): Promise<MirrorSession> {
@@ -22,7 +24,7 @@ export async function mirrorDemo(name: MirrorDemo, fast = false): Promise<Mirror
   const mirror = new FakeMirror(o);
   const s = new MirrorSession({ connect: async () => mirror, ...(fast ? { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms / 100)) } : {}), homeTimeoutMs: name === 'done-unconfirmed' || name === 'undo-pending' ? 0 : 10 * 60_000 }, true);
   if (name === 'pick-wrong') { await s.pickApk('mirror-kiosk-v0.12.0.apk', fakeApk('com.nimrod.mirrorkiosk')); return s; }
-  if (name !== 'run') await s.pickApk('kiosk-legacy-debug.apk', APK);
+  if (name !== 'run') await s.pickApk('generic-android-legacy.apk', APK);
   if (name === 'run' || name === 'pick') return s;
   if (name === 'undo-done' || name === 'undo-pending') mirror.files.set('/data/local/tmp/glassworks-previous-home', `${MIRROR_KIOSK}\n`);
   if (name === 'home-clear') mirror.pick(MIRROR_KIOSK); // an update: Android keeps the other app's Always pick

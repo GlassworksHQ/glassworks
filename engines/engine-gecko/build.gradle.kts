@@ -1,27 +1,11 @@
 // The Gecko engine: GeckoView behind the core's Engine API, and the web extension (assets/extension) that runs in the dashboard page (#21).
 plugins {
     id("com.android.library")
+    id("glassworks.android")
 }
 
 android {
     namespace = "dev.glassworks.engine.gecko"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
-    defaultConfig {
-        minSdk = 26
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-}
-
-// RepoFiles, the tests' way to find files across every module from the repo root (#21).
-extensions.configure<com.android.build.api.dsl.LibraryExtension> {
-    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/kotlin"))
 }
 
 // The same ABI as the APK (root build.gradle.kts): each per-ABI GeckoView AAR has its own classes.jar.

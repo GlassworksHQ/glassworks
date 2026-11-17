@@ -112,9 +112,16 @@ object HaAuth {
             serve = SetupChannelServer.lan(context, context.glassworks),
             code = context.glassworks.panelCode,
             // The ESPHome name, from the MAC PanelDevice saved (a panel that never announced itself has none yet).
-            ownHosts = { PanelHosts.now(prefs.deviceMac.takeIf { it.isNotEmpty() }?.let(frame::nodeName)) { msg, e -> AuthLog.w("$msg: $e") } },
+            ownHosts = PanelHosts.cached { PanelHosts.now(prefs.deviceMac.takeIf { it.isNotEmpty() }?.let(frame::nodeName)) { msg, e -> AuthLog.w("$msg: $e") } },
             pairingOpen = { prefs.lanPairingOpen },
             event = { msg -> android.util.Log.i(LAN_TAG, msg) },
+            // The page (kiln/apps/kiln/lan) is in the assets; its font is the app's own Inter.
+            files = { name ->
+                runCatching {
+                    if (name == "inter.ttf") context.resources.openRawResource(dev.glassworks.core.R.font.inter).use { it.readBytes() }
+                    else context.assets.open("setup/$name").use { it.readBytes() }
+                }.getOrNull()
+            },
         )
         s.front = lan::handle
         try {

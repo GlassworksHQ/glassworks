@@ -54,6 +54,8 @@ class RadioPane(
             "zigbee_stack", "Zigbee stack", "mdi:layers-outline", disabledByDefault = true, options = ZigbeeStack.LABELS,
             get = { radio.zigbeeStack.label }, set = { radio.setZigbeeStack(it) },
         ).apply { authOnly = true },
+        // Who uses the coordinator's EZSP port now (#217): "Home Assistant · 192.0.2.20 · since 14:32", or "Nobody".
+        TextSensorEntity("radio_connected", "Radio connected client", "mdi:lan-connect", EntityCategory.DIAGNOSTIC, disabledByDefault = true, get = { radio.connectedText() }),
         TextSensorEntity("radio_helper", "Radio helper", "mdi:shield-check-outline", EntityCategory.DIAGNOSTIC, disabledByDefault = true, get = { radio.helperStatusText() }),
         // Radio firmware (helper v4): never automatic. Pick an image (armed for 2 minutes), then press Flash.
         TextSensorEntity("radio_firmware", "Radio firmware", "mdi:chip", EntityCategory.DIAGNOSTIC, disabledByDefault = true, get = { radio.firmwareText() }),

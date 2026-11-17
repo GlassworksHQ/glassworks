@@ -4,8 +4,7 @@
  *
  * Reads:  <module>/src/main/{java,kotlin}/**\/pane.json and the icon.svg beside each (read-only), in every Gradle
  *         module under MODULE_ROOTS (core, pane-api, engines/*, panes/*, libs/*, frames/<id>/android and
- *         frames/<id>/panes/*; app/ too, the layout before #21's split). Finding no pane is an error, not an
- *         empty list.
+ *         frames/<id>/panes/*). Finding no pane is an error, not an empty list.
  * Writes: packages/frame-card/src/panes.generated.ts, nothing else.
  *
  *   node packages/frame-card/scripts/panes.mjs          (or: npm run panes -w @glassworks/frame-card)
@@ -27,7 +26,7 @@ export const OUT = join(HERE, '../src/panes.generated.ts');
 const ORDER = { stable: 0, beta: 1, alpha: 2, development: 3, planned: 4 };
 
 /** Where Gradle modules are looked for, from the repo root; `*` is one folder level (as the app's RepoFiles). */
-export const MODULE_ROOTS = ['app', 'libs', 'core', 'pane-api', 'engines', 'panes', 'frames/*/android', 'frames/*/panes'];
+export const MODULE_ROOTS = ['libs', 'core', 'pane-api', 'engines', 'panes', 'frames/*/android', 'frames/*/panes'];
 /** Folders never walked into: build output, caches, and a module's own sources. */
 const SKIP = new Set(['build', '.gradle', '.kotlin', 'node_modules', 'src', '.git']);
 

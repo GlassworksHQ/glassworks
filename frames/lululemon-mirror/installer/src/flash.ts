@@ -1,12 +1,14 @@
 // The Mirror in fastboot (its locked LK, reached with the button inside its back): what Kiln reads
 // before writing, the images it builds for it, the writes, and the first boot over adb with Kiln's
-// own key. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
+// own key, which the patched services.jar lets in without asking. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
 // lululemon's software: the screens say so before anything is written (#40).
 import type { PanelShell } from '@glassworks/adb';
-import { PKG, Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
+import { Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
+import { GLASSWORKS, type MirrorApp } from './app';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
 import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
+import { adbKeyLines } from './services';
 import type { Check } from './recipe';
 
 /** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
@@ -96,32 +98,76 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
 
 /**
  * The two images Kiln flashes, written as sparse images to the sinks: the loaded system image with
- * S1 Kiosk and the rest (patchSystem), and a fresh userdata the partition's size with this browser's
- * adb key (buildUserdata).
+ * the app (Glassworks), services.jar trusting `adbKey`'s first line, and the rest (patchSystem), and a
+ * fresh userdata the partition's size with `adbKey` in adb_keys (buildUserdata).
  */
 /** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
-export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean },
+export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean;
+  /** saved in userdata's wpa_supplicant.conf, so Android joins it on the first boot with nothing tapped */
+  wifi?: { ssid: string; password: string } },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
   onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
+  adbKeyLines(o.adbKey); // every line, before the system image is touched
   onProgress('patch', 0);
-  await patchSystem(await Ext4.open(loaded.disk), o);
+  const sys = await Ext4.open(loaded.disk);
+  await patchSystem(sys, o);
+  // the image's own template: the saved network goes after its lines, as the Wi-Fi HAL would copy it
+  const template = o.wifi ? new TextDecoder().decode(await sys.readFile('/etc/wifi/wpa_supplicant.conf')) : '';
   onProgress('patch', 1);
   await writeSparse(loaded.disk, sinks.system, { fill: o.fill, onProgress: (b) => onProgress('system', b / loaded.disk.blocks) });
   const ud = new Disk(new MemoryStore(), 4096, Math.floor(o.userdataBytes / 4096), { zeroed: true });
-  await buildUserdata(ud, { adbKey: o.adbKey, time: o.time });
+  await buildUserdata(ud, { adbKey: o.adbKey, time: o.time, ...(o.wifi ? { wifi: { ...o.wifi, template } } : {}) });
   await writeSparse(ud, sinks.userdata, { fill: o.fill, onProgress: (b) => onProgress('userdata', b / ud.blocks) });
 }
 
-/** Launchers the image ships, hidden on the first boot so S1 Kiosk is the only home screen: no chooser to tap. */
+/** Launchers the image ships, hidden on the first boot so our app is the only home screen: no chooser to tap. */
 export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'];
 
 /**
- * `home`: what Android opened for HOME after the other launchers were hidden: `set` (S1 Kiosk),
+ * `home`: what Android opened for HOME after the other launchers were hidden: `set` (our app),
  * `chooser` (its list of home apps: the Mirror has no touchscreen to answer it), or `other`. `none`:
- * S1 Kiosk has no home screen of its own (a build whose launcher activity is off), so nothing was
+ * our app has no home screen of its own (a build whose launcher activity is off), so nothing was
  * hidden: the image's launcher stays the home screen.
  */
-export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean; rotation?: string }
+export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean;
+  /** the display rotation Android reports after the rotation step: always MIRROR_ROTATION */
+  rotation: number }
+
+/**
+ * The Mirror's 1920x1080 panel stands portrait, upright at user_rotation 3 (Surface.ROTATION_270:
+ * graphics turned 90 degrees counter-clockwise, AOSP 6.0.1 Display.getRotation). Seen upright on the
+ * glass with Kiln's first boot, 2026-11-17. The setting lives in userdata, which Kiln writes fresh, so
+ * the first boot sets it again. (`ro.sf.hwrotation` does nothing on this image: nothing reads it.)
+ */
+export const MIRROR_ROTATION = 3;
+
+/**
+ * Android's display rotation: WindowManagerService's mRotation from `dumpsys window windows`, which
+ * prints it every time (dumpWindowsLocked with dumpAll) and holds no saved ANR state. Plain
+ * `dumpsys window` prints it only with dumpAll on Android 6, and its ANR snapshot has an old display.
+ */
+export async function displayRotation(p: PanelShell): Promise<number | undefined> {
+  const m = /(?:^|\s)mRotation=(\d)\b/m.exec((await p.run('dumpsys window windows')).out);
+  return m ? Number(m[1]) : undefined;
+}
+
+/**
+ * Locks the screen upright in portrait (no auto-rotate, user_rotation 3) and waits until Android
+ * reports rotation 3 exactly: 1 is portrait too, upside down. Throws after `tries` reads a second apart.
+ */
+export async function setPortrait(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  tries = 10): Promise<number> {
+  const r = new Steps(p, onStep);
+  await r.run('settings put system accelerometer_rotation 0');
+  await r.run(`settings put system user_rotation ${MIRROR_ROTATION}`);
+  let seen: number | undefined;
+  for (let i = 0; i < tries; i++) {
+    seen = await displayRotation(p);
+    if (seen === MIRROR_ROTATION) { r.detail(`rotation ${seen}`); return seen; }
+    await sleep(1000);
+  }
+  throw new Error(`the Mirror's screen didn't turn to portrait: after user_rotation=${MIRROR_ROTATION}, Android still reports rotation ${seen ?? 'unknown'} (${tries} s). Look at the glass, then run the first boot again`);
+}
 export interface HomeCheck { result: 'set' | 'chooser' | 'other' | 'none'; focused?: string; left: string[] }
 
 /** The activity in front, from `dumpsys activity activities` (Android 6's mFocusedActivity). */
@@ -133,10 +179,12 @@ export async function focusedActivity(p: PanelShell): Promise<string | undefined
  * Hides the image's other launchers (pm hide: adb's shell has MANAGE_USERS on Android 6), asks for
  * HOME, and checks what Android opened. Running it again is the fix when a launcher survived.
  */
-export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<{ hidden: string[]; home: HomeCheck }> {
+export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  app: MirrorApp = GLASSWORKS): Promise<{ hidden: string[]; home: HomeCheck }> {
+  const PKG = app.package;
   const r = new Steps(p, onStep);
   const installed = async (pkg: string) => (await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`);
-  // S1 Kiosk must answer HOME itself before the image's launchers go: hidden with nothing in their
+  // our app must answer HOME itself before the image's launchers go: hidden with nothing in their
   // place, a Mirror with no touchscreen would have no home screen at all. A bare package as am's last
   // argument sets the intent's package (Android 6 Am.makeIntent).
   const own = await r.try(`am start -a android.intent.action.MAIN -c android.intent.category.HOME ${PKG}`);
@@ -168,42 +216,47 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
 }
 
 /**
- * The Mirror's first start on Glassworks, over adb with Kiln's own key: checks it is the patched
- * image, grants what adb can, hides the other launchers, starts S1 Kiosk with Home Assistant's
- * address, and gives it the Wi-Fi.
+ * The Mirror's first start on Glassworks, over adb with Kiln's own key (the one services.jar trusts): checks it is the patched
+ * image, grants what adb can, turns the screen upright in portrait, starts the app (Glassworks) with Home
+ * Assistant's address, hides the other launchers, and gives it the Wi-Fi.
  */
 export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: string; wifi?: { ssid: string; password: string }; onStep?: StepFn;
-  sleep?: (ms: number) => Promise<void> }): Promise<FirstBoot> {
+  sleep?: (ms: number) => Promise<void>; app?: MirrorApp }): Promise<FirstBoot> {
+  const ours = o.app ?? GLASSWORKS;
   const r = new Steps(p, o.onStep);
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
-  r.step('Checking the Mirror started Glassworks');
+  r.step(`Checking the Mirror started ${ours.name}`);
   const fp = (await r.run('getprop ro.build.fingerprint')).trim();
   if (fp !== GLASS_PANES.fingerprint) throw new Error(`the Mirror runs ${fp || 'something unknown'}, not the image Kiln wrote`);
-  const app = await kioskVersion(p);
-  if (!app) throw new Error(`S1 Kiosk (${PKG}) isn't on the Mirror after the install`);
-  const rotation = (await r.try('getprop ro.sf.hwrotation')).trim() || undefined;
-  r.detail(`S1 Kiosk ${app.name ?? app.code}, ro.sf.hwrotation=${rotation ?? 'unset'}`);
-  await grantPermissions(r);
+  const app = await kioskVersion(p, undefined, ours);
+  if (!app) throw new Error(`${ours.name} (${ours.package}) isn't on the Mirror after the install`);
+  r.detail(`${ours.name} ${app.name ?? app.code}`);
+  await grantPermissions(r, ours);
 
-  r.step('Start S1 Kiosk');
-  await startApp(r, o);
+  // before the app starts, so it opens in portrait (it follows the system's rotation, #434)
+  r.step('Turn the screen upright (portrait)');
+  const rotation = await setPortrait(p, o.onStep, sleep);
 
-  r.step('Make S1 Kiosk the only home screen');
-  const { hidden, home } = await makeOnlyHome(p, o.onStep, sleep);
+  // through its main activity, whose extras it trusts from adb (#364): the HOME alias drops them
+  r.step(`Start ${ours.name}`);
+  await startApp(r, o, ours);
+
+  r.step(`Make ${ours.name} the only home screen`);
+  const { hidden, home } = await makeOnlyHome(p, o.onStep, sleep, ours);
 
   let wifi: boolean | undefined;
   if (o.wifi) {
-    r.step(`Wi-Fi ${o.wifi.ssid}`);
+    r.step('Wi-Fi: the network you entered'); // never its name: logs end up in failure reports (CLAUDE.md rule 2)
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
-    r.detail(wifi ? 'joined' : 'S1 Kiosk didn\'t confirm it joined: set the Wi-Fi in its settings');
+    r.detail(wifi ? 'joined' : `${ours.name} didn't confirm it joined (the image's saved network still applies)`);
   }
-  return { app, hidden, home, ...(wifi !== undefined ? { wifi } : {}), ...(rotation ? { rotation } : {}) };
+  return { app, hidden, home, rotation, ...(wifi !== undefined ? { wifi } : {}) };
 }
 
 /** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */
 export const GLASS_PANES_USERDATA = {
   name: 'userdata.sparse',
-  url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-1/userdata.sparse',
+  url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/userdata.sparse',
   size: 154_944_572,
   sha256: '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908',
 } as const;

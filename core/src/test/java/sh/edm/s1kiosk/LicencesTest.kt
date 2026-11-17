@@ -16,6 +16,8 @@ class LicencesTest {
             docs.map { it.path },
         )
         assertEquals(listOf("0BSD", "Apache-2.0", "MPL-2.0"), docs.drop(2).map { it.label })
+        // The repo's own licence, named for the project, not one app: every app on the core shows it (#23).
+        assertEquals("Glassworks licence (MIT)", docs[1].label)
     }
 
     /** Every SPDX id the notices name must have its text in LICENSES/, or the app's screen would lack it. */
@@ -31,6 +33,8 @@ class LicencesTest {
             "LGPL-2.1-or-later" to "LGPL-2.1", "GCC-exception-3.1" to "GCC-exception-3.1",
             "LicenseRef-Silabs-MSLA" to "LicenseRef-Silabs-MSLA",
             "OFL-1.1" to "OFL-1.1",
+            // desugar_jdk_libs, in the generic app's legacy APK (#198).
+            "GPL-2.0-only WITH Classpath-exception-2.0" to "GPL-2.0", "Classpath-exception-2.0" to "Classpath-exception-2.0",
         )
         for ((id, file) in needed) {
             assertTrue("notices should name $id", id in notices)

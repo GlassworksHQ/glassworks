@@ -9,6 +9,7 @@
       "ok": true,
       "state": {
         "ip": "192.0.2.10",
+        "online": false,
         "ha": {
           "url": "",
           "signedIn": false
@@ -64,6 +65,7 @@
       "ok": true,
       "state": {
         "ip": "192.0.2.10",
+        "online": false,
         "ha": {
           "url": "http://homeassistant.local:8123",
           "signedIn": false,
@@ -119,6 +121,7 @@
       "ok": true,
       "state": {
         "ip": "192.0.2.10",
+        "online": false,
         "ha": {
           "url": "http://homeassistant.local:8123",
           "signedIn": false,
@@ -187,6 +190,7 @@
       "ok": true,
       "state": {
         "ip": "192.0.2.10",
+        "online": false,
         "ha": {
           "url": "http://homeassistant.local:8123",
           "signedIn": false,

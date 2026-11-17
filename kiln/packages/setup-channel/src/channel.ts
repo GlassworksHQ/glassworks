@@ -19,9 +19,17 @@
 //     → {"id":6,"op":"pairing.arm"}   (apps with setup over the LAN, #34)
 //     ← {"id":6,"ok":true,"state":SetupState}            or {"id":6,"ok":false,"error":"…"}
 //       Opens pairing over the LAN again for 30 minutes, once Home Assistant has adopted the panel.
+//     → {"id":7,"op":"wifi.scan"}   (apps with the setup hotspot, #197)
+//     ← {"id":7,"ok":true,"state":SetupState,"networks":[{"ssid":"…","rssi":-50,"secure":true}]}
+//     → {"id":8,"op":"wifi.join","ssid":"…","password":"…"}   ("" for an open network)
+//     ← {"id":8,"ok":true,"state":SetupState}            or {"id":8,"ok":false,"error":"…"}
+//       The panel joins after it replies, and its own screen shows how it goes: the join can take it off the
+//       network the browser reached it on. Refused while the panel is on a network (state.online).
 //   The app may also push {"event":"state","state":SetupState} whenever something changes
 //   (signed in, radio status, Wi-Fi), so the installer doesn't have to poll.
-//   No secrets ever cross this channel (no tokens, no keys, no passwords).
+//   No tokens or keys cross this channel. The one secret is wifi.join's password, which the panel never logs nor
+//   sends back, and refuses while it is on a network: so it comes over the panel's WPA2 setup hotspot, never as
+//   plain HTTP over a working LAN. Kiln's USB wizard keeps Improv Serial for Wi-Fi.
 //
 //   The same protocol runs over the LAN (#34): a WebSocket at http://<panel>:8099/setup/channel
 //   (lan.ts). There the panel answers `state` only, until the browser pairs with the code on the panel's
@@ -45,9 +53,14 @@ export interface ThreadJoinState {
   role?: string;
 }
 
+/** A network the panel sees (`wifi.scan`). */
+export interface WifiNetwork { ssid: string; rssi: number; secure: boolean }
+
 export interface SetupState {
   /** Panel's Wi-Fi IPv4 address, if connected. */
   ip?: string;
+  /** The panel is on a network (Wi-Fi or Ethernet). Absent from apps before the setup hotspot (#197). */
+  online?: boolean;
   ha: {
     /** Address the app found on the network by itself (mDNS), if any. */
     discovered?: string;
@@ -80,7 +93,17 @@ export interface SetupState {
   };
 }
 
-type Reply = { id: number; ok: boolean; state?: SetupState; error?: string };
+type Reply = { id: number; ok: boolean; state?: SetupState; error?: string; networks?: WifiNetwork[] };
+
+/** The panel answered and said no (`ok:false`), as opposed to not answering at all. Its message is the panel's. */
+export class Refused extends Error {
+  override name = 'Refused';
+}
+
+/** The request never left this browser: the connection was gone before it could be written. Nothing reached the panel. */
+export class NotSent extends Error {
+  override name = 'NotSent';
+}
 
 export class SetupChannel {
   private buf = '';
@@ -109,16 +132,25 @@ export class SetupChannel {
     });
   }
 
-  private request(op: string, args: Record<string, string> = {}, timeoutMs = 8000): Promise<SetupState> {
+  private async request(op: string, args: Record<string, string> = {}, timeoutMs = 8000): Promise<SetupState> {
+    return (await this.call(op, args, timeoutMs)).state!;
+  }
+
+  /** The whole reply to `op`, once the panel says yes; a no is a [Refused]. */
+  private call(op: string, args: Record<string, string>, timeoutMs: number): Promise<Reply> {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => { this.pending.delete(id); reject(new Error(`the panel did not answer (${op})`)); }, timeoutMs);
       this.pending.set(id, (r) => {
         clearTimeout(t);
-        if (r.ok && r.state) resolve(r.state);
-        else reject(new Error(r.error || `${op} failed`));
+        if (r.ok && r.state) resolve(r);
+        else reject(new Refused(r.error || `${op} failed`));
       });
-      void this.io.write(new TextEncoder().encode(`${JSON.stringify({ id, op, ...args })}\n`)).catch(reject);
+      void this.io.write(new TextEncoder().encode(`${JSON.stringify({ id, op, ...args })}\n`)).catch((e: unknown) => {
+        clearTimeout(t);
+        this.pending.delete(id);
+        reject(new NotSent(`couldn't send ${op} to the panel${e instanceof Error ? ` (${e.message})` : ''}`));
+      });
     });
   }
 
@@ -130,6 +162,10 @@ export class SetupChannel {
   joinThread(): Promise<SetupState> { return this.request('radio.thread_join'); }
   /** Over USB: lets a browser pair over the LAN again after Home Assistant adopted the panel (apps with #34). */
   armPairing(): Promise<SetupState> { return this.request('pairing.arm'); }
+  /** The networks the panel sees now, strongest first: a fresh scan, up to about 15 s (apps with #197). */
+  async scanWifi(): Promise<WifiNetwork[]> { return (await this.call('wifi.scan', {}, 25_000)).networks ?? []; }
+  /** Sends the network to join ("" for an open one). The panel joins after it answers; its screen shows the outcome. */
+  joinWifi(ssid: string, password: string): Promise<SetupState> { return this.request('wifi.join', { ssid, password }); }
   close(): Promise<void> { return this.io.close(); }
 }
 

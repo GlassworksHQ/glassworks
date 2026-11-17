@@ -48,6 +48,8 @@ object MenuFixture {
         account: String = "Signed in as Wall panel",
         /** Whether Home Assistant has the panel, as the app reads it ([S1Settings.model]). */
         link: () -> HaLink = { HaLink.CONNECTED },
+        /** The panel's Wi-Fi address, as "Allow setup over the network" says it; none by default. */
+        panelIp: () -> String? = { null },
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
@@ -55,6 +57,7 @@ object MenuFixture {
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             live = live,
             account = { account },
+            panelIp = panelIp,
         )
         val sections = paneSections(panes, blueprints, running)
         return KioskSettingsOverlay.Model(withHaLink(settingsOrder(core.sections(), sections), link), version, sections.map { it.id }.toSet())

@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.setup
 
 import android.app.Application
 import android.content.Context
+import dev.glassworks.frame.Input
 import dev.glassworks.pane.PaneChoice
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -43,9 +44,9 @@ class SetupMockups {
     private fun model(
         step: String, wifi: WifiSetupStatus.Snapshot = online, haUrl: String? = ha,
         improv: ImprovFacts = ImprovFacts(), installer: InstallerWifi? = null, preview: Boolean = false,
-        done: Set<String> = flow.takeWhile { it != step }.toSet(),
+        done: Set<String> = flow.takeWhile { it != step }.toSet(), panelIp: String? = ip,
     ) = SetupOverlay.Model(
-        step = step, done = done, wifi = wifi, haUrl = haUrl, haSource = "mdns", panelIp = ip,
+        step = step, done = done, wifi = wifi, haUrl = haUrl, haSource = "mdns", panelIp = panelIp,
         signedIn = false, improv = WifiStep.improv(improv), installer = installer, preview = preview,
     )
 
@@ -65,9 +66,12 @@ class SetupMockups {
         )
     }
 
-    private fun shot(name: String, m: SetupOverlay.Model, radio: RadioFollowUp.Facts? = null, followUp: Boolean = false, then: (SetupOverlay) -> Unit = {}) {
+    private fun shot(
+        name: String, m: SetupOverlay.Model, radio: RadioFollowUp.Facts? = null, followUp: Boolean = false,
+        input: Input = Input.TOUCH, then: (SetupOverlay) -> Unit = {},
+    ) {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a, panes(a, radio, followUp))
+        val s = s1SetupOverlay(a, panes(a, radio, followUp)).also { it.input = input }
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         s.render(m)
         then(s)
@@ -122,5 +126,51 @@ class SetupMockups {
         shot("setup-12-preview", model(SetupFlow.WIFI, preview = true))
         shot("setup-13-done", model(SetupFlow.PANES)) { it.finish(holdMs = 60_000) {} }
         shot("setup-14-done-preview", model(SetupFlow.PANES, preview = true)) { it.finish {} }
+
+        // A frame without touch (Input.NONE, #34): set up from a computer; nothing on the screen takes a tap.
+        shot("setup-15-no-touch-wifi", model(SetupFlow.WIFI, wifi = offline, panelIp = null), input = Input.NONE)
+        shot("setup-16-no-touch-ha", model(SetupFlow.HA), input = Input.NONE)
+        shot("setup-17-no-touch-signin", model(SetupFlow.SIGNIN), input = Input.NONE)
+        shot("setup-18-no-touch-radio", model("radio"), radio = coordinator, input = Input.NONE)
+    }
+
+    /**
+     * A screen that stands portrait and takes no tap: the lululemon Mirror's 1080x1920 glass (#198), which the app now
+     * fills portrait (GenericAndroid.orientation) and sets up from a computer (Input.NONE).
+     *   ./gradlew :kiosk:testDebugUnitTest --tests '*SetupMockups.portraitWithoutTouch' -Ps1MockupDir=<dir>
+     */
+    @Test
+    @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    fun portraitWithoutTouch() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        for ((name, m) in listOf(
+            "portrait-01-no-touch-wifi" to model(SetupFlow.WIFI, wifi = offline, panelIp = null),
+            "portrait-02-no-touch-ha" to model(SetupFlow.HA),
+            "portrait-03-no-touch-signin" to model(SetupFlow.SIGNIN),
+        )) {
+            val a = Mockup.activity()
+            val s = s1SetupOverlay(a, panes(a, null)).also { it.input = Input.NONE }
+            a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
+            s.render(m)
+            Mockup.idle()
+            Mockup.save(name, s, 1080, 1920)
+        }
+        val a = Mockup.activity()
+        val o = LoadingOverlay(a)
+        a.setContentView(o, android.view.ViewGroup.LayoutParams(-1, -1))
+        o.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, "homeassistant.local"))
+        o.previewPhase(0.62f)
+        Mockup.idle()
+        Mockup.save("portrait-04-connecting", o, 1080, 1920)
+        // #448: no network and nothing to join. The loading screen's text has no button here; the Wi-Fi step
+        // (portrait-01) covers it at the next setup tick.
+        val stuck = OfflineText.Facts(wifiEnabled = true, savedNetwork = null, joining = false, wasOnlineBefore = false, offlineForMs = 5_000)
+        val t = OfflineText.decide(stuck, 30_000, Input.NONE)
+        val b = Mockup.activity()
+        val n = LoadingOverlay(b)
+        b.setContentView(n, android.view.ViewGroup.LayoutParams(-1, -1))
+        n.show(LoadingOverlay.State.Offline(t.title, t.detail, t.action))
+        Mockup.idle()
+        Mockup.save("portrait-05-no-touch-no-network", n, 1080, 1920)
     }
 }

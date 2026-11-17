@@ -1,5 +1,6 @@
 {
   "id": "aqara-s1-plus",
+  "kind": "full",
   "name": "Aqara S1 Plus",
   "brand": "Aqara",
   "status": "beta",

@@ -57,7 +57,7 @@ class Refused(Exception):
 def page_summary(s):
     """One reference dashboard's measurements."""
     sc, up = s.get("scroll") or {}, s.get("updates") or {}
-    return {
+    out = {
         # The graded medians unrounded (/3), so a summary bands them as the report did.
         "inp_ms": _graded(s.get("inp_ms")),
         # Rubric 2 (/3): open_ms is navigation to the first screen drawn (/2: to usable); blocking_ms
@@ -88,6 +88,21 @@ def page_summary(s):
                  "blocking": _n(s.get("blocking_ms")),
                  "camera": len(s.get("camera_runs") or [])},
     }
+    if "dialog_runs" in s:
+        # Clarity v3 (#211), added within /3: HA's more-info dialogs, each run's record (graded per run:
+        # the slowest to settle, how many failed, the open animations' frames). Absent for a report
+        # from before v3, so its summary stays as it was, byte for byte (test_summary).
+        out["dialog"] = dialog_summary(s)
+        out["runs"]["dialog"] = len(s["dialog_runs"])
+    return out
+
+
+def dialog_summary(s):
+    keys = ("n", "failed", "settled_ms")
+    return {"settled_ms": _med(s.get("dialog_settled_ms")),
+            "runs": [dict({"timed_out": True} if r.get("timed_out") else
+                          dict({k: r.get(k) for k in keys}, frames=r.get("frames")))
+                     for r in s["dialog_runs"]]}
 
 
 def camera_summary(s):

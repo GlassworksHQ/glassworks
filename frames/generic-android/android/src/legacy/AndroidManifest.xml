@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The legacy build (#198), over the app's manifest (src/main): Android 6-7 on GeckoView 144. The Glassworks
+     modules below declare minSdk 26; this build runs them from API 23, so it overrides their floor. What they call
+     above API 23 is listed and guarded: tools/legacy/api23-report.py and CI's api23 job, which also lints this
+     build (docs/research/legacy-engine.md). The libraries in libs/ and the legacy engine are minSdk 23 already. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.assist,dev.glassworks.panes.timers,dev.glassworks.panes.sendspin" />
+</manifest>

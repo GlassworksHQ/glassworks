@@ -1,4 +1,11 @@
+---
+topic: install
+evidence: read
+---
+
 # Mirror home app: how can adb, without root, make S1 Kiosk the Mirror's home screen on Android 6?
+
+> Since #411 the Mirror's app is Glassworks' legacy build (`dev.glassworks.generic_android.legacy`), not S1 Kiosk. The mechanism below is the same for either app.
 
 **Status (2026-11-15): read on the maintainer's unit, nothing written.** Android 6 has no `cmd`, so
 `cmd package set-home-activity` doesn't exist, and adb's shell can't disable another app. The way

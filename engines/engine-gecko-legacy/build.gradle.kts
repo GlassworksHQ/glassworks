@@ -4,34 +4,24 @@
 // of engine-gecko's. The web extension (assets/extension) is engine-gecko's too; assets/lockdown is this module's.
 plugins {
     id("com.android.library")
+    id("glassworks.android")
 }
 
 val shared = rootProject.layout.projectDirectory.dir("engines/engine-gecko/src/main")
 
 android {
     namespace = "dev.glassworks.engine.gecko.legacy"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
     defaultConfig {
         // GeckoView 144's AAR declares minSdk 21; the legacy engine is for Android 6 and up.
         minSdk = 23
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
     }
 
     // LockdownTest runs Lockdown on the JVM, where android.util.Log is a stub: it returns 0 instead of throwing.
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 
-// RepoFiles, the tests' way to find files across every module from the repo root (#21).
 // The helper extension (content.js, window.s1kiosk) is engine-gecko's, unchanged.
 extensions.configure<com.android.build.api.dsl.LibraryExtension> {
-    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/kotlin"))
     sourceSets.getByName("main").assets.srcDir(shared.dir("assets"))
 }
 

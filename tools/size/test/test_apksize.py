@@ -258,6 +258,25 @@ class Budgets(unittest.TestCase):
         for pid in PARTS["panes"]:
             self.assertIsInstance(s1["panes"][pid]["size_max_bytes"], int, pid)
 
+    def test_the_generic_apps_budgets(self):
+        """Glassworks for generic Android (#23): a size budget per ABI its frame runs, and per pane it ships.
+        Its RAM budgets wait for a measured run, and say so."""
+        g = A.read_json(os.path.join(ROOT, "frames", "generic-android", "budgets.json"))
+        frame = A.read_json(os.path.join(ROOT, "frames", "generic-android", "design", "frame.json"))
+        self.assertEqual(set(g["size"]["apk_max_bytes"]), set(frame["abis"]))
+        self.assertEqual(set(g["panes"]), {"assist", "sendspin", "timers"})
+        for pid, pane in g["panes"].items():
+            self.assertIn(pid, PARTS["panes"])
+            self.assertIsInstance(pane["size_max_bytes"], int, pid)
+            self.assertNotIn("ram_pss_max_kb", pane, "set from a measured run, then drop _todo_ram")
+        self.assertIn("ram_pss_max_kb", g["_todo_ram"])
+
+    def test_a_check_that_builds_no_base_says_so(self):
+        d = tempfile.mkdtemp()
+        rep = A.build_report("generic-android", {"armeabi-v7a": make_apk(os.path.join(d, "head.apk"))}, {}, PARTS, {"size": {}}, None,
+                             classes_of=lambda p: A.parse_classes(CLASSES), base_missing={"armeabi-v7a": "not-built"})
+        self.assertIn("this check builds no base", A.markdown(rep))
+
 
 class Comment(unittest.TestCase):
     """The PR comment is rendered by a workflow with write access, from a report another workflow

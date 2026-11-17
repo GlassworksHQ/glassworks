@@ -1,3 +1,8 @@
+---
+topic: perf
+evidence: verified
+---
+
 # Opening a view: where typical's 4.7 s goes on the S1 (#244)
 
 **Status (2026-11-14): answered. No app lever measured.** The open is one thread's work: HA's

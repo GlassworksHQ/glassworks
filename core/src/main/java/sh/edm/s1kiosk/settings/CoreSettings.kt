@@ -28,6 +28,9 @@ class CoreSettings(
     private val account: () -> String? = { null },
     /** The app's name, before [version] in About ([dev.glassworks.platform.AppBuild.product]). */
     private val product: String = dev.glassworks.platform.AppBuild.S1_KIOSK,
+    /** The panel's address on Wi-Fi, for the setup page's (null while it has none). */
+    private val panelIp: () -> String? = sh.edm.s1kiosk.InstallerGlue::wlanIpv4,
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -59,6 +62,7 @@ class CoreSettings(
                 "Secure hosts", "Other addresses the dashboard loads over HTTP, like a camera", TextKind.ADDRESS,
                 value = { prefs.extraSecureHosts }, restartsApp = true,
             ) { prefs.extraSecureHosts = it },
+            setupOverNetwork(),
         )),
         SettingsPlace.SCREEN to SettingsSection("screen", "Screen", listOfNotNull(
             // 0.4.3's "Screen follows presence" (#63's design names it this): on, the screen wakes when
@@ -101,6 +105,25 @@ class CoreSettings(
         )),
     )
 
+    /**
+     * "Allow setup over the network" (#34): pairing for the setup page at `/setup` is open until Home Assistant
+     * adds the panel; after that this opens it for 30 minutes, as the Home Assistant button and Kiln over USB do.
+     */
+    private fun setupOverNetwork() = SettingsItem.Action(
+        title = SETUP_OVER_NETWORK,
+        detail = {
+            val page = panelIp()?.let { "http://$it:${sh.edm.s1kiosk.auth.OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}" }
+            val where = page?.let { "Open $it on a computer on this network" }
+            val until = prefs.lanSetupUntil
+            when {
+                !prefs.haSeen -> (where ?: "On a computer on this network, open the panel's setup page") + ". It pairs until Home Assistant adds the panel."
+                now() < until -> "On until ${java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH).format(java.util.Date(until))}." + (where?.let { " $it." } ?: "")
+                else -> "Lets a computer on this network set the panel up, for 30 minutes."
+            }
+        },
+        label = "Allow",
+    ) { done -> prefs.armLanSetup(); done(null) }
+
     /** Where the dashboard loads from when its address is automatic. */
     private fun found(): String = prefs.haBase?.let { b ->
         "${b.substringAfter("://").substringBefore("/").substringBefore(":")} · found automatically"
@@ -121,6 +144,7 @@ class CoreSettings(
         /** The dashboard's page: where Home Assistant is and how its dashboard shows. */
         const val DASHBOARD_TITLE = "Home Assistant & dashboard"
         const val ACCOUNT_TITLE = "Dashboard sign-in"
+        const val SETUP_OVER_NETWORK = "Allow setup over the network"
         const val LICENCES_TITLE = "Open source licences"
         const val LICENCES_DETAIL = "The open-source software in the app and the radio package"
 

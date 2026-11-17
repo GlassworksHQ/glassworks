@@ -521,6 +521,42 @@ comes from, then call it. `PlatformTest` pins each boundary, and `PlatformConfin
 `./gradlew test` with the file and line of any other read. The libraries in `libs/` do not depend
 on Glassworks, so each keeps its own checks in an internal `Compat.kt`, which the same test allows.
 
+## Setup hotspot
+
+A panel with no working Wi-Fi opens its own, so a phone can join it and open the setup page (#197, the
+rule decided in #38). `SetupHotspotPolicy` (`dev.glassworks.setup`) holds the rule, and `SetupHotspot`
+keeps a `dev.glassworks.platform.Hotspot` on exactly while the rule says so:
+
+1. It starts when the panel has had no connection for 3 minutes since the app started, or when the
+   setup screen asks for it.
+2. It never runs while the panel is connected.
+3. It stops when Wi-Fi details arrive (`configured`), after 15 minutes, on Stop or at the end of
+   setup (`cancel`), and when the service ends (`close`). After `configured` or 15 minutes the saved
+   network gets 3 more minutes, then rule 1 applies again.
+
+The automatic start is armed only until the panel first connects: a panel that has been online since
+it started doesn't take itself off a router that reboots. Stop disarms it until Wi-Fi is configured
+again. Wi-Fi details sent while the panel is still on its old network keep it armed for 3 minutes, so
+a new network that fails brings the hotspot back. An ordinary app can't list the saved networks since Android 10, so "none saved" waits the same 3
+minutes; the setup screen can ask for the hotspot at once.
+
+`Hotspot.of` picks the way by `Platform.hotspotKind`:
+
+| Android | Frames | How | Network | Permission |
+|---|---|---|---|---|
+| 8 and newer | S1 (Android 10), tablets | `startLocalOnlyHotspot`, a public API (`LocalOnlyHotspot`) | Android's name (`AndroidShare_<n>`) and random WPA2 key | Fine location and location on (8 to 12), `NEARBY_WIFI_DEVICES` (13 and newer) |
+| 6 and 7 | Mirror, API 23–25 tablets | The hidden `setWifiApEnabled`, by reflection (`HiddenApHotspot`) | `Glassworks-XXXX` and a random key | `CHANGE_WIFI_STATE`, `CHANGE_NETWORK_STATE` (install-time) |
+
+The S1 needs no root for it: the local-only hotspot is open to any app in the foreground, and the
+kiosk's foreground service counts. The hidden API changes two things on the device, and
+`HiddenApHotspot` puts both back whenever the hotspot ends: the device's saved hotspot settings, and
+the Wi-Fi client that Android turns off to start the AP. On most devices, the S1 among them, the Wi-Fi
+client is off while the hotspot runs. A captive portal that opens the page by itself needs root, and
+comes later.
+
+`HotspotPermission` decides what the setup screen shows before it asks: the reason first, then
+Android's dialog, and where to allow it once Android won't ask again.
+
 ## Frames
 
 A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
@@ -537,6 +573,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
 | `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |
 | `systemSettingsTitle` | What the settings call the device's own settings app when it isn't Android's (the S1's: Aqara's). Null (the default) means Android's. |
+| `input` | `TOUCH` (the default), or `NONE` for a screen that takes no tap (the lululemon Mirror's). With `NONE` the panel only displays during setup: the setup page's address and QR code, and the pairing code without Close. Setup happens from a computer over the network (`/setup`, #34). |
 | `serviceWork(context, onForegroundOnly)` | Work the frame runs while the app's service runs: the S1's Wi-Fi scans while the screen is off (#3). Null (the default) means none. |
 | `deviceSection(context, running)` | The frame's Device page: settings and facts about the device that belong to no pane. Every settings surface lists it under Panel, after Screen, named after the frame ("S1 Plus"; a generic device's model). `running` gives a running pane by id. Null (the default) means no page. |
 

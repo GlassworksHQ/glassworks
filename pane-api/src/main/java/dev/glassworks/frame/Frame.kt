@@ -69,6 +69,20 @@ interface Frame {
     val systemSettingsTitle: String? get() = null
 
     /**
+     * Whether the panel's screen takes a tap. [Input.NONE] (a screen whose touch doesn't work, like the
+     * lululemon Mirror's): the panel only displays. Setup shows its address and a QR code for the setup page
+     * over the network, and the pairing code without a Close button, and never waits for a tap (#34).
+     */
+    val input: Input get() = Input.TOUCH
+
+    /**
+     * How the app's screen stands on this device: [Orientation.LANDSCAPE] or [Orientation.PORTRAIT], either way up, for
+     * a device that is always held one way (the S1, a Pixel Tablet on its dock), or [Orientation.ANY] to turn as
+     * Android's auto-rotate or the person's choice says. Read when the activity starts.
+     */
+    val orientation: Orientation get() = Orientation.LANDSCAPE
+
+    /**
      * Work the frame runs while the app's service runs, or null for none (the S1's: Wi-Fi scans while the
      * screen is off, #3). [onForegroundOnly] asks the service to take the types it may have now, when the
      * work found it needs one it didn't have (the location type for a scan).
@@ -123,6 +137,12 @@ fun Frame.openSystemSettings(context: Context): Boolean {
  * doesn't rename every device on it.
  */
 enum class NamedBy { FRAME, MODEL }
+
+/** Whether a frame's screen takes a tap ([Frame.input]). */
+enum class Input { TOUCH, NONE }
+
+/** How a frame's screen stands ([Frame.orientation]). [ANY]: as the device stands, which Android decides. */
+enum class Orientation { LANDSCAPE, PORTRAIT, ANY }
 
 /** [manufacturer] ("Aqara"), [model] ("Panel Hub S1 Plus") and [chip] ("Allwinner A133", or the board's name where Android gives no chip). */
 class Hardware(val manufacturer: String, val model: String, val chip: String)

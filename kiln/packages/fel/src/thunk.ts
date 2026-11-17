@@ -23,7 +23,7 @@
 // What it does and how to call it: docs/research/kiln-cleanroom/fel-spec.md, "The SPL thunk".
 
 /** 69 ARM words. Followed in memory by the SPL address and the swap table (see the spec). */
-export const FEL_TO_SPL_THUNK: readonly number[] = [] = [
+export const FEL_TO_SPL_THUNK: readonly number[] = [
   0xea000015, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
   0xffffffff, 0xe1a00000, 0xe28f40e8, 0xe4940004, 0xe4941004, 0xe4946004, 0xe3560000, 0x012fff1e,
   0xe5902000, 0xe5913000, 0xe2566004, 0xe4812004, 0xe4803004, 0x1afffff9, 0xeafffff3, 0xe59f80b0,

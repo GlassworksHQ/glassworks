@@ -191,10 +191,11 @@ class PaneFixtures(private val app: Application) {
         return p
     }
 
-    /** The radio's two entities the page shows, as Home Assistant has them. */
-    fun radio() = object : Pane {
+    /** The radio's entities the page shows, as Home Assistant has them; [connected]: who uses the coordinator now (#217). */
+    fun radio(connected: String = "Home Assistant · 192.0.2.20 · since 14:32") = object : Pane {
         override val id = "radio"
         override fun entities() = listOf(
+            TextSensorEntity("radio_connected", "Radio connected client", get = { connected }),
             TextSensorEntity("radio_helper", "Radio helper", get = { "v4 · root side ready" }),
             TextSensorEntity("radio_firmware", "Radio firmware", get = { "EmberZNet 7.4.4 · EZSP v13" }),
         )

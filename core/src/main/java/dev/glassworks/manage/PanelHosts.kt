@@ -24,6 +24,22 @@ object PanelHosts {
         return out
     }
 
+    /**
+     * [compute], kept for [ttlMs]: the panel's names are listed at most that often, not on every request. A new
+     * address (another network) shows within [ttlMs].
+     */
+    fun cached(ttlMs: Long = 5_000, monoMs: () -> Long = { System.nanoTime() / 1_000_000 }, compute: () -> Set<String>): () -> Set<String> {
+        val lock = Any()
+        var at = 0L
+        var hosts: Set<String>? = null
+        return {
+            synchronized(lock) {
+                val now = monoMs()
+                hosts?.takeIf { now - at < ttlMs } ?: compute().also { hosts = it; at = now }
+            }
+        }
+    }
+
     private fun hostname(): String = runCatching {
         val c = Class.forName("android.os.SystemProperties")
         c.getMethod("get", String::class.java, String::class.java).invoke(null, "net.hostname", "") as String

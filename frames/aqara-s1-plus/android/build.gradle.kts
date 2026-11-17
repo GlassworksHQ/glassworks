@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    id("glassworks.android")
 }
 
 // Release version: -Ps1Version=1.2.3 or S1_VERSION=1.2.3 (the release workflow sets it from the tag).
@@ -31,15 +32,8 @@ val haveReleaseKey = signingEnv.values.all { it != null }
 
 android {
     namespace = "sh.edm.s1kiosk"
-    // GeckoView 159 requires compileSdk 37.2 (and pulls androidx.core 1.19 -> AGP 9.1+).
-    // This only affects compilation; the app still runs on the panel's Android 10 (API 29).
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
-
     defaultConfig {
         applicationId = "sh.edm.s1kiosk"
-        minSdk = 26
         // Opts into newer Android rules on newer devices only; minSdk decides who can install it.
         // 35: Android 17 updates an app without a tap only if the new APK targets 35+ (#277,
         // docs/releasing.md "Raising targetSdk").
@@ -76,11 +70,6 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
     packaging {
         jniLibs { useLegacyPackaging = true }
     }
@@ -95,8 +84,9 @@ android {
         sourceSets.getByName("main").assets.srcDir(dir)
     }
 
-    // RepoFiles, the tests' way to find files across every module from the repo root (#21).
-    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/kotlin"))
+    // The GeckoView shadows and harness that run the real MainActivity (testing/gecko, shared with the generic app, #23).
+    sourceSets.getByName("test").kotlin.srcDir(rootProject.file("testing/gecko"))
+    sourceSets.getByName("test").java.srcDir(rootProject.file("testing/gecko"))
 }
 
 dependencies {

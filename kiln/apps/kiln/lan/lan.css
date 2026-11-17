@@ -1,0 +1,11 @@
+/* Kiln's own styles, with Inter from the app on the panel (the panel serves it at /setup/inter.ttf):
+   next/font sets --font-inter in Kiln, so this page sets it here. */
+@import '../src/app/globals.css';
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/setup/inter.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root { --font-inter: 'Inter'; --font-mono: ui-monospace; }

@@ -4,6 +4,7 @@
 
 package dev.glassworks.platform
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.app.Notification
@@ -20,6 +21,9 @@ import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import android.system.Os
+import android.system.OsConstants
 
 /**
  * What the running Android can do. This is the only place in the app that reads
@@ -44,6 +48,9 @@ open class PlatformApi(
 
     /** `AccessibilityAction.ACTION_SET_PROGRESS` exists (Android 7): a slider can be set to a value, not only stepped. */
     val hasSetProgressAction: Boolean get() = apiLevel >= 24
+
+    /** `DevicePolicyManager.reboot` exists (Android 7): a device owner can restart the device. */
+    val hasDeviceOwnerReboot: Boolean get() = apiLevel >= 24
 
     /** `Process.getStartElapsedRealtime` exists (Android 7). Below it, `/proc/self/stat` has the start time. */
     val hasProcessStartTime: Boolean get() = apiLevel >= 24
@@ -108,8 +115,47 @@ open class PlatformApi(
      */
     val canInstallWithoutUserAction: Boolean get() = apiLevel >= 31
 
+    /**
+     * The lowest targetSdk the new APK needs for [canInstallWithoutUserAction] to install it with no tap, or null
+     * below Android 12. From `SessionParams.setRequireUserAction`'s docs (read 2026-11-16): 29 on Android 12, 30 on
+     * 13, 31 on 14, 33 on 15, 34 on 16, 35 on 17. AOSP's code agrees up to 15 (`SILENT_INSTALL_ALLOWED`); its public
+     * main branch still says 33 after that, so this follows the stricter docs. Past 17 the docs say only that it goes
+     * up: one level a year, as from 15 to 17, is a guess.
+     */
+    val silentInstallMinTarget: Int? get() = when {
+        apiLevel < 31 -> null
+        apiLevel < 33 -> 29
+        apiLevel == 33 -> 30
+        apiLevel == 34 -> 31
+        else -> apiLevel - 2
+    }
+
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
+
+    /**
+     * How an ordinary app opens a Wi-Fi hotspot for setup (#197). From Android 8, the public
+     * `WifiManager.startLocalOnlyHotspot`. Below it there is none, and the hidden `setWifiApEnabled`
+     * (reflection, no hidden-API blocks before Android 9) is the way.
+     */
+    val hotspotKind: HotspotKind get() = if (apiLevel >= 26) HotspotKind.LOCAL_ONLY else HotspotKind.HIDDEN_AP
+
+    /**
+     * The runtime permission a setup hotspot needs, or null for none. From Android 13 (for apps targeting
+     * it), `NEARBY_WIFI_DEVICES`. Android 8 to 12 ask for fine location instead. The hidden API below
+     * Android 8 needs only install-time permissions.
+     */
+    val hotspotPermission: String? get() = when {
+        apiLevel >= 33 -> Manifest.permission.NEARBY_WIFI_DEVICES
+        apiLevel >= 26 -> Manifest.permission.ACCESS_FINE_LOCATION
+        else -> null
+    }
+
+    /** A local-only hotspot refuses to start while location is off (Android 8 to 12). From 13 the nearby permission replaces it. */
+    val hotspotNeedsLocationOn: Boolean get() = apiLevel in 26..32
+
+    /** A hotspot reservation describes its network as a `SoftApConfiguration` (Android 11). Below it, a `WifiConfiguration`. */
+    val hasSoftApConfiguration: Boolean get() = apiLevel >= 30
 
     /**
      * The flag to add to a `PendingIntent` that the system must be able to fill in (the package
@@ -184,10 +230,31 @@ open class PlatformApi(
         (if (apiLevel >= 31) capabilities?.transportInfo as? WifiInfo else null)
             ?: runCatching { wifi?.connectionInfo }.getOrNull()
 
+    /**
+     * When this process started, in ms on the elapsed-realtime clock: from Android 7 Android says; below, the start
+     * time in [procSelfStat] (`/proc/self/stat`), as the diagnostics pane reads it (#198). Null when that can't be
+     * read: unknown, not a guess.
+     */
+    fun processStartElapsedMs(
+        procSelfStat: () -> String? = { runCatching { java.io.File("/proc/self/stat").readText() }.getOrNull() },
+        ticksPerSecond: () -> Long = { Os.sysconf(OsConstants._SC_CLK_TCK) },
+    ): Long? =
+        if (hasProcessStartTime) Process.getStartElapsedRealtime()
+        else procSelfStat()?.let(::procStatStartTicks)?.let { ticks -> ticksPerSecond().takeIf { it > 0 }?.let { ticks * 1000 / it } }
+
     /** An [Intent] extra, read with the typed getter from Android 13 and the deprecated one below. */
     fun intentExtra(intent: Intent, name: String): Intent? =
         if (apiLevel >= 33) intent.getParcelableExtra(name, Intent::class.java)
         else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(name)
+}
+
+/** The ways an ordinary app opens a Wi-Fi hotspot ([PlatformApi.hotspotKind]). */
+enum class HotspotKind {
+    /** `WifiManager.startLocalOnlyHotspot`: Android names the network and picks its key. */
+    LOCAL_ONLY,
+
+    /** The hidden `WifiManager.setWifiApEnabled`: the app names the network, and must put back what it changed. */
+    HIDDEN_AP,
 }
 
 /** The queries for the Android this app runs on. */
@@ -206,4 +273,14 @@ object Platform : PlatformApi(Build.VERSION.SDK_INT) {
 
     /** The hardware platform (`Build.HARDWARE`, `ro.hardware`): the S1's A133 says "sun50iw10p1". */
     val hardware: String get() = Build.HARDWARE.orEmpty()
+}
+
+/**
+ * `starttime` from `/proc/<pid>/stat` (field 22): when the process started, in clock ticks since boot. Counted from
+ * the last `)`, since the command name in brackets may hold spaces or brackets of its own.
+ */
+fun procStatStartTicks(procPidStat: String): Long? {
+    val f = procPidStat.substringAfterLast(')', "").trim().split(Regex("\\s+"))
+    if (f.size < 20) return null
+    return f[19].toLongOrNull()
 }

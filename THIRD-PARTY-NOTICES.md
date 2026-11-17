@@ -55,6 +55,47 @@ of `:kiosk`, including transitive dependencies. The versions are the ones Gradle
   APK (`about:license`, in `assets/omni.ja`). It is also at
   https://hg.mozilla.org/releases/mozilla-release/file/7b34a03a910d0385299f4a9f27aa585a786862d8/toolkit/content/license.html
 
+### The legacy build of Glassworks for generic Android (#198)
+
+`dev.glassworks.generic_android.legacy`, for Android 6 and 7: the `legacy` build type of
+[`frames/generic-android/android`](frames/generic-android/android). Its libraries are the generic app's (all
+listed in this section), with these differences. `checkLegacyThirdPartyNotices` in that build file fails a legacy
+build if one is missing here.
+
+- **GeckoView 144** in place of 159: `org.mozilla.geckoview:geckoview-arm64-v8a:144.0.20251027123126` (the
+  arm64-v8a APK), `org.mozilla.geckoview:geckoview-armeabi-v7a:144.0.20251027123126` (the armeabi-v7a APK), and
+  `org.mozilla.geckoview:geckoview-exoplayer2:144.0.20251027123126`. Licence, copyright, upstream and `about:license`
+  as for GeckoView 159 above. Source: mozilla-release revision `5f480a9ab713ba79e5a14face39aacb038c36f30`,
+  https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30
+- **desugar_jdk_libs** 2.1.5 (`com.android.tools:desugar_jdk_libs:2.1.5`): OpenJDK's `java.time`, `java.util`
+  and other classes for Android versions that lack them (core library desugaring). The build compiles the ones the
+  app calls into the APK's code. Licence: GPL-2.0-only WITH Classpath-exception-2.0 (`LICENSES/GPL-2.0.txt`,
+  `LICENSES/Classpath-exception-2.0.txt`): the exception lets the app link it and keep its own licence.
+  Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
+  (release 2.1.5). Allowed by the maintainer on 2026-11-16 as the one exception to the repo's no-GPL rule
+  (`AGENTS.md`, rule 4), in two apps: this legacy APK, and the legacy engine's debug test app
+  (`sh.edm.s1kiosk.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
+  ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
+  module, but none of its classes go into their APKs. S1 Kiosk doesn't use it.
+- **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
+  build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
+  - `androidx.annotation:annotation-experimental:1.5.1`
+  - `androidx.annotation:annotation-jvm:1.9.1`
+  - `androidx.annotation:annotation:1.9.1`
+  - `androidx.collection:collection-jvm:1.5.0`
+  - `androidx.collection:collection:1.5.0`
+  - `androidx.concurrent:concurrent-futures:1.1.0`
+  - `androidx.core:core:1.17.0`
+  - `androidx.lifecycle:lifecycle-common-jvm:2.9.3`
+  - `androidx.lifecycle:lifecycle-common:2.9.3`
+  - `androidx.lifecycle:lifecycle-process:2.9.3`
+  - `androidx.lifecycle:lifecycle-runtime-android:2.9.3`
+  - `androidx.lifecycle:lifecycle-runtime:2.9.3`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.1`
+  - `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1`
+
 ### Libraries the app uses directly
 
 - **TensorFlow Lite** 2.16.1: `org.tensorflow:tensorflow-lite:2.16.1`, `org.tensorflow:tensorflow-lite-api:2.16.1`.
@@ -176,6 +217,14 @@ so they could never run. Passkey sign-in is therefore not available in the kiosk
     `e1d6480102fed30739fead0faee463101f892c8f` (SHA-256
     `29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031`)
   - Used by the app's own screens: voice overlay, timers, settings menu, setup and loading screens.
+- `assets/setup/`: the setup page the panel serves at `/setup` (#34), a build of Kiln's setup steps
+  (`kiln/apps/kiln/lan/`). This project's code is MIT. It bundles:
+  - **React** and **React DOM** 19.3.0, **scheduler** 0.28.0: MIT, "Copyright (c) Meta Platforms, Inc.
+    and affiliates." https://github.com/facebook/react. Their `@license` headers stay in `setup.js`.
+  - **Radix Primitives** `@radix-ui/react-radio-group` 1.5.1 and `@radix-ui/react-collapsible` 1.2.1,
+    with the `@radix-ui/*` packages they use (a subset of those listed under Kiln in section 4): MIT,
+    "Copyright (c) 2022 WorkOS". https://github.com/radix-ui/primitives
+  - The licence text: `LICENSES/MIT.txt`.
 - No machine-learning models are bundled by the app. The wake word models are downloaded by the
   panel at runtime (section 5). GeckoView's `omni.ja` has its own assets, such as the Liberation fonts
   used by its PDF viewer (SIL OFL 1.1). Those are listed in `about:license`.
@@ -318,6 +367,11 @@ All MIT, from this repository:
   in Inter (SIL OFL 1.1, fetched at build time). These downloads carry only images made with the font;
   the font itself ships in the S1 Kiosk APK (section 1, "Assets in the APK").
 - The S1 Kiosk APK (sections 1 and 2).
+- The Mirror's settings overlay, `frames/lululemon-mirror/overlay/GlassworksSettings.apk` (resource
+  values only, built by its `build.sh`). It is signed with AOSP's public test key
+  (`build/target/product/security/testkey`, android-6.0.1_r81, Apache-2.0, Copyright The Android Open
+  Source Project), so its signature block carries that public certificate. The private key is
+  downloaded at build time and never committed.
 
 ---
 
@@ -517,6 +571,8 @@ renders above:
 | U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`tools/fel/uboot/`](https://github.com/GlassworksHQ/glassworks/tree/8b2bf488fed3c7ba8343a32c67c9651066479128/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
+| GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
+| desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
 | GNU C Library, static in `otbr-agent`/`ot-ctl` | LGPL-2.1-or-later | installer, radio bundle | Ubuntu 22.04 source package `cross-toolchain-base` 59ubuntu3, which built `libc6-dev-armhf-cross` 2.35-0ubuntu1cross3 from Ubuntu's `glibc` 2.35 source: https://launchpad.net/ubuntu/+source/cross-toolchain-base/59ubuntu3. To relink `otbr-agent`/`ot-ctl` with a modified C library, rebuild them from source with [`frames/aqara-s1-plus/tools/radio/build-otbr.sh`](frames/aqara-s1-plus/tools/radio/build-otbr.sh). |
 | GNU C Library, `sisdk/lib/` | LGPL-2.1-or-later | radio bundle | The Ubuntu source packages named in `sisdk/NOTICE.txt` (Ubuntu snapshot `20261101T000000Z`, see `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`). The libraries can be replaced: the bundle loads them from that directory. |
 | libstdc++, libgcc_s | GPL-3.0-or-later WITH GCC-exception-3.1 | installer, radio bundle | The Ubuntu GCC cross source packages: `gcc-11-cross` for the static copies in `otbr-agent`/`ot-ctl`, and those named in `sisdk/NOTICE.txt` for `sisdk/lib/`. All are on https://launchpad.net/ubuntu |

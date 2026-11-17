@@ -203,11 +203,12 @@ class RadioDefinitionTest {
     }
 
     @Test
-    fun theRadiosFirmwareAndHelperAreOnItsPageButNotWhoIsConnected() {
-        // #212: "Connected now" waits for the root helper to report the live peer (#217).
+    fun whoIsConnectedTheRadiosFirmwareAndHelperAreOnItsPage() {
+        // #212, and #217: "Connected now" from the root helper's live peer.
         val pane = object : dev.glassworks.pane.Pane {
             override val id = "radio"
             override fun entities() = listOf(
+                dev.glassworks.esphome.TextSensorEntity("radio_connected", "Radio connected client", get = { "Home Assistant · 192.0.2.20 · since 14:32" }),
                 dev.glassworks.esphome.TextSensorEntity("radio_firmware", "Radio firmware", get = { "EmberZNet 7.4.4 · EZSP v13" }),
                 dev.glassworks.esphome.TextSensorEntity("radio_helper", "Radio helper", get = { "v4 · root side ready" }),
             )
@@ -215,9 +216,26 @@ class RadioDefinitionTest {
         val d = radioDefinition(app, FixedReadout(null, running = false))
         val block = d.settings(pane).single().items.last() as dev.glassworks.pane.SettingsItem.Group
         assertEquals("The radio", block.title)
-        assertEquals(listOf("Firmware" to "EmberZNet 7.4.4 · EZSP v13", "Radio helper" to "v4 · root side ready"),
+        assertEquals(listOf("Connected now" to "Home Assistant · 192.0.2.20 · since 14:32", "Firmware" to "EmberZNet 7.4.4 · EZSP v13", "Radio helper" to "v4 · root side ready"),
             block.items.map { (it as dev.glassworks.pane.SettingsItem.Info).let { i -> i.title() to i.detail() } })
         assertEquals("no pane, no block", d.settings().single().items.size, d.settings(null).single().items.size)
+    }
+
+    @Test
+    fun connectedNowOnThePageIsReadAfreshNotFromHomeAssistantsSensor() {
+        // The sensor lags up to 15 s (the radio's refresh); the page reads the controller each time it draws.
+        var live = "Nobody"
+        val pane = object : dev.glassworks.pane.Pane {
+            override val id = "radio"
+            override fun entities() = listOf(dev.glassworks.esphome.TextSensorEntity("radio_connected", "Radio connected client", get = { "Home Assistant · 192.0.2.20 · since 14:32" }))
+        }
+        val readout = object : RadioReadout by FixedReadout(null, running = false) {
+            override fun connectedNow() = live
+        }
+        val row = (radioDefinition(app, readout).settings(pane).single().items.last() as dev.glassworks.pane.SettingsItem.Group).items.single() as dev.glassworks.pane.SettingsItem.Info
+        assertEquals("Nobody", row.detail())
+        live = "198.51.100.7 · since 14:40"
+        assertEquals("198.51.100.7 · since 14:40", row.detail())
     }
 
     @Test

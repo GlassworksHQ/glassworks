@@ -40,7 +40,7 @@ describe('the pane list', () => {
   it('fails, not passes empty, when it finds no pane file', () => {
     const repo = mkdtempSync(join(tmpdir(), 'panes-'));
     try {
-      mkdirSync(join(repo, 'app/kiosk/src/main/java'), { recursive: true });
+      mkdirSync(join(repo, 'core/src/main/java'), { recursive: true });
       expect(() => paneFiles(repo)).toThrow(/no pane\.json/);
       expect(() => paneFiles(join(repo, 'nothing-here'))).toThrow(/no pane\.json/);
       // a pane in a module's src/main/kotlin counts too, as in the app's RepoFiles

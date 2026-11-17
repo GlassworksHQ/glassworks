@@ -16,7 +16,9 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | Path | What | Language |
 |---|---|---|
 | `settings.gradle.kts` | The Gradle root is the repo root. This file maps every module to its folder | Kotlin |
+| `build-logic/` | What every module builds with: `glassworks.android` (compileSdk, minSdk 26, JDK 17, the `testing/kotlin` tests) and `glassworks.jvm` (JDK 17). A module's build file keeps its namespace, dependencies and what differs | Kotlin |
 | `frames/aqara-s1-plus/android` | S1 Kiosk (`:kiosk`), the GeckoView kiosk app (`sh.edm.s1kiosk`, never rename it) | Kotlin, Android |
+| `frames/generic-android/android` | Glassworks for generic Android (`:generic-android`, `dev.glassworks.generic_android`): the core as an app for any Android 8+ device, no root | Kotlin, Android |
 | `core/`, `pane-api/` | The Glassworks core (`dev.glassworks.*`) and the pane API every pane builds on | Kotlin, Android |
 | `engines/engine-gecko` | The GeckoView engine and the kiosk's web extension | Kotlin, JavaScript |
 | `panes/<id>` | One module per pane (`:pane-<id>`): assist, camera, diagnostics, notifications, sendspin, timers, bluetooth-proxy. A frame's own panes sit in `frames/<id>/panes/` | Kotlin, Android |
@@ -25,7 +27,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 | `frames/<id>/` | Everything about one frame: its README, its Kiln recipe (`installer/`), its design data (`design/frame.json`, `recovery.json`) and its research notes (`research/`) | TypeScript, JSON, Markdown |
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup | TypeScript, React |
 | `site/` | glassworks.dev, the project site: landing page, `/frames`, `/panes`, `/brand` and the brand generator. Reads `frames/`, `packages/frame-card` and Clarity's grade from this repo at build time | TypeScript, Next.js |
-| `testing/` | Test helpers every Gradle module's tests share: `RepoFiles`, which finds source files across all modules from the repo root | Kotlin |
+| `testing/` | Test helpers every Gradle module's tests share: `RepoFiles`, which finds source files across all modules from the repo root (`testing/kotlin`); the GeckoView shadows and harness that run the real MainActivity in the two apps' tests (`testing/gecko`) | Kotlin, Java |
 | `frames/aqara-s1-plus/tools/` | The S1's own tools. `fel/`, `install/`, `install.sh`: FEL boot, U-Boot board files and patches, the CLI installer. `root/`, `radio/`: init services in the patched boot image (root helper, update and bundle services) | bash, `/system/bin/sh` (mksh), C |
 | `tools/` | Tools every frame shares: Clarity (`perf/`), release, size, showcase, doc checks | Python, bash |
 | `docs/` | User guides; `docs/research/` holds the general engineering notes and the index of every note | Markdown |
@@ -71,6 +73,9 @@ in HA. If a request goes against it, say so and point at the page instead of bui
    ignored). Describe what you read, and give offsets and symbols, but never commit the bytes.
 4. **No GPL payloads shipped by us.** Magisk is downloaded from its official release and checked by
    hash, never vendored. Licences of new dependencies go in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
+   One exception is decided (maintainer, 2026-11-16): `desugar_jdk_libs` (GPL-2.0 with the Classpath exception)
+   in the generic app's legacy APK, for Android 6–7, and in the legacy engine's debug test app
+   (`sh.edm.s1kiosk.legacy`). Any other GPL code in an APK needs the maintainer's call.
 5. **Changes to the boot patch, the root helper, the radio or anything in `frames/aqara-s1-plus/tools/root` need a real
    panel before merge.** Say so in the PR. Off-device tests alone are not enough there.
 6. **Updates must keep installing in place.** Don't change `applicationId`, the signing setup or

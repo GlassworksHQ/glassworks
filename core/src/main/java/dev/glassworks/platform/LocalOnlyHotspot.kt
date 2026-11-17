@@ -1,0 +1,142 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.platform
+
+import android.content.Context
+import android.content.pm.PackageManager
+import android.net.wifi.WifiManager
+import android.os.Handler
+import android.provider.Settings
+
+/**
+ * The setup hotspot on Android 8 and newer: `WifiManager.startLocalOnlyHotspot`, a public API for any app.
+ * Android names the network (`AndroidShare_<n>` on the S1's Android 10) and picks a random WPA2 key; the
+ * panel shows both as a QR code. It shares no internet, and changes no setting: closing the reservation
+ * ([stop]) or the app's process dying ends it.
+ *
+ * What Android asks for: `CHANGE_WIFI_STATE`, the permission in [PlatformApi.hotspotPermission], location on
+ * where [PlatformApi.hotspotNeedsLocationOn], and the app in the foreground when it starts (the kiosk's
+ * foreground service counts). On most devices, the S1 among them, the panel's Wi-Fi client stops while the
+ * hotspot runs (#38).
+ */
+class LocalOnlyHotspot(
+    context: Context,
+    private val handler: Handler,
+    private val platform: PlatformApi = Platform,
+    /** Android's call; a test stands in for it. */
+    private val ap: LocalOnlyAp = WifiLocalOnlyAp(context, platform),
+) : Hotspot {
+    private val ctx = context.applicationContext
+    private var reservation: LocalOnlyAp.Reservation? = null
+
+    /** Each start's number: a callback from a start that [stop] has ended since is dropped. */
+    private var generation = 0
+
+    override fun start(onEvent: (Hotspot.Event) -> Unit) {
+        stop()
+        val mine = ++generation
+        fun fail(why: HotspotFailure) = handler.post { if (generation == mine) onEvent(Hotspot.Event.Failed(why)) }
+        platform.hotspotPermission?.let { p ->
+            if (ctx.checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) { fail(HotspotFailure.NO_PERMISSION); return }
+        }
+        if (platform.hotspotNeedsLocationOn && !locationOn()) { fail(HotspotFailure.LOCATION_OFF); return }
+        val listener = object : LocalOnlyAp.Listener {
+            override fun onStarted(r: LocalOnlyAp.Reservation) {
+                // A start that stop() ended since: Android's reservation is nobody's, so it goes back at once.
+                if (generation != mine) { runCatching { r.close() }; return }
+                reservation = r
+                // Unreadable, or reading it threw: closed again by stop(), never left open.
+                val net = runCatching { r.network() }.getOrNull()
+                if (net == null) { stop(); onEvent(Hotspot.Event.Failed(HotspotFailure.FAILED)); return }
+                onEvent(Hotspot.Event.Started(net))
+            }
+
+            override fun onStopped() {
+                if (generation != mine) return
+                reservation = null
+                onEvent(Hotspot.Event.Stopped)
+            }
+
+            override fun onFailed(reason: Int) {
+                if (generation == mine) onEvent(Hotspot.Event.Failed(failure(reason)))
+            }
+        }
+        try {
+            if (!ap.start(listener, handler)) fail(HotspotFailure.NOT_ALLOWED)
+        } catch (_: SecurityException) {
+            fail(if (platform.hotspotNeedsLocationOn && !locationOn()) HotspotFailure.LOCATION_OFF else HotspotFailure.NO_PERMISSION)
+        } catch (_: IllegalStateException) {
+            // This app already holds a reservation Android hasn't let go of.
+            fail(HotspotFailure.FAILED)
+        }
+    }
+
+    override fun stop() {
+        generation++
+        reservation?.let { runCatching { it.close() } }
+        reservation = null
+    }
+
+    @Suppress("DEPRECATION") // LOCATION_MODE: LocationManager.isLocationEnabled is Android 9+, and this is needed from 8
+    private fun locationOn(): Boolean =
+        runCatching { Settings.Secure.getInt(ctx.contentResolver, Settings.Secure.LOCATION_MODE) }.getOrDefault(1) != Settings.Secure.LOCATION_MODE_OFF
+
+    private fun failure(reason: Int) = when (reason) {
+        WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL -> HotspotFailure.NO_CHANNEL
+        WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE -> HotspotFailure.TETHERING_ON
+        WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED -> HotspotFailure.NOT_ALLOWED
+        else -> HotspotFailure.FAILED
+    }
+}
+
+/** Android's local-only hotspot call, behind a seam so a test can stand in for the device. */
+interface LocalOnlyAp {
+    /** What Android hands over once the hotspot is up. */
+    interface Reservation {
+        /** Its network, or null when Android doesn't say. May throw. */
+        fun network(): HotspotNetwork?
+
+        /** Gives it back: Android stops the hotspot. */
+        fun close()
+    }
+
+    interface Listener {
+        fun onStarted(r: Reservation)
+        fun onStopped()
+        /** A `WifiManager.LocalOnlyHotspotCallback.ERROR_*` value. */
+        fun onFailed(reason: Int)
+    }
+
+    /** Asks for the hotspot; false when the device has no Wi-Fi. Throws as `WifiManager.startLocalOnlyHotspot` does. */
+    fun start(listener: Listener, handler: Handler): Boolean
+}
+
+/** [LocalOnlyAp] on a real device: `WifiManager.startLocalOnlyHotspot`. */
+class WifiLocalOnlyAp(context: Context, private val platform: PlatformApi = Platform) : LocalOnlyAp {
+    private val wifi = context.applicationContext.getSystemService(WifiManager::class.java)
+
+    override fun start(listener: LocalOnlyAp.Listener, handler: Handler): Boolean {
+        val wifi = wifi ?: return false
+        wifi.startLocalOnlyHotspot(object : WifiManager.LocalOnlyHotspotCallback() {
+            override fun onStarted(r: WifiManager.LocalOnlyHotspotReservation) = listener.onStarted(object : LocalOnlyAp.Reservation {
+                override fun network() = network(r)
+                override fun close() = r.close()
+            })
+
+            override fun onStopped() = listener.onStopped()
+            override fun onFailed(reason: Int) = listener.onFailed(reason)
+        }, handler)
+        return true
+    }
+
+    @Suppress("DEPRECATION") // getWifiConfiguration below Android 11, SoftApConfiguration.getSsid from 13: both still answer
+    private fun network(r: WifiManager.LocalOnlyHotspotReservation): HotspotNetwork? {
+        val (ssid, key) = if (platform.hasSoftApConfiguration) r.softApConfiguration.let { it.ssid to it.passphrase }
+        else r.wifiConfiguration?.let { it.SSID to it.preSharedKey } ?: (null to null)
+        val s = ssid?.trim('"')?.takeIf { it.isNotEmpty() } ?: return null
+        val k = key?.trim('"')?.takeIf { it.isNotEmpty() } ?: return null
+        return HotspotNetwork(s, k)
+    }
+}

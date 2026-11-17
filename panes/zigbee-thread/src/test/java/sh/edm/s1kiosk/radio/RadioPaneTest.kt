@@ -10,6 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -47,6 +48,10 @@ class RadioPaneTest {
     private val allow = MemoryAllowStore()
     private var stored: String? = "thread_router"
     private var published = 0
+    /** The controller's onChange: what makes the app publish its states to Home Assistant. */
+    private var changed = 0
+    /** 2026-11-15 14:40 UTC. */
+    private var now = 1_794_753_600_000L
 
     private val pane by lazy {
         val ctx = PaneContext(
@@ -60,7 +65,7 @@ class RadioPaneTest {
         )
         val controller = RadioController(
             props, load = { stored }, store = { stored = it }, inline = true, log = {},
-            filesDir = tmp.root, allow = allow,
+            filesDir = tmp.root, allow = allow, clock = { now }, onChange = { changed++ },
         )
         RadioPane(ctx, running, panelIp = { null }, radio = controller)
     }
@@ -96,6 +101,67 @@ class RadioPaneTest {
         assertEquals("198.51.100.23", pane.radio.allowedClients())
         assertEquals("198.51.100.23", allow.explicit)
         assertEquals(1, published)
+    }
+
+    /** The coordinator, Home Assistant last seen at 192.0.2.20, the panel's clock in UTC. */
+    private fun connectedNow(peer: String?, mode: String = "zigbee_tcp"): String {
+        stored = mode
+        allow.haV4 = "192.0.2.20"
+        peer?.let { props.props[RadioHelper.PROP_PEER] = it }
+        val zone = java.util.TimeZone.getDefault()
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"))
+        try { return pane.radio.connectedNow() } finally { java.util.TimeZone.setDefault(zone) }
+    }
+
+    @Test fun connectedNowNamesHomeAssistantAndSaysSinceWhen() {
+        // 2026-11-15 14:32:10 UTC
+        assertEquals("Home Assistant · 192.0.2.20 · since 14:32", connectedNow("192.0.2.20 1794753130"))
+    }
+
+    @Test fun connectedNowShowsAnotherClientByItsAddressAndTheDayWhenNotToday() {
+        // 2026-11-14 09:05 UTC, an IPv6 client as the helper writes it
+        assertEquals("2001:db8::20 · since 14 Nov 09:05", connectedNow("2001:db8:0:0:0:0:0:20 1794647100"))
+        assertEquals("The panel itself · 127.0.0.1 · since 14 Nov 09:05", connectedNow("127.0.0.1 1794647100"))
+    }
+
+    @Test fun connectedNowSaysNobodyAndWhenItDoesNotKnow() {
+        assertEquals("Nobody", connectedNow("none"))
+        props.props.remove(RadioHelper.PROP_PEER)
+        assertEquals("a helper from before #217", "Not known (the root helper doesn't report it yet)", connectedNow(null))
+        assertEquals("Not known (the root helper doesn't report it yet)", connectedNow("192.0.2.20 soon"))
+    }
+
+    @Test fun onlyTheCoordinatorHasAClient() {
+        assertEquals("Only the Zigbee coordinator takes a client", connectedNow("192.0.2.20 1794753130", mode = "thread_router"))
+    }
+
+    @Test fun homeAssistantGetsOnlyWhatARefreshSaw() {
+        // CodeRabbit on #391: a publish between refreshes must not send a client the change check never saw,
+        // or its leaving would never be published.
+        connectedNow("none")
+        pane.radio.refresh()
+        val sensor = entity("radio_connected")
+        assertEquals("Nobody", sensor.shownState())
+        props.props[RadioHelper.PROP_PEER] = "198.51.100.7 1794753130"
+        assertEquals("a publish before the refresh still says Nobody", "Nobody", sensor.shownState())
+        pane.radio.refresh()
+        assertTrue(sensor.shownState().orEmpty(), sensor.shownState().orEmpty().startsWith("198.51.100.7 · since "))
+        val before = changed
+        props.props[RadioHelper.PROP_PEER] = "none"
+        pane.radio.refresh()
+        assertEquals("its leaving is published", before + 1, changed)
+        assertEquals("Nobody", sensor.shownState())
+    }
+
+    @Test fun aNewClientIsPublishedToHomeAssistantOnTheNextRefresh() {
+        connectedNow("none")
+        pane.radio.refresh()
+        val before = changed
+        props.props[RadioHelper.PROP_PEER] = "198.51.100.7 1794753130"
+        pane.radio.refresh()
+        assertEquals(before + 1, changed)
+        pane.radio.refresh()
+        assertEquals("nothing new, nothing published", before + 1, changed)
     }
 
     @Test fun whileItRunsTheAppReachesTheControllerAndThreadJoinDeliversToIt() {

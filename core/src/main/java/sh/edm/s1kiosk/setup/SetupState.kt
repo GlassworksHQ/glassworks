@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.setup
 
+import dev.glassworks.frame.Input
 import dev.glassworks.pane.PaneChoice
 import dev.glassworks.pane.SetupStep
 
@@ -22,7 +23,8 @@ import dev.glassworks.pane.SetupStep
  *      person answers it under Panes;
  *   and, without the grace period, (1) while Improv (Wi-Fi over Bluetooth) is running or Wi-Fi
  *   details came from the computer: Improv's Allow prompt and the join's progress live in the
- *   Wi-Fi step.
+ *   Wi-Fi step. On a screen without touch ([Input.NONE]), also (1) whenever no Wi-Fi join is underway
+ *   or expected: the loading screen's offline text would point at a button nobody can press (#448).
  *   Once shown, it stays until every step is done (no flicker between steps).
  * - **Which step is current while it's shown?** The first one that isn't done, in order Wi-Fi →
  *   Home Assistant (add it, sign in) → Panes (choose, then each step of a pane that is on) → Done.
@@ -141,6 +143,10 @@ data class SetupInputs(
     val neverSetUp: Boolean = false,
     /** A Wi-Fi join sent from the computer (web installer) in this process, if any. */
     val installer: InstallerWifi? = null,
+    /** Whether the screen takes a tap (the frame's [dev.glassworks.frame.Frame.input]). */
+    val input: Input = Input.TOUCH,
+    /** Offline, and Wi-Fi is joining or has a network to join ([OfflineText.expectsJoin]). Read only without touch. */
+    val joinExpected: Boolean = false,
 )
 
 data class SetupRules(
@@ -188,7 +194,9 @@ object SetupState {
         // Improv's Allow prompt and the installer's join progress live in the Wi-Fi step: no grace then.
         val wifiSetupActive = i.improv.running || (i.installer != null && i.installer.phase != InstallerWifi.Phase.CONNECTED)
         // A fresh panel has no network to wait for: show setup at once instead of a "waiting" screen.
-        if (!i.online && (i.offlineForMs >= rules.offlineGraceMs || wifiSetupActive || i.neverSetUp)) reasons += "offline"
+        // Without touch, nothing waits for Wi-Fi it won't get: only this screen says how to set it up.
+        val noTouchStuck = i.input == Input.NONE && !i.joinExpected
+        if (!i.online && (i.offlineForMs >= rules.offlineGraceMs || wifiSetupActive || i.neverSetUp || noTouchStuck)) reasons += "offline"
         if (i.online && !i.haKnown) reasons += "home assistant not found"
         if (i.online && i.haKnown && !haEverRecorded && !i.haHelloThisProcess && i.uptimeMs >= rules.haGraceMs) {
             reasons += "not added to home assistant"
