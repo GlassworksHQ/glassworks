@@ -466,6 +466,10 @@ HANDLERS = {
     "lovelace/dashboards/list": _home("dashboards_list"),
     "config/entity_registry/list_for_display": _const(lambda: {"entity_categories": {"0": "config", "1": "diagnostic"},
                                                                 "entities": []}),
+    # The more-info dialog (#211) asks for its entity's registry entry; the fixed home has no registry,
+    # and HA answers an entity without one so (config/entity_registry.py websocket_get_entity).
+    "config/entity_registry/get": lambda c, m: c.result(m["id"], None, success=False, error={
+        "code": "not_found", "message": "Entity not found"}),
     "config/device_registry/list": _const([]),
     "config/area_registry/list": _const([]),
     "config/floor_registry/list": _const([]),
@@ -566,7 +570,7 @@ class Handler(BaseHTTPRequestHandler):
             # the loaded frontend, picks it up from /clarity/next and navigates there.
             q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
             ok = (q.get("view") in D.VIEWS and re.fullmatch(r"[0-9a-f]{4,32}", q.get("nonce", ""))
-                  and all(re.fullmatch(r"[0-9.]{1,12}", q.get(k, "0")) for k in ("run", "taps", "swipes", "vsync", "warmup")))
+                  and all(re.fullmatch(r"[0-9.]{1,12}", q.get(k, "0")) for k in ("run", "taps", "swipes", "dialogs", "vsync", "warmup")))
             if not ok:
                 return self.send_bytes(400, b"bad command", "text/plain")
             Handler.hub.reset()          # a no-op unless something changed after the last view
