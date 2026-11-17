@@ -1,5 +1,6 @@
 // A frame's design data, `frames/<id>/design/frame.json` (the format is in frames/README.md), and the
 // card's words for it. Kiln and glassworks.dev read the same files through these types.
+import type { FrameFacts, FrameRun } from './completeness';
 
 type V3 = [number, number, number];
 
@@ -87,6 +88,10 @@ export interface FrameDesign {
   unverified?: boolean;
   /** the outside work the frame stands on: images, unlocks, tools, research (frames/README.md#credits) */
   credits?: FrameCredit[];
+  /** what its panels show, for the checklist (completeness.ts; frames/README.md#how-complete-it-is). Not on a tested device */
+  facts?: FrameFacts;
+  /** a tested device only: its run on a real unit, which its checklist comes from */
+  run?: FrameRun;
 }
 
 /** One piece of outside work a frame relies on, and who made it. */
@@ -153,6 +158,21 @@ export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'ap
   else if (base.kind === 'tested') out.push(`base: ${f.base} is a tested device itself; name the frame it installs as`);
   for (const k of ['kiln', 'app', 'recovery'] as const) if (f[k] !== undefined) out.push(`${k}: a tested device has no recipe of its own; its base's install is used`);
   return out;
+}
+
+/** Every field a frame.json may have. A `Record` over FrameDesign's keys, so the compiler fails when the two differ. */
+const FIELDS: Record<keyof FrameDesign, true> = {
+  id: true, kind: true, base: true, name: true, brand: true, aka: true, status: true, summary: true, tagline: true, project: true,
+  kiln: true, model: true, recovery: true, render: true, display: true, boot: true, abis: true, app: true, specs: true, panes: true,
+  provides: true, install: true, ratings: true, ratingsNote: true, notice: true, unverified: true, credits: true, facts: true, run: true,
+};
+
+/**
+ * The keys a frame.json has that FrameDesign doesn't, one line each; empty when there are none. A stray `serial`
+ * or a misspelt field never reaches a page. Kiln's tests and glassworks.dev's build run it.
+ */
+export function keyProblems(f: object): string[] {
+  return Object.keys(f).filter((k) => !Object.hasOwn(FIELDS, k)).map((k) => `${k}: not a frame.json field (frames/README.md#designframejson)`);
 }
 
 /** The card's credit line, from the first credit marked `card`: "Built on Glass Panes by git-nimrod". */

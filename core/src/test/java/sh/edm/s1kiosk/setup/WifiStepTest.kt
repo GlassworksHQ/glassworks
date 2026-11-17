@@ -109,4 +109,25 @@ class WifiStepTest {
         assertEquals(line.detail, 1, Regex("send it again").findAll(line.detail).count())
         assertTrue(line.detail, "Check the password" !in line.detail)
     }
+
+    @Test
+    fun theFailureTextAddsPasswordAdviceOnlyWhenTheReasonHasNone() {
+        val unusable = WifiStep.failureText(dev.glassworks.improv.WifiProvisioner.UNUSABLE_PASSWORD)
+        assertEquals(unusable, 1, Regex("send it again").findAll(unusable).count())
+        assertTrue(WifiStep.failureText(dev.glassworks.improv.WifiProvisioner.RADIO_DIDNT_COME_BACK).let { "password" !in it })
+        assertEquals("Wrong password. Check the password and send it again.", WifiStep.failureText("wrong password"))
+    }
+
+    /**
+     * The Improv overlay (ImprovController) and the setup step say a failed join through [WifiStep.failureText], so the
+     * doubled "send it again" (#418 verifier) can't come back in one of them: no other source writes the advice itself.
+     */
+    @Test
+    fun onlyTheFailureTextWritesThePasswordAdvice() {
+        val code = dev.glassworks.testing.RepoFiles.code(atLeast = 200)
+        val writers = code.filter { "Check the password and send it again" in it.readText() }.map { it.name }
+        assertEquals(listOf("WifiStep.kt"), writers)
+        val overlay = code.single { it.name == "ImprovController.kt" }.readText()
+        assertTrue("the Improv overlay uses it", "WifiStep.failureText(fail)" in overlay)
+    }
 }

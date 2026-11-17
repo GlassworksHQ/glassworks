@@ -25,7 +25,7 @@ class TestBuildLabelTest {
      */
     @Test fun pagesShowTheLabelNotTheRawVersion() {
         // The S1 app and the Glassworks core both, in every module: a core page must not read the raw version either.
-        val raw = setOf("KioskApp.kt", "update/UpdateManager.kt", "esphome/PanelDevice.kt", "S1Panes.kt", "sendspin/SendspinPane.kt",
+        val raw = setOf("KioskApp.kt", "update/UpdateManager.kt", "esphome/PanelDevice.kt", "camera/CameraWiring.kt", "sendspin/SendspinPane.kt",
             "improv/ImprovController.kt", "improv/ImprovSerialServer.kt", "improv/ImprovIdentity.kt", "radio/RadioPane.kt")
             .map { "sh/edm/s1kiosk/$it" }.toSet() +
             "dev/glassworks/pane/Blueprints.kt" + // the release tag `v<versionName>` a blueprint's link points at, not a label

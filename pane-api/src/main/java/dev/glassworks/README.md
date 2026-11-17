@@ -324,6 +324,7 @@ The definition's `id` is the pane's.
 | `setupChoice` | The pane's card on the Panes step, or null. By default the switch's, when it is `inSetup`. A pane with `setupSteps` needs one. |
 | `settings()` | The pane's settings sections, as they are now. Called each time the menu opens. |
 | `extras` | adb intent extras for its settings (`IntentExtra.bool`, `float`, `string`). `restartsApp` for a setting read only at start. The switch's extra comes on its own (`intentExtras()`). |
+| `permissions` | Android's runtime permissions the pane needs while it is on (Assist: the microphone; the camera: the camera). The app asks for them when it starts, only if the app's manifest declares them and only on a screen that takes a tap (`permissionsToAsk()`). Without touch, the installer grants them. |
 
 **A setup step is state plus requests.** `done()` says whether the step is answered; `channelState()`
 is its part of the setup channel's state, under the step's id; `ops` are the requests that answer

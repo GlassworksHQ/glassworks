@@ -17,6 +17,8 @@ import org.json.JSONObject
  * Setup's Camera step under Panes (#117's approved design): what the camera may do, then Android's
  * permission ("Allow the camera"). Shown while the camera pane's card is on. Done once a use is picked
  * and Android allows the camera. [granted] reads Android's permission; [pickers] draws the cards.
+ * On a screen that takes no tap ([touch] false: the lululemon Mirror) it never holds setup: nobody there can pick
+ * or answer Android, so the use stays Presence only and the installer grants the camera (Kiln's `pm grant`).
  * Public for tests.
  */
 class CameraSetupStep(
@@ -25,12 +27,13 @@ class CameraSetupStep(
     private val turnOff: () -> Unit,
     private val granted: () -> Boolean,
     private val pickers: CameraUsePickers?,
+    private val touch: () -> Boolean = { true },
 ) : SetupStep {
     override val id = CameraPane.ID // the pane's own id: setup's rail and `--es setup_step camera`
     override val title = "Camera"
     override val reason = "the camera's use isn't picked, or Android hasn't allowed the camera"
 
-    override fun done(): Boolean = !on() || (prefs.useChosen && granted())
+    override fun done(): Boolean = !on() || !touch() || (prefs.useChosen && granted())
 
     override fun channelState(): JSONObject = JSONObject()
         .put("use", if (prefs.use == CameraUse.PRESENCE) "presence" else "snapshots")

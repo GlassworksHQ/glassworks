@@ -1,6 +1,5 @@
 package sh.edm.s1kiosk
 
-import android.Manifest
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -25,6 +24,7 @@ import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
 import dev.glassworks.pane.applyFrom
 import dev.glassworks.pane.intentExtras
+import dev.glassworks.pane.permissionsToAsk
 import dev.glassworks.platform.Platform
 import dev.glassworks.platform.HotspotAddress
 import dev.glassworks.platform.HotspotFailure
@@ -155,6 +155,7 @@ class MainActivity : Activity() {
         override fun run() {
             refreshSetup()
             setupOverlay.tick() // the panes' steps follow their state
+            if (resumed) requestRuntimePermissions() // a pane turned on since (from Home Assistant) asks once
             refreshOffline()
             handler.postDelayed(this, SETUP_TICK_MS)
         }
@@ -264,7 +265,6 @@ class MainActivity : Activity() {
         handler.post(setupTick)
         // The app's upkeep on each start (the S1's direct-boot splash).
         Thread({ runtime.app.activityStarted(applicationContext) }, "s1-boot-splash").start()
-        requestRuntimePermissions()
         hideSystemUi()
     }
 
@@ -803,7 +803,14 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         hideSystemUi()
+        requestRuntimePermissions() // at start, and what was turned on while another screen was in front
+    }
+
+    override fun onPause() {
+        resumed = false
+        super.onPause()
     }
 
     @Suppress("DEPRECATION")
@@ -934,10 +941,36 @@ class MainActivity : Activity() {
 
     // ---- Android runtime permissions (mic/camera) for Gecko
 
+    @Suppress("DEPRECATION") // getPackageInfo(String, PackageInfoFlags) is API 33; this one runs everywhere
+    private val declaredPermissions by lazy { packageManager.getPackageInfo(packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toSet() }
+
+    /** The screen takes a tap: read once, as the setup tick asks every couple of seconds. */
+    private val touchScreen by lazy { glassworks.frame.input == Input.TOUCH }
+
+    /** In front of the person: only then may Android's dialog show. */
+    private var resumed = false
+
+    /** Answered in this activity's life: a refusal isn't asked again until the next start. Android kills the app on a revoke. */
+    private val answeredPermissions = HashSet<String>()
+    private val grantedPermissions = HashSet<String>()
+
+    /** The startup request is open: no second one until Android answers it (an empty answer when it cancelled it). */
+    private var askingPermissions = false
+
+    private fun granted(permission: String): Boolean =
+        permission in grantedPermissions || (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED).also { if (it) grantedPermissions += permission }
+
+    /**
+     * What the panes that are on need and the app declares (#461), at start and when a pane turns on later, each once,
+     * while the activity is in front. Never on a screen without touch: nobody could answer there.
+     */
     private fun requestRuntimePermissions() {
-        val wanted = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
-            .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (wanted.isNotEmpty()) requestPermissions(wanted.toTypedArray(), REQ_STARTUP)
+        if (askingPermissions) return
+        val wanted = glassworks.paneDefinitions(this).permissionsToAsk(touch = touchScreen, declared = declaredPermissions, granted = ::granted) -
+            answeredPermissions
+        if (wanted.isEmpty()) return
+        askingPermissions = true
+        requestPermissions(wanted.toTypedArray(), REQ_STARTUP)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -947,6 +980,10 @@ class MainActivity : Activity() {
         if (requestCode == REQ_HOTSPOT) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) glassworks.setupHotspot?.ask()
             refreshSetup()
+        }
+        if (requestCode == REQ_STARTUP) {
+            askingPermissions = false
+            answeredPermissions += permissions.filterIndexed { i, _ -> i < grantResults.size }
         }
         if (requestCode == REQ_GECKO) {
             val cb = pendingAndroidPermission
