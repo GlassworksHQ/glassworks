@@ -308,7 +308,9 @@ below as the release notes.
   Bluetooth thermometers, plant sensors and tags near the panel. It only listens: devices that need a
   connection, like locks, still need an ESP32 proxy. Off by default. It never logs or keeps the
   addresses it hears, and sends them only over an encrypted connection with the panel's key, which
-  Home Assistant 2026.11 and later sets when you add the panel.
+  Home Assistant 2026.11 and later sets when you add the panel. If Home Assistant connects without that
+  key, the proxy's settings page and its *Bluetooth proxy status* sensor say *Waiting for the panel's
+  key*. Another app on your network that tries without the key doesn't change that.
 - **Setup's Panes step scrolls when there are more panes than fit.** Continue stays where it is,
   below the list, and every pane's name shows in full.
 - **Notifications from Home Assistant on the panel.** Call `esphome.<panel>_notify` with a title, a

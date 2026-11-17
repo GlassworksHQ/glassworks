@@ -20,7 +20,6 @@ import java.net.NetworkInterface
 object HaUrls {
     const val SERVICE_TYPE = "_home-assistant._tcp"
     const val DEFAULT_PORT = 8123
-    const val HELLO_PREFIX = "Home Assistant"
 
     /** Picks the URL from a resolved `_home-assistant._tcp` service (first of [candidates]). */
     fun fromTxt(txt: Map<String, ByteArray?>, host: InetAddress?, port: Int): String? =
@@ -53,9 +52,6 @@ object HaUrls {
         val withScheme = if ("://" in u) u else "http://$u"
         return OAuth.origin(withScheme)
     }
-
-    /** True if an ESPHome API client's HelloRequest.client_info is Home Assistant (`CLIENT_INFO`). */
-    fun isHomeAssistantHello(clientInfo: String): Boolean = clientInfo.startsWith(HELLO_PREFIX)
 
     /**
      * `GET /manifest.json` of an HA instance is the PWA manifest served by the `frontend`

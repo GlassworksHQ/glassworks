@@ -93,6 +93,10 @@ public interface BluetoothProxyHandler {
      */
     public val authOnly: Boolean get() = true
 
-    /** A client asked to subscribe and was refused for [authOnly]: the device has no key it holds. */
-    public fun onRefused() {}
+    /**
+     * A client asked to subscribe and was refused for [authOnly]: the device has no key it holds.
+     * [clientInfo] is its `HelloRequest.client_info`, so the device can tell Home Assistant from a
+     * script on the LAN.
+     */
+    public fun onRefused(clientInfo: String) {}
 }

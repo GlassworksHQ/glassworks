@@ -128,6 +128,7 @@ public final class dev/glassworks/esphome/ApiServer {
 }
 
 public final class dev/glassworks/esphome/ApiServer$Companion {
+	public final fun isHomeAssistant (Ljava/lang/String;)Z
 }
 
 public final class dev/glassworks/esphome/BinarySensorEntity : dev/glassworks/esphome/ApiEntity {
@@ -161,13 +162,13 @@ public final class dev/glassworks/esphome/BluetoothProxyFeature {
 public abstract interface class dev/glassworks/esphome/BluetoothProxyHandler {
 	public abstract fun getAuthOnly ()Z
 	public abstract fun getFeatureFlags ()I
-	public abstract fun onRefused ()V
+	public abstract fun onRefused (Ljava/lang/String;)V
 	public abstract fun onSubscribed (Z)V
 }
 
 public final class dev/glassworks/esphome/BluetoothProxyHandler$DefaultImpls {
 	public static fun getAuthOnly (Ldev/glassworks/esphome/BluetoothProxyHandler;)Z
-	public static fun onRefused (Ldev/glassworks/esphome/BluetoothProxyHandler;)V
+	public static fun onRefused (Ldev/glassworks/esphome/BluetoothProxyHandler;Ljava/lang/String;)V
 }
 
 public final class dev/glassworks/esphome/BrightnessLightEntity : dev/glassworks/esphome/ApiEntity {
