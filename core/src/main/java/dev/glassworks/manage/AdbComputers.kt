@@ -121,7 +121,7 @@ class AdbComputers(
     }
 
     /** What [allowAsking] did. */
-    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED }
+    enum class Allowed { ONCE, FROM_NOW_ON, CHANGED, NONE, FULL, FAILED, NOT_REMEMBERED }
 
     /**
      * Lets in the computer asking now, if it is still the one the page showed ([shown], its fingerprint). With
@@ -155,23 +155,26 @@ class AdbComputers(
         if (!save()) {
             listed.remove(key.fingerprint)
             event("$who allowed ${label(key)} over USB, for this connection: the allowed list couldn't be saved")
-            return Allowed.FAILED
+            return Allowed.NOT_REMEMBERED
         }
         event("$who allowed ${label(key)} over USB, from now on")
         return Allowed.FROM_NOW_ON
     }
 
-    /** Takes the computer with [fingerprint] off the list. False when it wasn't on it, or the list couldn't be saved. */
+    /** What [remove] did. */
+    enum class Removed { DONE, NOT_LISTED, NOT_SAVED }
+
+    /** Takes the computer with [fingerprint] off the list. When the list can't be saved, it stays on it. */
     @Synchronized
-    fun remove(fingerprint: String, who: String): Boolean {
-        val gone = listed.remove(fingerprint) ?: return false
+    fun remove(fingerprint: String, who: String): Removed {
+        val gone = listed.remove(fingerprint) ?: return Removed.NOT_LISTED
         if (!save()) {
             listed[fingerprint] = gone
             event("$who couldn't remove ${label(gone.key)} from the allowed list: it couldn't be saved")
-            return false
+            return Removed.NOT_SAVED
         }
         event("$who removed ${label(gone.key)} from the allowed list")
-        return true
+        return Removed.DONE
     }
 
     private fun load() {

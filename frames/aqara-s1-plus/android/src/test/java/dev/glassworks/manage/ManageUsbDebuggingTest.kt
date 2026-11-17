@@ -118,6 +118,23 @@ class ManageUsbDebuggingTest {
         assertEquals("/security?usb=gone", br.remove(a.fingerprint).headers["Location"])
     }
 
+    @Test fun `a removal or a remembering that can't be saved says so`() {
+        computers.asked(a)
+        val br = ha()
+        file.delete()
+        File(file, "x").apply { parentFile.mkdirs(); writeText("x") }
+        assertEquals("/security?usb=unsaved", br.allow(a.fingerprint).headers["Location"])
+        assertEquals(listOf(a.base64), allowed)
+        assertTrue(br.get("/security?usb=unsaved").text().contains("Allowed for this connection only"))
+        file.deleteRecursively()
+        computers.asked(a)
+        br.allow(a.fingerprint)
+        file.delete()
+        File(file, "x").apply { parentFile.mkdirs(); writeText("x") }
+        assertEquals("/security?usb=notremoved", br.remove(a.fingerprint).headers["Location"])
+        assertEquals(listOf(a), computers.list().map { it.key })
+    }
+
     @Test fun `forms without the session's token, from another site, or without a fingerprint are refused`() {
         computers.asked(a)
         val br = ha()
