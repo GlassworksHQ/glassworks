@@ -88,9 +88,10 @@ export function manageOrigin(url) {
 }
 
 /**
- * Whether [hostname] (a URL's, IPv6 in brackets) is on the local network, by the rule the panel's API uses for a
- * page's Origin (`ManageApi.localOrigin`): a private, loopback or link-local IP address, `localhost` or an mDNS
- * `.local` name. Names aren't resolved. A panel elsewhere gets no question and no token: over the internet, the
+ * Whether [hostname] (a URL's, IPv6 in brackets) is on the local network: a private, loopback or link-local IP
+ * address, `localhost` or an mDNS `.local` name. At most what the panel's API takes for a page's Origin
+ * (`ManageApi.localOrigin`); it refuses a few forms that one accepts (a bare `.local`, `fec0::/10`, IPv4-mapped or
+ * written-out IPv6), which only makes it stricter. Names aren't resolved. A panel elsewhere gets no question and no token: over the internet, the
  * token would cross in clear text.
  */
 export function localHost(hostname) {
@@ -200,22 +201,34 @@ const DOWN = "Can't reach it. It may be off, or on a version from before this pa
 const STRANGER = "It doesn't answer as the panel Home Assistant lists at this address, so it gets no sign-in.";
 const REMOTE = "Its address isn't on your network, so the page doesn't contact it or send it a sign-in.";
 
-/** How many times a call that answers 503 with Retry-After is made in all, and the longest wait between, in s. */
+/** How many times a call that answers 503 with Retry-After is made in all, and the longest it waits in all, in s. */
 export const TRIES = 3;
-const MAX_WAIT_S = 5;
+export const MAX_WAIT_S = 5;
 
 /**
  * [call] again while it answers 503 with Retry-After (a panel still asking Home Assistant about other sign-ins),
- * at most [TRIES] times in all, waiting what it asks, up to [MAX_WAIT_S] s. The last answer otherwise.
+ * at most [TRIES] times in all, waiting what it asks, but [MAX_WAIT_S] s at most in all: one busy panel can't hold
+ * the page (it waits for every panel) much past its own timeouts. The last answer otherwise.
  */
 export async function retrying(call, sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))) {
+  let left = MAX_WAIT_S;
   for (let i = 1; ; i++) {
     const r = await call();
     const header = r.status === 503 && r.headers ? r.headers.get('Retry-After') : null;
     const after = header == null || String(header).trim() === '' ? NaN : Number(header);
-    if (i >= TRIES || !Number.isFinite(after) || after < 0) return r;
-    await sleep(Math.min(after, MAX_WAIT_S) * 1000);
+    if (i >= TRIES || !Number.isFinite(after) || after < 0 || left <= 0) return r;
+    const wait = Math.min(after, left);
+    left -= wait;
+    await sleep(wait * 1000);
   }
+}
+
+/**
+ * Whether the page may send [p] its token or a change: on the local network, trusted ([readPanel] passed its hello)
+ * and with settings it read. Every path that sends the token checks this, not only [readPanel].
+ */
+export function usable(p) {
+  return !!(p && p.local === true && p.trusted === true && p.settings);
 }
 
 /**
@@ -224,7 +237,7 @@ export async function retrying(call, sleep = (ms) => new Promise((ok) => setTime
  * passes it, and [p] comes back `trusted` then. A busy panel's 503 is tried again ([retrying]).
  */
 export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined) {
-  if (!p.local) return { ...p, trusted: false, reach: { state: 'remote', why: REMOTE }, settings: null };
+  if (p.local !== true) return { ...p, trusted: false, reach: { state: 'remote', why: REMOTE }, settings: null };
   const get = async (path, headers) => {
     const r = await retrying(async () => {
       const c = new AbortController();

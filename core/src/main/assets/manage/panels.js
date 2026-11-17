@@ -8,7 +8,7 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, outcome, panelsFrom, pkceChallenge, plan, readPanel, retrying } from './panels-core.js';
+import { authorizeUrl, base64url, outcome, panelsFrom, pkceChallenge, plan, readPanel, retrying, usable } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
@@ -148,7 +148,7 @@ const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down
 /** A panel's own Manage page, in a new tab, signed in there with this tab's token (the panel checks it with Home Assistant). */
 async function open(p) {
   if (p.self) return location.assign('/');
-  if (!p.trusted) return;
+  if (!usable(p)) return;
   const access = await token().catch(() => null);
   if (!access) return start();
   // A new tab, without rel: the panel there gets the token in the post anyway, so what window.opener would add (it
@@ -176,11 +176,11 @@ function drawList(user) {
 // ------------------------------------------------------------------ copying settings
 
 function options(selected, skip) {
-  return panels.filter((p) => p.settings && p !== skip).map((p) => h('option', { value: p.origin, selected: p === selected }, p.name + (p.area ? ' · ' + p.area : '')));
+  return panels.filter((p) => usable(p) && p !== skip).map((p) => h('option', { value: p.origin, selected: p === selected }, p.name + (p.area ? ' · ' + p.area : '')));
 }
 
 function drawCopy(fromP, toP, result) {
-  const up = panels.filter((p) => p.settings);
+  const up = panels.filter(usable);
   if (up.length < 2) {
     copyCard.hidden = true;
     return;
@@ -235,6 +235,7 @@ function copied(result, toP) {
  * person agreed to its questions: each row goes again with its question's one-shot id.
  */
 async function apply(fromP, toP, rows, asked) {
+  if (!usable(toP)) return;
   const result = new Map();
   const access = await token().catch(() => null);
   if (!access) return start();
@@ -255,7 +256,7 @@ async function apply(fromP, toP, rows, asked) {
   panels = panels.map((p) => (p.origin === toP.origin ? again : p));
   drawList(stored()?.user || '');
   const to = panels.find((p) => p.origin === toP.origin);
-  if (to.settings) drawCopy(fromP, to, result);
+  if (usable(to)) drawCopy(fromP, to, result);
 }
 
 // ------------------------------------------------------------------ start

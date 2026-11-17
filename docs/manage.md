@@ -204,8 +204,8 @@ manage a panel. Whether other users get a say is open (#124).
 - The page answers only to the panel's own addresses and names (its IP addresses, its ESPHome name as `.local`,
   its Android host name), so another name pointed at it (DNS rebinding, or a spoofed `.local` answer)
   gets nothing.
-- No scripts, except on All panels ([below](#other-panels-through-home-assistant)), whose one script the panel serves
-  itself. No outside files, and a strict Content-Security-Policy.
+- No scripts, except on All panels ([below](#other-panels-through-home-assistant)): one script module, in two
+  files the panel serves itself. No outside files, and a strict Content-Security-Policy.
 - The log and the diagnostics file have tokens, keys, passwords (including `Basic` credentials and a
   user and password in an address), every value in an address's query (`?auth=…`), Thread datasets and
   MAC addresses removed. It goes by what these look like, so it can miss a secret in an unusual form:
@@ -232,8 +232,8 @@ manage a panel. Whether other users get a say is open (#124).
   the code on the panel is there for whoever would rather not.
 - **The Home Assistant token All panels carries.** All panels sends your Home Assistant access token to each
   panel it lists, over the same plain HTTP. Someone who can read your Wi-Fi traffic could use it as you, in Home
-  Assistant too, until it runs out (30 minutes) or you press **Sign out** on that page. The page keeps it in the tab;
-  close the tab or sign out when you're done.
+  Assistant too, until it runs out (30 minutes) or you press **Sign out** on that page. The page keeps it in the
+  tab; close the tab or sign out when you're done.
 - **A camera password you type here.** Setting a camera's password from this page sends it to the
   panel over the same plain HTTP, as every form does. To keep it off the network, set it on the
   panel's own screen instead. The panel never sends a stored password back.
@@ -258,13 +258,14 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 **All panels**, after Overview in the menu, sets up every panel in the house from one page (#466).
 
 1. **Continue with Home Assistant.** This tab signs in to Home Assistant on its own (with PKCE), with an
-   administrator, and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home Assistant too.
+   administrator, and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home
+   Assistant too.
 2. **The panels.** The page asks Home Assistant for its devices and lists each ESPHome device whose **Visit**
    link is a Manage page (port 8099), with its area, address and version. A panel that doesn't answer within
    6 seconds shows as **Down**; the others still work. A panel on a version from before this page shows as Down
    too. One that answers as some other device shows as **Not a panel** and gets nothing; one at an address off your
    network shows as **Not on your network** and isn't contacted. A panel busy asking Home Assistant about other
-   sign-ins is asked again, up to 3 times.
+   sign-ins is asked again: 3 tries at most, and 5 seconds of waiting in all.
 3. **Manage** opens that panel's own Manage page in a new tab, already signed in.
 4. **Copy settings.** Pick a panel to copy from and one to copy to. The page lists every setting that differs,
    ticked, as *its value now → the new value*. Settings the other panel's version or hardware doesn't have,
@@ -306,8 +307,8 @@ use All panels on a network you trust.
 - **What it changes.** One setting at a time, through the same checks and saves as the panel's own menu.
   A change that asks first on the panel (turning the radio off) answers with the panel's question and a
   one-time id. It runs only when the same token sends the same change again with that id, within 5 minutes,
-  as the page's own dialogs do. A sign-in and an action can't be changed this way. Each change goes in the Log with the user and
-  the address of the page that sent it.
+  as the page's own dialogs do. A sign-in and an action can't be changed this way. Each change goes in the Log
+  with the user and the address of the page that sent it.
 - **Signing in from another panel's page.** That page can also sign your browser in here with its token,
   so the panel's own Manage page opens without another Home Assistant sign-in. The panel asks Home Assistant
   about the token then and there, without the minute-old answer or a recent refusal. The sign-in lasts until
@@ -319,7 +320,8 @@ use All panels on a network you trust.
 For developers: `GET` and `POST` `/manage/api/settings` with `Authorization: Bearer <token>`, form-encoded
 `section`, `key`, `value` and, for a question's answer, `answer=<id>` (`ManageApi`); `POST /manage/ha/token`
 with `token` and `next` signs the browser in (`ManageServer.HANDOFF`). `GET /manage/api/hello` needs no token
-and answers only that this is a Glassworks panel and its model as Home Assistant shows it. Any page on any site can read it, so a site you visit can learn that a panel answers at an address on your
-network, and its model; no token, setting or name of yours comes with it. Any page may call
-them (CORS `*`): no cookie counts there. Chrome's private-network permission goes only to a page on the local
+and answers only that this is a Glassworks panel and its model as Home Assistant shows it. Any page on any
+site can read it, so a site you visit can learn that a panel answers at an address on your network, and its
+model; no token, setting or name of yours comes with it. Any page may call them (CORS `*`): no cookie counts
+there. Chrome's private-network permission goes only to a page on the local
 network (a private address, `localhost` or a `.local` name).

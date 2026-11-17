@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, usable, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -195,8 +195,15 @@ test("a busy panel's 503 with Retry-After is tried again, a bounded number of ti
   let calls = 0;
   const always = await retrying(async () => (calls++, { status: 503, headers: { get: () => '30' } }), async (ms) => waits.push(ms));
   assert.equal(always.status, 503);
-  assert.equal(calls, TRIES);
-  assert.deepEqual(waits.slice(2), [5000, 5000], 'a long Retry-After waits at most 5 s');
+  assert.equal(calls, 2, 'one wait of 5 s uses the whole budget: no third try');
+  assert.deepEqual(waits.slice(2), [5000], 'a long Retry-After waits at most 5 s in all');
+
+  const split = [];
+  let tries = 0;
+  await retrying(async () => (tries++, { status: 503, headers: { get: () => '4' } }), async (ms) => split.push(ms));
+  assert.deepEqual(split, [4000, 1000], 'the waits together stay within the budget');
+  assert.equal(tries, TRIES);
+  assert.equal(split.reduce((a, b) => a + b, 0), MAX_WAIT_S * 1000);
 
   let once = 0;
   await retrying(async () => (once++, { status: 503, headers: { get: () => null } }), noWait);
@@ -204,4 +211,28 @@ test("a busy panel's 503 with Retry-After is tried again, a bounded number of ti
   let ok200 = 0;
   await retrying(async () => (ok200++, { status: 200, headers: { get: () => '1' } }), noWait);
   assert.equal(ok200, 1);
+});
+
+test('only a local, trusted panel with settings is usable, whatever the list holds', async () => {
+  const ok = { local: true, trusted: true, settings: settings };
+  assert.ok(usable(ok));
+  for (const no of [null, {}, { ...ok, local: false }, { ...ok, local: 'yes' }, { ...ok, trusted: false }, { ...ok, trusted: 1 }, { ...ok, settings: null }])
+    assert.ok(!usable(no), JSON.stringify(no));
+
+  // A list as the page holds it, even with remote entries that somehow carry trust and settings: after readPanel,
+  // nothing off the local network is usable, trusted or has settings.
+  const { seen, fetchFn } = net({
+    'kitchen-panel.local:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: MODEL }] : [200, settings]),
+    '203.0.113.7:8099': (path) => (path === '/manage/api/hello' ? [200, { api: 1, glassworks: true, model: MODEL }] : [200, settings]),
+  });
+  const list = await Promise.all([
+    panelAt('kitchen-panel.local:8099'),
+    { ...panelAt('203.0.113.7:8099'), trusted: true, settings },
+    { ...panelAt('kitchen-panel.local:8099'), local: false, trusted: true, settings },
+  ].map((p) => readPanel(p, 'TOKEN', fetchFn, 6_000, noWait)));
+  const offLan = list.filter((p) => !localHost(new URL(p.origin).hostname) || p.local !== true);
+  assert.equal(offLan.length, 2);
+  for (const p of offLan) assert.ok(!p.trusted && !p.settings && !usable(p), JSON.stringify(p));
+  assert.deepEqual(list.map(usable), [true, false, false]);
+  assert.ok(!seen.some(([host]) => host === '203.0.113.7:8099'));
 });
