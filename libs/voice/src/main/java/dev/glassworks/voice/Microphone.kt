@@ -84,7 +84,7 @@ internal class Microphone(
         while (running.get()) {
             val rec = open()
             if (rec == null) {
-                onOpenFailed()
+                if (running.get()) onOpenFailed()
                 sleepQuietly(5_000)
                 continue
             }
@@ -104,7 +104,8 @@ internal class Microphone(
         while (running.get()) {
             val n = rec.read(frame, filled, frameSamples - filled)
             if (n < 0) {
-                onReadFailed(n)
+                // A read that outlived stop()'s join: a stopped microphone reports nothing.
+                if (running.get()) onReadFailed(n)
                 return
             }
             filled += n

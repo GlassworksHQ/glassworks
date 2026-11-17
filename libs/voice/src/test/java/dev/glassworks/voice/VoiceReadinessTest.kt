@@ -211,16 +211,51 @@ class VoiceReadinessTest {
     }
 
     @Test
-    fun aLoadThatFindsEveryModelStillClearsWhatAKilledDownloadLeft() {
-        val dir = Files.createTempDirectory("models").toFile()
-        val model = File(dir, "w.tflite").apply { writeBytes(ByteArray(64) { 1 }) }
-        val fetcher = ModelFetcher("https://example.invalid", mapOf("w.tflite" to ModelFetcher.sha256(model)), open = { error("nothing to download") })
-        val killed = File(dir, "w.tflite.killed.part").apply { writeBytes(ByteArray(8)); setLastModified(System.currentTimeMillis() - 11 * 60_000) }
-        val live = File(dir, "w.tflite.live.part").apply { writeBytes(ByteArray(8)) }
-        assertEquals(emptyList<String>(), fetcher.missing(dir))
-        assertEquals(emptyList<String>(), fetcher.ensure(dir))
-        assertFalse("a killed download's part is gone", killed.exists())
-        assertTrue("a live download's part stays", live.exists())
+    fun aLoadThatFindsItsModelStillClearsWhatAKilledDownloadLeft() {
+        for ((word, sub) in listOf("hey_jarvis_v0.1" to "", "okay_nabu" to "micro")) {
+            val dir = Files.createTempDirectory("models").toFile()
+            val parts = File(dir, sub).apply { mkdirs() }
+            val killed = File(parts, "w.tflite.killed.part").apply { writeBytes(ByteArray(8)); setLastModified(System.currentTimeMillis() - 11 * 60_000) }
+            val live = File(parts, "w.tflite.live.part").apply { writeBytes(ByteArray(8)) }
+            val e = VoiceEngine(app, VoiceConfig(modelsDir = dir), word, onActiveWordChanged = {}, retryDelay = { 150L }) { Quiet }
+                .also { engine = it; it.start(muted = true) }
+            eventually("$word ready") { e.readiness == VoiceReadiness.Ready }
+            assertFalse("$word: a killed download's part is gone", killed.exists())
+            assertTrue("$word: a live download's part stays", live.exists())
+            e.stop()
+        }
+    }
+
+    @Test
+    fun aStoppedMicrophonesLateReadFailureDoesNotCount() {
+        // The first microphone's read outlasts stop()'s 2 s join, then fails. Later reads wait for audio.
+        val release = java.util.concurrent.CountDownLatch(1)
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        val stuck = java.util.concurrent.atomic.AtomicReference<Thread>()
+        ShadowAudioRecord.setSource(object : ShadowAudioRecord.AudioRecordSource {
+            override fun readInShortArray(audioData: ShortArray, offsetInShorts: Int, sizeInShorts: Int, isBlocking: Boolean): Int {
+                if (reads.getAndIncrement() == 0) {
+                    stuck.set(Thread.currentThread())
+                    while (release.count > 0) try { release.await() } catch (_: InterruptedException) {}
+                    return -3
+                }
+                return try { Thread.sleep(60_000); 0 } catch (_: InterruptedException) { 0 }
+            }
+        })
+        shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        val closed = Semaphore(0)
+        val e = engine { Quiet }.also { it.onMicLevel = { level -> if (level == 0f) closed.release() } }
+        eventually("ready") { e.readiness == VoiceReadiness.Ready }
+        e.setMuted(false)
+        eventually("reading") { stuck.get() != null }
+        e.setMuted(true)
+        assertTrue("muted", closed.tryAcquire(5, TimeUnit.SECONDS))
+        release.countDown()
+        stuck.get().join(5_000)
+        e.setMuted(false)
+        e.micReadFailed(-3)
+        e.micReadFailed(-3)
+        assertEquals("the stopped microphone's failure didn't count", VoiceReadiness.Ready, e.readiness)
     }
 
     @Test

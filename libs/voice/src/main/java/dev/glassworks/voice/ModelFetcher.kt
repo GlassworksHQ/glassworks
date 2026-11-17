@@ -54,6 +54,17 @@ internal class ModelFetcher(
             return c.inputStream
         }
 
+        /**
+         * Deletes the `.part` files in [dir] older than 10 minutes: what a killed download left. A live download's
+         * part is younger. The age comes from the wall clock, and the S1 has no RTC battery: if NTP moves the clock
+         * forward at boot while a download runs, its part can look old and go. That download then fails, and the
+         * engine retries it.
+         */
+        fun sweep(dir: File) {
+            val stale = System.currentTimeMillis() - STALE_PART_MS
+            dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
+        }
+
         fun sha256(f: File): String = f.inputStream().use { input ->
             val md = MessageDigest.getInstance("SHA-256")
             val buf = ByteArray(64 * 1024)
@@ -62,19 +73,11 @@ internal class ModelFetcher(
         }
     }
 
-    /**
-     * Files of this fetcher's set that are absent or don't match their hash. First deletes the `.part` files
-     * a killed process left: every load calls this, even one that finds every model and never calls [ensure].
-     */
-    fun missing(dir: File): List<String> {
-        // A live download's part is younger.
-        val stale = System.currentTimeMillis() - STALE_PART_MS
-        dir.listFiles { f -> f.name.endsWith(".part") && f.lastModified() < stale }?.forEach { it.delete() }
-        return files.filter { (name, sha) ->
-            val f = File(dir, name)
-            !f.isFile || f.length() < 8 || sha256(f) != sha
-        }.keys.toList()
-    }
+    /** Files of this fetcher's set that are absent or don't match their hash. */
+    fun missing(dir: File): List<String> = files.filter { (name, sha) ->
+        val f = File(dir, name)
+        !f.isFile || f.length() < 8 || sha256(f) != sha
+    }.keys.toList()
 
     /**
      * Fetches whatever [missing] reports. Each file goes to a `.part` file first and is renamed only

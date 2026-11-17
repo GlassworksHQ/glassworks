@@ -252,6 +252,8 @@ public class VoiceEngine internal constructor(
             return
         }
         if (showStarting) setModel(VoiceReadiness.Starting)
+        // Every load, even one that finds its model and downloads nothing.
+        ModelFetcher.sweep(if (word is WakeWord.Micro) microDir else modelsDir)
         val failed: Pair<String, (Long) -> VoiceReadiness> = try {
             val next = Loaded(id, word.phrase, load(word))
             if (!install(next)) { closeQuietly(next); return }
