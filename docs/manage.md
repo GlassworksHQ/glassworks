@@ -9,8 +9,9 @@ Other names for it, such as one your router gives it (`panel.lan`) or a name wit
 address": the page only answers to its own addresses and names (see below). It shows how the panel is doing,
 keeps a log, and runs the everyday actions. It's part of the Glassworks core, so every frame has it.
 
-Status: **new, not yet checked on a panel.** It has the same settings as the panel's own menu, and
-changes them the same way.
+Status: **checked on an S1 Plus on 2026-11-14** (#178): sign-in through Home Assistant, every page, and HA's
+**Visit**. Not checked on a panel yet: that Home Assistant keeps no token for the page after a sign-in (#33).
+It has the same settings as the panel's own menu, and changes them the same way.
 
 ## What's on it
 

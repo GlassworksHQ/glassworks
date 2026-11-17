@@ -70,6 +70,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `install` | `{ how, href? }`: one sentence on how it installs. `href` is only for a frame that installs from somewhere other than Kiln; a frame with `kiln` has none (the S1 installs from Kiln) |
 | `ratings` | The nine install ratings, each `{ value, detail?, label? }` (`label`: the card's tag in the frame's own words, e.g. the Mirror's reversibility): `difficulty`, `reversible`, `modifiesAndroid`, `root`, `opensDevice`, `vendorApps`, `wipes`, `backup`, `updates` |
 | `ratingsNote`, `notice` | Optional. A sentence of context; something a buyer must know |
+| `legacy` | Optional. One line on the card for a frame that runs the legacy build (Android 6–7, #198): `Legacy: frozen engine, your Home Assistant only` on the Mirror. Generic Android says which devices get it |
 | `unverified` | Optional. `true` when any of it comes from writeups rather than a real device |
 | `credits` | Optional. The outside work the frame stands on, and who made it ([below](#credits)) |
 | `facts` | Optional, not on a tested device. What its panels show, for the checklist ([below](#how-complete-it-is)) |

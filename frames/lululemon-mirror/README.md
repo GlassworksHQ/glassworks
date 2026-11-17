@@ -77,9 +77,9 @@ Kiln show ([how](../README.md#credits)).
 
 ## Status
 
-**Status: planned.** Nothing installs on it yet. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
+**Status: planned.** There is no release for it yet, and Kiln's install is test only. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
 
-The original version runs Android 6.0.1, and S1 Kiosk needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Kiln's Mirror recipe installs the legacy build of Glassworks for generic Android (`dev.glassworks.generic_android.legacy`, #198) instead, which asks for Android 6.0 (API 23); it doesn't run on a Mirror yet. Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
+The original version runs Android 6.0.1, and S1 Kiosk needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Kiln's Mirror recipe installs the legacy build of Glassworks for generic Android (`dev.glassworks.generic_android.legacy`, #198) instead, which asks for Android 6.0 (API 23). It has run on a Mirror: it starts with no crashes and stands upright (2026-11-17, #443), and the dashboard loads after a sign-in from a phone (2026-11-17, #459). It runs a frozen engine and opens only your Home Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
 
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
 
@@ -97,7 +97,7 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-Not available yet. **Test only, today**, at `/lululemon-mirror?apk=local` in Kiln ([its recipe](installer)). Nothing of it has run on a real Mirror yet.
+Not available yet. **Test only, today**, at `/lululemon-mirror?apk=local` in Kiln ([its recipe](installer)). The fastboot path has run end to end on a real Mirror from the command line, with `tools/mirror/flash-node.ts`, which runs the same steps without a browser ([image-patch.md](research/image-patch.md#the-first-real-flash-2026-11-16-verified-by-the-root)). It hasn't run from Kiln's page yet.
 
 **Over fastboot, from lululemon's software or the community image (#40):**
 

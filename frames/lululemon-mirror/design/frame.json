@@ -7,7 +7,8 @@
   "status": "planned",
   "summary": "A full-length mirror with a 40-inch portrait screen behind it. The original version takes a new Android image over fastboot.",
   "tagline": "A 40-inch mirror with Android behind it.",
-  "notice": "Not installable yet: today's app needs Android 8.0, and the Mirror runs 6.0.1. Installing will erase lululemon's software, with no backup. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target.",
+  "notice": "Test only for now: Kiln installs the legacy build of Glassworks, which has no release yet. Installing will erase lululemon's software, with no backup. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target.",
+  "legacy": "Legacy: frozen engine, your Home Assistant only",
   "model": {
     "body": {
       "shape": "rect",
@@ -433,8 +434,8 @@
     "unverified": ["install", "silentUpdates", "kiosk", "setup", "branding"],
     "notes": {
       "install": "Kiln's Mirror recipe runs in test only (/lululemon-mirror?apk=local).",
-      "silentUpdates": "Seen with the probe app on 2026-11-16 (privileged-app.md); Glassworks itself hasn't run on a Mirror yet.",
-      "kiosk": "Seen with the probe app on 2026-11-16 (first-boot.md), not yet with Glassworks.",
+      "silentUpdates": "Seen with the probe app on 2026-11-16 (privileged-app.md); not yet with Glassworks.",
+      "kiosk": "The only home screen: seen with the probe app on 2026-11-16 (first-boot.md) and with Glassworks on 2026-11-17. The other checks aren't done on a Mirror yet.",
       "setup": "It has no touch. The setup hotspot is meant for it, and hasn't run on a Mirror yet."
     }
   }

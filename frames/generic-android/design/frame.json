@@ -7,6 +7,7 @@
   "status": "planned",
   "summary": "Core plus the panes that need no special hardware. No root.",
   "tagline": "Any Android device, as an app. No root.",
+  "legacy": "On Android 6–7, legacy: frozen engine, your Home Assistant only",
   "model": {
     "body": {
       "shape": "rect",

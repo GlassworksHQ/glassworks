@@ -8,6 +8,11 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Glassworks for Android 6 and 7 tablets and the lululemon Mirror.** Devices on Android 6.0 to 7.1 get
+  a legacy build of Glassworks for generic Android, a separate app with its own updates. Kiln picks it for
+  them, and it is what Kiln installs on the Mirror. It runs a frozen web engine that gets no more security
+  fixes, so it opens only your Home Assistant: maps, iframe cards and anything else from another address
+  stay blank, with a note. There is no release yet; Kiln installs it as a test.
 - **Voice says when it can't get ready.** When the wake word model doesn't download (no internet, a
   certificate the panel can't verify, an HTTP error), fails its check, can't be saved, or the microphone
   doesn't work or isn't allowed, the Assist page on the panel and on the Manage page says so in words, with

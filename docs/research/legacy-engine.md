@@ -1,11 +1,12 @@
 # Legacy engine: does GeckoView 144 run on Android 6–7, locked to Home Assistant?
 
-**Status (2026-11-15): working for the engine; the app itself is not yet.** GeckoView 144.0.2 (arm64-v8a) runs
+**Status (2026-11-17): working for the engine and the app.** GeckoView 144.0.2 (arm64-v8a) runs
 on a real lululemon Mirror (Android 6.0.1) and on API 23 and API 25 emulators. It draws Home Assistant's real
 frontend and runs the S1 app's helper extension (`window.s1kiosk`). The lockdown refuses everything outside the
 dashboard's origin, with a note on the page, and nothing reached the other origin in any run. The emulators'
-black tiles don't happen on the Mirror's Adreno 306. The S1 app's own screens still call API 24+ and crash on
-Android 6.
+black tiles don't happen on the Mirror's Adreno 306. Until Phase B (#412) the app's own screens called API 24+ and
+crashed on Android 6. Now the legacy build starts on the Mirror with no crashes (2026-11-17, #443) and loads the
+dashboard after a sign-in from a phone (2026-11-17, #459).
 
 Devices: a lululemon Studio Mirror (community image, Android 6.0.1, 929 MB RAM, Adreno 306, no root), run by the
 maintainer's root thread; Android emulators `system-images;android-23;default;arm64-v8a` (Android 6.0) and
@@ -310,8 +311,9 @@ the message says "…isn't the Home Assistant address the panel started with…"
 ## What runs on the legacy engine
 
 What #198's item 3 asks: the same core and panes as the current engine, where the engine allows. Two layers:
-the engine (verified on the Mirror and the emulators, above), and the app's own code on Android 6–7, which
-doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
+the engine (verified on the Mirror and the emulators, above), and the app's own code on Android 6–7. The app ran
+into API 24 at start (step 9); since Phase B (#412) it runs. On the Mirror it starts with no crashes (2026-11-17,
+#443) and loads the dashboard after a sign-in from a phone (2026-11-17, #459).
 
 **The engine, in the page:**
 
@@ -319,7 +321,7 @@ doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
 |---|---|---|
 | The dashboard (HA's frontend), sign-in through `/auth/authorize` | Works | Verified on the Mirror and API 23 (steps 5, 11) |
 | The helper extension: `window.s1kiosk`, the native port | Works | Verified (steps 4, 11) |
-| Hiding HA's header and sidebar, the external-auth bridge (`window.externalApp`) | Same `content.js`; needs the app's MainActivity to answer it | Untested: the app doesn't run on API 23 yet |
+| Hiding HA's header and sidebar, the external-auth bridge (`window.externalApp`) | Same `content.js`; needs the app's MainActivity to answer it | The bridge: verified on the Mirror (2026-11-17, #459: after a sign-in from a phone, the dashboard loaded signed in). Hiding the header and sidebar: untested |
 | Camera cards | HLS only: WebRTC is off | Read (HA's frontend falls back when `RTCPeerConnection` is missing); untested |
 | Map cards, iframe and webpage cards, brand icons, anything from another origin | Blocked, with the note | Verified for the kinds of request (steps 4, 12); not with a real map card |
 | Downloads (backups, logs) | Refused | Verified (step 12) |
