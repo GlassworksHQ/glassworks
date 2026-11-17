@@ -43,7 +43,7 @@ class SettingsLayoutMockups {
 
     @Before fun setUp() {
         Mockup.interFromSources()
-        KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel"; zoom = 1.25f; presenceRangeM = 1.8f; nightWindow = "22:00-07:00" }
+        KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel"; zoom = 1.25f; presenceRangeM = 1.8f }
     }
 
     @After fun shutdown() = panes.shutdown()

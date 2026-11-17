@@ -1,0 +1,10 @@
+{
+  "id": "screen",
+  "name": "Screen",
+  "blueprints": [
+    {
+      "file": "blueprints/panel-night-mode.yaml",
+      "summary": "At night the panels turn their screen off sooner and keep it dimmer, then go back to your day settings."
+    }
+  ]
+}

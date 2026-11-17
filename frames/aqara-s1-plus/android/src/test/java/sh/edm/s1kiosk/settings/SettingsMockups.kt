@@ -44,7 +44,7 @@ class SettingsMockups {
     ): KioskSettingsOverlay {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val app = RuntimeEnvironment.getApplication()
-        KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel"; zoom = 1.25f; presenceRangeM = 1.8f; nightWindow = "22:00-07:00" }
+        KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel"; zoom = 1.25f; presenceRangeM = 1.8f }
         val radio = radioDefinition(app, FixedReadout(if (radioRunning) facts else null, running = radioRunning))
         val panes = listOf(
             MenuFixture.cardOnly("voice", "Voice", "Assist and timers"),
@@ -103,7 +103,6 @@ class SettingsMockups {
         shot("settings-09-voice", menu(radioRunning = true), "voice")
         shot("settings-10-log", menu(radioRunning = true), "log")
         shot("settings-11-idle-picker", menu(radioRunning = true), "screen") { it.previewEdit("Turn off when idle") }
-        shot("settings-12-night-window", menu(radioRunning = true), "screen") { it.previewEdit("At night") }
         shot("settings-13-radio-on", menu(radioRunning = true, facts = coordinator), "radio")
         shot("settings-14-radio-off-asks", menu(radioRunning = true, facts = coordinator), "radio") { it.previewConfirm("radio") }
         shot("settings-15-pane-cant-run", menu(radioRunning = true, extra = listOf(cantRun)), "example")

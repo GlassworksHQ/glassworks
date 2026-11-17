@@ -10,7 +10,7 @@ import java.util.Locale
 
 /**
  * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Log and
- * About (#63). Network and Security have nothing yet. Durations and the night window are picked, the
+ * About (#63). Network and Security have nothing yet. Durations are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
  * for a restart, as their adb extras always did.
@@ -27,6 +27,8 @@ class CoreSettings(
     private val live: Live = Live(),
     /** What the device has for the Screen page: rows it can't back are left out ([ScreenHardware.of]). */
     private val hardware: ScreenHardware,
+    /** The Screen page's Blueprints card (Panel night mode, #473), or null for none. */
+    private val screenBlueprints: SettingsItem.Blueprints? = null,
     /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"); null leaves the row out. */
     private val account: () -> String? = { null },
     /** The app's name, before [version] in About ([dev.glassworks.platform.AppBuild.product]). */
@@ -67,18 +69,13 @@ class CoreSettings(
             ) { prefs.extraSecureHosts = it },
             setupOverNetwork(),
         )),
-        SettingsPlace.SCREEN to SettingsSection("screen", "Screen", presence() + listOfNotNull(
+        SettingsPlace.SCREEN to SettingsSection(SCREEN, "Screen", presence() + listOfNotNull(
             idle(),
-            SettingsItem.TimeRange(
-                "At night", value = { prefs.nightWindow },
-                shown = { w -> if (w.isBlank()) "Off" else w.replace("-", " – ") },
-            ) { v, done -> prefs.nightWindow = v; live.brightness(); done(null) }, // the night cap follows the window
-            SettingsItem.Duration(
-                "At night, turn off after", value = { prefs.nightIdleOffSec }, choices = NIGHT_CHOICES, shown = ::afterIdle,
-            ) { v, done -> prefs.nightIdleOffSec = v; done(null) },
             if (hardware.light) switch("Brightness", "Follows the room's light", { prefs.autoBrightness }) { prefs.autoBrightness = it; live.brightness() } else null,
             // Android's settings need a finger on the panel's own screen.
             deviceSettings?.takeIf { hardware.touch },
+            // Night is Home Assistant's to decide (#473): the blueprint turns the screen off sooner and dims it.
+            screenBlueprints,
         )),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
@@ -135,7 +132,7 @@ class CoreSettings(
             "Turn off when idle", value = { if (prefs.screenMode == "always") 0 else prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
         ) { v, done ->
             prefs.idleOffSec = v
-            // Never keeps an "always" screen on: in "presence" the night's timeout would still turn it off.
+            // Never leaves the mode as it is, so an "always" screen stays on.
             if (v > 0) prefs.screenMode = "presence"
             done(null)
         }
@@ -179,6 +176,8 @@ class CoreSettings(
     companion object {
         /** The dashboard's page: where Home Assistant is and how its dashboard shows. */
         const val DASHBOARD_TITLE = "Home Assistant & dashboard"
+        /** The Screen page's id, and its blueprints' `pane` in the app's blueprint list (core/src/main/java/dev/glassworks/screen/page.json). */
+        const val SCREEN = "screen"
         const val ACCOUNT_TITLE = "Dashboard sign-in"
         const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
@@ -188,7 +187,6 @@ class CoreSettings(
         /** The presence sensor's furthest (Home Assistant's `Presence range` number goes as far). */
         const val RANGE_MAX_M = 2.5f
         val IDLE_CHOICES = listOf(30, 60, 120, 300, 600, 1800, 0)
-        val NIGHT_CHOICES = listOf(10, 20, 30, 60, 120, 300)
 
         /** "After 2 minutes", "After 45 s", "Never" (0). */
         fun afterIdle(sec: Int): String = when {

@@ -1,7 +1,8 @@
 # Blueprints
 
 Some things a panel does need an automation in Home Assistant: ring the panels when the doorbell rings,
-turn the lights on when someone walks up to the panel. Each pane that has such automations ships them as
+turn the lights on when someone walks up to the panel, dim the screens at night. Each pane that has such
+automations ships them as
 Home Assistant [blueprints](https://www.home-assistant.io/docs/automation/using_blueprints/). You add one
 to Home Assistant, then make an automation from it and pick your own doorbell, lights and panels.
 
@@ -9,25 +10,64 @@ A blueprint is a YAML file that Home Assistant's own blueprint feature keeps in 
 gets installed in Home Assistant, and the panel never writes to it: Home Assistant's own import dialog
 adds the file, after you press Import. Delete it from **Settings → Automations & scenes → Blueprints**.
 
-**Status (2026-11-15): new.** The four blueprints pass Home Assistant 2026.11.1's own config check
-([how](research/pane-blueprints.md)); none has run on a panel yet.
+**Status (2026-11-17): new.** The five blueprints pass Home Assistant's own config check
+([how](research/pane-blueprints.md)). Panel night mode also ran in a scratch Home Assistant 2026.11.2
+against stand-in numbers. None has run on a panel yet.
 
 ## The blueprints
 
-| Pane | Blueprint | What it does |
+| Page | Blueprint | What it does |
 |---|---|---|
+| Screen | Panel night mode | At night the panels turn their screen off sooner and keep it dimmer, then go back to your day settings ([below](#panel-night-mode)) |
 | Notifications | Doorbell on Glassworks panels | When the doorbell rings, the panels ring and show the door's view and camera ([the doorbell](notifications.md#the-doorbell)) |
 | Notifications | Ask on the panels | A question with buttons on the panels. Each button runs a script you pick ([details](notifications.md#ask-on-the-panels)) |
 | Camera | Lights on at the panel | Someone moves in front of the panel: lights on, and off again after a while |
 | Camera | Snapshot when away | Movement at the panel while nobody is home sends its picture to your phone |
 
 The files are in each pane's `blueprints/` folder, such as
-[`panes/notifications/blueprints/`](../panes/notifications/blueprints/).
+[`panes/notifications/blueprints/`](../panes/notifications/blueprints/). The Screen page's is in
+[`core/blueprints/`](../core/blueprints/).
+
+## Panel night mode
+
+The panel has no clock-based schedule of its own. Up to 0.4.3 it had one: **At night** (22:00–07:00)
+with **At night, turn off after** (20 s) and auto brightness capped at 20%. Home Assistant decides when
+it is night now ([principles](principles.md): HA is the brain), and this blueprint does what that
+setting did, for any number of panels.
+
+1. Add it from the panel's **Settings → Screen**, at the bottom of the page, or from the Manage page's
+   Screen page.
+2. Make an automation from it. Pick each panel's **Idle timeout** (`number.<panel>_idle_timeout`) and,
+   to dim the screens too, each panel's **Max auto brightness** (`number.<panel>_max_auto_brightness`).
+   The first list offers only duration numbers. The second can't be narrowed in Home Assistant's picker,
+   so pick only *Max auto brightness* there: the automation skips any number that isn't in %.
+3. **Night is when** takes any condition. It starts as a Time condition from 22:00 to 07:00. For the sun,
+   replace it with a Sun condition: after sunset, before sunrise. Any other condition works too, such
+   as an alarm being armed.
+4. The defaults are the old setting's: 20 s and 20% at night, the panel's own 120 s and 100% by day.
+
+It checks once a minute, and moves a panel only between your two values: at night, one still at the day
+value goes to the night value; by day, one still at the night value goes back. So it acts once when night
+starts and once when it ends. A value you set by hand (say 5 minutes at 14:00) is neither, so it stays,
+day and night, until you set the panel back to one of the two. A panel that is at some other value when
+you create the automation stays there too: set it to the day values once. The panel's own value is the
+automation's memory, so a restart of Home Assistant in the night loses nothing, and a panel that was off
+or restarting catches up within a minute.
+
+An idle timeout above 0 from Home Assistant also turns *Screen mode* back to `presence`, as the panel's own
+**Turn off when idle** does: a panel set to stay on (`always`) would otherwise never turn off. So a panel
+you keep always on doesn't belong in this automation. *Max auto brightness* limits the brightness that follows the room's light: a
+brightness you set on the panel's `Screen` light, and a screen held on for a high or critical
+notification, don't follow it.
+
+A panel that Home Assistant added before this version has its *Idle timeout* entity turned off: turn it
+on from the panel's device page in Home Assistant first. *Max auto brightness* is new and on.
 
 ## Adding one from the panel
 
 Open **Settings → Panes →** the pane. Its page has a **Blueprints for Home Assistant** card between the
-pane's own settings and its *In Home Assistant* list. A pane that is off shows none, and one this
+pane's own settings and its *In Home Assistant* list. The Screen page (**Settings → Screen**) has the same
+card at its end, with Panel night mode. A pane that is off shows none, and one this
 panel can't run isn't listed at all. What the buttons do depends on the panel's Home Assistant
 sign-in (the QR code from setup):
 
@@ -67,6 +107,9 @@ Assistant asks before it replaces the one you have.
 3. Write the app's list again:
    `./gradlew :kiosk:testDebugUnitTest --tests '*BlueprintCatalogTest*' -Ps1RegenGolden=true`, then
    `npm run panes -w @glassworks/frame-card`. `BlueprintCatalogTest` fails until both are done.
-4. Add sample inputs to [`tools/blueprints/samples.yaml`](../tools/blueprints/samples.yaml) and run
+4. A page of the core's own settings (Screen) lists its blueprints the same way, in a `page.json` next to
+   its code, with the YAML in `core/blueprints/`. The panel's page gets the card from
+   `S1Settings.model`'s `blueprints`, as a pane's does.
+5. Add sample inputs to [`tools/blueprints/samples.yaml`](../tools/blueprints/samples.yaml) and run
    [`tools/blueprints/ha-check.sh`](../tools/blueprints/ha-check.sh) with a Python that has Home
    Assistant installed. Use only the entities and actions the panel really has.

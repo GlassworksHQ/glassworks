@@ -63,6 +63,7 @@ object MenuFixture {
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             live = live,
             hardware = hardware,
+            screenBlueprints = blueprints(CoreSettings.SCREEN),
             account = { account },
             panelIp = panelIp,
         )

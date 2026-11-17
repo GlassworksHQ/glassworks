@@ -166,15 +166,6 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
         get() = sp.getInt("idle_off_sec", 120)
         set(v) = sp.edit().putInt("idle_off_sec", v).apply()
 
-    /** Night window "HH:MM-HH:MM" (local time); empty = no night mode. */
-    override var nightWindow: String
-        get() = sp.getString("night_window", "22:00-07:00") ?: ""
-        set(v) = sp.edit().putString("night_window", v.trim()).apply()
-
-    override var nightIdleOffSec: Int
-        get() = sp.getInt("night_idle_off_sec", 20)
-        set(v) = sp.edit().putInt("night_idle_off_sec", v).apply()
-
     override var wakeOnApproach: Boolean
         get() = sp.getBoolean("wake_on_approach", true)
         set(v) = sp.edit().putBoolean("wake_on_approach", v).apply()
@@ -195,10 +186,6 @@ class KioskPrefs(context: Context, secrets: SecretStore = SecretStore.keystore()
     override var maxBrightness: Float
         get() = sp.getFloat("max_brightness", 1.0f)
         set(v) = sp.edit().putFloat("max_brightness", v).apply()
-
-    override var nightMaxBrightness: Float
-        get() = sp.getFloat("night_max_brightness", 0.2f)
-        set(v) = sp.edit().putFloat("night_max_brightness", v).apply()
 
     /** Fixed brightness (0..1) used while auto brightness is off; -1 = system default. */
     override var manualBrightness: Float
