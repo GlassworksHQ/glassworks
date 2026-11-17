@@ -39,7 +39,7 @@ export interface FrameFacts {
   panelRuns?: boolean;
   /** the items whose facts come from code or notes, not yet from a real unit */
   unverified?: CheckKey[];
-  /** the items that don't apply here; each needs its reason in `notes` */
+  /** the shown-only items that don't apply here; each needs its reason in `notes`. An item that counts can't be n/a */
   na?: CheckKey[];
   /** a reason the data can't give, one line per item */
   notes?: Partial<Record<CheckKey, string>>;
@@ -55,7 +55,7 @@ export type GrantWhat = 'microphone' | 'camera' | 'secure-settings' | 'overlay' 
 export interface FrameRun {
   /** the day it ran, YYYY-MM-DD. Without it the values are what we expect, and every item says unverified */
   on?: string;
-  /** the app's version that ran */
+  /** the app's version, or the test build, that ran */
   app?: string;
   /** `--plan`: the device as adb read it */
   plan: { model: string; android: string; sdk: number; abi: Abi; app: string };
@@ -66,8 +66,8 @@ export interface FrameRun {
     home: { how: 'set-home-activity' | 'chooser'; state: 'set' | 'unconfirmed' };
     setupPage: boolean;
   };
-  /** what the panel reports after: its *Silent updates* sensor, word for word */
-  panel: { silentUpdates: string };
+  /** what the panel reports after: its *Silent updates* sensor, word for word. Left out until someone reads it */
+  panel?: { silentUpdates?: string };
   /** what the person saw on the unit that neither reports */
   seen: { hardware?: string[]; kiosk?: Partial<Record<Exclude<KioskCheck, 'onlyHome'>, boolean>>; setup?: SetupWay[]; notes?: Partial<Record<CheckKey, string>> };
 }
@@ -94,7 +94,7 @@ export const WORD_MEANING: Record<Word | 'none', string> = {
   full: 'Everything that counts is there.',
   good: 'It installs from Kiln and runs, and something that counts is still missing.',
   basic: 'The app runs on it as it is.',
-  none: 'Nothing runs on it yet.',
+  none: "It doesn't ship yet: its status is planned or under development.",
 };
 
 export interface Completeness {
@@ -114,7 +114,7 @@ function fromRun(r: FrameRun): FrameFacts {
   const seen = r.seen.hardware;
   return {
     install: ['usb-debugging', ...(r.install.home.how === 'chooser' ? (['home-pick'] as const) : [])],
-    silentUpdates: r.panel.silentUpdates,
+    silentUpdates: r.panel?.silentUpdates,
     hardware: seen || refused.length ? [...(seen ?? []), ...refused] : undefined,
     kiosk: { onlyHome: r.install.home.state === 'set', ...r.seen.kiosk },
     setup: r.seen.setup,
@@ -139,7 +139,10 @@ const RULES: Record<CheckKey, (f: FrameDesign, x: FrameFacts, o: { route?: strin
     if (!['yes', 'partly'].includes(f.ratings.reversible.value)) why.push('No way back.');
     if (!x.install) why.push('Taps on the device not checked yet.');
     else if (x.install.length) why.push(`On the device: ${list(x.install.map((s) => DEVICE_STEPS[s]))}.`);
-    return why.length ? no(...why) : yes('From Kiln, with nothing to tap on the device and a way back.');
+    if (why.length) return no(...why);
+    // a button inside the case (the S1's FEL) is a step with the hands, which the install ratings show; not a tap
+    const hands = f.ratings.opensDevice?.value === 'yes' ? ' Opening it to press a button is a physical step, not a tap on its screen.' : '';
+    return yes(`From Kiln, with nothing to tap on the device's screen and a way back.${hands}`);
   },
   silentUpdates: (_, x) => {
     const m = /^(Yes|No): (.+)$/.exec(x.silentUpdates ?? '');
@@ -196,7 +199,7 @@ export function completeness(f: FrameDesign, o: { base?: Pick<FrameDesign, 'kiln
   const route = f.kiln ?? (f.kind === 'tested' ? o.base?.kiln : undefined);
   const expected = f.unverified === true || (f.kind === 'tested' && f.run?.on === undefined);
   const items = CHECKS.map((key): CheckItem => {
-    const na = x.na?.includes(key);
+    const na = !COUNTED.includes(key) && x.na?.includes(key);
     const v = na ? { state: 'na' as const, reason: x.notes?.[key] ?? '' } : RULES[key](f, x, { route, clarity: o.clarity });
     return {
       key, label: CHECK_TEXT[key], ...v,
@@ -250,6 +253,8 @@ function factProblemsOf(x: unknown, out: string[]) {
   if (x.panelRuns !== undefined && typeof x.panelRuns !== 'boolean') out.push('facts.panelRuns: should be true or false');
   if (x.unverified !== undefined) words('facts.unverified', x.unverified, CHECKS, out);
   if (x.na !== undefined) words('facts.na', x.na, CHECKS, out);
+  // an n/a counts as ticked, so on an item that counts it would give a word the data never earned
+  if (Array.isArray(x.na)) for (const k of x.na) if (COUNTED.includes(k)) out.push(`facts.na: ${k} decides the word, so it can't be n/a`);
   if (x.notes !== undefined) notes('facts.notes', x.notes, out);
   if (Array.isArray(x.na)) for (const k of x.na) if (typeof k === 'string' && !(isObj(x.notes) && isText(x.notes[k]))) out.push(`facts.na: ${k} needs its reason in facts.notes.${k}`);
 }
@@ -282,8 +287,13 @@ function runProblemsOf(r: unknown, out: string[]) {
     if (!isObj(h) || !['set-home-activity', 'chooser'].includes(h.how as string) || !['set', 'unconfirmed'].includes(h.state as string)) out.push('run.install.home: should be { how: set-home-activity or chooser, state: set or unconfirmed }');
     if (typeof i.setupPage !== 'boolean') out.push('run.install.setupPage: should be true or false');
   }
-  if (!isObj(r.panel) || typeof r.panel.silentUpdates !== 'string' || !SENSOR.test(r.panel.silentUpdates)) out.push('run.panel.silentUpdates: the panel\'s Silent updates sensor, word for word ("Yes: …" or "No: …")');
-  else only('run.panel', r.panel, ['silentUpdates'], out);
+  if (r.panel !== undefined) {
+    if (!isObj(r.panel)) out.push('run.panel: should be what the panel reports, { silentUpdates }');
+    else {
+      only('run.panel', r.panel, ['silentUpdates'], out);
+      if (r.panel.silentUpdates !== undefined && (typeof r.panel.silentUpdates !== 'string' || !SENSOR.test(r.panel.silentUpdates))) out.push('run.panel.silentUpdates: the panel\'s Silent updates sensor, word for word ("Yes: …" or "No: …")');
+    }
+  }
   const s = r.seen;
   if (!isObj(s)) return out.push('run.seen: should be an object, {} when nothing else was seen');
   only('run.seen', s, ['hardware', 'kiosk', 'setup', 'notes'], out);
@@ -295,7 +305,7 @@ function runProblemsOf(r: unknown, out: string[]) {
 
 /**
  * What's wrong with a frame's `facts` or `run`, one line per problem; empty when it's fine.
- * glassworks.dev's build and this package's tests run it. A tested device has a `run` and no `facts`; any other kind has `facts` and no `run`.
+ * glassworks.dev's build, Kiln's frame-designs test and this package's tests run it. A tested device has a `run` and no `facts`; any other kind has `facts` and no `run`.
  */
 export function factProblems(f: Pick<FrameDesign, 'kind'> & { facts?: unknown; run?: unknown }): string[] {
   const out: string[] = [];

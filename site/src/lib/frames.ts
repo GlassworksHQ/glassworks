@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, creditProblems, factProblems, kindProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
+import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, creditProblems, factProblems, keyProblems, kindProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
 
 /*
  * The frame catalog: every `frames/<id>/design/frame.json` in this repo, read at build time (the
@@ -25,6 +25,9 @@ function check(file: string, f: FrameDesign, id: string, all: FrameDesign[]) {
     throw new Error(`${file}: ${why} (format: frames/README.md)`);
   };
   if (f.id !== id) bad(`id "${f.id}" isn't its folder's name "${id}"`);
+  // only FrameDesign's own fields: a stray `serial` or a misspelt key fails here
+  const keys = keyProblems(f);
+  if (keys.length) bad(keys.join("; "));
   if (!(f.status in ORDER)) bad(`status "${f.status}" isn't one of ${Object.keys(ORDER).join(", ")}`);
   // full frame, device frame or tested device; a tested device names the frame it installs as (#403)
   const kind = kindProblems(f, all);

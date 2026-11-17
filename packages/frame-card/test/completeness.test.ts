@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { completeness, factProblems, type CheckKey, type FrameDesign, type FrameFacts, type FrameRun } from '../src';
+import { completeness, factProblems, keyProblems, type CheckKey, type FrameDesign, type FrameFacts, type FrameRun } from '../src';
 
 const FRAMES = join(__dirname, '../../../frames');
 const ids = readdirSync(FRAMES, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
@@ -66,10 +66,16 @@ describe('the word', () => {
     expect(word(frame({ status: 'alpha' }))).toBe('full');
   });
 
-  it('counts an item that doesn\'t apply as ticked', () => {
-    const f = facts({ hardware: undefined, na: ['hardware'], notes: { hardware: 'It is a screen and nothing else.' } });
-    expect(item(f, 'hardware')).toMatchObject({ state: 'na', reason: 'It is a screen and nothing else.' });
+  it('shows an n/a on an item that is shown only, with its reason', () => {
+    const f = facts({ branding: undefined, na: ['branding'], notes: { branding: 'It has no screen at power-on.' } });
+    expect(item(f, 'branding')).toMatchObject({ state: 'na', reason: 'It has no screen at power-on.' });
     expect(word(f)).toBe('full');
+  });
+
+  it('never lets an n/a on an item that counts earn a word: no Full without Kiln', () => {
+    const f = frame({ kiln: undefined, facts: { ...FULL, na: ['install'], notes: { install: 'It comes with Glassworks.' } } });
+    expect(item(f, 'install')).toMatchObject({ state: 'no', reason: 'Not in Kiln yet.' });
+    expect(word(f)).toBe('basic');
   });
 
   it('says it is unverified when an item that counts isn\'t from a real unit, and not for one that is shown only', () => {
@@ -82,7 +88,10 @@ describe('the word', () => {
 
 describe('each item', () => {
   it('install: needs Kiln, a way back and nothing to tap on the device', () => {
-    expect(item(frame(), 'install')).toMatchObject({ state: 'yes', reason: 'From Kiln, with nothing to tap on the device and a way back.' });
+    const screen = "From Kiln, with nothing to tap on the device's screen and a way back.";
+    expect(item(frame({ ratings: { ...frame().ratings, opensDevice: { value: 'no' } } }), 'install')).toMatchObject({ state: 'yes', reason: screen });
+    // the S1's FEL button: opening the case is a physical step, which the install ratings show, not a tap
+    expect(item(frame(), 'install').reason).toBe(`${screen} Opening it to press a button is a physical step, not a tap on its screen.`);
     expect(item(frame({ kiln: undefined }), 'install').reason).toBe('Not in Kiln yet.');
     expect(item(frame({ ratings: { ...frame().ratings, reversible: { value: 'no' } } }), 'install').reason).toBe('No way back.');
     expect(item(frame({ ratings: { ...frame().ratings, reversible: { value: 'partly' } } }), 'install').state).toBe('yes');
@@ -171,6 +180,16 @@ describe('a tested device', () => {
     expect(item(r, 'hardware').reason).toBe('Not yet: the microphone: Android refused it.');
   });
 
+  it('fails kiosk when Kiln couldn\'t confirm the home screen', () => {
+    const r = tested({ install: { ...run.install, home: { how: 'set-home-activity', state: 'unconfirmed' } } });
+    expect(item(r, 'kiosk')).toMatchObject({ state: 'no', reason: 'Not yet: the only home screen.' });
+    expect(item(tested(), 'kiosk').state).toBe('yes');
+  });
+
+  it('says nobody read the sensor when the run has no panel report', () => {
+    expect(item(tested({ panel: undefined }), 'silentUpdates')).toMatchObject({ state: 'no', reason: 'No panel has reported it yet.', unverified: false });
+  });
+
   it('says its hardware isn\'t checked when the run saw none: it is one device, not many', () => {
     expect(item(tested({ seen: {} }), 'hardware').reason).toBe('Not checked on a real unit yet.');
   });
@@ -203,19 +222,30 @@ describe('the frames', () => {
     expect(of('aqara-s1-plus').items.filter((i) => i.state !== 'yes').map((i) => i.key)).toEqual(['hardware']);
   });
 
-  it('marks every Pixel Tablet value unverified until the root\'s run', () => {
-    expect(read('google-pixel-tablet').run?.on).toBeUndefined();
-    expect(of('google-pixel-tablet').items.every((i) => i.unverified)).toBe(true);
+  it('takes the Pixel Tablet\'s checklist from the root\'s run on 2026-11-17, with nothing unverified', () => {
+    const f = read('google-pixel-tablet');
+    expect(f.run?.on).toBe('2026-11-17');
+    expect(f.unverified).toBeUndefined();
+    const c = of('google-pixel-tablet');
+    expect(c.items.filter((i) => i.unverified)).toEqual([]);
+    expect(Object.fromEntries(c.items.map((i) => [i.key, i.state]))).toEqual({
+      install: 'no', silentUpdates: 'no', hardware: 'no', kiosk: 'no', setup: 'yes', recovery: 'yes', branding: 'no', proof: 'no',
+    });
+  });
+
+  it.each(ids)('%s: has only frame.json\'s own fields', (id) => {
+    expect(keyProblems(read(id))).toEqual([]);
   });
 });
 
 describe('factProblems', () => {
-  it.each([
+  it.each<[string, unknown, string]>([
     ['a sensor answer in its own words', { kind: 'full', facts: { silentUpdates: 'yes' } }, 'facts.silentUpdates: the panel\'s Silent updates sensor, word for word ("Yes: …" or "No: …")'],
     ['an unknown step', { kind: 'full', facts: { install: ['press-a-button'] } }, 'facts.install: should be a list of usb-debugging, home-pick'],
     ['an unknown kiosk check', { kind: 'full', facts: { kiosk: { fast: true } } }, 'facts.kiosk: should map onlyHome, noVendorUi, survivesReboot, sleepsAndWakes to true or false'],
     ['no way to set it up', { kind: 'full', facts: { setup: [] } }, 'facts.setup: should be a list of screen, hotspot, bluetooth, computer'],
-    ['n/a without a reason', { kind: 'full', facts: { na: ['hardware'] } }, 'facts.na: hardware needs its reason in facts.notes.hardware'],
+    ['n/a without a reason', { kind: 'full', facts: { na: ['branding'] } }, 'facts.na: branding needs its reason in facts.notes.branding'],
+    ...(['install', 'silentUpdates', 'hardware', 'kiosk', 'setup'] as const).map((k) => [`n/a on ${k}, which counts`, { kind: 'full', facts: { na: [k], notes: { [k]: 'A reason.' } } }, `facts.na: ${k} decides the word, so it can't be n/a`] as [string, unknown, string]),
     ['a verdict written by hand', { kind: 'full', facts: { word: 'full' } }, 'facts.word: not part of the record (no serials, fingerprints or addresses)'],
     ['a run on a full frame', { kind: 'full', run: {} }, 'run: only a tested device has one; record what this frame\'s panels show in facts'],
     ['facts on a tested device', { kind: 'tested', facts: {}, run: undefined }, 'facts: a tested device\'s come from its run on a real unit; record them in run'],
@@ -225,6 +255,10 @@ describe('factProblems', () => {
 
   it('fails a tested device without a run', () => {
     expect(factProblems({ kind: 'tested' })).toEqual(['run: a tested device records its run on a real unit (frames/README.md#a-tested-devices-run)']);
+  });
+
+  it('rejects a field frame.json doesn\'t have, such as a serial beside the run', () => {
+    expect(keyProblems({ ...read('google-pixel-tablet'), serial: 'x' })).toEqual(['serial: not a frame.json field (frames/README.md#designframejson)']);
   });
 
   it('keeps serials and fingerprints out of a run', () => {

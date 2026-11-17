@@ -240,7 +240,8 @@ async function Device({ params }: { params: Params }) {
             </div>
           ))}
         </dl>
-        {(!live || d.unverified) && <p className={s.expected}>Expected. Nothing has run on this device yet.</p>}
+        {/* a tested device's dated run on a real unit is the install these ratings describe */}
+        {((!live && !d.run?.on) || d.unverified) && <p className={s.expected}>Expected. Nothing has run on this device yet.</p>}
       </section>
 
       <p className={s.back}>

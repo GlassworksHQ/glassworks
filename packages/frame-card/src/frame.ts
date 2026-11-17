@@ -160,6 +160,21 @@ export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'ap
   return out;
 }
 
+/** Every field a frame.json may have. A `Record` over FrameDesign's keys, so the compiler fails when the two differ. */
+const FIELDS: Record<keyof FrameDesign, true> = {
+  id: true, kind: true, base: true, name: true, brand: true, aka: true, status: true, summary: true, tagline: true, project: true,
+  kiln: true, model: true, recovery: true, render: true, display: true, boot: true, abis: true, app: true, specs: true, panes: true,
+  provides: true, install: true, ratings: true, ratingsNote: true, notice: true, unverified: true, credits: true, facts: true, run: true,
+};
+
+/**
+ * The keys a frame.json has that FrameDesign doesn't, one line each; empty when there are none. A stray `serial`
+ * or a misspelt field never reaches a page. Kiln's tests and glassworks.dev's build run it.
+ */
+export function keyProblems(f: object): string[] {
+  return Object.keys(f).filter((k) => !Object.hasOwn(FIELDS, k)).map((k) => `${k}: not a frame.json field (frames/README.md#designframejson)`);
+}
+
 /** The card's credit line, from the first credit marked `card`: "Built on Glass Panes by git-nimrod". */
 export function cardCredit(f: Pick<FrameDesign, 'credits'>): string | undefined {
   const c = f.credits?.find((x) => x.card);

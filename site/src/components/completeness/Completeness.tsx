@@ -1,4 +1,4 @@
-import { WORD_MEANING, WORD_TEXT, type CheckItem, type Completeness } from "@glassworks/frame-card";
+import { CHECK_TEXT, COUNTED, WORD_MEANING, WORD_TEXT, type CheckItem, type Completeness } from "@glassworks/frame-card";
 import s from "./Completeness.module.css";
 
 /*
@@ -10,6 +10,10 @@ import s from "./Completeness.module.css";
 const MARK = { yes: "✓", no: "✗", na: "n/a" } as const;
 const SAID = { yes: "Ticked", no: "Not yet", na: "Doesn't apply" } as const;
 const TONE = { yes: s.ok, no: s.mid, na: s.none } as const;
+
+/** "Install, silent updates, hardware, kiosk and setup", from the items that count */
+const counted = COUNTED.map((k, i) => (i ? CHECK_TEXT[k].toLowerCase() : CHECK_TEXT[k]));
+const DECIDES = `${counted.slice(0, -1).join(", ")} and ${counted[counted.length - 1]} decide the word.`;
 
 function Items({ title, items, flag }: { title: string; items: CheckItem[]; flag: boolean }) {
   return (
@@ -53,7 +57,7 @@ export function CompletenessPanel({ c }: { c: Completeness }) {
             {c.unverified && <span className={s.prov}>Unverified</span>}
           </span>
           <span className={s.meaning}>
-            {WORD_MEANING[w]} Install, silent updates, hardware, kiosk and setup decide the word.
+            {WORD_MEANING[w]} {DECIDES}
             {allExpected && " These are the values we expect: nothing here has run on a real unit yet."}
           </span>
         </div>

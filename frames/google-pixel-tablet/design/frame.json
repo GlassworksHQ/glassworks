@@ -88,8 +88,9 @@
       "value": "planned"
     }
   },
-  "unverified": true,
   "run": {
+    "on": "2026-11-17",
+    "app": "test build 9755076",
     "plan": {
       "model": "Pixel Tablet",
       "android": "17",
@@ -109,9 +110,12 @@
       "home": { "how": "set-home-activity", "state": "set" },
       "setupPage": true
     },
-    "panel": { "silentUpdates": "Yes: Android 12 or newer lets the app update itself" },
     "seen": {
-      "setup": ["screen", "computer"]
+      "setup": ["screen", "computer"],
+      "notes": {
+        "silentUpdates": "Kiln allowed Install unknown apps on 2026-11-17. The panel's Silent updates sensor isn't read yet.",
+        "setup": "Home Assistant added it, and the QR sign-in on its screen loaded the dashboard (2026-11-17)."
+      }
     }
   }
 }

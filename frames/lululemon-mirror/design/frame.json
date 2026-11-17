@@ -426,7 +426,7 @@
   "facts": {
     "install": [],
     "silentUpdates": "Yes: the app is a system app that may install apps",
-    "kiosk": { "onlyHome": true, "survivesReboot": true },
+    "kiosk": { "onlyHome": true },
     "setup": ["computer"],
     "branding": { "bootAnimation": true },
     "panelRuns": false,
