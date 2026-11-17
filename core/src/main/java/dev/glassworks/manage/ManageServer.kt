@@ -56,6 +56,8 @@ class ManageServer(
     private val saveWaitMs: Long = 20_000,
     /** A monotonic clock in ms for the questions' expiry: a wall clock that jumps (NTP, a time zone) mustn't stretch or cut it. */
     private val monoMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** "Allow a new computer" on the Security page, where the app can answer adb's question (#435); null elsewhere. */
+    private val usb: ManageUsbDebugging? = null,
 ) {
     private val random = SecureRandom()
 
@@ -255,7 +257,8 @@ class ManageServer(
                 html(200, pages.log(status, viewer, log.read(level, q), level, q))
             }
             path == "/log/diagnostics.txt" -> diagnostics()
-            path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"])))
+            path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"]),
+                more = usb?.cards(viewer, req.query["usb"]).orEmpty()))
             path == "/about" -> html(200, pages.about(status, viewer))
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
             else -> {
@@ -394,6 +397,8 @@ class ManageServer(
                 is PanelCode.Check.Locked -> html(429, rebootDialog(host.status(), viewer, lockedText()))
             }
             "/settings" -> changeSetting(req, s, viewer)
+            ManageUsbDebugging.ALLOW, ManageUsbDebugging.REMOVE ->
+                usb?.post(req.path, req.form, who(s), homeAssistant = s.with == SignedInWith.HOME_ASSISTANT) ?: HttpResponse.text(404, "Not found.")
             "/security/signout" -> {
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }
