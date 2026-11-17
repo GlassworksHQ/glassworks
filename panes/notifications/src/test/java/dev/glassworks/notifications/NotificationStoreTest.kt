@@ -163,6 +163,16 @@ class NotificationStoreTest {
         assertNull("a card with no view", store.openView(store.post(n("plain"), false).entry.id))
     }
 
+    /** CodeRabbit on #429: the view opened from the stage keeps the tag, so clear_notification still closes it. */
+    @Test
+    fun theViewOpenedFromTheStageKeepsItsTag() {
+        val fire = store.post(n("fire", tag = "smoke", p = Priority.CRITICAL, url = "http://ha/fire"), false).entry
+        val view = store.openView(fire.id)!!
+        assertEquals("smoke", view.notification.tag)
+        assertEquals(view.id, store.clear("smoke")?.id)
+        assertNull(store.page())
+    }
+
     @Test
     fun anActionClosesUnlessSticky() {
         val a = store.post(n("a", tag = "door"), false).entry

@@ -1,9 +1,11 @@
 package sh.edm.s1kiosk.notifications
 
+import android.animation.ValueAnimator
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -25,7 +27,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.Shadows.shadowOf
 import sh.edm.s1kiosk.ui.Mockup
+import java.time.Duration
 import java.util.concurrent.CompletableFuture
 
 /** The overlay sends taps back to the hub, opens and closes full-screen views, and handles Back. */
@@ -46,8 +50,11 @@ class NotificationOverlayTest {
         { reports += it }, { false }, { "http://homeassistant.local:8123" }, { 0L }, { _, _ -> CompletableFuture<Unit>() },
     ).also { hub.attach(it) }
 
+    /** The overlay's clock. The store's stays at 0, so a view with a timeout of 90 s ends at 90 000. */
+    private var t = 0L
+
     private val overlay = Mockup.show(FrameLayout(Mockup.activity())).let { root ->
-        NotificationOverlay(root.context, hub, images = null, now = { 0L }).also {
+        NotificationOverlay(root.context, hub, images = null, now = { t }).also {
             root.addView(it, FrameLayout.LayoutParams(-1, -1))
             // Robolectric's window stays GONE; a resumed activity's window on the panel is VISIBLE (the screen on).
             it.dispatchWindowVisibilityChanged(View.VISIBLE)
@@ -236,6 +243,111 @@ class NotificationOverlayTest {
         assertEquals(3, events.size)
         assertFalse("the picture came in time and is shown", picture.isRecycled)
     }
+
+    /** The maintainer on #429: the bar slides over the time left in one animation, and stops when the view closes. */
+    @Test
+    fun theBarSlidesOverTheTimeLeftAndStopsOnClose() {
+        t = 12_000
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","timeout":90}""")
+        val bar = timeLeft()
+        val slide = slide(bar)!!
+        assertTrue(slide.isRunning)
+        assertEquals("over the 78 s left", 78_000L, slide.duration)
+        assertEquals("from where the time is", 78f / 90, fill(bar).scaleX, 0.001f)
+        assertEquals(0f, fill(bar).pivotX)
+        Mockup.layout(overlay.rootView)
+        assertTrue("laid out: the fill has its pixels", fill(bar).width > 0)
+        // Seek the animation itself: Robolectric's vsync shadow moves the clock on each frame, so idling runs it fast.
+        slide.currentPlayTime = 39_000
+        assertEquals("halfway, linear, in whole pixels of the fill", 39f / 90, fill(bar).scaleX, 1f / fill(bar).width)
+        assertTrue("the text still says the time", shownText().contains("Back to your dashboard in 1:18"))
+        assertTrue("the tick doesn't rebuild the bar", timeLeft() === bar)
+        click("Back now")
+        assertFalse("cancelled on close", slide.isStarted)
+        assertNull(slide(bar))
+    }
+
+    @Test
+    fun theBarStopsWithTheScreenAndKeepsRealTimeAtAnyAnimationScale() {
+        center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","size":"half","timeout":90}""")
+        val bar = timeLeft()
+        val first = slide(bar)!!
+        overlay.dispatchWindowVisibilityChanged(View.GONE)
+        assertFalse("nothing moves on a sleeping panel", first.isStarted)
+        assertNull(slide(bar))
+        t = 30_000
+        animationScale(2f)
+        try {
+            overlay.dispatchWindowVisibilityChanged(View.VISIBLE)
+            val again = slide(bar)!!
+            assertEquals("60 s left, at twice the animation scale: half the duration", 30_000L, again.duration)
+            assertEquals(60f / 90, fill(bar).scaleX, 0.001f)
+        } finally {
+            animationScale(1f)
+        }
+    }
+
+    @Test
+    fun withAnimationsOffTheBarStepsEachSecond() {
+        animationScale(0f)
+        try {
+            center.handle("m", "Doorbell", """{"url":"/dashboard-door/0","timeout":90}""")
+            val bar = timeLeft()
+            assertNull("no animation", slide(bar))
+            assertEquals(1f, fill(bar).scaleX, 0.001f)
+            t = 30_000
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_100))
+            assertEquals("stepped with the text", 60f / 90, fill(bar).scaleX, 0.001f)
+            assertTrue(shownText().contains("Back to your dashboard in 1:00"))
+        } finally {
+            animationScale(1f)
+        }
+    }
+
+    /** CodeRabbit on #429: on a narrow portrait screen the stage's buttons wrap, and each, Dismiss too, keeps its one line. */
+    @Test
+    @Config(qualifiers = "w480dp-h800dp-port-hdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun onANarrowScreenTheStageButtonsWrapAndKeepTheirWidth() {
+        val buttons = stageButtons(720, 1200)
+        assertTrue("more than one row: ${buttons.map { it.second }}", buttons.map { it.second }.distinct().size > 1)
+        for ((b, _) in buttons) {
+            assertEquals("${b.text} on one line", 1, b.lineCount)
+            val at = IntArray(2).also { b.getLocationInWindow(it) }
+            assertTrue("${b.text} on screen: ${at[0]}..${at[0] + b.width}", at[0] >= 0 && at[0] + b.width <= 720)
+        }
+        assertEquals("the same order: Dismiss last", "Dismiss", buttons.last().first.text.toString())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun onTheS1TheStageButtonsStayInOneRow() {
+        val buttons = stageButtons(1440, 720)
+        assertEquals(1, buttons.map { it.second }.distinct().size)
+        assertEquals(listOf(NotificationOverlay.OPEN_THE_VIEW, "Close the valve", "Call", "Silence", "Dismiss"), buttons.map { it.first.text.toString() })
+    }
+
+    /** A critical one with a view and three buttons, laid out at [w] x [h]: each button and the top of its row. */
+    private fun stageButtons(w: Int, h: Int): List<Pair<TextView, Int>> {
+        center.handle(
+            "The leak sensor turned on.", "Water under the sink",
+            """{"priority":"critical","url":"/leak/0","actions":[{"action":"valve","title":"Close the valve"},{"action":"call","title":"Call"},{"action":"silence","title":"Silence"}]}""",
+        )
+        Mockup.layout(overlay.rootView, w, h)
+        val row = views(overlay).filterIsInstance<TextView>().first { it.text.toString() == "Dismiss" && it.isShown }.parent as ViewGroup
+        return (0 until row.childCount).map { row.getChildAt(it) as TextView }
+            .map { b -> b to IntArray(2).also { b.getLocationInWindow(it) }[1] }
+    }
+
+    /** The system's animator duration scale (Developer options, or 0 with Remove animations): a hidden API, as the system sets it. */
+    private fun animationScale(scale: Float) {
+        ValueAnimator::class.java.getMethod("setDurationScale", Float::class.javaPrimitiveType).invoke(null, scale)
+    }
+
+    private fun timeLeft(): ViewGroup = views(overlay).filterIsInstance<ViewGroup>().single { it.javaClass.simpleName == "TimeLeft" && it.isAttachedToWindow }
+    private fun fill(bar: ViewGroup): View = bar.getChildAt(0)
+    private fun slide(bar: ViewGroup): ValueAnimator? =
+        bar.javaClass.getDeclaredField("animator").apply { isAccessible = true }.get(bar) as ValueAnimator?
 
     @Test
     fun thePictureIsLetGoWhenTheViewClosesAndWhenTheOverlayGoes() {

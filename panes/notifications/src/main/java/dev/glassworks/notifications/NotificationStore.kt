@@ -132,7 +132,8 @@ class NotificationStore(private val now: () -> Long, val max: Int = 20) {
         val e = entries.firstOrNull { it.id == id } ?: return null
         val url = e.notification.url ?: return null
         remove(e)
-        val n = Notification(e.notification.title.ifEmpty { e.notification.message }, "", url = url, sound = Sound.NONE)
+        // The same tag: clear_notification closes the view, and a same-tag post replaces it.
+        val n = Notification(e.notification.title.ifEmpty { e.notification.message }, "", tag = e.notification.tag, url = url, sound = Sound.NONE)
         return post(n, doNotDisturb = false, jump = true).entry
     }
 

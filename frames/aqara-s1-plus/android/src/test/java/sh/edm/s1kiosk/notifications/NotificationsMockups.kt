@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.notifications
 
+import android.animation.ValueAnimator
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
@@ -26,6 +27,7 @@ import dev.glassworks.notifications.Priority
 import dev.glassworks.notifications.ViewSize
 import dev.glassworks.pane.PaneChoice
 import org.junit.Assume.assumeTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,6 +64,18 @@ import java.io.ByteArrayOutputStream
 class NotificationsMockups {
 
     @Before fun interFromSources() = Mockup.interFromSources()
+
+    /**
+     * Still frames, as a panel with Remove animations: the time-left bar steps instead of sliding. A running
+     * animator is a Choreographer loop, which Robolectric's paused looper runs a vsync at a time through every idle
+     * (the orb avoids Choreographer for this reason), so the shots took over 10 minutes with it.
+     */
+    @Before fun stillFrames() = animationScale(0f)
+    @After fun animationsBack() = animationScale(1f)
+
+    private fun animationScale(scale: Float) {
+        ValueAnimator::class.java.getMethod("setDurationScale", Float::class.javaPrimitiveType).invoke(null, scale)
+    }
 
     private val now = 10_000_000L
     private val HA = "http://homeassistant.local:8123"
@@ -165,6 +179,18 @@ class NotificationsMockups {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
         val door = view("Doorbell", "/dashboard-door/0", timeout = 90, agoMs = 6_000, half = true)
         viewShot("notify-19-tablet-portrait-half-next", door, listOf(view("Garage door open", "/garage/0", timeout = 60, half = true)), Ha.DOOR, w = 800, h = 1280)
+    }
+
+    /** A narrow portrait screen (CodeRabbit on #429): a critical one with its view and three buttons, all readable with Dismiss. */
+    @Test
+    @Config(qualifiers = "w480dp-h800dp-port-hdpi")
+    fun portraitCritical() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val leak = entry(
+            "Water under the kitchen sink", "The leak sensor turned on at 14:32. The main valve is still open.",
+            Priority.CRITICAL, actions = listOf("Close the valve", "Call", "Silence"), tag = "water_leak", url = "$HA/leak/0",
+        )
+        viewShot("notify-23-portrait-critical-buttons", null, emptyList(), Ha.HOME, cards = listOf(leak), w = 720, h = 1200)
     }
 
     /** A frame without touch, the Mirror's portrait screen (#230): no button; the countdown moves on. */

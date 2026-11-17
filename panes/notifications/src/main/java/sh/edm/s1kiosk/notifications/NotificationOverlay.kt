@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.notifications
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -22,6 +23,8 @@ import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -51,6 +54,7 @@ import sh.edm.s1kiosk.voice.OrbArt
 import sh.edm.s1kiosk.voice.OrbBakes
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.ceil
 
 /**
  * The notifications over the dashboard (#118, the approved design): cards at top right, the stack and
@@ -111,7 +115,10 @@ class NotificationOverlay(
     /** The window is on screen: false while the activity is stopped, as it is with the screen off. */
     private var windowShown = false
     private val refold = Runnable { render() }
-    private val pageTick = Runnable { renderPage(state.page) }
+    private val pageTick = Runnable { tickPage() }
+    /** The open view's bar, for the tick: its line of text and its time left. */
+    private var pageLine: TextView? = null
+    private var pageTime: TimeLeft? = null
 
     private val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END; clipChildren = false }
     private val stack = FrameLayout(context).apply { clipChildren = false; clipToPadding = false }
@@ -289,29 +296,71 @@ class NotificationOverlay(
             if (n.title.isNotEmpty() && n.message.isNotEmpty()) addView(g.text(17f, MU).apply { this.text = n.message; gravity = Gravity.CENTER },
                 LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(8f) })
         }
-        stageContent.addView(ScrollView(context).apply {
+        // The text above, the buttons below; on a narrow screen the buttons take more rows and the text the rest.
+        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(ScrollView(context).apply {
             isVerticalFadingEdgeEnabled = true
             setFadingEdgeLength(px(20f))
             addView(text, LayoutParams(-1, -2))
-        }, LayoutParams(px(860f), -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+        }, LinearLayout.LayoutParams(minOf(px(860f), screenW() - 2 * px(STAGE_SIDE_DP)), 0, 1f).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
             topMargin = px(STAGE_TEXT_TOP_DP)
-            bottomMargin = px(STAGE_BUTTONS_BOTTOM_DP + STAGE_BUTTONS_DP + 16f)
+            bottomMargin = px(16f)
         })
-        stageContent.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+        column.addView(ButtonRows(context, px(12f)).apply {
             // A critical one's view opens from here, never by itself (#230): the stage is what can't be missed.
             val buttons = listOfNotNull(
                 n.url?.takeIf { input == Input.TOUCH }?.let { OPEN_THE_VIEW to { hub.openView(e.id) } },
             ) + n.actions.map { a -> a.title to { tap(e, a.id, a.uri) } }
             buttons.forEachIndexed { i, (title, onTap) ->
-                val b = if (i == 0) g.primary(title) else g.ghost(title)
-                b.setOnClickListener { onTap() }
-                addView(b, LinearLayout.LayoutParams(-2, -2).apply { if (i > 0) marginStart = px(12f) })
+                addView((if (i == 0) g.primary(title) else g.ghost(title)).apply { setOnClickListener { onTap() } })
             }
-            addView(g.ghost("Dismiss").apply { setOnClickListener { hub.dismiss(e.id) } },
-                LinearLayout.LayoutParams(-2, -2).apply { if (buttons.isNotEmpty()) marginStart = px(12f) })
-        }, LayoutParams(-1, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = px(STAGE_BUTTONS_BOTTOM_DP) })
+            addView(g.ghost("Dismiss").apply { setOnClickListener { hub.dismiss(e.id) } })
+        }, LinearLayout.LayoutParams(-1, -2).apply {
+            marginStart = px(STAGE_SIDE_DP)
+            marginEnd = px(STAGE_SIDE_DP)
+            bottomMargin = px(STAGE_BUTTONS_BOTTOM_DP)
+        })
+        stageContent.addView(column, LayoutParams(-1, -1))
+    }
+
+    /**
+     * The stage's buttons in one centred row, as on the S1. When they don't fit (a narrow portrait screen, or many
+     * actions), they go on as many centred rows as it takes, in the same order, so Dismiss keeps its natural width.
+     */
+    private class ButtonRows(context: Context, private val gap: Int) : ViewGroup(context) {
+        private fun rows(max: Int): List<List<View>> {
+            val rows = mutableListOf<MutableList<View>>()
+            var x = 0
+            for (c in (0 until childCount).map(::getChildAt).filter { it.visibility != GONE }) {
+                if (rows.isEmpty() || x + gap + c.measuredWidth > max) { rows += mutableListOf(c); x = c.measuredWidth }
+                else { rows.last() += c; x += gap + c.measuredWidth }
+            }
+            return rows
+        }
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val max = MeasureSpec.getSize(widthMeasureSpec)
+            for (i in 0 until childCount) getChildAt(i).measure(
+                MeasureSpec.makeMeasureSpec(max, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED))
+            val rows = rows(max)
+            val h = rows.sumOf { r -> r.maxOf { it.measuredHeight } } + gap * (rows.size - 1).coerceAtLeast(0)
+            setMeasuredDimension(max, h)
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            var y = 0
+            for (row in rows(r - l)) {
+                val rowH = row.maxOf { it.measuredHeight }
+                var x = (r - l - (row.sumOf { it.measuredWidth } + gap * (row.size - 1))) / 2
+                for (c in row) {
+                    val top = y + (rowH - c.measuredHeight) / 2
+                    c.layout(x, top, x + c.measuredWidth, top + c.measuredHeight)
+                    x += c.measuredWidth + gap
+                }
+                y += rowH + gap
+            }
+        }
     }
 
     /**
@@ -408,11 +457,14 @@ class NotificationOverlay(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (shownHalf) post { if (shownHalf) render() }
+        // The half dialog and the stage's text column follow the screen's size.
+        if (shownHalf || stage.visibility == View.VISIBLE) post { if (shownHalf || stage.visibility == View.VISIBLE) render() }
     }
 
     private fun renderPage(e: Entry?) {
         main.removeCallbacks(pageTick)
+        pageLine = null
+        pageTime = null
         pageBar.removeAllViews()
         footer.removeAllViews()
         val half = e != null && shownHalf
@@ -446,15 +498,7 @@ class NotificationOverlay(
      */
     private fun bar(e: Entry, half: Boolean): View = LinearLayout(context).apply {
         val n = e.notification
-        val left = e.expiresAt?.let { (it - now()).coerceAtLeast(0) }
-        val waiting = state.waiting
-        val button = ViewButton.of(waiting, if (half) ViewSize.HALF else ViewSize.FULL, input)
-        val line = when {
-            waiting > 0 -> listOfNotNull(left?.let { "Next in ${clock(it)}" }, "$waiting more waiting").joinToString("  ·  ")
-            left != null -> if (half) "Closes in ${clock(left)}" else "Back to your dashboard in ${clock(left)}"
-            half -> "Open until you close it"
-            else -> "Your dashboard is one tap away"
-        }
+        val button = ViewButton.of(state.waiting, if (half) ViewSize.HALF else ViewSize.FULL, input)
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         if (half) {
@@ -467,13 +511,35 @@ class NotificationOverlay(
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             addView(g.text(15f, TX, Inter.MEDIUM).apply { text = n.title.ifEmpty { n.message }; setSingleLine(); ellipsize = TextUtils.TruncateAt.END })
-            addView(g.text(13f, MU).apply { text = line })
+            addView(g.text(13f, MU).apply { text = barLine(e, half) }.also { pageLine = it })
         }, if (half) LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(18f) } else LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(18f) })
-        if (left != null && n.timeoutS != null) {
-            addView(TimeLeft(context, left / (n.timeoutS * 1000f)), LinearLayout.LayoutParams(px(80f), px(3f)).apply { marginEnd = px(if (button != null) 18f else 0f) })
+        val ends = e.expiresAt
+        if (ends != null && n.timeoutS != null) {
+            addView(TimeLeft(context, ends, n.timeoutS * 1000L).also { pageTime = it },
+                LinearLayout.LayoutParams(px(80f), px(3f)).apply { marginEnd = px(if (button != null) 18f else 0f) })
             if (!detached) main.postDelayed(pageTick, 1_000)
         }
         button?.let { b -> addView(smallPill(b.label, white = true).apply { setOnClickListener { hub.dismiss(e.id) } }) }
+    }
+
+    /** The bar's line: what comes next and when. */
+    private fun barLine(e: Entry, half: Boolean): String {
+        val left = e.expiresAt?.let { (it - now()).coerceAtLeast(0) }
+        val waiting = state.waiting
+        return when {
+            waiting > 0 -> listOfNotNull(left?.let { "Next in ${clock(it)}" }, "$waiting more waiting").joinToString("  ·  ")
+            left != null -> if (half) "Closes in ${clock(left)}" else "Back to your dashboard in ${clock(left)}"
+            half -> "Open until you close it"
+            else -> "Your dashboard is one tap away"
+        }
+    }
+
+    /** Once a second: the bar's text, and its time left when it steps rather than slides. Nothing is rebuilt. */
+    private fun tickPage() {
+        val e = state.page ?: return
+        pageLine?.text = barLine(e, shownHalf)
+        pageTime?.step()
+        if (!detached && pageTime != null) main.postDelayed(pageTick, 1_000)
     }
 
     /**
@@ -553,8 +619,9 @@ class NotificationOverlay(
             }
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(14f) })
         val left = e.expiresAt?.let { (it - now()).coerceAtLeast(0) }
-        if (left != null && n.timeoutS != null && !compact) {
-            addView(TimeLeft(context, left / (n.timeoutS * 1000f)), LinearLayout.LayoutParams(-1, px(3f)).apply { topMargin = px(14f) })
+        val ends = e.expiresAt
+        if (ends != null && n.timeoutS != null && !compact) {
+            addView(TimeLeft(context, ends, n.timeoutS * 1000L), LinearLayout.LayoutParams(-1, px(3f)).apply { topMargin = px(14f) })
         }
     }
 
@@ -714,16 +781,74 @@ class NotificationOverlay(
     }
 
     /** The time left: a thin line in the brand's gradient (not a status colour). */
-    private class TimeLeft(context: Context, private val left: Float) : View(context) {
-        private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        override fun onDraw(c: Canvas) {
-            val h = height.toFloat()
-            p.shader = null; p.color = Color.argb(20, 255, 255, 255)
-            c.drawRoundRect(0f, 0f, width.toFloat(), h, h / 2, h / 2, p)
-            // The track's colour set the paint's alpha: back to opaque before the gradient.
-            p.color = Color.WHITE
-            p.shader = LinearGradient(0f, 0f, width.toFloat(), 0f, SKY, VIOLET, Shader.TileMode.CLAMP)
-            c.drawRoundRect(0f, 0f, width * left.coerceIn(0f, 1f), h, h / 2, h / 2, p)
+    /**
+     * The time left until [endsAt], of [totalMs], as a bar that empties. It slides: one linear animation over the
+     * time left, which sets the fill's scaleX in whole pixels of its width. A scaleX that doesn't change doesn't
+     * invalidate, so the window redraws only when the bar moves a pixel (the S1's 120 px pill over 90 s: about one
+     * frame in 0.75 s), never a draw on every vsync; no onDraw or layout either way. Android has no public way to run
+     * it on the RenderThread (API 34's ViewPropertyAnimator has no RenderThread backend; RenderNodeAnimator is hidden).
+     * It runs only while the window is shown (not on a sleeping panel) and stops when the bar goes; a new bar
+     * starts from where the time really is. With the system's animations off (duration scale 0, which is also what
+     * Remove animations sets) there is no animation: the fill steps once a second with the text ([step]).
+     */
+    private inner class TimeLeft(context: Context, private val endsAt: Long, private val totalMs: Long) : FrameLayout(context) {
+        private val fill = View(context).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(SKY, VIOLET)).apply { cornerRadius = 999f }
+            pivotX = 0f
+        }
+        private var animator: ValueAnimator? = null
+
+        init {
+            background = GradientDrawable().apply { setColor(Color.argb(20, 255, 255, 255)); cornerRadius = 999f }
+            addView(fill, LayoutParams(-1, -1))
+            step()
+        }
+
+        private fun leftMs() = (endsAt - now()).coerceAtLeast(0)
+
+        /** [f] of the fill, rounded up to its next whole pixel: it reaches 0 only when the time does. */
+        private fun wholePixels(f: Float): Float {
+            val w = fill.width
+            return if (w > 0) ceil(f * w) / w else f
+        }
+
+        /** The fill where the time is, unless the animation is moving it. */
+        fun step() {
+            if (animator == null) fill.scaleX = (leftMs() / totalMs.toFloat()).coerceIn(0f, 1f)
+        }
+
+        private fun slide() {
+            stop()
+            step()
+            val left = leftMs()
+            if (!windowShown || !isAttachedToWindow || left == 0L || !ValueAnimator.areAnimatorsEnabled()) return
+            animator = ValueAnimator.ofFloat(fill.scaleX, 0f).apply {
+                // The system scales every animator's duration; a countdown keeps real time.
+                duration = (left / ValueAnimator.getDurationScale()).toLong()
+                interpolator = LinearInterpolator()
+                addUpdateListener { a -> fill.scaleX = wholePixels(a.animatedValue as Float) }
+                start()
+            }
+        }
+
+        private fun stop() {
+            animator?.cancel()
+            animator = null
+        }
+
+        override fun onAttachedToWindow() {
+            super.onAttachedToWindow()
+            slide()
+        }
+
+        override fun onDetachedFromWindow() {
+            stop()
+            super.onDetachedFromWindow()
+        }
+
+        override fun onWindowVisibilityChanged(visibility: Int) {
+            super.onWindowVisibilityChanged(visibility)
+            if (visibility == VISIBLE) slide() else stop()
         }
     }
 
@@ -761,7 +886,8 @@ class NotificationOverlay(
         /** The critical alert's layout: the text starts under the orb, the buttons end 28 dp above the bottom. */
         const val STAGE_TEXT_TOP_DP = 236f
         const val STAGE_BUTTONS_BOTTOM_DP = 28f
-        const val STAGE_BUTTONS_DP = 52f
+        /** The stage's text and buttons keep this far from a narrow screen's sides. */
+        const val STAGE_SIDE_DP = 24f
         const val LONG_TITLE = 32
         val CARD = Color.parseColor("#16171c")
         /** The list's scrim, and the one behind a half view. */
