@@ -174,8 +174,9 @@ How it behaves:
   as plain HTTP.
 - **Sign in** on the Home Assistant step saves the address, then goes to the panel's sign-in in the same
   tab (`/signin/continue?then=setup`, #453). The panel binds that sign-in to this browser with a cookie
-  named for its state (single use, 10 minutes, PKCE as for the QR code; one cookie per sign-in, so starting
-  another never replaces it), refuses its callback from any other browser with a way back to setup, and
+  holding its state (single use, 10 minutes, PKCE as for the QR code). Each pending sign-in gets a cookie
+  slot no other pending one holds (`gw_signin_<n>`), so starting another never replaces it and a browser holds
+  at most 16 of them. The panel refuses its callback from any other browser with a way back to setup, and
   after Home Assistant loads `/setup#signed-in` again. Every way out of the callback clears the cookie. The
   QR code's own sign-in is not bound, as before. The page reads where setup is from the
   panel, then goes on to the radio step, or to Done on a panel without a radio. Kiln's wizard still opens a

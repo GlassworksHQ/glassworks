@@ -125,10 +125,12 @@ data class PendingSignIn(
     val codeVerifier: String,
     /** Started from the setup page (#453): the callback goes back to it, and only in the browser that started. */
     val toSetup: Boolean = false,
+    /** A setup sign-in's binding cookie ([StateStore.create]), or -1. */
+    val slot: Int = -1,
 ) {
     override fun toString() =
         "PendingSignIn(clientId=$clientId, redirectUri=$redirectUri, haBase=$haBase, createdAt=$createdAt, " +
-            "purpose=$purpose, toSetup=$toSetup, codeVerifier=<redacted>)"
+            "purpose=$purpose, toSetup=$toSetup, slot=$slot, codeVerifier=<redacted>)"
 
     companion object {
         const val PURPOSE_SIGNIN = "signin"
@@ -137,7 +139,7 @@ data class PendingSignIn(
 }
 
 /** What the caller needs to build the authorize URL. The verifier stays in the store. */
-data class NewSignIn(val state: String, val codeChallenge: String)
+data class NewSignIn(val state: String, val codeChallenge: String, val slot: Int = -1)
 
 /**
  * OAuth `state` values handed out by /signin. Single use, expire after [ttlMs] (HA's own codes live
@@ -158,8 +160,11 @@ class StateStore(
         while (pending.size >= max) pending.remove(pending.keys.first())
         val s = OAuth.randomState()
         val verifier = OAuth.newCodeVerifier()
-        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, toSetup)
-        return NewSignIn(s, OAuth.codeChallenge(verifier))
+        // A setup sign-in gets a slot no other pending one holds, so its binding cookie never replaces a live one,
+        // and a browser never holds more than [max] of them. There is always one free: fewer than [max] are pending.
+        val slot = if (toSetup) (0 until max).first { n -> pending.values.none { it.toSetup && it.slot == n } } else -1
+        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, toSetup, slot)
+        return NewSignIn(s, OAuth.codeChallenge(verifier), slot)
     }
 
     /**

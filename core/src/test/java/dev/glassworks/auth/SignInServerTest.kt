@@ -378,21 +378,29 @@ class SignInServerTest {
 
     // ------------------------------------------------------------------ the setup page's sign-in (#453)
 
-    /** The phone's cookies for the panel, kept as a browser keeps them: by name, a newer one replacing an older. */
+    /**
+     * The phone's cookies for the panel, kept as a browser keeps them: by name and path, a newer one replacing an
+     * older, a delete removing only the one at its own path, and sent only to paths under theirs.
+     */
     private class Jar {
-        val cookies = LinkedHashMap<String, String>()
+        /** Name to (path, value). */
+        val cookies = LinkedHashMap<String, Pair<String, String>>()
         fun keep(r: SignInServer.Response) = r.also {
             val set = it.headers["Set-Cookie"] ?: return@also
             val (name, value) = set.substringBefore(';').split('=', limit = 2)
-            if (set.contains("Max-Age=0")) cookies.remove(name) else cookies[name] = value
+            val path = Regex("Path=([^;]+)").find(set)!!.groupValues[1]
+            if (!set.contains("Max-Age=0")) cookies[name] = path to value
+            else if (cookies[name]?.first == path) cookies.remove(name)
         }
-        fun header() = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }.ifEmpty { null }
+        fun header(path: String) = cookies.entries.filter { path == it.value.first || path.startsWith(it.value.first + "/") }
+            .joinToString("; ") { "${it.key}=${it.value.second}" }.ifEmpty { null }
+        val names get() = cookies.keys.toList()
     }
 
     /** One request through the router as the phone's browser makes it, with its cookies. */
     private fun call(s: SignInServer, path: String, jar: Jar? = null): SignInServer.Response {
         val uri = URI(path)
-        val headers = mapOf("host" to "192.0.2.10:8099") + (jar?.header()?.let { mapOf("cookie" to it) } ?: emptyMap())
+        val headers = mapOf("host" to "192.0.2.10:8099") + (jar?.header(uri.rawPath)?.let { mapOf("cookie" to it) } ?: emptyMap())
         val r = s.handle(SignInServer.Request("GET", uri.rawPath, OAuth.parseQuery(uri.rawQuery), headers))
         return jar?.keep(r) ?: r
     }
@@ -415,9 +423,9 @@ class SignInServerTest {
     fun setupPageSignInGoesBackToTheSetupPage() {
         val jar = Jar()
         val (q, state) = start(server, jar)
-        assertEquals(listOf(SignInServer.handOffCookie(state)), jar.cookies.keys.toList())
+        assertEquals(mapOf("${SignInServer.HANDOFF}0" to ("/callback" to state)), jar.cookies)
         val bind = call(server, "${SignInServer.CONTINUE}?then=setup").headers["Set-Cookie"]!!
-        assertTrue(bind, bind.contains("=1; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800"))
+        assertTrue(bind, bind.matches(Regex("${SignInServer.HANDOFF}1=[A-Za-z0-9_-]{32}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800")))
         issueCode("c0de", q)
         val r = callback(server, state, jar)
         assertEquals(200, r.status)
@@ -425,7 +433,7 @@ class SignInServerTest {
         assertTrue("the binding cookie goes", jar.cookies.isEmpty())
         assertEquals("RT", signedIn!!.first.refreshToken)
         assertEquals(q["code_challenge"], OAuth.codeChallenge(tokenRequests.single()["code_verifier"]!!))
-        assertEquals("single use", 400, callback(server, state, Jar().apply { cookies[SignInServer.handOffCookie(state)] = "1" }).status)
+        assertEquals("single use", 400, callback(server, state, Jar().apply { cookies["${SignInServer.HANDOFF}0"] = "/callback" to state }).status)
     }
 
     @Test
@@ -447,12 +455,40 @@ class SignInServerTest {
     @Test
     fun startingAnotherSetupSignInKeepsTheFirstOnesBinding() {
         val jar = Jar()
-        val (q, first) = start(server, jar)
-        start(server, jar) // a second tap, or a cross-site GET to /signin/continue?then=setup in this browser
+        val (q1, first) = start(server, jar)
+        val (q2, second) = start(server, jar) // a second tap, or a cross-site GET to /signin/continue?then=setup
+        assertEquals(2, jar.names.size)
+        issueCode("c0de", q1)
+        assertEquals(200, callback(server, first, jar).status)
+        assertEquals("the first one's clear leaves the second's binding", 1, jar.names.size)
+        issueCode("c1de", q2)
+        assertEquals(200, callback(server, second, jar, code = "c1de").status)
+        assertTrue(jar.cookies.isEmpty())
+    }
+
+    @Test
+    fun aBrowserHoldsAFewBindingsAtMostHoweverManySignInsStart() {
+        val jar = Jar()
+        repeat(400) { start(server, jar) }
+        assertTrue("${jar.names.size} binding cookies", jar.names.size <= 16)
+        val cookie = jar.header("/callback")!!
+        assertTrue("${cookie.length} bytes", cookie.length < 1024)
+        // the newest still works
+        val (q, last) = start(server, jar)
         issueCode("c0de", q)
-        val r = callback(server, first, jar)
-        assertEquals(200, r.status)
-        assertEquals("RT", signedIn!!.first.refreshToken)
+        assertEquals(200, callback(server, last, jar).status)
+    }
+
+    @Test
+    fun aStateOutsideTheAlphabetIsNoState() {
+        val jar = Jar()
+        val (_, state) = start(server, jar)
+        for (bad in listOf("$state;x", "$state x", "", "a".repeat(65))) {
+            val r = call(server, "/callback?code=c0de&state=${OAuth.enc(bad)}", jar)
+            assertEquals(bad, 400, r.status)
+            assertNull("nothing from the request goes into a header", r.headers["Set-Cookie"])
+        }
+        assertEquals("the real one is still bound", 1, jar.names.size)
     }
 
     @Test
