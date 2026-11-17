@@ -434,7 +434,7 @@ class SignInServerTest {
         now = 10 * 60_000L
         val r = call(s, "/callback?code=c0de&state=${OAuth.enc(state)}", cookie = "${SignInServer.HANDOFF}=$state")
         assertEquals(400, r.status)
-        assertTrue(text(r), text(r).contains("expired") && text(r).contains("""<a class="btn" href="/setup">Back to setup</a>"""))
+        assertTrue(text(r), text(r).contains("expired") && text(r).contains("Go back to setup and sign in again.") && text(r).contains("""<a class="btn" href="/setup">Back to setup</a>"""))
         assertNull(signedIn)
     }
 
