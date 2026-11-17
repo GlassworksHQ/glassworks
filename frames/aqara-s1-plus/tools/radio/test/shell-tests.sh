@@ -906,8 +906,12 @@ check "a new helper keeps rules already in place: not rebuilt, one jump, the sta
   test "$(cat "$T/ipt/restores" 2>/dev/null | wc -l)/$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')/$(grep -c '^sys.s1kiosk.portal.status=' "$T/setprop.log")" = 0/1/1
 # first_check: until the helper started in the background has done its first check (its status line)
 first_check() { i=0; until grep -q '^sys.s1kiosk.portal.status=' "$T/setprop.log" || [ $i -ge 300 ]; do sleep 0.1; i=$((i + 1)); done; }
-: > "$T/setprop.log"; LOOPS=30 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
-H=$!; first_check; sed -i '/^-A PREROUTING -j S1PORTAL$/d' "$T/ipt/4-nat"; wait $H
+# bg_until <test...>: waits (60 s at most, an emulated ARM under load is slow) until it holds, then stops the helper
+bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; }
+jumps4() { test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1; }
+rules4() { test -n "$(nat 4 | grep '^-A S1PORTAL')"; }
+: > "$T/setprop.log"; LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check; sed -i '/^-A PREROUTING -j S1PORTAL$/d' "$T/ipt/4-nat"; bg_until jumps4
 check "a jump lost while it runs (netd restarted) is put back by the loop" test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1
 socks tcp6; portal
 check "the redirect's socket gone: everything removed, both families" \
@@ -931,8 +935,8 @@ ap_up; socks udp6 "$AP4:1F75 07 10050"; portal
 check "no IPv6 socket: IPv4 only" test -n "$(nat 4 | grep '^-A S1PORTAL')" -a -z "$(nat 6 | grep '^-A S1PORTAL')"
 ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6; socks tcp "012BA8C0:1FA2 0A 10050"; socks tcp6; portal
 check "plain IPv4 sockets (udp, tcp) count too" test "$(nat 4 | grep -c '^-A S1PORTAL')" = 2
-ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=30 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
-H=$!; first_check; hostapd_on; wait $H
+ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check; hostapd_on; bg_until rules4
 check "the loop between the helper's passes: up again within seconds" test -n "$(nat 4 | grep '^-A S1PORTAL')"
 ap_up; portal; echo 6 > /t/ipt-refuse; rm -f "$T/ipt/6-nat"; portal
 check "ip6tables refuses after the IPv4 rules went in: nothing left half-done, and an error" \
