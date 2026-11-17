@@ -207,6 +207,9 @@ subprojects {
     }
 }
 
+// `./gradlew test` (CI's app job) runs build-logic's tests too: an included build's tasks aren't part of it otherwise.
+tasks.register("test") { dependsOn(gradle.includedBuild("build-logic").task(":test")) }
+
 /**
  * Fails when a ```kotlin block of a library's README.md isn't in its ReadmeExample* test sources, line for line
  * (indentation and blank lines aside), so the README can't drift from code that compiles. Gradle blocks (they
