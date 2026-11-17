@@ -159,6 +159,8 @@ class ScreenByFrameTest {
         prefs.screenMode = "always"; prefs.idleOffSec = 300
         val idle = screen(generic()).first.filterIsInstance<SettingsItem.Duration>().first { it.title == "Turn off when idle" }
         assertEquals("Never", idle.shown(idle.value()))
+        idle.save(0) {}
+        assertEquals("Never leaves it always on, also at night (CodeRabbit on #475)", "always", prefs.screenMode)
         idle.save(120) {}
         assertEquals("presence", prefs.screenMode)
         assertEquals(120, prefs.idleOffSec)
