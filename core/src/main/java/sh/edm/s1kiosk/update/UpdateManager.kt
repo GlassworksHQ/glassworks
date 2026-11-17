@@ -12,7 +12,7 @@ import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.platform.Platform
 import dev.glassworks.platform.PlatformApi
-import dev.glassworks.update.InstallRights
+import dev.glassworks.update.SilentUpdates
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -35,7 +35,7 @@ import sh.edm.s1kiosk.Glassworks
  *   digest, then the APK's package, version and signing certificate against this app ([ApkCheck]),
  *   then hand `files/update/pending.apk` to the boot image's root service ([UpdateHelper]); without
  *   it (older boot image, generic Android), Android's PackageInstaller. That asks for confirmation on
- *   the screen, except on Android 12+ where the app updates itself without a tap when Android allows it.
+ *   the screen unless Android lets the app install without one ([silentUpdates]).
  *
  * Everything runs on one "s1-update" thread. [onChange] fires (on that thread) whenever the entity's
  * state may have changed.
@@ -48,6 +48,16 @@ class UpdateManager(
     private val ctx = context.applicationContext
     /** The S1 boot image's root update service; null on a frame without one, which installs with PackageInstaller. */
     private val root = runtime.frame.rootUpdates
+    /** Whether [root] is in this boot image; null until [start] reads it (a getprop) on the update thread. */
+    @Volatile private var rootService: SilentUpdates.Root? = null
+
+    /**
+     * Whether updates install with nobody at the screen, and why (#422): Home Assistant's *Silent updates*. Read at
+     * [start], on every tick and before an install, since it can change while the app runs ("Install unknown apps",
+     * device owner). Null until [start] has read [rootService].
+     */
+    @Volatile var silentUpdates: SilentUpdates? = null
+        private set
     private val exec: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "s1-update").apply { isDaemon = true } }
     val model = UpdateModel(runtime.build.versionName, runtime.build.product)
@@ -65,11 +75,12 @@ class UpdateManager(
         exec.execute {
             cleanup()
             root?.lastFailure()?.let { model.onInfo("Last update failed: $it") }
-            model.installNote = when {
-                root == null -> if (installsWithoutTap()) NO_TAP_NOTE else CONFIRM_NOTE
-                root.present() -> ""
-                else -> NO_HELPER_NOTE
+            rootService = when {
+                root == null -> SilentUpdates.Root.NONE
+                root.present() -> SilentUpdates.Root.PRESENT
+                else -> SilentUpdates.Root.MISSING
             }
+            refreshSilent()
             onChange()
         }
         registerNetwork()
@@ -99,6 +110,18 @@ class UpdateManager(
     }
 
     fun statusText(): String = model.statusText()
+
+    /** Reads [silentUpdates] again and sets the note under an offered update from it. True when the answer changed. */
+    private fun refreshSilent(): Boolean {
+        val s = rootService?.let { SilentUpdates.read(ctx, it) } ?: return false
+        model.installNote = when {
+            s == SilentUpdates.RootService -> ""
+            s == SilentUpdates.NoRootService -> NO_HELPER_NOTE
+            s.silent -> NO_TAP_NOTE
+            else -> CONFIRM_NOTE
+        }
+        return (s != silentUpdates).also { silentUpdates = s }
+    }
 
     // ------------------------------------------------------------------ check
 
@@ -146,6 +169,7 @@ class UpdateManager(
                 Log.w(TAG, "install $why")
                 onChange()
             }
+            if (refreshSilent()) onChange()
             if (schedule.due(now) && model.currentPhase == UpdateModel.Phase.IDLE) check("scheduled")
         } catch (t: Throwable) {
             Log.w(TAG, "update tick failed", t) // never let the scheduled task die
@@ -376,6 +400,7 @@ class UpdateManager(
      * asks for no user action and Android allows it ([sessionParams]).
      */
     private fun installWithPackageInstaller(a: UpdateModel.Attempt, apk: File) {
+        refreshSilent()
         val pi = ctx.packageManager.packageInstaller
         val id = pi.createSession(sessionParams(ctx.packageName, apk.length(), Platform))
         try {
@@ -387,7 +412,7 @@ class UpdateManager(
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or Platform.mutablePendingIntentFlag
                 val pending = PendingIntent.getBroadcast(ctx, id, Intent(ctx, UpdateInstallReceiver::class.java), flags)
                 model.onInstalling(a, SystemClock.elapsedRealtime(), when {
-                    installsWithoutTap() -> "Installing ${a.offer.version} without a tap"
+                    silentUpdates?.silent == true -> "Installing ${a.offer.version} without a tap"
                     root == null -> "Installing ${a.offer.version}: confirm on the screen"
                     else -> "Installing ${a.offer.version}: confirm on the panel's screen (no root update service in this boot image)"
                 })
@@ -401,13 +426,6 @@ class UpdateManager(
             throw e
         }
     }
-
-    /**
-     * Whether a PackageInstaller session can install with nobody at the screen: on Android 12+ the session asks
-     * for no user action ([sessionParams]); a privileged app (`INSTALL_PACKAGES`, the Mirror's) never needs one.
-     * Either way Android may still ask, and [UpdateInstallReceiver] then shows the confirmation.
-     */
-    private fun installsWithoutTap(): Boolean = Platform.canInstallWithoutUserAction || InstallRights.installsPackages(ctx)
 
     /** From [UpdateInstallReceiver]: Android asks for a tap before it installs (STATUS_PENDING_USER_ACTION). */
     internal fun onWaitingForTap() = exec.execute {
@@ -479,9 +497,9 @@ class UpdateManager(
         const val CMD_CHECK = 2
         const val NO_HELPER_NOTE =
             "Installing asks for confirmation on the panel's screen: this panel's boot image has no root update service yet."
-        /** A frame with no root update service at all (generic Android) below Android 12. */
+        /** PackageInstaller where Android asks for a tap ([silentUpdates] says no, and why). */
         const val CONFIRM_NOTE = "Installing asks for confirmation on the screen."
-        /** The same on Android 12+, where the app updates itself unless Android asks for a tap. */
+        /** PackageInstaller where Android lets the app install without a tap, unless it asks after all. */
         const val NO_TAP_NOTE = "Installs without a tap, unless Android asks for one on the screen."
         private const val FIRST_CHECK_DELAY_S = 30L
         private const val TICK_S = 15 * 60L
