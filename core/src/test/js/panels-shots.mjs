@@ -1,0 +1,208 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+// Screenshots of All panels (#466) with its real script, against fakes: a fake Home Assistant (login, token,
+// websocket) and fake panels, all behind an HTTP proxy in this process, driven in headless Chrome over CDP.
+// Touches nothing else: no real panel or Home Assistant, a temporary Chrome profile. Illustrative values only.
+//
+//   ./gradlew :kiosk:testDebugUnitTest --tests '*ManagePageMockups*' -Ps1MockupDir=/tmp/shots
+//   node core/src/test/js/panels-shots.mjs /tmp/shots/manage/13-all-panels.html /tmp/shots/panels
+//
+// Chrome: CHROME=<path>, else Google Chrome's macOS path.
+
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const [pageFile, out] = process.argv.slice(2);
+if (!pageFile || !out) throw new Error('usage: panels-shots.mjs <13-all-panels.html> <out dir>');
+mkdirSync(out, { recursive: true });
+const assets = join(dirname(fileURLToPath(import.meta.url)), '../../main/assets/manage');
+const chrome = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+
+// ------------------------------------------------------------------ the fakes
+
+const HA = '192.0.2.10:8123';
+let admin = true;
+const sw = (key, on, more = {}) => ({ key, title: key, kind: 'switch', value: on ? 'on' : 'off', shown: on ? 'On' : 'Off', ...more });
+const idle = (s, choices) => ({ key: 'Turn off when idle', title: 'Turn off when idle', kind: 'duration', value: String(s), shown: s ? 'After ' + s / 60 + ' minutes' : 'Never', choices });
+const range = (m) => ({ key: 'Presence range', title: 'Presence range', kind: 'slider', value: String(m), shown: 'Up to ' + m + ' m', min: '0', max: '2.5', step: '0.1' });
+const wake = (id, ids) => ({ key: 'Wake word', title: 'Wake word', kind: 'choice', value: id, shown: { okay_nabu: 'Okay Nabu', hey_jarvis: 'Hey Jarvis' }[id], options: ids.map((i) => [i, { okay_nabu: 'Okay Nabu', hey_jarvis: 'Hey Jarvis' }[i]]) });
+const panels = {
+  '192.0.2.40:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.2', sections: [
+    { id: 'dashboard', title: 'Home Assistant & dashboard', items: [sw('Full screen', true)] },
+    { id: 'screen', title: 'Screen', items: [sw('Wakes when someone comes close', true), range(1.2), idle(300, [30, 60, 120, 300, 600, 0]), sw('Brightness', true)] },
+    { id: 'assist', title: 'Voice', items: [sw('on', true), wake('hey_jarvis', ['okay_nabu', 'hey_jarvis']), sw('Wake sound', false)] },
+    { id: 'radio', title: 'Radio', items: [sw('on', true)] },
+    { id: 'camera', title: 'Camera', items: [{ key: 'Stream sign-in', title: 'Stream sign-in', kind: 'sign-in', set: true }] },
+  ] },
+  '192.0.2.41:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.1', sections: [
+    { id: 'dashboard', title: 'Home Assistant & dashboard', items: [sw('Full screen', false)] },
+    { id: 'screen', title: 'Screen', items: [sw('Wakes when someone comes close', true), range(0.8), idle(120, [30, 60, 120, 600, 0])] },
+    { id: 'assist', title: 'Voice', items: [sw('on', false), wake('okay_nabu', ['okay_nabu', 'hey_jarvis'])] },
+    { id: 'radio', title: 'Radio', items: [sw('on', false)] },
+    { id: 'camera', title: 'Camera', items: [{ key: 'Stream sign-in', title: 'Stream sign-in', kind: 'sign-in', set: false }] },
+  ] },
+};
+const devices = [
+  { id: 'k', name: 'Aqara S1 Plus', name_by_user: 'Kitchen panel', area_id: 'kitchen', configuration_url: 'http://192.0.2.40:8099', disabled_by: null },
+  { id: 'b', name: 'Aqara S1 Plus', name_by_user: 'Bedroom panel', area_id: 'bedroom', configuration_url: 'http://192.0.2.41:8099', disabled_by: null },
+  { id: 'h', name: 'Pixel Tablet', name_by_user: 'Hallway tablet', area_id: 'hallway', configuration_url: 'http://192.0.2.42:8099', disabled_by: null },
+  { id: 'ma', name: 'S1 Panel', model: 'Panel Hub S1 Plus (S1 Kiosk)', area_id: null, configuration_url: null, disabled_by: null },
+];
+const initial = JSON.stringify(panels);
+const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }];
+
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+const send = (res, status, body, type = 'application/json') => {
+  res.writeHead(status, { 'Content-Type': type, ...CORS });
+  res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
+};
+const form = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => ok(new URLSearchParams(b))); });
+
+async function handle(req, res) {
+  const u = new URL(req.url, 'http://' + req.headers.host);
+  if (req.method === 'OPTIONS') return send(res, 204, '');
+  if (u.host === HA) {
+    if (u.pathname === '/auth/authorize') {
+      res.writeHead(302, { Location: u.searchParams.get('redirect_uri') + '?code=fake-code&state=' + u.searchParams.get('state') });
+      return res.end();
+    }
+    if (u.pathname === '/auth/token') return send(res, 200, { access_token: 'fake-access', refresh_token: 'fake-refresh', expires_in: 1800, token_type: 'Bearer' });
+    if (u.pathname === '/auth/revoke') return send(res, 200, '');
+  }
+  const p = panels[u.host];
+  if (u.host === '192.0.2.40:8099' && u.pathname === '/panels') return send(res, 200, readFileSync(pageFile), 'text/html; charset=utf-8');
+  if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
+  if (p && u.pathname === '/manage/api/settings') {
+    if (req.method === 'GET') return send(res, 200, p);
+    const f = await form(req);
+    const item = p.sections.find((s) => s.id === f.get('section'))?.items.find((i) => i.key === f.get('key'));
+    if (!item) return send(res, 404, { problem: "This panel doesn't have that setting.", missing: true });
+    if (f.get('section') === 'radio' && f.get('confirmed') !== '1') return send(res, 409, { ask: { title: 'Turn the radio on?', detail: 'Zigbee devices on this panel join again.', action: 'Turn on' } });
+    Object.assign(item, { value: f.get('value') }, item.kind === 'switch' ? { shown: f.get('value') === 'on' ? 'On' : 'Off' } : {});
+    return send(res, 200, { ok: true, restart: false });
+  }
+  res.socket.destroy();
+}
+
+/** HA's websocket: auth, then answers to the three calls the page makes. */
+function websocket(req, socket) {
+  const accept = createHash('sha1').update(req.headers['sec-websocket-key'] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+  const frame = (o) => {
+    const b = Buffer.from(JSON.stringify(o));
+    const head = b.length < 126 ? Buffer.from([0x81, b.length]) : b.length < 65536 ? Buffer.from([0x81, 126, b.length >> 8, b.length & 255]) : null;
+    socket.write(Buffer.concat([head, b]));
+  };
+  frame({ type: 'auth_required' });
+  let buf = Buffer.alloc(0);
+  socket.on('data', (d) => {
+    buf = Buffer.concat([buf, d]);
+    // Several frames can come in one read: the page asks its three calls at once.
+    while (buf.length >= 6) {
+      if ((buf[0] & 0x0f) === 8) return socket.end();
+      let len = buf[1] & 0x7f;
+      let at = 2;
+      if (len === 126) { len = buf.readUInt16BE(2); at = 4; }
+      if (buf.length < at + 4 + len) return;
+      const mask = buf.subarray(at, at + 4);
+      const m = JSON.parse(Buffer.from(buf.subarray(at + 4, at + 4 + len).map((x, i) => x ^ mask[i % 4])).toString());
+      buf = buf.subarray(at + 4 + len);
+      if (m.type === 'auth') { frame({ type: 'auth_ok' }); continue; }
+      const result = { 'auth/current_user': { id: 'u1', name: admin ? 'Alex' : 'Sam', is_admin: admin },
+        'config/device_registry/list': devices, 'config/area_registry/list': areas }[m.type];
+      frame({ id: m.id, type: 'result', success: true, result });
+    }
+  });
+}
+
+// The proxy: Chrome sends every request here, with the full URL; a websocket comes as CONNECT, then upgrades.
+const inner = http.createServer(handle).on('upgrade', websocket);
+const proxy = http.createServer(handle).on('upgrade', websocket).on('connect', (req, socket) => {
+  socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+  inner.emit('connection', socket);
+});
+await new Promise((ok) => proxy.listen(0, '127.0.0.1', ok));
+
+// ------------------------------------------------------------------ Chrome over CDP
+
+const profile = mkdtempSync(join(tmpdir(), 'gw-panels-shots-'));
+const browser = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run',
+  '--proxy-server=http://127.0.0.1:' + proxy.address().port, '--proxy-bypass-list=<-loopback>', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+const wsUrl = await new Promise((ok) => browser.stderr.on('data', (d) => { const m = /ws:\/\/\S+/.exec(String(d)); if (m) ok(m[0]); }));
+const targets = await (await fetch(wsUrl.replace('ws://', 'http://').replace(/\/devtools.*/, '/json/list'))).json();
+const cdp = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl);
+await new Promise((ok) => cdp.addEventListener('open', ok));
+let id = 0;
+const pending = new Map();
+cdp.addEventListener('message', (e) => { const m = JSON.parse(e.data); pending.get(m.id)?.(m); pending.delete(m.id); });
+const call = (method, params = {}) => new Promise((ok, no) => { pending.set(++id, (m) => (m.error ? no(new Error(method + ': ' + m.error.message)) : ok(m.result))); cdp.send(JSON.stringify({ id, method, params })); });
+const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
+const js = async (expr) => (await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.value;
+const until = async (expr, what) => { for (let i = 0; i < 100; i++) { if (await js(expr)) return; await sleep(100); } throw new Error('never: ' + what + ': ' + (await js('location.href + " | " + document.getElementById("gw-panels")?.textContent'))); };
+
+let viewport = { width: 1440, mobile: false };
+async function look(width, scheme) {
+  viewport = { width, mobile: width < 600 };
+  await call('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: viewport.mobile ? 2 : 1, mobile: viewport.mobile });
+  await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
+}
+
+/** The whole page: the viewport grows to it first, so the fixed sidebar runs its full height. */
+async function shot(name) {
+  await sleep(250);
+  const { cssContentSize: s } = await call('Page.getLayoutMetrics');
+  const height = Math.max(Math.ceil(s.height), 600);
+  await call('Emulation.setDeviceMetricsOverride', { width: viewport.width, height, deviceScaleFactor: viewport.mobile ? 2 : 1, mobile: viewport.mobile });
+  await sleep(150);
+  const { data } = await call('Page.captureScreenshot', { format: 'png' });
+  await call('Emulation.setDeviceMetricsOverride', { width: viewport.width, height: 900, deviceScaleFactor: viewport.mobile ? 2 : 1, mobile: viewport.mobile });
+  writeFileSync(join(out, name + '.png'), Buffer.from(data, 'base64'));
+  console.log('wrote', name);
+}
+
+const PAGE = 'http://192.0.2.40:8099/panels';
+const listed = "document.querySelectorAll('#gw-list .chip').length === 3 && ![...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')";
+try {
+  await call('Page.enable');
+  await look(1440, 'dark');
+  await call('Page.navigate', { url: PAGE });
+  await until("document.querySelector('#gw-list button')", 'the sign-in button');
+  await shot('01-signed-out');
+  await js("document.querySelector('#gw-list button').click()");
+  await until(listed + " && !document.getElementById('gw-copy').hidden", 'the panels and the copy card');
+  await shot('02-panels-and-copy');
+  await js("document.querySelector('#gw-copy button[type=submit]').click()");
+  await until("document.querySelector('.cpa')", 'the copy result');
+  await shot('03-copied-asks-first');
+  await js("document.querySelector('.cpa button').click()");
+  await until("!document.querySelector('.cpa')", 'the confirmed change');
+  await shot('04-confirmed');
+  Object.assign(panels, JSON.parse(initial));
+  await look(390, 'dark');
+  await call('Page.navigate', { url: PAGE });
+  await until(listed, 'the panels on a phone');
+  await shot('05-phone');
+  await look(1440, 'light');
+  await call('Page.navigate', { url: PAGE });
+  await until(listed, 'the panels, light');
+  await shot('06-light');
+  admin = false;
+  await look(1440, 'dark');
+  await call('Page.navigate', { url: PAGE });
+  await until("document.querySelector('#gw-list .note')?.textContent.includes('administrator')", 'the non-admin refusal');
+  await shot('07-not-admin');
+} finally {
+  cdp.close();
+  browser.kill();
+  proxy.close();
+  inner.close();
+  await sleep(300);
+  rmSync(profile, { recursive: true, force: true });
+}

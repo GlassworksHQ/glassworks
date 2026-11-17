@@ -250,7 +250,25 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 
 ## Other panels, through Home Assistant
 
-Each panel lets a page on another panel read and change its settings (#466). That page holds a Home
+**All panels**, after Overview in the menu, sets up every panel in the house from one page (#466).
+
+1. **Continue with Home Assistant.** This tab signs in to Home Assistant on its own, with an administrator,
+   and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home Assistant too.
+2. **The panels.** The page asks Home Assistant for its devices and lists each one whose **Visit** link is a
+   Manage page (port 8099), with its area, address and version. A panel that doesn't answer within 6 seconds
+   shows as **Down**; the others still work. A panel on a version from before this page shows as Down too.
+3. **Manage** opens that panel's own Manage page in a new tab, already signed in.
+4. **Copy settings.** Pick a panel to copy from and one to copy to. The page lists every setting that differs,
+   ticked, as *its value now → the new value*. Settings the other panel's version or hardware doesn't have,
+   values it can't take (an option its version lacks) and sign-ins are greyed out and never sent. **Copy**
+   changes only what is ticked, on that panel alone. A change that asks first on the panel (the radio) is
+   listed with the panel's question and **Change them too**.
+
+All panels is the one Manage page with a script, served by the panel itself. Its Content-Security-Policy
+lets it reach only this panel's Home Assistant and Manage pages on port 8099. The other pages still have
+no scripts.
+
+Each panel lets a page on another panel read and change its settings. That page holds a Home
 Assistant access token, and each panel checks it with its own Home Assistant. No panel trusts another,
 and there are no shared keys and no leader.
 

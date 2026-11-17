@@ -101,6 +101,7 @@ open class AppManage(
         qr = { req -> qr(signIn, req) },
         ownHosts = ::ownHosts,
         event = { msg -> Log.i(TAG, msg); runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) } },
+        scripts = { name -> runCatching { app.assets.open("manage/$name").use { it.readBytes() } }.getOrNull() },
     )
 
     override fun http(port: Int) = HttpServer(port, server::handle, log = { Log.d(TAG, it) })

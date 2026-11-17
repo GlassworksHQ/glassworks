@@ -76,6 +76,8 @@ class ManagePageMockups {
         save("07b-reboot-code", b.get("/confirm/reboot"))
         save("08-about", b.get("/about"))
         save("09-wall-base", b.get("/wall-base"))
+        // #466: All panels as the server draws it; panels-shots.mjs runs its script against fakes.
+        save("13-all-panels", b.get("/panels"))
         // The QR flow and back: the done page offers Manage; signed in, every QR page's header leads back.
         save("10-qr-done", anon.get("/callback"))
         save("10b-qr-done-signed-in", b.get("/callback"))
