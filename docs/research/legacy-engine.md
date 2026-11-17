@@ -304,7 +304,8 @@ as before (4 frames and 2 pages refused). Then, in the same process (same pid, `
 with `--es url http://127.0.0.1:18126/`), the new dashboard address was refused: `Lockdown: refused page from
 127.0.0.1:18126`, nothing reached the other origin's server, and with nothing else on screen the engine showed
 "127.0.0.1:18126 isn't the Home Assistant the panel started with, so it didn't open. … If the dashboard's address
-changed, restart the app." (`Lockdown.ELSEWHERE`; `NO_DASHBOARD` when there was none at start).
+changed, restart the app." (`Lockdown.ELSEWHERE`; `NO_DASHBOARD` when there was none at start). Since step 15
+the message says "…isn't the Home Assistant address the panel started with…".
 
 ## What runs on the legacy engine
 
