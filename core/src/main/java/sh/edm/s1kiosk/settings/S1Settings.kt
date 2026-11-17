@@ -55,6 +55,7 @@ object S1Settings {
                 brightness = { runtime.screen.refreshBrightness() },
             ),
             hardware = ScreenHardware.of(frame, panes, context),
+            screenBlueprints = blueprints(CoreSettings.SCREEN),
             account = runtime.dashboardAccount::shown,
             product = runtime.build.product,
         )

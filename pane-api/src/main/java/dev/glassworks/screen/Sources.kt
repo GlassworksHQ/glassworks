@@ -49,17 +49,15 @@ interface LightSource {
 interface ScreenSettings {
     /** "presence": off after the idle timeout with nobody near. "always": never off. */
     val screenMode: String
+    /** Seconds with nobody near and no touch before the screen turns off; 0 or less never. Home Assistant can change it. */
     val idleOffSec: Int
-    /** "HH:MM-HH:MM" in local time. Anything else means no night. */
-    val nightWindow: String
-    val nightIdleOffSec: Int
     val wakeOnApproach: Boolean
     /** Passed to [PresenceSource.setRange]. */
     val presenceRangeM: Float
     var autoBrightness: Boolean
     val minBrightness: Float
+    /** The most automatic brightness may reach, unless something holds the screen. Home Assistant can lower it, at night say. */
     val maxBrightness: Float
-    val nightMaxBrightness: Float
     /** 0..1 while [autoBrightness] is off. 0 or less means the system brightness. */
     var manualBrightness: Float
 }

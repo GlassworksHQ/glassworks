@@ -11,6 +11,12 @@ import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.frame.Input
 import dev.glassworks.frame.Orientation
 import dev.glassworks.manage.ManageFixture
+import dev.glassworks.pane.BLUEPRINTS
+import dev.glassworks.pane.Blueprint
+import dev.glassworks.pane.BlueprintAccess
+import dev.glassworks.pane.SettingsItem
+import dev.glassworks.pane.blueprintCard
+import dev.glassworks.testing.RepoFiles
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.screen.AmbientLight
 import dev.glassworks.screen.ProximityPresence
@@ -39,7 +45,7 @@ import java.io.File
  * The Screen page on each frame (#471), on the panel and on the Manage page, from the real settings model:
  * the S1 (its VI5300 and light sensor), a Pixel Tablet (a light sensor and a camera, no proximity sensor),
  * a bare tablet (neither) and the lululemon Mirror (portrait, no touch; a camera, sensors unknown, drawn
- * without). Skipped unless asked:
+ * without). Each page also scrolled to its Blueprints card (`-end`): Panel night mode (#473), for an administrator. Skipped unless asked:
  *   ./gradlew :kiosk:testDebugUnitTest --tests '*ScreenByFrameMockups*' -Ps1MockupDir=<dir>
  */
 @RunWith(RobolectricTestRunner::class)
@@ -72,24 +78,38 @@ class ScreenByFrameMockups {
         ShadowBuild.setModel(model)
     }
 
+    /** The app's real blueprint list, for an administrator whose Home Assistant has none of them yet. */
+    private fun card(id: String): SettingsItem.Blueprints? {
+        val list = Blueprint.parse(File(RepoFiles.s1App, "src/main/assets/${Blueprint.ASSET}").readText()).filter { it.pane == id }
+        if (list.isEmpty()) return null
+        val ha = "http://homeassistant.local:8123"
+        return SettingsItem.Blueprints(list, { s -> blueprintCard(list, s, BlueprintAccess.Admin(emptyList()), ha, "v0.5.0") }, {})
+    }
+
     private fun generic(): GenericAndroid = GenericAndroid(app, presence = ProximityPresence("test"), light = AmbientLight("test"))
 
     private fun shoot(name: String, frame: Frame, w: Int, h: Int) {
         settingsApp(frame)
         val runtime = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false))
         val prefs = KioskPrefs(app)
-        val model = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = true, fullScreen = {}, context = app)
+        val model = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = true, fullScreen = {}, blueprints = ::card, context = app)
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         o.show(model)
         o.previewSection("screen")
         Mockup.idle()
         Mockup.save("screen-$name", o, w, h)
+        Mockup.layout(o, w, h)
+        o.previewScrollTo(Mockup.label(o, BLUEPRINTS))
+        Mockup.idle()
+        Mockup.save("screen-$name-end", o, w, h)
         val tokens = HaTokenClient(object : HttpPoster {
             override fun postForm(url: String, body: String) = 0 to ""
             override fun get(url: String, maxBytes: Int) = 0 to ""
         })
         val m = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, prefs)
-        val f = ManageFixture().apply { statusFn = { m.status() } }
+        // The app's assets aren't on Robolectric's class path, so S1Manage's own blueprint list is empty here: the
+        // panel's model, with the card, stands in for its sections.
+        val f = ManageFixture().apply { statusFn = { m.status().copy(sections = model.sections) } }
         val browser = f.Browser().also { it.signInWithHa() }
         File(Mockup.dir!!, "manage").mkdirs()
         File(Mockup.dir!!, "manage/screen-$name.html").writeBytes(browser.get("/screen").body)

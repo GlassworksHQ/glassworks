@@ -209,23 +209,6 @@ class SettingsOverlayTest {
         assertTrue(shown(o, "After 5 minutes"))
     }
 
-    @Test
-    fun theNightWindowIsSteppedAndCanBeOff() {
-        val o = open()
-        prefs.nightWindow = "22:00-07:00"
-        o.previewSection("screen")
-        Mockup.idle()
-        row(o, "At night").performClick()
-        Mockup.idle()
-        Mockup.label(o, "22:00").let { assertTrue(it.isShown) }
-        o.findViewsWithText("From later").performFirstClick()
-        o.findViewsWithText("To earlier").performFirstClick()
-        Mockup.label(o, "Save").performClick()
-        settle()
-        assertEquals("22:30-06:30", prefs.nightWindow)
-        assertTrue(shown(o, "22:30 – 06:30"))
-    }
-
     private fun View.findViewsWithText(desc: String): List<View> {
         val out = ArrayList<View>()
         findViewsWithText(out, desc, View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION)

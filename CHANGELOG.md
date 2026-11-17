@@ -8,6 +8,16 @@ below as the release notes.
 ## [Unreleased]
 
 ### Added
+- **Panel night mode, a blueprint for Home Assistant.** At night your panels turn their screen off
+  sooner and keep it dimmer, and in the morning they go back to your day settings. Night can be two
+  times, sunset to sunrise, or any condition Home Assistant can check, and one automation covers all
+  your panels. It only switches a panel between your two values: at night one that is still at the
+  day value, by day one still at the night value. A value you set by hand stays, unless it is one of
+  those two. A panel that was off or restarting catches up within a minute of coming back.
+  Add it from the panel's **Settings → Screen** or the Manage page. A new *Max auto brightness* number
+  in Home Assistant sets how bright the screen may get, and *Idle timeout* is now on by default for new
+  panels. Setting *Idle timeout* above 0 from Home Assistant also turns *Screen mode* back to presence,
+  as the panel's own **Turn off when idle** does.
 - **The panel opens its own Wi-Fi for setup when no Wi-Fi works.** With no connection 3 minutes after it
   starts, or when you press **Set up from a phone** on its setup screen, the panel opens a Wi-Fi network of
   its own for 15 minutes. Scan the QR code on its screen with a phone, open the address it shows, pair, and
@@ -133,6 +143,14 @@ below as the release notes.
   generic app's icon; S1 Kiosk keeps its own.
 
 ### Changed
+- **The panel's own night setting is gone: Home Assistant decides when it is night.** The **At night**
+  window (22:00–07:00) and **At night, turn off after** (20 s) are no longer in the settings, on the
+  Manage page or in Home Assistant (*Night window*, *Night idle timeout*). After the update a panel
+  keeps the same idle timeout day and night, and brightness is no longer capped at 20% at night, even
+  if you had changed those settings. To get them back, add the **Panel night mode** blueprint from
+  **Settings → Screen** ([how](docs/blueprints.md#panel-night-mode)). On a panel Home Assistant already
+  has, turn its *Idle timeout* entity on first. Your other screen settings stay as they were. Dashboards
+  that read `window.s1kiosk.night` get nothing there now.
 - **The panel's own Wi-Fi says when it is starting, then shows the setup page's QR code once a phone is on it.**
   **Set up from a phone** now shows "Starting the setup Wi-Fi…" at once, where the screen used to sit unchanged
   for several seconds. A start that fails says why in the same place, with **Try again**. Once a phone on the

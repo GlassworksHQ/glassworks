@@ -492,7 +492,7 @@ class GeckoBehaviourPinTest {
         val m = port.posted.single()
         assertEquals("state", m.getString("type"))
         val state = m.getJSONObject("state")
-        assertEquals(setOf("presence", "proximityRaw", "lux", "screenOn", "night", "voice"), state.keys().asSequence().toSet())
+        assertEquals(setOf("presence", "proximityRaw", "lux", "screenOn", "voice"), state.keys().asSequence().toSet())
         assertEquals("off", state.getString("voice"))
     }
 

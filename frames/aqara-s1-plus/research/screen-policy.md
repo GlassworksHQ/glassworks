@@ -59,5 +59,6 @@ adb shell service call A_device_control 7 i32 0 i32 0   # disable DND (2nd arg: 
 adb shell service call A_device_control 7 i32 1 i32 0   # restore
 ```
 
-Night behaviour now lives in the kiosk's screen policy (`dev.glassworks.screen.ScreenPolicy`): a configurable night window, a shorter
-idle timeout and a lower brightness cap, with wake on approach. See [sensors.md](../docs/sensors.md).
+Night behaviour lived in the kiosk's screen policy (`dev.glassworks.screen.ScreenPolicy`) up to 0.4.3: a night window, a shorter
+idle timeout and a lower brightness cap, with wake on approach. Since #473 the panel has no clock of its own: Home Assistant
+sets the idle timeout and the brightness limit at night with the Panel night mode blueprint. See [sensors.md](../docs/sensors.md).
