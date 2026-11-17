@@ -20,6 +20,9 @@ object WifiRadio {
      * The user's Wi-Fi switch is off: `Settings.Global.WIFI_ON` says off, also through airplane mode. Not the client's
      * state: without STA+AP concurrency Android parks the client while our own access point runs, and
      * `isWifiEnabled` then reads false with the switch on (S1 retest on b8f827fe). Unreadable counts as on.
+     *
+     * Keep in step with `wifiSwitchOn` in `libs/improv`'s WifiProvisioner.kt, which reads the same setting and values for
+     * a join (the library can't depend on the core). There an unreadable switch reads as off, on purpose.
      */
     fun switchedOff(context: Context): Boolean {
         val v = runCatching { Settings.Global.getInt(context.applicationContext.contentResolver, Settings.Global.WIFI_ON) }.getOrNull()

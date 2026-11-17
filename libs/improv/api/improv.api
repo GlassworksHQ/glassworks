@@ -226,6 +226,7 @@ public final class dev/glassworks/improv/SerialPacketReader$Item$Packet : dev/gl
 
 public final class dev/glassworks/improv/WifiProvisioner {
 	public static final field Companion Ldev/glassworks/improv/WifiProvisioner$Companion;
+	public static final field RADIO_DIDNT_COME_BACK Ljava/lang/String;
 	public fun <init> (Landroid/content/Context;Landroid/os/Handler;Landroid/content/ComponentName;)V
 	public synthetic fun <init> (Landroid/content/Context;Landroid/os/Handler;Landroid/content/ComponentName;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun cancel ()V

@@ -461,7 +461,7 @@ class MainActivity : Activity() {
         val needsPermission = hotspotAsked ||
             (view as? SetupHotspot.View.Off)?.error == HotspotFailure.NO_PERMISSION
         val permission = if (needsPermission) hotspotPermission() else HotspotPermission.Step.Ready
-        val url = HotspotAddress.now()?.let { "http://$it:${sh.edm.s1kiosk.auth.OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }
+        val url = HotspotAddress.now(this)?.let { "http://$it:${sh.edm.s1kiosk.auth.OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }
         return HotspotStep.card(view, permission, url)
     }
 
