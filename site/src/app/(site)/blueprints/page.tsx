@@ -21,6 +21,10 @@ export default async function BlueprintsPage() {
   const core = list.filter(isCore);
   // the panes' own order: general panes first, frame panes last
   const groups = panes.map((p) => ({ pane: p, list: list.filter((b) => b.pane === p.id) })).filter((g) => g.list.length > 0);
+  // a blueprint the page can't place would vanish from it without a word: stop the build instead
+  const placed = new Set([...core, ...groups.flatMap((g) => g.list)]);
+  const lost = list.filter((b) => !placed.has(b));
+  if (lost.length > 0) throw new Error(`blueprints: no card for ${lost.map((b) => `${b.path} (pane ${b.pane})`).join(", ")}`);
 
   return (
     <>

@@ -46,8 +46,9 @@ files change.
    `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric, the latest
    release from `../CHANGELOG.md`. Blueprints are the app's own list (its `blueprints.json` asset),
    read from GitHub at the latest release tag when the site is built (`src/lib/blueprints.ts`), so the
-   build needs github.com; `BLUEPRINTS_REF=<tag or commit>` builds from another ref. The docs are the repo's own Markdown: `src/lib/docs/sources.ts`
-   maps each file to its URL and nav group, and the site never keeps a copy. A doc's text changes in
+   build needs github.com; `BLUEPRINTS_REF=<tag or commit>` builds from another ref. The docs are the
+   repo's own Markdown: `src/lib/docs/sources.ts` maps each file to its URL and nav group, and the site
+   never keeps a copy. A doc's text changes in
    the Markdown, on GitHub; a new doc gets a line in `sources.ts`. A data change
    and the page that shows it go in one PR. The site's own words for that data are in
    `src/lib/frameText.ts`. The libraries' API reference is each release's Dokka HTML, from its

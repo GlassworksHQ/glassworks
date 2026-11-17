@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PANES } from "@glassworks/frame-card";
 import { describe, expect, it } from "vitest";
 import { ASSET, fromAsset, isCore } from "./blueprints";
 
@@ -27,6 +28,8 @@ describe("blueprints", () => {
     const panes = list.filter((b) => !isCore(b));
     expect(panes.map((b) => b.name)).toContain("Doorbell on Glassworks panels");
     expect(panes.every((b) => b.path.startsWith("panes/") || b.path.startsWith("frames/"))).toBe(true);
-    expect(list.length).toBe(JSON.parse(asset).length);
+    // every pane blueprint belongs to a pane the site knows, or the page would have nowhere to show it
+    const known = new Set(PANES.map((p) => p.id));
+    expect(panes.filter((b) => !known.has(b.pane)).map((b) => b.path)).toEqual([]);
   });
 });
