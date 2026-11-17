@@ -17,20 +17,20 @@ class CameraPartsTest {
     private val presenceOnly = CameraPolicy(privacy = false, use = CameraUse.PRESENCE)
 
     @Test fun withoutTheCameraOrWithPrivacyNothingRuns() {
-        assertEquals(CameraPlan.NOTHING, CameraPlan.of(snapshots, permitted = false, ownSensor = false, signedIn = true))
-        assertEquals(CameraPlan.NOTHING, CameraPlan.of(snapshots.copy(privacy = true), permitted = true, ownSensor = false, signedIn = true))
+        assertEquals(CameraPlan.NOTHING, CameraPlan.of(snapshots, permitted = false, ownSensor = false, signedIn = true, streams = true))
+        assertEquals(CameraPlan.NOTHING, CameraPlan.of(snapshots.copy(privacy = true), permitted = true, ownSensor = false, signedIn = true, streams = true))
     }
 
     @Test fun theScreenUsesTheCameraOnlyWithoutASensorOfItsOwn() {
-        assertEquals(CameraPlan(detect = true, feedScreen = true, stream = false), CameraPlan.of(presenceOnly, true, ownSensor = false, signedIn = true))
-        assertEquals(CameraPlan.NOTHING, CameraPlan.of(presenceOnly, true, ownSensor = true, signedIn = true))
+        assertEquals(CameraPlan(detect = true, feedScreen = true, stream = false), CameraPlan.of(presenceOnly, true, ownSensor = false, signedIn = true, streams = true))
+        assertEquals(CameraPlan.NOTHING, CameraPlan.of(presenceOnly, true, ownSensor = true, signedIn = true, streams = true))
     }
 
     @Test fun theStreamNeedsItsSwitchSnapshotsAndASignIn() {
-        assertEquals(CameraPlan(true, true, true), CameraPlan.of(snapshots, true, ownSensor = false, signedIn = true))
-        assertEquals("no default password", CameraPlan(true, true, false), CameraPlan.of(snapshots, true, ownSensor = false, signedIn = false))
-        assertEquals("refused in Presence only", CameraPlan(true, true, false), CameraPlan.of(snapshots.copy(use = CameraUse.PRESENCE), true, false, true))
-        assertEquals("motion for the ONVIF events even with a sensor of its own", CameraPlan(true, false, true), CameraPlan.of(snapshots, true, ownSensor = true, signedIn = true))
+        assertEquals(CameraPlan(true, true, true), CameraPlan.of(snapshots, true, ownSensor = false, signedIn = true, streams = true))
+        assertEquals("no default password", CameraPlan(true, true, false), CameraPlan.of(snapshots, true, ownSensor = false, signedIn = false, streams = true))
+        assertEquals("refused in Presence only", CameraPlan(true, true, false), CameraPlan.of(snapshots.copy(use = CameraUse.PRESENCE), true, false, true, streams = true))
+        assertEquals("motion for the ONVIF events even with a sensor of its own", CameraPlan(true, false, true), CameraPlan.of(snapshots, true, ownSensor = true, signedIn = true, streams = true))
     }
 
     @Test fun nv21KeepsLumaRowsAndInterleavesVThenU() {
@@ -90,6 +90,20 @@ class CameraPartsTest {
         assertEquals("nothing up to 1080p: the smallest listed, never one it doesn't list", 2048 to 1536, yuvSizeFor(listOf(2592 to 1944, 2048 to 1536), hd))
         assertEquals(hd, yuvSizeFor(null, hd))
         assertEquals(hd, yuvSizeFor(emptyList(), hd))
+    }
+
+    /** #479: Android 6's emulator camera (LEGACY) lists no 1280x720; the stream runs at the size the hub reads. */
+    @Test fun aLegacyCameraStreamsAtTheSizeItLists() {
+        val legacy = listOf(640 to 480, 320 to 240, 176 to 144)
+        val reader = yuvSizeFor(legacy, CameraHub.WIDTH to CameraHub.HEIGHT)
+        assertEquals(StreamFit.Size(640, 480), streamFitFor(reader, legacy) { _, _ -> true })
+        assertEquals("a camera that doesn't list encoder sizes", StreamFit.Size(640, 480), streamFitFor(reader, null) { _, _ -> true })
+        val noSurface = streamFitFor(reader, listOf(320 to 240)) { _, _ -> true }
+        assertEquals("The camera can't send its 640 × 480 picture to a video encoder", (noSurface as StreamFit.Refused).why)
+        val noEncoder = streamFitFor(reader, legacy) { w, h -> w * h <= 320 * 240 }
+        assertEquals("The video encoder can't take the camera's 640 × 480 picture", (noEncoder as StreamFit.Refused).why)
+        assertEquals("a camera that can't stream runs presence alone", CameraPlan(true, true, false),
+            CameraPlan.of(snapshots, true, ownSensor = false, signedIn = true, streams = false))
     }
 
     @Test fun presenceOnALegacyCameraAsksForTheSlowestRangeThatCoversIt() {

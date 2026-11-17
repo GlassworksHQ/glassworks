@@ -17,7 +17,8 @@ fun announcedFps(range: IntRange?): Int = range?.last ?: 0
 
 /**
  * The size the hub reads frames at: [want] when the camera lists it for YUV ([sizes], width to height), else the
- * listed size nearest it in area, up to 1920x1080, else the smallest it lists. A LEGACY camera (Android 6's, on the
+ * listed size nearest it in area among those up to 1920x1080. A camera that lists nothing that small gets the
+ * smallest size it lists, which can be larger. A LEGACY camera (Android 6's, on the
  * Camera1 shim) refuses a session at a size it doesn't list. With no list, [want].
  */
 fun yuvSizeFor(sizes: List<Pair<Int, Int>>?, want: Pair<Int, Int>): Pair<Int, Int> {
@@ -34,3 +35,27 @@ fun yuvSizeFor(sizes: List<Pair<Int, Int>>?, want: Pair<Int, Int>): Pair<Int, In
  */
 fun presenceRangeFor(ranges: List<IntRange>?, want: Int): IntRange? =
     ranges?.filter { it.last >= want }?.minWithOrNull(compareBy<IntRange> { it.last }.thenBy { it.first })
+
+/** What the stream can be on this camera: H.264 at [Size], or no stream, for [Refused.why]. */
+sealed interface StreamFit {
+    data class Size(val width: Int, val height: Int) : StreamFit {
+        override fun toString() = "${width}x$height"
+    }
+
+    /** [why] is shown on the camera's page as is. */
+    data class Refused(val why: String) : StreamFit
+}
+
+/**
+ * The stream at the size the hub reads frames at ([reader], from [yuvSizeFor]): the camera draws both at one size,
+ * which a LEGACY camera's shim takes. Refused when the camera doesn't list that size for an encoder's surface
+ * ([surfaces], null when it doesn't say) or the H.264 encoder can't take it ([encodes]).
+ */
+fun streamFitFor(reader: Pair<Int, Int>, surfaces: List<Pair<Int, Int>>?, encodes: (Int, Int) -> Boolean): StreamFit {
+    val (w, h) = reader
+    return when {
+        surfaces != null && reader !in surfaces -> StreamFit.Refused("The camera can't send its $w × $h picture to a video encoder")
+        !encodes(w, h) -> StreamFit.Refused("The video encoder can't take the camera's $w × $h picture")
+        else -> StreamFit.Size(w, h)
+    }
+}

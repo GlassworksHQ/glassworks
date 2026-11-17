@@ -50,6 +50,8 @@ data class CameraReading(
     val lens: CameraFacts.Lens? = null,
     /** Frames a second asked of the camera: 0 while nothing asks, null for the camera's own rate. */
     val frameRate: Int? = 0,
+    /** The stream's size on this camera, or why it can't stream. */
+    val streamFit: StreamFit = StreamFit.Size(CameraHub.WIDTH, CameraHub.HEIGHT),
 )
 
 /**
@@ -66,6 +68,7 @@ object CameraPage {
         r.problem == CameraPane.NOT_ALLOWED -> "$NOT_ALLOWED_LINE." to Tone.PROBLEM
         r.problem != null -> r.problem to Tone.PROBLEM
         r.privacy -> "Camera privacy is on · the camera is closed" to Tone.QUIET
+        r.onvif && r.streamFit is StreamFit.Refused -> "${r.streamFit.why} · the stream stays off" to Tone.PROBLEM
         r.onvif && !r.signedIn -> NO_SIGN_IN to Tone.PROBLEM
         r.watchers.isNotEmpty() -> "Camera in use · streaming to ${viewers(r.watchers.size)} · images leave the panel" to Tone.OK
         r.leaving -> "Camera in use · sending images to Home Assistant" to Tone.OK
@@ -110,16 +113,17 @@ object CameraPage {
         return listOf(presence, camera, out)
     }
 
-    /** Why the stream can't be on now, or null when it can: privacy first, then the use. */
-    fun streamRefusal(privacy: Boolean, use: CameraUse): String? = when {
+    /** Why the stream can't be on now, or null when it can: privacy first, then the use, then the camera ([fit]). */
+    fun streamRefusal(privacy: Boolean, use: CameraUse, fit: StreamFit): String? = when {
         privacy -> PRIVACY_ON
         use == CameraUse.PRESENCE -> NEEDS_CAMERA
+        fit is StreamFit.Refused -> "${fit.why}."
         else -> null
     }
 
     /** The stream switch's line: why it can't be on, or what it is for. */
-    fun streamDetail(privacy: Boolean, use: CameraUse): String =
-        streamRefusal(privacy, use) ?: "For Frigate, go2rtc, Home Assistant's ONVIF integration and UniFi Protect."
+    fun streamDetail(privacy: Boolean, use: CameraUse, fit: StreamFit): String =
+        streamRefusal(privacy, use, fit) ?: "For Frigate, go2rtc, Home Assistant's ONVIF integration and UniFi Protect."
 
     /** The user name, never the password: no surface shows that. */
     fun signIn(signIn: Pair<String, String>?): String =
@@ -128,9 +132,9 @@ object CameraPage {
     fun address(a: StreamAddress?): String =
         a?.let { "${it.host} · RTSP port ${it.rtspPort}, ONVIF port ${it.onvifPort}" } ?: "The panel has no address yet"
 
-    fun stream(r: CameraReading): String = when {
-        r.address == null -> "—"
-        else -> "${r.address.stream} · H.264 · ${CameraHub.WIDTH} × ${CameraHub.HEIGHT}" + if (r.streaming) "" else " · closed now"
+    fun stream(r: CameraReading): String = when (val fit = r.streamFit) {
+        is StreamFit.Refused -> "None on this camera"
+        is StreamFit.Size -> r.address?.let { "${it.stream} · H.264 · ${fit.width} × ${fit.height}" + if (r.streaming) "" else " · closed now" } ?: "—"
     }
 
     fun device(r: CameraReading): String = r.address?.device?.let { it + if (r.streaming) "" else " · closed now" } ?: "—"

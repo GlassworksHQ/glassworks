@@ -6,6 +6,7 @@ package dev.glassworks.camera
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Bundle
 import android.util.Log
@@ -117,5 +118,17 @@ class H264Encoder(
 
         /** About 0.1 bit a pixel at [FPS]: 1.4 Mbit/s at 1280x720. */
         fun bitrateFor(width: Int, height: Int): Int = (width * height * FPS / 10).coerceIn(500_000, 6_000_000)
+
+        /**
+         * Whether the encoder [H264Encoder] gets (the first H.264 encoder, as `createEncoderByType` picks) takes
+         * [width] x [height]. False without one. True when Android can't say: the encoder then tries.
+         */
+        fun encodes(width: Int, height: Int): Boolean = try {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                .firstOrNull { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
+                ?.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)?.videoCapabilities?.isSizeSupported(width, height) ?: false
+        } catch (e: Exception) {
+            true
+        }
     }
 }

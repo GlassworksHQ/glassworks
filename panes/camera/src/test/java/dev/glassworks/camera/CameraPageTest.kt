@@ -71,14 +71,21 @@ class CameraPageTest {
         assertTrue("closed ports say so", CameraPage.stream(watching).endsWith("closed now"))
         listOf(CameraPage.stream(r), CameraPage.device(r)).forEach { assertFalse("no credentials in $it", it.contains("@")) }
         assertEquals("The stream is off", CameraPage.watching(watching))
+        assertEquals("#479: the size the camera streams at", "rtsp://192.0.2.41:8554/live · H.264 · 640 × 480",
+            CameraPage.stream(r.copy(streamFit = StreamFit.Size(640, 480))))
+        assertEquals("None on this camera", CameraPage.stream(watching.copy(streamFit = StreamFit.Refused("no"))))
     }
 
     @Test fun theStreamSwitchSaysWhyItCantBeOn() {
-        assertEquals(CameraPage.NEEDS_CAMERA, CameraPage.streamDetail(privacy = false, use = CameraUse.PRESENCE))
-        assertEquals("privacy first", CameraPage.PRIVACY_ON, CameraPage.streamDetail(privacy = true, use = CameraUse.PRESENCE_AND_SNAPSHOTS))
-        assertEquals(CameraPage.PRIVACY_ON, CameraPage.streamRefusal(privacy = true, use = CameraUse.PRESENCE))
-        assertEquals(null, CameraPage.streamRefusal(privacy = false, use = CameraUse.PRESENCE_AND_SNAPSHOTS))
-        assertTrue(CameraPage.streamDetail(false, CameraUse.PRESENCE_AND_SNAPSHOTS).contains("UniFi Protect"))
+        assertEquals(CameraPage.NEEDS_CAMERA, CameraPage.streamDetail(privacy = false, use = CameraUse.PRESENCE, fit = StreamFit.Size(1280, 720)))
+        assertEquals("privacy first", CameraPage.PRIVACY_ON, CameraPage.streamDetail(privacy = true, use = CameraUse.PRESENCE_AND_SNAPSHOTS, fit = StreamFit.Size(1280, 720)))
+        assertEquals(CameraPage.PRIVACY_ON, CameraPage.streamRefusal(privacy = true, use = CameraUse.PRESENCE, fit = StreamFit.Size(1280, 720)))
+        assertEquals(null, CameraPage.streamRefusal(privacy = false, use = CameraUse.PRESENCE_AND_SNAPSHOTS, fit = StreamFit.Size(1280, 720)))
+        assertTrue(CameraPage.streamDetail(false, CameraUse.PRESENCE_AND_SNAPSHOTS, StreamFit.Size(1280, 720)).contains("UniFi Protect"))
+        val refused = StreamFit.Refused("The camera can't send its 640 × 480 picture to a video encoder")
+        assertEquals("the camera's reason, after privacy and the use", "${refused.why}.",
+            CameraPage.streamRefusal(privacy = false, use = CameraUse.PRESENCE_AND_SNAPSHOTS, fit = refused))
+        assertEquals(CameraPage.NEEDS_CAMERA, CameraPage.streamRefusal(privacy = false, use = CameraUse.PRESENCE, fit = refused))
     }
 
     @Test fun theCameraTileSaysWhichCameraAndItsRate() {

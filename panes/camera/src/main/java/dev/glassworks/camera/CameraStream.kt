@@ -27,6 +27,9 @@ interface StreamOutput {
 
     /** The address of each session watching now (one per session): empty while the stream is off. */
     fun watchers(): List<String> = emptyList()
+
+    /** The size the stream runs at on this camera, or why it can't run: then [start] opens nothing. */
+    fun fit(): StreamFit = StreamFit.Size(CameraHub.WIDTH, CameraHub.HEIGHT)
 }
 
 /** Where to find the stream: the panel's [host], the RTSP [stream] URL and the ONVIF [device] service. No credentials, ever. */
@@ -52,8 +55,8 @@ class CameraStream(
     private val host: () -> String?,
     private val snapshot: () -> ByteArray?,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
-    private val encoders: EncoderFactory = EncoderFactory { au, failed ->
-        H264Encoder(CameraHub.WIDTH, CameraHub.HEIGHT, onAccessUnit = au, onFailure = failed)
+    private val encoders: EncoderFactory = EncoderFactory { size, au, failed ->
+        H264Encoder(size.width, size.height, onAccessUnit = au, onFailure = failed)
     },
     /** Tests use free ports and no WS-Discovery. */
     private val rtspPort: Int = RTSP_PORT,
@@ -74,6 +77,11 @@ class CameraStream(
     override fun start(signIn: Pair<String, String>): Boolean = synchronized(lock) {
         if (rtsp != null && this.signIn == signIn) return true
         stopLocked()
+        // No port opens for a stream without a picture: a viewer would get SDP and nothing after it.
+        val size = when (val fit = hub.streamFit) {
+            is StreamFit.Size -> fit
+            is StreamFit.Refused -> { log("no stream: ${fit.why}"); return false }
+        }
         this.signIn = signIn
         val name = identity().name
         var ve: ViewerEncoder? = null
@@ -89,7 +97,7 @@ class CameraStream(
             port = onvifPort,
             host = { host() ?: "0.0.0.0" },
             info = { identity().let { OnvifDeviceInfo(Build.MANUFACTURER, Build.MODEL, it.firmware, onvifMac(it.panelMac).replace(":", ""), Build.DEVICE, onvifMac(it.panelMac), it.name) } },
-            stream = { OnvifStreamInfo("rtsp://${host() ?: "0.0.0.0"}:$rtspPort/live", CameraHub.WIDTH, CameraHub.HEIGHT, H264Encoder.FPS, H264Encoder.bitrateFor(CameraHub.WIDTH, CameraHub.HEIGHT) / 1000) },
+            stream = { OnvifStreamInfo("rtsp://${host() ?: "0.0.0.0"}:$rtspPort/live", size.width, size.height, H264Encoder.FPS, H264Encoder.bitrateFor(size.width, size.height) / 1000) },
             credentials = { this.signIn },
             snapshot = snapshot,
             onLog = { log("ONVIF: $it") },
@@ -125,6 +133,8 @@ class CameraStream(
     override fun address(): StreamAddress? = host()?.let { StreamAddress(it, rtspPort, onvifPort) }
 
     override fun watchers(): List<String> = synchronized(lock) { rtsp }?.watchers() ?: emptyList()
+
+    override fun fit(): StreamFit = hub.streamFit
 
     /** Each part on its own: a throwing encoder release must not leave the ports open or the multicast lock held. */
     private fun stopLocked() {

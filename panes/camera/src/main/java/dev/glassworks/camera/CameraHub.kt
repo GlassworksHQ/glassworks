@@ -21,6 +21,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
+import android.media.MediaCodec
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
@@ -78,8 +79,10 @@ class CameraHub(
     private var presenceRange: android.util.Range<Int>? = null
     /** The reader's size: [width] x [height] when the camera lists it ([yuvSizeFor]). */
     private var size = width to height
-    /** The stream's encoder is [width] x [height]: a camera that doesn't list that size gets no encoder. */
-    private val streamable get() = size == width to height
+    /** The stream on the open camera, read with [size]: the session never looks the camera up again. */
+    private var openFit: StreamFit = StreamFit.Refused(SIZES_UNREADABLE)
+    /** The camera the hub opens or holds open, for [availability]. */
+    private var openId: String? = null
 
     private val wanted get() = sinks.isNotEmpty() || waiters.isNotEmpty() || encoder != null ||
         SystemClock.elapsedRealtime() < lingerUntil
@@ -146,6 +149,7 @@ class CameraHub(
     fun release() {
         handler.post {
             released = true
+            manager.unregisterAvailabilityCallback(availability)
             sinks.clear(); waiters.forEach { it.latch.countDown() }; waiters.clear(); encoder = null
             closeCamera()
             // An open in flight still calls back: quit only once it has, so it can close that camera.
@@ -168,6 +172,7 @@ class CameraHub(
         val id = try { pickCamera() } catch (e: Exception) { fail("no camera: ${e.javaClass.simpleName}"); return }
             ?: run { fail("this device has no camera"); return }
         opening = true
+        openId = id
         try {
             manager.openCamera(id, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
@@ -224,6 +229,54 @@ class CameraHub(
 
     override val streamFps: Int get() = announcedFps(streamRange)
 
+    private class Sizes(val reader: Pair<Int, Int>, val fit: StreamFit)
+
+    /**
+     * The last sizes [read], with the camera they were read from. Dropped when opening a camera fails ([fail]) and
+     * whenever Android says a camera the hub doesn't hold came, went, or was taken or freed ([availability]), so a
+     * camera that was unplugged or replaced under the same id is read again.
+     */
+    private val sizes = KeptRead<Sizes>()
+
+    /** Runs on the hub's thread, as [openId] changes. */
+    private val availability = object : CameraManager.AvailabilityCallback() {
+        override fun onCameraAvailable(cameraId: String) = changed(cameraId)
+        override fun onCameraUnavailable(cameraId: String) = changed(cameraId)
+
+        private fun changed(cameraId: String) { if (cameraId != openId) sizes.drop() }
+    }
+
+    // On the hub's thread, not the caller's: it is the process's first call to the camera service, and the panes are
+    // built on the main thread at start. release() unregisters on the same thread, after it.
+    init {
+        handler.post { manager.registerAvailabilityCallback(availability, handler) }
+    }
+
+    /**
+     * The reader size ([yuvSizeFor]) and stream ([streamFitFor]) of camera [id] (null: the panel has none now): the
+     * encoder runs at the reader's size, or not at all. The stream asks before it opens a port, the hub when it opens
+     * the camera. Neither no camera nor a read that throws is kept, so the next ask reads again.
+     */
+    private fun read(id: String?): Sizes {
+        if (id == null) return Sizes(width to height, StreamFit.Refused(NO_CAMERA))
+        return sizes.read(id) {
+            val map = manager.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
+            Sizes(reader, streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes))
+        }
+    }
+
+    /**
+     * No stream while the camera's sizes can't be read: the pane asks again on its next check. Kept sizes answer
+     * without asking the camera service, so the page's refresh costs no binder call.
+     */
+    override val streamFit: StreamFit get() = try {
+        (sizes.kept() ?: read(cameraId())).fit
+    } catch (e: Exception) {
+        log("camera: sizes unreadable (${e.javaClass.simpleName})")
+        StreamFit.Refused(SIZES_UNREADABLE)
+    }
+
     /** Which camera the hub opens, for the page (#117's Camera tile): read once, like [streamRange]. */
     override val lens: CameraFacts.Lens? by lazy {
         try {
@@ -256,8 +309,9 @@ class CameraHub(
         facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
         sensorDegrees = c.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 0
         fpsRange = streamRange?.let { android.util.Range(it.first, it.last) }
-        val listed = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.getOutputSizes(ImageFormat.YUV_420_888)
-        size = yuvSizeFor(listed?.map { it.width to it.height }, width to height)
+        val read = sizes.kept(id) ?: read(id) // throws to openCamera, which retries
+        size = read.reader
+        openFit = read.fit
         val legacy = c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY
         presenceRange = if (!legacy) null else presenceRangeFor(
             c.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)?.map { it.lower..it.upper }, CameraPresence.DEFAULT_FPS.toInt(),
@@ -272,9 +326,9 @@ class CameraHub(
             r.setOnImageAvailableListener({ onImage(it) }, handler)
             reader = r
         }
-        // A camera without the encoder's size would refuse the whole session, presence included: presence goes on alone.
-        val encoder = encoder?.takeIf { streamable }
-        if (this.encoder != null && encoder == null) log("camera: no ${width}x$height output, so no stream; presence goes on")
+        // The stream never asks on a camera that can't stream ([CameraStream] opens no port); if it did, presence goes on alone.
+        val encoder = encoder?.takeIf { openFit is StreamFit.Size }
+        if (this.encoder != null && encoder == null) log("camera: no stream ($openFit); presence goes on")
         val targets = listOfNotNull(r.surface, encoder)
         val gen = ++generation
         configuring = true
@@ -361,6 +415,7 @@ class CameraHub(
     /** Tells presence the camera is gone, answers waiting stills, and tries again later while it is still wanted. */
     private fun fail(why: String) {
         log("camera: $why")
+        sizes.drop()
         closeCamera()
         sinks.forEach { it.sink.lost(why) }
         waiters.forEach { it.latch.countDown() }
@@ -388,6 +443,7 @@ class CameraHub(
         try { device?.close() } catch (_: Exception) {}
         if (device != null) log("camera closed")
         device = null
+        openId = null
         try { reader?.close() } catch (_: Exception) {}
         reader = null
     }
@@ -403,5 +459,30 @@ class CameraHub(
         const val LINGER_MS = 10_000L
         const val RETRY_MS = 5_000L
         const val DETACH_WAIT_MS = 1_000L
+        const val SIZES_UNREADABLE = "The panel couldn't read the camera's sizes"
+        const val NO_CAMERA = "The panel has no camera now"
     }
+}
+
+/**
+ * A value read for one camera id, kept until [drop]. A read that a [drop] overtook is returned but not kept, so a
+ * camera that changed while it was being read is read again. Any thread.
+ */
+internal class KeptRead<V : Any> {
+    private val lock = Any()
+    private var kept: Pair<String, V>? = null
+    private var generation = 0
+
+    fun kept(): V? = synchronized(lock) { kept?.second }
+
+    fun kept(id: String): V? = synchronized(lock) { kept?.takeIf { it.first == id }?.second }
+
+    fun read(id: String, read: () -> V): V {
+        val gen = synchronized(lock) { generation }
+        val v = read()
+        synchronized(lock) { if (gen == generation) kept = id to v }
+        return v
+    }
+
+    fun drop() = synchronized(lock) { generation++; kept = null }
 }
