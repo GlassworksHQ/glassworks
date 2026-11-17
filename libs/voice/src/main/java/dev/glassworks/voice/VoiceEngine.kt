@@ -180,9 +180,13 @@ public class VoiceEngine internal constructor(
 
     /** Tells [onReadiness] when [readiness] changed. Any thread. */
     private fun publish() {
-        val now = readiness
-        val changed = synchronized(readyLock) { (published != now).also { published = now } }
-        if (changed) try { onReadiness?.invoke(now) } catch (e: Exception) { VoiceLog.w("readiness listener failed", e) }
+        // Read and delivered under the lock: a thread that read an older state can't deliver it after a newer one.
+        synchronized(readyLock) {
+            val now = readiness
+            if (published == now) return
+            published = now
+            try { onReadiness?.invoke(now) } catch (e: Exception) { VoiceLog.w("readiness listener failed", e) }
+        }
     }
 
     private fun setModel(r: VoiceReadiness) {
@@ -234,7 +238,12 @@ public class VoiceEngine internal constructor(
             VoiceLog.i("No wake word selected; wake word detection off")
             return
         }
-        if (loaded?.id == id) return
+        if (loaded?.id == id) {
+            // Back to the word that still listens, while another was loading (it showed Starting).
+            failures = 0
+            setModel(VoiceReadiness.Ready)
+            return
+        }
         if (showStarting) setModel(VoiceReadiness.Starting)
         val failed: Pair<String, (Long) -> VoiceReadiness> = try {
             val next = Loaded(id, word.phrase, load(word))
@@ -280,7 +289,9 @@ public class VoiceEngine internal constructor(
 
     private fun loadLegacy(file: String): WakeDetector = try {
         TfliteWakeWord.load(modelsDir, file)
-    } catch (e: ModelsMissingException) {
+    } catch (e: Exception) {
+        // Missing, or there but refused by TFLite (a corrupt file): fetch what fails its hash, then load again.
+        if (e !is ModelsMissingException && e !is WakeEngineException) throw e
         val fetched = try { ModelFetcher().ensure(modelsDir) } catch (io: java.io.IOException) {
             throw ModelsMissingException("${e.message}; downloading them failed: ${io.message}", modelFailureOf(io))
         }

@@ -132,6 +132,21 @@ class VoiceReadinessTest {
     }
 
     @Test
+    fun backToTheWordThatStillListensIsReady() {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val e = engine(word = "hey_jarvis") { word ->
+            if (word.id == "okay_nabu") gate.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            Quiet
+        }
+        eventually("Hey Jarvis ready") { e.readiness == VoiceReadiness.Ready }
+        e.setActive(listOf("okay_nabu"))
+        eventually("Okay Nabu loading") { e.readiness == VoiceReadiness.Starting }
+        e.setActive(listOf("hey_jarvis"))
+        gate.countDown()
+        eventually("ready again, not stuck on Getting ready") { e.readiness == VoiceReadiness.Ready }
+    }
+
+    @Test
     fun aMicrophoneThatWontOpenSaysWhetherItIsAllowed() {
         val e = engine { Quiet }
         eventually("ready") { e.readiness == VoiceReadiness.Ready }

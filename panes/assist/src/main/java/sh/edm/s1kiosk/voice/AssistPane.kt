@@ -104,6 +104,9 @@ class AssistPane(
     @Volatile var readiness: VoiceReadiness? = null
         private set
 
+    /** Guards [input] against [readiness]: an engine's late report can't bring a stopped pane's state back. */
+    private val lifecycle = Any()
+
     /** After a failed download or engine start: tries again now instead of at the next retry. */
     fun retryNow() {
         input?.retryNow()
@@ -191,7 +194,10 @@ class AssistPane(
         engine.onError = { msg -> dispatch(VoiceEvent.Error(msg, local = true)) }
         engine.onMicLevel = { VoiceLevels.mic = it }
         readiness = engine.readiness
-        engine.onReadiness = { r -> if (input === engine) { readiness = r; ctx.publishStates() } }
+        engine.onReadiness = { r ->
+            val current = synchronized(lifecycle) { (input === engine).also { if (it) readiness = r } }
+            if (current) ctx.publishStates()
+        }
         val c = VoiceAssistantController(
             send = { type, payload -> server?.sendVoice(type, payload) ?: false },
             player = object : dev.glassworks.voice.UrlPlayer {
@@ -226,8 +232,10 @@ class AssistPane(
         watchdog?.shutdownNow()
         watchdog = null
         input?.stop()
-        input = null
-        readiness = null
+        synchronized(lifecycle) {
+            input = null
+            readiness = null
+        }
         // The server outlives the pane (voice turned off, or the panel stopping): take the stopped controller back.
         server?.let { if (it.voice === controller) it.voice = null }
         controller = null

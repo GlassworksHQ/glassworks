@@ -82,7 +82,7 @@ internal class ModelFetcher(
                 val input = download { open(URL("$base/$name")) }
                 input.use {
                     val out = save { part.outputStream() }
-                    out.use {
+                    save { out.use {
                         val buf = ByteArray(64 * 1024)
                         var total = 0L
                         while (true) {
@@ -92,9 +92,9 @@ internal class ModelFetcher(
                             if (total > MAX_BYTES) throw ModelDownloadException("$name is larger than expected", ModelFailure.CheckFailed)
                             save { out.write(buf, 0, n) }
                         }
-                    }
+                    } }
                 }
-                val got = sha256(part)
+                val got = save { sha256(part) }
                 if (got != files.getValue(name)) {
                     throw ModelDownloadException("$name failed its SHA-256 check (got ${got.take(16)}…)", ModelFailure.CheckFailed)
                 }
@@ -111,7 +111,8 @@ internal class ModelFetcher(
         throw e as? ModelDownloadException ?: ModelDownloadException(e.message ?: e.toString(), modelFailureOf(e), e)
     }
 
+    /** A local file step: its failure is Storage, unless it is already a classified download failure inside it. */
     private inline fun <T> save(block: () -> T): T = try { block() } catch (e: IOException) {
-        throw ModelDownloadException(e.message ?: e.toString(), ModelFailure.Storage, e)
+        throw e as? ModelDownloadException ?: ModelDownloadException(e.message ?: e.toString(), ModelFailure.Storage, e)
     }
 }
