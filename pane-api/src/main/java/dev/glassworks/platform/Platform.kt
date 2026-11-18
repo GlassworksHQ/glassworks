@@ -5,15 +5,18 @@
 package dev.glassworks.platform
 
 import android.Manifest
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.app.role.RoleManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
@@ -22,6 +25,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import android.provider.Settings
 import android.system.Os
 import android.system.OsConstants
 
@@ -260,6 +264,32 @@ open class PlatformApi(
     ): Long? =
         if (hasProcessStartTime) Process.getStartElapsedRealtime()
         else procSelfStat()?.let(::procStatStartTicks)?.let { ticks -> ticksPerSecond().takeIf { it > 0 }?.let { ticks * 1000 / it } }
+
+    /** The home screen is a role from Android 10 (`RoleManager.ROLE_HOME`), which an app asks for with Android's own dialog. */
+    val hasHomeRole: Boolean get() = apiLevel >= 29
+
+    /** This app is the home screen: it holds the home role (Android 10+), or Android's HOME intent goes to it (older). */
+    fun isHomeApp(context: Context): Boolean = runCatching {
+        if (hasHomeRole) context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true
+        else context.packageManager.resolveActivity(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.packageName == context.packageName
+    }.getOrDefault(false)
+
+    /**
+     * Asks Android to make this app the home screen, from [activity]: the home role's dialog on Android 10+ (started for
+     * a result, as the role dialog needs), else Android's home settings. False when Android had nothing to open.
+     */
+    fun askHome(activity: Activity, requestCode: Int): Boolean {
+        if (hasHomeRole) runCatching {
+            val roles = activity.getSystemService(RoleManager::class.java)
+            if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                activity.startActivityForResult(roles.createRequestRoleIntent(RoleManager.ROLE_HOME), requestCode)
+                return true
+            }
+        }
+        return runCatching { activity.startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }.isSuccess
+    }
 
     /** An [Intent] extra, read with the typed getter from Android 13 and the deprecated one below. */
     fun intentExtra(intent: Intent, name: String): Intent? =

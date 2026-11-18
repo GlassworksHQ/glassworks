@@ -60,7 +60,7 @@ object SetupFlow {
     /**
      * Every step in order. [panes]: some pane has a card, so the Panes group is there; [paneSteps]: the
      * ids of the steps of the panes that are on, which follow the Panes step in its group; [own]: the device's
-     * steps (#403's This tablet, #422's Silent updates), each a row of its own after Panes.
+     * steps (#403's This device, #422's Silent updates), each a row of its own after Panes.
      */
     fun ids(panes: Boolean, paneSteps: List<String> = emptyList(), own: List<String> = emptyList()): List<String> =
         listOf(WIFI, HA, SIGNIN) + (if (panes) listOf(PANES) + paneSteps else emptyList()) + own + DONE

@@ -197,8 +197,8 @@ const firstLine = (s: string) => s.trim().split(/\r?\n/).find((l) => l.trim())?.
 
 /**
  * Each permission adb's shell can grant, if this build asks for it: microphone and camera (runtime
- * permissions), secure settings (screen on and off), the overlay (an app-op), and the device admin it
- * locks the screen with. Each is read back from the device: a vendor build may answer 0 and still not
+ * permissions), secure settings (the Bluetooth proxy turns Location on with them), the overlay (an app-op), and the
+ * device admin it turns the screen off with. Each is read back from the device: a vendor build may answer 0 and still not
  * grant it.
  */
 async function grant(r: Steps, app: GenericApp, apk: Uint8Array, sdk: number): Promise<Grant[]> {

@@ -71,7 +71,7 @@ class PrefsPinTest {
     }
 
     /** The prefs classes the app builds from a context. */
-    private fun roots(ctx: Context): List<Any> = listOf(KioskPrefs(ctx), PanePrefs(ctx), PrefsSsStore(ctx))
+    private fun roots(ctx: Context): List<Any> = listOf(KioskPrefs(ctx), PanePrefs(ctx), PrefsSsStore(ctx), dev.glassworks.setup.SetupPrefs(ctx))
 
     /** [roots] and every prefs or store object reachable from them through getters. */
     private fun prefsObjects(ctx: Context): List<Any> {

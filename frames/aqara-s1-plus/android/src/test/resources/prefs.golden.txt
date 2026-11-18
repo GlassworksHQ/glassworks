@@ -81,4 +81,6 @@ sendspin|output_delay_ms|Int|0
 sendspin|pairing_psk|String|null
 sendspin|records|String|null
 sendspin|volume|Int|60
+setup|this_device_answered|Boolean|false
+setup|this_device_migrated|Boolean|false
 timers|anchor|String|null

@@ -107,7 +107,7 @@ describe('the screens', () => {
     expect(heading()).toBe('Keep it plugged in.');
     expect(document.querySelector('.plain')?.textContent).toContain('Pixel Tablet, Android 14, 64-bit');
     const grants = [...document.querySelectorAll('.grants > div')].map((g) => g.textContent);
-    expect(grants).toEqual(['MicrophoneOn', 'CameraNot asked by this build', 'Screen on and offOn', 'Show over other appsOn', 'Lock the screenOn', 'Updates without a tapOn']);
+    expect(grants).toEqual(['MicrophoneOn', 'CameraNot asked by this build', 'Secure settingsOn', 'Show over other appsOn', 'Turn the screen offOn', 'Updates without a tapOn']);
     expect(document.querySelector('.warnbox')).toBeNull();
     expect(rail()).toContain('Install:now');
   });
@@ -115,8 +115,8 @@ describe('the screens', () => {
   it('4b: a vendor build that refuses a grant and the home screen: said once, then one tap', async () => {
     await show('vendor', 'One tap on the tablet.');
     expect(document.querySelector('.lede')?.textContent).toBe('Pick Glassworks, then Always.');
-    expect(document.querySelector('.grants')?.textContent).toContain('Screen on and offThis tablet said no');
-    expect(document.querySelector('.warnbox')?.textContent).toBe('This tablet\'s software refused screen on and off. Glassworks works without it; the screen won\'t turn off by itself.');
+    expect(document.querySelector('.grants')?.textContent).toContain('Secure settingsThis tablet said no');
+    expect(document.querySelector('.warnbox')?.textContent).toBe('This tablet\'s software refused secure settings. Glassworks works without it; the Bluetooth proxy can\'t turn Location on by itself.');
     expect(screen.getByText('Waiting for your tap')).toBeTruthy();
     expect(rail()).toContain('Install:turn');
   });

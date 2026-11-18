@@ -3,6 +3,8 @@ package sh.edm.s1kiosk
 import android.app.Application
 import dev.glassworks.KioskPrefs
 import dev.glassworks.platform.AppBuild
+import dev.glassworks.setup.SetupPrefs
+import dev.glassworks.setup.ThisDeviceStep
 import dev.glassworks.update.SilentUpdatesStep
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,6 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import sh.edm.s1kiosk.frame.TestFrames
 
 /**
  * The device's own setup steps (#422's Silent updates): after the panes' steps, also on the setup channel, and never
@@ -48,5 +51,24 @@ class DeviceSetupStepsTest {
         KioskPrefs(app).haSeen = true // then setup reaches Home Assistant
         runtime().paneDefinitions(app) // a restart mid-setup
         assertFalse("still asked during this first setup", KioskPrefs(app).silentUpdatesAnswered)
+    }
+
+    @Test fun thisTabletComesFirstOnATabletAndNeverOnTheS1() {
+        assertTrue("the S1", runtime().deviceSetupSteps(app).none { it.id == ThisDeviceStep.ID })
+        val tablet = KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false))
+        assertEquals(listOf(ThisDeviceStep.ID, SilentUpdatesStep.ID), tablet.deviceSetupSteps(app).map { it.id })
+        val mirror = KioskApp.runtime(TestFrames.mirror(app), build = AppBuild("1.0.0", 10000, debug = false))
+        assertTrue("no touch: nobody could tap its buttons", mirror.deviceSetupSteps(app).none { it.id == ThisDeviceStep.ID })
+    }
+
+    @Test fun aTabletSetUpBeforeNeverSeesThisTablet() {
+        KioskPrefs(app).haSeen = true
+        KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+        assertTrue(SetupPrefs(app).thisDeviceAnswered)
+    }
+
+    @Test fun aFreshTabletIsAskedDuringSetup() {
+        KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+        assertFalse(SetupPrefs(app).thisDeviceAnswered)
     }
 }

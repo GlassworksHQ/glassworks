@@ -66,10 +66,15 @@ class GenericAndroid(
 
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = emptyList<Pane>()
 
-    /** The Device page, named after the device: silent updates, device owner, model and Android. */
+    /**
+     * The Device page, named after the device: silent updates, the home screen and turning the screen off (setup's This
+     * tablet step, #403), device owner, model and Android.
+     */
     override fun deviceSection(context: Context, running: (String) -> Pane?): SettingsSection =
         SettingsSection(DEVICE, friendlyName().ifBlank { "Device" }, listOf(
             silentUpdatesItem { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
+            SettingsItem.Info({ HOME_TITLE }, { if (Platform.isHomeApp(context)) HOME_YES else HOME_NO }, fixable = { !Platform.isHomeApp(context) }),
+            SettingsItem.Info({ SCREEN_OFF_TITLE }, { if (adminActive(context)) SCREEN_OFF_YES else SCREEN_OFF_NO }, fixable = { !adminActive(context) }),
             SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
             SettingsItem.Info({ ANDROID_TITLE }, { Build.VERSION.RELEASE.orEmpty() }),
@@ -91,6 +96,20 @@ class GenericAndroid(
         /** The Device page's id on every frame. */
         const val DEVICE = "device"
         const val SILENT_UPDATES_TITLE = "Silent updates"
+        const val HOME_TITLE = "Home screen"
+        const val HOME_YES = "Yes: Glassworks opens when the device starts"
+        const val HOME_NO = "No: another app opens when the device starts. To change it: Android's Settings, Apps, Default apps, Home app"
+        const val SCREEN_OFF_TITLE = "Turn the screen off"
+        const val SCREEN_OFF_YES = "Yes: Glassworks is a device admin, so it can turn the screen off when idle. " +
+            "Turn that off in Android's Settings, Security, Device admin apps before you uninstall it"
+        const val SCREEN_OFF_NO = "No: the screen goes off on Android's own timer. To change it: setup's This device step, " +
+            "or Android's Settings, Security, Device admin apps"
+
+        /** One of this app's components is an active device admin (the receiver Kiln or setup's This device step activates). */
+        fun adminActive(context: Context): Boolean = runCatching {
+            context.getSystemService(android.app.admin.DevicePolicyManager::class.java)?.activeAdmins.orEmpty()
+                .any { it.packageName == context.packageName }
+        }.getOrDefault(false)
         const val OWNER_TITLE = "Device owner"
         const val MODEL_TITLE = "Model"
         const val ANDROID_TITLE = "Android"
