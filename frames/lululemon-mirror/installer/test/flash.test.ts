@@ -93,10 +93,13 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
 
     const out = { system: [] as Uint8Array<ArrayBuffer>[], userdata: [] as Uint8Array<ArrayBuffer>[] };
     const steps = new Set<string>();
+    const logs: string[] = [];
     const userdataBytes = 40 * 1024 * 1024;
-    await buildImages(loaded, { apk: fakeMirrorApk(), adbKey: KEY, userdataBytes, time: T },
-      { system: (b) => { out.system.push(b.slice()); }, userdata: (b) => { out.userdata.push(b.slice()); } }, (s) => steps.add(s));
+    await buildImages(loaded, { apk: fakeMirrorApk({ libs: { 'arm64-v8a': { 'libxul.so': new Uint8Array(8) } } }), adbKey: KEY, userdataBytes, time: T },
+      { system: (b) => { out.system.push(b.slice()); }, userdata: (b) => { out.userdata.push(b.slice()); } }, (s) => steps.add(s), (l) => logs.push(l));
     expect([...steps]).toEqual(['patch', 'system', 'userdata']);
+    // patchSystem's own lines reach the caller's log (#557)
+    expect(logs).toContain('1 native library for arm64-v8a in /priv-app/Glassworks/lib/arm64');
 
     // through the real Fastboot class onto Qualcomm LK as far as flashBlob uses it, 16 MiB per download
     const fake = new FakeLk(16 << 20, [['system', loaded.disk.blocks * 4096], ['userdata', userdataBytes]]);
