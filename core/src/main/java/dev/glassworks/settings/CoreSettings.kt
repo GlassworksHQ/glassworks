@@ -32,7 +32,7 @@ class CoreSettings(
     /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"); null leaves the row out. */
     private val account: () -> String? = { null },
     /** The app's name, before [version] in About ([dev.glassworks.platform.AppBuild.product]). */
-    private val product: String = dev.glassworks.platform.AppBuild.S1_KIOSK,
+    private val product: String = dev.glassworks.platform.AppBuild.PRODUCT,
     /** The panel's address on Wi-Fi, for the setup page's (null while it has none). */
     private val panelIp: () -> String? = dev.glassworks.InstallerGlue::wlanIpv4,
     private val now: () -> Long = System::currentTimeMillis,

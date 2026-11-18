@@ -19,7 +19,7 @@ the panel's entities and glue are `PanelDevice` in
 `core/src/main/java/dev/glassworks/device/` and the voice assistant in the
 [`voice`](../libs/voice/README.md) library (`VoiceAssistantController`, `VoiceEngine`), wrapped by `panes/assist`, with the wall base and the Aqara cloud switch in `frames/aqara-s1-plus/panes/wall-base`
 (`WallBasePane.kt`) and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
-keeps working while the screen is off. Logs: `adb logcat -s S1ESPHome S1Voice`.
+keeps working while the screen is off. Logs: `adb logcat -s Glassworks.ESPHome Glassworks.Voice`.
 
 ## Add it to Home Assistant
 
@@ -71,8 +71,8 @@ Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphom
 |---|---|
 | name / friendly name | `aqara-s1-plus-a1b2c3` / `Aqara S1 Plus`: what the device is, and the end of its MAC (see [Names](#names)). Before #260: `s1-panel` / `Glassworks Panel` |
 | MAC (unique id in HA) | the Wi-Fi MAC of `wlan0` if readable, else a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`), else a random one; persisted in prefs (`device_mac`). The first two come out the same after a reinstall, so HA keeps the same device |
-| manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (S1 Kiosk)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (S1 Kiosk)` |
-| esphome_version / compilation_time | `2026.10.2` / `S1 Kiosk <app version>` (HA shows "2026.10.2 (S1 Kiosk 0.1.0)") |
+| manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (Glassworks)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (Glassworks)`. Up to 0.4.3 the S1 app said `(S1 Kiosk)` |
+| esphome_version / compilation_time | `2026.10.2` / `Glassworks <app version>` (HA shows "2026.10.2 (Glassworks 0.1.0)") |
 | API version | 1.20 (as ESPHome 2026.10/11); `DeviceCapabilitiesRequest` is answered |
 | Sendspin | `DeviceCapabilitiesResponse.sendspin` = `{feature_flags: PAIRING_TOKEN, client_id}`; `SendspinPairingTokenRequest` (159) → `SendspinPairingTokenResponse` (160), token only over Noise with a key ([sendspin.md](sendspin.md#esphome-hand-off-how-ha-gives-ma-the-token)) |
 | voice_assistant_feature_flags | 61 = VOICE_ASSISTANT 1 + API_AUDIO 4 + TIMERS 8 + ANNOUNCE 16 + START_CONVERSATION 32 (0 when `voice_enabled` is false). Voice turned on or off while the panel runs changes it, and the panel asks Home Assistant to reconnect so it reads it again (#67) |
@@ -411,7 +411,7 @@ the four marked *on* are enabled when HA adds the panel. Turn the others on from
 
 The pane samples once a minute. It sends a value only when it moved by at least its band since the
 last value it sent, so a quiet panel sends almost nothing. It reads files in `/proc` and `/sys` and
-asks Android. It runs no shell commands and needs no root. S1 Kiosk and the generic app (both of its
+asks Android. It runs no shell commands and needs no root. The S1 app and the generic app (both of its
 builds, Android 6 and up) have it.
 
 | Entity | object_id | Default | Band | Source |
@@ -432,7 +432,7 @@ builds, Android 6 and up) have it.
 - CPU usage and App CPU usage are unknown for the first minute after a start: they need two samples.
 - CPU usage counts I/O wait as idle. `top` shows `iow` apart from `idle`, so a busy share worked out from `top`'s `idle` column counts I/O wait as busy and reads higher.
 - The timestamps are accurate to about a minute, because ESPHome sends sensor values as 32-bit floats.
-- The pane logs its own cost under `S1ESPHome` (`diagnostics: sample N took X ms CPU`) for the
+- The pane logs its own cost under `Glassworks.ESPHome` (`diagnostics: sample N took X ms CPU`) for the
   first three samples and then once an hour.
 
 ### Wall base entities
@@ -528,11 +528,11 @@ the stream). Its component and the main activity's differ per app:
 
 | App | Camera settings | Main activity |
 |---|---|---|
-| S1 Kiosk | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
+| Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
 | Glassworks for generic Android | `dev.glassworks.generic_android/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity` |
 | Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity` |
 
-For example, on S1 Kiosk: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
+For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity, for example
@@ -542,7 +542,7 @@ usual `--ez camera_enabled true` on the main activity, for example
 
 `update/UpdateManager.kt`; releases and signing in [releasing.md](releasing.md).
 
-- **State:** `current_version` is the app's versionName and `title` is `S1 Kiosk`. `missing_state`
+- **State:** `current_version` is the app's versionName and `title` is `Glassworks` (`S1 Kiosk` up to 0.4.3). `missing_state`
   stays set until the first successful check, and until then `latest_version` = `current_version`:
   Home Assistant 2026.11 ignores `missing_state` for update entities, and an empty `latest_version`
   can't be compared, which its `UpdateEntity.has_update` counts as an update (the entity turned on with
@@ -714,7 +714,7 @@ Assistant still does, unless the microphone is the problem. Each failure shows i
   went wrong, what to do and when the panel tries again, and a **Try again** row under *Listening* for
   the failures the panel retries. The pane's chip in the settings list reads *Problem*.
 - **The `voice_status` sensor** in Home Assistant (diagnostic, on by default).
-- **The log** (`S1Voice`, the Manage page's *Voice* source): one line per new failure, with the reason.
+- **The log** (`Glassworks.Voice`, the Manage page's *Voice* source): one line per new failure, with the reason.
   It never holds a token or a network name.
 
 A failed download or engine start is tried again after 30 s, then 1, 2 and 5 minutes, then every 10

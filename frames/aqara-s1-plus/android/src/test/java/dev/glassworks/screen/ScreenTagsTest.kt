@@ -28,8 +28,8 @@ class ScreenTagsTest {
         screen.start(context)
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(false)
         screen.wake("test")
-        assertEquals("s1kiosk:wake", shadowOf(ShadowPowerManager.getLatestWakeLock()).tag)
-        assertTrue(ShadowLog.getLogsForTag("S1Kiosk.Screen").any { it.msg == "wake (test)" })
+        assertEquals("glassworks:wake", shadowOf(ShadowPowerManager.getLatestWakeLock()).tag)
+        assertTrue(ShadowLog.getLogsForTag("Glassworks.Screen").any { it.msg == "wake (test)" })
         screen.stop()
     }
 }

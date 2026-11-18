@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicReference
  * and requests.
  */
 object SetupChannelServer {
-    private const val TAG = "S1Kiosk.SetupChannel"
+    private const val TAG = "Glassworks.SetupChannel"
 
     /** Improv's scan waits up to 15 s (it may turn Wi-Fi on first); a second more for the answer. */
     private const val SCAN_WAIT_MS = 16_000L

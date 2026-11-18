@@ -449,7 +449,7 @@ class CameraHub(
     }
 
     companion object {
-        private const val TAG = "S1Kiosk.Camera"
+        private const val TAG = "Glassworks.Camera"
 
         /** Enough for a still people recognise and an H.264 stream; presence reads a sparse 48x27 grid of it. */
         const val WIDTH = 1280

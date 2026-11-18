@@ -74,7 +74,7 @@ open class KioskService : Service() {
         val notification = buildNotification()
         foreground = KioskForeground(
             Platform,
-            onRefused = { t, e -> Log.w("S1Kiosk", "foreground service types $t (${KioskForeground.names(t)}) refused", e) },
+            onRefused = { t, e -> Log.w("Glassworks", "foreground service types $t (${KioskForeground.names(t)}) refused", e) },
             startWith = { Platform.startForeground(this, NOTIFICATION_ID, notification, it) },
         )
         promote()
@@ -111,7 +111,7 @@ open class KioskService : Service() {
         ImprovSerialServer.start(glassworks.frame, glassworks.build)
         SetupChannelServer.start(this, glassworks)
         startSetupHotspot()
-        Log.i("S1Kiosk", "KioskService started")
+        Log.i("Glassworks", "KioskService started")
     }
 
     /**
@@ -196,7 +196,7 @@ open class KioskService : Service() {
             cameraGranted = granted(Manifest.permission.CAMERA) && packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
         )
         if (types != before) {
-            Log.i("S1Kiosk", "foreground service types $types (${KioskForeground.names(types)}; location ${if (types and KioskForeground.LOCATION != 0) "on" else "off"})")
+            Log.i("Glassworks", "foreground service types $types (${KioskForeground.names(types)}; location ${if (types and KioskForeground.LOCATION != 0) "on" else "off"})")
         }
     }
 
@@ -251,7 +251,7 @@ open class KioskService : Service() {
         ?: applicationInfo.icon.takeIf { it != 0 } ?: android.R.drawable.sym_def_app_icon
 
     companion object {
-        private const val HOTSPOT_TAG = "S1Kiosk.Hotspot"
+        private const val HOTSPOT_TAG = "Glassworks.Hotspot"
         private const val CHANNEL = "kiosk"
         private const val NOTIFICATION_ID = 1
         private const val REQ_KIOSK_SETTINGS = 10  // distinct PendingIntent request codes

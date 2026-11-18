@@ -38,7 +38,7 @@ import dev.glassworks.frame.friendlyName
  *   it (older boot image, generic Android), Android's PackageInstaller. That asks for confirmation on
  *   the screen unless Android lets the app install without one ([silentUpdates]).
  *
- * Everything runs on one "s1-update" thread. [onChange] fires (on that thread) whenever the entity's
+ * Everything runs on one "glassworks-update" thread. [onChange] fires (on that thread) whenever the entity's
  * state may have changed.
  */
 class UpdateManager(
@@ -60,7 +60,7 @@ class UpdateManager(
     @Volatile var silentUpdates: SilentUpdates? = null
         private set
     private val exec: ScheduledExecutorService =
-        Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "s1-update").apply { isDaemon = true } }
+        Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "glassworks-update").apply { isDaemon = true } }
     val model = UpdateModel(runtime.build.versionName, runtime.build.product)
     /** The Frame update entity's model (#139), checked with the app's releases; null on a frame with no releases of its own. */
     val frame: FrameUpdateModel? = runtime.frame.frameRelease?.let { FrameUpdateModel(it, "${runtime.frame.friendlyName()} frame") }
@@ -509,7 +509,7 @@ class UpdateManager(
     }
 
     companion object {
-        const val TAG = "S1Kiosk.Update"
+        const val TAG = "Glassworks.Update"
         /** `UpdateCommand` (aioesphomeapi api.proto). */
         const val CMD_INSTALL = 1
         const val CMD_CHECK = 2

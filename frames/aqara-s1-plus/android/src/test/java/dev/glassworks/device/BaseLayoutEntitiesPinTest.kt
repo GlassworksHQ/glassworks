@@ -64,7 +64,7 @@ class BaseLayoutEntitiesPinTest {
             val identity = DeviceIdentity(
                 name = "aqara-s1-plus-000001", friendlyName = "Aqara S1 Plus", macAddress = "02:00:00:00:00:01",
                 esphomeVersion = PanelDevice.ESPHOME_VERSION, compilationTime = "test", manufacturer = "Aqara",
-                model = "Panel Hub S1 Plus (S1 Kiosk)", voiceFeatures = PanelDevice.VOICE_FEATURES,
+                model = "Panel Hub S1 Plus (Glassworks)", voiceFeatures = PanelDevice.VOICE_FEATURES,
             )
             device.initEntities(identity)
             assertEquals(BaseBackend.LOCALSERVICE, device.paneList().filterIsInstance<WallBasePane>().single().config.backend)

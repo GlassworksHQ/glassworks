@@ -40,7 +40,7 @@ Kotlin. Run it in any JVM or Android app and Home Assistant's ESPHome integratio
 an ESPHome device, with entities, encryption and the voice assistant. Most libraries implement the
 *client* side (talking to ESPHome devices). This one implements the device.
 
-It was extracted from [S1 Kiosk](../../frames/aqara-s1-plus/android/README.md), where it runs the Aqara S1 Plus panel's
+It was extracted from [Glassworks for the Aqara S1 Plus](../../frames/aqara-s1-plus/android/README.md), where it runs the Aqara S1 Plus panel's
 ESPHome device. Package `dev.glassworks.esphome`, MIT licensed.
 
 ## What it does
@@ -108,7 +108,7 @@ server.start()
 
 `ReadmeExampleTest` keeps this example compiling and working.
 
-- **Persist the key.** Implement `NoiseKeyStore` over your own storage (S1 Kiosk uses
+- **Persist the key.** Implement `NoiseKeyStore` over your own storage (Glassworks uses
   SharedPreferences). `save` must be synchronous and return false when the key wasn't stored, and the
   key must never be logged. If your storage can hold a key it can't read for a while (a key store
   that is down), implement `ReadableNoiseKeyStore` and return `StoredKey.Unreadable` from `read()`

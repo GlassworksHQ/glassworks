@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** Log facade: android.util.Log on the device, stdout in JVM tests. Never pass secrets. */
 object AuthLog {
-    private const val TAG = "S1Auth"
+    private const val TAG = "Glassworks.Auth"
     private val onAndroid = System.getProperty("java.vendor")?.contains("Android") == true
     fun i(msg: String) = if (onAndroid) { android.util.Log.i(TAG, msg); Unit } else println("I/$TAG: $msg")
     fun w(msg: String, t: Throwable? = null) =

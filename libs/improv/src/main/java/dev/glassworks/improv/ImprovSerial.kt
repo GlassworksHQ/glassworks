@@ -3,7 +3,7 @@ package dev.glassworks.improv
 /**
  * Improv Serial (https://www.improv-wifi.com/serial/): the packet types, commands, states and errors.
  * Pure Kotlin and transport-agnostic: feed bytes to [SerialPacketReader] and write what
- * [ImprovSerialSession] sends to any byte stream (a UART, a socket, an adb stream). S1 Kiosk carries
+ * [ImprovSerialSession] sends to any byte stream (a UART, a socket, an adb stream). The S1 app carries
  * it over adb ([ImprovAdbServer]); the browser client is kiln/packages/improv-serial (keep in sync).
  *
  * Packet: `"IMPROV" | version 1 | type | length | data[length] | checksum`, the checksum being the

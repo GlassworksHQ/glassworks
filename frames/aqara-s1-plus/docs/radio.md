@@ -761,7 +761,7 @@ RadioController runs the host while the helper reports `ok zigbee_router`.
   wait for NETWORK_UP (60 s), `updateTcLinkKey`. No joinable network: `ready to join: no Zigbee network
   allows joining right now (N seen)`.
 - ZHA's interview: ZDO is answered by zigbeed; the host answers Basic-cluster reads (manufacturer
-  `S1 Unleashed`, model `S1 Panel Zigbee router`, mains powered).
+  `Glassworks`, model `S1 Panel Zigbee router`, mains powered; the manufacturer was `S1 Unleashed` up to 0.4.3).
 
 Verified on the panel (from a computer through `adb forward`, `ZigbeeRouterLiveTest`, dry run so
 `joinNetwork` is never called; and in the app through the setup channel): session bring-up,
@@ -965,7 +965,7 @@ and the **proof build from `build-otbr.sh` already is that profile** (all of tho
   40 s, 60 s and every 120 s. Scans are never less than 40 s apart, so Android does not throttle
   them within one run of the app's service (a restart of the service forgets the last scan). A
   connect that keeps trying for 60 s counts as not connected; drops under 15 s don't restart that
-  count. Log tag `S1Kiosk.Wifi`. Android 10 refuses an app's scan without the location
+  count. Log tag `Glassworks.Wifi`. Android 10 refuses an app's scan without the location
   permission (the installer grants it), with location off, or when the location app-op is
   foreground-only and the app is not in the foreground. The first panel run (2026-11-12, b47ce54)
   failed on the last one: every scan was refused (`UID … has no location permission`), with the

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Made by branding/boot/app_icon.py from site/public/brand/mark-on-dark.svg; don't edit. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M70.564,59.438L71.078,59.798L71.46,60.21L71.693,60.66L71.776,61.125L71.693,61.59L71.46,62.04L71.078,62.453L70.564,62.813L56.922,70.688L56.295,70.984L55.583,71.205L54.807,71.34L54,71.385L53.194,71.34L52.418,71.205L51.705,70.984L51.079,70.688L37.436,62.813L36.923,62.453L36.54,62.04L36.308,61.59L36.225,61.125L36.308,60.66L36.54,60.21L36.923,59.798L37.436,59.438L51.079,51.563L51.705,51.266L52.418,51.045L53.194,50.91L54,50.865L54.807,50.91L55.583,51.045L56.295,51.266L56.922,51.563Z"
+        android:strokeColor="#33F4F4F5"
+        android:strokeWidth="1.875"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M70.564,52.313L71.078,52.673L71.46,53.085L71.693,53.535L71.776,54L71.693,54.465L71.46,54.915L71.078,55.328L70.564,55.688L56.922,63.563L56.295,63.859L55.583,64.08L54.807,64.215L54,64.26L53.194,64.215L52.418,64.08L51.705,63.859L51.079,63.563L37.436,55.688L36.923,55.328L36.54,54.915L36.308,54.465L36.225,54L36.308,53.535L36.54,53.085L36.923,52.673L37.436,52.313L51.079,44.438L51.705,44.141L52.418,43.92L53.194,43.785L54,43.74L54.807,43.785L55.583,43.92L56.295,44.141L56.922,44.438Z"
+        android:strokeColor="#73F4F4F5"
+        android:strokeWidth="1.875"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M70.564,45.188L71.078,45.548L71.46,45.96L71.693,46.41L71.776,46.875L71.693,47.34L71.46,47.79L71.078,48.203L70.564,48.563L56.922,56.438L56.295,56.734L55.583,56.955L54.807,57.09L54,57.135L53.194,57.09L52.418,56.955L51.705,56.734L51.079,56.438L37.436,48.563L36.923,48.203L36.54,47.79L36.308,47.34L36.225,46.875L36.308,46.41L36.54,45.96L36.923,45.548L37.436,45.188L51.079,37.313L51.705,37.016L52.418,36.795L53.194,36.66L54,36.615L54.807,36.66L55.583,36.795L56.295,37.016L56.922,37.313Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="36.225" android:startY="36.615" android:endX="53.994" android:endY="67.399">
+                <item android:offset="0" android:color="#FF38BDF8" />
+                <item android:offset="1" android:color="#FFA78BFA" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>
