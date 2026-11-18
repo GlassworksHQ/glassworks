@@ -72,4 +72,22 @@ class DeviceSetupStepsTest {
         KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
         assertFalse(SetupPrefs(app).thisDeviceAnswered)
     }
+
+    /** Setup's end answers the device's own steps, also one it skipped, so a lost grant never brings setup back. */
+    @Test fun theEndOfSetupAnswersTheDevicesOwnSteps() {
+        val r = runtime()
+        r.paneDefinitions(app) // a fresh panel: not answered
+        assertFalse(KioskPrefs(app).silentUpdatesAnswered)
+        r.settleDeviceSteps(app)
+        assertTrue(KioskPrefs(app).silentUpdatesAnswered)
+        assertTrue("answered: it never asks again", r.deviceSetupSteps(app).single().done())
+    }
+
+    @Test fun theEndOfSetupAnswersThisDeviceToo() {
+        val tablet = KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false))
+        tablet.paneDefinitions(app)
+        assertFalse(SetupPrefs(app).thisDeviceAnswered)
+        tablet.settleDeviceSteps(app)
+        assertTrue(SetupPrefs(app).thisDeviceAnswered)
+    }
 }
