@@ -359,6 +359,7 @@ class SetupStateTest {
         // the grace; once the page is left (signed in there), Add it asks.
         val panel = i.copy(usePanelLogin = true, showing = false)
         assertFalse("on HA's login page", SetupState.decide(panel).show)
+        assertFalse("while that page loads", SetupState.decide(panel.copy(onAuthPage = false)).show)
         val left = SetupState.decide(panel.copy(onAuthPage = false, dashboardLoaded = true))
         assertTrue(left.show)
         assertEquals(SetupFlow.HA, left.step)
