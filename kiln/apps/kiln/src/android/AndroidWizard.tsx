@@ -297,7 +297,7 @@ const GRANT_TEXT: Record<Grant['what'], { name: string; without: string }> = {
   // Location on; the device admin is what turns the screen off when idle (lockNow).
   'secure-settings': { name: 'Secure settings', without: 'the Bluetooth proxy can\'t turn Location on by itself' },
   'overlay': { name: 'Show over other apps', without: 'its codes can\'t show over other apps' },
-  'device-admin': { name: 'Turn the screen off', without: 'the screen goes off on Android\'s own timer, not when Glassworks turns it off' },
+  'device-admin': { name: 'Turn the screen off', without: 'Glassworks can\'t turn the screen off by itself' },
 };
 
 function GrantList({ grants, updates }: { grants: Grant[]; updates?: SilentUpdatesResult }) {

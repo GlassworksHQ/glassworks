@@ -121,6 +121,35 @@ class SetupFootTest {
             assertTrue("$label $b on the card", b.top >= 0 && b.bottom <= bottom)
         }
         val rows = views(s).filterIsInstance<android.widget.ScrollView>().single { it.isShown && it.getChildAt(0).height > 0 && it.parent !== s }
+        assertTrue("the rows have room to show: ${rows.height}px", rows.height > 40 * dp)
         assertTrue("the rows scroll: ${rows.getChildAt(0).height} in ${rows.height}", rows.getChildAt(0).height > rows.height)
+        // Scrolled to the end, the screen row's last line (how to undo it) is in view.
+        rows.scrollTo(0, rows.getChildAt(0).height)
+        Mockup.layout(s)
+        val undo = views(rows).filterIsInstance<TextView>().single { it.text == ThisDeviceStep.SCREEN_OFF }
+        val inRows = box(undo).bottom - box(rows).top
+        assertTrue("the undo line ends in view: $inRows of ${rows.height}", rows.scrollY > 0 && inRows <= rows.height + 1)
+    }
+
+    /** A redraw of the same step (every couple of seconds) keeps the step's own view attached, so a drag isn't cut (#524). */
+    @Test fun aRedrawOfTheSameStepKeepsItsViewAttached() {
+        val a = Mockup.activity()
+        val step = ThisDeviceStep({ ThisDeviceStep.Grants(home = false, admin = false) }, { false }, {}, { true }, { true })
+        val s = SetupOverlay(a, TestFrames.tablet(a), emptyList(), listOf(step))
+        a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
+        val m = SetupOverlay.Model(step = ThisDeviceStep.ID, done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN),
+            wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),
+            haUrl = "http://homeassistant.local:8123", haSource = "mdns", panelIp = "192.0.2.10", signedIn = true)
+        s.render(m)
+        Mockup.idle()
+        val rows = views(s).filterIsInstance<android.widget.ScrollView>().single { it.isShown && it.parent !== s }
+        var detached = 0
+        rows.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {}
+            override fun onViewDetachedFromWindow(v: View) { detached++ }
+        })
+        repeat(3) { s.render(m); Mockup.idle() }
+        assertEquals("never detached by a redraw", 0, detached)
+        assertTrue(rows.isShown)
     }
 }

@@ -102,8 +102,8 @@ class GenericAndroid(
         const val SCREEN_OFF_TITLE = "Turn the screen off"
         const val SCREEN_OFF_YES = "Yes: Glassworks is a device admin, so it can turn the screen off when idle. " +
             "Turn that off in Android's Settings, Security, Device admin apps before you uninstall it"
-        const val SCREEN_OFF_NO = "No: the screen goes off on Android's own timer. To change it: setup's This device step, " +
-            "or Android's Settings, Security, Device admin apps"
+        const val SCREEN_OFF_NO = "No: Glassworks can't turn the screen off by itself. To change it: setup's This device " +
+            "step, or Android's Settings, Security, Device admin apps"
 
         /** One of this app's components is an active device admin (the receiver Kiln or setup's This device step activates). */
         fun adminActive(context: Context): Boolean = runCatching {

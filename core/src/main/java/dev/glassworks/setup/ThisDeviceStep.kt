@@ -141,8 +141,8 @@ class ThisDeviceStep(
         const val MAKE_HOME = "Make it the home screen"
         const val ALLOW_SCREEN_OFF = "Let it turn the screen off"
         /** What Android's "Activate device admin app?" dialog says Glassworks wants it for (`EXTRA_ADD_EXPLANATION`). */
-        const val ADMIN_EXPLANATION = "Glassworks turns the screen off when the panel is idle, and nothing else. " +
-            "Turn this off before you uninstall Glassworks."
+        const val ADMIN_EXPLANATION = "Glassworks turns the screen off when the panel is idle, or when Home Assistant " +
+            "turns it off. With a PIN or password, Android then locks the device. Turn this off before you uninstall Glassworks."
         const val TILE_GAP_DP = 11f
         const val FADE_DP = 28f
     }

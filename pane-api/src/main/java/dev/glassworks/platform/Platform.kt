@@ -270,7 +270,9 @@ open class PlatformApi(
 
     /** This app is the home screen: it holds the home role (Android 10+), or Android's HOME intent goes to it (older). */
     fun isHomeApp(context: Context): Boolean = runCatching {
-        if (hasHomeRole) context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_HOME) == true
+        // The role where Android has it, as askHome asks for it; else the HOME intent, as askHome's settings page sets it.
+        val roles = if (hasHomeRole) context.getSystemService(RoleManager::class.java)?.takeIf { it.isRoleAvailable(RoleManager.ROLE_HOME) } else null
+        if (roles != null) roles.isRoleHeld(RoleManager.ROLE_HOME)
         else context.packageManager.resolveActivity(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY,
         )?.activityInfo?.packageName == context.packageName
