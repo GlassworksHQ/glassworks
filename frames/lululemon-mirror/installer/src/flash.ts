@@ -100,17 +100,19 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
  * The two images Kiln flashes, written as sparse images to the sinks: the loaded system image with
  * the app (Glassworks), services.jar trusting `adbKey`'s first line, and the rest (patchSystem), and a
  * fresh userdata the partition's size with `adbKey` in adb_keys (buildUserdata).
+ * `log`: patchSystem's own lines (the app's libraries, the unused apps left out, build.prop, services.jar).
+ * `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL.
  */
-/** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
 export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean;
   /** saved in userdata's wpa_supplicant.conf, so Android joins it on the first boot with nothing tapped */
   wifi?: { ssid: string; password: string } },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
-  onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
+  onProgress: (step: PrepareStep, x: number) => void = () => {},
+  log: (line: string) => void = () => {}): Promise<void> {
   adbKeyLines(o.adbKey); // every line, before the system image is touched
   onProgress('patch', 0);
   const sys = await Ext4.open(loaded.disk);
-  await patchSystem(sys, o);
+  await patchSystem(sys, o, log);
   // the image's own template: the saved network goes after its lines, as the Wi-Fi HAL would copy it
   const template = o.wifi ? new TextDecoder().decode(await sys.readFile('/etc/wifi/wpa_supplicant.conf')) : '';
   onProgress('patch', 1);

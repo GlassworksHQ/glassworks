@@ -10,7 +10,7 @@ import { Fastboot } from '@glassworks/fastboot';
 import { GLASSWORKS, IMAGE_PROXY, MIRROR_FASTBOOT, MIRROR_PROBE, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb, readSerial } from './adb';
-import { DRY_USERDATA, dryDevices, dryImage } from './dry';
+import { DRY_USERDATA, dryDevices, dryImage, dryRoom } from './dry';
 import { runInstall, runWayBack, type RunDeps } from './run';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -176,7 +176,9 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
     const common = { apk, app, bootAnimation, settingsOverlay, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
     let r;
     if (dry) {
-      const img = await dryImage(work, apk.length + (bootAnimation?.length ?? 0));
+      // the fake image needs room for what the patch writes: the APK, the libraries it unpacks, the
+      // boot animation and the settings overlay (#557)
+      const img = await dryImage(work, await dryRoom(apk, (bootAnimation?.length ?? 0) + (settingsOverlay?.length ?? 0)));
       const d = dryDevices(img.bytes, log, { app });
       r = await runInstall({ ...common, image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, adbKey: fakeAdbKey(1, 'dry@run'), screenshot: join(work, 'after.png') }, d.deps);
       log(`\nDry run: LK got ${d.lk.commands.filter((c) => c.startsWith('flash:')).join(', ')}, then reboot; adb ran ${d.after.cmds.length} commands on the first boot.`);
