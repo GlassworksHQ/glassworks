@@ -261,10 +261,14 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
     return d.code === 0;
   };
   const removed: UndoResult = { app: 'removed', note: 'Glassworks is removed.' };
-  // pm refuses to disable a package that isn't there: an earlier undo that stopped at the HOME check removed it
-  const notOff = async (): Promise<UndoResult> => ((await r.try(`pm list packages ${PKG}`)).split(/\r?\n/).some((l) => l.trim() === `package:${PKG}`)
-    ? { app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' }
-    : removed);
+  // pm refuses to disable a package that isn't there: an earlier undo that stopped at the HOME check
+  // removed it. Only a listing that worked can say it's gone.
+  const notOff = async (): Promise<UndoResult> => {
+    const l = await p.run(`pm list packages ${PKG}`);
+    return l.code === 0 && !l.out.split(/\r?\n/).some((x) => x.trim() === `package:${PKG}`)
+      ? removed
+      : { app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' };
+  };
   let result: UndoResult;
   if (wifiAtRisk(wifi)) {
     const net = `the panel's Wi-Fi${wifi.ssid ? ` (${wifi.ssid})` : ''}`;

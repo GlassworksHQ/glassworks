@@ -99,7 +99,8 @@ panel_wifi() {
   if [[ $WIFI_OWNER == unknown ]] && ! adb shell ip -4 -o addr show wlan0 2>/dev/null | grep -q 'inet '; then WIFI_OWNER=none; fi
   return 0
 }
-installed() { adb shell pm list packages "$PKG" | tr -d '\r' | grep -qx "package:$PKG"; }
+# Glassworks is gone, by a package listing that worked (a failed listing says nothing).
+absent() { local l; l=$(adb shell pm list packages "$PKG") || return 1; ! tr -d '\r' <<<"$l" | grep -qx "package:$PKG"; }
 wifi_at_risk() { [[ $WIFI_OWNER == kiosk || $WIFI_OWNER == unknown ]]; }
 net_name() { if [[ -n $WIFI_SSID ]]; then printf '"%s"' "$WIFI_SSID"; else printf 'its Wi-Fi network'; fi; }
 is_key_mismatch() { grep -qiE 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match' <<<"$1"; }
@@ -317,7 +318,7 @@ if [[ $UNDO -eq 1 ]]; then
     if [[ $DRY -eq 1 ]]; then echo "  + adb shell pm disable-user --user 0 $PKG"; APP_AFTER_UNDO=kept
     elif adb shell pm disable-user --user 0 "$PKG" >/dev/null; then APP_AFTER_UNDO=kept
     else APP_AFTER_UNDO=failed; fi
-    if [[ $APP_AFTER_UNDO == failed ]] && ! installed; then APP_AFTER_UNDO=removed; fi
+    if [[ $APP_AFTER_UNDO == failed ]] && absent; then APP_AFTER_UNDO=removed; fi
     if [[ $APP_AFTER_UNDO == kept ]]; then
       if [[ $WIFI_OWNER == kiosk ]]; then
         echo "  kept Glassworks installed but disabled: it saved the panel's Wi-Fi $(net_name), and Android"
@@ -331,7 +332,7 @@ if [[ $UNDO -eq 1 ]]; then
     echo "  + adb shell pm uninstall $PKG || adb shell pm disable-user --user 0 $PKG"
   elif ! adb shell pm uninstall "$PKG" | grep -q Success; then
     if adb shell pm disable-user --user 0 "$PKG" >/dev/null; then APP_AFTER_UNDO=disabled
-    elif installed; then APP_AFTER_UNDO=failed
+    elif ! absent; then APP_AFTER_UNDO=failed
     fi # pm refuses both for a package that isn't there: an earlier --undo that stopped at the HOME check removed it
   fi
   # Radio (frames/aqara-s1-plus/docs/radio.md): the app kept Aqara's radio services stopped ("Off" mode) and blocked

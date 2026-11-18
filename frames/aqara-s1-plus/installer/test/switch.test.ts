@@ -351,6 +351,14 @@ describe('undo keeps the panel on its Wi-Fi', () => {
     }
   });
 
+  it('a package listing that fails is not taken as removed', async () => {
+    const p = new UndoWifiPanel();
+    p.installed = 'none';
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'pm list packages sh.edm.s1kiosk' ? (p.cmds.push(cmd), { out: 'cmd: Failure calling service package\n', code: 1 }) : run(cmd));
+    expect((await unprovision(p, () => {}, noSleep)).app).toBe('running');
+  });
+
   it('uninstall refused, disable works: says it is turned off instead', async () => {
     const p = new UndoWifiPanel();
     p.wifiDump = fixture('dumpsys-wifi-other.txt');

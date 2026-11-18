@@ -89,7 +89,9 @@ cmd="$*"
 case "$cmd" in
   "getprop ro.product.model") echo "Aqara S1 Plus" ;;
   "getprop ro.build.version.sdk") echo 29 ;;
-  "pm list packages sh.edm.s1kiosk") [ "$(st installed)" != none ] && echo "package:sh.edm.s1kiosk" ;;
+  "pm list packages sh.edm.s1kiosk")
+    [ "$(st list)" = fail ] && { echo "cmd: Failure calling service package"; exit 1; }
+    [ "$(st installed)" != none ] && echo "package:sh.edm.s1kiosk" ;;
   "dumpsys package sh.edm.s1kiosk")
     if [ "$(st installed)" = release ]; then printf '    versionName=0.4.1\n    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]\n'
     else printf '    versionName=0.1.0\n    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]\n'; fi ;;
@@ -141,7 +143,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install}
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list}
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -376,6 +378,11 @@ for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
   panel "$fix"; printf none > "$T/installed"
   out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
   check "retry after an undo that removed Glassworks ($fix): exit 0, says removed" bash -c '[ "$1" -eq 0 ] && grep -q "Glassworks is removed" <<<"$2"' _ $rc "$out"
+done
+for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
+  panel "$fix"; printf none > "$T/installed"; printf fail > "$T/list"
+  out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+  check "...a listing that fails is not taken as removed ($fix)" bash -c '[ "$1" -ne 0 ] && ! grep -q "Glassworks is removed" <<<"$2"' _ $rc "$out"
 done
 unknown_wifi
 out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1)
