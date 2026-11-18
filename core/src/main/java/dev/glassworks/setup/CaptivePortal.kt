@@ -67,10 +67,10 @@ class CaptivePortal(
 
     /**
      * Answers on [at] from now on, instead of where it answered before. The web redirect keeps running when the IPv4
-     * address is the same (the IPv6 one coming later only moves DNS).
+     * address is the same (the IPv6 one coming later only moves DNS). True when every listener came up.
      */
     @Synchronized
-    override fun start(at: PortalAddresses) {
+    override fun start(at: PortalAddresses): Boolean {
         stopDns()
         if (httpOn != at.v4) stopHttp()
         dns = listOfNotNull(at.v4, at.v6).mapNotNull { a ->
@@ -89,6 +89,7 @@ class CaptivePortal(
             httpOn = at.v4.takeIf { http != null }
         }
         log("portal on (DNS ${dns.size}, redirect ${if (http != null) "on" else "off"})")
+        return dns.size == listOfNotNull(at.v4, at.v6).size && http != null
     }
 
     @Synchronized
@@ -194,7 +195,8 @@ class CaptivePortal(
 
 /** What [PortalHotspot] runs while the hotspot is up; [CaptivePortal] on a device. */
 interface Portal {
-    fun start(at: PortalAddresses)
+    /** Answers on [at]. False when a listener didn't come up (its port taken): a later start tries again. */
+    fun start(at: PortalAddresses): Boolean
 
     /** Safe when it isn't running. */
     fun stop()

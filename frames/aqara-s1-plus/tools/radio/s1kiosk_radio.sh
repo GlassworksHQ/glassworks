@@ -708,6 +708,17 @@ portal_wanted() {
 }
 
 # the rules' lines in iptables-save's order: family iface v4 prefix [v6]
+ip6_canon() { # an IPv6 address, short (2001:db8::1) or full -> 8 groups, lower case, no leading zeros (as hex_ip6)
+  c_=$(printf '%s' "${1%%/*}" | tr 'A-F' 'a-f')
+  case "$c_" in *::*) l6_=${c_%%::*}; r6_=${c_#*::} ;; *) l6_=$c_; r6_=- ;; esac
+  o6_=""; n6_=0; ro6_=""
+  for g_ in $(printf '%s' "$l6_" | tr ':' ' '); do o6_="$o6_:$(printf '%x' $((16#$g_)))"; n6_=$((n6_ + 1)); done
+  if [ "$r6_" != - ]; then
+    for g_ in $(printf '%s' "$r6_" | tr ':' ' '); do ro6_="$ro6_:$(printf '%x' $((16#$g_)))"; n6_=$((n6_ + 1)); done
+    while [ "$n6_" -lt 8 ]; do o6_="$o6_:0"; n6_=$((n6_ + 1)); done
+  fi
+  echo "${o6_#:}$ro6_"
+}
 portal_rules() {
   if [ "$1" = 4 ]; then
     echo "-A $PORTAL_CHAIN -s $3/$4 -d $3/32 -i $2 -p udp -m udp --dport 53 -j DNAT --to-destination $3:$PORTAL_DNS"
@@ -730,8 +741,13 @@ portal_ok() {
       printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination $3:$p_\$" || return 1
     done
   elif [ -n "$5" ]; then
-    # ip6tables-save shortens the address (2001:db8::20), so only its shape is checked here
-    printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination \[[0-9a-f:]*\]:$PORTAL_DNS\$" || return 1
+    # ip6tables-save shortens the address (2001:db8::20): the -d match and the target are compared with the
+    # kiosk's socket address in one form, so a rule for an address the hotspot no longer has is rebuilt
+    l_=$(printf '%s\n' "$s_" | grep "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination \[[0-9a-fA-F:]*\]:$PORTAL_DNS\$") || return 1
+    d_=$(printf '%s\n' "$l_" | sed -n 's/.* -d \([0-9a-fA-F:]*\)\/128 .*/\1/p')
+    t_=$(printf '%s\n' "$l_" | sed -n 's/.*--to-destination \[\([0-9a-fA-F:]*\)\]:.*/\1/p')
+    w6_=$(ip6_canon "$5")
+    [ -n "$d_" ] && [ "$(ip6_canon "$d_")" = "$w6_" ] && [ "$(ip6_canon "$t_")" = "$w6_" ] || return 1
   fi
   [ "$(printf '%s\n' "$s_" | grep -c "^-A PREROUTING .*-j $PORTAL_CHAIN\$")" = 1 ]
 }

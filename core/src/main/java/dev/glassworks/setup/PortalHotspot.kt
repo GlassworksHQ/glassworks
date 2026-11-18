@@ -9,8 +9,9 @@ import dev.glassworks.platform.Hotspot
 /**
  * A [Hotspot] with its captive portal (#197): [portal] runs exactly while [hotspot] is up, on the hotspot's addresses.
  * It starts when Android says the hotspot is up and stops with it, however it ends: [stop], Android ending it, or a
- * failed start. Android 10 gives the hotspot its IPv6 address a moment after its IPv4 one, so the addresses are read
- * again [recheckMs] after the start, and the portal moves to them if they changed.
+ * failed start. While the hotspot is up the addresses are read again every [recheckMs]: Android 10 gives the hotspot
+ * its IPv6 address a moment after its IPv4 one, and the first read can come before either. The portal starts once
+ * there is an address, moves when they change, and starts again when a listener didn't come up (a port taken).
  *
  * One thread, the one the hotspot's events come on. [schedule] runs a callback after a delay and returns its cancel.
  */
@@ -39,18 +40,18 @@ class PortalHotspot(
         hotspot.stop()
     }
 
+    /** Runs the portal on the addresses the hotspot has now, then again every [recheckMs] until [off]. */
     private fun on() {
         move()
-        cancelRecheck = schedule(recheckMs) { cancelRecheck = null; move() }
+        cancelRecheck = schedule(recheckMs) { cancelRecheck = null; on() }
     }
 
-    /** Runs the portal on the addresses the hotspot has now. */
     private fun move() {
         val now = addresses()
-        if (now == null) { log("portal: the hotspot has no address yet"); return }
+        if (now == null) { if (at != null) { at = null; portal.stop() }; return }
         if (now == at) return
-        at = now
-        portal.start(now)
+        // Remembered only once every listener is up, so a start that missed one is tried again on the next read.
+        at = if (portal.start(now)) now else null
     }
 
     private fun off() {

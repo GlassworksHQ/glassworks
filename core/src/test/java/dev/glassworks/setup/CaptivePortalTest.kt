@@ -163,7 +163,9 @@ class CaptivePortalTest {
     /** Records what the portal was asked. */
     private class FakePortal : Portal {
         val calls = mutableListOf<String>()
-        override fun start(at: PortalAddresses) { calls += "start ${at.v4.hostAddress} ${at.v6?.hostAddress}" }
+        /** What the next starts answer: every listener up, or not. */
+        var up = true
+        override fun start(at: PortalAddresses): Boolean { calls += "start ${at.v4.hostAddress} ${at.v6?.hostAddress}"; return up }
         override fun stop() { calls += "stop" }
     }
 
@@ -216,6 +218,43 @@ class CaptivePortalTest {
         addresses = PortalAddresses(ap)
         wakes.removeAt(0).also { assertEquals(0, wakes.size) }()
         assertEquals("...until the recheck finds one", "start 192.168.43.1 null", portal.calls.last())
+    }
+
+    @Test
+    fun `it keeps looking for the hotspot's address while the hotspot is up, not just once`() {
+        val portal = FakePortal()
+        val inner = FakeHotspot()
+        val wakes = mutableListOf<() -> Unit>()
+        var addresses: PortalAddresses? = null
+        val h = PortalHotspot(inner, portal, { _, r -> wakes += r; { wakes.remove(r) } }, { addresses })
+        h.start { }
+        inner.listener!!(Hotspot.Event.Started(net))
+        repeat(3) { wakes.removeAt(0)() } // 9 s with no address
+        assertEquals("nothing started yet", listOf("stop"), portal.calls)
+        addresses = PortalAddresses(ap)
+        wakes.removeAt(0)()
+        assertEquals("a later read finds it", "start 192.168.43.1 null", portal.calls.last())
+        repeat(5) { wakes.removeAt(0)() }
+        assertEquals("...and it isn't started again while nothing changes", 1, portal.calls.count { it.startsWith("start") })
+        h.stop()
+        assertEquals("stopped: no more reads", 0, wakes.size)
+    }
+
+    @Test
+    fun `a start that didn't bring every listener up is tried again, and a good one is kept`() {
+        val portal = FakePortal().apply { up = false }
+        val inner = FakeHotspot()
+        val wakes = mutableListOf<() -> Unit>()
+        val h = PortalHotspot(inner, portal, { _, r -> wakes += r; { wakes.remove(r) } }, { PortalAddresses(ap) })
+        h.start { }
+        inner.listener!!(Hotspot.Event.Started(net))
+        wakes.removeAt(0)()
+        assertEquals("a port was taken: started again on the next read", 2, portal.calls.count { it.startsWith("start") })
+        portal.up = true
+        wakes.removeAt(0)()
+        repeat(3) { wakes.removeAt(0)() }
+        assertEquals("up at the third: kept from then on", 3, portal.calls.count { it.startsWith("start") })
+        h.stop()
     }
 
     @Test

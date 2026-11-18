@@ -941,6 +941,14 @@ check "...never with an address in the log" test -z "$(grep -e 192.168 -e 2001: 
 : > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.3
 check "a new helper keeps rules already in place: not rebuilt, one jump, the status written once" \
   test "$(cat "$T/ipt/restores" 2>/dev/null | wc -l)/$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')/$(grep -c '^sys.s1kiosk.portal.status=' "$T/setprop.log")" = 0/1/1
+# ip6tables-save prints the address short; a rule in that form is the same rule, not a stale one
+sed -i 's/2001:db8:0:0:0:0:0:1/2001:db8::1/g' "$T/ipt/6-nat"; rm -f "$T/ipt/restores"; portal
+check "an IPv6 rule as ip6tables-save prints it (2001:db8::1) is kept, not rebuilt" \
+  test ! -s "$T/ipt/restores" -a "$(prop sys.s1kiosk.portal.status)" = "on wlan0"
+socks udp6 "$AP4:1F75 07 10050" "B80D0120000000000000000002000000:1F75 07 10050"; portal
+check "the hotspot's IPv6 address moved (IPv4 the same): the IPv6 rule follows it" \
+  test "$(nat 6 | grep -c 'to-destination \[2001:db8:0:0:0:0:0:2\]:8053$')/$(nat 6 | grep -c '2001:db8::1\|0:0:0:0:0:1\]')" = 1/0
+ap_up; portal
 # first_check: until the helper started in the background has done its first check (its status line)
 first_check() { i=0; until grep -q '^sys.s1kiosk.portal.status=' "$T/setprop.log" || [ $i -ge 300 ]; do sleep 0.1; i=$((i + 1)); done; }
 # bg_until <test...>: waits (60 s at most, an emulated ARM under load is slow) until it holds, then stops the helper
