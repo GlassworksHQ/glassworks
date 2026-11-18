@@ -173,7 +173,9 @@ below as the release notes.
 - **Setup signs in to Home Assistant without leaving you in another tab.** On the panel's setup page (`:8099/setup`),
   **Sign in** now takes you to Home Assistant's sign-in in the same tab and brings you back to the setup
   page at the next step, instead of leaving you in a second tab. Kiln over USB signs in in a small window
-  that closes by itself, and Kiln moves on to the radio without a click. The list of steps shows only the steps
+  that closes by itself, and Kiln moves on to the radio without a click. The Home Assistant step offers one
+  way on: **Sign in** until the panel is signed in, then **Continue**; "Skip, sign in on the panel" keeps
+  the address and leaves the sign-in to the panel's screen. The list of steps shows only the steps
   your panel has: a panel without a radio no longer lists a Radio step it skips.
 - **The S1's Bluetooth proxy goes by the panel's Bluetooth address.** The proxy now tells Home
   Assistant the panel's own Bluetooth address, as ESPHome proxies do, instead of its network address.

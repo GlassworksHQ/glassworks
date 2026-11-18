@@ -235,6 +235,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
+  skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
   radio(): Promise<void> { return this.steps.radio(); }
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
   /** Skip and Finish: the button stays busy until the panel has ended the pairing (or said it couldn't). */

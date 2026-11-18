@@ -69,3 +69,23 @@ describe('the rail is the panel\'s own steps (#453)', () => {
     expect(counter(c)).toBe('4 of 5');
   });
 });
+
+describe('the Home Assistant step offers one way on (maintainer, 2026-11-18)', () => {
+  const ha = (signedIn: boolean, signingIn = false) =>
+    ({ at: 'setup', setup: { phase: 'ha', signingIn, ha: { url: '', discovered: 'http://homeassistant.local:8123', signedIn } } }) as unknown as LanView;
+  const buttons = (c: HTMLElement) => [...c.querySelectorAll('main button')].map((b) => `${b.textContent}${b.className.includes('ember') ? ' (ember)' : ''}${(b as HTMLButtonElement).disabled ? ' (off)' : ''}`);
+
+  it('not signed in: Sign in, and a quiet way to leave it to the panel; no Continue', () => {
+    expect(buttons(page(ha(false)))).toEqual(['Skip, sign in on the panel', 'Sign in (ember)']);
+  });
+
+  it('signed in: Continue only', () => {
+    const c = page(ha(true));
+    expect(buttons(c)).toEqual(['Continue (ember)']);
+    expect(c.textContent).toContain('The panel is signed in.');
+  });
+
+  it('while the sign-in is under way, Sign in waits', () => {
+    expect(buttons(page(ha(false, true)))).toEqual(['Skip, sign in on the panel', 'Sign in (ember) (off)']);
+  });
+});
