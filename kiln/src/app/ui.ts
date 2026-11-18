@@ -1223,7 +1223,7 @@ class Installer {
         ]
       : [
           ['Restore the original software', 'Put the panel in FEL mode. This page writes its own boot, verified-boot and splash partitions back from the backup.'],
-          ['Factory reset the panel', 'Last, on the panel: swipe down from the top, tap Settings on the Glassworks notification, then Advanced settings → Factory reset. That removes Glassworks and everything set up on the panel. A factory reset alone does not restore the software, so restore first.'],
+          ['Factory reset the panel', 'Last, on the panel: swipe down from the top, tap Settings on the app\'s notification, then Advanced settings → Factory reset. That removes Glassworks and everything set up on the panel. A factory reset alone does not restore the software, so restore first.'],
         ];
     const at = keep && this.appsGivenBack ? 1 : 0;
     const ol = $('#undo-order');
@@ -1297,7 +1297,7 @@ class Installer {
     $('#done-title').textContent = 'The original software is back';
     $('#done-body').textContent = this.undoPath() === 'keep'
       ? 'The panel is restarting with Aqara\'s software and apps. Your settings and Wi-Fi are as they were.'
-      : 'One last step, on the panel: swipe down from the top, tap Settings on the Glassworks notification, then Advanced settings → Factory reset. After that it is exactly as it came from Aqara.';
+      : 'One last step, on the panel: swipe down from the top, tap Settings on the app\'s notification, then Advanced settings → Factory reset. After that it is exactly as it came from Aqara.';
     $('#bk').hidden = true;
     $('#bk-hint').textContent = 'Keep your backup in case you want to install again later.';
     $('#done-undo').hidden = true;

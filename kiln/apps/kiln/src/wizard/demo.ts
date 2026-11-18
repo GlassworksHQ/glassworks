@@ -350,7 +350,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       return;
     case 'undo-done':
       dispatch({ type: 'start', flow: 'undo', now: Date.now() });
-      dispatch({ type: 'done', done: { title: 'The original software is back.', body: 'One last step, on the panel: swipe down, tap Settings on the Glassworks notification, then Advanced settings → Factory reset.' } });
+      dispatch({ type: 'done', done: { title: 'The original software is back.', body: 'One last step, on the panel: swipe down, tap Settings on the app\'s notification, then Advanced settings → Factory reset.' } });
       return;
     case 'error':
       install();

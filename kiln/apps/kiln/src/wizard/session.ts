@@ -236,7 +236,7 @@ export class Session implements SetupSteps {
         title: 'The original software is back.',
         body: this.s.undo.depth === 'keep'
           ? 'It is restarting with Aqara\'s software and apps. Your settings and Wi-Fi are as they were.'
-          : `One last step, on the panel: swipe down, tap Settings on the ${this.d.frame.app} notification, then Advanced settings → Factory reset.`,
+          : `One last step, on the panel: swipe down, tap Settings on the app's notification, then Advanced settings → Factory reset.`,
       },
     });
   }
