@@ -152,6 +152,7 @@ open class AppManage(
                     "Licence" to own.licence,
                     "Source" to "github.com/GlassworksHQ/glassworks",
                 ),
+                legacy = runtime.engine.lockedDown,
             )
         }
 
@@ -245,11 +246,7 @@ open class AppManage(
         return Tile("Wi-Fi", link.ssid ?: "Connected", listOfNotNull(link.rssi?.let { "$it dBm".replace('-', '−') }, link.ipv4).joinToString(" · "), Tile.Tone.OK)
     }
 
-    private fun engineTile(): Tile {
-        val name = runtime.engine.name.ifEmpty { "Unknown" }
-        val major = name.substringAfterLast(' ').substringBefore('.')
-        return Tile("Engine", name.substringBeforeLast(' ') + " " + major, "Version ${name.substringAfterLast(' ')}", Tile.Tone.OK)
-    }
+    private fun engineTile(): Tile = engineTile(runtime.engine.name)
 
     private fun memoryTile(): Tile {
         val mi = ActivityManager.MemoryInfo()
@@ -336,6 +333,17 @@ open class AppManage(
 
         /** How long a restart or reboot waits, so the page that started it reaches the browser first. */
         const val ACTION_DELAY_MS = 1_000L
+
+        /**
+         * The Engine tile from the engine's name: "GeckoView 159" over "Version 159.0". The legacy engine's name ends in
+         * a label ("GeckoView 144.0 (legacy, Home Assistant only)"), which the Legacy chip explains instead (#29).
+         */
+        fun engineTile(name: String): Tile {
+            val m = Regex("""^(.*?) ((\d+)(?:\.\d+)*)""").find(name)
+                ?: return Tile("Engine", name.ifEmpty { "Unknown" }, "", Tile.Tone.OK)
+            val (product, version, major) = m.destructured
+            return Tile("Engine", "$product $major", "Version $version", Tile.Tone.OK)
+        }
 
         /** An Android system property, "" when unset or unreadable. */
         fun prop(key: String): String = runCatching {

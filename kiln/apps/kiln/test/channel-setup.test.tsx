@@ -173,7 +173,7 @@ describe('the setup steps over the LAN', () => {
 
   it('the next steps\' Finish waits while a button\'s work runs', () => {
     const finished: string[] = [];
-    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => { finished.push('finish'); } };
+    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => { finished.push('finish'); } };
     const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [] };
     const { rerender } = render(<RadioNext busy steps={steps} setup={{ phase: 'radio-next', plan }} />);
     const finish = screen.getByRole('button', { name: 'Finish' });
@@ -192,7 +192,7 @@ describe('the setup steps over the LAN', () => {
       copied.push(`${cmd}:${document.querySelector('textarea')?.value ?? ''}`);
       return true;
     }) as typeof document.execCommand;
-    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} };
+    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} };
     const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [{ title: 'Add the radio', body: '', kv: [['Serial path', 'socket://192.0.2.10:6638', true]] as [string, string, boolean][] }] };
     render(<RadioNext busy={false} steps={steps} setup={{ phase: 'radio-next', plan }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
@@ -204,12 +204,14 @@ describe('the setup steps over the LAN', () => {
     const calls: string[] = [];
     const steps: SetupSteps = {
       click: async (name, run) => { calls.push(name); await run(); },
-      signIn: () => {}, saveHa: async (u) => { calls.push(`saveHa ${u}`); }, radio: async () => {},
+      signIn: (u) => { calls.push(`signIn ${u}`); }, saveHa: async (u) => { calls.push(`saveHa ${u}`); },
+      skipHa: async (u) => { calls.push(`skipHa ${u}`); }, radio: async () => {},
       applyRadio: async (m) => { calls.push(`applyRadio ${m}`); }, finish: () => {},
     };
     const { unmount } = render(<HomeAssistant busy={false} steps={steps} setup={{ phase: 'ha', ha: panelState.ha }} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(calls).toEqual(['save-ha', 'saveHa http://homeassistant.local:8123']);
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip, sign in on the panel' }));
+    expect(calls).toEqual(['sign-in', 'signIn http://homeassistant.local:8123', 'skip-ha', 'skipHa http://homeassistant.local:8123']);
     unmount();
     render(<Radio busy={false} steps={steps} setup={{ phase: 'radio', radio: panelState.radio, note: '' }} />);
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Finish' })); });

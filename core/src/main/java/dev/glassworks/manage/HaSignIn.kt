@@ -93,7 +93,7 @@ class HaSignIn(
         val p = synchronized(pending) { prune(); state?.let { pending.remove(it) } }
             ?: return Result.Failed("This sign-in has expired", "Start again from the Manage page.")
         // Another browser's state (login CSRF): refuse, the code is not used.
-        if (browser == null || browser != p.browser) return Result.Failed("Can't sign in", "Start again from the Manage page, in this browser.")
+        if (browser == null || !MessageDigest.isEqual(browser.toByteArray(), p.browser.toByteArray())) return Result.Failed("Can't sign in", "Start again from the Manage page, in this browser.")
         if (error != null) return Result.Failed("Sign-in cancelled", "Home Assistant answered: $error.")
         if (code.isNullOrEmpty()) return Result.Failed("Can't sign in", "Home Assistant didn't send an authorization code.")
         val tokens = gateway.exchangeCode(p.haBase, p.clientId, code, p.verifier)

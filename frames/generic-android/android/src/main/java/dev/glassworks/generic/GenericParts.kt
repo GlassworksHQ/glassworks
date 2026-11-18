@@ -30,6 +30,8 @@ import dev.glassworks.TimerOverlay
 import dev.glassworks.VoiceOverlay
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.camera.CameraWiring
+import dev.glassworks.diagnostics.DiagnosticsDefinition
+import dev.glassworks.diagnostics.DiagnosticsPane
 import dev.glassworks.auth.SignInServer
 import dev.glassworks.device.DeviceHost
 import dev.glassworks.manage.AppManage
@@ -49,8 +51,9 @@ import dev.glassworks.assist.wakeChime
 
 /**
  * The generic app's parts ([AppParts]): its fixed set of panes (#23), Assist with its timers and Sendspin, which
- * need a microphone and a speaker, and the camera (#117), which needs a camera. A device without a pane's hardware
- * hides the pane (CantRun). The wiring of each pane is S1 Kiosk's (S1Panes), with the S1's own panes left out.
+ * need a microphone and a speaker, the camera (#117), which needs a camera, and diagnostics, which needs nothing. A
+ * device without a pane's hardware hides the pane (CantRun). The wiring of each pane is S1 Kiosk's (S1Panes), with
+ * the S1's own panes left out.
  */
 class GenericParts : AppParts {
 
@@ -62,7 +65,8 @@ class GenericParts : AppParts {
 
     override fun paneDefinitions(context: Context, runtime: GlassworksRuntime, frameDefinitions: List<PaneDefinition>): List<PaneDefinition> =
         listOf(AssistDefinition(paneFile(context, "assist")), SendspinDefinition(paneFile(context, "sendspin"), settingsWorker::execute)) +
-            frameDefinitions + CameraWiring.definition(context, runtime, paneFile(context, "camera"))
+            frameDefinitions + CameraWiring.definition(context, runtime, paneFile(context, "camera")) +
+            DiagnosticsDefinition(paneFile(context, "diagnostics"))
 
     /** The timers (12 dp), then the voice orb (16 dp) over them, and the camera's privacy dot above the menus (30 dp). */
     override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> {
@@ -149,7 +153,9 @@ class GenericParts : AppParts {
                 play = { host.chimes().chime() },
                 silence = host::silenceChimes,
             ),
-        ) + runtime.frame.panes(paneContext, exec) + listOfNotNull(CameraWiring.pane(runtime, host))
+        ) + runtime.frame.panes(paneContext, exec) + listOfNotNull(CameraWiring.pane(runtime, host)) +
+            // A frame with no CPU thermal zone (any device here) has no temperature entity.
+            DiagnosticsPane(paneContext, runtime.frame.cpuThermalZone, runtime.engine::isContentProcess, exec)
         // Timers ride with Assist (their pane.json requires the same).
         if (assist.id in host.cantRun) return panes.filter { it !is TimersPane }
         host.cancelVoice = assist::cancel
@@ -161,6 +167,6 @@ class GenericParts : AppParts {
         const val LAUNCHER = "dev.glassworks.generic.Launcher"
 
         /** The panes this app has settings for. */
-        val PANES = setOf("assist", "sendspin", "timers", "camera")
+        val PANES = setOf("assist", "sendspin", "timers", "camera", "diagnostics")
     }
 }

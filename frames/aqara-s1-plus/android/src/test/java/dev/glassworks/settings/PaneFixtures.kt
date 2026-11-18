@@ -108,7 +108,8 @@ class PaneFixtures(private val app: Application) {
     )
 
     /** An hour of made-up readings, a minute apart, ending at [now]. */
-    fun diagnostics(): DiagnosticsPane {
+    /** [hasTemperature]: the frame names a CPU thermal zone, as the S1 does and the generic app's frames don't. */
+    fun diagnostics(hasTemperature: Boolean = true): DiagnosticsPane {
         val now = (3L * 24 + 4) * 3_600_000L
         val samples = ArrayDeque((0 until 60).map { n ->
             val t = now - (59 - n) * 60_000L
@@ -128,7 +129,7 @@ class PaneFixtures(private val app: Application) {
         ShadowSystemClock.advanceBy(Duration.ofMillis(now - SystemClock.elapsedRealtime()))
         // Started on a device thread that never gets to run: start() reads the restart reason, the ticks are ours.
         val device = Executors.newSingleThreadScheduledExecutor().also { held += it; it.execute { Thread.sleep(Long.MAX_VALUE) } }
-        return DiagnosticsPane(ctx, true, device, probe).also { p -> p.start(); repeat(60) { p.tick() } }
+        return DiagnosticsPane(ctx, hasTemperature, device, probe).also { p -> p.start(); repeat(60) { p.tick() } }
     }
 
     /** A three-channel switch base, as the tracker hears it, with relay 1 on and button 1 just pressed; or none. */

@@ -5,7 +5,7 @@ import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from '@glasswork
 import { AndroidSession, type UsbFacts } from './session';
 
 export const ANDROID_DEMOS = [
-  'run', 'find', 'undo-find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'done', 'done-untested', 'undo-done', 'error', 'own-frame',
+  'run', 'find', 'undo-find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'done', 'done-untested', 'done-old', 'done-refused', 'done-lock', 'undo-done', 'error', 'own-frame',
 ] as const;
 export type AndroidDemo = (typeof ANDROID_DEMOS)[number];
 
@@ -25,12 +25,17 @@ class Held extends FakeAndroid {
 
 /** `fast`: no delays (the tests). */
 export async function androidDemo(name: AndroidDemo, fast = false): Promise<AndroidSession> {
-  const untested = name === 'done-untested' || name === 'brand' || name === 'debug-generic';
+  const untested = name === 'done-untested' || name === 'done-old' || name === 'brand' || name === 'debug-generic';
   const o: FakeAndroidOptions = untested
     ? { manufacturer: 'Teclast', model: 'P20HD', release: '13', sdk: 33, ip: '192.0.2.11', picksAfter: 3 }
     : { ip: '192.0.2.10', picksAfter: 3 };
   if (name === 'vendor') Object.assign(o, { refuseSetHome: true, refuseGrant: ['android.permission.WRITE_SECURE_SETTINGS'], picksAfter: undefined });
   if (name === 'undo-done') o.installed = 600;
+  // issue 422's Done block: Android 9 (a tap each), and a build that keeps "Install unknown apps" off
+  if (name === 'done-old') Object.assign(o, { release: '9', sdk: 28 });
+  if (name === 'done-refused') o.keepInstallOpOff = true;
+  // issue 522: a tablet with a PIN
+  if (name === 'done-lock') o.lock = 'pin';
   // an S1 with USB debugging on, as it reads (AqaraS1Plus.kt, 2026-11-14)
   if (name === 'own-frame') Object.assign(o, { sdk: 29, release: '10', abilist: 'armeabi-v7a,armeabi', manufacturer: 'Allwinner', model: 'QUAD-CORE R818 EVB2', hardware: 'sun50iw10p1' });
   if (name === 'error') o.installFails = 'Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]';

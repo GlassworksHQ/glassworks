@@ -2,23 +2,27 @@
 // over the panel's WebSocket; pairing again when the panel ended the session (30 minutes without a change).
 import { NOT_PAIRED, type SetupState } from '@glassworks/setup-channel';
 import { describe, expect, it, vi } from 'vitest';
-import { LanSession, RAN_OUT, type ChannelStream } from '../src/lan/lanSession';
+import { cameBackFromSignIn, FULL_RAIL, LanSession, RAN_OUT, SIGN_IN_HERE, type ChannelStream } from '../src/lan/lanSession';
 import { JOIN_CHECK_MS, stillOnHotspot } from '../src/setup/channelSetup';
 
 const CODE = '482913';
 
 /** The panel as the page sees it: /setup/pair, /setup/done and the channel, with one browser's pairing. */
-function fakePanel({ open = true, online = undefined as boolean | undefined } = {}) {
+function fakePanel({ open = true, online = undefined as boolean | undefined, radio = true } = {}) {
   const st: SetupState = {
     ip: '192.0.2.10',
     online,
     ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: 'http://192.0.2.10:8099/signin' },
     radio: { mode: 'off', status: 'Off', helper: true, answered: false, options: [{ id: 'off', label: 'Off', detail: '' }, { id: 'zigbee_tcp', label: 'Zigbee coordinator', detail: '' }] },
   };
+  if (!radio) delete (st as Partial<SetupState>).radio; // a frame without one (the Mirror) leaves it out
   const panel = {
+    st,
     paired: false,
     /** Every channel the page opens fails its first request (it opens, then nothing answers). */
     channelDead: false,
+    /** Every request after this many fails, on this channel and any new one. */
+    deadAfter: undefined as number | undefined,
     /** The panel refuses to end the session (a network error on /setup/done). */
     doneFails: false,
     /** /setup/done answers this instead of ending the session. */
@@ -32,6 +36,8 @@ function fakePanel({ open = true, online = undefined as boolean | undefined } = 
     joinUnsent: false,
     /** The panel closed its hotspot: nothing it gets is answered any more. */
     gone: false,
+    /** set_ha answers only once this settles (a slow save). */
+    setHaGate: undefined as Promise<void> | undefined,
     /** What wifi.join carried. */
     joined: undefined as { ssid: string; password: string } | undefined,
     sleep: async () => {},
@@ -64,7 +70,7 @@ function fakePanel({ open = true, online = undefined as boolean | undefined } = 
         onData: (f) => { cb = f; },
         close: async () => { panel.closedChannels++; },
         write: async (d) => {
-          if (panel.channelDead) throw new Error('the connection dropped');
+          if (panel.channelDead || (panel.deadAfter !== undefined && panel.asked.length >= panel.deadAfter)) throw new Error('the connection dropped');
           for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
             const m = JSON.parse(line);
             panel.asked.push(m.op);
@@ -82,7 +88,9 @@ function fakePanel({ open = true, online = undefined as boolean | undefined } = 
               if (m.op === 'set_radio') { st.radio.mode = m.mode; st.radio.answered = true; }
               r = { id: m.id, ok: true, state: st };
             }
-            queueMicrotask(() => cb(new TextEncoder().encode(`${JSON.stringify(r)}\n`)));
+            const answer = () => cb(new TextEncoder().encode(`${JSON.stringify(r)}\n`));
+            if (m.op === 'set_ha' && panel.setHaGate) void panel.setHaGate.then(answer);
+            else queueMicrotask(answer);
           }
         },
       };
@@ -101,7 +109,7 @@ describe('the panel\'s setup page', () => {
     expect(lan.state.view).toMatchObject({ at: 'pair', shown: true });
     await lan.enterCode('111111');
     expect(lan.state.view).toMatchObject({ at: 'pair', shown: true, error: 'That\'s not the code. 4 tries left.' });
-    expect(panel.asked).toEqual([]); // nothing reaches the channel before pairing
+    expect(panel.asked).toEqual(['state']); // before pairing only the state, for the rail
     await lan.enterCode('482 913');
     expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha' } });
     await lan.saveHa('http://192.0.2.20:8123');
@@ -109,7 +117,7 @@ describe('the panel\'s setup page', () => {
     await lan.applyRadio('off');
     await vi.waitFor(() => expect(lan.state.view).toEqual({ at: 'done' }));
     expect(panel.calls.at(-1)).toBe('POST /setup/done');
-    expect(panel.asked).toEqual(['state', 'set_ha', 'state', 'set_radio']);
+    expect(panel.asked).toEqual(['state', 'state', 'set_ha', 'state', 'set_radio']);
   });
 
   it('a panel on no network (its setup hotspot) starts with Wi-Fi, and a join leaves the page on "joining"', async () => {
@@ -316,4 +324,179 @@ describe('the panel\'s setup page', () => {
       expect(lan.state.view).toEqual({ at: 'done' });
     });
   }
+
+  describe('the rail lists the steps the panel has (#453)', () => {
+    it('a panel without a radio has no radio step, from before pairing; the read lets the channel go', async () => {
+      const panel = fakePanel({ radio: false });
+      const lan = new LanSession(panel);
+      await lan.start();
+      await vi.waitFor(() => expect(lan.state.rail).toEqual(['pair', 'wifi', 'ha', 'done']));
+      expect(panel.closedChannels).toBe(1);
+      await lan.showCode();
+      await lan.enterCode(CODE);
+      await lan.saveHa('http://192.0.2.20:8123');
+      await vi.waitFor(() => expect(lan.state.view).toEqual({ at: 'done' }));
+      expect(lan.state.rail).toEqual(['pair', 'wifi', 'ha', 'done']);
+    });
+
+    it('a panel with a radio keeps it', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      expect(lan.state.rail).toEqual(FULL_RAIL);
+    });
+
+    it('a paired browser learns it from the steps\' own channel', async () => {
+      const panel = fakePanel({ radio: false });
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      expect(lan.state.rail).toEqual(['pair', 'wifi', 'ha', 'done']);
+    });
+  });
+
+  describe('skipping the sign-in (the panel asks for it on its screen)', () => {
+    it('keeps a valid address and moves on', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      await lan.skipHa('http://192.0.2.20:8123');
+      expect(panel.st.ha.url).toBe('http://192.0.2.20:8123');
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('moves on without saving an address that isn\'t one', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      await lan.skipHa('not an address');
+      expect(panel.asked).not.toContain('set_ha');
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+  });
+
+  describe('Home Assistant\'s sign-in in this tab (#453)', () => {
+    it('saves the address, then goes to the panel\'s sign-in here: no tab', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const went: string[] = [];
+      const openTab = vi.fn(() => null);
+      const lan = new LanSession({ ...panel, navigate: (p) => went.push(p), openTab });
+      await lan.start();
+      lan.signIn('http://192.0.2.20:8123');
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha', signingIn: true, note: expect.stringMatching(/come back here/) } });
+      await vi.waitFor(() => expect(went).toEqual([SIGN_IN_HERE]));
+      expect(panel.asked.indexOf('set_ha')).toBeGreaterThan(-1);
+      expect(panel.st.ha.url).toBe('http://192.0.2.20:8123');
+      expect(openTab).not.toHaveBeenCalled();
+    });
+
+    it('a panel that gives no sign-in link (no Wi-Fi IPv4, as the Mirror) still signs in here, on this page\'s address', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      delete panel.st.ip;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signinUrl: undefined };
+      const went: string[] = [];
+      const lan = new LanSession({ ...panel, navigate: (p) => went.push(p) });
+      await lan.start();
+      lan.signIn('http://192.0.2.20:8123');
+      await vi.waitFor(() => expect(went).toEqual([SIGN_IN_HERE]));
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha', signingIn: true } });
+      expect((lan.state.view as { setup: { error?: string } }).setup.error).toBeUndefined();
+    });
+
+    it('a slow save the person moved on from doesn\'t take the page away', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      let saved!: () => void;
+      panel.setHaGate = new Promise((r) => { saved = r; });
+      const went: string[] = [];
+      const lan = new LanSession({ ...panel, navigate: (p) => went.push(p) });
+      await lan.start();
+      lan.signIn('http://192.0.2.20:8123');
+      await lan.radio(); // "Skip" while the address is still being saved
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+      saved();
+      await vi.waitFor(() => expect(panel.st.ha.url).toBe('http://192.0.2.20:8123'));
+      await new Promise((r) => setTimeout(r, 10));
+      expect(went).toEqual([]);
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('back from it, the panel lost on the way: Try again still carries on after Home Assistant', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      panel.channelDead = true;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true };
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'lost' });
+      panel.channelDead = false;
+      await lan.retry();
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('back from it, the panel lost at the radio step: Try again still lands on Radio', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true };
+      panel.deadAfter = 2; // the state reads after the return work, the radio step's own doesn't
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'lost' });
+      panel.deadAfter = undefined;
+      await lan.retry();
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('the page knows it came back by the #signed-in mark, and takes the mark off so a reload doesn\'t hand off again', () => {
+      const loc = { hash: '#signed-in', pathname: '/setup', search: '' };
+      const history = { replaceState: vi.fn((_s: unknown, _t: string, url: string) => { loc.hash = new URL(url, 'http://192.0.2.10:8099').hash; }) };
+      expect(cameBackFromSignIn(loc, history)).toBe(true);
+      expect(history.replaceState).toHaveBeenCalledWith(null, '', '/setup');
+      expect(cameBackFromSignIn(loc, history)).toBe(false); // the reload
+      expect(cameBackFromSignIn({ hash: '', pathname: '/setup', search: '' }, history)).toBe(false);
+      expect(history.replaceState).toHaveBeenCalledTimes(1);
+    });
+
+    it('back from it, signed in: on at the radio step', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true };
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('back from it on a panel without a radio: Done', async () => {
+      const panel = fakePanel({ radio: false });
+      panel.paired = true;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true };
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      await vi.waitFor(() => expect(lan.state.view).toEqual({ at: 'done' }));
+    });
+
+    it('back from it, not signed in after all: Home Assistant again', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha' } });
+    });
+
+    it('back from it after the pairing ended: pair again, then on after Home Assistant', async () => {
+      const panel = fakePanel();
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signedIn: true };
+      const lan = new LanSession({ ...panel, backFromSignIn: true });
+      await lan.start();
+      expect(lan.state.view).toMatchObject({ at: 'pair' });
+      await lan.showCode();
+      await lan.enterCode(CODE);
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+  });
 });

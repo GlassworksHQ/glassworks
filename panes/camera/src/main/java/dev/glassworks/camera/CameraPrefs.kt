@@ -92,7 +92,8 @@ class CameraPrefs(private val sp: SharedPreferences) {
         const val USE_PRESENCE = "Presence only"
         const val USE_CAMERA = "Presence + camera"
 
-        /** The second card's line. */
+        /** The cards' lines, on the panel and the Manage page. */
+        const val USE_PRESENCE_LINE = "Wakes the screen when someone walks up. No image leaves the panel."
         const val USE_CAMERA_LINE = "Snapshots for Home Assistant, and the stream for Protect or Frigate if you turn it on."
     }
 }

@@ -55,6 +55,8 @@ data class PanelStatus(
     val sections: List<SettingsSection>,
     /** Lines for About, as label to value. */
     val about: List<Pair<String, String>>,
+    /** The legacy build's frozen engine (Engine.lockedDown): the Overview shows a Legacy chip that says what it can't do (#29). */
+    val legacy: Boolean = false,
 )
 
 /** The actions the Overview offers. Each returns null when it was started, else why not, in words. */

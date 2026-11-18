@@ -53,11 +53,11 @@ import dev.glassworks.ui.StackView.Look
 
 /**
  * The first-boot setup screen (docs/onboarding.md, step 4), as drawn in #63: a native, full-screen
- * overlay over the page. Left, the steps (Wi-Fi, Home Assistant, Panes, Sign in) and the stack, whose
+ * overlay over the page. Left, the steps (Wi-Fi, Home Assistant, Panes) and the stack, whose
  * plates set one per step. Right, a glass card for the current step: one idea, a short heading, one
  * white button. Done is the lit stack on its own, the same picture as boot.
  *
- * The rail groups the steps (#63 round 2): Wi-Fi, Home Assistant (add it, sign in), Panes (choose which,
+ * The rail groups the steps (#63 round 2): Wi-Fi, Home Assistant (sign in, add it), Panes (choose which,
  * then each step of a pane that is on, drawn by the pane through [SetupCard]), Done. A step that is done
  * shows so, with Continue; the rail and Continue move between steps, also in a preview. Panes only asks
  * which panes are on: one card per pane that offers one ([PaneChoice]). The Wi-Fi step shows Improv (Wi-Fi over Bluetooth) inline, Allow included, so
@@ -122,9 +122,9 @@ class SetupOverlay(
     var onStepDone: (() -> Unit)? = null
 
     /**
-     * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step but Sign in shows where to
-     * set the panel up from a computer (the setup page over the network, #34), and no card has a button. Once signed in,
-     * the Home Assistant step waits for Home Assistant to add the panel instead (#484).
+     * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step shows where to set the panel up
+     * from a computer (the setup page over the network, #34), and no card has a button. Sign in shows its phone code
+     * instead once Home Assistant has added the panel, and once signed in, Add it waits for Home Assistant (#484).
      */
     val input: Input = frame.input
 
@@ -175,7 +175,32 @@ class SetupOverlay(
     /** Pushes the rail's stack art to its foot. */
     private val railSpacer = View(context)
 
-    private val rail = LinearLayout(context).apply {
+    private val railFoot = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.BOTTOM
+        addView(railStack, LinearLayout.LayoutParams(px(78f), px(76f)).apply { marginStart = px(6f); bottomMargin = px(12f) })
+        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+        addView(previewChip)
+    }
+
+    /**
+     * The brand, the steps and the stack art at the foot. In landscape the art steps aside when the rows need its room:
+     * on the S1, Silent updates is a seventh row while Sign in or a pane's step is open (#422).
+     */
+    private val rail = object : LinearLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            if (portrait) return
+            val above = (0 until childCount).map(::getChildAt).filter { it !== railSpacer && it !== railFoot }
+                .sumOf { it.measuredHeight + (it.layoutParams as LayoutParams).let { lp -> lp.topMargin + lp.bottomMargin } }
+            val fits = above + px(RAIL_ART_DP) <= MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom
+            val want = if (fits) View.VISIBLE else View.GONE
+            if (railStack.visibility != want) {
+                railStack.visibility = want
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }
+    }.apply {
         orientation = LinearLayout.VERTICAL
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -186,13 +211,7 @@ class SetupOverlay(
         })
         addView(railRows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(33f) })
         addView(railSpacer, LinearLayout.LayoutParams(-1, 0, 1f))
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-            addView(railStack, LinearLayout.LayoutParams(px(78f), px(76f)).apply { marginStart = px(6f); bottomMargin = px(12f) })
-            addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-            addView(previewChip)
-        }, LinearLayout.LayoutParams(-1, -2))
+        addView(railFoot, LinearLayout.LayoutParams(-1, -2))
     }
 
     // ---- right: the current step's card
@@ -211,18 +230,106 @@ class SetupOverlay(
     private val ghost = g.ghost("").apply { setPadding(px(28f), px(15f), px(28f), px(15f)) }
     private val plainLeft = g.plain("").apply { setPadding(0, px(14f), px(12f), px(14f)) }
     private val plain = g.plain("")
-    private val buttonRow = LinearLayout(context).apply {
+
+    /** The quietest action at the foot: Bluetooth's Not now (or Stop) on the Wi-Fi step (#468). */
+    private val quiet = g.text(15f, FA, Inter.MEDIUM).apply {
+        gravity = Gravity.CENTER
+        setPadding(px(12f), px(14f), px(12f), px(14f))
+        isClickable = true
+        isFocusable = true
+    }
+
+    // ---- the Wi-Fi step's other ways (#468): folded behind one link, which opens them in its place
+    private val waysLink = g.plain("Other ways to set up ›").apply { setSingleLine(); setPadding(0, px(14f), px(12f), px(14f)) }
+    /** Each lines up with the card's text, where the link was; the gap to the next is its own end padding. */
+    private val wayButtons = List(2) { g.plain("").apply { setSingleLine(); setPadding(0, px(14f), px(24f), px(14f)) } }
+    private val waysRow = object : LinearLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            // Side by side, unless the room is too narrow for them (a small phone): then one under the other.
+            val room = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+            val free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            val need = shownChildren().sumOf { it.measure(free, free); it.measuredWidth }
+            orientation = if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED && need > room) VERTICAL else HORIZONTAL
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        }
+    }.apply {
+        gravity = Gravity.CENTER_VERTICAL
+        addView(waysLink)
+        wayButtons.forEach { addView(it) }
+    }
+
+    /** The other ways are open: their link was tapped on this step. */
+    private var waysOpen = false
+
+    private val buttons = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         addView(ghost, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(22f) })
         addView(plainLeft, LinearLayout.LayoutParams(-2, -2))
         addView(foot, LinearLayout.LayoutParams(-2, -2))
-        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+        addView(View(context), LinearLayout.LayoutParams(0, 0, 1f)) // no height: without buttons the foot takes no room
         addView(plain, LinearLayout.LayoutParams(-2, -2))
+        addView(quiet, LinearLayout.LayoutParams(-2, -2))
         addView(primary, LinearLayout.LayoutParams(-2, -2))
     }
+
+    /**
+     * The card's foot: its [buttons], and on the Wi-Fi step its other ways at the left (#468). They sit beside the
+     * buttons when the widest of them fits in the room the buttons leave, else on a line of their own above them (a
+     * phone, or a card the hotspot's button fills), so every size keeps the whole foot.
+     */
+    private val buttonRow = object : ViewGroup(context) {
+        private var above = false
+
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val w = MeasureSpec.getSize(widthMeasureSpec)
+            val free = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            if (waysRow.visibility == View.GONE) {
+                buttons.measure(exactly(w), free)
+                setMeasuredDimension(w, buttons.measuredHeight)
+                return
+            }
+            buttons.measure(free, free)
+            val room = w - buttons.measuredWidth
+            above = waysRow.shownChildren().maxOf { it.measure(free, free); it.measuredWidth } > room
+            waysRow.measure(MeasureSpec.makeMeasureSpec(if (above) w else room, MeasureSpec.AT_MOST), free)
+            buttons.measure(exactly(if (above) w else buttons.measuredWidth), free)
+            val h = if (above) waysRow.measuredHeight + buttons.measuredHeight else maxOf(waysRow.measuredHeight, buttons.measuredHeight)
+            setMeasuredDimension(w, h)
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            val w = r - l
+            val h = b - t
+            if (waysRow.visibility == View.GONE) { buttons.layout(0, 0, w, buttons.measuredHeight); return }
+            if (above) {
+                waysRow.layout(0, 0, waysRow.measuredWidth, waysRow.measuredHeight)
+                buttons.layout(0, waysRow.measuredHeight, w, h)
+            } else {
+                val wy = (h - waysRow.measuredHeight) / 2
+                val by = (h - buttons.measuredHeight) / 2
+                waysRow.layout(0, wy, waysRow.measuredWidth, wy + waysRow.measuredHeight)
+                buttons.layout(w - buttons.measuredWidth, by, w, by + buttons.measuredHeight)
+            }
+        }
+    }.apply {
+        addView(waysRow)
+        addView(buttons)
+    }
+
+    private fun exactly(size: Int) = MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY)
+
+    private fun ViewGroup.shownChildren() = (0 until childCount).map { getChildAt(it) }.filter { it.visibility != View.GONE }
     private val qrImage = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
-    private val qrTile = FrameLayout(context).apply {
+    /** Square, [QR_DP] at most: smaller only where the room under a portrait card's text is shorter. */
+    private val qrTile = object : FrameLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val side = MeasureSpec.makeMeasureSpec(
+                minOf(px(QR_DP), MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec)), MeasureSpec.EXACTLY,
+            )
+            super.onMeasure(side, side)
+        }
+    }.apply {
         background = GradientDrawable().apply { cornerRadius = 20 * g.dp; setColor(Color.WHITE) }
         setPadding(px(14f), px(14f), px(14f), px(14f))
         addView(qrImage, LayoutParams(-1, -1))
@@ -233,7 +340,7 @@ class SetupOverlay(
             gradientRadius = 125 * g.dp
             colors = intArrayOf(Color.argb(70, 56, 189, 248), Color.TRANSPARENT)
         }
-        addView(qrTile, LayoutParams(px(226f), px(226f), Gravity.CENTER))
+        addView(qrTile, LayoutParams(-1, -1, Gravity.CENTER))
         visibility = View.GONE
     }
 
@@ -245,19 +352,32 @@ class SetupOverlay(
         addView(slot, slotLp)
         addView(status, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         addView(stretch, stretchLp)
-        addView(buttonRow, LinearLayout.LayoutParams(-1, -2))
     }
     // Landscape's places (the S1, tablets); portrait swaps them in stack().
     private val columnBeside = LinearLayout.LayoutParams(0, -1, 1f)
-    private val qrBeside = LinearLayout.LayoutParams(px(238f), -1)
+    /**
+     * 6 dp more gap before the code (12 dp to its tile), so text that runs the column's full width doesn't touch it
+     * (#422). Any more and the Mirror's "Scan to set it up." wraps. Gone with the code.
+     */
+    private val qrBeside = LinearLayout.LayoutParams(px(238f), -1).apply { marginStart = px(6f) }
     private val railBeside = LinearLayout.LayoutParams(px(227f), -1).apply { marginEnd = px(26f) }
     private val cardBeside = LinearLayout.LayoutParams(0, -1, 1f)
-    private val card = LinearLayout(context).apply {
+    /** The text and the QR code beside it (under it in portrait). */
+    private val textAndQr = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        background = g.surface(34f)
-        setPadding(px(41f), px(36f), px(28f), px(30f))
         addView(column, columnBeside)
         addView(qrGlow, qrBeside)
+    }
+    /**
+     * The buttons are the card's foot, across its whole width (#422, #403): Continue stays in the corner with a QR
+     * code beside the text too, not at the text's edge in the middle of the card.
+     */
+    private val card = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        background = g.surface(34f)
+        setPadding(px(41f), px(36f), px(28f), px(30f))
+        addView(textAndQr, LinearLayout.LayoutParams(-1, 0, 1f))
+        addView(buttonRow, LinearLayout.LayoutParams(-1, -2))
     }
     private val wizard = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -287,7 +407,7 @@ class SetupOverlay(
         portrait = on
         qrBelow = below
         wizard.orientation = if (on) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-        card.orientation = wizard.orientation
+        textAndQr.orientation = wizard.orientation
         rail.layoutParams = if (on) LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(26f) } else railBeside
         card.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else cardBeside
         column.layoutParams = when {
@@ -295,7 +415,8 @@ class SetupOverlay(
             below -> LinearLayout.LayoutParams(-1, -2)
             else -> LinearLayout.LayoutParams(-1, 0, 1f)
         }
-        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else qrBeside
+        // A gap between the text and the code, and between the code and the buttons (#422's portrait tablet).
+        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = px(TIGHT_GAP_DP); bottomMargin = px(TIGHT_GAP_DP) } else qrBeside
         // A plain View measured to wrap takes all the room it may: the spacers go, or the rail fills the screen and
         // the text the card.
         railSpacer.visibility = if (on) View.GONE else View.VISIBLE
@@ -383,12 +504,15 @@ class SetupOverlay(
         bind(m, true)
     }
 
-    /** Continue on a step that is done: the next one (the current one ends the walk). */
+    /**
+     * Continue on a step that is done: the next one, or back to the current step when the next one can't open yet
+     * (Done, or Panes after an Add it that Home Assistant did before the sign-in).
+     */
     private fun advance() {
         val m = model ?: return
         val f = flow()
         val next = f.getOrNull(f.indexOf(shown()) + 1) ?: return
-        if (next == SetupFlow.DONE && !m.preview) { viewing = null; bind(m, true); return }
+        if (!m.preview && next != m.step && next !in m.done) { viewing = null; bind(m, true); return }
         open(next)
     }
 
@@ -454,6 +578,7 @@ class SetupOverlay(
         viewing = null // opened again, it starts on its own step, not the one last looked at
         model = null // so the next render counts as a step change (Add it by hand folds), also when not shown
         manualShown = false
+        waysOpen = false // opened again, the Wi-Fi step's other ways start folded
         if (!isShowing) return
         isShowing = false
         hideKeyboard()
@@ -505,27 +630,39 @@ class SetupOverlay(
     private var cardStep: String? = null
 
     private fun bindCard(m: Model, stepChanged: Boolean) {
+        // Each refresh draws the card again, and the reset in drawCard hides its buttons for a moment. Android drops a
+        // key's focus from a view that goes GONE, so a button that is still shown after the draw gets it back (#468).
+        val focused = findFocus()
+        drawCard(m, stepChanged)
+        if (focused != null && !focused.isFocused && focused.isShown) focused.requestFocus()
+    }
+
+    private fun drawCard(m: Model, stepChanged: Boolean) {
         qrGlow.visibility = View.GONE
         cardBody.visibility = View.VISIBLE
         cardTitle.textSize = 45f
         slotLp.topMargin = px(SECTION_GAP_DP)
         primary.visibility = View.GONE; ghost.visibility = View.GONE
         plain.visibility = View.GONE; plainLeft.visibility = View.GONE; foot.visibility = View.GONE
+        quiet.visibility = View.GONE; waysRow.visibility = View.GONE
         primary.isEnabled = true; primary.alpha = 1f
-        listOf(primary, ghost, plain, plainLeft).forEach { it.setOnClickListener(null) }
+        listOf(primary, ghost, plain, plainLeft, quiet).forEach { it.setOnClickListener(null) }
         val shown = shown()
         // Also when the caller saw no change: a pane step's Continue clears `viewing` before the screen draws
         // the current step again, so that draw can't tell (the tablet run on 28c157d: the camera's
         // "Android allows the camera." stayed on Sign in).
         if (stepChanged || shown != cardStep) status.visibility = View.GONE
+        // The other ways fold when the card shows another step, not when the rail opens the one already shown.
+        if (shown != cardStep) waysOpen = false
         cardStep = shown
         if (shown == null) return
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
         val done = shown in m.done
         cardLabel.text = SetupFlow.group(shown)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
         if (input == Input.NONE) {
-            // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in.
-            if (shown == SetupFlow.SIGNIN) {
+            // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in. Before Home Assistant
+            // added the panel, Sign in is the setup page's, which also finds Home Assistant.
+            if (shown == SetupFlow.SIGNIN && (done || SetupFlow.HA in m.done || m.signinMoved)) {
                 bindSignin(m, done)
                 // Neither "on this panel instead" nor a done step's Continue: the next step comes by itself.
                 plainLeft.visibility = View.GONE
@@ -540,8 +677,12 @@ class SetupOverlay(
         var content: View? = null
         when (shown) {
             SetupFlow.WIFI -> content = bindWifi(m, done)
-            SetupFlow.HA -> content = bindHa(m, done)
-            SetupFlow.SIGNIN -> bindSignin(m, done)
+            // Both Home Assistant steps need its address first.
+            SetupFlow.SIGNIN, SetupFlow.HA -> content = when {
+                !done && m.haUrl == null -> bindFind()
+                shown == SetupFlow.HA -> bindHa(m, done)
+                else -> { bindSignin(m, done); null }
+            }
             SetupFlow.PANES -> content = bindPanes(m, stepChanged)
             else -> {
                 // A pane's step fills the card itself (SetupCard.content), slot included, and sets its status
@@ -584,55 +725,118 @@ class SetupOverlay(
     private fun bindWifi(m: Model, done: Boolean): View? {
         val w = m.wifi
         val inst = m.installer
-        var tile = false
         val spot = m.hotspot?.takeIf { !w.online && !done }
         if (spot?.title != null) return bindHotspotCard(spot)
-        when {
-            w.online || done -> {
-                cardTitle.text = if (w.ethernet) "Connected over Ethernet." else "Connected to ${w.ssid ?: "Wi-Fi"}."
-                cardBody.text = "The panel is on the network."
-                // Already there: on to the next step, or change the network.
-                continueButton()
-                ghost.text = "Use another network"
-                ghost.visibility = View.VISIBLE
-                ghost.setOnClickListener { onChooseNetwork?.invoke() }
-                return null
-            }
-            inst?.phase == InstallerWifi.Phase.CONNECTING -> {
-                cardTitle.text = "Connecting to ${inst.ssid}…"
-                cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This can take up to a minute.")
-            }
-            else -> {
-                cardTitle.text = if (w.state == WifiSetupStatus.State.CONNECTING) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
-                cardBody.text = "Send it from Home Assistant: it finds this panel over Bluetooth."
-                tile = true
-            }
+        if (w.online || done) {
+            cardTitle.text = if (w.ethernet) "Connected over Ethernet." else "Connected to ${w.ssid ?: "Wi-Fi"}."
+            cardBody.text = "The panel is on the network."
+            // Nor an older line: a failed join from before it connected (a preview keeps the step across refreshes).
+            status.visibility = View.GONE
+            // Already there: on to the next step, or change the network.
+            continueButton()
+            ghost.text = "Use another network"
+            ghost.visibility = View.VISIBLE
+            ghost.setOnClickListener { onChooseNetwork?.invoke() }
+            return null
         }
+        val plan = WifiWays.plan(m.improv, spot)
+        // A way that can't open says what fixes it (Turn on Wi-Fi), whichever way leads. It opens Android's Wi-Fi
+        // settings, as Choose a network does, so it stands in for that way too.
+        val turnOnWifi = spot?.action?.takeIf { plan.lead != WifiWays.Way.HOTSPOT && it == dev.glassworks.setup.HotspotStep.Action.WIFI_SETTINGS }
+        val others = if (turnOnWifi != null) plan.others - WifiWays.Way.MANUAL else plan.others
         // The hotspot's line goes with its button (Allow, Try again, Turn on Wi-Fi), so it wins over an older line
-        // (CodeRabbit on #418): a failed installer join, then the Wi-Fi status.
-        val spotStatus = spot?.status
+        // (CodeRabbit on #418): a failed installer join, then the Wi-Fi status. A line about opening the hotspot shows
+        // only while its button does: as the lead, or among the opened other ways (#468).
+        val spotButtonShown = plan.lead == WifiWays.Way.HOTSPOT || (waysOpen && WifiWays.Way.HOTSPOT in others)
+        val spotStatus = spot?.status?.takeIf { spot.action !in WifiWays.OPENS || spotButtonShown }
         when {
             spotStatus != null -> showStatus(spotStatus, tone(spot.tone))
             !w.online && inst?.phase == InstallerWifi.Phase.FAILED -> showStatus("Couldn't join ${inst.ssid}: ${inst.detail ?: "unknown error"}", ROSE)
             else -> w.message?.let { showStatus(it, AMBER) } ?: run { status.visibility = View.GONE } // nor the hotspot card's line from a moment ago
         }
-        spot?.action?.let { a ->
-            plain.text = a.label
-            plain.visibility = View.VISIBLE
-            plain.setOnClickListener { onHotspotAction?.invoke(a) }
+        if (inst?.phase == InstallerWifi.Phase.CONNECTING) {
+            // The computer is setting it up (Kiln, over USB): nothing to choose here.
+            cardTitle.text = "Connecting to ${inst.ssid}…"
+            cardBody.text = "Wi-Fi details sent from your computer." + (inst.detail?.let { " $it" } ?: " This can take up to a minute.")
+            return null
         }
-        ghost.text = "Choose a network"
-        ghost.visibility = View.VISIBLE
-        ghost.setOnClickListener { onChooseNetwork?.invoke() }
-        if (!tile) return null
-        improvTile.bind(m.improv)
-        // Not now and Stop end the Bluetooth window: quiet words next to Choose a network, not a button.
-        m.improv.actions.firstOrNull { it == WifiStep.Action.NOT_NOW || it == WifiStep.Action.STOP }?.let { a ->
+        val joining = w.state == WifiSetupStatus.State.CONNECTING
+        // Turn on Wi-Fi: quiet words at the left, so a phone keeps it on one line with the lead's button.
+        turnOnWifi?.let { a ->
             plainLeft.text = a.label
             plainLeft.visibility = View.VISIBLE
-            plainLeft.setOnClickListener { onImprovAction?.invoke(a) }
+            plainLeft.setOnClickListener { onHotspotAction?.invoke(a) }
         }
-        return improvTile.view
+        val content: View? = when (plan.lead) {
+            WifiWays.Way.IMPROV -> {
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
+                cardBody.text = "Home Assistant sends it over Bluetooth, from its app or its settings." // one line on the S1
+                improvTile.bind(m.improv)
+                // Not now and Stop end the Bluetooth window: the quietest words on the card.
+                m.improv.actions.firstOrNull { it == WifiStep.Action.NOT_NOW || it == WifiStep.Action.STOP }?.let { a ->
+                    quiet.text = a.label
+                    quiet.visibility = View.VISIBLE
+                    quiet.setOnClickListener { onImprovAction?.invoke(a) }
+                }
+                improvTile.view
+            }
+            WifiWays.Way.HOTSPOT -> {
+                val a = spot!!.action!!
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Set up from a phone."
+                cardBody.text = "A phone joins the panel's own Wi-Fi, then sends yours from a page. Nothing to type here."
+                primary.text = if (a == dev.glassworks.setup.HotspotStep.Action.ALLOW) a.label else dev.glassworks.setup.HotspotStep.Action.OPEN.label
+                primary.visibility = View.VISIBLE
+                primary.setOnClickListener { onHotspotAction?.invoke(a) }
+                null
+            }
+            WifiWays.Way.MANUAL -> {
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Choose your Wi-Fi."
+                cardBody.text = "Pick your network and type its password here."
+                primary.text = "Choose a network"
+                primary.visibility = View.VISIBLE
+                primary.setOnClickListener { onChooseNetwork?.invoke() }
+                null
+            }
+        }
+        bindOtherWays(others, m, spot)
+        return content
+    }
+
+    /**
+     * The Wi-Fi step's other ways, in [WifiWays] order: folded behind "Other ways to set up ›", which opens them in its
+     * place, one quiet tap each. They stay open until the card shows another step.
+     */
+    private fun bindOtherWays(others: List<WifiWays.Way>, m: Model, spot: dev.glassworks.setup.HotspotStep.Card?) {
+        if (others.isEmpty()) return
+        waysRow.visibility = View.VISIBLE
+        waysLink.visibility = if (waysOpen) View.GONE else View.VISIBLE
+        waysLink.setOnClickListener {
+            // The link goes, so a key's focus moves on to the first way that took its place.
+            val focused = waysLink.isFocused
+            waysOpen = true
+            bind(m, false)
+            if (focused) wayButtons.first().requestFocus()
+        }
+        wayButtons.forEachIndexed { i, b ->
+            val way = others.getOrNull(i)
+            b.visibility = if (waysOpen && way != null) View.VISIBLE else View.GONE
+            b.setOnClickListener(null)
+            when (way) {
+                WifiWays.Way.IMPROV -> {
+                    // Off: start it. Couldn't start: start it again, and say so.
+                    val a = if (WifiStep.Action.RETRY in m.improv.actions) WifiStep.Action.RETRY else WifiStep.Action.START
+                    b.text = if (a == WifiStep.Action.RETRY) "Try Bluetooth again" else a.label
+                    b.setOnClickListener { onImprovAction?.invoke(a) }
+                }
+                WifiWays.Way.HOTSPOT -> {
+                    val a = spot?.action ?: dev.glassworks.setup.HotspotStep.Action.OPEN
+                    b.text = dev.glassworks.setup.HotspotStep.Action.OPEN.label
+                    b.setOnClickListener { onHotspotAction?.invoke(a) }
+                }
+                WifiWays.Way.MANUAL -> { b.text = "Choose a network"; b.setOnClickListener { onChooseNetwork?.invoke() } }
+                null -> {}
+            }
+        }
     }
 
     /**
@@ -691,14 +895,6 @@ class SetupOverlay(
             plainLeft.setOnClickListener { manualShown = true; bind(m, false) }
             return null
         }
-        if (m.haUrl == null) {
-            cardTitle.text = "Find Home Assistant."
-            cardBody.text = "The panel is looking for it on the network. If it doesn't show up, enter its address."
-            primary.text = "Connect"
-            primary.visibility = View.VISIBLE
-            primary.setOnClickListener { submit() }
-            return urlField
-        }
         cardTitle.text = "Add it in Home Assistant."
         waitingText.text = "Waiting for Home Assistant…"
         cardBody.text = SpannableStringBuilder().apply {
@@ -715,6 +911,16 @@ class SetupOverlay(
         plain.visibility = View.VISIBLE
         plain.setOnClickListener { onSkipHa?.invoke() }
         return waiting
+    }
+
+    /** Home Assistant not found yet: the panel looks for it, or takes its address. */
+    private fun bindFind(): View {
+        cardTitle.text = "Find Home Assistant."
+        cardBody.text = "The panel is looking for it on the network. If it doesn't show up, enter its address."
+        primary.text = "Connect"
+        primary.visibility = View.VISIBLE
+        primary.setOnClickListener { submit() }
+        return urlField
     }
 
     private fun bindPanes(m: Model, stepChanged: Boolean): View {
@@ -790,8 +996,8 @@ class SetupOverlay(
             return null
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
-        // Signed in from the setup page, and only Home Assistant's add is left: nothing to scan any more (#484).
-        if (shown() == SetupFlow.HA && m.signedIn && SetupFlow.HA !in m.done) return bindAddWait(url)
+        // Signed in, and only Home Assistant's add is left: nothing to scan any more (#484).
+        if (shown() == SetupFlow.HA && SetupFlow.SIGNIN in m.done && SetupFlow.HA !in m.done) return bindAddWait(url)
         if (qrFor != url) {
             qrImage.setImageBitmap(QrCode.bitmap(url, px(200f)))
             qrFor = url
@@ -890,21 +1096,34 @@ class SetupOverlay(
     private inner class ImprovTile {
         private val dot = View(context)
         private val halo = FrameLayout(context).apply { addView(dot, LayoutParams(px(9f), px(9f), Gravity.CENTER)) }
-        private val title = g.text(16.5f, TX, Inter.MEDIUM).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
-        private val detail = g.text(15f, MU).apply { setLineSpacing(0f, 1.2f); maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+        private val title = g.text(16.5f, TX, Inter.MEDIUM).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.END }
+        private val detail = g.text(15f, MU).apply { setLineSpacing(0f, 1.2f); maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
         private val action = g.primary("").apply { setPadding(px(26f), px(12f), px(26f), px(12f)) }
-        val view = LinearLayout(context).apply {
+        private val words = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(title)
+            addView(detail, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(5f) })
+        }
+        private val actionBeside = LinearLayout.LayoutParams(-2, -2)
+        private val actionUnder = LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(12f) }
+        val view = object : LinearLayout(context) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                // A narrow card (a phone) puts the button under the words, so neither is cut (#468).
+                val under = MeasureSpec.getSize(widthMeasureSpec) < px(NARROW_TILE_DP)
+                if (under != (action.parent === words)) {
+                    (action.parent as ViewGroup).removeView(action)
+                    if (under) words.addView(action, actionUnder) else addView(action, actionBeside)
+                }
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }.apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = g.surface(19f, Glass.S1)
             setPadding(px(13f), px(15f), px(18f), px(15f))
             addView(halo, LinearLayout.LayoutParams(px(18f), px(18f)).apply { marginEnd = px(14f) })
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                addView(title)
-                addView(detail, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(5f) })
-            }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(14f) })
-            addView(action, LinearLayout.LayoutParams(-2, -2))
+            addView(words, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = px(14f) })
+            addView(action, actionBeside)
         }
 
         fun bind(line: WifiStep.ImprovLine) {
@@ -1116,6 +1335,15 @@ class SetupOverlay(
         /** The gap under the heading when the step's view needs the room (the Panes list). */
         const val TIGHT_GAP_DP = 18f
         const val CARD_GAP_DP = 11f
+
+        /** The QR code's white tile, its quiet zone included. */
+        const val QR_DP = 226f
+
+        /** The rail's stack art with the gap under it. */
+        const val RAIL_ART_DP = 88f
+
+        /** The Bluetooth tile narrower than this (a phone's card) puts its button under its words (#468). */
+        const val NARROW_TILE_DP = 360f
 
         /** Continue on Panes waits this long for every card in all (the radio's Off waits for its helper). */
         const val BUDGET_MS = 30_000L
