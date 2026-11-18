@@ -1,27 +1,38 @@
 #!/usr/bin/env bash
 # verify-api23.sh: does Android 6's verifier take every Glassworks class in the legacy APK? (#435, #198)
 #
-# Installs the APK on an Android 6 (API 23) emulator or device and reads what dex2oat logs at install. Android 6
+# Installs the APK on an Android 6 (API 23) emulator and reads what dex2oat logs at install. Android 6
 # verifies every class then; a class it rejects throws VerifyError when the app first uses it, which on the Mirror
 # crashed the app at every start (2026-11-18, UsbDebugging$Requests). Newer Android accepts the same dex, so only
 # an API 23 install shows it. Fails on a rejected class in dev.glassworks or sh.edm.s1kiosk.
 #
-# What it touches: installs the APK on the device given and removes it after; it stops if the app is there already. The dex doesn't depend on the
-# ABI, so the APK's native libraries are dropped from a copy first, which lets the arm64 APK install on the CI
+# What it touches: an emulator only (it refuses a real device), through an adb server of its own on its own port
+# with USB and mDNS off, which it stops at the end; the shared server isn't used or stopped. It installs the APK there
+# and removes it after, and stops if the app is there already. The dex doesn't depend on the ABI, so the APK's native libraries are dropped from a copy first, which lets the arm64 APK install on the CI
 # runners' x86_64 emulators. The copy is signed with a throwaway key made for the run.
 #
-#   tools/legacy/verify-api23.sh <legacy.apk> <adb serial>
+#   tools/legacy/verify-api23.sh <legacy.apk> <emulator serial>     VERIFY_ADB_PORT picks the port (5077)
 set -euo pipefail
 
 apk="$1"
 serial="$2"
 adb="${ADB:-adb}"
-# Emulators only: a server that also claims USB or mDNS devices takes them from whoever drives a real panel.
-export ADB_USB=0 ADB_MDNS=0 ADB_MDNS_AUTO_CONNECT=0
 build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
 
+# A server of its own: one that also claims USB or mDNS devices takes them from whoever drives a real panel (on macOS
+# even with --one-device, 2026-11-18). A port someone listens on already is someone else's server.
+export ADB_USB=0 ADB_MDNS=0 ADB_MDNS_AUTO_CONNECT=0 ANDROID_ADB_SERVER_PORT="${VERIFY_ADB_PORT:-5077}"
+if (exec 3<>"/dev/tcp/127.0.0.1/$ANDROID_ADB_SERVER_PORT") 2>/dev/null; then
+  echo "verify-api23: port $ANDROID_ADB_SERVER_PORT is in use; pick a free one with VERIFY_ADB_PORT" >&2
+  rm -rf "$work"
+  exit 2
+fi
+trap '"$adb" kill-server >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+"$adb" start-server >/dev/null 2>&1
+"$adb" -s "$serial" wait-for-device
+
+[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" = 1 ] || { echo "verify-api23: $serial isn't an emulator" >&2; exit 2; }
 sdk="$("$adb" -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')"
 [ "$sdk" = 23 ] || { echo "verify-api23: $serial runs API $sdk, not 23" >&2; exit 2; }
 
