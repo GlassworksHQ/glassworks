@@ -410,7 +410,7 @@ class UpdateManager(
                     s.fsync(out)
                 }
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or Platform.mutablePendingIntentFlag
-                val pending = PendingIntent.getBroadcast(ctx, id, Intent(ctx, UpdateInstallReceiver::class.java), flags)
+                val pending = PendingIntent.getBroadcast(ctx, id, Intent(ctx, runtime.components.updateReceiver), flags)
                 model.onInstalling(a, SystemClock.elapsedRealtime(), when {
                     silentUpdates?.silent == true -> "Installing ${a.offer.version} without a tap"
                     root == null -> "Installing ${a.offer.version}: confirm on the screen"

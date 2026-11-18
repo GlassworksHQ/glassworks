@@ -56,7 +56,7 @@ class GlassworksRuntime(
     override val presence = PresenceRelay(frame.presence)
 
     override val screen = ScreenPolicy(
-        presence, frame.light, AdminReceiver::class.java, settings = ::KioskPrefs,
+        presence, frame.light, app.components.admin, settings = ::KioskPrefs,
         logTag = "S1Kiosk.Screen", wakeLockTag = "s1kiosk:wake",
     )
 
@@ -133,7 +133,7 @@ class GlassworksRuntime(
     override fun managePage(context: Context, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
         app.managePage(context, this, signIn, tokens, prefs)
 
-    override val mainActivity get() = app.mainActivity
+    override val components get() = app.components
 
     override fun paneFile(context: Context, namespace: String) = app.paneFile(context, namespace)
 

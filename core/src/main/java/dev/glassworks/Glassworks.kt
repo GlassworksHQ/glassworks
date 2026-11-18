@@ -115,8 +115,8 @@ interface Glassworks {
     /** Cancels the current voice run (stops streaming and playback); null while the service isn't running. */
     var voiceCancel: (() -> Unit)?
 
-    /** The app's activity: the one that shows the dashboard, and that Home Assistant's commands go to. */
-    val mainActivity: Class<out Activity>
+    /** The app's classes for the core's components ([AppComponents]): start and name these, never the core's own. */
+    val components: AppComponents
 
     /** The file that holds the settings of the pane with id [namespace]: the app decides (PaneContext.prefs). */
     fun paneFile(context: Context, namespace: String): SharedPreferences

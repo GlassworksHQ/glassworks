@@ -208,7 +208,7 @@ open class KioskService : Service() {
         // can pull the shade down). MainActivity is singleTask: the running one gets it in onNewIntent.
         val menu = PendingIntent.getActivity(
             this, REQ_KIOSK_SETTINGS,
-            Intent(this, MainActivity::class.java)
+            Intent(this, glassworks.components.mainActivity)
                 .putExtra(SettingsMenu.EXTRA, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -246,7 +246,7 @@ open class KioskService : Service() {
         private const val REQ_PANEL_SETTINGS = 11
 
         fun start(context: Context) {
-            val i = Intent(context, KioskService::class.java)
+            val i = Intent(context, context.glassworks.components.service)
             if (Platform.hasForegroundServiceStart) context.startForegroundService(i)
             else context.startService(i)
         }

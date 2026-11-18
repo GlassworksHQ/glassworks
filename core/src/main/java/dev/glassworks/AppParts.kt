@@ -34,16 +34,16 @@ interface AppParts {
     /** The app's service started, before it starts the device: the app's own first state (the S1's voice state). */
     fun serviceStarted(context: Context, runtime: GlassworksRuntime) {}
 
-    /** The app's activity: the one that shows the dashboard, and that Home Assistant's commands go to. */
-    val mainActivity: Class<out Activity>
+    /** The classes the app's manifest declares for the core's components ([AppComponents]). */
+    val components: AppComponents
 
     /**
      * Whether the extras of [intent], which started or reached the app's activity, may change settings. Only a
-     * start of [mainActivity] itself, which the app's manifest guards with WRITE_SECURE_SETTINGS (adb, root, the
+     * start of the app's main activity itself, which the app's manifest guards with WRITE_SECURE_SETTINGS (adb, root, the
      * system and the app get in; other apps don't), may. A launcher alias, which any app can start, may not
      * (#23, #374); the activity drops its extras.
      */
-    fun trustsExtras(intent: Intent): Boolean = intent.component?.className == mainActivity.name
+    fun trustsExtras(intent: Intent): Boolean = intent.component?.className == components.mainActivity.name
 
     /** The file that holds the settings of the pane with id [namespace]. */
     fun paneFile(context: Context, namespace: String): SharedPreferences

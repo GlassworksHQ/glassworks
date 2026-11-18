@@ -43,11 +43,13 @@ class PanelDeviceFrameTest {
         val apks = RepoFiles.appModules.filter { m -> File(m, "build.gradle.kts").let { it.isFile && "id(\"com.android.application\")" in it.readText() } }
         assertTrue("found the APK modules", apks.size >= 2)
         val sources = RepoFiles.sources(atLeast = 30, inModules = RepoFiles.appModules - apks.toSet()) { it.extension == "kt" && RepoFiles.inPackage(it, "dev/glassworks") }
-        // Imports, and fully qualified names anywhere else (`sh.edm.s1kiosk.X(...)` needs no import).
+        // Imports, and fully qualified names anywhere else (`sh.edm.s1kiosk.X(...)` needs no import), outside strings
+        // (the root helper's `/data/data/sh.edm.s1kiosk` path is the app's id, not its code).
         val qualified = Regex("""\bsh\.edm\.[a-z0-9_.]*[a-z0-9_]""")
+        val string = Regex(""""(?:\\.|[^"\\])*"""")
         val bad = sources.flatMap { f ->
             f.readLines().withIndex().filter { (_, line) ->
-                val code = line.substringBefore("//").trim()
+                val code = line.substringBefore("//").trim().replace(string, "\"\"")
                 if (code.startsWith("*") || code.startsWith("/*")) return@filter false // KDoc and comments
                 val imp = code.takeIf { it.startsWith("import sh.edm.") }?.removePrefix("import ")?.substringBefore(" as ")
                 if (imp != null) imp.substringBeforeLast('.') !in libPackages

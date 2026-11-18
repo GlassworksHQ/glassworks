@@ -59,7 +59,7 @@ class AppIconMockups {
 
     private fun notification(): Notification {
         val service = Robolectric.buildService(KioskService::class.java).get()
-        val build = KioskService::class.java.getDeclaredMethod("buildNotification").apply { isAccessible = true }
+        val build = dev.glassworks.KioskService::class.java.getDeclaredMethod("buildNotification").apply { isAccessible = true }
         return build.invoke(service) as Notification
     }
 

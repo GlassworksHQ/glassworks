@@ -34,7 +34,6 @@ import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
 import dev.glassworks.web.PageShell
-import dev.glassworks.AdminReceiver
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
 import dev.glassworks.MainActivity
@@ -261,7 +260,7 @@ open class AppManage(
         private val dpm get() = app.getSystemService(DevicePolicyManager::class.java)
 
         private fun toActivity(extra: String, delayMs: Long = 0): String? {
-            val i = Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(extra, true)
+            val i = Intent(app, runtime.components.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(extra, true)
             main.postDelayed({
                 val sink = runtime.commandSink
                 if (sink != null) sink(i) else runCatching { app.startActivity(i) }.onFailure { Log.w(TAG, "can't start the activity", it) }
@@ -285,7 +284,7 @@ open class AppManage(
             main.postDelayed({
                 runCatching {
                     if (holdsReboot) app.getSystemService(PowerManager::class.java)?.reboot(null)
-                    else dpm?.reboot(ComponentName(app, AdminReceiver::class.java))
+                    else dpm?.reboot(ComponentName(app, runtime.components.admin))
                 }.onFailure { Log.w(TAG, "reboot failed", it) }
             }, ACTION_DELAY_MS)
             return null

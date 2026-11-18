@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import sh.edm.s1kiosk.AdminReceiver as S1Admin
 
 /**
  * Pins how the panel's screen behaves: the VI5300 range table, presence, wake on approach, idle off,
@@ -366,7 +367,7 @@ class ScreenBehaviourPinTest {
     // ---- a wake after an idle sleep lasts the idle timeout (#257)
 
     private fun admin() = shadowOf(h.context.getSystemService(android.app.admin.DevicePolicyManager::class.java))
-        .setActiveAdmin(android.content.ComponentName(h.context, dev.glassworks.AdminReceiver::class.java))
+        .setActiveAdmin(android.content.ComponentName(h.context, S1Admin::class.java))
 
     private val awake: android.os.PowerManager.WakeLock? get() = org.robolectric.shadows.ShadowPowerManager.getLatestWakeLock()
 

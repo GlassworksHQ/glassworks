@@ -17,6 +17,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowLog
 import dev.glassworks.KioskPrefs
 import dev.glassworks.MainActivity
+import dev.glassworks.glassworks
 import dev.glassworks.auth.HaAuth
 import dev.glassworks.auth.StoredAuth
 import dev.glassworks.dashboard.Dashboards
@@ -33,7 +34,9 @@ class GeckoPinHarness(
     prefs: (KioskPrefs) -> Unit = {},
 ) : AutoCloseable {
     val app: Application = RuntimeEnvironment.getApplication()
-    val controller: ActivityController<MainActivity>
+    /** The app's own activity class (its subclass at the name its manifest declares, #22). */
+    private val main: Class<out MainActivity> get() = app.glassworks.components.mainActivity
+    val controller: ActivityController<out MainActivity>
 
     init {
         GeckoShadows.reset()
@@ -42,8 +45,8 @@ class GeckoPinHarness(
         holdRestarts()
         prefs(KioskPrefs(app))
         ShadowLog.clear()
-        controller = (if (startIntent == null) Robolectric.buildActivity(MainActivity::class.java)
-            else Robolectric.buildActivity(MainActivity::class.java, startIntent)).setup()
+        controller = (if (startIntent == null) Robolectric.buildActivity(main)
+            else Robolectric.buildActivity(main, startIntent)).setup()
         idle()
     }
 
@@ -68,7 +71,7 @@ class GeckoPinHarness(
 
     /** Delivers [i] as Android does: with its component set, to MainActivity when the test named none. */
     fun newIntent(i: Intent) {
-        controller.newIntent(if (i.component == null) Intent(i).setClass(app, MainActivity::class.java) else i)
+        controller.newIntent(if (i.component == null) Intent(i).setClass(app, main) else i)
         idle()
     }
 

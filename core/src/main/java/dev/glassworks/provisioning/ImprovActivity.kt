@@ -5,7 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import dev.glassworks.KioskService
+import dev.glassworks.glassworks
 
 /**
  * Invisible trampoline for the Improv intent extras (see [ImprovController.handleIntent]):
@@ -24,7 +24,7 @@ open class ImprovActivity : Activity() {
         Log.i("S1Kiosk.Improv", "ImprovActivity: ${extras?.keySet()?.joinToString()}")
         try {
             // An activity in the foreground may start the (already foreground) service directly.
-            startService(Intent(this, KioskService::class.java).apply { extras?.let { putExtras(it) } })
+            startService(Intent(this, glassworks.components.service).apply { extras?.let { putExtras(it) } })
         } catch (e: Exception) {
             Log.w("S1Kiosk.Improv", "could not reach KioskService", e)
         }

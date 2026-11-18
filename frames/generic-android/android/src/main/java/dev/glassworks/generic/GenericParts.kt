@@ -18,7 +18,11 @@ import java.util.concurrent.TimeUnit
 import dev.glassworks.AppParts
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
+import dev.glassworks.AppComponents
+import sh.edm.s1kiosk.AdminReceiver
+import sh.edm.s1kiosk.KioskService
 import sh.edm.s1kiosk.MainActivity
+import sh.edm.s1kiosk.update.UpdateInstallReceiver
 import dev.glassworks.OverlayHost
 import dev.glassworks.PaneOverlay
 import dev.glassworks.PaneFiles
@@ -87,7 +91,8 @@ class GenericParts : AppParts {
     // Settings from intent extras: only a start of MainActivity itself, which takes WRITE_SECURE_SETTINGS (adb) unless
     // it is the app's own; never through the launcher alias ([LAUNCHER]), which any app can start. AppParts'
     // trustsExtras does exactly that (#409).
-    override val mainActivity = MainActivity::class.java
+    // The subclasses at the names the Tablet, the Mirror and Kiln know (#22).
+    override val components = AppComponents(MainActivity::class.java, KioskService::class.java, AdminReceiver::class.java, UpdateInstallReceiver::class.java)
 
     override fun serviceStarted(context: Context, runtime: GlassworksRuntime) {
         runtime.voiceState = if (VoicePrefs(paneFile(context, "assist")).enabled) "idle" else "off"

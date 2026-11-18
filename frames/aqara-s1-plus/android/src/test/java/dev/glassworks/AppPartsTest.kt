@@ -58,7 +58,7 @@ class AppPartsTest {
         }
         override fun devicePanes(runtime: GlassworksRuntime, host: DeviceHost): List<Pane> = emptyList()
         override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> = emptyList()
-        override val mainActivity = Activity::class.java
+        override val components = AppComponents(FakeMain::class.java, KioskService::class.java, AdminReceiver::class.java, dev.glassworks.update.UpdateInstallReceiver::class.java)
         override fun paneFile(context: Context, namespace: String) = file
         override fun managePage(context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
             error("no Manage page in this test")
@@ -97,7 +97,10 @@ class AppPartsTest {
     }
 
     @Test fun theAppDecidesItsActivityAndWherePaneSettingsLive() {
-        assertEquals(Activity::class.java, runtime.mainActivity)
+        assertEquals(FakeMain::class.java, runtime.components.mainActivity)
         assertSame(parts.file, runtime.paneFile(app, "anything"))
     }
 }
+
+/** An app's own subclass of the core's activity, as the S1's `sh.edm.s1kiosk.MainActivity` is. */
+private class FakeMain : MainActivity()

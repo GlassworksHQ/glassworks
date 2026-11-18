@@ -948,7 +948,7 @@ open class MainActivity : Activity() {
         restartWaitingSince = 0L
         val pi = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent(this, glassworks.components.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             Platform.backgroundStartOptions(),
         )

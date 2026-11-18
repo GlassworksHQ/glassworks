@@ -53,7 +53,7 @@ import dev.glassworks.assist.TtsPlayer
  *
  * Entity values are read from [KioskPrefs] / [screen] (thread-safe); anything touching
  * the screen or the activity is posted to the main thread. Kiosk actions (URL, reload, zoom,
- * header, restart) go to the app's activity ([Glassworks.mainActivity]) as intents, exactly like the
+ * header, restart) go to the app's activity ([AppComponents.mainActivity]) as intents, exactly like the
  * `adb am start` extras.
  */
 class PanelDevice(
@@ -468,11 +468,11 @@ class PanelDevice(
 
     /** Sends extras to the app's activity (same as `adb shell am start ... --e* key value`). */
     private fun toActivity(build: Intent.() -> Unit) {
-        val i = Intent(ctx, runtime.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply(build)
+        val i = Intent(ctx, runtime.components.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply(build)
         ui {
             val sink = runtime.commandSink
             if (sink != null) sink(i) else try { ctx.startActivity(i) } catch (e: Exception) {
-                EspHomeLog.w("Cannot start ${runtime.mainActivity.simpleName}", e)
+                EspHomeLog.w("Cannot start ${runtime.components.mainActivity.simpleName}", e)
             }
         }
     }

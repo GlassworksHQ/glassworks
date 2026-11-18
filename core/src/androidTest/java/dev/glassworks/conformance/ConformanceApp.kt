@@ -118,7 +118,10 @@ class FakeParts : AppParts {
         listOf(SpeakerPane()).filter { it.id !in host.cantRun }
 
     override fun overlays(runtime: GlassworksRuntime, host: OverlayHost) = emptyList<PaneOverlay>()
-    override val mainActivity = Activity::class.java
+    override val components = dev.glassworks.AppComponents(
+        dev.glassworks.MainActivity::class.java, dev.glassworks.KioskService::class.java,
+        dev.glassworks.AdminReceiver::class.java, dev.glassworks.update.UpdateInstallReceiver::class.java,
+    )
     override fun paneFile(context: Context, namespace: String): SharedPreferences = context.getSharedPreferences("conformance", Context.MODE_PRIVATE)
     override fun managePage(context: Context, runtime: GlassworksRuntime, signIn: SignInServer, tokens: HaTokenClient, prefs: KioskPrefs): ManagePage =
         error("no Manage page in the conformance test")

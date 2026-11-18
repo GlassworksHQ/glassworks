@@ -1,5 +1,8 @@
 package sh.edm.s1kiosk
 
+import dev.glassworks.AppComponents
+import sh.edm.s1kiosk.update.UpdateInstallReceiver
+
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -171,7 +174,8 @@ class S1Panes : AppParts {
         )
     }
 
-    override val mainActivity = MainActivity::class.java
+    // The subclasses at the names panels, Kiln and the root helper know (#22).
+    override val components = AppComponents(MainActivity::class.java, KioskService::class.java, AdminReceiver::class.java, UpdateInstallReceiver::class.java)
 
     /** The direct-boot splash (our look before unlock at the next boot): on only while it's safe. */
     override fun activityStarted(context: Context) = BootSplashActivity.sync(context)

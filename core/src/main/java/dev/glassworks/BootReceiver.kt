@@ -14,9 +14,9 @@ open class BootReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             Log.w("S1Kiosk", "Could not start KioskService", e)
         }
-        val launch = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         try {
+            val launch = Intent(context, context.glassworks.components.mainActivity)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             context.startActivity(launch)
         } catch (e: Exception) {
             // Background activity starts can be blocked on Android 10+ unless the app has

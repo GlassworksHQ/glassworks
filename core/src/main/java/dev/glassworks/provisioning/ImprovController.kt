@@ -1,7 +1,6 @@
 package dev.glassworks.provisioning
 
 import dev.glassworks.platform.Platform
-import dev.glassworks.AdminReceiver
 import android.content.ComponentName
 import dev.glassworks.improv.*
 import android.annotation.SuppressLint
@@ -155,7 +154,7 @@ object ImprovController {
         initialized = true
         app = ctx.applicationContext
         prefs = KioskPrefs(app)
-        wifi = WifiProvisioner(app, main, ComponentName(app, AdminReceiver::class.java)).also {
+        wifi = WifiProvisioner(app, main, ComponentName(app, app.glassworks.components.admin)).also {
             it.onProgress = { p ->
                 val inst = installerWifi
                 if (installerJoining && inst != null) installerWifi = inst.copy(detail = p) else progress = p
