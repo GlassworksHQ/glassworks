@@ -37,26 +37,26 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 <!-- tools/ci/changes.py --table -->
 | Job or step | Runs when a PR changes |
 |---|---|
-| every job | `.github/workflows`, `.github/actions`, `tools/ci`, `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradlew`, `gradlew.bat`, `gradle`, `package.json`, `package-lock.json` |
-| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `frames/*/design/frame.json`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/s1-kiosk-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `**/sh/edm/**` |
-| app: release build, update check | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `frames/*/design/frame.json`, `tools/release/check-update-compat.sh` |
+| every job | `.github/workflows`, `.github/actions`, `tools/ci`, `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradlew`, `gradlew.bat`, `gradle`, `frames/*/design/frame.json`, `package.json`, `package-lock.json` |
+| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/s1-kiosk-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `**/sh/edm/**` |
+| app: release build, update check | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `tools/release/check-update-compat.sh` |
 | app: aioesphomeapi tests | `libs`, `build-logic` |
 | libs-api23 | `libs`, `build-logic` |
 | api23 | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `tools/legacy` |
-| libs-publish | `libs`, `build-logic`, `LICENSE`, `THIRD-PARTY-NOTICES.md`, `tools/release/check-lib-artifact.sh`, `tools/release/lib-consumer-check.sh` |
+| libs-publish | `libs`, `build-logic`, `LICENSE`, `LICENSES`, `THIRD-PARTY-NOTICES.md`, `tools/release/check-lib-artifact.sh`, `tools/release/lib-consumer-check.sh` |
 | wake-word | `libs`, `build-logic`, `tools/voice` |
 | web | anything but `**/*.md`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/{*.kt,*.java}`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/{test,androidTest}/**`, `{libs,core,pane-api,engines,panes,testing,build-logic,frames/*/android,frames/*/panes}/**/src/*/res/**`, `!testing/kotlin/dev/glassworks/testing/RepoFiles.kt`, `!core/src/main/res/font/**` |
 | refract | `kiln/workers` |
 | scripts: Clarity tests (ffmpeg, fast and slow sets) | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity`, `docs/perf.md` |
 | perf-webrtc | `tools/perf`, `frames/*/budgets.json`, `frames/*/clarity` |
 | root | `frames/aqara-s1-plus/tools/root`, `frames/aqara-s1-plus/tools/radio` |
-| size | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `frames/*/design/frame.json`, `frames/*/budgets.json`, `tools/size`, `tools/release/frame-abis.sh`, `frames/aqara-s1-plus/tools/radio`, `kiln/assets.lock.json` |
+| size | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `frames/*/budgets.json`, `tools/size`, `tools/release/frame-abis.sh`, `frames/aqara-s1-plus/tools/radio`, `kiln/assets.lock.json` |
 | size-generic | `frames/generic-android`, `core`, `pane-api`, `panes`, `libs`, `engines`, `testing`, `build-logic`, `LICENSE`, `LICENSES`, `THIRD-PARTY-NOTICES.md`, `tools/size`, `tools/legacy/apk-icons.py`, `tools/release/check-update-compat.sh` |
 | branding | `branding/boot`, `branding/glass-tile`, `branding/lululemon-mirror`, `branding/bootlogos.json`, `frames/aqara-s1-plus/design/frame.json`, `frames/lululemon-mirror/design/frame.json` |
-| site | `site`, `packages`, `frames`, `docs`, `tools/perf/grade.ts`, `tools/perf/page/rubric.json`, `**/*.md`; or deletes or renames any file |
+| site | `site`, `packages`, `frames`, `docs`, `tools/perf/grade.ts`, `tools/perf/page/rubric.json`, `**/*.md`, `libs/*/build.gradle.kts`, `libs/*/gradle.properties`; or deletes or renames any file |
 <!-- end -->
 
-`scripts` always runs: its install script tests, tool tests and the docs' link check take seconds. Its
+`scripts` always runs: its install script tests, tool tests, this selector's tests and the docs' link check take seconds. Its
 Clarity tests (ffmpeg, the fast and slow sets) run only on their row.
 
 Some rows need explaining.

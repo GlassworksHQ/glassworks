@@ -20,11 +20,12 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-# The workflows, this selector and the files every Gradle module or npm workspace builds with.
+# The workflows, this selector and the files every Gradle module or npm workspace builds with (the root
+# build.gradle.kts reads every frame's frame.json for the ABIs).
 EVERYTHING = (
     '.github/workflows', '.github/actions', 'tools/ci',
     'settings.gradle.kts', 'build.gradle.kts', 'gradle.properties', 'gradlew', 'gradlew.bat', 'gradle',
-    'package.json', 'package-lock.json',
+    'frames/*/design/frame.json', 'package.json', 'package-lock.json',
 )
 
 # Every Gradle module and what builds them.
@@ -32,8 +33,8 @@ ANDROID = ('libs', 'core', 'pane-api', 'engines', 'panes', 'testing', 'build-log
            'frames/*/android', 'frames/*/panes')
 MODULES = '{' + ','.join(ANDROID) + '}'
 
-# What the release APKs take in from outside the modules: the licence assets, the notices check, the ABIs.
-APK_INPUTS = ('THIRD-PARTY-NOTICES.md', 'LICENSE', 'LICENSES', 'frames/*/design/frame.json')
+# What the release APKs take in from outside the modules: the licence assets and the notices check.
+APK_INPUTS = ('THIRD-PARTY-NOTICES.md', 'LICENSE', 'LICENSES')
 
 # What the unit tests read from the repo beyond the modules: Test.readsRepoFiles in
 # build-logic/src/main/kotlin/glassworks.android.gradle.kts, plus debloat.sh (BootRestTest).
@@ -69,7 +70,8 @@ RULES = {
     'libs_api23': Rule('libs-api23', when=LIBS),
     'api23': Rule('api23', when=ANDROID + ('tools/legacy',)),
     'libs_publish': Rule('libs-publish', when=LIBS + (
-        'LICENSE', 'THIRD-PARTY-NOTICES.md', 'tools/release/check-lib-artifact.sh', 'tools/release/lib-consumer-check.sh')),
+        'LICENSE', 'LICENSES', 'THIRD-PARTY-NOTICES.md', 'tools/release/check-lib-artifact.sh',
+        'tools/release/lib-consumer-check.sh')),
     'wake_word': Rule('wake-word', when=LIBS + ('tools/voice',)),
     # The workspaces read across the repo (frames, docs' JSON and images, tools, the panes' pane.json and icons,
     # core's setup page and font, RepoFiles.kt), so this rule is the other way round: what can't reach them is
@@ -92,9 +94,10 @@ RULES = {
     'branding': Rule('branding', when=(
         'branding/boot', 'branding/glass-tile', 'branding/lululemon-mirror', 'branding/bootlogos.json',
         'frames/aqara-s1-plus/design/frame.json', 'frames/lululemon-mirror/design/frame.json')),
+    # site/scripts/api-docs.mjs reads the libraries' build files and gradle.properties.
     'site': Rule('site', when=(
-        'site', 'packages', 'frames', 'docs', 'tools/perf/grade.ts', 'tools/perf/page/rubric.json', '**/*.md'),
-        on_delete=True),
+        'site', 'packages', 'frames', 'docs', 'tools/perf/grade.ts', 'tools/perf/page/rubric.json', '**/*.md',
+        'libs/*/build.gradle.kts', 'libs/*/gradle.properties'), on_delete=True),
 }
 
 

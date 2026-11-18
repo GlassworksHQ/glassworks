@@ -50,11 +50,19 @@ class PrTypes(unittest.TestCase):
 
     def test_workflows_and_shared_build_files_run_everything(self):
         for f in ('.github/workflows/core-emulators.yml', 'settings.gradle.kts', 'build.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties',
-                  'package.json', 'package-lock.json', 'tools/ci/changes.py'):
+                  'package.json', 'package-lock.json', 'tools/ci/changes.py', 'frames/lululemon-mirror/design/frame.json'):
             self.assertEqual(running(f), set(changes.RULES), f)
 
     def test_a_module_build_file_is_not_the_root_one(self):
         self.assertNotEqual(running('core/build.gradle.kts'), set(changes.RULES))
+
+    def test_a_packaged_licence_runs_the_publishing_dry_run(self):
+        self.assertIn('libs_publish', running('LICENSES/BSD-3-Clause.txt'))
+
+    def test_a_librarys_build_file_runs_the_site_which_lists_its_api_reference(self):
+        self.assertIn('site', running('libs/voice/build.gradle.kts'))
+        self.assertIn('site', running('libs/voice/gradle.properties'))
+        self.assertNotIn('site', running('libs/voice/src/main/java/dev/glassworks/voice/WakeWords.kt'))
 
     def test_a_deleted_file_runs_the_site_whose_docs_may_link_to_it(self):
         self.assertIn('site', running('tools/mictest/x.py', deleted=['tools/mictest/x.py']))
@@ -127,11 +135,12 @@ class PrYmlFollowsTheTable(unittest.TestCase):
         for key in changes.RULES:
             self.assertIn(f"needs.changes.outputs.{key} != 'false'", self.yml, key)
 
-    def test_a_job_with_a_rule_is_gated_on_it(self):
+    def test_a_job_with_a_rule_is_gated_on_it_at_job_level(self):
         for job, body in self.jobs.items():
             key = job.replace('-', '_')
             if key in changes.RULES:
-                self.assertIn(f"needs.changes.outputs.{key} != 'false' }}}}", body, job)
+                job_if = re.search(r'^    if: (.*)$', body, re.M).group(1)
+                self.assertEqual(job_if, f"${{{{ !cancelled() && needs.changes.outputs.{key} != 'false' }}}}", job)
 
 
 class DocsCarryTheTable(unittest.TestCase):

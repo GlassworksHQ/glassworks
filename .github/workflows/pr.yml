@@ -100,9 +100,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
 
-      - name: The selector's own tests
-        run: python3 -m unittest discover -s tools/ci/test
-
       - name: Pick the jobs
         id: pick
         env:
@@ -469,6 +466,9 @@ jobs:
         run: python3 -m unittest discover -s branding/boot/test -v
       - name: Docs links
         run: python3 tools/check-doc-links.py
+      # Here, in a required check: a map that pr.yml or docs/ci.md no longer follows fails the PR.
+      - name: CI job selection (tools/ci/changes.py)
+        run: python3 -m unittest discover -s tools/ci/test -v
       - name: Library parity tables
         run: python3 tools/check-parity-tables.py
       - name: Brand images are live on glassworks.dev
