@@ -409,20 +409,21 @@ the four marked *on* are enabled when HA adds the panel. Turn the others on from
 
 The pane samples once a minute. It sends a value only when it moved by at least its band since the
 last value it sent, so a quiet panel sends almost nothing. It reads files in `/proc` and `/sys` and
-asks Android. It runs no shell commands and needs no root.
+asks Android. It runs no shell commands and needs no root. S1 Kiosk and the generic app (both of its
+builds, Android 6 and up) have it.
 
 | Entity | object_id | Default | Band | Source |
 |---|---|---|---|---|
-| sensor `CPU usage` (%) | `cpu_usage` | on | 1 % | `/proc/stat`, all cores, busy share over the last minute |
+| sensor `CPU usage` (%) | `cpu_usage` | on | 1 % | `/proc/stat`, all cores, busy share over the last minute. Unknown where SELinux keeps apps from `/proc/stat`: Android 8 and later, unless permissive as the S1's (untested on a tablet) |
 | sensor `App CPU usage` (%) | `app_cpu_usage` | off | 0.5 % | `/proc/<pid>/stat` of every app process (Gecko's too), as a share of all cores |
-| sensor `CPU temperature` (°C) | `cpu_temperature` | on | 0.5 °C | the frame's thermal zone; on the S1 `cpu_thermal_zone`. No entity on a frame without one |
+| sensor `CPU temperature` (°C) | `cpu_temperature` | on | 0.5 °C | the frame's thermal zone; on the S1 `cpu_thermal_zone`. No entity on a frame without one: the generic app's (the Pixel Tablet, the lululemon Mirror, any other device) |
 | sensor `RAM available` (MiB) | `memory_available` | off | 8 MiB | `ActivityManager.MemoryInfo.availMem` |
-| sensor `App RAM` (MiB) | `app_memory` | off | 4 MiB | PSS of every app process, from `/proc/<pid>/smaps_rollup`; unknown for a minute if one of them can't be read |
+| sensor `App RAM` (MiB) | `app_memory` | off | 4 MiB | PSS of every app process, from `/proc/<pid>/smaps_rollup`; unknown for a minute if one of them can't be read. A kernel without `smaps_rollup` (before Linux 4.14 and Android's 4.4 and 4.9, such as the Mirror's 3.10) sums the `Pss:` lines of `/proc/<pid>/smaps` |
 | sensor `Storage free` (GiB) | `storage_free` | off | 0.05 GiB | `StatFs` on `/data` |
-| sensor `Wi-Fi signal` (dBm) | `wifi_signal` | on | 2 dB | `WifiManager`; unknown while Wi-Fi is down |
-| sensor `Wi-Fi link speed` (Mbit/s) | `wifi_link_speed` | off | 1 Mbit/s | `WifiManager` |
+| sensor `Wi-Fi signal` (dBm) | `wifi_signal` | on | 2 dB | the Wi-Fi network `ConnectivityManager` has, then its `WifiInfo` (#263); unknown while Wi-Fi is down |
+| sensor `Wi-Fi link speed` (Mbit/s) | `wifi_link_speed` | off | 1 Mbit/s | as Wi-Fi signal |
 | sensor `Uptime` (timestamp) | `uptime` | on | 120 s | when the panel booted; HA shows "3 hours ago" |
-| sensor `App uptime` (timestamp) | `app_uptime` | off | 120 s | when the app process started |
+| sensor `App uptime` (timestamp) | `app_uptime` | off | 120 s | when the app process started: `Process.getStartElapsedRealtime`, or `/proc/self/stat` on Android 6 |
 | sensor `Web content processes` | `web_content_processes` | off | 1 | the engine's content processes (Gecko's tabs) |
 | text_sensor `Last restart reason` | `last_restart_reason` | off | | why the app's process last ended, e.g. `crash`, `low memory`, `app updated`; Android 11 and later. Always `unknown` on the S1 (Android 10) |
 

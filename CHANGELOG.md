@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Glassworks for generic Android gets the Diagnostics pane.** The app on tablets and the lululemon Mirror, in
+  both of its builds, now sends its CPU, RAM, storage, Wi-Fi and uptime to Home Assistant, as S1 Kiosk does, and
+  shows them on its Diagnostics page on the panel and on the Manage page. These devices have no CPU temperature
+  sensor the app knows, so there is no temperature entity. On a narrow screen, such as the Mirror's in portrait, a
+  pane's reading tiles now stack one to a row instead of cutting off their values.
 - **Voice says when it can't get ready.** When the wake word model doesn't download (no internet, a
   certificate the panel can't verify, an HTTP error), fails its check, can't be saved, or the microphone
   doesn't work or isn't allowed, the Assist page on the panel and on the Manage page says so in words, with
