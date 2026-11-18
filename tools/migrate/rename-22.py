@@ -621,22 +621,22 @@ def s1_frame_setup():
     text = open(manifest).read()
 
     def full(m):
-        attr, name = m.group(1), m.group(2)
+        attr, q, name = m.group(1), m.group(2), m.group(3)
         fq = OLD + name if name.startswith(".") else name
         if fq in S1_SHIMS or fq == S1_ALIAS:
-            return f'{attr}="{fq}"'
+            return f'{attr}{q}{fq}{q}'
         if fq in COMPONENTS:
-            return f'{attr}="{COMPONENTS[fq]}"'
+            return f'{attr}{q}{COMPONENTS[fq]}{q}'
         if fq.startswith(OLD + "."):
             rest = fq[len(OLD) + 1:]
             sub, _, cls = rest.rpartition(".")
             if sub in S1_PACKAGES:
-                return f'{attr}="{S1_PACKAGES[sub]}.{cls}"'
+                return f'{attr}{q}{S1_PACKAGES[sub]}.{cls}{q}'
             if sub in PACKAGES:  # a core class an S1 branch added under the old package goes with the core (base_rule)
-                return f'{attr}="{PACKAGES[sub]}.{cls}"'
+                return f'{attr}{q}{PACKAGES[sub]}.{cls}{q}'
         return m.group(0)
     # Class names only: the component tags' own name and targetActivity, never an <action> or <meta-data> name.
-    name = re.compile(r'(android:(?:name|targetActivity))="(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+)"')
+    name = re.compile(r'(android:(?:name|targetActivity|backupAgent)\s*=\s*)(["\'])(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+)\2')
     tag = re.compile(r'<(?:application|activity|activity-alias|service|receiver|provider)\b[^>]*>')
     new = tag.sub(lambda t: name.sub(full, t.group(0)), text)
     new = new.replace(f'android:taskAffinity="{OLD}.', f'android:taskAffinity="{S1_NAMESPACE}.')

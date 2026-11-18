@@ -8,6 +8,8 @@ import org.junit.Test
 import dev.glassworks.s1.BootSplash.Home
 import dev.glassworks.s1.BootSplash.Step
 import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 
 class BootSplashTest {
     private val pkg = "sh.edm.s1kiosk"
@@ -71,18 +73,30 @@ class BootSplashTest {
 
     @Test
     fun manifestMatches() {
-        val m = File(RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
-        val block = m.substringAfter("android:name=\"dev.glassworks.s1.BootSplashActivity\"").substringBefore("</activity>")
-        assertTrue("splash ships disabled", "android:enabled=\"false\"" in block)
-        assertTrue("direct-boot aware", "android:directBootAware=\"true\"" in block)
-        assertTrue("own process", "android:process=\":boot\"" in block)
-        assertTrue("HOME filter priority", "android:priority=\"${BootSplash.PRIORITY}\"" in block)
-        assertTrue("HOME filter", "android.intent.category.HOME" in block && "android.intent.category.DEFAULT" in block)
-        val live = m.replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
-        val main = checkNotNull(Regex("""<activity\s[^>]*android:name="sh\.edm\.s1kiosk\.MainActivity"[\s\S]*?</activity>""").find(live)?.value) {
-            "the manifest declares MainActivity"
+        val doc = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }.newDocumentBuilder()
+            .parse(File(RepoFiles.s1App, "src/main/AndroidManifest.xml"))
+        fun activity(name: String): Element = checkNotNull(doc.getElementsByTagName("activity").let { list ->
+            (0 until list.length).map { list.item(it) as Element }.firstOrNull { it.getAttributeNS(ANDROID, "name") == name }
+        }) { "the manifest declares $name" }
+        fun priorities(e: Element) = e.getElementsByTagName("intent-filter").let { list ->
+            (0 until list.length).map { (list.item(it) as Element).getAttributeNS(ANDROID, "priority") }
         }
-        assertFalse("MainActivity stays credential-encrypted only", "directBootAware" in main)
-        assertFalse("MainActivity HOME keeps the default priority 0", "android:priority" in main)
+        fun categories(e: Element) = e.getElementsByTagName("category").let { list ->
+            (0 until list.length).map { (list.item(it) as Element).getAttributeNS(ANDROID, "name") }
+        }
+
+        val boot = activity(splash)
+        assertEquals("splash ships disabled", "false", boot.getAttributeNS(ANDROID, "enabled"))
+        assertEquals("direct-boot aware", "true", boot.getAttributeNS(ANDROID, "directBootAware"))
+        assertEquals("own process", ":boot", boot.getAttributeNS(ANDROID, "process"))
+        assertTrue("HOME filter priority", "${BootSplash.PRIORITY}" in priorities(boot))
+        assertTrue("HOME filter", categories(boot).containsAll(listOf("android.intent.category.HOME", "android.intent.category.DEFAULT")))
+        val kioskMain = activity(main)
+        assertEquals("MainActivity stays credential-encrypted only", "", kioskMain.getAttributeNS(ANDROID, "directBootAware"))
+        assertTrue("MainActivity HOME keeps the default priority 0", priorities(kioskMain).all { it.isEmpty() })
+    }
+
+    private companion object {
+        const val ANDROID = "http://schemas.android.com/apk/res/android"
     }
 }
