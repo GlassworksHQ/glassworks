@@ -5,9 +5,9 @@ evidence: verified
 
 # Screen lock: which adb command tells Kiln that a device has a PIN, pattern or password, without root
 
-**Status (2026-11-18): working.** `dumpsys lock_settings` answers on Android 8 to 15: the credential type on 11 and
-15, a gatekeeper SID on 8. Verified on emulators running Android 8.0, 11 and 15. Android 6, 7, 9, 10 and 12 to 14 are
-untested; where the dump has no answer, Kiln says nothing.
+**Status (2026-11-18): working on the versions run.** `dumpsys lock_settings` answers on emulators running Android
+8.0 (a gatekeeper SID), 11 and 15 (the credential type). Android 6, 7, 8.1, 9, 10 and 12 to 14 are untested; where the
+dump has no answer, Kiln says nothing.
 
 Devices: Android Emulator 36.4.9 on an Apple Silicon Mac, system images `android-26;default;arm64-v8a` (8.0),
 `android-30;default;arm64-v8a` (11) and `android-35;google_apis;arm64-v8a` (15). adb over TCP only
