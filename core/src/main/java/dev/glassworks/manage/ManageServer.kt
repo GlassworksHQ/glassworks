@@ -235,8 +235,11 @@ class ManageServer(
         // The candidates first, then the live sessions: one signed in meanwhile isn't a candidate (CodeRabbit on #534).
         // Read without pruning: list() would end the sessions of another address, perhaps one just made for a new one.
         val candidates = kept.keys.toCollection(ArrayList())
-        if (candidates.isNotEmpty()) {
+        val marked = leftFor.toCollection(ArrayList())
+        if (candidates.isNotEmpty() || marked.isNotEmpty()) {
             val live = sessions.liveIds()
+            // A "left at the old address" mark lasts as long as its session (CodeRabbit on #534).
+            for (id in marked) if (id !in live) leftFor.remove(id)
             val ha = haBase()?.trim()?.trimEnd('/')
             for (id in candidates) {
                 if (id !in live) endSession(id, now = true)
@@ -249,6 +252,9 @@ class ManageServer(
     }
 
 
+
+    /** How many sessions are marked as having their sign-in left at an old address (tests). */
+    fun leftMarks(): Int = leftFor.size
 
     /** Whether [session] has a Home Assistant sign-in kept for All panels (tests). */
     fun keepsHaSignIn(session: String): Boolean = kept.containsKey(session)

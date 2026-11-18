@@ -397,6 +397,10 @@ class ManageKeptSignInTest {
         assertTrue("the old address may be someone else now", f.revoked.isEmpty())
         assertTrue(f.events.any { it.contains("address changed") && !it.contains("REFRESH") })
         assertFalse(f.server.keepsHaSignIn(id))
+        assertEquals("marked as left while the session lives", 1, f.server.leftMarks())
+        f.now += 31L * 24 * 3600 * 1000
+        f.server.sweep()
+        assertEquals("the mark goes with the session", 0, f.server.leftMarks())
     }
 
     @Test fun aSignInHomeAssistantNoLongerTakesIsDroppedButAnOutageIsNot() {
