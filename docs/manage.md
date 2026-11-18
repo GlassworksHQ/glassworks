@@ -184,8 +184,8 @@ manage a panel. Whether other users get a say is open (#124).
 - The panel asks Home Assistant who you are and checks you're an administrator. Anyone else's token is
   **revoked straight away**. An administrator's sign-in is kept in the panel's memory for that browser's Manage
   session only, so All panels needs no second sign-in. It is never written to disk, a log or the
-  diagnostics, and the panel revokes it in Home Assistant when you sign out (here or from Security), when the
-  session runs out, or when the panel's Home Assistant address changes. If the app restarts, the panel
+  diagnostics, and the panel revokes it in Home Assistant when you sign out (here or from Security), and within a
+  minute of the session running out or the panel's Home Assistant address changing. If the app restarts, the panel
   forgets it without revoking it; it then stays under your profile in Home Assistant (*Security → Refresh
   tokens*) until it expires or you delete it. If Home Assistant doesn't take a revoke, the panel tries once
   more and then logs a warning. Its own

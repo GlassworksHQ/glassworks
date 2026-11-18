@@ -122,6 +122,8 @@ function signIn() {
 /** An access token from the sign-in this panel keeps for the Manage session, kept in the tab; null when it keeps none. */
 async function fromPanel() {
   const a = haSignIn ? await panelAccess(csrf) : null;
+  // An outage keeps the sign-in where it is: the page says so and tries again, rather than asking for a new one.
+  if (a && a.outage) throw new Error(a.problem);
   if (!a) { keep(KEY, null); return null; }
   keep(KEY, JSON.stringify({ ha, session, viaPanel: true, access: a.access_token, until: Date.now() + a.expires_in * 1000 }));
   return a.access_token;
@@ -328,7 +330,14 @@ async function start() {
   }
   // Signed in to this Manage page with Home Assistant: the panel's kept sign-in serves, no second one (#466 panel run).
   let access = await token().catch(() => null);
-  if (!access && haSignIn) access = await fromPanel().catch(() => null);
+  if (!access && haSignIn) {
+    try {
+      access = await fromPanel();
+    } catch (e) {
+      if (mine !== generation) return;
+      return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill', type: 'button', onclick: start }, 'Try again'));
+    }
+  }
   if (mine !== generation) return;
   if (!access) {
     return say(listCard, 'Panels in Home Assistant', 'Sign in with a Home Assistant administrator to find the panels. This tab keeps the sign-in until you close it.',

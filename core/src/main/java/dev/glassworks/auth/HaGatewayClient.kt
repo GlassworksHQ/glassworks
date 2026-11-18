@@ -41,7 +41,8 @@ class HaGatewayClient(private val tokens: HaTokenClient, private val connect: (S
     override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens =
         when (val r = tokens.refresh(StoredAuth(haBase, clientId, refreshToken))) {
             is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, null, r.expiresIn)
-            is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0)
+            // invalid_grant or access_denied: HA no longer takes this sign-in. Anything else is an outage.
+            is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0, refused = r.isRevoked)
         }
 
     override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean =

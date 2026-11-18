@@ -143,6 +143,7 @@ class ManageFixture(
         saveWaitMs = saveWaitMs,
         monoMs = { monoMs },
         scripts = { name -> dev.glassworks.testing.RepoFiles.file("core/src/main/assets/manage/$name").readBytes() },
+        sweepMs = 0,
     )
 
     init {

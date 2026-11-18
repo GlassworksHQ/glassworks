@@ -59,6 +59,8 @@ class ManageServer(
     private val monoMs: () -> Long = { System.nanoTime() / 1_000_000 },
     /** All panels' scripts by file name ([ManagePages.PANELS_SCRIPT]), or null when this build has none (#466). */
     private val scripts: (String) -> ByteArray? = { null },
+    /** How often kept Home Assistant sign-ins of ended sessions are revoked, off the request threads; 0 for never (tests call [sweep]). */
+    sweepMs: Long = 60_000,
 ) {
     private val random = SecureRandom()
 
@@ -99,7 +101,17 @@ class ManageServer(
         kept.remove(session)?.let { signIn.end(it) }
     }
 
-    /** Ends the kept sign-ins of sessions that have ended (run out, signed out elsewhere, HA's address changed). */
+    init {
+        if (sweepMs > 0) java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "gw-manage-sweep").apply { isDaemon = true } }
+            .scheduleWithFixedDelay({ runCatching { sweep() } }, sweepMs, sweepMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * Ends the kept sign-ins of sessions that have ended (run out, signed out elsewhere, HA's address changed). Runs
+     * every [sweepMs] on its own thread, so no request waits on Home Assistant's revoke (CodeRabbit on #534).
+     */
+    fun sweep() = dropEnded()
+
     private fun dropEnded() {
         if (kept.isEmpty()) return
         val live = sessions.list(haBase()).map { it.id }.toSet()
@@ -286,11 +298,12 @@ class ManageServer(
         if (k.haBase != haBase()?.trim()?.trimEnd('/')) { forget(s.id); return json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED)) }
         return when (val t = signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken)) {
             is HaGateway.Tokens.Ok -> json(200, JSONObject().put("access_token", t.accessToken).put("expires_in", t.expiresIn))
-            is HaGateway.Tokens.Failed -> {
-                // HA no longer takes it (revoked there, or run out): drop it, and All panels asks for a sign-in.
-                if (!t.unreachable) kept.remove(s.id)
-                json(if (t.unreachable) 503 else 404, JSONObject().put("problem", if (t.unreachable) "Can't reach Home Assistant." else "Home Assistant no longer takes this sign-in."))
-            }
+            // HA refused it (revoked there, or run out): drop it, and All panels asks for a sign-in. Anything else (no
+            // answer, a 5xx from HA or a proxy) is an outage: keep it, and All panels says so (CodeRabbit on #534).
+            is HaGateway.Tokens.Failed -> if (t.refused) {
+                kept.remove(s.id)
+                json(404, JSONObject().put("problem", "Home Assistant no longer takes this sign-in."))
+            } else json(503, JSONObject().put("problem", "Can't reach Home Assistant. Try again in a moment."))
         }
     }
 
@@ -355,7 +368,6 @@ class ManageServer(
     // ------------------------------------------------------------------ signed in
 
     private fun signedIn(req: HttpRequest, s: Session): HttpResponse {
-        dropEnded()
         val viewer = ManagePages.Viewer(who(s), s.csrf, homeAssistant = s.with == SignedInWith.HOME_ASSISTANT)
         if (req.method == "POST") {
             if (!csrfOk(req, s)) return HttpResponse.text(403, "This form has expired. Go back and try again.")

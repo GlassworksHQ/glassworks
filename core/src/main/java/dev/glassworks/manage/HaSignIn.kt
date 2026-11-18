@@ -22,7 +22,7 @@ interface HaGateway {
             override fun toString() = "Ok(<redacted>)"
         }
         /** [invalidCode]: the code was used or is too old. [unreachable]: HA didn't answer. */
-        class Failed(val reason: String, val invalidCode: Boolean = false, val unreachable: Boolean = false) : Tokens()
+        class Failed(val reason: String, val invalidCode: Boolean = false, val unreachable: Boolean = false, val refused: Boolean = false) : Tokens()
     }
 
     /** `POST <haBase>/auth/token`, `grant_type=authorization_code`, with the PKCE verifier. */

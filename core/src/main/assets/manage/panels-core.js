@@ -410,15 +410,19 @@ export function storedFor(raw, ha, session) {
 /**
  * A fresh Home Assistant access token from this panel, out of the sign-in it keeps with this Manage session
  * (`POST /manage/ha/access`, same origin, with the session's [csrf]): one sign-in for the page and All panels (#466
- * panel run). `{ access_token, expires_in }`, or null when the panel keeps none (a code sign-in) or HA won't renew it.
+ * panel run). `{ access_token, expires_in }`; null when the panel keeps none (a code sign-in) or HA refused it; or
+ * `{ outage, problem }` when Home Assistant (or this panel) didn't answer: the sign-in is still there, try again.
  */
 export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
+  let r;
   try {
-    const r = await timed(fetchFn, '/manage/ha/access', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
-    return r.status === 200 && r.body && typeof r.body.access_token === 'string' ? r.body : null;
+    r = await timed(fetchFn, '/manage/ha/access', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
   } catch {
-    return null;
+    return { outage: true, problem: "Can't reach this panel. Try again in a moment." };
   }
+  if (r.status === 200 && r.body && typeof r.body.access_token === 'string') return r.body;
+  if (r.status === 503) return { outage: true, problem: (r.body && r.body.problem) || "Can't reach Home Assistant. Try again in a moment." };
+  return null;
 }
 
 /** Ends the sign-in this panel keeps for All panels (`POST /manage/ha/forget`): it revokes it in Home Assistant. */

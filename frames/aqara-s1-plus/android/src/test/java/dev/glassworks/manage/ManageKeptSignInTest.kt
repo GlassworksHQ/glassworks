@@ -82,9 +82,7 @@ class ManageKeptSignInTest {
         val b = signedIn()
         val id = sessionId()
         f.haBase = "http://192.0.2.11:8123"
-        f.Browser().get("/")
-        f.haBase = "http://192.0.2.10:8123"
-        signedIn().get("/")
+        f.server.sweep()
         assertEquals(listOf("REFRESH"), f.revoked)
         assertFalse(f.server.keepsHaSignIn(id))
     }
@@ -94,9 +92,22 @@ class ManageKeptSignInTest {
         f.refreshAnswer = HaGateway.Tokens.Failed("unreachable", unreachable = true)
         assertEquals(503, access(b).status)
         assertTrue(f.server.keepsHaSignIn(sessionId()))
-        f.refreshAnswer = HaGateway.Tokens.Failed("invalid_grant")
+        f.refreshAnswer = HaGateway.Tokens.Failed("server_error")
+        assertEquals("a 5xx from HA or a proxy is an outage too", 503, access(b).status)
+        assertTrue(f.server.keepsHaSignIn(sessionId()))
+        f.refreshAnswer = HaGateway.Tokens.Failed("invalid_grant", refused = true)
         assertEquals(404, access(b).status)
         assertFalse(f.server.keepsHaSignIn(sessionId()))
+    }
+
+    @Test fun aSessionThatRunsOutHasItsSignInEndedByTheSweepWithNoRequest() {
+        f.Browser().signInWithHa(remember = false)
+        val id = sessionId()
+        f.now += 13L * 3600 * 1000 // past a session that isn't remembered (12 h)
+        assertTrue("nothing ends it before the sweep", f.revoked.isEmpty())
+        f.server.sweep()
+        assertEquals(listOf("REFRESH"), f.revoked)
+        assertFalse(f.server.keepsHaSignIn(id))
     }
 
     @Test fun noTokenInTheLogTheDiagnosticsOrAWarning() {

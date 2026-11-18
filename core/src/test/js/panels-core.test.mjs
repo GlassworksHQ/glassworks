@@ -467,7 +467,10 @@ test("All panels takes its token from the panel's kept sign-in, same origin, wit
   assert.deepEqual(seen[0], ['/manage/ha/access', 'POST', 'csrf=CSRF', 'error'], 'a relative URL: this panel only');
   assert.equal(await panelAccess('CSRF', answer(404, { problem: 'none kept' }), 1_000), null, 'a code sign-in: Continue instead');
   assert.equal(await panelAccess('CSRF', answer(200, { nope: 1 }), 1_000), null);
-  assert.equal(await panelAccess('CSRF', async () => { throw new TypeError('Failed to fetch'); }, 1_000), null);
+  // An outage isn't a missing sign-in: the page says so and tries again, it doesn't ask for Continue.
+  assert.deepEqual(await panelAccess('CSRF', answer(503, { problem: "Can't reach Home Assistant. Try again in a moment." }), 1_000),
+    { outage: true, problem: "Can't reach Home Assistant. Try again in a moment." });
+  assert.equal((await panelAccess('CSRF', async () => { throw new TypeError('Failed to fetch'); }, 1_000)).outage, true);
   assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
   assert.equal(seen.at(-1)[0], '/manage/ha/forget');
   assert.equal(await panelForget('CSRF', answer(500, null), 1_000), false);
