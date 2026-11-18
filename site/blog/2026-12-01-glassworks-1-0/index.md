@@ -31,8 +31,8 @@ device. A **pane** is a feature the panel can have or leave out, and says what h
 | Frame | Status | What it is |
 |---|---|---|
 | [Aqara S1 Plus](../../../frames/aqara-s1-plus/README.md) | Beta | The reference frame. Every pane runs on it |
-| [Generic Android](../../../frames/generic-android/README.md) | Planned | Any Android device, as an app, no root. [Update if it ships in 1.0] |
-| [lululemon Studio Mirror](../../../frames/lululemon-mirror/README.md) | Planned | A full-length mirror with an Android screen behind it. [Update if it ships in 1.0] |
+| [Generic Android](../../../frames/generic-android/README.md) | Under development | Any Android device, as an app, no root. [Update if it ships in 1.0] |
+| [lululemon Studio Mirror](../../../frames/lululemon-mirror/README.md) | Under development | A full-length mirror with an Android screen behind it. [Update if it ships in 1.0] |
 
 ## Panes
 

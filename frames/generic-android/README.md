@@ -23,8 +23,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-planned-on-dark.svg">
-    <img alt="Status: planned" src="https://www.glassworks.dev/brand/badge-status-planned-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-under-development-on-dark.svg">
+    <img alt="Status: under development" src="https://www.glassworks.dev/brand/badge-status-under-development-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -44,9 +44,11 @@ A Glassworks **frame**: the device definition for the Generic Android. Its data 
 
 ## Status
 
-**Status: planned.** The frame has its own app, **Glassworks** (`dev.glassworks.generic_android`, built from
+**Status: under development.** The frame has its own app, **Glassworks** (`dev.glassworks.generic_android`, built from
 [`android/`](android)), for Android 8.0 or newer (`minSdk` 26; Android 6 and 7 get the separate legacy build,
-#198). It hasn't run on a device yet. S1 Kiosk also runs as this frame on any device that isn't an Aqara S1
+#198). It has run on a Pixel Tablet (Android 17, 2026-11-16, #364): the dashboard, Home Assistant adoption as its
+own device, the hidden panes and an update in place. The wake word, Music Assistant and the light sensor haven't
+been checked on a device yet (#23). S1 Kiosk also runs as this frame on any device that isn't an Aqara S1
 (`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
 device's features allow.
 
@@ -100,10 +102,11 @@ APK only, which the maintainer allowed on 2026-11-16 (`AGENTS.md`, rule 4; `THIR
 ```
 
 Status: it builds (CI builds and checks it on every change, and test builds publish it), and CI's conformance test
-starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It hasn't run on a device yet, and there is no
-release. Try it first where a crash loop is cheap: as the home app, a crash at start would repeat at every boot.
-What waits: a first device run and a release job: `release.yml` doesn't build
-the generic app or its legacy build yet. The release key exists ([Signing](#signing)).
+starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It has run on a lululemon Mirror
+(Android 6.0.1): it starts with no crashes (2026-11-17, #443), and the dashboard loads after a sign-in from a phone
+(2026-11-17, #459). There is no release. Try it first where a crash loop is cheap: as the home app, a crash at start
+would repeat at every boot. What waits: a release job: `release.yml` doesn't build the generic app or its legacy
+build yet. The release key exists ([Signing](#signing)).
 
 The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
 
@@ -257,7 +260,7 @@ permissions that copy asked for. What was weighed (2026-11-15):
 | What the Mirror build must keep | Every legacy build asks for `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` and keeps MAIN, HOME and DEFAULT in one filter (`GenericAppTest`) | The same, in its own build |
 
 A tablet build on the Mirror would be the same APK, so the second app's guard buys nothing. Kiln's Mirror
-recipe takes `sh.edm.s1kiosk` today; it moves to the legacy id with the build.
+recipe installs the legacy id and refuses `sh.edm.s1kiosk` (#411).
 
 ## Signing
 

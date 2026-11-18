@@ -42,8 +42,8 @@ describe('the picker', () => {
   it('shows the frames, and Continue goes to the picked one\'s start', () => {
     render(<Picker />);
     expect(screen.getByRole('radio', { name: /Aqara S1 Plus, Beta/ })).toHaveProperty('dataset.state', 'checked');
-    expect(screen.getByRole('radio', { name: /lululemon Studio Mirror, Planned, not installable/ })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('radio', { name: /Generic Android, Planned, not installable/ })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('radio', { name: /lululemon Studio Mirror, Under development, not installable/ })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('radio', { name: /Generic Android, Under development, not installable/ })).toHaveProperty('disabled', true);
     expect(screen.queryByText(/still working/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenCalledWith('/aqara-s1-plus');

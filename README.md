@@ -70,8 +70,8 @@ Glassworks from the browser.
 | Frame | Status | What it is |
 |---|---|---|
 | [Aqara S1 Plus](frames/aqara-s1-plus/README.md) | Beta | A133 wall panel, rooted. The reference frame. |
-| [Generic Android](frames/generic-android/README.md) | Planned | Any Android device, as an app. No root. |
-| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Planned | A 40-inch mirror with Android behind it. |
+| [Generic Android](frames/generic-android/README.md) | Under development | Any Android device, as an app. No root. |
+| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Under development | A 40-inch mirror with Android behind it. |
 
 Each row comes from the frame's `design/frame.json` ([the format](frames/README.md)).
 [glassworks.dev/frames](https://www.glassworks.dev/frames) shows the same frames with their 3D

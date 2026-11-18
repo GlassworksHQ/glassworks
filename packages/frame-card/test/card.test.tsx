@@ -61,6 +61,11 @@ describe('FrameCardBody', () => {
     expect(render(<FrameCardBody f={s1} screen="/r/render.webp" />).querySelector('img')!.getAttribute('src')).toBe('/r/render.webp');
   });
 
+  it('says a legacy frame runs a frozen engine, on a line aria-describedby can name', () => {
+    expect(render(<FrameCardBody f={mirror} idPrefix="c" />).querySelector('#c-legacy')?.textContent).toBe('Legacy: frozen engine, your Home Assistant only');
+    expect(render(<FrameCardBody f={s1} idPrefix="c" />).querySelector('#c-legacy')).toBeNull();
+  });
+
   it('keeps the name a span by default, so the body fits in a button', () => {
     const el = render(<FrameCardBody f={s1} />);
     expect(el.querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
