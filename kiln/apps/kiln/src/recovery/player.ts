@@ -68,8 +68,12 @@ export function timeline(f: RecoveryData): Timeline {
       tl.plug = { start: t + 0.8, end: t + 1.5 };
       tl.click = { start: t + 1.45, end: t + 2.0 };
       t += 1.5;
-      tl.ready = { start: t + Math.min(2, f.ready?.seconds ?? 2) * 0.4 + 0.2 };
-      t += 2.3;
+      // A short wait plays faster, as the S1's always has; a longer hold plays in real time, so the
+      // animation never says "let go" before the device is ready (the Mirror's 5 s).
+      const seconds = f.ready?.seconds ?? 2;
+      const wait = seconds <= 2 ? seconds * 0.4 + 0.2 : seconds;
+      tl.ready = { start: t + wait };
+      t += wait + 1.3;
     }
     tl.beats.push([start, t]);
   }

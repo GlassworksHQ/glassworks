@@ -75,6 +75,14 @@ describe.each(withRecovery)('%s recovery.json', (id) => {
     }
   });
 
+  it('keeps "keep holding" up for a hold over 2 s, in real time, before it says let go', () => {
+    const tl = timeline(f);
+    const seconds = f.ready?.seconds ?? 0;
+    if (!tl.ready || !tl.plug || !tl.hold || seconds <= 2) return;
+    expect(tl.ready.start - tl.plug.end).toBeGreaterThanOrEqual(seconds);
+    expect(tl.hold.end).toBe(tl.ready.start);
+  });
+
   it('draws and plays: one screw per screw, and no NaN at any moment', () => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     const beats: number[] = [];
