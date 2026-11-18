@@ -30,3 +30,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Updates from Home Assistant.** Each build offers only its own releases on its update entity. On Android 12
   and newer with "Install unknown apps" allowed, as device owner, or as a system app (the Mirror), an update
   installs without a tap. The *Silent updates* sensor says which applies.
+
+### Fixed
+- **The Mirror uses less memory, and its drawing no longer dies when the screen turns off.** The legacy build
+  draws in the app's own process instead of a separate GPU process, which Android killed whenever the screen went
+  off or a system dialog came up. It also no longer runs GeckoView's crash helper, which did nothing for the app
+  and was restarted about once a minute. Legacy build only. Not yet run on a real Mirror.
