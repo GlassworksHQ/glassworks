@@ -219,14 +219,23 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
 const KEYBOARD_PKG = 'rkr.simplekeyboard.inputmethod';
 const HOME_QUERY = 'cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME';
 
+/** What undo did with Glassworks itself, from the exit status of each step. */
+export interface UndoResult {
+  /** disabled: kept for its Wi-Fi, or Android would not remove it. running: Android would not disable it either. */
+  app: 'removed' | 'disabled' | 'running';
+  /** One plain sentence for the user. */
+  note: string;
+}
+
 /**
  * install.sh --undo: Aqara's apps, launcher, DND, keyboard and radio/cloud services back, and Glassworks
- * removed. The kiosk is a device admin, and Android refuses to disable or uninstall an active admin,
+ * removed or disabled. The kiosk is a device admin, and Android refuses to disable or uninstall an active admin,
  * so it first asks the app to drop that and waits until it has. Ends by checking that HOME really is
  * Aqara's launcher again, and throws if not (rather than claiming success with the kiosk on screen).
+ * HOME being Aqara's says nothing about Glassworks, so the result says what happened to it.
  */
 export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
-  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<void> {
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<UndoResult> {
   const r = new Steps(p, onStep);
   r.step('Removing Glassworks\' device admin');
   const adminGone = await dropAdmin(p, sleep);
@@ -246,14 +255,28 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
   // Android 10 forgets every Wi-Fi network an app saved when the app is uninstalled, and Glassworks
   // saves the panel's Wi-Fi itself. Then it is disabled instead, which keeps the network.
   const wifi = await panelWifi(p);
+  const disable = async () => {
+    const d = await p.run(`pm disable-user --user 0 ${PKG}`);
+    if (d.code !== 0) r.detail(`could not disable Glassworks (${d.out.trim() || `exit ${d.code}`})`);
+    return d.code === 0;
+  };
+  const running: UndoResult = { app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' };
+  let result: UndoResult;
   if (wifiAtRisk(wifi)) {
-    await r.try(`pm disable-user --user 0 ${PKG}`);
-    r.detail(`kept Glassworks installed but disabled: it saved the panel's Wi-Fi${wifi.ssid ? ` (${wifi.ssid})` : ''}, and Android forgets that network when Glassworks is uninstalled`);
-  } else if (!/Success/.test(await r.try(`pm uninstall ${PKG}`))) {
+    const net = `the panel's Wi-Fi${wifi.ssid ? ` (${wifi.ssid})` : ''}`;
+    if (await disable()) {
+      r.detail(wifi.owner === 'kiosk'
+        ? `kept Glassworks installed but disabled: it saved ${net}, and Android forgets that network when Glassworks is uninstalled`
+        : `kept Glassworks installed but disabled: the installer can't tell who saved ${net}, and if Glassworks did, Android forgets it when Glassworks is uninstalled`);
+      result = { app: 'disabled', note: 'Glassworks is installed but turned off, so the panel keeps its Wi-Fi.' };
+    } else result = running;
+  } else if (/Success/.test(await r.try(`pm uninstall ${PKG}`))) {
+    result = { app: 'removed', note: 'Glassworks is removed.' };
+  } else if (await disable()) {
     // the app restarts itself (foreground service): uninstall, or at least disable it
-    await r.try(`pm disable-user --user 0 ${PKG}`);
     r.detail('could not uninstall Glassworks; disabled it instead');
-  }
+    result = { app: 'disabled', note: 'Android would not remove Glassworks, so it is turned off instead.' };
+  } else result = running;
   if ((await r.try(`pm list packages ${KEYBOARD_PKG}`)).includes(`package:${KEYBOARD_PKG}`)) {
     await r.try(`pm uninstall ${KEYBOARD_PKG}`);
   }
@@ -266,4 +289,5 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
     throw new Error(`the panel's home screen is still ${home || 'unknown'}, not Aqara's launcher`);
   }
   await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
+  return result;
 }

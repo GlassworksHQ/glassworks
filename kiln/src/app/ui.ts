@@ -12,7 +12,7 @@ import {
   Assets, BackupRefused, BackupStore, InstallFlow, backupZip, fmtSize, readBackupZip, restoreFromBackup, webUsbDevices,
   type AskKind, type Bar, type BackupFile, type BackupMeta, type FlowUi, type PartState, type Progress,
 } from '@glassworks/kiln-core';
-import { giveBackApps } from './undo';
+import { GIVE_BACK_STEP, appsBackNote, giveBackApps } from './undo';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const $$ = (s: string) => [...document.querySelectorAll<HTMLElement>(s)];
@@ -597,6 +597,15 @@ class Installer {
         this.renderUndoOrder();
         return giveBackApps(plan, files, async () => {});
       }).catch((e: Error) => this.undoNote('err', 'This backup can\'t undo the install', `${e.message}. Nothing on the panel was changed.`));
+    }
+    if (which === 'undo-still-on') {
+      // the apps are back, but Android would not remove or disable Glassworks
+      void this.openUndo().then(() => {
+        document.querySelector<HTMLInputElement>('input[name=how][value=keep]')!.checked = true;
+        this.renderUndoOrder();
+        const n = appsBackNote({ app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' });
+        this.undoNote(n.kind, n.title, n.sub);
+      });
     }
   }
 
@@ -1218,7 +1227,7 @@ class Installer {
     const keep = this.undoPath() === 'keep';
     const steps: [string, string][] = keep
       ? [
-          ['Give the panel back to Aqara\'s apps', 'With the panel running normally and plugged in. This page removes Glassworks and turns Aqara\'s launcher, voice, updates and radio back on.'],
+          GIVE_BACK_STEP,
           ['Restore the original software', 'Then put the panel in FEL mode. This page writes its own boot, verified-boot and splash partitions back from the backup.'],
         ]
       : [
@@ -1259,11 +1268,11 @@ class Installer {
       try {
         this.key ??= await loadOrCreateAdbKey();
         const panel = (await webUsbDevices.knownAdb(this.key)) ?? (await webUsbDevices.requestAdb(this.key));
-        await giveBackApps(s1Plus.backup, this.undoFiles, () =>
-          unprovision(panel, (s, d) => { this.undoNote('busy', 'Giving the panel back to Aqara\'s apps', s || d || ''); }));
-        this.appsGivenBack = true;
+        const note = appsBackNote(await giveBackApps(s1Plus.backup, this.undoFiles, () =>
+          unprovision(panel, (s, d) => { this.undoNote('busy', 'Giving the panel back to Aqara\'s apps', s || d || ''); })));
+        this.appsGivenBack = note.done;
         this.renderUndoOrder();
-        this.undoNote('ok', 'Aqara\'s apps are back', 'Next: restore the original software. Click Continue, then put the panel in FEL mode.');
+        this.undoNote(note.kind, note.title, note.sub);
       } catch (e) {
         if (e instanceof BackupRefused) {
           this.undoNote('err', 'This backup can\'t undo the install', `${e.message}. Nothing on the panel was changed.`);

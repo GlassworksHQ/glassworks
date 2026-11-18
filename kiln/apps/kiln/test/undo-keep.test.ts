@@ -12,7 +12,7 @@ import { initial } from '../src/wizard/state';
 async function setup(parts: Record<string, Uint8Array>, recipe = s1Plus) {
   const files = await Promise.all(Object.entries(parts).map(([p, d]) => backupFile(p, d)));
   const meta: BackupMeta = { id: 's1-backup-20261112-090000', created: '', bootWasPatched: false, files: files.map((f) => ({ part: f.part, size: f.data.length, sha256: f.sha256 })) };
-  const panel = { run: vi.fn(async () => ({ out: '', code: 0 })), push: vi.fn(async () => {}) };
+  const panel = { run: vi.fn(async (_cmd: string) => ({ out: '', code: 0 })), push: vi.fn(async () => {}) };
   const requestAdb = vi.fn(async () => panel);
   const session = new Session({
     recipe, frame: s1PlusUi, requestFel: () => new Promise(() => {}),
@@ -51,6 +51,31 @@ describe('Undo, keeping the settings', () => {
     expect(note).toMatchObject({ kind: 'err', title: 'Kiln can\'t check this backup.', link: { href: s1PlusUi.help.undo } });
     expect(note.sub).toMatch(/not-backed-up.*This step changed nothing on the panel\.$/);
     expect(note.title).not.toMatch(/adb/);
+  });
+
+  it('says Glassworks is still on when Android won\'t remove or disable it, and doesn\'t move on', async () => {
+    const { session, panel } = await setup({ boot: demoBootImage(), vbmeta: new Uint8Array(4096), bootloader: new Uint8Array(4096) });
+    panel.run.mockImplementation(async (cmd: string) => (
+      cmd.startsWith('cmd package resolve-activity') ? { out: 'com.aqara.inhome.launcher/.MainActivity\n', code: 0 }
+      : cmd === 'pm uninstall sh.edm.s1kiosk' ? { out: 'Failure [DELETE_FAILED_INTERNAL_ERROR]\n', code: 1 }
+      : cmd === 'pm disable-user --user 0 sh.edm.s1kiosk' ? { out: 'Error: java.lang.SecurityException\n', code: 255 }
+      : { out: '', code: 0 }));
+    await session.undoContinue();
+    expect(session.store.state.undo).toMatchObject({
+      appsBack: false,
+      locked: true,
+      note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: expect.stringMatching(/would not turn Glassworks off[\s\S]*"As it came from Aqara"/) },
+    });
+  });
+
+  it('says Glassworks is removed when it is', async () => {
+    const { session, panel } = await setup({ boot: demoBootImage(), vbmeta: new Uint8Array(4096), bootloader: new Uint8Array(4096) });
+    panel.run.mockImplementation(async (cmd: string) => (
+      cmd.startsWith('cmd package resolve-activity') ? { out: 'com.aqara.inhome.launcher/.MainActivity\n', code: 0 }
+      : cmd === 'pm uninstall sh.edm.s1kiosk' ? { out: 'Success\n', code: 0 }
+      : { out: '', code: 0 }));
+    await session.undoContinue();
+    expect(session.store.state.undo).toMatchObject({ appsBack: true, note: { kind: 'ok', sub: expect.stringMatching(/^Glassworks is removed\. Next/) } });
   });
 
   it('goes on to give the apps back for a backup it can restore', async () => {

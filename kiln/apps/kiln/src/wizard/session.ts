@@ -634,8 +634,13 @@ export class Session implements SetupSteps {
         return;
       }
       this.dispatch({ type: 'changed', by: 'apps' }); // before it starts: a give-back that stops partway has changed the panel too
-      await unprovision(panel, (s, d) => busy(s || d || ''));
-      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: 'Next, put the original software back: Continue, then recovery mode.' } } });
+      const r = await unprovision(panel, (s, d) => busy(s || d || ''));
+      // Still on: the apps are back against this backup (locked), but the step isn't done.
+      if (r.app === 'running') {
+        this.dispatch({ type: 'undo', patch: { locked: true, note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `${r.note} Try again, or choose "${this.d.frame.undo.factory.title}".` } } });
+        return;
+      }
+      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: `${r.note} Next, put the original software back: Continue, then recovery mode.` } } });
     } catch (e) {
       const msg = notPicked(e) ? 'Nothing was picked.' : (e as Error).message;
       this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Couldn\'t reach the panel over adb.', sub: `${msg} Is it running and plugged in?` } } });
