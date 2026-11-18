@@ -175,7 +175,32 @@ class SetupOverlay(
     /** Pushes the rail's stack art to its foot. */
     private val railSpacer = View(context)
 
-    private val rail = LinearLayout(context).apply {
+    private val railFoot = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.BOTTOM
+        addView(railStack, LinearLayout.LayoutParams(px(78f), px(76f)).apply { marginStart = px(6f); bottomMargin = px(12f) })
+        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+        addView(previewChip)
+    }
+
+    /**
+     * The brand, the steps and the stack art at the foot. In landscape the art steps aside when the rows need its room:
+     * on the S1, Silent updates is a seventh row while Sign in or a pane's step is open (#422).
+     */
+    private val rail = object : LinearLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            if (portrait) return
+            val above = (0 until childCount).map(::getChildAt).filter { it !== railSpacer && it !== railFoot }
+                .sumOf { it.measuredHeight + (it.layoutParams as LayoutParams).let { lp -> lp.topMargin + lp.bottomMargin } }
+            val fits = above + px(RAIL_ART_DP) <= MeasureSpec.getSize(heightMeasureSpec) - paddingTop - paddingBottom
+            val want = if (fits) View.VISIBLE else View.GONE
+            if (railStack.visibility != want) {
+                railStack.visibility = want
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            }
+        }
+    }.apply {
         orientation = LinearLayout.VERTICAL
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -186,13 +211,7 @@ class SetupOverlay(
         })
         addView(railRows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(33f) })
         addView(railSpacer, LinearLayout.LayoutParams(-1, 0, 1f))
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-            addView(railStack, LinearLayout.LayoutParams(px(78f), px(76f)).apply { marginStart = px(6f); bottomMargin = px(12f) })
-            addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-            addView(previewChip)
-        }, LinearLayout.LayoutParams(-1, -2))
+        addView(railFoot, LinearLayout.LayoutParams(-1, -2))
     }
 
     // ---- right: the current step's card
@@ -217,12 +236,20 @@ class SetupOverlay(
         addView(ghost, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(22f) })
         addView(plainLeft, LinearLayout.LayoutParams(-2, -2))
         addView(foot, LinearLayout.LayoutParams(-2, -2))
-        addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
+        addView(View(context), LinearLayout.LayoutParams(0, 0, 1f)) // no height: without buttons the foot takes no room
         addView(plain, LinearLayout.LayoutParams(-2, -2))
         addView(primary, LinearLayout.LayoutParams(-2, -2))
     }
     private val qrImage = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
-    private val qrTile = FrameLayout(context).apply {
+    /** Square, [QR_DP] at most: smaller only where the room under a portrait card's text is shorter. */
+    private val qrTile = object : FrameLayout(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            val side = MeasureSpec.makeMeasureSpec(
+                minOf(px(QR_DP), MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec)), MeasureSpec.EXACTLY,
+            )
+            super.onMeasure(side, side)
+        }
+    }.apply {
         background = GradientDrawable().apply { cornerRadius = 20 * g.dp; setColor(Color.WHITE) }
         setPadding(px(14f), px(14f), px(14f), px(14f))
         addView(qrImage, LayoutParams(-1, -1))
@@ -233,7 +260,7 @@ class SetupOverlay(
             gradientRadius = 125 * g.dp
             colors = intArrayOf(Color.argb(70, 56, 189, 248), Color.TRANSPARENT)
         }
-        addView(qrTile, LayoutParams(px(226f), px(226f), Gravity.CENTER))
+        addView(qrTile, LayoutParams(-1, -1, Gravity.CENTER))
         visibility = View.GONE
     }
 
@@ -245,19 +272,32 @@ class SetupOverlay(
         addView(slot, slotLp)
         addView(status, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         addView(stretch, stretchLp)
-        addView(buttonRow, LinearLayout.LayoutParams(-1, -2))
     }
     // Landscape's places (the S1, tablets); portrait swaps them in stack().
     private val columnBeside = LinearLayout.LayoutParams(0, -1, 1f)
-    private val qrBeside = LinearLayout.LayoutParams(px(238f), -1)
+    /**
+     * 6 dp more gap before the code (12 dp to its tile), so text that runs the column's full width doesn't touch it
+     * (#422). Any more and the Mirror's "Scan to set it up." wraps. Gone with the code.
+     */
+    private val qrBeside = LinearLayout.LayoutParams(px(238f), -1).apply { marginStart = px(6f) }
     private val railBeside = LinearLayout.LayoutParams(px(227f), -1).apply { marginEnd = px(26f) }
     private val cardBeside = LinearLayout.LayoutParams(0, -1, 1f)
-    private val card = LinearLayout(context).apply {
+    /** The text and the QR code beside it (under it in portrait). */
+    private val textAndQr = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
-        background = g.surface(34f)
-        setPadding(px(41f), px(36f), px(28f), px(30f))
         addView(column, columnBeside)
         addView(qrGlow, qrBeside)
+    }
+    /**
+     * The buttons are the card's foot, across its whole width (#422, #403): Continue stays in the corner with a QR
+     * code beside the text too, not at the text's edge in the middle of the card.
+     */
+    private val card = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        background = g.surface(34f)
+        setPadding(px(41f), px(36f), px(28f), px(30f))
+        addView(textAndQr, LinearLayout.LayoutParams(-1, 0, 1f))
+        addView(buttonRow, LinearLayout.LayoutParams(-1, -2))
     }
     private val wizard = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -287,7 +327,7 @@ class SetupOverlay(
         portrait = on
         qrBelow = below
         wizard.orientation = if (on) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-        card.orientation = wizard.orientation
+        textAndQr.orientation = wizard.orientation
         rail.layoutParams = if (on) LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(26f) } else railBeside
         card.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else cardBeside
         column.layoutParams = when {
@@ -295,7 +335,8 @@ class SetupOverlay(
             below -> LinearLayout.LayoutParams(-1, -2)
             else -> LinearLayout.LayoutParams(-1, 0, 1f)
         }
-        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f) else qrBeside
+        // A gap between the text and the code, and between the code and the buttons (#422's portrait tablet).
+        qrGlow.layoutParams = if (on) LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = px(TIGHT_GAP_DP); bottomMargin = px(TIGHT_GAP_DP) } else qrBeside
         // A plain View measured to wrap takes all the room it may: the spacers go, or the rail fills the screen and
         // the text the card.
         railSpacer.visibility = if (on) View.GONE else View.VISIBLE
@@ -1116,6 +1157,12 @@ class SetupOverlay(
         /** The gap under the heading when the step's view needs the room (the Panes list). */
         const val TIGHT_GAP_DP = 18f
         const val CARD_GAP_DP = 11f
+
+        /** The QR code's white tile, its quiet zone included. */
+        const val QR_DP = 226f
+
+        /** The rail's stack art with the gap under it. */
+        const val RAIL_ART_DP = 88f
 
         /** Continue on Panes waits this long for every card in all (the radio's Off waits for its helper). */
         const val BUDGET_MS = 30_000L
