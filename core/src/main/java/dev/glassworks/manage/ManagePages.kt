@@ -152,7 +152,7 @@ ${foot(viewer)}"""
             action(v, "/action/${a.key}", a.label) + if (a == OverviewAction.RESTART && actions.canReboot) action(v, "/action/reboot", "Reboot") else ""
         }
         val main = """<section class="card hero">${PageShell.mark(Look.DONE, "hm")}<div class="ht"><h1><i class="dot ok"></i>Running</h1>
-<p class="meta">Glassworks ${esc(s.version)} · up ${esc(duration(s.uptimeMs))}</p></div><div class="acts">$buttons</div></section>
+<p class="meta${if (s.legacy) " lgm" else ""}">Glassworks ${esc(s.version)} · up ${esc(duration(s.uptimeMs))}${if (s.legacy) LEGACY_CHIP else ""}</p></div><div class="acts">$buttons</div></section>
 <section class="tiles">$tiles</section>""" +
             (if (s.panes.isNotEmpty()) """<section class="card list"><div class="lh"><b>Panes</b><span>${esc(panesSummary(s.panes))}</span></div>$panes</section>""" else "")
         return frame(s, "/", "Overview", v, main, notice)
@@ -518,6 +518,15 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
         private const val SIGN_IN_CSS = """h1{font-size:30px}@media (min-width:720px){h1{font-size:52px;letter-spacing:-.03em}.copy p{font-size:18px}}
 .rem{margin-top:18px}.alt{font-size:15px}.act form{margin:0}"""
 
+        /**
+         * The legacy build's chip (#29). Its limits show on hover, on focus (keyboard) and on a tap, which focuses the
+         * button. No script: the page's CSP allows none.
+         */
+        private const val LEGACY_CHIP = """<span class="lg"><button class="chip" type="button" aria-describedby="lgtip">Legacy</button>""" +
+            """<span class="tip" id="lgtip" role="tooltip">The legacy build for Android 6 and 7. Its frozen web engine gets no """ +
+            """security fixes, so it loads only your Home Assistant (no map tiles or web cards from other sites), and remote """ +
+            """debugging is off.</span></span>"""
+
         val MANAGE_CSS = """body{display:block}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none;background:var(--faint)}.dot.ok{background:var(--green)}.dot.work{background:var(--amber)}.dot.bad{background:var(--rose)}.dot.off{background:var(--faint)}
 .side{position:fixed;inset:0 auto 0 0;width:280px;padding:28px 18px;border-right:1px solid var(--edge);display:flex;flex-direction:column;overflow:auto}
@@ -547,6 +556,9 @@ a.tile{text-decoration:none}a.tile:hover{background:var(--hover)}.tile small{col
 .grp .lh{border-bottom:1px solid var(--edge)}.grp:not(:first-child) .lh{padding-top:22px}
 .chip{display:inline-flex;align-items:center;gap:${Tokens.Chip.GAP}px;padding:${Tokens.Chip.PAD_V}px ${Tokens.Chip.PAD_END}px ${Tokens.Chip.PAD_V}px ${Tokens.Chip.PAD_START}px;border-radius:999px;border:1px solid var(--edge);background:var(--glass);font-size:${Tokens.Chip.TEXT}px;line-height:1.35;color:var(--muted);white-space:nowrap;flex:none}
 .chip .dot{width:${Tokens.Chip.DOT}px;height:${Tokens.Chip.DOT}px}
+.lgm{position:relative}.lg{display:inline-flex;vertical-align:middle;margin-left:10px}.lg .chip{font-family:inherit;cursor:help}
+.lg .chip:focus-visible{outline:2px solid var(--sky);outline-offset:3px}.lg:hover .tip,.lg:focus-within .tip{display:block}
+.lg .tip{display:none;position:absolute;left:0;top:calc(100% + 8px);z-index:4;max-width:420px;padding:12px 16px;border-radius:14px;border:1px solid var(--edge);background:var(--bg-2);color:var(--fg);font-size:14px;line-height:1.45;white-space:normal;box-shadow:0 20px 40px rgba(0,0,0,.35)}
 .ni .nt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ni .dot{margin-left:10px}
 details.off summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
 details.off summary::-webkit-details-marker{display:none}details.off summary::after{content:"›";font-size:18px;letter-spacing:0;transition:transform .15s}details.off[open] summary::after{transform:rotate(90deg)}
@@ -597,7 +609,7 @@ a.see{color:inherit;text-decoration:underline;text-underline-offset:3px}[id^="i-
 .drop .brand{display:none}.menu>summary>span{display:block;height:2px;border-radius:2px;background:var(--fg)}
 .menu .drop{position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--bg);border-bottom:1px solid var(--edge);padding:16px;max-height:80vh;overflow:auto;box-shadow:0 20px 40px rgba(0,0,0,.35)}
 .hero{grid-template-columns:64px 1fr;column-gap:18px;padding:18px 20px;margin-bottom:12px}.hm{width:64px;height:60px;grid-row:1}.ht{align-self:center}
-.hero h1{font-size:24px}.meta{font-size:14px;margin-bottom:0}
+.hero h1{font-size:24px}.meta{font-size:14px;margin-bottom:0}.lg{display:flex;width:max-content;margin:6px 0 0}
 .acts{grid-column:1/-1;margin-top:16px;gap:8px}.acts .pill{padding:9px 16px;font-size:15px}
 .tiles{grid-template-columns:1fr;gap:0;background:var(--glass);border:1px solid var(--edge);border-radius:22px;padding:4px 20px}
 .tile{flex-direction:row;align-items:center;justify-content:space-between;border:0;border-bottom:1px solid var(--edge);border-radius:0;background:none;padding:14px 0}

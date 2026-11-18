@@ -93,7 +93,7 @@ class FramePanesTest {
         assertEquals(steps, SetupFlow.usable(steps, skipped::add))
         assertEquals(emptyList<String>(), skipped)
         assertEquals(listOf("radio"), steps.map { it.id }) // a sub-step under Panes
-        assertEquals(listOf("wifi", "ha", "signin", "panes", "radio", "done"), SetupFlow.ids(true, steps.map { it.id }))
+        assertEquals(listOf("wifi", "signin", "ha", "panes", "radio", "done"), SetupFlow.ids(true, steps.map { it.id }))
         // Then the device's own (Silent updates), after every pane's.
         assertEquals(steps + runtime.deviceSetupSteps(app), runtime.setupSteps(app))
     }

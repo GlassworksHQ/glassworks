@@ -123,6 +123,12 @@ the system permissions both builds ask for (`INSTALL_PACKAGES`, `REBOOT`, `WRITE
 either.
 Why one legacy app and not a Mirror app of its own: [The legacy build's id](#the-legacy-builds-id).
 
+The Manage page says so: on the legacy build its Overview has a **Legacy** chip next to the version, whose tooltip
+names the limits (#29, [manage.md](../../docs/manage.md#whats-on-it)). No other build shows it, and Home Assistant gets
+no entity for it. Remote debugging stays off on the legacy build: it ignores
+`--ez remote_debug true`, and logs why, and it starts the engine without remote debugging even if the setting was
+left on.
+
 The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
 
 ## Hardware
