@@ -503,7 +503,7 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
          * button. No script: the page's CSP allows none.
          */
         private const val LEGACY_CHIP = """<span class="lg"><button class="chip" type="button" aria-describedby="lgtip">Legacy</button>""" +
-            """<span class="tip" id="lgtip" role="tooltip">The legacy build for Android 6 and 7, such as the Mirror. Its frozen web engine gets no """ +
+            """<span class="tip" id="lgtip" role="tooltip">The legacy build for Android 6 and 7. Its frozen web engine gets no """ +
             """security fixes, so it loads only your Home Assistant (no map tiles or web cards from other sites), and remote """ +
             """debugging is off.</span></span>"""
 
