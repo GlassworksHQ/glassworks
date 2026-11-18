@@ -55,6 +55,9 @@ fun Test.readsRepoFiles(repo: File) {
         .withPropertyName("frameAbis").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(File(repo, "tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
         .withPathSensitivity(PathSensitivity.NONE)
+    // CaptivePortalTest: the app's portal ports are the S1 radio helper's (#197).
+    inputs.file(File(repo, "frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh")).withPropertyName("radioHelper")
+        .withPathSensitivity(PathSensitivity.NONE)
     val roots = listOf("libs", "core", "pane-api", "engines", "panes", "frames") // RepoFiles.SEARCH, by top folder
     inputs.files(roots.map { dir ->
         fileTree(File(repo, dir)) {
