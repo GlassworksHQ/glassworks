@@ -162,11 +162,18 @@ const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down
 async function open(p) {
   if (p.self) return location.assign('/');
   if (!usable(p)) return;
+  // The new tab is opened now, during the click: after a slow token renewal the click no longer counts, and the
+  // browser would block a new tab as a pop-up (CodeRabbit on #488). Blocked anyway: this tab goes there instead.
+  // No rel: the panel there gets the token in the post anyway, so what window.opener would add (it could only send
+  // this tab elsewhere; it can't read it, being another origin) gives it nothing more.
+  const name = 'gw-manage-' + random(9).replace(/[^A-Za-z0-9]/g, '');
+  const tab = window.open('about:blank', name);
   const access = await token().catch(() => null);
-  if (!access) return start();
-  // A new tab, without rel: the panel there gets the token in the post anyway, so what window.opener would add (it
-  // could only send this tab elsewhere; it can't read it, being another origin) gives it nothing more.
-  const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: '_blank' },
+  if (!access) {
+    if (tab) tab.close();
+    return start();
+  }
+  const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: tab ? name : '_self' },
     h('input', { type: 'hidden', name: 'token', value: access }), h('input', { type: 'hidden', name: 'next', value: '/' }),
     // For the other panel's Log: Safari posts this from a new tab with `Origin: null` (2026-11-18 panel run).
     h('input', { type: 'hidden', name: 'from', value: location.host }));

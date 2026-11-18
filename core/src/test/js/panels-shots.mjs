@@ -77,6 +77,10 @@ const requests = [];
 let challenge = null;
 /** Whether a copy ever sent a panel's own Home Assistant address (the 2026-11-18 panel run's blocker). */
 let haAddressSent = false;
+/** Handoffs a panel received: which panel, and the page it says it came from. */
+const handoffs = [];
+/** How long the fake Home Assistant takes to answer a token request. */
+let tokenDelayMs = 0;
 /** Whether the fake Home Assistant takes a revoke. */
 let revokeOk = true;
 const initial = JSON.stringify(panels);
@@ -104,6 +108,7 @@ async function handle(req, res) {
     }
     if (u.pathname === '/auth/token') {
       const f = await form(req);
+      if (tokenDelayMs) await new Promise((ok) => setTimeout(ok, tokenDelayMs));
       const verified = f.get('grant_type') !== 'authorization_code' ||
         createHash('sha256').update(f.get('code_verifier') || '').digest('base64url') === challenge;
       if (!verified) return send(res, 400, { error: 'invalid_request', error_description: 'PKCE verifier does not match' });
@@ -115,6 +120,11 @@ async function handle(req, res) {
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/panels') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp });
     return res.end(readFileSync(pageFile));
+  }
+  if (u.pathname === '/manage/ha/token' && req.method === 'POST') {
+    const f = await form(req);
+    handoffs.push({ host: u.host, from: f.get('from'), token: !!f.get('token') });
+    return send(res, 200, '<p>Signed in</p>', 'text/html');
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
@@ -241,6 +251,17 @@ try {
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Garage')).querySelector('.chip').textContent"), 'Not a panel');
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Office')).querySelector('.chip').textContent"), 'Not on your network');
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Porch')).querySelector('.chip').textContent"), 'Refused', 'answered hello, then 401: Refused, not Down');
+  // Manage on Bedroom while the token needs a slow renewal (6 s, past the click's activation): the new tab opened during
+  // the click still gets the sign-in, and the post says which page it came from.
+  await js("const t = JSON.parse(sessionStorage.getItem('gw-ha')); t.until = Date.now(); sessionStorage.setItem('gw-ha', JSON.stringify(t));");
+  tokenDelayMs = 6_000;
+  const tabsBefore = (await call('Target.getTargets')).targetInfos.filter((t) => t.type === 'page').length;
+  await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
+  for (let i = 0; i < 120 && !handoffs.length; i++) await sleep(100);
+  tokenDelayMs = 0;
+  assert.deepEqual(handoffs, [{ host: 'bedroom-panel.local:8099', from: 'kitchen-panel.local:8099', token: true }], 'one handoff, from this page');
+  assert.equal((await call('Target.getTargets')).targetInfos.filter((t) => t.type === 'page').length, tabsBefore + 1, 'in a new tab');
+
   // Copy clicked twice: one copy runs, each setting is sent once.
   const posts = () => requests.filter((r) => r === 'POST bedroom-panel.local:8099/manage/api/settings').length;
   const before = posts();
