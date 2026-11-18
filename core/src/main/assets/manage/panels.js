@@ -127,12 +127,15 @@ function signIn() {
 /** An access token from the sign-in this panel keeps for the Manage session, kept in the tab; null when it keeps none. */
 async function fromPanel() {
   const mine = generation;
+  const was = stored();
   const a = haSignIn ? await panelAccess(csrf) : null;
   if (mine !== generation) return null;
   // An outage keeps the sign-in where it is: the page says so and tries again, rather than asking for a new one.
   if (a && a.outage) throw new Error(a.problem);
   if (!a) { keep(KEY, null); return null; }
-  keep(KEY, JSON.stringify({ ha, session, viaPanel: true, access: a.access_token, until: Date.now() + a.expires_in * 1000 }));
+  // A renewal keeps who signed in, for the list's header; stored() is already this HA and this session's, or null.
+  const user = was && was.viaPanel ? was.user : undefined;
+  keep(KEY, JSON.stringify({ ha, session, viaPanel: true, user, access: a.access_token, until: Date.now() + a.expires_in * 1000 }));
   return a.access_token;
 }
 
@@ -140,11 +143,14 @@ async function fromPanel() {
 const end = (t) => (t.viaPanel ? panelForget(csrf) : revokeAt(ha, t.refresh));
 
 async function signOut() {
-  generation++;
+  const mine = ++generation;
   const t = stored();
   keep(KEY, null);
-  if (t && !(await end(t))) return revokeFailed(t);
-  start();
+  // Signing out: the list goes, so a second click can't start the page again while this one waits (CodeRabbit on #534).
+  copyCard.hidden = true;
+  say(listCard, 'Panels in Home Assistant', 'Signing out…');
+  if (t && !(await end(t))) return mine === generation ? revokeFailed(t) : undefined;
+  if (mine === generation) start();
 }
 
 /** Home Assistant didn't confirm the revoke: the sign-in may stay active there. Say so, with a way to try again. */
@@ -311,6 +317,8 @@ async function apply(fromP, toP, rows, asked) {
   for (const e of copyCard.querySelectorAll('button, input, select')) e.disabled = true;
   try {
     const access = await token().catch(() => null);
+    // Signed out meanwhile: what the sign-out drew stays.
+    if (stale()) return;
     if (!access) return start();
     const answers = asked ? new Map(rows.map((r) => [r.section + '\n' + r.key, asked.get(r.section + '\n' + r.key).ask.id])) : null;
     const fresh = await copyRows(toP, access, rows, answers, undefined, undefined, undefined, stale);

@@ -100,18 +100,67 @@ class ManageKeptSignInTest {
         f.revokeWorks = false
         assertEquals(502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
         // The sweep tries again, and Home Assistant is slow to answer (and won't take it this time either).
+        val started = java.util.concurrent.CountDownLatch(1)
         val gate = java.util.concurrent.CountDownLatch(1)
+        f.revokeStarted = started
         f.revokeGate = gate
         val sweeping = Thread { f.server.sweep() }.apply { start() }
-        val deadline = System.currentTimeMillis() + 5_000
-        while (f.revoked.size < 3 && System.currentTimeMillis() < deadline) Thread.sleep(10)
-        assertEquals("the sweep is ending it", 3, f.revoked.size)
-        assertEquals("not done while the sweep may still fail", 502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
-        gate.countDown()
-        sweeping.join(5_000)
+        try {
+            assertTrue("the sweep began its revoke", started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals("not done while the sweep may still fail", 502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+            assertEquals("that Try again sent nothing of its own", 3, f.revoked.size)
+        } finally {
+            gate.countDown()
+            sweeping.join(10_000)
+        }
+        assertFalse("the sweep finished", sweeping.isAlive)
+        assertFalse(f.revokeGateTimedOut)
         f.revokeGate = null
+        f.revokeStarted = null
         f.revokeWorks = true
         assertEquals("tried again once the sweep is done", 200, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+    }
+
+    @Test fun anAddressThatChangesWhileHomeAssistantRenewsItGetsNoToken() {
+        val b = signedIn()
+        val id = sessionId()
+        f.duringRefresh = { f.haBase = "http://192.0.2.11:8123" }
+        val r = access(b)
+        assertEquals(404, r.status)
+        assertFalse(r.text().contains("ACCESS-RENEWED"))
+        assertEquals("ended in HA", listOf("REFRESH"), f.revoked)
+        assertFalse(f.server.keepsHaSignIn(id))
+    }
+
+    @Test fun stoppingThePageEndsWhatItStillKeepsAndRetriesNothingAfter() {
+        signedIn()
+        val other = signedIn()
+        f.revokeWorks = false
+        assertEquals(502, other.post(ManageServer.HA_FORGET, mapOf("csrf" to other.csrf())).status)
+        f.revoked.clear()
+        f.revokeWorks = true
+        f.server.stop()
+        assertEquals("the kept one and the unconfirmed one, once each", listOf("REFRESH", "REFRESH"), f.revoked)
+        f.revoked.clear()
+        f.server.sweep()
+        assertTrue("nothing left after the stop", f.revoked.isEmpty())
+    }
+
+    @Test fun aGrantNoSessionTookIsTriedAgainWhenHomeAssistantDidntTakeItsRevoke() {
+        val b = f.Browser()
+        b.get("/")
+        val start = b.post("/manage/ha", mapOf("next" to "/"))
+        val state = dev.glassworks.web.HttpServer.parseQuery(start.headers["Location"]!!.substringAfter('?'))["state"]!!
+        f.haBase = "http://192.0.2.11:8123"
+        f.revokeWorks = false
+        assertEquals("the address changed during the sign-in", 409,
+            b.get("/manage/callback?code=CODE&state=$state", mapOf("sec-fetch-site" to "cross-site")).status)
+        assertEquals(2, f.revoked.size)
+        f.revokeWorks = true
+        f.server.sweep()
+        assertEquals("the sweep ended it", 3, f.revoked.size)
+        f.server.sweep()
+        assertEquals("once", 3, f.revoked.size)
     }
 
     @Test fun theSweepTriesAgainAnEndHomeAssistantDidntTake() {

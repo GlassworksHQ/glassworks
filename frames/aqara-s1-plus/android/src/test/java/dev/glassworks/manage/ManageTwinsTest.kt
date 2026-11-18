@@ -183,6 +183,18 @@ class ManageTwinsTest {
         assertEquals(0, f.server.questionsWaiting(id))
     }
 
+    /** All panels' Sign out ends only the Home Assistant sign-in: the Manage session's questions stay (CodeRabbit on #534). */
+    @Test fun endingAllPanelsSignInKeepsTheSessionsQuestions() {
+        val b = signedIn()
+        val waiting = asked(b, "time-zone", "Thread network", "run")
+        val id = f.sessions.list(f.haBase).single().id
+        f.revokeWorks = false
+        assertEquals(502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to b.csrf())).status)
+        f.server.sweep()
+        assertEquals("through a failed revoke and the sweep's retry", 1, f.server.questionsWaiting(id))
+        assertEquals(303, answering(b, "time-zone", "Thread network", "run", waiting))
+    }
+
     /** Either sign-in (#288); one that costs something asks first, as on the panel. */
     @Test fun anActionThatAsksOnThePanelAsksHereFirstForACodeSignInToo() {
         val b = f.Browser()

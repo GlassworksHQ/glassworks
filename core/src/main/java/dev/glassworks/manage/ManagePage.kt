@@ -17,6 +17,9 @@ interface ManagePage {
     /** Stops keeping the page's log. */
     fun stopLog()
 
+    /** The page stops with the web server: its log, and any work it does in the background. */
+    fun stop() = stopLog()
+
     /** What the page's Overview shows now; the panel's settings menu opens on the same Overview. */
     fun status(): PanelStatus
 

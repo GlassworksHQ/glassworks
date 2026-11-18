@@ -123,7 +123,7 @@ class ManageServerTest {
 
     // ------------------------------------------------------------------ sign in with Home Assistant
 
-    @Test fun signingInWithHaAsksTheLocalHaWithPkceAndKeepsNoHaToken() {
+    @Test fun signingInWithHaAsksTheLocalHaWithPkceAndKeepsItsTokenInMemoryOnly() {
         val b = f.Browser()
         b.get("/")
         val start = b.post("/manage/ha", mapOf("next" to "/", "remember" to "1"))
@@ -351,6 +351,8 @@ class ManageServerTest {
     @Test fun aRevokeHaDidntTakeIsTriedAgainThenLogged() {
         f.revokeWorks = false
         val b = f.Browser().also { it.signInWithHa() }
+        assertTrue("signing in revokes nothing", f.revoked.isEmpty())
+        assertTrue(f.warnings.isEmpty())
         // Kept for All panels until sign-out (#466); sign-out ends it in HA, twice if HA doesn't take it.
         b.post("/manage/signout", mapOf("csrf" to b.csrf()))
         assertEquals(listOf("REFRESH", "REFRESH"), f.revoked)

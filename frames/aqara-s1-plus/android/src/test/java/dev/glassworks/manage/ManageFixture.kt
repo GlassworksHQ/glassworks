@@ -62,11 +62,13 @@ class ManageFixture(
         }
         override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean {
             revoked += refreshToken
-            revokeGate?.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            revokeStarted?.countDown()
+            revokeGate?.let { if (!it.await(10, java.util.concurrent.TimeUnit.SECONDS)) revokeGateTimedOut = true }
             return revokeWorks
         }
         override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens {
             refreshed += refreshToken
+            duringRefresh?.invoke()
             return refreshAnswer
         }
     }
@@ -81,8 +83,14 @@ class ManageFixture(
     val events = Collections.synchronizedList(ArrayList<String>())
     @Volatile var revokeWorks = true
 
-    /** While set, a revoke waits for it, as when Home Assistant is slow to answer. */
+    /** While set, a revoke waits for it, as when Home Assistant is slow to answer; [revokeStarted] says one began. */
     @Volatile var revokeGate: java.util.concurrent.CountDownLatch? = null
+    @Volatile var revokeStarted: java.util.concurrent.CountDownLatch? = null
+    /** A revoke waited 10 s for [revokeGate] and went on: the test that set it failed to release it. */
+    @Volatile var revokeGateTimedOut = false
+
+    /** Runs while Home Assistant renews a kept sign-in (an address that changes meanwhile). */
+    @Volatile var duringRefresh: (() -> Unit)? = null
     var canReboot = true
     val actions = object : PanelActions {
         override fun reloadDashboard(): String? { ran += "reload"; return null }
@@ -151,6 +159,7 @@ class ManageFixture(
         monoMs = { monoMs },
         scripts = { name -> dev.glassworks.testing.RepoFiles.file("core/src/main/assets/manage/$name").readBytes() },
         sweepMs = 0,
+        background = { it() },
     )
 
     init {

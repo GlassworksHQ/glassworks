@@ -118,6 +118,11 @@ open class AppManage(
 
     override fun stopLog() = tail.stop()
 
+    override fun stop() {
+        tail.stop()
+        server.stop()
+    }
+
     private inner class Host : ManageHost {
         override val actions: PanelActions = Actions()
 

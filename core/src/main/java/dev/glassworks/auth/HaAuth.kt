@@ -157,7 +157,7 @@ object HaAuth {
     fun stopServer() {
         server?.stop()
         server = null
-        manage?.stopLog()
+        manage?.stop()
         manage = null
     }
 

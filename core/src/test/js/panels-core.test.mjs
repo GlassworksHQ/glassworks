@@ -472,6 +472,6 @@ test("All panels takes its token from the panel's kept sign-in, same origin, wit
     { outage: true, problem: "Can't reach Home Assistant. Try again in a moment." });
   assert.equal((await panelAccess('CSRF', async () => { throw new TypeError('Failed to fetch'); }, 1_000)).outage, true);
   assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
-  assert.equal(seen.at(-1)[0], '/manage/ha/forget');
+  assert.deepEqual(seen.at(-1), ['/manage/ha/forget', 'POST', 'csrf=CSRF', 'error'], 'this panel only, with the form token');
   assert.equal(await panelForget('CSRF', answer(500, null), 1_000), false);
 });

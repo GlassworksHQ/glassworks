@@ -61,6 +61,8 @@ class ManageServer(
     private val scripts: (String) -> ByteArray? = { null },
     /** How often kept Home Assistant sign-ins of ended sessions are revoked, off the request threads; 0 for never (tests call [sweep]). */
     sweepMs: Long = 60_000,
+    /** Runs [stop]'s last revokes off the caller's thread (it may be the main thread); tests run them at once. */
+    private val background: (() -> Unit) -> Unit = { work -> Thread(work, "gw-manage-stop").apply { isDaemon = true }.start() },
 ) {
     private val random = SecureRandom()
 
@@ -95,20 +97,25 @@ class ManageServer(
      */
     private val kept = java.util.concurrent.ConcurrentHashMap<String, HaSignIn.Kept>()
 
-    /**
-     * A signed-out session's questions go with it, and its kept Home Assistant sign-in is ended in HA. False when HA
-     * didn't confirm it, also while another call (the sweep, a second Try again) is still ending it: that one may fail
-     * yet, so this one can't say it's done (CodeRabbit on #534).
-     */
-    private fun forget(session: String): Boolean {
+    /** A session that ended (signed out, run out): its questions go with it, and its kept sign-in is ended in HA. */
+    private fun endSession(session: String) {
         asked.entries.removeIf { it.value.session == session }
-        if (!ending.add(session)) return false
+        endKept(session)
+    }
+
+    /**
+     * Ends the Home Assistant sign-in kept under [id] (a session, or a grant no session took), in HA. The Manage session
+     * and its questions stay (CodeRabbit on #534). False when HA didn't confirm it, also while another call (the sweep, a
+     * second Try again) is still ending it: that one may fail yet, so this one can't say it's done.
+     */
+    private fun endKept(id: String): Boolean {
+        if (!ending.add(id)) return false
         try {
-            val k = kept.remove(session) ?: unrevoked.remove(session) ?: return true
+            val k = kept.remove(id) ?: unrevoked.remove(id) ?: return true
             // HA didn't take the revoke: no longer usable, but kept aside to try again (Try again, the sweep).
-            return signIn.end(k).also { ended -> if (!ended) unrevoked[session] = k }
+            return signIn.end(k).also { ended -> if (!ended) unrevoked[id] = k }
         } finally {
-            ending.remove(session)
+            ending.remove(id)
         }
     }
 
@@ -118,9 +125,21 @@ class ManageServer(
     /** Kept sign-ins whose revoke Home Assistant didn't take: not usable, tried again by [sweep] and by Try again. */
     private val unrevoked = java.util.concurrent.ConcurrentHashMap<String, HaSignIn.Kept>()
 
-    init {
-        if (sweepMs > 0) java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "gw-manage-sweep").apply { isDaemon = true } }
-            .scheduleWithFixedDelay({ runCatching { sweep() } }, sweepMs, sweepMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+    private val sweeper = if (sweepMs > 0) java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "gw-manage-sweep").apply { isDaemon = true } }
+        .also { it.scheduleWithFixedDelay({ runCatching { sweep() } }, sweepMs, sweepMs, java.util.concurrent.TimeUnit.MILLISECONDS) }
+    else null
+
+    /**
+     * The Manage page stops (the kiosk service stops its web server): the sweep stops with it, and every Home Assistant
+     * sign-in it still keeps, usable or waiting for a retry, is ended in HA once more, off this thread. One HA doesn't
+     * take then stays under the person's profile, as after an app restart (CodeRabbit on #534).
+     */
+    fun stop() {
+        sweeper?.shutdownNow()
+        val left = ArrayList<HaSignIn.Kept>()
+        for (id in kept.keys.toCollection(ArrayList())) kept.remove(id)?.let(left::add)
+        for (id in unrevoked.keys.toCollection(ArrayList())) unrevoked.remove(id)?.let(left::add)
+        if (left.isNotEmpty()) background { for (k in left) runCatching { signIn.end(k) } }
     }
 
     /**
@@ -130,12 +149,13 @@ class ManageServer(
     fun sweep() = dropEnded()
 
     private fun dropEnded() {
-        for (id in unrevoked.keys.toList()) forget(id)
+        // Copies made by iterating: toList()'s one-item shortcut can call next() on a key another thread just took.
+        for (id in unrevoked.keys.toCollection(ArrayList())) endKept(id)
         if (kept.isEmpty()) return
         // The candidates first, then the live sessions: one signed in meanwhile isn't a candidate (CodeRabbit on #534).
-        val candidates = kept.keys.toList()
+        val candidates = kept.keys.toCollection(ArrayList())
         val live = sessions.list(haBase()).map { it.id }.toSet()
-        for (id in candidates) if (id !in live) forget(id)
+        for (id in candidates) if (id !in live) endSession(id)
     }
 
     /** Whether [session] has a Home Assistant sign-in kept for All panels (tests). */
@@ -235,8 +255,8 @@ class ManageServer(
                 // again. Read once, so the session is bound to the address that was checked.
                 val ha = haBase()
                 if (r.haBase != ha?.trim()?.trimEnd('/')) {
-                    // No session to keep it for: end it in HA.
-                    r.kept?.let(signIn::end)
+                    // No session to keep it for: end it in HA. One HA didn't take waits for the sweep under its own id.
+                    r.kept?.let { k -> if (!signIn.end(k)) unrevoked["grant-" + ByteArray(12).also(random::nextBytes).joinToString("") { "%02x".format(it) }] = k }
                     return html(409, PageShell.qrPage(name(), "Home Assistant's address changed", "Sign in again.", PageShell.Look.PROBLEM,
                         button = """<a class="btn" href="/">Back to sign in</a>"""))
                 }
@@ -315,9 +335,14 @@ class ManageServer(
      */
     private fun haAccess(s: Session): HttpResponse {
         val k = kept[s.id] ?: return json(404, JSONObject().put("problem", "No Home Assistant sign-in is kept for this browser."))
-        if (k.haBase != haBase()?.trim()?.trimEnd('/')) { forget(s.id); return json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED)) }
+        val moved = { k.haBase != haBase()?.trim()?.trimEnd('/') }
+        if (moved()) { endKept(s.id); return json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED)) }
         return when (val t = signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken)) {
-            is HaGateway.Tokens.Ok -> json(200, JSONObject().put("access_token", t.accessToken).put("expires_in", t.expiresIn))
+            // The address may have changed while HA renewed it: no token for an address the panel no longer uses.
+            is HaGateway.Tokens.Ok -> if (moved()) {
+                endKept(s.id)
+                json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED))
+            } else json(200, JSONObject().put("access_token", t.accessToken).put("expires_in", t.expiresIn))
             // HA refused it (revoked there, or run out): drop it, and All panels asks for a sign-in. Anything else (no
             // answer, a 5xx from HA or a proxy) is an outage: keep it, and All panels says so (CodeRabbit on #534).
             is HaGateway.Tokens.Failed -> if (t.refused) {
@@ -380,7 +405,7 @@ class ManageServer(
         if (session == null) return HttpResponse.seeOther("/")
         if (!csrfOk(req, session)) return HttpResponse.text(403, "This form has expired. Go back and try again.")
         if (sessions.revoke(session.id) == SessionStore.Revoked.NOT_SAVED) return notSaved()
-        forget(session.id)
+        endSession(session.id)
         event("${who(session)} signed out (${session.browser})")
         return HttpResponse.seeOther("/", mapOf("Set-Cookie" to clearCookie(SESSION)))
     }
@@ -538,7 +563,7 @@ class ManageServer(
             }
             "/settings" -> changeSetting(req, s, viewer)
             HA_ACCESS -> haAccess(s)
-            HA_FORGET -> if (forget(s.id)) {
+            HA_FORGET -> if (endKept(s.id)) {
                 event("${who(s)} ended the Home Assistant sign-in All panels used (${s.browser})")
                 json(200, JSONObject().put("ok", true))
             } else json(502, JSONObject().put("problem", "Home Assistant didn't confirm it ended the sign-in. Try again."))
@@ -546,7 +571,7 @@ class ManageServer(
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }
                 if (sessions.revoke(id) == SessionStore.Revoked.NOT_SAVED) return notSaved()
-                forget(id)
+                endSession(id)
                 target?.let { event("${who(s)} signed out ${it.browser}") }
                 if (id == s.id) HttpResponse.seeOther("/", mapOf("Set-Cookie" to clearCookie(SESSION)))
                 else HttpResponse.seeOther("/security?done=signedout")

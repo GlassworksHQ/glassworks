@@ -263,7 +263,9 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 
 1. **Signing in.** Signed in to this Manage page with Home Assistant, All panels uses that sign-in: the panel
    hands the page a fresh Home Assistant access token from it (same page, its form token), so there is no
-   second sign-in. Signed in with the code on the panel, the page asks for **Continue with Home Assistant**: the
+   second sign-in. That holds only while the panel keeps it: after **Sign out** on All panels, after the app
+   restarts, or when Home Assistant no longer takes it, the Manage session stays but All panels asks for
+   **Continue with Home Assistant** again. Signed in with the code on the panel, the page asks for it too: the
    tab signs in to Home Assistant on its own (with PKCE), with an administrator, and keeps the sign-in until you
    close the tab. **Sign out** on the page ends it in Home
    Assistant too, when Home Assistant answers. If it doesn't, the page says the sign-in may stay active there, with
