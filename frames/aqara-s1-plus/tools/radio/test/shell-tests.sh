@@ -308,6 +308,12 @@ w "$T/bin/mount" <<'MOUNT'
 #!/bin/sh
 echo "$*" >> /t/mounts
 MOUNT
+# mv that fails when its source is listed in /t/mv-fail (one path per line), for the loader's renames
+w "$T/bin/mv" <<'MV'
+#!/bin/sh
+for a in "$@"; do case "$a" in -*) ;; *) grep -qxF -- "$a" /t/mv-fail 2>/dev/null && exit 1; break ;; esac; done
+exec /bin/mv "$@"
+MV
 printf 'stock-anim' > "$T/anim.zip"; printf 'not a zip' > "$T/badanim.zip"
 python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_STORED); z.writestr("desc.txt", "1440 720 30\n"); z.close()' "$T/banim.zip"
 printf '#!/bin/sh\nsetprop test.radio "bundle-script|${GW_SOURCE}|${GW_BUNDLE}"\n' > "$T/svc-radio.sh"
@@ -437,9 +443,25 @@ L boot; check "...it loads at the next boot all the same" test "$(prop ro.glassw
 mv /data/glassworks/bundle/current /data/glassworks/bundle/old
 check "(setup: the loaded bundle is moved aside)" test ! -e /data/glassworks/bundle/current -a -d /data/glassworks/bundle/old
 L boot; check "a promotion cut short between its renames: the loaded bundle comes back" test "$(prop ro.glassworks.frame.version)" = 2.0.5 -a -d /data/glassworks/bundle/current
-echo 2.0.4 > /data/glassworks/bundle/bad-radio; rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
+echo 2.0.4 > /data/glassworks/bundle/bad-radio
+check "(setup: a marker for 2.0.4 is there)" test "$(cat /data/glassworks/bundle/bad-radio)" = 2.0.4
+rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
 check "a bad-script marker written for another bundle doesn't count" test "$(prop test.radio)" = "bundle-script|bundle 2.0.5|/data/glassworks/bundle/current"
 rm -f /data/glassworks/bundle/bad-radio
+
+B=/data/glassworks/bundle
+mkframe "$T/f8" 2.0.6 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+stage_frame "$T/f8/frame-bundle"; install_frame >/dev/null; mv "$B/current" "$B/old"; echo "$B/old" > "$T/mv-fail"
+L boot
+check "the loaded bundle can't be put back from old: nothing is promoted" test -d "$B/old" -a -d "$B/next" -a ! -e "$B/current"
+rm -f "$T/mv-fail"; L boot
+check "...the next boot puts it back and promotes" test "$(prop ro.glassworks.frame.version)" = 2.0.6 -a ! -e "$B/old" -a ! -e "$B/next"
+mkframe "$T/f9" 2.0.7 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+stage_frame "$T/f9/frame-bundle"; install_frame >/dev/null; printf '%s\n' "$B/next" "$B/old" > "$T/mv-fail"
+L boot
+check "move-in and rollback both fail: old and the staged bundle survive" test -d "$B/old" -a -d "$B/next" -a ! -e "$B/current"
+rm -f "$T/mv-fail"; L boot
+check "...the next boot restores and promotes" test "$(prop ro.glassworks.frame.version)" = 2.0.7 -a ! -e "$B/old" -a ! -e "$B/next"
 
 mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
 GW_LOADER_ONCE=1 L run radio; check "a developer script without the marker is ignored" test "$(prop test.radio)" != "dev|dev|1"

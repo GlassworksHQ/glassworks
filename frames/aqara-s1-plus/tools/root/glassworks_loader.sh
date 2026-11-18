@@ -267,6 +267,8 @@ boot)
     if ! check_dir "$BDIR/$c_"; then say "staged bundle ($c_) dropped: $WHY"; rm -rf "${BDIR:?}/$c_"; continue; fi
     nv=$VERSION; nf=$FVER
     [ -e "$BDIR/current" ] && rm -rf "$BDIR/old"
+    # mv onto a leftover old would put current inside it, one level too deep.
+    if [ -e "$BDIR/old" ]; then say "cannot clear the old rollback copy; $c_ stays staged"; continue; fi
     # current must be gone before the candidate moves in: mv onto a directory would move it inside.
     if [ -e "$BDIR/current" ] && ! mv "$BDIR/current" "$BDIR/old"; then
       say "cannot move the loaded bundle aside; $c_ stays staged"; continue
