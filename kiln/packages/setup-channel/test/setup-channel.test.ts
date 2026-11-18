@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ByteStream } from 'improv-serial';
-import { SetupChannel, validHaUrl, type SetupState } from '../src/channel';
+import { kilnSignInUrl, openSignInWindow, SetupChannel, validHaUrl, type SetupState } from '../src/channel';
 
 const base: SetupState = {
   ip: '192.168.1.50',
@@ -79,5 +79,22 @@ describe('setup channel', () => {
     expect(validHaUrl('https://ha.example.com/dash')).toBe(true);
     expect(validHaUrl('homeassistant.local')).toBe(false);
     expect(validHaUrl("http://x'; reboot")).toBe(false);
+  });
+});
+
+describe('Kiln\'s sign-in window (issue 453)', () => {
+  it('goes to the panel\'s sign-in for Kiln, on the address the panel gave', () => {
+    expect(kilnSignInUrl('http://192.0.2.10:8099/signin')).toBe('http://192.0.2.10:8099/signin/continue?then=kiln');
+  });
+
+  it('opens a pop-up, or a tab where the browser won\'t', () => {
+    const win = {} as Window;
+    const popup = vi.fn(() => win);
+    expect(openSignInWindow(popup)).toBe(win);
+    expect(popup).toHaveBeenCalledExactlyOnceWith('about:blank', 'glassworks-signin', expect.stringContaining('popup'));
+    const tabOnly = vi.fn((_u: string, target: string) => (target === '_blank' ? win : null));
+    expect(openSignInWindow(tabOnly)).toBe(win);
+    expect(tabOnly).toHaveBeenLastCalledWith('about:blank', '_blank');
+    expect(openSignInWindow(() => null)).toBeNull();
   });
 });

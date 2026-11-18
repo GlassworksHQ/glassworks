@@ -22,7 +22,8 @@ import dev.glassworks.setup.SetupOverlay
 
 /**
  * #449 keeps the setup screen on only where no presence sensor can wake it. The S1 has its VI5300: its setup screen
- * still turns off after a 20 s idle timeout (what HA's night mode sets), as before.
+ * still turns off after a 20 s idle timeout (what HA's night mode sets), as before, once its screen mode is presence:
+ * a panel that never picked one stays always on (#522).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(
@@ -48,7 +49,7 @@ class NotReadyScreenPinTest {
 
     @Test fun theS1sSetupScreenSleepsAsBefore() {
         s1()
-        GeckoPinHarness(prefs = { it.idleOffSec = 20 }).use { h ->
+        GeckoPinHarness(prefs = { it.idleOffSec = 20; it.screenMode = "presence" }).use { h ->
             assertEquals("the S1's frame", "aqara-s1-plus", h.app.glassworksRuntime.frame.board)
             h.advance(5_000)
             assertTrue("a fresh panel shows setup", h.rootChildren().filterIsInstance<SetupOverlay>().single().isShowing)

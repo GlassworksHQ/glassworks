@@ -4,7 +4,7 @@ import { LAN_CHANNEL_PATH, openWebSocketStream } from '@glassworks/setup-channel
 import { createRoot } from 'react-dom/client';
 import { MarkDefs } from '../components/Mark';
 import { LanPage } from './LanPage';
-import { LanSession } from './lanSession';
+import { cameBackFromSignIn, LanSession } from './lanSession';
 
 const lan = new LanSession({
   fetch: async (path, init) => {
@@ -17,6 +17,8 @@ const lan = new LanSession({
     return { status: r.status, json: () => r.json() };
   },
   openStream: () => openWebSocketStream(`ws://${location.host}${LAN_CHANNEL_PATH}`),
+  navigate: (path) => location.assign(path),
+  backFromSignIn: cameBackFromSignIn(location, history),
 });
 
 createRoot(document.getElementById('root')!).render(<><MarkDefs /><LanPage lan={lan} /></>);

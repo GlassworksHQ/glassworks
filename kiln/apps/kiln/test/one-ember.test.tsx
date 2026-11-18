@@ -41,7 +41,7 @@ describe('one ember action per screen', () => {
     ['radio-thread-old', 'Finish'],
     ['wifi', 'Continue'],
     ['wifi-new', 'Connect'],
-    ['home-assistant', 'Continue'],
+    ['home-assistant', 'Sign in'], // not signed in yet: Sign in is the way on, not Continue
     ['radio', 'Finish'],
     ['radio-next', 'Finish'],
     ['undo', 'Continue'],

@@ -207,7 +207,7 @@ class SettingsMenuTest {
         assertEquals(1.5f, prefs.zoom)
         assertEquals("ha.local", prefs.extraSecureHosts)
         assertFalse(prefs.hideHeader); assertFalse(prefs.hideSidebar) // one switch for both
-        assertEquals("always", prefs.screenMode)
+        assertEquals("presence", prefs.screenMode) // the wake switch said always, then the picked time put presence back (#522)
         assertEquals(300, prefs.idleOffSec)
         assertEquals(2.1f, prefs.presenceRangeM)
         assertTrue(prefs.autoBrightness)

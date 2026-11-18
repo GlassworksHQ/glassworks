@@ -14,4 +14,5 @@ publish the matching section below as the release notes.
   has run since S1 Kiosk 0.4, split out of its pane (#152).
 - **The API.** `SendspinPlayer` with its `Identity`, `Settings` and `Status`; `SsStore`, `MemoryStore`,
   `SsIdentity` and `SsPairingRecord` for what it keeps across restarts; and `WsClient`, the WebSocket
-  client it runs on.
+  client it runs on. `WsClient.connect` can take an `openSocket` function that makes the TCP
+  connection, so an app can try every address a name resolves to.

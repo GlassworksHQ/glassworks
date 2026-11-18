@@ -1,7 +1,7 @@
 // The panel's own setup page (#34): pairing with the code on the panel's screen, then Kiln's setup steps
 // (src/setup) over the panel's /setup/channel WebSocket. The panel serves this page at /setup, so every
 // request goes to its own origin.
-import { NOT_PAIRED, SetupChannel } from '@glassworks/setup-channel';
+import { NOT_PAIRED, SetupChannel, type SetupState } from '@glassworks/setup-channel';
 import { ChannelSetup, type SetupSteps, type WifiSteps } from '../setup/channelSetup';
 import { THREAD_FROM_HA } from '../setup/radioPlan';
 import type { Setup } from '../wizard/state';
@@ -15,7 +15,21 @@ export type LanView =
   /** `again`: what Try again does (the start, or ending the session once more). */
   | { at: 'lost'; error: string; again?: 'start' | 'done' };
 
-export interface LanState { view: LanView; busy?: string }
+/** A step on the page's rail. */
+export type RailStep = 'pair' | 'wifi' | 'ha' | 'radio' | 'done';
+
+export interface LanState {
+  view: LanView;
+  busy?: string;
+  /** The steps this panel has, from what it reports: a frame without a radio has no radio step. */
+  rail: readonly RailStep[];
+}
+
+/** The rail before the panel has said whether it has a radio, and for one that has. */
+export const FULL_RAIL: readonly RailStep[] = ['pair', 'wifi', 'ha', 'radio', 'done'];
+
+/** The steps a panel that reported [st] has. */
+export const railOf = (st: SetupState): readonly RailStep[] => (st.radio ? FULL_RAIL : FULL_RAIL.filter((s) => s !== 'radio'));
 
 /** What SetupChannel reads and writes: the WebSocket, as a byte stream. */
 export type ChannelStream = ConstructorParameters<typeof SetupChannel>[0];
@@ -26,25 +40,47 @@ export interface LanDeps {
   /** Opens the panel's setup channel WebSocket. */
   openStream(): Promise<ChannelStream>;
   openTab?: (url: string) => Window | null;
+  /** Goes to a page on the panel in this tab (the sign-in, [SIGN_IN_HERE]); without it, sign-in opens a tab. */
+  navigate?: (path: string) => void;
+  /** This load came back from that sign-in ([BACK_FROM_SIGN_IN] in the address): setup carries on after Home Assistant. */
+  backFromSignIn?: boolean;
   /** The pause between tries to open the channel (tests skip it). */
   sleep?: (ms: number) => Promise<void>;
 }
 
 export const PAIR = '/setup/pair';
 export const DONE = '/setup/done';
+/**
+ * The panel's sign-in, started by this page in its own tab (issue 453). The panel binds it to this browser and, once
+ * signed in, loads this page again with [BACK_FROM_SIGN_IN]. A path on this page's own host, so the pairing's
+ * cookie is still there when the browser comes back.
+ */
+export const SIGN_IN_HERE = '/signin/continue?then=setup';
+export const BACK_FROM_SIGN_IN = '#signed-in';
+
+/**
+ * Whether this load came back from the panel's sign-in. Takes the mark off the address, so a reload starts where
+ * the panel is instead of handing off again.
+ */
+export function cameBackFromSignIn(loc: Pick<Location, 'hash' | 'pathname' | 'search'>, history: Pick<History, 'replaceState'>): boolean {
+  if (loc.hash !== BACK_FROM_SIGN_IN) return false;
+  history.replaceState(null, '', loc.pathname + loc.search);
+  return true;
+}
 
 /** The note when the panel ended the pairing under the page: it lasts 30 minutes without a change. */
 export const RAN_OUT = 'The pairing ran out: it lasts 30 minutes without a change. Pair again to carry on where you were.';
 
 export class LanSession implements SetupSteps, WifiSteps {
-  state: LanState = { view: { at: 'connecting' } };
+  state: LanState = { view: { at: 'connecting' }, rail: FULL_RAIL };
   private listeners = new Set<() => void>();
   private readonly steps: ChannelSetup;
   private running?: string;
-  /** The step to go back to after pairing again. */
-  private resume?: 'wifi' | 'ha' | 'radio';
+  /** The step to go back to after pairing again; `signed-in`: the step after Home Assistant. */
+  private resume?: 'wifi' | 'ha' | 'radio' | 'signed-in';
 
   constructor(private readonly d: LanDeps) {
+    if (d.backFromSignIn) this.resume = 'signed-in';
     this.steps = new ChannelSetup({
       // This page comes from the app, so it always has a channel: running out of tries is an error here,
       // never the wizard's "older app without one" (which would show Done).
@@ -54,7 +90,7 @@ export class LanSession implements SetupSteps, WifiSteps {
           let c: SetupChannel | undefined;
           try {
             c = new SetupChannel(await d.openStream());
-            await c.getState();
+            this.saw(await c.getState());
             return c;
           } catch (e) {
             last = e;
@@ -72,6 +108,7 @@ export class LanSession implements SetupSteps, WifiSteps {
       // this page comes from the app on the panel, which has everything the Thread step can ask for
       app: async () => ({ code: THREAD_FROM_HA }),
       openTab: d.openTab,
+      signInHere: d.navigate && (() => d.navigate!(SIGN_IN_HERE)),
     });
   }
 
@@ -80,6 +117,26 @@ export class LanSession implements SetupSteps, WifiSteps {
   private set(patch: Partial<LanState>) {
     this.state = { ...this.state, ...patch };
     for (const l of this.listeners) l();
+  }
+
+  /** A state the panel sent: which steps it has. */
+  private saw(st: SetupState) {
+    const rail = railOf(st);
+    if (rail.length !== this.state.rail.length) this.set({ rail });
+  }
+
+  /**
+   * Before pairing: the panel's state, only for the rail. The channel answers `state` to anyone; it is let go at
+   * once, so it doesn't hold one of the panel's few web workers while the person finds the code.
+   */
+  private async peek(): Promise<void> {
+    let c: SetupChannel | undefined;
+    try {
+      c = new SetupChannel(await this.d.openStream());
+      this.saw(await c.getState());
+    } catch { /* the rail stays as it is until the steps open the channel */ } finally {
+      void c?.close().catch(() => {});
+    }
   }
 
   /** A step's state, unless the panel said this browser isn't paired (the pairing ran out): then pair again. */
@@ -120,6 +177,7 @@ export class LanSession implements SetupSteps, WifiSteps {
     }
     if (r.paired === true) return this.begin().catch((e) => this.lose(e));
     this.set({ view: { at: 'pair', open: r.open !== false, shown: false } });
+    void this.peek();
   }
 
   /** Puts a code on the panel's screen. */
@@ -162,11 +220,13 @@ export class LanSession implements SetupSteps, WifiSteps {
   private async begin(): Promise<void> {
     this.steps.close(); // a channel opened before pairing doesn't carry the session
     const back = this.resume;
-    this.resume = undefined;
     this.set({ view: { at: 'setup', setup: { phase: 'waiting', note: 'Connecting to the panel.' } } });
-    if (back === 'radio') await this.steps.radio();
+    if (back === 'signed-in') await this.steps.afterSignIn();
+    else if (back === 'radio') await this.steps.radio();
     else if (back === 'ha') await this.steps.homeAssistant();
     else await this.steps.wifi(); // an offline panel (on its setup hotspot) starts with Wi-Fi, one on a network with HA
+    // kept until the step opened: Try again after a lost panel goes back there, not to the start
+    if (this.resume === back && this.state.view.at !== 'lost') this.resume = undefined;
   }
 
   wifi(): Promise<void> { return this.steps.wifi(); }
@@ -175,6 +235,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
+  skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
   radio(): Promise<void> { return this.steps.radio(); }
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
   /** Skip and Finish: the button stays busy until the panel has ended the pairing (or said it couldn't). */

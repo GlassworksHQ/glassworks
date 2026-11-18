@@ -21,6 +21,7 @@ import type { RailMark, RailStep } from '../wizard/state';
 import { registry } from '../wizard/registry';
 import { ANDROID_BASE, keptAndroid } from './activity';
 import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from './demo';
+import { ScreenLockBlock } from './ScreenLockBlock';
 import { AndroidSession, androidMode, type AndroidState } from './session';
 import './android.css';
 
@@ -444,6 +445,7 @@ function Done({ s, session }: { s: AndroidState; session: AndroidSession }) {
         </div>
       )}
       <SilentBlock updates={installed.silentUpdates} release={s.plan!.device.release || androidName(s.plan!.device.sdk)} />
+      <ScreenLockBlock lock={installed.screenLock} />
       <Refusals grants={installed.grants} />
       {page ? <>
         <div className="well">

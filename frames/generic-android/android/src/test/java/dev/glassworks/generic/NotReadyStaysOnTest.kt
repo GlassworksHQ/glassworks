@@ -42,7 +42,8 @@ import dev.glassworks.setup.SetupOverlay
 class NotReadyStaysOnTest {
     private val dash = "http://192.0.2.10:8123/"
 
-    private fun idle20s(set: (KioskPrefs) -> Unit = {}) = GeckoPinHarness(prefs = { it.idleOffSec = 20; set(it) })
+    // A picked time puts the screen mode to presence, as the Screen page's row does: "always" is the default (#522).
+    private fun idle20s(set: (KioskPrefs) -> Unit = {}) = GeckoPinHarness(prefs = { it.idleOffSec = 20; it.screenMode = "presence"; set(it) })
 
     private fun GeckoPinHarness.sleeps() = logs("Glassworks.Screen").filter { it.startsWith("sleep (idle") }
     private fun GeckoPinHarness.setup() = rootChildren().filterIsInstance<SetupOverlay>().single()

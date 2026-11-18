@@ -123,10 +123,14 @@ data class PendingSignIn(
     val purpose: String = PURPOSE_SIGNIN,
     /** PKCE secret for this sign-in. Never log it. */
     val codeVerifier: String,
+    /** Where it started, so how its callback ends (#453). */
+    val then: Then = Then.QR,
+    /** A setup sign-in's binding cookie ([StateStore.create]), or -1. */
+    val slot: Int = -1,
 ) {
     override fun toString() =
         "PendingSignIn(clientId=$clientId, redirectUri=$redirectUri, haBase=$haBase, createdAt=$createdAt, " +
-            "purpose=$purpose, codeVerifier=<redacted>)"
+            "purpose=$purpose, then=$then, slot=$slot, codeVerifier=<redacted>)"
 
     companion object {
         const val PURPOSE_SIGNIN = "signin"
@@ -134,8 +138,20 @@ data class PendingSignIn(
     }
 }
 
+/**
+ * Where a sign-in started (`/signin/continue?then=…`), so how its callback ends: the QR code's done page, back to the
+ * setup page in the same tab (bound to that browser), or Kiln's window, which closes as Kiln moves on by itself.
+ */
+enum class Then {
+    QR, SETUP, KILN;
+
+    companion object {
+        fun of(param: String?) = when (param) { "setup" -> SETUP; "kiln" -> KILN; else -> QR }
+    }
+}
+
 /** What the caller needs to build the authorize URL. The verifier stays in the store. */
-data class NewSignIn(val state: String, val codeChallenge: String)
+data class NewSignIn(val state: String, val codeChallenge: String, val slot: Int = -1)
 
 /**
  * OAuth `state` values handed out by /signin. Single use, expire after [ttlMs] (HA's own codes live
@@ -149,13 +165,18 @@ class StateStore(
     private val pending = LinkedHashMap<String, PendingSignIn>()
 
     @Synchronized
-    fun create(clientId: String, redirectUri: String, haBase: String, purpose: String = PendingSignIn.PURPOSE_SIGNIN): NewSignIn {
+    fun create(
+        clientId: String, redirectUri: String, haBase: String, purpose: String = PendingSignIn.PURPOSE_SIGNIN, then: Then = Then.QR,
+    ): NewSignIn {
         prune()
         while (pending.size >= max) pending.remove(pending.keys.first())
         val s = OAuth.randomState()
         val verifier = OAuth.newCodeVerifier()
-        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier)
-        return NewSignIn(s, OAuth.codeChallenge(verifier))
+        // A setup sign-in gets a slot no other pending one holds, so its binding cookie never replaces a live one,
+        // and a browser never holds more than [max] of them. There is always one free: fewer than [max] are pending.
+        val slot = if (then == Then.SETUP) (0 until max).first { n -> pending.values.none { it.then == Then.SETUP && it.slot == n } } else -1
+        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, then, slot)
+        return NewSignIn(s, OAuth.codeChallenge(verifier), slot)
     }
 
     /**
