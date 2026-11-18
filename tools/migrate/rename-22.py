@@ -265,7 +265,9 @@ def decide(sources):
         if s.module in SHIM_MODULES and s.fq(s.stem) in COMPONENTS:
             return s.pkg  # an app's subclass at the old name (write_shims), not the component's code
         if s.module in S1_MODULES or s.module == S1_APP or s.sub in ("base", "frame"):
-            return S1_PACKAGES.get(s.sub, s.pkg)
+            if s.sub in S1_PACKAGES:
+                return S1_PACKAGES[s.sub]
+            # A test of a core class that sits in the S1 app's tests (sh.edm.s1kiosk.camera, say) goes with the core.
         if s.sub not in PACKAGES:
             return s.pkg
         if s.fq(s.stem) in COMPONENTS and not s.test:

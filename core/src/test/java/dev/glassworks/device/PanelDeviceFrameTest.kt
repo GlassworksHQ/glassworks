@@ -50,11 +50,11 @@ class PanelDeviceFrameTest {
         val core = RepoFiles.appModules - apks.toSet() - RepoFiles.appModules.filter { RepoFiles.rel(it).startsWith("frames/") }.toSet()
         val sources = RepoFiles.sources(atLeast = 30, inModules = core) { it.extension == "kt" && RepoFiles.inPackage(it, "dev/glassworks") }
         // Imports, and fully qualified names anywhere else (`dev.glassworks.s1.X(...)` needs no import), outside strings
-        // (the root helper's `/data/data/sh.edm.s1kiosk` path is the app's id, not its code). A name's package is the
-        // part before its first capitalised segment.
+        // (the root helper's `/data/data/sh.edm.s1kiosk` path is the app's id, not its code). A name is an app's when it
+        // is in or under one of the apps' packages, so a lowercase top-level declaration (`dev.glassworks.s1.helper`) counts.
         val qualified = Regex("""\b(?:sh\.edm|dev\.glassworks)(?:\.[A-Za-z0-9_]+)+""")
-        fun pkgOf(name: String) = name.split('.').takeWhile { it.firstOrNull()?.isLowerCase() == true }.joinToString(".")
-        fun isApp(name: String) = name.startsWith("sh.edm.") && libPackages.none { name == it || name.startsWith("$it.") } || pkgOf(name) in appPackages
+        fun under(name: String, pkgs: Set<String>) = pkgs.any { name == it || name.startsWith("$it.") }
+        fun isApp(name: String) = !under(name, libPackages) && (name.startsWith("sh.edm.") || under(name, appPackages))
         val string = Regex(""""(?:\\.|[^"\\])*"""")
         val bad = sources.flatMap { f ->
             f.readLines().withIndex().filter { (_, line) ->
