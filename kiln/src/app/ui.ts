@@ -798,9 +798,12 @@ class Installer {
       if (left) return;
       left = true;
       signingIn = false;
-      // the radio step reads the panel first: if that fails, this step is still on screen, so it works again
+      // The radio step reads the panel first: if that fails, this step is still on screen and works again. A failed
+      // move-on after a sign-in isn't retried by itself (no loop on a panel that stays away): the step shows Continue,
+      // as the panel is signed in, and Continue retries.
       this.radioStep().catch((e) => {
         left = false;
+        btn.disabled = false;
         st.className = 'status err';
         st.textContent = (e as Error).message;
       });
