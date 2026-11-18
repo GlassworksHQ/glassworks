@@ -6,6 +6,7 @@ package dev.glassworks.setup
 
 import android.content.Context
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import dev.glassworks.pane.SetupCard
 import dev.glassworks.pane.SetupHost
 import dev.glassworks.pane.SetupOp
@@ -64,10 +65,18 @@ class ThisDeviceStep(
     private inner class Screen(private val context: Context, private val host: SetupHost) : SetupScreen {
         private val homeTile = StatusTile(context).apply { title.text = HOME }
         private val adminTile = StatusTile(context).apply { title.text = SCREEN }
-        private val rows = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(homeTile.view, LinearLayout.LayoutParams(-1, -2))
-            addView(adminTile.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = Glass(context).px(TILE_GAP_DP) })
+        /**
+         * The rows scroll in the room above the card's buttons, so a large font never cuts their lines (CodeRabbit on
+         * #524). The buttons are the card's foot and stay put.
+         */
+        private val rows = ScrollView(context).apply {
+            isVerticalFadingEdgeEnabled = true
+            setFadingEdgeLength(Glass(context).px(FADE_DP))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(homeTile.view, LinearLayout.LayoutParams(-1, -2))
+                addView(adminTile.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = Glass(context).px(TILE_GAP_DP) })
+            }, android.widget.FrameLayout.LayoutParams(-1, -2))
         }
         private var last: Grants? = null
         /** Android had no page or dialog to open for that row. */
@@ -135,5 +144,6 @@ class ThisDeviceStep(
         const val ADMIN_EXPLANATION = "Glassworks turns the screen off when the panel is idle, and nothing else. " +
             "Turn this off before you uninstall Glassworks."
         const val TILE_GAP_DP = 11f
+        const val FADE_DP = 28f
     }
 }

@@ -52,7 +52,7 @@ class ThisDeviceStepTest {
 
     private fun bound(r: Rig) = Card().also { r.screen.bind(it, entered = true) }
 
-    private fun details(card: Card): List<String> = (card.content as android.view.ViewGroup).let { rows ->
+    private fun details(card: Card): List<String> = ((card.content as android.widget.ScrollView).getChildAt(0) as android.view.ViewGroup).let { rows ->
         (0 until rows.childCount).map { i ->
             fun texts(v: View): List<String> = if (v is android.widget.TextView) listOf(v.text.toString())
                 else if (v is android.view.ViewGroup) (0 until v.childCount).flatMap { texts(v.getChildAt(it)) } else emptyList()
