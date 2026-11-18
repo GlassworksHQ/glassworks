@@ -9,9 +9,12 @@
 # device-unique values: never paste those into an issue or PR.
 set -euo pipefail
 OUT=$1; MIN=${2:-60}
-# the counts merge every save in samples/: an earlier run's saves would count again
-if [ -n "$(ls -A "$OUT" 2>/dev/null)" ]; then echo "memory-hour: $OUT isn't empty; give each run a new folder" >&2; exit 1; fi
-mkdir -p "$OUT/samples"
+# the counts merge every save in samples/: an earlier run's saves would count again. A plain mkdir reserves the
+# folder, so a second run started on it at the same time stops here.
+mkdir -p "$OUT"
+entries=$(ls -A "$OUT") || { echo "memory-hour: can't read $OUT" >&2; exit 1; }
+[ -z "$entries" ] || { echo "memory-hour: $OUT isn't empty; give each run a new folder" >&2; exit 1; }
+mkdir "$OUT/samples" || { echo "memory-hour: another run took $OUT" >&2; exit 1; }
 read -ra ADB <<< "${MIRROR_ADB:?set MIRROR_ADB to the adb command for the Mirror, e.g. adb -s <serial>}"
 P=dev.glassworks.generic_android.legacy
 # One remote command line, quoted for the Mirror's shell: adb shell joins its arguments with spaces.
