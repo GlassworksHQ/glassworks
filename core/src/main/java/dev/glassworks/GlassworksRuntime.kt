@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import dev.glassworks.engine.Engine
 import dev.glassworks.frame.Frame
+import dev.glassworks.frame.Input
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.manage.PanelCode
 import dev.glassworks.pane.CantRun
@@ -89,6 +90,9 @@ class GlassworksRuntime(
 
     private var deviceSteps: List<SetupStep>? = null
 
+    /** The frame's screen takes a tap: read once, when setup first asks (a binder call). */
+    private val touch by lazy { frame.input == Input.TOUCH }
+
     /**
      * Silent updates (#422): shown during setup whenever updates ask for a tap and there's a way to change that. The
      * answer is read on every ask, at most once a second, once [UpdateManager] has read the frame's root update service.
@@ -98,7 +102,7 @@ class GlassworksRuntime(
             val ctx = context.applicationContext
             val prefs = KioskPrefs(ctx)
             val silent = SilentUpdates.Fresh { updates?.rootService?.let { SilentUpdates.read(ctx, it) } }
-            listOf(SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }))
+            listOf(SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }, { touch }))
         }.also { deviceSteps = it }
     }
 
