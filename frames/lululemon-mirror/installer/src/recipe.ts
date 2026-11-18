@@ -11,6 +11,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { Steps, dropAdmin, grantPermissions, kioskVersion, q, startApp, type StepFn } from '@glassworks/app-adb';
 import { GLASSWORKS, type MirrorApp } from './app';
 import { checkMirrorApk } from './image';
+import { describeMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
 
 const HOME_INTENT = 'am start -a android.intent.action.MAIN -c android.intent.category.HOME';
 /** The home app the Mirror had before ours, kept on the Mirror for undo. adb's shell owns /data/local/tmp. */
@@ -63,8 +64,11 @@ export interface MirrorOptions extends HomeWait {
   locale?: string;
 }
 
-/** `home`: whether Android now opens the wanted app as the home screen; `unconfirmed` if the wait ran out. */
-export interface Installed { app: AppVersion; home: 'set' | 'unconfirmed'; previousHome?: string }
+/**
+ * `home`: whether Android now opens the wanted app as the home screen; `unconfirmed` if the wait ran out.
+ * `updates`: whether its updates install by themselves, read back (a normal app here, unless it updated the image's copy).
+ */
+export interface Installed { app: AppVersion; home: 'set' | 'unconfirmed'; previousHome?: string; updates: MirrorUpdates }
 export interface Removed { removed: boolean; home: 'set' | 'unconfirmed'; previousHome?: string }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -228,6 +232,8 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
 
   phase({ step: 'grant' });
   await grantPermissions(r, ours);
+  const updates = await readMirrorUpdates(p, ours);
+  r.detail(describeMirrorUpdates(updates));
 
   phase({ step: 'start' });
   r.step(`Start ${ours.name}`);
@@ -235,7 +241,7 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
 
   r.step(`Make ${ours.name} the home screen`);
   const home = await waitForHome(p, r, ours.name, isOurs, o);
-  return { app, home, ...(previousHome ? { previousHome } : {}) };
+  return { app, home, updates, ...(previousHome ? { previousHome } : {}) };
 }
 
 /**

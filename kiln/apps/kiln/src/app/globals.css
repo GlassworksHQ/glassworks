@@ -307,3 +307,12 @@ details > summary, .disclose { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* issue 422: Done's Silent updates block on every frame (components/SilentUpdates.tsx), the grants row's look with a line that says what it means */
+.su { display: grid; gap: 6px; border: 1px solid var(--edge); border-radius: 12px; padding: 11px 14px; }
+.su .spread > span { font-size: 14px; }
+.su i { font-style: normal; font-size: 13px; }
+.su .y { color: var(--ok-ink); }
+.su .n { color: var(--faint); }
+.su .w { color: var(--turn-ink); }
+.su .small { line-height: 1.45; }
