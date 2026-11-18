@@ -60,7 +60,11 @@ class ManageFixture(
             userGate?.await()
             return if (accessToken in refusedTokens) null else user
         }
-        override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean { revoked += refreshToken; return revokeWorks }
+        override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean {
+            revoked += refreshToken
+            revokeGate?.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            return revokeWorks
+        }
         override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens {
             refreshed += refreshToken
             return refreshAnswer
@@ -75,7 +79,10 @@ class ManageFixture(
 
     val warnings = Collections.synchronizedList(ArrayList<String>())
     val events = Collections.synchronizedList(ArrayList<String>())
-    var revokeWorks = true
+    @Volatile var revokeWorks = true
+
+    /** While set, a revoke waits for it, as when Home Assistant is slow to answer. */
+    @Volatile var revokeGate: java.util.concurrent.CountDownLatch? = null
     var canReboot = true
     val actions = object : PanelActions {
         override fun reloadDashboard(): String? { ran += "reload"; return null }

@@ -94,6 +94,26 @@ class ManageKeptSignInTest {
         assertTrue("nothing left to end", f.revoked.isEmpty())
     }
 
+    @Test fun tryAgainWhileTheSweepIsStillEndingItIsntReportedDone() {
+        val b = signedIn()
+        val csrf = b.csrf()
+        f.revokeWorks = false
+        assertEquals(502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+        // The sweep tries again, and Home Assistant is slow to answer (and won't take it this time either).
+        val gate = java.util.concurrent.CountDownLatch(1)
+        f.revokeGate = gate
+        val sweeping = Thread { f.server.sweep() }.apply { start() }
+        val deadline = System.currentTimeMillis() + 5_000
+        while (f.revoked.size < 3 && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertEquals("the sweep is ending it", 3, f.revoked.size)
+        assertEquals("not done while the sweep may still fail", 502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+        gate.countDown()
+        sweeping.join(5_000)
+        f.revokeGate = null
+        f.revokeWorks = true
+        assertEquals("tried again once the sweep is done", 200, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+    }
+
     @Test fun theSweepTriesAgainAnEndHomeAssistantDidntTake() {
         val b = signedIn()
         f.revokeWorks = false

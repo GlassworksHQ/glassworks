@@ -95,13 +95,25 @@ class ManageServer(
      */
     private val kept = java.util.concurrent.ConcurrentHashMap<String, HaSignIn.Kept>()
 
-    /** A signed-out session's questions go with it, and its kept Home Assistant sign-in is ended in HA. */
+    /**
+     * A signed-out session's questions go with it, and its kept Home Assistant sign-in is ended in HA. False when HA
+     * didn't confirm it, also while another call (the sweep, a second Try again) is still ending it: that one may fail
+     * yet, so this one can't say it's done (CodeRabbit on #534).
+     */
     private fun forget(session: String): Boolean {
         asked.entries.removeIf { it.value.session == session }
-        val k = kept.remove(session) ?: unrevoked.remove(session) ?: return true
-        // HA didn't take the revoke: no longer usable, but kept aside to try again (Try again, the sweep).
-        return signIn.end(k).also { ended -> if (!ended) unrevoked[session] = k }
+        if (!ending.add(session)) return false
+        try {
+            val k = kept.remove(session) ?: unrevoked.remove(session) ?: return true
+            // HA didn't take the revoke: no longer usable, but kept aside to try again (Try again, the sweep).
+            return signIn.end(k).also { ended -> if (!ended) unrevoked[session] = k }
+        } finally {
+            ending.remove(session)
+        }
     }
+
+    /** Sessions whose kept sign-in a call to [forget] is ending in Home Assistant right now. */
+    private val ending: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** Kept sign-ins whose revoke Home Assistant didn't take: not usable, tried again by [sweep] and by Try again. */
     private val unrevoked = java.util.concurrent.ConcurrentHashMap<String, HaSignIn.Kept>()

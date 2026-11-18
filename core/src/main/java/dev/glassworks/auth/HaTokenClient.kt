@@ -76,7 +76,10 @@ class HaTokenClient(private val http: HttpPoster) {
         return TokenResult.parse(status, body)
     }
 
-    /** Best effort; HA always answers 200. Returns false only on a transport error. */
+    /**
+     * True when Home Assistant took it: HA answers 200 to every revoke, even of a token it doesn't know. A transport
+     * error or any other status (a proxy's 502 or 503 in front of HA) isn't a revoke (CodeRabbit on #534).
+     */
     fun revoke(auth: StoredAuth): Boolean =
-        http.postForm(OAuth.trimBase(auth.haBase) + "/auth/revoke", OAuth.form("token" to auth.refreshToken)).first > 0
+        http.postForm(OAuth.trimBase(auth.haBase) + "/auth/revoke", OAuth.form("token" to auth.refreshToken)).first in 200..299
 }

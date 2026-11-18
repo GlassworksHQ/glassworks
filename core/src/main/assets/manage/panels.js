@@ -77,13 +77,18 @@ function dropOthers() {
 
 const tokenCall = (form) => tokenRequest(ha, form);
 
-/** A current access token, renewed from the refresh token a minute before it runs out; null when signed out. */
+/**
+ * A current access token, renewed from the refresh token a minute before it runs out; null when signed out,
+ * also when a sign-out came while it was being renewed: the renewal then stores nothing (CodeRabbit on #534).
+ */
 async function token() {
   const t = stored();
   if (!t) return null;
   if (Date.now() < t.until - 60_000) return t.access;
   if (t.viaPanel) return fromPanel();
+  const mine = generation;
   const j = await tokenCall({ grant_type: 'refresh_token', refresh_token: t.refresh, client_id: clientId });
+  if (mine !== generation) return null;
   keep(KEY, JSON.stringify({ ...t, access: j.access_token, until: Date.now() + j.expires_in * 1000 }));
   return j.access_token;
 }
@@ -121,7 +126,9 @@ function signIn() {
 /** Home Assistant drops the refresh token and every access token made from it: no panel can use them after. */
 /** An access token from the sign-in this panel keeps for the Manage session, kept in the tab; null when it keeps none. */
 async function fromPanel() {
+  const mine = generation;
   const a = haSignIn ? await panelAccess(csrf) : null;
+  if (mine !== generation) return null;
   // An outage keeps the sign-in where it is: the page says so and tries again, rather than asking for a new one.
   if (a && a.outage) throw new Error(a.problem);
   if (!a) { keep(KEY, null); return null; }
@@ -185,7 +192,13 @@ async function open(p) {
   // this tab elsewhere; it can't read it, being another origin) gives it nothing more.
   const name = 'gw-manage-' + random(9).replace(/[^A-Za-z0-9]/g, '');
   const tab = window.open('about:blank', name);
+  const mine = generation;
   const access = await token().catch(() => null);
+  // Signed out meanwhile: nothing goes to the panel, and the page keeps what the sign-out drew.
+  if (mine !== generation) {
+    if (tab) tab.close();
+    return;
+  }
   if (!access) {
     if (tab) tab.close();
     return start();
@@ -330,6 +343,7 @@ async function start() {
   }
   // Signed in to this Manage page with Home Assistant: the panel's kept sign-in serves, no second one (#466 panel run).
   let access = await token().catch(() => null);
+  if (mine !== generation) return;
   if (!access && haSignIn) {
     try {
       access = await fromPanel();

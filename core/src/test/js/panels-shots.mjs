@@ -84,6 +84,10 @@ const handoffs = [];
 let tokenDelayMs = 0;
 /** Whether this panel keeps the Manage sign-in's Home Assistant sign-in for All panels (#466 one sign-in). */
 let panelSignIn = false;
+/** How long this panel takes to renew the kept sign-in's access token. */
+let accessDelayMs = 0;
+/** Whether this panel confirms it ended its kept sign-in. */
+let forgetOk = true;
 /** Whether the fake Home Assistant takes a revoke. */
 let revokeOk = true;
 const initial = JSON.stringify(panels);
@@ -133,7 +137,11 @@ async function handle(req, res) {
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/access' && req.method === 'POST' && panelSignIn) {
     const f = await form(req);
     if (f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
+    if (accessDelayMs) await new Promise((ok) => setTimeout(ok, accessDelayMs));
     return send(res, 200, { access_token: 'fake-access-from-panel', expires_in: 1800 });
+  }
+  if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/forget' && req.method === 'POST') {
+    return forgetOk ? send(res, 200, { ok: true }) : send(res, 502, { problem: "Home Assistant didn't confirm it ended the sign-in. Try again." });
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
@@ -351,6 +359,22 @@ try {
   assert.ok(!requests.slice(since).some((r) => r.includes('/auth/authorize')), "no trip to Home Assistant's login page");
   assert.ok(requests.slice(since).includes('POST kitchen-panel.local:8099/manage/ha/access'), "the token came from this panel's kept sign-in");
   await shot('11-one-sign-in');
+  // Sign out while Manage waits for a slow renewal from the panel, and the panel can't confirm the sign-out: the renewal's
+  // late answer must not sign the page back in, and nothing goes to the other panel (CodeRabbit on #534).
+  await js("const t = JSON.parse(sessionStorage.getItem('gw-ha')); t.until = Date.now(); sessionStorage.setItem('gw-ha', JSON.stringify(t));");
+  accessDelayMs = 2_000;
+  forgetOk = false;
+  const handoffsBefore = handoffs.length;
+  await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
+  await sleep(300);
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Sign out').click()");
+  await until("document.querySelector('#gw-list .note')?.textContent.includes(\"didn't confirm it ended the sign-in\")", 'the sign-out warning');
+  await sleep(2_500);
+  accessDelayMs = 0;
+  forgetOk = true;
+  assert.equal(await js("sessionStorage.getItem('gw-ha')"), null, 'the late renewal stored no sign-in');
+  assert.equal(handoffs.length, handoffsBefore, 'nothing went to the other panel after the sign-out');
+  assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes(\"didn't confirm it ended the sign-in\")"), 'the sign-out warning stays');
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
   assert.ok(!haAddressSent, "no copy sent a panel's own Home Assistant address");
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');
