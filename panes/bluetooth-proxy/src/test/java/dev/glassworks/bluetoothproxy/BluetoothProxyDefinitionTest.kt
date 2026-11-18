@@ -6,8 +6,15 @@ import dev.glassworks.esphome.bluetoothproxy.BleScanner
 import dev.glassworks.esphome.bluetoothproxy.GattRadio
 import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 import dev.glassworks.esphome.bluetoothproxy.ScanPower
+import dev.glassworks.esphome.DeviceIdentity
+import dev.glassworks.pane.IN_HOME_ASSISTANT
+import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PaneState
+import dev.glassworks.pane.SettingsItem
+import dev.glassworks.pane.paneSections
 import dev.glassworks.pane.paneState
+import dev.glassworks.platform.AppBuild
+import java.util.concurrent.Executors
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -59,6 +66,32 @@ class BluetoothProxyDefinitionTest {
 
     @Test fun noBluetoothLeStillCantRunOnThisPanel() {
         assertEquals("it has no Bluetooth LE", BluetoothProxyDefinition(file, Radio(ScanFailure.NO_BLE)).settings().single().unavailable())
+    }
+
+    /**
+     * #212's overlap (#235): the page lists the proxy's two entities itself and sets no `covers`, so
+     * the core adds no "In Home Assistant" list of its own and each entity shows once.
+     */
+    @Test fun thePageListsItsEntitiesOnce() {
+        file.edit().putBoolean(BluetoothProxyPrefs.KEY_ENABLED, true).commit()
+        val def = BluetoothProxyDefinition(file, Radio(null), page = { _, _ -> error("not drawn here") })
+        val identity = DeviceIdentity(
+            name = "test-panel", friendlyName = "Test Panel", macAddress = "02:00:00:00:00:01",
+            esphomeVersion = "2026.10.2", compilationTime = "test", manufacturer = "Test", model = "JVM", voiceFeatures = 0,
+        )
+        val ctx = PaneContext(
+            RuntimeEnvironment.getApplication(), prefs = { throw IllegalArgumentException(it) }, identity,
+            publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
+            build = AppBuild("1.0.0", 10000, debug = false),
+        )
+        val device = Executors.newSingleThreadScheduledExecutor()
+        try {
+            val pane = def.pane(ctx, device)
+            val page = paneSections(listOf(def), running = { pane }).single().items
+                .flatMap { if (it is SettingsItem.Native) it.twin() else listOf(it) }
+            val rows = page.filterIsInstance<SettingsItem.States>().filter { it.title == IN_HOME_ASSISTANT }.flatMap { it.rows() }.map { it.name }
+            assertEquals(listOf(ProxyPage.ADS_ENTITY, ProxyPage.STATUS_ENTITY), rows)
+        } finally { device.shutdownNow() }
     }
 
     @Test fun theModeIsKept() {

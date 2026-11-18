@@ -50,9 +50,7 @@ class HaUrlsTest {
     }
 
     @Test
-    fun helloAndManifest() {
-        assertTrue(HaUrls.isHomeAssistantHello("Home Assistant 2026.11.0"))
-        assertFalse(HaUrls.isHomeAssistantHello("aioesphomeapi"))
+    fun manifest() {
         assertTrue(HaUrls.looksLikeHaManifest(200, """{"background_color":"#FFFFFF","name":"Home Assistant","short_name":"Assistant"}"""))
         assertFalse(HaUrls.looksLikeHaManifest(200, """{"name":"Grafana"}"""))
         assertFalse(HaUrls.looksLikeHaManifest(404, "{}"))

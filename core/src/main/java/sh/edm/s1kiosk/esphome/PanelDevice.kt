@@ -41,7 +41,6 @@ import sh.edm.s1kiosk.dashboard.Dashboard
 import sh.edm.s1kiosk.dashboard.DashboardOptions
 import sh.edm.s1kiosk.dashboard.Dashboards
 import sh.edm.s1kiosk.dashboard.StableChange
-import sh.edm.s1kiosk.discovery.HaUrls
 import sh.edm.s1kiosk.setup.SetupSignals
 import sh.edm.s1kiosk.update.UpdateManager
 import sh.edm.s1kiosk.voice.ExoAudioPlayer
@@ -334,12 +333,12 @@ class PanelDevice(
         panes.forEachPane("bind") { it.bind(s) }
         s.onCommand = { exec.execute { s.publishStates() } }
         s.onClientHello = { info, addr ->
-            if (HaUrls.isHomeAssistantHello(info)) SetupSignals.onHaHello()
+            if (ApiServer.isHomeAssistant(info)) SetupSignals.onHaHello()
             onApiHello(info, addr)
         }
         // HA subscribes only after it has added the panel: remember that (setup screen, step 2).
         s.onStatesSubscribed = { info, addr, authenticated ->
-            if (HaUrls.isHomeAssistantHello(info)) {
+            if (ApiServer.isHomeAssistant(info)) {
                 if (!prefs.haSeen) { prefs.haSeen = true; EspHomeLog.i("Home Assistant has added the panel") }
                 SetupSignals.onHaSubscribed()
                 emit(PanelEvent.HomeAssistantSubscribed(addr, authenticated))

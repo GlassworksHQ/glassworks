@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
+import dev.glassworks.esphome.ApiServer
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.auth.HttpPoster
 import java.net.InetAddress
@@ -61,7 +62,7 @@ class HaDiscovery(
 
     /** From the ESPHome API server (any thread). */
     fun onApiHello(clientInfo: String, remote: InetAddress?) {
-        if (!HaUrls.isHomeAssistantHello(clientInfo) || remote == null || esphomeTried) return
+        if (!ApiServer.isHomeAssistant(clientInfo) || remote == null || esphomeTried) return
         esphomeTried = true
         exec.execute {
             if (prefs.haUrlSource == SOURCE_MANUAL || prefs.haUrlSource == SOURCE_MDNS) return@execute

@@ -184,13 +184,20 @@ class BluetoothProxyEngineTest {
         assertEquals("nothing forwarded", emptyList<List<RawAdvertisement>>(), sent)
     }
 
-    @Test fun aRefusedSubscriberShowsAsNeedingTheKeyUntilOneSubscribes() {
-        engine.onRefused()
+    @Test fun aRefusedHomeAssistantShowsAsNeedingTheKeyUntilOneSubscribes() {
+        engine.onRefused("Home Assistant 2026.11.0")
         loop.advanceBy(0)
         assertTrue(engine.status.needsKey)
         assertEquals("no scan for a refused client", emptyList<String>(), scanner.calls)
         subscribe(true)
         assertFalse("a subscriber came: the key works", engine.status.needsKey)
+    }
+
+    /** #226's review: a keyless script on the LAN is refused, but that says nothing about Home Assistant. */
+    @Test fun aRefusedClientThatIsntHomeAssistantDoesntSayHaNeedsTheKey() {
+        engine.onRefused("aioesphomeapi")
+        loop.advanceBy(0)
+        assertFalse(engine.status.needsKey)
     }
 
     @Test fun bluetoothComingBackRetriesAtOnce() {

@@ -19,6 +19,13 @@ publish the matching section below as the release notes.
 - **The Bluetooth adapter's own MAC.** Set `ApiServer.bluetoothMacAddress` and the proxy sends it as
   `bluetooth_mac_address` (DeviceInfo field 18) and in the capabilities, as an ESPHome proxy does; Home
   Assistant then keys the scanner on it. Unset, nothing changes: HA keys it on the device MAC.
+- **`ApiServer.isHomeAssistant(clientInfo)`** tells Home Assistant's `HelloRequest.client_info` from
+  any other client's.
+
+### Changed
+- **`BluetoothProxyHandler.onRefused` now gets the refused client's `client_info`.** A device can then
+  say "Home Assistant needs the key" only when it was Home Assistant, not a keyless script on the LAN.
+  Implementations of `onRefused()` need the new parameter, so the next release is 0.2.0 (#246).
 
 ### Fixed
 - **Home Assistant finds the Bluetooth proxy's flags where API 1.15 and later put them.** With

@@ -23,7 +23,10 @@ data class ProxyStatus(
     val lastHour: List<Int> = emptyList(),
     /** After a failure: when the next try is due, in ms from now. Null when none is waiting. */
     val retryInMs: Long? = null,
-    /** A client was refused for want of the device's key, and none has subscribed since. */
+    /**
+     * Home Assistant was refused for want of the device's key, and no client has subscribed since. A
+     * refused script on the LAN doesn't count: HA may not need the key at all.
+     */
     val needsKey: Boolean = false,
 )
 
@@ -131,7 +134,10 @@ class BluetoothProxyEngine internal constructor(
         }
     }
 
-    override fun onRefused() = loop.execute { if (!closed && !subscribed) needsKey = true }
+    override fun onRefused(clientInfo: String) {
+        if (!ApiServer.isHomeAssistant(clientInfo)) return
+        loop.execute { if (!closed && !subscribed) needsKey = true }
+    }
 
     override fun onSubscribed(subscribed: Boolean) = loop.execute {
         if (closed) return@execute
