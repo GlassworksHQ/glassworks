@@ -84,11 +84,11 @@ describe('frame designs', () => {
     expect(RENDERS[id], 'Kiln imports it').toMatch(/render/);
   });
 
-  it('the S1 is installable from Kiln; the planned frames aren\'t', () => {
+  it('the S1 is installable from Kiln; the frames that don\'t ship yet aren\'t', () => {
     expect(read('aqara-s1-plus')).toMatchObject({ status: 'beta', kiln: '/aqara-s1-plus', recovery: 'recovery.json' });
     expect(read('aqara-s1-plus').abis, 'the S1 runs a 32-bit userspace').toEqual(['armeabi-v7a']);
-    for (const id of ['lululemon-mirror', 'generic-android', 'google-pixel-tablet']) {
-      expect(read(id), id).toMatchObject({ status: 'planned' });
+    for (const [id, status] of [['lululemon-mirror', 'development'], ['generic-android', 'development'], ['google-pixel-tablet', 'planned']] as const) {
+      expect(read(id), id).toMatchObject({ status });
       expect(read(id).kiln, id).toBeUndefined();
     }
   });

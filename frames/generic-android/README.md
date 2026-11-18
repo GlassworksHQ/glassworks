@@ -23,8 +23,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-planned-on-dark.svg">
-    <img alt="Status: planned" src="https://www.glassworks.dev/brand/badge-status-planned-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-under-development-on-dark.svg">
+    <img alt="Status: under development" src="https://www.glassworks.dev/brand/badge-status-under-development-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -44,7 +44,7 @@ A Glassworks **frame**: the device definition for the Generic Android. Its data 
 
 ## Status
 
-**Status: planned.** The frame has its own app, **Glassworks** (`dev.glassworks.generic_android`, built from
+**Status: under development.** The frame has its own app, **Glassworks** (`dev.glassworks.generic_android`, built from
 [`android/`](android)), for Android 8.0 or newer (`minSdk` 26; Android 6 and 7 get the separate legacy build,
 #198). It has run on a Pixel Tablet (Android 17, 2026-11-16, #364): the dashboard, Home Assistant adoption as its
 own device, the hidden panes and an update in place. The wake word, Music Assistant and the light sensor haven't

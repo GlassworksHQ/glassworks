@@ -23,8 +23,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-planned-on-dark.svg">
-    <img alt="Status: planned" src="https://www.glassworks.dev/brand/badge-status-planned-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-under-development-on-dark.svg">
+    <img alt="Status: under development" src="https://www.glassworks.dev/brand/badge-status-under-development-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -77,7 +77,7 @@ Kiln show ([how](../README.md#credits)).
 
 ## Status
 
-**Status: planned.** There is no release for it yet, and Kiln's install is test only. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
+**Status: under development.** The legacy build has run on a real Mirror, but there is no release for it yet, and Kiln's install is test only. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
 
 The original version runs Android 6.0.1, and S1 Kiosk needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Kiln's Mirror recipe installs the legacy build of Glassworks for generic Android (`dev.glassworks.generic_android.legacy`, #198) instead, which asks for Android 6.0 (API 23). It has run on a Mirror: it starts with no crashes and stands upright (2026-11-17, #443), and the dashboard loads after a sign-in from a phone (2026-11-17, #459). It runs a frozen engine and opens only your Home Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
 

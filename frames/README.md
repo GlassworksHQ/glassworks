@@ -15,8 +15,8 @@ and glassworks.dev read them from here.
 | Frame | Status | Installer | Design |
 |---|---|---|---|
 | [`aqara-s1-plus`](aqara-s1-plus) | Beta | yes | `frame.json`, `recovery.json` |
-| [`lululemon-mirror`](lululemon-mirror) | Planned | test only: over fastboot with the community image, or adb onto it (`/lululemon-mirror?apk=local`) | `frame.json` only (no recovery drawing yet) |
-| [`generic-android`](generic-android) | Planned | headless recipe, no screen yet (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
+| [`lululemon-mirror`](lululemon-mirror) | Under development | test only: over fastboot with the community image, or adb onto it (`/lululemon-mirror?apk=local`) | `frame.json` only (no recovery drawing yet) |
+| [`generic-android`](generic-android) | Under development | headless recipe, no screen yet (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
 | [`google-pixel-tablet`](google-pixel-tablet) | Planned | none of its own: it installs as `generic-android` | `frame.json` only. A tested device: the generic app as it is |
 
 ### Three kinds of device
@@ -304,8 +304,8 @@ Worked out from today's data (2026-11-17):
 | Frame | Word | Why |
 |---|---|---|
 | `aqara-s1-plus` | Good | Everything that counts is ticked but hardware: the wall base sends no button presses over its UART, and the Ethernet base isn't supported ([base-protocol.md](aqara-s1-plus/research/base-protocol.md)) |
-| `lululemon-mirror` | Not rated yet | Planned, and not in Kiln yet. Its silent updates and home screen were seen with the probe app, not yet with Glassworks, so they're marked unverified. Nothing records it coming back after a reboot, so that isn't checked |
-| `generic-android` | Not rated yet | Planned, and not in Kiln yet. Silent updates and hardware depend on the device |
+| `lululemon-mirror` | Not rated yet | Under development, and not in Kiln yet. Its silent updates were seen with the probe app only, and its home screen with Glassworks too (2026-11-17); both stay marked unverified. Nothing records it coming back after a reboot, so that isn't checked |
+| `generic-android` | Not rated yet | Under development, and not in Kiln yet. Silent updates and hardware depend on the device |
 | `google-pixel-tablet` | Not rated yet | Planned. The root's run on 2026-11-17 (`run-node.ts --plan`, then `--install`, generic test build 9755076; Home Assistant added it and the QR sign-in loaded the dashboard) gives setup ✓. Install isn't in Kiln on main and needs USB debugging. Its *Silent updates* sensor, hardware and three kiosk checks aren't read yet |
 
 ## What came from glassworks.dev

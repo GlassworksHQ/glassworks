@@ -1,6 +1,6 @@
 'use client';
 // /lululemon-mirror: the Mirror's test install. Off unless the address has ?apk=local (or a demo):
-// the Mirror is a planned frame, and the only APK for it is a test build picked from this computer.
+// the Mirror is under development, and the only APK for it is a test build picked from this computer.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
 import { Assets, fmtSize } from '@glassworks/kiln-core';
@@ -106,7 +106,7 @@ function Off() {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">The Mirror doesn&apos;t install from Kiln yet.</h2>
-      <p className="lede">It is a planned frame. Follow it on GitHub, or pick another panel.</p>
+      <p className="lede">It is under development, with no release yet. Follow it on GitHub, or pick another panel.</p>
       <div className="foot">
         <a className="link" href="https://github.com/GlassworksHQ/glassworks/tree/main/frames/lululemon-mirror">The Mirror on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
