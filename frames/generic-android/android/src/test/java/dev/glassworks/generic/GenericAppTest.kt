@@ -176,6 +176,15 @@ class GenericAppTest {
     }
 
     /**
+     * #556: the /system copy asks to change networks it didn't save, so Improv can replace the one Kiln wrote into the
+     * Mirror's image when its password is wrong. An update can never add the permission.
+     */
+    @Test fun everyBuildAsksToReplaceASavedNetwork() {
+        val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
+        assertTrue("android.permission.OVERRIDE_WIFI_CONFIG" in requested)
+    }
+
+    /**
      * #198: on the Mirror, Kiln flashes the app into /system/priv-app, where Android 6 grants these. An update
      * gets only the privileged permissions its /system copy asked for, so every build asks for them. And Kiln
      * makes it the Mirror's home screen only with MAIN, HOME and DEFAULT in one intent filter (#385).
