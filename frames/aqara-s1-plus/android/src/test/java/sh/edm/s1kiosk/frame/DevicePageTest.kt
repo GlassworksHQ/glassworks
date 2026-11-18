@@ -165,10 +165,13 @@ class DevicePageTest {
     @Test fun genericAndroidsRows() {
         val s = GenericAndroid(app).deviceSection(app)
         assertEquals("Pixel Tablet", s.title)
-        assertEquals(listOf("Silent updates", "Device owner", "Model", "Android"), titles(s))
+        assertEquals(listOf("Silent updates", "Home screen", "Turn the screen off", "Device owner", "Model", "Android"), titles(s))
         val info = s.items.filterIsInstance<SettingsItem.Info>().associate { it.title() to it.detail() }
         assertEquals("Google Pixel Tablet", info["Model"])
         assertEquals("No", info["Device owner"])
+        // setup's This device step (#403): neither is set on a fresh install, and each says where to set it
+        assertEquals(GenericAndroid.HOME_NO, info["Home screen"])
+        assertEquals(GenericAndroid.SCREEN_OFF_NO, info["Turn the screen off"])
         assertEquals(
             "Robolectric's SDK 34, Install unknown apps not allowed",
             "No: Android needs “Install unknown apps” allowed for the app. To change it: allow it in Android's settings, under Apps", info["Silent updates"],
