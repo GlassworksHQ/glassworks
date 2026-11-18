@@ -16,7 +16,7 @@ import java.util.Locale
  * Reached by reflection (hidden API). If the platform refuses, it logs why and changes nothing.
  */
 object SystemLocale {
-    private const val TAG = "S1Locale"
+    private const val TAG = "Glassworks.Locale"
 
     /** Parses a BCP 47 tag such as `en-US`; null if it isn't a plain language[-region] tag. */
     fun parse(tag: String): Locale? {

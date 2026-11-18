@@ -11,7 +11,14 @@ package dev.glassworks.frame
  * A mark must never match another device: a wrong name is worse than the ROM's. `DeviceFrameTest` checks each against
  * its frame.json.
  */
-class DeviceFrame(val id: String, val brand: String, val modelName: String, private val mark: (prop: (String) -> String) -> Boolean) {
+class DeviceFrame(
+    val id: String,
+    val brand: String,
+    val modelName: String,
+    private val mark: (prop: (String) -> String) -> Boolean,
+    /** The frame's own release line (#139) on a device with these system properties, or null when it has none. */
+    val release: (prop: (String) -> String) -> FrameRelease? = { null },
+) {
     /**
      * frame.json's `name`: [brand], a space, then [modelName], the product's model as Home Assistant's device info gives
      * it. Not frame.json's `model`, which is the 3D body.
@@ -26,9 +33,25 @@ class DeviceFrame(val id: String, val brand: String, val modelName: String, priv
          * `ro.build.fingerprint` (`Android/msm8916_64/…`) come from the community `system` image and name the
          * Qualcomm reference board, which other MSM8916 devices share.
          */
-        val LULULEMON_MIRROR = DeviceFrame("lululemon-mirror", "lululemon", "Studio Mirror") { prop ->
-            prop("ro.board.platform") == "msm8916" && prop("ro.bootimage.build.fingerprint").startsWith("mirror/mirror/")
-        }
+        val LULULEMON_MIRROR = DeviceFrame(
+            "lululemon-mirror", "lululemon", "Studio Mirror",
+            mark = { prop -> prop("ro.board.platform") == "msm8916" && prop("ro.bootimage.build.fingerprint").startsWith("mirror/mirror/") },
+            // Kiln stamps the version into build.prop at flash time. Nothing installs on the Mirror from Home Assistant.
+            release = { prop ->
+                FrameRelease("lululemon-mirror", FrameRelease.stamp("lululemon-mirror", prop), GLASS_PANES[prop("ro.build.fingerprint")], MIRROR_INSTALL)
+            },
+        )
+
+        /**
+         * The Glass Panes images by their `ro.build.fingerprint`, for a Mirror flashed before Kiln stamped the frame
+         * version (frames/lululemon-mirror/research/image-patch.md has both).
+         */
+        val GLASS_PANES = mapOf(
+            "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys" to "Glass Panes image 1",
+            "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys" to "Glass Panes image 2",
+        )
+
+        const val MIRROR_INSTALL = "To install it: flash the device again with Kiln, at ${FrameRelease.KILN}"
 
         val ALL: List<DeviceFrame> = listOf(LULULEMON_MIRROR)
 

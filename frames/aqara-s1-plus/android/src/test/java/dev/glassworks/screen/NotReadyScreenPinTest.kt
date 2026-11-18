@@ -54,8 +54,8 @@ class NotReadyScreenPinTest {
             h.advance(5_000)
             assertTrue("a fresh panel shows setup", h.rootChildren().filterIsInstance<SetupOverlay>().single().isShowing)
             h.advance(30_000)
-            assertEquals(listOf("sleep (idle 20s) admin=false"), h.logs("S1Kiosk.Screen").filter { it.startsWith("sleep (idle") })
-            assertTrue(h.logs("S1Kiosk.Screen").none { it.startsWith("stay on") })
+            assertEquals(listOf("sleep (idle 20s) admin=false"), h.logs("Glassworks.Screen").filter { it.startsWith("sleep (idle") })
+            assertTrue(h.logs("Glassworks.Screen").none { it.startsWith("stay on") })
         }
     }
 }

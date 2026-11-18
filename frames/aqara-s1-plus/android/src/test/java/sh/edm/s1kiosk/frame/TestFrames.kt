@@ -24,6 +24,8 @@ object TestFrames {
     val MIRROR_PROPS = mapOf(
         "ro.board.platform" to "msm8916",
         "ro.bootimage.build.fingerprint" to "mirror/mirror/msm8916_64:6.0.1/IFC-6309-2.0-MIR.S22Q401/2:user/test-keys",
+        // Glass Panes image 2, flashed before Kiln stamped the frame version (#139).
+        "ro.build.fingerprint" to "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys",
     )
 
     fun s1(): Frame = AqaraS1Plus()

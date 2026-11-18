@@ -44,7 +44,7 @@ class ScreenOffWifiScanner(
     private val onForegroundOnly: () -> Unit = {},
 ) : ServiceWork {
     companion object {
-        const val TAG = "S1Kiosk.Wifi"
+        const val TAG = "Glassworks.Wifi"
         private const val RETRY_MS = 120_000L
 
         private val CONNECTING = setOf(

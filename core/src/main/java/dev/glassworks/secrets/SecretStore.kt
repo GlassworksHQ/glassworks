@@ -94,7 +94,7 @@ class SecretStore(
 
         /** The Keystore key every secret on this panel is sealed with. Panels keep it: never rename it. */
         const val KEY_ALIAS = "glassworks_secrets"
-        const val TAG = "S1Kiosk.Secrets"
+        const val TAG = "Glassworks.Secrets"
 
         /** [stored] has the mark and, after it, base64 of at least an IV and a tag: plaintext can't pass by chance. */
         fun isSealed(stored: String): Boolean = stored.startsWith(MARK) &&

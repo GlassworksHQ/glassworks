@@ -21,7 +21,7 @@
 #   tools/voice/fetch-models.sh --openwakeword  # also the legacy openWakeWord models
 #
 # Env:
-#   MODELS_CACHE  host cache root (default: ~/.cache/s1kiosk)
+#   MODELS_CACHE  host cache root (default: ~/.cache/glassworks)
 #   OWW_VERSION   openWakeWord release tag (default: v0.5.1)
 set -euo pipefail
 
@@ -46,7 +46,7 @@ OWW_FILES=(
 
 PKG="sh.edm.s1kiosk"
 REMOTE_DIR="/sdcard/Android/data/${PKG}/files/models"
-ROOT="${MODELS_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/s1kiosk}"
+ROOT="${MODELS_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/glassworks}"
 MWW_CACHE="${ROOT}/microwakeword-${MWW_COMMIT}"
 OWW_CACHE="${ROOT}/openwakeword-${OWW_VERSION}"
 

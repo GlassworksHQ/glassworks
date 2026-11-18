@@ -186,7 +186,7 @@ class CameraPane(
 
     companion object {
         const val ID = "camera"
-        private const val TAG = "S1Kiosk.Camera"
+        private const val TAG = "Glassworks.Camera"
         const val CHECK_S = 10L
         const val NOT_ALLOWED = "Android hasn't allowed the camera"
         const val STREAM_FAILED = "The stream couldn't open its ports"
