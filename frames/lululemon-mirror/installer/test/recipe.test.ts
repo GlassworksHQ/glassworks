@@ -98,7 +98,7 @@ describe('install', () => {
     await expect(installMirror(p, { apk: fakeApk('com.nimrod.mirrorkiosk'), sleep: noSleep })).rejects.toThrow(/is com\.nimrod\.mirrorkiosk, not Glassworks \(dev\.glassworks\.generic_android\.legacy\).*Nothing was changed/);
     await expect(installMirror(p, { apk: new TextEncoder().encode('not an apk'), sleep: noSleep })).rejects.toThrow(/isn't an APK/);
     await expect(installMirror(p, { apk: fakeMirrorApk({ home: 'none' }), sleep: noSleep })).rejects.toThrow(/can't be the Mirror's home screen/);
-    // the old S1 Kiosk id is no longer the Mirror's app
+    // the S1 app's id is not the Mirror's app
     await expect(installMirror(p, { apk: fakeApk('sh.edm.s1kiosk'), sleep: noSleep })).rejects.toThrow(/is sh\.edm\.s1kiosk, not Glassworks/);
     expect(p.cmds.filter((c) => WRITES.test(c))).toEqual([]);
   });

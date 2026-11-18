@@ -124,7 +124,7 @@ describe('the headless install on a fake Mirror', () => {
     expect(d.lk.commands).toEqual([]);
   });
 
-  it('refuses S1 Kiosk\'s id, or an APK without a privileged permission, before the Mirror is touched', async () => {
+  it('refuses the S1 app\'s id, or an APK without a privileged permission, before the Mirror is touched', async () => {
     const img = await dryImage(work);
     for (const [apk, why] of [[fakeApk('sh.edm.s1kiosk', { minSdk: 23 }), /is sh\.edm\.s1kiosk, not Glassworks/], [fakeMirrorApk({ without: ['android.permission.REBOOT'] }), /doesn't ask for REBOOT/]] as const) {
       const d = dryDevices(img.bytes, () => {});

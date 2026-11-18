@@ -20,14 +20,14 @@ It has no network and no Home Assistant. It asks for four permissions:
 | `WRITE_SECURE_SETTINGS` | `signature\|privileged\|development` | the same, or any app adb grants it to with `pm grant` |
 | `MANAGE_USB` | `signature\|privileged` (AOSP 6.0.1_r81 `core/res/AndroidManifest.xml:1164`; the same on the Mirror, `dumpsys package android`, verified 2026-11-16) | the same as `INSTALL_PACKAGES` |
 
-## Why it is called S1 Kiosk
+## Its package and folder
 
-The Mirror pipeline normally installs Glassworks' legacy build (`dev.glassworks.generic_android.legacy`)
-and refuses `sh.edm.s1kiosk`. With `--probe` it takes `sh.edm.s1kiosk` instead, in the
-`/priv-app/S1Kiosk` folder the first runs were verified with, and the first boot starts
-`sh.edm.s1kiosk/.MainActivity`. So the probe keeps that package id and that activity name. It is still a different app, signed with a throwaway key: it can't update or be
-updated by a real S1 Kiosk build. That's fine on a test Mirror, where the probe is flashed in place
-of S1 Kiosk with a fresh userdata.
+The Mirror pipeline normally installs Glassworks' legacy build (`dev.glassworks.generic_android.legacy`).
+With `--probe` it takes the probe, `dev.glassworks.mirror.probe`, instead. Until #527 the probe borrowed
+the S1 app's id, `dev.glassworks.mirror.probe`, which the pipeline took then. The probe is a different app, signed with a
+throwaway key, so it never updates or is updated by a Glassworks build. Its folder in the image stays
+`/priv-app/S1Kiosk`, the one the first runs were verified with: the pipeline clears that folder and
+Glassworks' by name, so one image holds one app.
 
 ## What it shows
 
@@ -112,7 +112,7 @@ left out below. `PROBE` is the output folder of `build.sh`.
    ```sh
    adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME
    adb logcat -d -s GwProbe
-   adb shell dumpsys package sh.edm.s1kiosk | grep -E 'codePath|versionCode|flags|INSTALL_PACKAGES|REBOOT|WRITE_SECURE|MANAGE_USB'
+   adb shell dumpsys package dev.glassworks.mirror.probe | grep -E 'codePath|versionCode|flags|INSTALL_PACKAGES|REBOOT|WRITE_SECURE|MANAGE_USB'
    ```
    Expect version 1, `system yes`, `privileged yes`, `code-path /system/priv-app/S1Kiosk/S1Kiosk.apk`,
    and all four permissions granted.
@@ -120,30 +120,30 @@ left out below. `PROBE` is the output folder of `build.sh`.
    ```sh
    adb push "$PROBE/probe-v2.apk" /data/local/tmp/probe-v2.apk
    adb shell chmod 644 /data/local/tmp/probe-v2.apk
-   adb shell am start -n sh.edm.s1kiosk/.ProbeAction --es action update --es apk /data/local/tmp/probe-v2.apk
+   adb shell am start -n dev.glassworks.mirror.probe/.ProbeAction --es action update --es apk /data/local/tmp/probe-v2.apk
    sleep 20; adb logcat -d -s GwProbe | grep -E 'STEP update|RESULT update'
    ```
    Expect `RESULT update OK silent update, no tap`. If it says it can't read the file (SELinux
-   refused `/data/local/tmp`), push it to `/sdcard/Android/data/sh.edm.s1kiosk/files/probe-v2.apk`
+   refused `/data/local/tmp`), push it to `/sdcard/Android/data/dev.glassworks.mirror.probe/files/probe-v2.apk`
    instead and pass that path.
 3. **Check the status again**, with the commands of step 1. Expect version 2,
-   `updated-system-app yes`, `privileged yes`, `code-path /data/app/sh.edm.s1kiosk-1/base.apk` (the
+   `updated-system-app yes`, `privileged yes`, `code-path /data/app/dev.glassworks.mirror.probe-1/base.apk` (the
    number may differ), and all four permissions still granted.
 4. **Write a secure setting.**
    ```sh
-   adb shell am start -n sh.edm.s1kiosk/.ProbeAction --es action settings
+   adb shell am start -n dev.glassworks.mirror.probe/.ProbeAction --es action settings
    adb logcat -d -s GwProbe | grep 'RESULT settings'
    ```
    Expect `RESULT settings OK global auto_time=<value> written back`.
 5. **Reboot.**
    ```sh
-   adb shell am start -n sh.edm.s1kiosk/.ProbeAction --es action reboot
+   adb shell am start -n dev.glassworks.mirror.probe/.ProbeAction --es action reboot
    adb logcat -d -s GwProbe | grep -E 'STEP reboot|RESULT reboot'   # may cut off as the Mirror goes down
    adb wait-for-device; until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 2; done
    adb shell dumpsys activity activities | grep mFocusedActivity
    adb logcat -d -s GwProbe
    ```
-   Expect the Mirror to restart, `mFocusedActivity` to be `sh.edm.s1kiosk/.MainActivity`, and the
+   Expect the Mirror to restart, `mFocusedActivity` to be `dev.glassworks.mirror.probe/.MainActivity`, and the
    status lines to show version 2, still privileged, all four granted.
 
 6. **Allow a new computer's adb key** (`MANAGE_USB`, `allowUsbDebugging`). This is the method that
@@ -170,7 +170,7 @@ left out below. `PROBE` is the output folder of `build.sh`.
       servers:
       ```sh
       adb logcat -c
-      adb shell "nohup sh -c \"sleep 20; am start -n sh.edm.s1kiosk/.ProbeAction --es action allow-adb-key --es key '$(cat "$KEY")'\" > /dev/null 2>&1 &"
+      adb shell "nohup sh -c \"sleep 20; am start -n dev.glassworks.mirror.probe/.ProbeAction --es action allow-adb-key --es key '$(cat "$KEY")'\" > /dev/null 2>&1 &"
       ```
    3. At once, switch to a server that has only the test key, for the Mirror only:
       ```sh
@@ -212,7 +212,7 @@ one back first.
 
 | Outcome | Meaning |
 |---|---|
-| Step 1: `privileged yes`, `INSTALL_PACKAGES` and `REBOOT` granted | Android 6 on this image grants privileged permissions to `/system/priv-app` apps whatever their key, as read. S1 Kiosk in Kiln's image gets them too. `WRITE_SECURE_SETTINGS` alone proves little: the first boot also grants it with `pm grant` |
+| Step 1: `privileged yes`, `INSTALL_PACKAGES` and `REBOOT` granted | Android 6 on this image grants privileged permissions to `/system/priv-app` apps whatever their key, as read. Glassworks in Kiln's image gets them too. `WRITE_SECURE_SETTINGS` alone proves little: the first boot also grants it with `pm grant` |
 | Step 1: `privileged no`, or `INSTALL_PACKAGES` denied | The image doesn't do what AOSP 6 does (a vendor change, or the APK isn't where Kiln put it). Updates would need a tap, or root, or the platform key ([mirror-root.md](../../../frames/lululemon-mirror/research/mirror-root.md)) |
 | Step 2: `RESULT update OK` | Glassworks can update itself on the Mirror with no tap and no root, from Home Assistant's update entity |
 | Step 2: `FAIL needs a tap` | `INSTALL_PACKAGES` didn't count: updates need someone at the Mirror with a mouse, or another route |
@@ -233,9 +233,9 @@ one back first.
 |---|---|
 | `build.sh` | Both builds, the checks, the SHA-256s |
 | `src/main/AndroidManifest.xml` | The permissions, HOME, the adb-only action activity |
-| `src/main/java/sh/edm/s1kiosk/MainActivity.java` | The status screen and its `FACT` lines |
-| `src/main/java/sh/edm/s1kiosk/ProbeAction.java` | `update`, `settings`, `reboot`, `allow-adb-key` |
+| `src/main/java/dev/glassworks/mirror/probe/MainActivity.java` | The status screen and its `FACT` lines |
+| `src/main/java/dev/glassworks/mirror/probe/ProbeAction.java` | `update`, `settings`, `reboot`, `allow-adb-key` |
 | `adbkey.py` | A throwaway adb key pair in adb's formats (git-ignored `out/adbkey-test/`), and fingerprints of keys, never the keys |
-| `src/main/java/sh/edm/s1kiosk/InstallResult.java` | PackageInstaller's answer, as one `RESULT update` line |
-| `src/main/java/sh/edm/s1kiosk/Probe.java` | The log lines: status codes to OK/FAIL, protection levels, the adb key check and its fingerprint |
-| `src/test/java/sh/edm/s1kiosk/ProbeTest.java` | JVM tests for `Probe` |
+| `src/main/java/dev/glassworks/mirror/probe/InstallResult.java` | PackageInstaller's answer, as one `RESULT update` line |
+| `src/main/java/dev/glassworks/mirror/probe/Probe.java` | The log lines: status codes to OK/FAIL, protection levels, the adb key check and its fingerprint |
+| `src/test/java/dev/glassworks/mirror/probe/ProbeTest.java` | JVM tests for `Probe` |

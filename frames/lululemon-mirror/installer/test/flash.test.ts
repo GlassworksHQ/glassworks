@@ -162,7 +162,7 @@ describe('first boot', () => {
       `pm grant ${pkg} android.permission.WRITE_SECURE_SETTINGS`,
       `appops set ${pkg} SYSTEM_ALERT_WINDOW allow`,
       `pm grant ${pkg} android.permission.CHANGE_CONFIGURATION`,
-      `dpm set-active-admin ${pkg}/sh.edm.s1kiosk.AdminReceiver`,
+      `dpm set-active-admin ${pkg}/dev.glassworks.AdminReceiver`,
       'settings put system accelerometer_rotation 0',
       'settings put system user_rotation 3',
       'dumpsys window windows',

@@ -14,7 +14,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskService
+import dev.glassworks.KioskService
 
 /**
  * The service's notification shows the mark's white silhouette, not the launcher icon. The launcher icon was its

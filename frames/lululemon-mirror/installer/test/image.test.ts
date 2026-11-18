@@ -59,11 +59,14 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
     const home = [...PERMS.map((e) => e.attrs!.name === 'android.permission.REBOOT' ? { ...e, attrs: { ...e.attrs, maxSdkVersion: '22' } } : e), ...app(HOME_ACTIVITY())];
     await expect(checkMirrorApk(fakeApk(PKG, { minSdk: 23, home }))).rejects.toThrow(/doesn't ask for REBOOT\./);
   });
-  it('refuses S1 Kiosk\'s id by default, and takes it only as the probe (MIRROR_PROBE)', async () => {
+  it('refuses the S1 app\'s id, and takes the probe\'s only as the probe (MIRROR_PROBE)', async () => {
     const s1 = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
     await expect(checkMirrorApk(s1)).rejects.toThrow(/this APK is sh\.edm\.s1kiosk, not Glassworks \(dev\.glassworks\.generic_android\.legacy\)/);
-    await expect(checkMirrorApk(s1, MIRROR_PROBE)).resolves.toMatchObject({ package: 'sh.edm.s1kiosk' });
-    await expect(checkMirrorApk(mirrorApk({ minSdk: 23 }), MIRROR_PROBE)).rejects.toThrow(/not the Mirror probe \(sh\.edm\.s1kiosk\)/);
+    await expect(checkMirrorApk(s1, MIRROR_PROBE)).rejects.toThrow(/not the Mirror probe \(dev\.glassworks\.mirror\.probe\)/);
+    const probe = fakeApk('dev.glassworks.mirror.probe', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
+    await expect(checkMirrorApk(probe, MIRROR_PROBE)).resolves.toMatchObject({ package: 'dev.glassworks.mirror.probe' });
+    await expect(checkMirrorApk(probe)).rejects.toThrow(/this APK is dev\.glassworks\.mirror\.probe, not Glassworks/);
+    await expect(checkMirrorApk(mirrorApk({ minSdk: 23 }), MIRROR_PROBE)).rejects.toThrow(/not the Mirror probe \(dev\.glassworks\.mirror\.probe\)/);
   });
   it('says a manifest it can\'t parse can\'t be read, never a RangeError', async () => {
     const apk = mirrorApk({ minSdk: 23 });
@@ -239,7 +242,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const img = join(dir, 'swap.img');
     mke2fs(img, 64, MAKE_EXT4FS, systemTree());
     const disk = await load(img);
-    const probe = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
+    const probe = fakeApk('dev.glassworks.mirror.probe', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
     await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: probe, app: MIRROR_PROBE, time: T });
     await dump(disk, img);
     expect(debugfs(img, 'ls /priv-app')).toContain('S1Kiosk');

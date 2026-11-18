@@ -529,14 +529,14 @@ the stream). Its component and the main activity's differ per app:
 | App | Camera settings | Main activity |
 |---|---|---|
 | Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
-| Glassworks for generic Android | `dev.glassworks.generic_android/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity` |
-| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity` |
+| Glassworks for generic Android | `dev.glassworks.generic_android/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android/dev.glassworks.MainActivity` |
+| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity` |
 
 For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity, for example
-`adb shell am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --ez camera_enabled true` on the Mirror.
+`adb shell am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --ez camera_enabled true` on the Mirror.
 
 ### App updates
 

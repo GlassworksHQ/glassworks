@@ -74,7 +74,7 @@ out (turn the lock off in Android's settings, or keep the screen on).
 | Presence and light | None | Android's proximity and light sensors |
 
 Settings that S1 Kiosk takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
-this app only from adb: `adb shell am start -n dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity --es …`.
+this app only from adb: `adb shell am start -n dev.glassworks.generic_android/dev.glassworks.MainActivity --es …`.
 Starting that activity takes `WRITE_SECURE_SETTINGS`, which adb's shell has and other apps can't get. The
 launcher and the home screen use an alias whose extras the app drops, so another app on the device can't
 change a setting.
@@ -246,10 +246,10 @@ Android allows it only on a device with no accounts and a single user: remove th
 first, or set it up right after a factory reset.
 
 ```sh
-adb shell dpm set-device-owner dev.glassworks.generic_android/sh.edm.s1kiosk.AdminReceiver
+adb shell dpm set-device-owner dev.glassworks.generic_android/dev.glassworks.AdminReceiver
 adb shell dumpsys device_policy | grep -A3 "Device Owner"
 # undo (`dpm remove-active-admin` doesn't work for a release build):
-adb shell am start -n dev.glassworks.generic_android/sh.edm.s1kiosk.improv.ImprovActivity --ez release_device_owner true
+adb shell am start -n dev.glassworks.generic_android/dev.glassworks.provisioning.ImprovActivity --ez release_device_owner true
 ```
 
 While it is device owner, the app can't be uninstalled until you undo it. The details are in

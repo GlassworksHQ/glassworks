@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 aguilaair
-package sh.edm.s1kiosk;
+package dev.glassworks.mirror.probe;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -28,8 +28,8 @@ public class ProbeTest {
     @Test
     public void failuresNameTheStatusAndKeepAndroidsMessage() {
         // Android 6 reports a signature mismatch as STATUS_FAILURE_CONFLICT (PackageManager.installStatusToPublicStatus)
-        assertEquals("RESULT update FAIL STATUS_FAILURE_CONFLICT: INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: sh.edm.s1kiosk",
-            Probe.installResult(5, "INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: sh.edm.s1kiosk"));
+        assertEquals("RESULT update FAIL STATUS_FAILURE_CONFLICT: INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: dev.glassworks.mirror.probe",
+            Probe.installResult(5, "INSTALL_FAILED_UPDATE_INCOMPATIBLE: New package has a different signature: dev.glassworks.mirror.probe"));
         assertEquals("RESULT update FAIL STATUS_FAILURE_INCOMPATIBLE: INSTALL_FAILED_OLDER_SDK", Probe.installResult(7, "INSTALL_FAILED_OLDER_SDK"));
         assertEquals("RESULT update FAIL STATUS_FAILURE", Probe.installResult(1, ""));
         assertEquals("RESULT update FAIL STATUS_FAILURE_BLOCKED", Probe.installResult(2, null));

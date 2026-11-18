@@ -21,7 +21,7 @@ install (WRITES system and userdata):
   --refract                download it through Refract instead (${IMAGE_PROXY.base})
   --apk <file>             the legacy build of Glassworks for generic Android
                            (dev.glassworks.generic_android.legacy: minSdk 23, arm64-v8a or armeabi-v7a)
-  --probe                  the APK is the Mirror probe (tools/mirror/probe-app, sh.edm.s1kiosk) instead
+  --probe                  the APK is the Mirror probe (tools/mirror/probe-app, dev.glassworks.mirror.probe) instead
   --adb-key <file>         the adb public key the Mirror lets in without asking (services.jar),
                            default ~/.android/adbkey.pub. adb's server must hold its private half:
                            for another key, see "A throwaway key" in tools/mirror/README.md. Repeat

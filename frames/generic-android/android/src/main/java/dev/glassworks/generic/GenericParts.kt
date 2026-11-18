@@ -19,10 +19,10 @@ import dev.glassworks.AppParts
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
 import dev.glassworks.AppComponents
-import sh.edm.s1kiosk.AdminReceiver
-import sh.edm.s1kiosk.KioskService
-import sh.edm.s1kiosk.MainActivity
-import sh.edm.s1kiosk.update.UpdateInstallReceiver
+import dev.glassworks.AdminReceiver
+import dev.glassworks.KioskService
+import dev.glassworks.MainActivity
+import dev.glassworks.update.UpdateInstallReceiver
 import dev.glassworks.OverlayHost
 import dev.glassworks.PaneOverlay
 import dev.glassworks.PaneFiles

@@ -2,7 +2,7 @@
 
 What changed in each release of Glassworks for generic Android (`dev.glassworks.generic_android`, Android 8 and
 newer) and its legacy build (`dev.glassworks.generic_android.legacy`, Android 6 and 7, the lululemon Mirror
-included), for people running one. S1 Kiosk's changes are in the repo's [CHANGELOG.md](../../CHANGELOG.md).
+included), for people running one. The S1 app's changes are in the repo's [CHANGELOG.md](../../CHANGELOG.md).
 
 Both builds share this file and one version sequence. A version's section is the release notes of
 `generic-android-v<version>` and of `generic-android-legacy-v<version>`, whichever of the two is tagged

@@ -1,5 +1,5 @@
 // The app Kiln puts on the Mirror. Since #408 that's the legacy build of Glassworks for generic Android
-// (minSdk 23, GeckoView 144), named in the frame's own data (design/frame.json `app`), not S1 Kiosk.
+// (minSdk 23, GeckoView 144), named in the frame's own data (design/frame.json `app`), not the S1 app.
 import type { AppId } from '@glassworks/app-adb';
 import frame from '../../design/frame.json';
 
@@ -29,14 +29,14 @@ export const GLASSWORKS: MirrorApp = {
 };
 
 /**
- * The Mirror probe (tools/mirror/probe-app), test only, chosen by the harness's --probe. It borrows S1
- * Kiosk's id and MainActivity, and keeps the folder its README and research note were verified with.
+ * The Mirror probe (tools/mirror/probe-app), test only, chosen by the harness's --probe. It keeps the folder its
+ * README and research note were verified with, when it still borrowed the S1 app's id (before #527).
  */
 export const MIRROR_PROBE: MirrorApp = {
   name: 'the Mirror probe',
-  package: 'sh.edm.s1kiosk',
-  activity: 'sh.edm.s1kiosk/.MainActivity',
-  home: 'sh.edm.s1kiosk/.MainActivity',
+  package: 'dev.glassworks.mirror.probe',
+  activity: 'dev.glassworks.mirror.probe/.MainActivity',
+  home: 'dev.glassworks.mirror.probe/.MainActivity',
   dir: '/priv-app/S1Kiosk',
   file: 'S1Kiosk.apk',
 };
