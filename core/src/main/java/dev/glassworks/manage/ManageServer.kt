@@ -64,7 +64,7 @@ class ManageServer(
 
     private val handoffs = PerAddress(HANDOFFS_PER_WINDOW, HANDOFF_WINDOW_MS)
 
-    private val api = ManageApi(host, tokens, ::apply, PENDING, event, ::ask) { id, owner, section, key, value -> answered(id, owner, section, key, value) }
+    private val api = ManageApi(host, tokens, haBase, ::apply, PENDING, event, ::ask) { id, owner, section, key, value -> answered(id, owner, section, key, value) }
 
     /** A question's answer (#269 verifier): the change it asked about, for one session, until it runs out. */
     private data class Asked(val session: String, val section: String, val key: String, val value: String, val untilMs: Long)

@@ -257,6 +257,8 @@ and there are no shared keys and no leader.
 - **Who may.** Administrators only, as on the page itself. The panel asks its Home Assistant who the token
   belongs to (`auth/current_user`), at the address it uses, and only when that address is on your network.
   It keeps the answer for a minute, so a token revoked in Home Assistant still works here for up to a minute.
+  An answer counts only for the address that gave it: when the panel's Home Assistant address changes, the
+  page has to sign in again.
   A token Home Assistant didn't confirm stays refused for 10 seconds, except for a sign-in from another panel's
   page, which always asks. The panel asks Home Assistant about at most two tokens at a time: while Home Assistant
   is slow, the rest are told to try again in a moment. One address (one computer, usually) can start at most

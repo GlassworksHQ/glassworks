@@ -337,6 +337,19 @@ class ManageApiTest {
         assertTrue(r.headers["Set-Cookie"]!!.startsWith(ManageServer.SESSION + "="))
     }
 
+    @Test fun aSettingsRequestIsBoundToTheAddressThatConfirmedTheUser() {
+        var reads = 0
+        f.haBaseFn = { if (reads++ == 0) "http://192.0.2.10:8123" else "http://192.0.2.11:8123" }
+        val r = page().post("section" to "screen", "key" to "Turn off when idle", "value" to "60")
+        assertEquals(401, r.status)
+        assertEquals(ManageApi.ADDRESS_CHANGED, json(r).getString("problem"))
+        assertEquals(120, idle)
+        reads = 0
+        assertEquals(401, page().get().status)
+        f.haBaseFn = null
+        assertEquals(200, page().get().status)
+    }
+
     @Test fun aHandoffIsBoundToTheAddressThatConfirmedTheUser() {
         // The first read (the check) sees one address, every later one another: the panel's address changed mid-request.
         var reads = 0

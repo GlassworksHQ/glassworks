@@ -30,6 +30,8 @@ import org.json.JSONObject
 class ManageApi(
     private val host: ManageHost,
     private val check: HaTokenCheck,
+    /** The HA address the panel uses now: a request runs only for the address that confirmed its user. */
+    private val haBase: () -> String?,
     /** [SettingsChange.change] on the panel's main thread: null, why not, or [pending] while it still runs. */
     private val apply: (SettingsItem, String) -> String?,
     private val pending: String,
@@ -46,7 +48,9 @@ class ManageApi(
         if (req.method != "GET" && req.method != "POST") return json(req, 405, JSONObject().put("problem", "Not allowed."))
         val token = HaTokenCheck.bearer(req.headers["authorization"])
         val user = when (val r = check.check(token)) {
-            is HaTokenCheck.Result.Ok -> r.user
+            // Bound to the address that confirmed the user, as the handoff is (CodeRabbit on #487): if it changed since, start again.
+            is HaTokenCheck.Result.Ok -> if (r.haBase == haBase()?.trim()?.trimEnd('/')) r.user
+                else return json(req, 401, JSONObject().put("problem", ADDRESS_CHANGED), mapOf("WWW-Authenticate" to "Bearer"))
             is HaTokenCheck.Result.NotAdmin -> return json(req, 403, JSONObject().put("problem", "${r.name} isn't a Home Assistant administrator."))
             HaTokenCheck.Result.NoHa -> return json(req, 409, JSONObject().put("problem", NO_HA))
             HaTokenCheck.Result.Refused -> return json(req, 401, JSONObject().put("problem", REFUSED), mapOf("WWW-Authenticate" to "Bearer"))
@@ -99,6 +103,7 @@ class ManageApi(
 
         const val REFUSED = "Home Assistant didn't confirm this sign-in. Sign in again."
         const val NO_HA = "This panel has no Home Assistant address on your network, so it can't check who you are."
+        const val ADDRESS_CHANGED = "This panel's Home Assistant address changed. Sign in again."
         const val BUSY = "The panel is still asking Home Assistant about other sign-ins. Try again in a moment."
 
         /**
