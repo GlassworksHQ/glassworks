@@ -16,6 +16,8 @@ set -euo pipefail
 apk="$1"
 serial="$2"
 adb="${ADB:-adb}"
+# Emulators only: a server that also claims USB or mDNS devices takes them from whoever drives a real panel.
+export ADB_USB=0 ADB_MDNS=0 ADB_MDNS_AUTO_CONNECT=0
 build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
