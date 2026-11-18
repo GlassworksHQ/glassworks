@@ -233,6 +233,10 @@ boot)
   own_dirs || say "cannot prepare $BDIR"
   # A bundle staged by `install` loads now. The floor moves up only once it has passed the full check.
   state=none; fv=$BOOT_FRAME_VERSION; why=""
+  # An install stopped between moving the staged bundle aside and moving the new one in: the old one
+  # still counts (it was reported staged), with the same checks as any.
+  if [ -e "$BDIR/next" ]; then rm -rf "$BDIR/next.old"
+  elif [ -e "$BDIR/next.old" ]; then mv "$BDIR/next.old" "$BDIR/next"; fi
   if [ -e "$BDIR/next" ]; then
     if check_dir "$BDIR/next"; then
       nv=$VERSION; fl=$(floor); [ "$nv" -gt "$fl" ] && fl=$nv

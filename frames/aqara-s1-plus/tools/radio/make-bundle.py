@@ -191,6 +191,8 @@ def main():
     if len(manifest) > MAX_MANIFEST:
         die(f"manifest is {len(manifest)} bytes; panels refuse more than {MAX_MANIFEST}")
     for l in lines:
+        if "\n" in l or "\r" in l:
+            die(f"manifest line {l!r} spans lines (a line break in --created?)")
         if "  " in l or l != l.strip():
             die(f"manifest line {l!r} has stray spaces")
 

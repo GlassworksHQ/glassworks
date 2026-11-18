@@ -144,17 +144,23 @@ APP_THREAD_LEAVE=radio/thread-leave           # app -> helper: forget the Thread
 
 # Root-only state dir; created on first run so a freshly flashed boot image needs no other install step.
 [ -d "$DIR" ] || { mkdir -p "$DIR" && chown root:root "$DIR" && chmod 700 "$DIR"; }
-# Once per panel: the app settings an app from before the loader set under the s1kiosk names move to
-# the Glassworks names, where the new one is empty. Only once, behind a root-only marker: after it, an
-# empty value means empty (an empty allow-list is loopback only), never the old value.
-# TODO(#528): drop with the release that drops the old names.
-if [ ! -e "$DIR/.settings-moved" ]; then
-  for k_ in radio_mode radio_zigbee radio_allow timezone; do
-    o_=$(getprop "persist.s1kiosk.$k_")
-    [ -n "$o_" ] && [ -z "$(getprop "persist.glassworks.$k_")" ] && setprop "persist.glassworks.$k_" "$o_"
-  done
-  : > "$DIR/.settings-moved"; chmod 600 "$DIR/.settings-moved"
-fi
+# The app settings an app from before the loader keeps under the s1kiosk names (#528) are copied to the
+# Glassworks names: at the first start where the new one is empty, then again whenever the old value
+# changes (a 0.4.3 boot image or app changed it, e.g. after a Kiln update stopped at its RAM boot).
+# $SM (root 0600) records the old values last copied, one "key value" line each, so an empty new value
+# stays empty (an empty allow-list is loopback only) until the old one changes. A failed write keeps the
+# old record, so it is tried again at the next start. TODO(#528): drop with the old names.
+SM=$DIR/.settings-moved
+for k_ in radio_mode radio_zigbee radio_allow timezone; do
+  o_=$(getprop "persist.s1kiosk.$k_")
+  if [ -f "$SM" ]; then
+    r_=$(sed -n "s/^$k_ //p" "$SM" | head -1)
+    [ "$o_" = "$r_" ] || setprop "persist.glassworks.$k_" "$o_" || o_=$r_
+  elif [ -n "$o_" ] && [ -z "$(getprop "persist.glassworks.$k_")" ]; then
+    setprop "persist.glassworks.$k_" "$o_" || o_=""
+  fi
+  echo "$k_ $o_"
+done > "$SM.tmp" && chmod 600 "$SM.tmp" && mv -f "$SM.tmp" "$SM"
 # Binaries: developer copies in $DIR (with dev-override only), then the radio bundle, then the boot image.
 bin() {
   if [ -n "$DEV" ] && [ -x "$DIR/$1" ]; then echo "$DIR/$1"

@@ -392,13 +392,18 @@ echo junk >> /data/glassworks/bundle/next/services/radio.sh
 L boot
 check "a staged bundle that fails its check is dropped at boot" test ! -e /data/glassworks/bundle/next -a "$(prop ro.glassworks.frame.version)" = 2.0.0
 check "...and doesn't move the floor" test "$(cat /data/glassworks/bundle/version)" = 2000000
+stage_frame "$T/f3/frame-bundle"; install_frame >/dev/null; mv /data/glassworks/bundle/next /data/glassworks/bundle/next.old
+L boot
+check "an install stopped with the staged bundle moved aside: it still loads" test "$(prop ro.glassworks.frame.version)" = 2.0.1 -a ! -e /data/glassworks/bundle/next.old
 
 mkframe "$T/f4" 2.0.2 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700" --file "bootanimation.zip=$T/badanim.zip"
-stage_frame "$T/f4/frame-bundle"; install_frame >/dev/null; L boot
-check "a bundle animation that is not a usable zip: the boot image's is mounted" has "$(tail -1 "$T/mounts")" "$TBL/glassworks_bootanimation.zip"
+stage_frame "$T/f4/frame-bundle"; install_frame >/dev/null; rm -f "$T/mounts"; L boot
+check "a bundle animation that is not a usable zip: the boot image's is mounted" test "$(cat "$T/mounts")" = "-o bind $TBL/glassworks_bootanimation.zip $T/anim.zip"
 check "...and the bundle still loads" test "$(prop ro.glassworks.frame.version)" = 2.0.2
 : > "$T/runblock"; GW_RUN="$T/runblock/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" boot
 check "no active record can be written: the boot copies run, and it says why" test "$(prop ro.glassworks.frame.version)/$(prop sys.glassworks.bundle.state)" = "1.0.0/bad: cannot record the active bundle"
+rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 GW_RUN="$T/runblock/run" /system/bin/sh "$TBL/glassworks_loader.sh" run radio
+check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
 rm -f "$T/runblock"; L boot
 
 mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
@@ -948,6 +953,16 @@ check "...and a root-only marker says it is done" test "$(stat -c %a:%u /data/s1
 rm -f "$T/props/persist.glassworks.radio_allow"
 LOOPS=1 helper
 check "an allow-list cleared later stays empty (loopback only), never the old 'any'" test -z "$(prop persist.glassworks.radio_allow)"
+echo sisdk > "$T/props/persist.s1kiosk.radio_zigbee"
+LOOPS=1 helper
+check "an old value changed later (a 0.4.3 image or app) is copied again" test "$(prop persist.glassworks.radio_zigbee)" = sisdk
+printf 'x%.0s' $(seq 1 100) > "$T/props/persist.s1kiosk.radio_zigbee"
+LOOPS=1 helper
+check "a copy that fails keeps the new value" test "$(prop persist.glassworks.radio_zigbee)" = sisdk
+check "...and the old record, so it is tried again" has "$(cat /data/s1kiosk/radio/.settings-moved)" "radio_zigbee sisdk"
+echo aqara > "$T/props/persist.s1kiosk.radio_zigbee"
+LOOPS=1 helper
+check "...and goes through once it can" test "$(prop persist.glassworks.radio_zigbee)" = aqara
 rm -f "$T"/props/persist.s1kiosk.* "$T/props/persist.glassworks.timezone"
 
 

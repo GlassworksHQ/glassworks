@@ -22,6 +22,9 @@ const HAVE = existsSync(join(STOCK, 'boot.img')) && existsSync(join(G, 'out/SHA2
 const OVERLAY = ['glassworks.rc', 'glassworks_loader.sh', 'glassworks_verify', 'glassworks_bundle.pub', 'glassworks_radio.sh',
   'glassworks_firstboot.sh', 'glassworks_netwatch.sh', 'glassworks_update.sh', 'glassworks_bootanimation.zip', 'otbr-agent', 'ot-ctl'];
 const MISSING = HAVE ? OVERLAY.filter((f) => !existsSync(join(G, 'fixtures/overlay', f))) : [];
+if (OUT && !HAVE) {
+  throw new Error(`S1_WIRE_TRACE: needs ${join(STOCK, 'boot.img')} and ${join(G, 'out/SHA256SUMS')}: no trace was written`);
+}
 if (OUT && MISSING.length) {
   throw new Error(`S1_WIRE_TRACE: ${G} has goldens for another overlay (missing ${MISSING.join(', ')}): ` +
     'regenerate them with gen.sh, or point S1_WEB_GOLDEN at a set for this revision');

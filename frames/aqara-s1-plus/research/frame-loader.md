@@ -220,7 +220,7 @@ bundle, once the loader makes that possible over the air.
 | `s1kiosk_devsu` (dev images) | `glassworks_devsu` | |
 | `s1kiosk_verify`, `s1kiosk_bundle.pub`, `s1kiosk_adb_keys`, `s1kiosk_bootanimation.zip`, `s1kiosk_*.rc` | `glassworks_verify`, `glassworks_bundle.pub`, `glassworks_adb_keys`, `glassworks_bootanimation.zip`, `glassworks.rc` | In the ramdisk (`overlay.d`) |
 | `sys.s1kiosk.update.*`, `sys.s1kiosk.bundle.*`, `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status` | `sys.glassworks.*`, same suffixes | |
-| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone` | `persist.glassworks.*` | The radio helper copies each old value once when the new one is empty, so the radio mode and the time zone survive the reflash. Removed with the old names |
+| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone` | `persist.glassworks.*` | The radio helper copies each old value at its first start (where the new one is empty), then again only when the old value changes, so the radio mode and the time zone survive the reflash and a stopped update. Removed with the old names |
 | `/data/s1kiosk` (bundle store, update copy, markers), `/data/s1kiosk-pub` | `/data/glassworks`, `/data/glassworks-pub` | |
 | `/data/s1kiosk/radio` (dataset, Zigbee NVM, otbr's Thread settings in `run/thread`) | **stays** | `otbr-agent` has `/data/s1kiosk/radio/run` compiled in (`build-otbr.sh` line 127). It moves in a later bundle, with an otbr built for the new path and a one-time move of `run/thread` |
 | `applicationId` `sh.edm.s1kiosk`, `files/update/pending.apk` | stays | The app id stays (maintainer). App-private paths sit under it |
@@ -262,9 +262,11 @@ stopping after step 3 leaves the panel working as before.
 5. **Load the frame bundle before calling it done.** The new boot image has no frame bundle yet, and
    some things live only in one: Silicon Labs' Zigbee runtime (`sisdk/`) above all. Until a bundle
    loads, a panel in `zigbee_tcp` with the Silicon Labs stack reports "needs a radio bundle with its
-   runtime" and its coordinator is down. So Kiln waits for the app to stage its frame bundle, restarts
-   the panel once more, and checks `ro.glassworks.frame.version` and the radio status before it says
-   the update is done.
+   runtime" and its coordinator is down. So Kiln has the app fetch and stage the frame release's bundle,
+   restarts the panel once more, and calls the update done only when the loader's own record,
+   `/data/glassworks-pub/frame-bundle`, reads `ok <the release's version>`. `ro.glassworks.frame.version`
+   alone doesn't prove it: the boot image and the first bundle are both 1.0.0. The radio status is a
+   separate check after that.
 
 If the panel never reaches fastboot, or stock fastboot refuses `boot` or `flash`, the route stops
 before any write, and the FEL button stays the way in. **Route 2** (root writes `boot` from Android,
@@ -359,13 +361,13 @@ bytes with `SHA256SUMS`, and `fastboot reboot`.
 
 These need a boot image built by `patch-boot-magisk.sh` from this branch, RAM-booted (T3's route, or
 FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3: the radio helper reads
-`persist.s1kiosk.*` once, at its first start, into the new names, so `thread_router` comes back by itself.
+`persist.s1kiosk.*` into the new names at its first start, so `thread_router` comes back by itself.
 
 | Test | What it settles | Expect |
 |---|---|---|
 | L1 | `/data` at `post-fs-data`, and the `exec` step (on a store with no bundle: no `/data/glassworks/bundle/current` or `next`; with one, expect `ok <its version>` instead) | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; `logcat -d -s glassworks_loader` |
 | L2 | The slots under init | `init.svc.glassworks_radio`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
-| L3 | The radio from the old setting | `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.radio.source` = `boot`, otbr runs |
+| L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.radio.source` = `boot`, otbr runs |
 | L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
 | L5 | The check's cost at `post-fs-data` | the `glassworks_loader` log lines' times, with and without a bundle (a bundle needs the bundles PR) |
 
