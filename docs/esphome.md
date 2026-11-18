@@ -880,6 +880,9 @@ between panels are #116, parked after v1.
 4. From an automation, pass the text: `action: script.announce_on_every_panel` with
    `data: {message: "Dinner's ready"}`.
 
+The script reads the helper when its run starts. A press while the panels are still speaking waits
+its turn, and then says what the helper holds at that moment, not when you pressed.
+
 What each panel does: Home Assistant's chime, then the message in the voice of that panel's Assist
 pipeline (`preannounce: false` drops the chime). The screen wakes, and with *Voice overlay* on, the
 overlay shows the message. Music on the speaker pauses and Music Assistant's player goes quiet; both
@@ -899,6 +902,10 @@ announces on all the panels at once and the action ends when the last one has fi
       media_player_entity_id: media_player.office_panel_speaker
       message: "{{ message | default(states('input_text.announcement'), true) }}"
   ```
+
+  This step doesn't wait for the speaker to finish, so `mode: queued` doesn't protect it. A new
+  announcement on that speaker replaces the one playing (`ExoAudioPlayer.play`), so a second run
+  straight after can cut the first one off.
 - **A panel that is still announcing** refuses a second one (`SatelliteBusyError`). `mode: queued`
   keeps the script's own runs from overlapping.
 
