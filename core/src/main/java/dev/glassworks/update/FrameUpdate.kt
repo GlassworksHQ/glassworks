@@ -63,7 +63,10 @@ class FrameUpdateModel(private val release: FrameRelease, private val title: Str
     @Volatile var offer: FrameOffer? = null
         private set
 
-    val updateAvailable: Boolean get() = offer?.let { installed.olderThan(it.version) } == true
+    val updateAvailable: Boolean get() = newer() != null
+
+    /** The last offer when it is newer than [installed], read once so a check landing meanwhile can't mix two offers. */
+    private fun newer(): FrameOffer? = offer?.takeIf { installed.olderThan(it.version) }
 
     /** A check succeeded; [offer] is null when the frame has no release yet. */
     fun onChecked(offer: FrameOffer?) {
@@ -73,12 +76,12 @@ class FrameUpdateModel(private val release: FrameRelease, private val title: Str
 
     /** The Device page's Frame version row: the installed version, and the newer one with how to install it. */
     fun detail(): String {
-        val o = offer?.takeIf { updateAvailable } ?: return installed.shown
+        val o = newer() ?: return installed.shown
         return "${installed.shown}. ${o.version} is out" + release.install?.let { ". $it" }.orEmpty()
     }
 
     fun view(): UpdateStateData {
-        val o = offer?.takeIf { updateAvailable }
+        val o = newer()
         return UpdateStateData(
             missingState = !checked,
             inProgress = false,
