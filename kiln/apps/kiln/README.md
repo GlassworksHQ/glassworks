@@ -179,8 +179,11 @@ How it behaves:
   at most 16 of them. The panel refuses its callback from any other browser with a way back to setup, and
   after Home Assistant loads `/setup#signed-in` again. Every way out of the callback clears the cookie. The
   QR code's own sign-in is not bound, as before. The page reads where setup is from the
-  panel, then goes on to the radio step, or to Done on a panel without a radio. Kiln's wizard still opens a
-  tab: leaving its page would drop the USB connection.
+  panel, then goes on to the radio step, or to Done on a panel without a radio. Kiln's wizard
+  over USB opens the sign-in in a pop-up instead (`/signin/continue?then=kiln`; a tab where pop-ups are
+  blocked), since leaving its page would drop the USB connection. The panel's last page closes that window, or
+  says "Signed in. Kiln has moved on." where the browser won't let it, and Kiln moves on to the radio step as
+  soon as the panel reports the sign-in, with no click.
 - The step rail lists the steps the panel has. Before pairing, the page reads the panel's state once over
   the channel (which answers `state` to anyone) and lets it go; a frame without a radio has no Radio step.
 - Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the

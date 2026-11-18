@@ -1,0 +1,86 @@
+// Kiln over USB signs the panel in to Home Assistant in a window it opens (issue 453): the panel's sign-in with
+// then=kiln, whose last page closes that window, and Kiln moves on when the panel reports the sign-in, with no click.
+import { SetupChannel, type SetupState } from '@glassworks/setup-channel';
+import type { ByteStream } from 'improv-serial';
+import { describe, expect, it, vi } from 'vitest';
+import { ChannelSetup } from '../src/setup/channelSetup';
+import type { Setup } from '../src/wizard/state';
+
+/** The panel over the channel; `signIn()` is HA's callback reaching it, which it announces as a state event. */
+function panel() {
+  let cb: (c: Uint8Array) => void = () => {};
+  const st: SetupState = {
+    ip: '192.0.2.10',
+    ha: { discovered: 'http://homeassistant.local:8123', url: '', signedIn: false, signinUrl: 'http://192.0.2.10:8099/signin' },
+    radio: { mode: 'off', status: 'Off', helper: true, options: [{ id: 'off', label: 'Off', detail: '' }] },
+  };
+  const send = (o: object) => queueMicrotask(() => cb(new TextEncoder().encode(`${JSON.stringify(o)}\n`)));
+  return {
+    st,
+    signIn: () => { st.ha.signedIn = true; send({ event: 'state', state: st }); },
+    stream: {
+      onData: (f: (c: Uint8Array) => void) => { cb = f; },
+      close: async () => {},
+      write: async (d: Uint8Array) => {
+        for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
+          const m = JSON.parse(line);
+          if (m.op === 'set_ha') st.ha.url = m.url;
+          send({ id: m.id, ok: true, state: st });
+        }
+      },
+    } satisfies ByteStream,
+  };
+}
+
+function kiln(p: ReturnType<typeof panel>) {
+  let phase: Setup = { phase: 'waiting', note: '' };
+  const win = { location: { href: 'about:blank' }, close: vi.fn() } as unknown as Window;
+  const openTab = vi.fn(() => win);
+  const steps = new ChannelSetup({
+    open: async () => { const c = new SetupChannel(p.stream); await c.getState(); return c; },
+    phase: () => phase,
+    show: (s) => { phase = s; },
+    here: () => true,
+    done: () => {},
+    unreachable: (e) => { throw e; },
+    app: async () => undefined,
+    openTab,
+  });
+  return { steps, win, openTab, phase: () => phase };
+}
+
+describe('Kiln\'s sign-in', () => {
+  it('opens its window inside the click and points it at the panel\'s sign-in for Kiln', async () => {
+    const p = panel();
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    k.steps.signIn('http://192.0.2.20:8123');
+    expect(k.openTab).toHaveBeenCalledTimes(1); // before any await: inside the click
+    expect(k.phase()).toMatchObject({ phase: 'ha', signingIn: true, note: expect.stringMatching(/window that opened.*moves on by itself/) });
+    await vi.waitFor(() => expect(k.win.location.href).toBe('http://192.0.2.10:8099/signin/continue?then=kiln'));
+    expect(p.st.ha.url).toBe('http://192.0.2.20:8123');
+    k.steps.close();
+  });
+
+  it('moves on to the radio step when the panel reports the sign-in, with no click', async () => {
+    const p = panel();
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    k.steps.signIn('http://192.0.2.20:8123');
+    await vi.waitFor(() => expect(k.win.location.href).toMatch(/then=kiln$/));
+    p.signIn();
+    await vi.waitFor(() => expect(k.phase()).toMatchObject({ phase: 'radio' }));
+    k.steps.close();
+  });
+
+  it('a panel already signed in, with no sign-in from this page, waits for Continue', async () => {
+    const p = panel();
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    p.signIn();
+    await vi.waitFor(() => expect(k.phase()).toMatchObject({ phase: 'ha', ha: { signedIn: true } }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(k.phase()).toMatchObject({ phase: 'ha' });
+    k.steps.close();
+  });
+});

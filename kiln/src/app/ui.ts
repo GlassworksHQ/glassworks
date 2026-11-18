@@ -3,7 +3,7 @@ import felImg from '../../../docs/img/fel-button.jpg?url';
 import { loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
 import { FelDevice } from '@glassworks/fel';
-import { SETUP_SOCKET, SetupChannel, validHaUrl, type SetupState } from '@glassworks/setup-channel';
+import { kilnSignInUrl, openSignInWindow, SETUP_SOCKET, SetupChannel, validHaUrl, type SetupState } from '@glassworks/setup-channel';
 import {
   IMPROV_SOCKET, ImprovSerialClient, PacketReader, PacketType, Rpc, State as ImprovState, describeSwitch, frame, parseResult, s1Plus, strings, unprovision,
   type AssetName, type ByteStream, type Provisioned, type SetUpOptions,
@@ -793,8 +793,11 @@ class Installer {
     this.phase('ha', 'Connect it to Home Assistant', 'Tell the panel where Home Assistant is, then sign in. You can also do this on the panel.', 'Home Assistant', () => void this.radioStep());
     const input = $('#ha-url') as HTMLInputElement;
     const st = $('#ha-st');
+    // a sign-in this page started, in its own window: when the panel reports it, the page moves on by itself
+    let signingIn = false;
     const render = (s: SetupState) => {
       this.ip = s.ip ?? this.ip;
+      if (signingIn && s.ha.signedIn) { signingIn = false; void this.radioStep(); return; }
       $('#ha-found').textContent = s.ha.discovered ? 'Found on your network' : 'Not found automatically: type it';
       if (!input.value) input.value = s.ha.url || s.ha.discovered || 'http://homeassistant.local:8123';
       const row = $('#ha-signin');
@@ -813,19 +816,22 @@ class Installer {
     }, 3000);
     btn.textContent = 'Continue';
     btn.disabled = false;
-    // Sign in: the popup must open inside the click, so open it first and point it after saving the address.
+    // Sign in: the window must open inside the click, so open it first and point it after saving the address. Its
+    // last page closes it (then=kiln), and render() moves on when the panel says it is signed in.
     $('#ha-signin-btn').onclick = () => {
       const url = input.value.trim();
       if (!validHaUrl(url)) { st.className = 'status err'; st.textContent = 'That doesn\'t look like a web address (http://… or https://…).'; return; }
-      const tab = window.open('about:blank', '_blank');
+      const tab = openSignInWindow();
+      signingIn = true;
       st.className = 'status';
-      st.textContent = 'Sign in on the tab that opened; this page notices when you are done.';
+      st.textContent = 'Sign in to Home Assistant in the window that opened. This step moves on by itself when the panel is signed in.';
       void (async () => {
         try {
           const s = url === this.setup?.state?.ha.url ? this.setup.state : await this.withSetup((x) => x.setHa(url));
           if (!s.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
-          if (tab) tab.location.href = s.ha.signinUrl; else window.open(s.ha.signinUrl, '_blank');
+          if (tab) tab.location.href = kilnSignInUrl(s.ha.signinUrl); else window.open(kilnSignInUrl(s.ha.signinUrl), '_blank');
         } catch (e) {
+          signingIn = false;
           tab?.close();
           st.className = 'status err';
           st.textContent = (e as Error).message;

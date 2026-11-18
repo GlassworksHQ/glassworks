@@ -182,9 +182,10 @@ another network**.
 </table>
 
 **Home Assistant.** Kiln shows the address the panel found on your network, or asks you to type
-it. **Sign in** opens the panel's own sign-in page in a new tab, the same one its QR code points
-to, so your login goes from Home Assistant straight to the panel. This page notices when you are
-done. Then click **Continue**.
+it. **Sign in** opens Home Assistant's sign-in in a small window, through the panel, so your login
+goes from Home Assistant straight to the panel. When you are signed in, the window closes and Kiln
+moves on to the radio by itself. (A browser that blocks pop-ups gets a tab instead; it ends on
+"Signed in. Kiln has moved on.")
 
 <img src="../../../docs/img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field, a Sign in button. Link: Skip, do it on the panel. Button: Continue." width="100%">
 

@@ -568,6 +568,34 @@ class SignInServerTest {
     }
 
     @Test
+    fun kilnsSignInClosesItsWindowOrSaysKilnHasMovedOn() {
+        val (q, state) = start(server, null, then = "?then=kiln")
+        issueCode("c0de", q)
+        val r = callback(server, state, null)
+        assertEquals(200, r.status)
+        val html = text(r)
+        assertTrue(html, html.contains("Signed in.") && html.contains("Kiln has moved on.") && html.contains("<script>window.close()</script>"))
+        for (tab in listOf("close this page", "other tab", "Panel signed in")) assertTrue(tab, !html.contains(tab, ignoreCase = true))
+        // the browser runs that one script and nothing else
+        val sha = java.util.Base64.getEncoder().encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest("window.close()".toByteArray()))
+        assertTrue(r.headers["Content-Security-Policy"]!!, r.headers["Content-Security-Policy"]!!.endsWith("; script-src 'sha256-$sha'"))
+        assertEquals("RT", signedIn!!.first.refreshToken)
+        assertNull("unbound, as the QR code's sign-in", r.headers["Set-Cookie"])
+    }
+
+    @Test
+    fun kilnsSignInFailuresSendThePersonBackToKiln() {
+        val (_, state) = start(server, null, then = "?then=kiln")
+        val r = callback(server, state, null, code = "refused-by-ha")
+        assertTrue(text(r), text(r).contains("Sign in again from Kiln.") && !text(r).contains("Scan the code") && !setupWay(r))
+        assertTrue("no other page runs a script", !text(r).contains("<script"))
+        assertTrue(r.headers["Content-Security-Policy"]!!, !r.headers["Content-Security-Policy"]!!.contains("script-src"))
+        val (_, cancelled) = start(server, null, then = "?then=kiln")
+        val c = call(server, "/callback?error=access_denied&state=${OAuth.enc(cancelled)}")
+        assertTrue(text(c), text(c).contains("Sign in again from Kiln.") && !text(c).contains("Scan the code"))
+    }
+
+    @Test
     fun theQrSignInStaysAsItWas() {
         val r = call(server, SignInServer.CONTINUE)
         assertNull("no binding cookie for a QR sign-in", r.headers["Set-Cookie"])

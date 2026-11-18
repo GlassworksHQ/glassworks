@@ -154,15 +154,15 @@ class SignInServer(
             ?: return page(400, "Bad Request", "Can't sign in", "Open this page with the panel's address (scan the QR code).")
         val clientId = OAuth.clientId(host)
         val redirect = OAuth.redirectUri(host)
-        val toSetup = req.query["then"] == THEN_SETUP
-        val sign = states.create(clientId, redirect, ha, toSetup = toSetup)
+        val then = Then.of(req.query["then"])
+        val sign = states.create(clientId, redirect, ha, then = then)
         val location = OAuth.authorizeUrl(ha, clientId, redirect, sign.state, sign.codeChallenge)
         // Lax: HA's redirect back is a top-level GET from another site, and it must carry this cookie. Its slot is
         // one no other pending sign-in holds, so starting another (or a cross-site GET starting one) never replaces
         // it, and there are at most a few. It outlives the state (10 minutes), so a sign-in that ran out still shows
         // the way back to setup.
-        if (toSetup) check(sign.slot >= 0) { "a setup sign-in without a slot can't be bound" }
-        val bind = if (toSetup) mapOf("Set-Cookie" to "$HANDOFF${sign.slot}=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
+        if (then == Then.SETUP) check(sign.slot >= 0) { "a setup sign-in without a slot can't be bound" }
+        val bind = if (then == Then.SETUP) mapOf("Set-Cookie" to "$HANDOFF${sign.slot}=${sign.state}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800") else emptyMap()
         return Response(
             302, "Found",
             mapOf("Location" to location, "Cache-Control" to "no-store", "Content-Type" to "text/plain; charset=utf-8") + bind,
@@ -182,18 +182,22 @@ class SignInServer(
     }
 
     private fun callback(q: Map<String, String>, pending: PendingSignIn?, bound: Boolean): Response {
-        // Started on the setup page: every way out of here leads back to it. A sign-in the panel still knows says
-        // where it started; one it doesn't (run out) has only its cookie to say so.
-        val setup = pending?.toSetup ?: bound
-        val back = if (setup) BACK_TO_SETUP else ""
-        val again = if (setup) "Go back to setup and sign in again." else "Scan the code to try again."
+        // Every way out of here says where to start again. A sign-in the panel still knows says where it started; one
+        // it doesn't (run out) has only the setup page's cookie to say so.
+        val then = pending?.then ?: if (bound) Then.SETUP else Then.QR
+        val back = if (then == Then.SETUP) BACK_TO_SETUP else ""
+        val again = when (then) {
+            Then.QR -> "Scan the code to try again."
+            Then.SETUP -> "Go back to setup and sign in again."
+            Then.KILN -> "Sign in again from Kiln."
+        }
         q["error"]?.let { err ->
             return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. $again", button = back)
         }
-        pending ?: return expired(back)
+        pending ?: return expired(then)
         // Another browser finishing the setup page's sign-in (login CSRF): refused, the code is not used. Usually an
         // in-app browser that handed HA's login to the default one: the way back starts it again there.
-        if (pending.toSetup && !bound) return page(403, "Forbidden", "Can't sign in",
+        if (then == Then.SETUP && !bound) return page(403, "Forbidden", "Can't sign in",
             "This sign-in was started in another browser. Start it again from the setup page, in this browser.", button = back)
         val code = q["code"]?.takeIf { it.isNotEmpty() }
             ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. $again", button = back)
@@ -209,16 +213,17 @@ class SignInServer(
                     return page(500, "Internal Server Error", "Can't sign in", why ?: "The panel couldn't store the sign-in.", button = back)
                 }
                 AuthLog.i("Signed in to ${pending.haBase} (refresh token stored)")
-                if (pending.toSetup) return backToSetup()
+                if (then == Then.SETUP) return backToSetup()
+                if (then == Then.KILN) return kilnDone()
                 page(200, "OK", "Panel signed in", "It's loading your dashboard now. You can close this page.", Look.DONE,
                     tile = haTile(pending.haBase, dot = true), footHtml = MANAGE_FOOT)
             }
             is TokenResult.Error -> {
                 AuthLog.w("code exchange failed: ${r.code} (${r.httpStatus})")
                 when {
-                    r.isInvalidCode -> expired(back)
+                    r.isInvalidCode -> expired(then)
                     r.httpStatus <= 0 -> page(502, "Bad Gateway", "Can't reach Home Assistant",
-                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${if (setup) "sign in again from setup" else "scan the code again"}.", button = back)
+                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${retry(then)}.", button = back)
                     else -> page(502, "Bad Gateway", "Can't sign in",
                         "Home Assistant refused the sign-in (${esc(r.code)}). $again", button = back)
                 }
@@ -242,9 +247,29 @@ class SignInServer(
     private fun notWaiting() = page(409, "Conflict", "Not waiting for a sign-in",
         "Start “Join Home Assistant's Thread network” on the panel first, then scan the code it shows.")
 
-    private fun expired(back: String = "") = page(400, "Bad Request", "This link has expired",
-        if (back.isEmpty()) "Scan the code on the panel again. It shows a new one." else "Go back to setup and sign in again.",
-        button = back, foot = "Codes last 10 minutes and work once.")
+    private fun retry(then: Then) = when (then) {
+        Then.QR -> "scan the code again"
+        Then.SETUP -> "sign in again from setup"
+        Then.KILN -> "sign in again from Kiln"
+    }
+
+    private fun expired(then: Then = Then.QR) = page(400, "Bad Request", "This link has expired",
+        when (then) {
+            Then.QR -> "Scan the code on the panel again. It shows a new one."
+            Then.SETUP -> "Go back to setup and sign in again."
+            Then.KILN -> "Sign in again from Kiln."
+        },
+        button = if (then == Then.SETUP) BACK_TO_SETUP else "", foot = "Codes last 10 minutes and work once.")
+
+    /**
+     * Signed in from Kiln (`then=kiln`): Kiln opened this window and moves on by itself when the panel reports the
+     * sign-in, so the window closes. A browser that won't let a script close it shows the one line, and nothing
+     * about other tabs. The CSP allows that one script by its hash.
+     */
+    private fun kilnDone(): Response {
+        val r = page(200, "OK", "Signed in", "Kiln has moved on.<script>$CLOSE</script>", Look.DONE)
+        return Response(r.status, r.reason, r.headers + ("Content-Security-Policy" to "${r.headers["Content-Security-Policy"]}; script-src '$CLOSE_HASH'"), r.body)
+    }
 
     /**
      * Signed in from the setup page: back to it, at the step after Home Assistant. HA sent the browser here from
@@ -347,6 +372,12 @@ class SignInServer(
 
         /** `[CONTINUE]?then=setup`: the setup page's sign-in, which comes back to it (#453). */
         const val THEN_SETUP = "setup"
+
+        /** `[CONTINUE]?then=kiln`: Kiln's sign-in, in a window Kiln opened, which closes when it is done. */
+        const val THEN_KILN = "kiln"
+
+        const val CLOSE = "window.close()"
+        val CLOSE_HASH = "sha256-" + java.util.Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(CLOSE.toByteArray()))
 
         /** Where a sign-in from the setup page ends: the page, which carries on after Home Assistant. */
         const val SETUP_RETURN = "/setup#signed-in"
