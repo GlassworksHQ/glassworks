@@ -61,7 +61,7 @@ class SilentUpdatesStepTest {
 
     /** One rule (the maintainer, 2026-11-18): the step shows whenever updates ask for a tap and there's a fix. */
     @Test fun itShowsWheneverTheAnswerHasAFix() {
-        val nothingToDo = listOf(SilentUpdates.RootService, SilentUpdates.SystemApp, SilentUpdates.DeviceOwner, SilentUpdates.SelfUpdate, null)
+        val nothingToDo = listOf(SilentUpdates.RootService, SilentUpdates.SystemApp, SilentUpdates.DeviceOwner, SilentUpdates.SelfUpdate)
         for (s in nothingToDo) assertTrue("done for $s", Rig(s).step.done())
         val fixable = listOf(
             SilentUpdates.UnknownAppsOff, SilentUpdates.OldAndroid("9"), SilentUpdates.NoRootService, SilentUpdates.TargetTooLow("17", 35, 34),
@@ -80,6 +80,26 @@ class SilentUpdatesStepTest {
         assertNull(noTouch.ops.getValue("answer").run(JSONObject()))
         assertTrue(answered)
         assertFalse("with touch it asks", SilentUpdatesStep({ SilentUpdates.OldAndroid("6.0.1") }, { false }, {}, touch = { true }).done())
+    }
+
+    /** Not read yet: setup waits on it, and nothing can answer it before its first offer could show (#513). */
+    @Test fun anUnknownAnswerHoldsSetupAndCantBeAnsweredYet() {
+        val r = Rig(null)
+        assertFalse(r.step.done())
+        assertEquals(SilentUpdatesStep.NOT_READ, r.step.ops.getValue("answer").run(JSONObject()))
+        assertFalse(r.answered)
+        val (_, card) = bound(r)
+        assertEquals(SilentUpdatesStep.CHECKING_TITLE, card.title)
+        r.answer = SilentUpdates.SelfUpdate
+        assertTrue("known, nothing to offer, and the checking card latched nothing", r.step.done())
+        assertNull("known: the answer op records it, as setup's end does", r.step.ops.getValue("answer").run(JSONObject()))
+        assertTrue(r.answered)
+    }
+
+    @Test fun aDoneStepOpenedFromTheRailStaysDone() {
+        val r = Rig(SilentUpdates.SelfUpdate)
+        bound(r)
+        assertTrue(r.step.done())
     }
 
     @Test fun anOldBootImagePointsAtKiln() {

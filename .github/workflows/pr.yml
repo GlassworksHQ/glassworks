@@ -397,7 +397,7 @@ jobs:
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         if: steps.changed.outputs.run == 'true'
         with:
-          path: ~/.cache/s1kiosk/microwakeword-${{ steps.models.outputs.commit }}
+          path: ~/.cache/glassworks/microwakeword-${{ steps.models.outputs.commit }}
           key: microwakeword-${{ steps.models.outputs.commit }}
 
       - name: MicroWakeWordClipTest (real models)

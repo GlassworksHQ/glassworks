@@ -45,7 +45,11 @@ class SilentUpdatesStep(
      */
     @Volatile private var shown = false
 
-    override fun done(): Boolean = answered() || !touch() || (!shown && offer(answer()) == null)
+    /**
+     * Not done while the answer isn't known yet (the update manager reads the frame's root service at its start): setup
+     * waits on this step rather than end before its first offer can show (CodeRabbit on #513).
+     */
+    override fun done(): Boolean = answered() || !touch() || (!shown && answer().let { it != null && offer(it) == null })
 
     /** For the setup channel: whether updates are silent, what the step offers ([Offer.wire], or null) and the reason. */
     override fun channelState(): JSONObject? = answer()?.let { s ->
@@ -53,7 +57,7 @@ class SilentUpdatesStep(
     }
 
     /** For the setup channel and the LAN page: answers the step, as "Not now" does. */
-    override val ops = mapOf("answer" to SetupOp { markAnswered(); null })
+    override val ops = mapOf("answer" to SetupOp { if (answer() == null) NOT_READ else { markAnswered(); null } })
 
     override fun screen(context: Context, host: SetupHost): SetupScreen = Screen(context, host)
 
@@ -63,11 +67,16 @@ class SilentUpdatesStep(
         private var noSettings = false
 
         override fun bind(card: SetupCard, entered: Boolean) {
-            if (!host.preview) shown = true
             val s = answer()
+            // Only a live card with something to offer latches: one opened from the rail once done stays done.
+            if (!host.preview && offer(s) != null) shown = true
             lastSilent = s?.silent
             when {
-                s?.silent == true -> {
+                s == null -> {
+                    card.title(CHECKING_TITLE)
+                    card.body(CHECKING_BODY)
+                }
+                s.silent -> {
                     card.title(ALLOW_TITLE)
                     card.body(ALLOW_BODY)
                     card.status(ON, SetupCard.Tone.GREEN)
@@ -125,6 +134,10 @@ class SilentUpdatesStep(
         const val OPEN_SETTINGS = "Open Android's settings"
         const val OWNER_TITLE = "A tap per update"
         const val OPTIONAL = "Optional"
+        const val CHECKING_TITLE = "Checking updates"
+        const val CHECKING_BODY = "A moment: Glassworks is reading whether updates can install by themselves here."
+        /** The setup channel's answer while [answer] isn't known yet. */
+        const val NOT_READ = "Silent updates isn't read yet. Try again in a moment."
         const val KILN = "https://kiln.glassworks.dev"
 
         fun ownerBody(android: String) =

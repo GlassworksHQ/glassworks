@@ -122,7 +122,7 @@ class FramePanesTest {
         val r = runtimeWith(FakeFrame("wifi" to "go", "camera" to "look", "camera" to "pan", "radio" to "tune"))
         val steps = r.setupSteps(app)
         assertEquals(listOf("radio", "camera", "silent_updates"), steps.map { it.id })
-        val errors = ShadowLog.getLogsForTag("S1Kiosk").filter { it.type == Log.ERROR }.map { it.msg }
+        val errors = ShadowLog.getLogsForTag("Glassworks").filter { it.type == Log.ERROR }.map { it.msg }
         assertEquals(errors.toString(), 3, errors.size)
         assertTrue(errors.toString(), errors[0].contains("'wifi'"))
 
@@ -172,7 +172,7 @@ class FramePanesTest {
         val r = runtimeWith(FakeFrame("silent_updates" to "look"))
         assertEquals(listOf("radio", "silent_updates"), r.setupSteps(app).map { it.id })
         assertTrue("the device's own step", r.setupSteps(app).last() === r.deviceSetupSteps(app).single())
-        val errors = ShadowLog.getLogsForTag("S1Kiosk").filter { it.type == Log.ERROR }.map { it.msg }
+        val errors = ShadowLog.getLogsForTag("Glassworks").filter { it.type == Log.ERROR }.map { it.msg }
         assertTrue(errors.toString(), errors.any { "'silent_updates'" in it })
     }
 
@@ -183,7 +183,7 @@ class FramePanesTest {
         ShadowLog.clear()
         val r = runtimeWith(FakeFrame("camera" to "look", card = false))
         assertEquals(listOf("radio", "silent_updates"), r.setupSteps(app).map { it.id })
-        val errors = ShadowLog.getLogsForTag("S1Kiosk").filter { it.type == Log.ERROR }.map { it.msg }
+        val errors = ShadowLog.getLogsForTag("Glassworks").filter { it.type == Log.ERROR }.map { it.msg }
         assertTrue(errors.toString(), errors.any { "'camera'" in it && "no card" in it })
     }
 }

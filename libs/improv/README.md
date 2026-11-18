@@ -41,7 +41,7 @@ device over **Bluetooth LE**, over a **serial** stream, or over **adb on a USB c
 page. It also joins the network, which is the hard part on Android 10 and later. Few Android
 implementations of the device side exist.
 
-It was extracted from [S1 Kiosk](../../frames/aqara-s1-plus/android/README.md), where it puts the Aqara S1 Plus panel on Wi-Fi.
+It was extracted from [Glassworks for the Aqara S1 Plus](../../frames/aqara-s1-plus/android/README.md), where it puts the Aqara S1 Plus panel on Wi-Fi.
 Package `dev.glassworks.improv`, MIT licensed.
 
 ## What's in it
@@ -159,7 +159,7 @@ A web page then opens `localabstract:myapp_improv` over WebUSB adb with the
 also run `adb forward tcp:7000 localabstract:myapp_improv` and use any Improv Serial client on
 `localhost:7000`. Only adb (uid 2000, or 0 after `adb root`) may connect, so USB access with an
 authorized adb key is the physical authorization. That means it needs adb turned on, which suits
-kiosks, signage and other single-purpose devices. S1 Kiosk's `ImprovSerialServer.kt` is the full
+kiosks, signage and other single-purpose devices. Glassworks's `ImprovSerialServer.kt` is the full
 example.
 
 ## Compared with the Improv spec
@@ -230,5 +230,5 @@ up. A Kotlin build needs Kotlin 2.0 or newer; a Java build needs Java 17 (so com
 ```
 
 The protocol, both sessions, the adb peer check and the Wi-Fi security rules have JVM unit tests.
-`ImprovBleServer` and `WifiProvisioner` have no automated tests. S1 Kiosk has only lightly tested them end to end on the panel (see
+`ImprovBleServer` and `WifiProvisioner` have no automated tests. Glassworks has only lightly tested them end to end on the panel (see
 [onboarding.md](../../docs/onboarding.md)).

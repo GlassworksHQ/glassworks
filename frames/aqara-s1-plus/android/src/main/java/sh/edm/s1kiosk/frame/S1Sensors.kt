@@ -11,7 +11,7 @@ import dev.glassworks.screen.LightSource
 import dev.glassworks.screen.PresenceSource
 import kotlin.math.abs
 
-private const val TAG = "S1Kiosk.Screen"
+private const val TAG = "Glassworks.Screen"
 
 /**
  * The S1's "vi5300 Proximity Sensor" (ST VL53L-class time-of-flight, wake-up sensor). The Lumi HAL

@@ -15,7 +15,7 @@ import org.junit.Test
  * trips it too. It covers every module but the libraries, wherever they sit ([RepoFiles]).
  */
 class BuildConfigConfinementTest {
-    /** The one file per app that reads it: S1 Kiosk's, and the generic app's (#23). */
+    /** The one file per app that reads it: the S1 app's, and the generic app's (#23). */
     private val readers = setOf("sh/edm/s1kiosk/KioskApp.kt", "dev/glassworks/generic/GenericApp.kt")
 
     /**

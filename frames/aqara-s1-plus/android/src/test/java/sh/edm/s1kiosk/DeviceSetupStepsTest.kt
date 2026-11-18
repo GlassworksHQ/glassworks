@@ -73,14 +73,16 @@ class DeviceSetupStepsTest {
         assertFalse(SetupPrefs(app).thisDeviceAnswered)
     }
 
-    /** Setup's end answers the device's own steps, also one it skipped, so a lost grant never brings setup back. */
-    @Test fun theEndOfSetupAnswersTheDevicesOwnSteps() {
-        val r = runtime()
-        r.paneDefinitions(app) // a fresh panel: not answered
-        assertFalse(KioskPrefs(app).silentUpdatesAnswered)
+    /**
+     * Setup's end answers the device's own steps through their answer op ([SilentUpdatesStepTest] checks the op once
+     * the answer is known). Before the update manager has read the answer, nothing records it: the step still asks.
+     */
+    @Test fun theEndOfSetupDoesntAnswerSilentUpdatesBeforeItIsRead() {
+        val r = runtime() // no update manager in a test: the answer isn't known
+        r.paneDefinitions(app)
         r.settleDeviceSteps(app)
-        assertTrue(KioskPrefs(app).silentUpdatesAnswered)
-        assertTrue("answered: it never asks again", r.deviceSetupSteps(app).single().done())
+        assertFalse(KioskPrefs(app).silentUpdatesAnswered)
+        assertFalse("it still asks once it's read", r.deviceSetupSteps(app).single().done())
     }
 
     @Test fun theEndOfSetupAnswersThisDeviceToo() {

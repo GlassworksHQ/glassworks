@@ -66,7 +66,7 @@ class SettingsLayoutMockups {
         val byId = running.associateBy { it.id }
         fun model() = MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = defs, running = { byId[it] }).let { m ->
             // The frame's Device page, after Screen, as S1Settings puts it.
-            val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app) { byId[it] }
+            val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app, frame.frameRelease) { byId[it] }
                 else frame.deviceSection(app) { byId[it] }
             device?.let { lastDevice = it; lastFrame = frameName }
             val at = m.sections.indexOfFirst { it.id == "screen" } + 1
@@ -117,6 +117,10 @@ class SettingsLayoutMockups {
         shot("07-edit-a-value", "dashboard") { it.previewEdit("Home Assistant") }
         shot("08-device", "device")
         manageDevice("$prefix-08-device")
+        // #139: the Frame version row, last on a frame with releases of its own.
+        if (lastDevice?.items?.any { it is dev.glassworks.pane.SettingsItem.Info && it.title() == "Frame version" } == true) {
+            shot("08b-device-frame-version", "device") { Mockup.idle(); it.previewScrollTo(Mockup.label(it, "Frame version"), alignBottom = true) }
+        }
     }
 
     @Test
@@ -154,6 +158,19 @@ class SettingsLayoutMockups {
         Mockup.idle()
         Mockup.save("layout-tablet-android11-08-device", o, 1280, 800)
         manageDevice("layout-tablet-android11-08-device")
+    }
+
+    /** The lululemon Mirror's Device page, portrait: its frame version from before Kiln's stamp (#139). */
+    @Test
+    @Config(qualifiers = "w480dp-h960dp-port-hdpi")
+    fun mirror() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        app.applicationInfo.targetSdkVersion = 35
+        val o = menu(sh.edm.s1kiosk.frame.TestFrames.mirror(app), "lululemon Studio Mirror", listOf(panes.voice()), setOf("diagnostics"), "1.1 of 2 GB")
+        o.previewSection("device")
+        Mockup.idle()
+        Mockup.save("layout-mirror-08-device", o, Mockup.H, Mockup.W)
+        manageDevice("layout-mirror-08-device")
     }
 
     private fun aPixelTablet() {

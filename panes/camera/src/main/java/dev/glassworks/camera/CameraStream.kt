@@ -152,7 +152,7 @@ class CameraStream(
     }
 
     companion object {
-        private const val TAG = "S1Kiosk.Camera"
+        private const val TAG = "Glassworks.Camera"
         const val RTSP_PORT = 8554
         const val ONVIF_PORT = 8000
     }

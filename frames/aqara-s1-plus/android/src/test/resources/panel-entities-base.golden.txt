@@ -23,6 +23,7 @@ dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
+frame_update|-1294359206|UpdateEntity|Frame update|mdi:package-up|firmware|CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
@@ -108,6 +109,7 @@ dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
+frame_update|-1294359206|UpdateEntity|Frame update|mdi:package-up|firmware|CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
@@ -195,6 +197,7 @@ dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
+frame_update|-1294359206|UpdateEntity|Frame update|mdi:package-up|firmware|CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
@@ -273,6 +276,7 @@ dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
+frame_update|-1294359206|UpdateEntity|Frame update|mdi:package-up|firmware|CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=
@@ -351,6 +355,7 @@ dashboard|-457110565|SelectEntity|Dashboard|mdi:view-dashboard||CONFIG|authOnly=
 dashboard_url|-228981371|TextEntity|Dashboard URL|mdi:web||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 diagnostics|-377449481|SwitchEntity|Diagnostics|mdi:stethoscope||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 do_not_disturb|-1712049842|SwitchEntity|Do not disturb|mdi:bell-off-outline||CONFIG|authOnly=false|options=|eventTypes=
+frame_update|-1294359206|UpdateEntity|Frame update|mdi:package-up|firmware|CONFIG|authOnly=false|options=|eventTypes=
 hide_ha_header|208075011|SwitchEntity|Hide HA header|mdi:page-layout-header||CONFIG|authOnly=false|options=|eventTypes=|disabledByDefault
 home_assistant_url|-1466418685|TextSensorEntity|Home Assistant URL|mdi:home-assistant||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
 idle_timeout|681270463|NumberEntity|Idle timeout|mdi:timer-outline|duration|CONFIG|authOnly=false|options=|eventTypes=

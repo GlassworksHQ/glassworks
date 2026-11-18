@@ -58,7 +58,7 @@ class WallBase(
     )
 
     companion object {
-        private const val TAG = "S1Base"
+        private const val TAG = "Glassworks.Base"
         private const val DOCK_INTERVAL_MS = 60_000L
         private const val NO_REPLY_MS = 15_000L
         private const val MIN_DOCK_READ_GAP_MS = 2_000L
