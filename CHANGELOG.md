@@ -168,6 +168,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Dashboards can read the panel's state as `window.glassworks`.** The presence, light and screen state a
   dashboard sees now has the Glassworks name, with a `glassworks-state` event when it changes. The old
   `window.s1kiosk` and `s1kiosk-state` keep working, so existing dashboards need no change.
+- **The Manage page says what the legacy build can't do.** On Android 6 and 7 devices and the lululemon
+  Mirror, the Overview has a *Legacy* chip next to the version. Hover it, tap it or tab to it: its web engine
+  is frozen and gets no security fixes, so it loads only your Home Assistant, and remote debugging is off.
+  Remote debugging now stays off there for real: the adb extra that turns it on is ignored, and so is the
+  setting if it was already on. Other devices don't show the chip.
 
 ### Changed
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
