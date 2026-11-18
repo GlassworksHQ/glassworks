@@ -152,6 +152,18 @@ class PrYmlFollowsTheTable(unittest.TestCase):
                 self.assertEqual(job_if, f"${{{{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.{key} != 'false') }}}}", job)
 
 
+class GradleJobsForgetMisses(unittest.TestCase):
+    def test_every_gradle_job_ends_by_dropping_dependency_metadata_on_failure(self):
+        last = ("      - name: Forget Gradle's dependency metadata after a failure\n        if: failure()\n"
+                "        run: rm -rf ~/.gradle/caches/modules-2/metadata-*\n")
+        for name in ('pr.yml', 'core-emulators.yml'):
+            jobs = re.split(r'^  [a-z0-9-]+:\n', (ROOT / '.github/workflows' / name).read_text().split('\njobs:\n', 1)[1], flags=re.M)
+            gradle = [j for j in jobs if 'gradle/actions/setup-gradle@' in j]
+            self.assertTrue(gradle, name)
+            for job in gradle:
+                self.assertTrue(job.rstrip('\n').endswith(last.rstrip('\n')), job[:200])
+
+
 class DocsCarryTheTable(unittest.TestCase):
     def test_docs_ci_md_has_the_current_table(self):
         doc = (ROOT / 'docs/ci.md').read_text()
