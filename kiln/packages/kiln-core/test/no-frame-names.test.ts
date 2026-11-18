@@ -17,7 +17,7 @@ const FRAME_NAMES: [what: string, pattern: RegExp, catches: string[]][] = [
   ['the S1 partitions and their sizes', /vbmeta_system|vbmeta_vendor|dtbo|0x0*2000000\b|0x0*60000000\b|\b33554432\b|\b1610612736\b/i,
     ['vbmeta_system', 'vbmeta_vendor', 'dtbo', '0x2000000', '0x60000000', '33554432', '1610612736']],
   ['the S1 boot patch, radio and branding', /magisk|overlay|radio|otbr|zigbee|thread_router|glass.?tile/i,
-    ['isMagiskPatched', 'overlay.d', 'radio-rc', 'otbr-agent', 'zigbee_host', 'thread_router', 'Glass Tile', 'glass-tile']],
+    ['isMagiskPatched', 'overlay.d', 'radio-sh', 'otbr-agent', 'zigbee_host', 'thread_router', 'Glass Tile', 'glass-tile']],
   ['the S1 debloat list', /debloat/i, ['DEBLOAT']],
 ];
 

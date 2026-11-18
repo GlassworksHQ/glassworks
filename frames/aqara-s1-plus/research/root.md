@@ -5,6 +5,11 @@ evidence: verified
 
 # Persistent root: Magisk + the S1 Kiosk root helper
 
+> **S1 frame 1.0.0 (#139, #528):** the boot image now carries the frame loader, with Glassworks
+> names (`glassworks.rc`, `glassworks_loader.sh`, `/data/glassworks`), and everything but the loader
+> comes in a signed frame bundle: [frame-loader.md](frame-loader.md). This page describes how root was
+> set up, and the 0.4.3 boot image's services, which panels keep until their Kiln update.
+
 **Status (2026-11-09): working on the reference panel.**
 - `boot` is Magisk v31.1 plus our `overlay.d/s1kiosk_radio.rc`.
 - It was flashed from the FEL U-Boot with `fastboot flash boot`.

@@ -1,4 +1,7 @@
 #!/system/bin/sh
+# TRANSITION (#528): remove with the s1kiosk names, one release after S1 frame 1.0.0. This is the
+# 0.4.3 boot images' copy, kept so the old radio bundle (make-bundle.py --version) still builds and
+# is tested against it. Boot images with the frame loader use glassworks_*.sh instead.
 # s1kiosk_bundle: root install service for signed radio bundles (docs/radio.md "Radio bundles"),
 # contract v1. Ships in the boot image (overlay.d/sbin, ${MAGISKTMP}) next to s1kiosk_verify and
 # s1kiosk_bundle.pub (the project's Ed25519 public key).

@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
-# Patch a stock S1 Plus boot.img with Magisk + the S1 Kiosk root helper, entirely on the host.
+# Patch a stock S1 Plus boot.img with Magisk + the S1 frame loader, entirely on the host.
 # No adb and no panel needed, so it works for factory panels (stock boot read over FEL fastboot).
 #
 #   frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh <stock-boot.img> <out-boot.img>
 #
 # Runs Magisk's own boot_patch.sh in an arm64 Linux container (Docker): the arm64 magiskboot does
-# the work, and the panel's armeabi-v7a magiskinit/magisk/init-ld are the payload. Then it adds:
-#   overlay.d/s1kiosk_radio.rc           init service (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.rc)
-#   overlay.d/sbin/s1kiosk_radio.sh      root helper   -> ${MAGISKTMP}/s1kiosk_radio.sh
-#   overlay.d/sbin/{otbr-agent,ot-ctl}   Thread stack  (frames/aqara-s1-plus/tools/radio/build-otbr.sh)
-#   overlay.d/s1kiosk_firstboot.rc       one-shot first-boot provisioning (frames/aqara-s1-plus/tools/root/s1kiosk_firstboot.*)
-#   overlay.d/sbin/s1kiosk_firstboot.sh
-#   overlay.d/sbin/s1kiosk_adb_keys      this computer's adb public key, authorized on first boot so a
+# the work, and the panel's armeabi-v7a magiskinit/magisk/init-ld are the payload. Then it adds the
+# S1 frame's loader and the boot image's own copies of what a frame bundle may replace
+# (frames/aqara-s1-plus/research/frame-loader.md):
+#   overlay.d/glassworks.rc              the init service slots (frames/aqara-s1-plus/tools/root/glassworks.rc)
+#   overlay.d/sbin/glassworks_loader.sh  the loader: runs each slot from the bundle or the copies below
+#   overlay.d/sbin/glassworks_verify     Ed25519 checker (frames/aqara-s1-plus/tools/root/build-verify.sh)
+#   overlay.d/sbin/glassworks_bundle.pub the project's bundle public key (frames/aqara-s1-plus/tools/root/glassworks_bundle.pub)
+#   overlay.d/sbin/glassworks_adb_keys   this computer's adb public key, authorized on first boot so a
 #                                        factory panel (no adb) can continue with frames/aqara-s1-plus/tools/install.sh
 #                                        (ADB_PUBKEY=<file>, default ~/.android/adbkey.pub; none = skip)
-#   overlay.d/s1kiosk_netwatch.rc        network watchdog (cycles Wi-Fi if the link wedges)
-#   overlay.d/sbin/s1kiosk_netwatch.sh
-#   overlay.d/s1kiosk_update.rc          root install service for app updates (started by the app)
-#   overlay.d/sbin/s1kiosk_update.sh
-#   overlay.d/s1kiosk_bundle.rc          root install service for signed radio bundles (started by the app)
-#   overlay.d/sbin/s1kiosk_bundle.sh
-#   overlay.d/sbin/s1kiosk_verify        Ed25519 checker (frames/aqara-s1-plus/tools/root/build-verify.sh)
-#   overlay.d/sbin/s1kiosk_bundle.pub    the project's radio bundle public key (frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub)
-#   overlay.d/s1kiosk_branding.rc        boot animation, bind-mounted over /system/media/bootanimation.zip
-#   overlay.d/sbin/s1kiosk_bootanimation.zip   (BOOT_ANIMATION=<zip>, default branding/glass-tile; none = stock)
+#   overlay.d/sbin/glassworks_radio.sh   the radio helper (frames/aqara-s1-plus/tools/radio/glassworks_radio.sh)
+#   overlay.d/sbin/{otbr-agent,ot-ctl}   Thread stack (frames/aqara-s1-plus/tools/radio/build-otbr.sh)
+#   overlay.d/sbin/glassworks_firstboot.sh, glassworks_netwatch.sh, glassworks_update.sh
+#   overlay.d/sbin/glassworks_bootanimation.zip   (BOOT_ANIMATION=<zip>, default branding/glass-tile; none = stock)
+#                                        the loader bind-mounts it over /system/media/bootanimation.zip
 # Nothing is flashed here; see frames/aqara-s1-plus/research/root.md.
 #
 # Magisk is GPLv3 and is not redistributed by this repo: the official release is downloaded and its
@@ -45,7 +41,7 @@ done
 grep -q '/data/s1kiosk/radio/run' "$RADIO/out/BUILD-INFO.txt" ||
   { echo "otbr was built with the wrong OTBR_RUNTIME_DIR (need /data/s1kiosk/radio/run)"; exit 1; }
 [ -x "$HERE/out/s1kiosk_verify" ] || { echo "missing $HERE/out/s1kiosk_verify: run frames/aqara-s1-plus/tools/root/build-verify.sh"; exit 1; }
-grep -qE '^[0-9a-f]{64}$' "$HERE/s1kiosk_bundle.pub" || { echo "$HERE/s1kiosk_bundle.pub is not a 32-byte hex public key"; exit 1; }
+grep -qE '^[0-9a-f]{64}$' "$HERE/glassworks_bundle.pub" || { echo "$HERE/glassworks_bundle.pub is not a 32-byte hex public key"; exit 1; }
 [ "$(head -c 8 "$IN")" = "ANDROID!" ] || { echo "$IN is not an Android boot image"; exit 1; }
 
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
@@ -57,14 +53,14 @@ mkdir "$W/p"
 cp "$W/x/assets/boot_patch.sh" "$W/x/assets/util_functions.sh" "$W/p/"
 cp "$W/x/lib/arm64-v8a/libmagiskboot.so" "$W/p/magiskboot"           # runs on the host
 for b in magiskinit magisk init-ld; do cp "$W/x/lib/$PAYLOAD_ABI/lib$b.so" "$W/p/$b"; done  # go in the image
-cp "$RADIO/s1kiosk_radio.rc" "$RADIO/s1kiosk_radio.sh" "$RADIO/out/otbr-agent" "$RADIO/out/ot-ctl" "$W/p/"
-cp "$HERE/s1kiosk_firstboot.rc" "$HERE/s1kiosk_firstboot.sh" "$HERE/s1kiosk_netwatch.rc" "$HERE/s1kiosk_netwatch.sh" "$W/p/"
-cp "$HERE/s1kiosk_update.rc" "$HERE/s1kiosk_update.sh" "$W/p/"
-cp "$HERE/s1kiosk_bundle.rc" "$HERE/s1kiosk_bundle.sh" "$HERE/s1kiosk_bundle.pub" "$HERE/out/s1kiosk_verify" "$W/p/"
-if [ "$ADB_PUBKEY" = none ]; then : > "$W/p/s1kiosk_adb_keys"
+cp "$HERE/glassworks.rc" "$HERE/glassworks_loader.sh" "$HERE/glassworks_bundle.pub" "$W/p/"
+cp "$HERE/out/s1kiosk_verify" "$W/p/glassworks_verify"   # the pinned release binary keeps its old file name
+cp "$RADIO/glassworks_radio.sh" "$RADIO/out/otbr-agent" "$RADIO/out/ot-ctl" "$W/p/"
+cp "$HERE/glassworks_firstboot.sh" "$HERE/glassworks_netwatch.sh" "$HERE/glassworks_update.sh" "$W/p/"
+if [ "$ADB_PUBKEY" = none ]; then : > "$W/p/glassworks_adb_keys"
 elif [ -s "$ADB_PUBKEY" ]; then
   grep -q '^QAAAA' "$ADB_PUBKEY" || { echo "$ADB_PUBKEY does not look like an adb public key"; exit 1; }
-  cp "$ADB_PUBKEY" "$W/p/s1kiosk_adb_keys"
+  cp "$ADB_PUBKEY" "$W/p/glassworks_adb_keys"
 else echo "no adb public key at $ADB_PUBKEY (run 'adb start-server' once, or ADB_PUBKEY=none)"; exit 1
 fi
 BRANDING_CPIO=""
@@ -76,20 +72,19 @@ z = zipfile.ZipFile(sys.argv[1])
 bad = [i.filename for i in z.infolist() if i.compress_type != zipfile.ZIP_STORED]
 assert not bad, f"bootanimation.zip entries must be STORED, not compressed: {bad[:3]}"
 PY
-  cp "$BOOT_ANIMATION" "$W/p/s1kiosk_bootanimation.zip"
-  cp "$HERE/s1kiosk_branding.rc" "$W/p/"
-  BRANDING_CPIO='"add 0644 overlay.d/s1kiosk_branding.rc s1kiosk_branding.rc" "add 0644 overlay.d/sbin/s1kiosk_bootanimation.zip s1kiosk_bootanimation.zip"'
+  cp "$BOOT_ANIMATION" "$W/p/glassworks_bootanimation.zip"
+  BRANDING_CPIO='"add 0644 overlay.d/sbin/glassworks_bootanimation.zip glassworks_bootanimation.zip"'
 fi
 cp "$IN" "$W/p/boot.img"
 
-# DEVELOPMENT ONLY: DEV_SU_HOURS=<n> adds frames/aqara-s1-plus/tools/root/dev/s1kiosk_devsu.{rc,sh}: adb shell root for n hours
+# DEVELOPMENT ONLY: DEV_SU_HOURS=<n> adds frames/aqara-s1-plus/tools/root/dev/glassworks_devsu.{rc,sh}: adb shell root for n hours
 # after each boot, plus the adb key authorized every boot. Never for a normal install.
 DEV_CPIO=""
 if [ -n "${DEV_SU_HOURS:-}" ]; then
   case "$DEV_SU_HOURS" in *[!0-9]*|'') echo "DEV_SU_HOURS must be a number of hours"; exit 1 ;; esac
-  cp "$HERE/dev/s1kiosk_devsu.rc" "$W/p/"
-  sed "s/__HOURS__/$DEV_SU_HOURS/" "$HERE/dev/s1kiosk_devsu.sh" > "$W/p/s1kiosk_devsu.sh"
-  DEV_CPIO='"add 0644 overlay.d/s1kiosk_devsu.rc s1kiosk_devsu.rc" "add 0700 overlay.d/sbin/s1kiosk_devsu.sh s1kiosk_devsu.sh"'
+  cp "$HERE/dev/glassworks_devsu.rc" "$W/p/"
+  sed "s/__HOURS__/$DEV_SU_HOURS/" "$HERE/dev/glassworks_devsu.sh" > "$W/p/glassworks_devsu.sh"
+  DEV_CPIO='"add 0644 overlay.d/glassworks_devsu.rc glassworks_devsu.rc" "add 0700 overlay.d/sbin/glassworks_devsu.sh glassworks_devsu.sh"'
   echo "WARNING: development image: adb shell gets root for $DEV_SU_HOURS h after each boot"
 fi
 docker run --rm --platform linux/arm64 -e PREINITDEVICE="$PREINITDEVICE" -e BRANDING_CPIO="$BRANDING_CPIO" -e DEV_CPIO="$DEV_CPIO" -v "$W/p":/w -w /w \
@@ -102,25 +97,31 @@ docker run --rm --platform linux/arm64 -e PREINITDEVICE="$PREINITDEVICE" -e BRAN
   KEEPVERITY=true KEEPFORCEENCRYPT=true sh boot_patch.sh /w/boot.img
   ./magiskboot cleanup
   ./magiskboot unpack new-boot.img
+  # A boot image patched before still carries the overlay files added then, because the Magisk
+  # restore only undoes its own changes. Drop every overlay.d entry but the Magisk ones, so a re-patch
+  # equals a patch of stock (the s1kiosk_* services of a 0.4.3 image would otherwise run as well).
+  for e in $(./magiskboot cpio ramdisk.cpio "ls -r overlay.d" 2>/dev/null | awk "{print \$NF}"); do
+    case "$e" in
+      overlay.d/sbin|overlay.d/sbin/magisk.xz|overlay.d/sbin/init-ld.xz) ;;
+      overlay.d/*) ./magiskboot cpio ramdisk.cpio "rm -r $e" ;;
+    esac
+  done
   ./magiskboot cpio ramdisk.cpio \
-    "add 0644 overlay.d/s1kiosk_radio.rc s1kiosk_radio.rc" \
-    "add 0700 overlay.d/sbin/s1kiosk_radio.sh s1kiosk_radio.sh" \
+    "add 0644 overlay.d/glassworks.rc glassworks.rc" \
+    "add 0700 overlay.d/sbin/glassworks_loader.sh glassworks_loader.sh" \
+    "add 0700 overlay.d/sbin/glassworks_verify glassworks_verify" \
+    "add 0644 overlay.d/sbin/glassworks_bundle.pub glassworks_bundle.pub" \
+    "add 0600 overlay.d/sbin/glassworks_adb_keys glassworks_adb_keys" \
+    "add 0700 overlay.d/sbin/glassworks_radio.sh glassworks_radio.sh" \
     "add 0700 overlay.d/sbin/otbr-agent otbr-agent" \
     "add 0700 overlay.d/sbin/ot-ctl ot-ctl" \
-    "add 0644 overlay.d/s1kiosk_firstboot.rc s1kiosk_firstboot.rc" \
-    "add 0700 overlay.d/sbin/s1kiosk_firstboot.sh s1kiosk_firstboot.sh" \
-    "add 0600 overlay.d/sbin/s1kiosk_adb_keys s1kiosk_adb_keys" \
-    "add 0644 overlay.d/s1kiosk_netwatch.rc s1kiosk_netwatch.rc" \
-    "add 0700 overlay.d/sbin/s1kiosk_netwatch.sh s1kiosk_netwatch.sh" \
-    "add 0644 overlay.d/s1kiosk_update.rc s1kiosk_update.rc" \
-    "add 0700 overlay.d/sbin/s1kiosk_update.sh s1kiosk_update.sh" \
-    "add 0644 overlay.d/s1kiosk_bundle.rc s1kiosk_bundle.rc" \
-    "add 0700 overlay.d/sbin/s1kiosk_bundle.sh s1kiosk_bundle.sh" \
-    "add 0700 overlay.d/sbin/s1kiosk_verify s1kiosk_verify" \
-    "add 0644 overlay.d/sbin/s1kiosk_bundle.pub s1kiosk_bundle.pub"
+    "add 0700 overlay.d/sbin/glassworks_firstboot.sh glassworks_firstboot.sh" \
+    "add 0700 overlay.d/sbin/glassworks_netwatch.sh glassworks_netwatch.sh" \
+    "add 0700 overlay.d/sbin/glassworks_update.sh glassworks_update.sh"
   [ -z "$BRANDING_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $BRANDING_CPIO"
   [ -z "$DEV_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $DEV_CPIO"
   ./magiskboot cpio ramdisk.cpio "extract .backup/.magisk magisk.cfg"
+  chmod 644 magisk.cfg   # extracted with the cpio mode (000); root may not override it on a shared mount
   echo "--- Magisk config:"; cat magisk.cfg
   echo "--- overlay.d:"; ./magiskboot cpio ramdisk.cpio "ls -r overlay.d"
   ./magiskboot repack new-boot.img s1-boot.img'

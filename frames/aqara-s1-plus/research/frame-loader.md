@@ -5,10 +5,12 @@ evidence: read
 
 # Frame updates on the S1: the loader, signed bundles, and a reflash without opening the panel
 
-**Status (2026-11-18): read and designed, untested on a panel.** The stock firmware answers both open
-questions in #139 on paper: `/data` is not encrypted, and the stock U-Boot has a fastboot `boot`
-command. The no-opening reflash has a likely route, with two premises from the issue corrected below.
-Every panel test is written out in [Panel tests](#panel-tests) and has not run yet.
+**Status (2026-11-18): the loader is built and passes off-device tests; untested on a panel.** The
+stock firmware answers both open questions in #139 on paper: `/data` is not encrypted, and the stock
+U-Boot has a fastboot `boot` command. The no-opening reflash has a likely route, with two premises from
+the issue corrected below. The loader is in `frames/aqara-s1-plus/tools/root/` (`glassworks_loader.sh`,
+`glassworks.rc`), and both boot patchers make byte-identical images with it (attempt 7). Every panel
+test is written out in [Panel tests](#panel-tests) and has not run yet.
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
 backups and Aqara's 4.5.80 OTA package, all outside the repo; AOSP `android-10.0.0_r41`; this repo at
@@ -120,6 +122,27 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
    `vbmeta` flags. `com.lumi.ota` stays disabled ([debloat.md](debloat.md)). That is the S1's
    vendor-updater decision.
 
+7. **Re-patching an already-patched image** (2026-11-18, verified on a host). The Kiln goldens
+   were made again with the loader's overlay: `patch-boot-magisk.sh` in its arm64 container over the
+   stock 4.5.80 and older images, then `S1_WEB_GOLDEN=<dir> npm test -w @glassworks/bootpatch`.
+   Re-patching the old radio-bundle image (`repatch-bundled`) did **not** give the same image as
+   patching stock:
+   ```
+   --- overlay.d:   (repatch-bundled, before the fix)
+   overlay.d/glassworks.rc
+   overlay.d/s1kiosk_radio.rc
+   overlay.d/sbin/glassworks_loader.sh
+   …
+   overlay.d/sbin/s1kiosk_radio.sh
+   ```
+   The Magisk restore only undoes the Magisk changes, so the overlay files of the earlier patch stay.
+   Kiln's update path patches the panel's own, already-patched `boot`, so a 0.4.3 panel would have run
+   `s1kiosk_radio` next to `glassworks_radio`, both driving the radio. Both patchers now drop every
+   `overlay.d` entry but the Magisk ones before adding theirs. After the fix, `repatch-bundled` equals
+   `stock-old` and every golden case matches byte for byte (61 tests). It also fixed an older slip:
+   re-patching with `BOOT_ANIMATION=none` used to keep the animation of the earlier patch.
+   `kiln/packages/bootpatch/test/repatch-overlay.test.ts` pins it in CI without the goldens.
+
 ## Result
 
 ### The open questions in #139
@@ -155,6 +178,8 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
      version row and update notice read exactly these two properties.
   4. It bind-mounts the bundle's `bootanimation.zip` over `/system/media/bootanimation.zip`, or the
      ramdisk's copy when the bundle has none or is bad.
+- **The installer is not a slot.** `glassworks_bundle` always runs the boot image's
+  `glassworks_loader.sh install`, so a bundle can't replace the code that checks bundles.
 - **Fallback.** A missing bundle, a failed check, or another frame's bundle means the boot image's
   copies run. A slot whose bundle script exits 3 times within a minute is marked bad, and that slot
   runs the boot copy from then on. That is the radio helper's rule today, applied to every slot.
@@ -323,6 +348,20 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
 `fastboot flash boot "$B/boot.img"` (and `misc` if T2 ran),
 `frames/aqara-s1-plus/tools/install/fb-read-partition.sh boot <file>`, compare the first 33554432
 bytes with `SHA256SUMS`, and `fastboot reboot`.
+
+### The loader on the panel (L1–L5)
+
+These need a boot image built by `patch-boot-magisk.sh` from this branch, RAM-booted (T3's route, or
+FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3: the radio helper reads
+`persist.s1kiosk.*` when the new names are empty, so `thread_router` comes back by itself.
+
+| Test | What it settles | Expect |
+|---|---|---|
+| L1 | `/data` at `post-fs-data`, and the `exec` step | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; `logcat -d -s glassworks_loader` |
+| L2 | The slots under init | `init.svc.glassworks_radio`, `_netwatch` = `running`; `_firstboot` ran (`dmesg` has `glassworks_firstboot` lines); no `init.svc.s1kiosk_*` |
+| L3 | The radio from the old setting | `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.radio.source` = `boot`, otbr runs |
+| L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
+| L5 | The check's cost at `post-fs-data` | the `glassworks_loader` log lines' times, with and without a bundle (a bundle needs the bundles PR) |
 
 ## Open questions
 

@@ -78,22 +78,19 @@ if (sha256(apk) !== pinned) fail(`${opt.apk} is not the pinned Magisk APK (sha25
 const from = opt['overlay-dir']
   ? (name) => read(join(opt['overlay-dir'], name))
   : (name) => read({
-    's1kiosk_radio.rc': join(radio, name), 's1kiosk_radio.sh': join(radio, name),
+    'glassworks_radio.sh': join(radio, name),
     'otbr-agent': join(radio, 'out', name), 'ot-ctl': join(radio, 'out', name),
-    's1kiosk_verify': join(root, 'out', name),
-    's1kiosk_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
+    'glassworks_verify': join(root, 'out', 's1kiosk_verify'),
+    'glassworks_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
   }[name] ?? join(root, name));
 const adbKey = opt['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
 
 const overlay = s1Overlay({
-  radioRc: from('s1kiosk_radio.rc'), radioSh: from('s1kiosk_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
-  firstbootRc: from('s1kiosk_firstboot.rc'), firstbootSh: from('s1kiosk_firstboot.sh'),
+  rc: from('glassworks.rc'), loaderSh: from('glassworks_loader.sh'), verify: from('glassworks_verify'), bundlePub: from('glassworks_bundle.pub'),
   adbKeys: adbKey === 'none' ? new Uint8Array(0) : read(adbKey),
-  netwatchRc: from('s1kiosk_netwatch.rc'), netwatchSh: from('s1kiosk_netwatch.sh'),
-  updateRc: from('s1kiosk_update.rc'), updateSh: from('s1kiosk_update.sh'),
-  bundleRc: from('s1kiosk_bundle.rc'), bundleSh: from('s1kiosk_bundle.sh'),
-  verify: from('s1kiosk_verify'), bundlePub: from('s1kiosk_bundle.pub'),
-  branding: opt['no-anim'] ? undefined : { rc: from('s1kiosk_branding.rc'), bootAnimation: from('s1kiosk_bootanimation.zip') },
+  radioSh: from('glassworks_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
+  firstbootSh: from('glassworks_firstboot.sh'), netwatchSh: from('glassworks_netwatch.sh'), updateSh: from('glassworks_update.sh'),
+  bootAnimation: opt['no-anim'] ? undefined : from('glassworks_bootanimation.zip'),
 });
 
 const r = await patchBoot({ boot: read(input), magiskApk: apk, overlay, preinitDevice: opt.preinit });

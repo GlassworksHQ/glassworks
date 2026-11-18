@@ -10,9 +10,8 @@ import { isOurSplash } from './splash';
 /** The blobs in kiln/assets.lock.json (staged by kiln/scripts/stage-assets.mjs). */
 export type AssetName =
   | 'uboot-spl' | 'uboot' | 'magisk' | 'otbr-agent' | 'ot-ctl'
-  | 'radio-rc' | 'radio-sh' | 'firstboot-rc' | 'firstboot-sh' | 'netwatch-rc' | 'netwatch-sh' | 'update-rc' | 'update-sh'
-  | 'bundle-rc' | 'bundle-sh' | 'verify' | 'bundle-pub'
-  | 'branding-rc' | 'bootanimation' | 'bootlogo' | 'kiosk-apk' | 'keyboard-apk';
+  | 'rc' | 'loader-sh' | 'verify' | 'bundle-pub' | 'radio-sh' | 'firstboot-sh' | 'netwatch-sh' | 'update-sh'
+  | 'bootanimation' | 'bootlogo' | 'kiosk-apk' | 'keyboard-apk';
 
 export type SetUpOptions = Omit<ProvisionOptions, 'kioskApk' | 'keyboardApk'> & { keyboard?: boolean };
 
@@ -50,18 +49,16 @@ export const s1Plus: Recipe<AssetName, SetUpOptions, Provisioned> = {
     ours: { bootloader: { what: 'splash', is: isOurSplash } },
   },
 
-  patching: 'Adding root, the radio helper and this browser\'s key',
+  patching: 'Adding root, the frame loader and this browser\'s key',
 
   async patchBoot({ backup, asset: a, adbPublicKey, branding, log }) {
-    const [magiskApk, radioRc, radioSh, otbrAgent, otCtl, firstbootRc, firstbootSh, netwatchRc, netwatchSh, updateRc, updateSh,
-      bundleRc, bundleSh, verify, bundlePub] =
-      await Promise.all([a('magisk'), a('radio-rc'), a('radio-sh'), a('otbr-agent'), a('ot-ctl'), a('firstboot-rc'), a('firstboot-sh'), a('netwatch-rc'), a('netwatch-sh'), a('update-rc'), a('update-sh'),
-        a('bundle-rc'), a('bundle-sh'), a('verify'), a('bundle-pub')]);
+    const [magiskApk, rc, loaderSh, verify, bundlePub, radioSh, otbrAgent, otCtl, firstbootSh, netwatchSh, updateSh] =
+      await Promise.all([a('magisk'), a('rc'), a('loader-sh'), a('verify'), a('bundle-pub'), a('radio-sh'), a('otbr-agent'), a('ot-ctl'),
+        a('firstboot-sh'), a('netwatch-sh'), a('update-sh')]);
     const overlay = s1Overlay({
-      radioRc, radioSh, otbrAgent, otCtl, firstbootRc, firstbootSh, netwatchRc, netwatchSh, updateRc, updateSh,
-      bundleRc, bundleSh, verify, bundlePub,
+      rc, loaderSh, verify, bundlePub, radioSh, otbrAgent, otCtl, firstbootSh, netwatchSh, updateSh,
       adbKeys: new TextEncoder().encode(`${adbPublicKey}\n`),
-      branding: branding ? { rc: await a('branding-rc'), bootAnimation: await a('bootanimation') } : undefined,
+      bootAnimation: branding ? await a('bootanimation') : undefined,
     });
     const patched = await patchBoot({ boot: backup.get('boot')!, magiskApk, overlay });
     patched.log.forEach((l) => log(l));

@@ -1,0 +1,76 @@
+# The S1 frame's init services (frames/aqara-s1-plus/research/frame-loader.md), injected by Magisk as
+# overlay.d/glassworks.rc. The scripts ship in overlay.d/sbin (${MAGISKTMP}). Every slot runs
+# glassworks_loader.sh, which picks the slot's script from the signed frame bundle or the boot image.
+# init only reads .rc files at boot, so these slots are fixed; svc1 and svc2 are spare slots for
+# services a later bundle brings.
+
+# Once per boot, before the boot animation and the app: load a staged bundle, check the bundle, set
+# ro.glassworks.frame.id and ro.glassworks.frame.version, mount the boot animation. `exec` blocks init
+# until it is done.
+on post-fs-data
+    exec u:r:su:s0 root root -- /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh boot
+
+# The radio helper (docs/radio.md). Never exits. The app changes the mode with
+# setprop persist.glassworks.radio_mode <id>; setprop ctl.restart glassworks_radio
+service glassworks_radio /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run radio
+    user root
+    group root system
+    seclabel u:r:su:s0
+    disabled
+
+# The watchdog: the Wi-Fi link and Android's ActivityManager (#248).
+service glassworks_netwatch /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run netwatch
+    user root
+    group root system
+    seclabel u:r:su:s0
+    disabled
+
+# First-boot provisioning: authorizes the installer's adb key, turns adb and Wi-Fi on. Runs once.
+service glassworks_firstboot /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run firstboot
+    user root
+    group root system
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+# App updates: the app stages files/update/pending.apk, sets sys.glassworks.update.status requested,
+# then ctl.start glassworks_update. It installs that one file, only as an update of sh.edm.s1kiosk.
+service glassworks_update /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run update
+    user root
+    group root system
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+# Frame bundles: the app stages files/frame/bundle-in, sets sys.glassworks.bundle.status requested,
+# then ctl.start glassworks_bundle. Always the boot image's installer: a bundle can't replace it.
+service glassworks_bundle /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh install
+    user root
+    group root system
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+service glassworks_svc1 /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run svc1
+    user root
+    group root system
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+service glassworks_svc2 /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run svc2
+    user root
+    group root system
+    seclabel u:r:su:s0
+    oneshot
+    disabled
+
+# settings(1) and pm need system_server, hence boot_completed. A disabled service has no init.svc.*
+# until it first runs, so init announces the update service here.
+on property:sys.boot_completed=1
+    setprop sys.glassworks.update.version 1
+    start glassworks_firstboot
+    start glassworks_netwatch
+    start glassworks_radio
+    start glassworks_svc1
+    start glassworks_svc2

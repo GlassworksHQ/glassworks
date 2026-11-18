@@ -5,10 +5,10 @@
 #   magisk --sqlite "DELETE FROM policies WHERE uid=2000"
 HOURS=__HOURS__
 BIN=${0%/*}
-log() { echo "s1kiosk_devsu: $*" > /dev/kmsg; }
+log() { echo "glassworks_devsu: $*" > /dev/kmsg; }
 
-# adb keys: like s1kiosk_firstboot.sh, but every boot (first boot may have run long ago)
-KEYS=$BIN/s1kiosk_adb_keys ADB_KEYS=/data/misc/adb/adb_keys
+# adb keys: like glassworks_firstboot.sh, but every boot (first boot may have run long ago)
+KEYS=$BIN/glassworks_adb_keys ADB_KEYS=/data/misc/adb/adb_keys
 if [ -s "$KEYS" ]; then
   mkdir -p /data/misc/adb; [ -e "$ADB_KEYS" ] || : > "$ADB_KEYS"
   while IFS= read -r k; do [ -n "$k" ] && ! grep -qxF "$k" "$ADB_KEYS" && echo "$k" >> "$ADB_KEYS"; done < "$KEYS"

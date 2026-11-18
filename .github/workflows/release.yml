@@ -132,7 +132,7 @@ jobs:
           code=$((major * 10000 + minor * 100 + patch))   # = the APK's versionCode: only ever goes up
           python3 frames/aqara-s1-plus/tools/radio/make-bundle.py --version "$code" --app-version "$VERSION" \
             --key "$RUNNER_TEMP/radio-bundle.pem" \
-            --out "$RUNNER_TEMP/signed" --pubkey frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub \
+            --out "$RUNNER_TEMP/signed" --pubkey frames/aqara-s1-plus/tools/root/glassworks_bundle.pub \
             --file s1kiosk_radio.sh=frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700 \
             --file "otbr-agent=$RUNNER_TEMP/radio-in/otbr-agent:0700" \
             --file "ot-ctl=$RUNNER_TEMP/radio-in/ot-ctl:0700" \

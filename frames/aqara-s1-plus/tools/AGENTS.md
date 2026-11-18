@@ -12,8 +12,8 @@ before you change the boot path. The tools every frame shares are in [`tools/`](
 | `fel/uboot/patches/0001` | A133 DDR4 controller setup matching boot0 (MR0 is the actual fix) | MR0 was sent upstream on 2026-11-11; drop that hunk once it lands |
 | `fel/uboot/patches/0002` | fastboot `upload`, for reading partitions back (`fastboot get_staged`) | |
 | `install/` | `fel-install.sh` (FEL → backup → patch → flash → verify), `fb-read-partition.sh`, the `--undo` path; `install-churn.py`: one row per kiosk install or force-stop from a saved logcat (#248) | Has off-device tests in `install/test/`; `install-churn.py` reads a file only |
-| `root/` | Init services baked into `boot` via Magisk `overlay.d`: first boot, update, bundle, netwatch (Wi-Fi, and Android 10's ActivityManager loop from #248), branding; `s1kiosk_verify` (C) | Runs as root under permissive SELinux. netwatch may kill `system_server` (a framework restart), at most once per 10 min |
-| `radio/` | Root helper `s1kiosk_radio.sh` (contract v4), the otbr/zigbeed builds, the bundle maker | Tests: `radio/test/run.sh` |
+| `root/` | The frame loader baked into `boot` via Magisk `overlay.d` (`glassworks_loader.sh`, `glassworks.rc`: the service slots, frame bundles, the boot animation, `ro.glassworks.frame.*`) and the boot copies of its slot scripts: first boot, update, netwatch (Wi-Fi, and Android 10's ActivityManager loop from #248); the verifier `s1kiosk_verify` (C, installed as `glassworks_verify`). `s1kiosk_bundle.sh` is the 0.4.3 images' radio bundle service, kept for one release (#528) | Runs as root under permissive SELinux. netwatch may kill `system_server` (a framework restart), at most once per 10 min |
+| `radio/` | Root helper `glassworks_radio.sh` (contract v5, the loader's radio slot), the otbr/zigbeed builds, the bundle maker (`make-bundle.py`: frame bundles; with `--version`, the old radio bundle for one release). `s1kiosk_radio.sh` is 0.4.3's helper v4, kept for that old bundle | Tests: `radio/test/run.sh` |
 | `install.sh`, `debloat/` | The CLI installer over adb (`--undo` puts the panel back), and the debloat script it runs | Tests: `install/test/install-tests.sh` |
 | `bracket/` | The wall base emulator and the proof script | |
 
@@ -24,9 +24,9 @@ before you change the boot path. The tools every frame shares are in [`tools/`](
   ARM container. Add a case there for every behaviour you change.
 - **Threat model:** SELinux is permissive, so any app may set properties or start init services.
   Services take no input except files owned by the kiosk's uid, which they check. They don't follow
-  symlinks (`s1kiosk_verify --copy`), and they report through `sys.s1kiosk.*.status`. Don't add an
+  symlinks (`glassworks_verify --copy`), and they report through `sys.glassworks.*.status`. Don't add an
   input path that skips those checks. Read [`../research/root.md`](../research/root.md) first.
-- Helper fixes reach panels through the **signed radio bundle**, not by reflashing `boot`. A change
+- Helper fixes reach panels through the **signed frame bundle**, not by reflashing `boot`. A change
   that needs a new boot image is a much bigger deal, because every user reruns the installer. Say
   which of the two your change needs.
 - `.rc` and service changes must be tested on a real panel. Off-device tests can't see init.

@@ -422,6 +422,27 @@ VLANs, which makes this easy to miss: the integration looks healthy while routin
 
 As a **repeater** (*Thread router* mode) the panel has no such requirement: it only talks Thread.
 
+## Root helper contract v5: the frame loader (S1 frame 1.0.0)
+
+From S1 frame 1.0.0 the boot image holds the frame loader ([frame-loader.md](../research/frame-loader.md)),
+and the helper is `frames/aqara-s1-plus/tools/radio/glassworks_radio.sh`, contract **v5**: v4 below with
+Glassworks names, run in the loader's `glassworks_radio` slot. What changes against v4:
+
+| v4 (0.4.3 boot images) | v5 |
+|---|---|
+| init service `s1kiosk_radio`, `.rc` in the boot image | `glassworks_radio`, a slot in `glassworks.rc` that runs `glassworks_loader.sh run radio` |
+| `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status` | `sys.glassworks.radio.*`, `sys.glassworks.timezone.status`; `sys.glassworks.radio.version` = `5` |
+| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone` | `persist.glassworks.*`. For one release the helper reads the old name when the new one is empty (#528) |
+| the helper's own loader and the radio bundle (`$DIR/bundle`, `s1kiosk_bundle.sh`) | the frame loader and the frame bundle (`/data/glassworks/bundle`); the helper gets the checked bundle in `GW_BUNDLE`. `sys.s1kiosk.radio.bundle` is gone: the bundle state is the loader's |
+| `/data/s1kiosk-pub` (bundle state, Bluetooth address) | `/data/glassworks-pub` (`frame-bundle`, `bluetooth-address`) |
+| iptables chain `S1RADIO` | `GWRADIO` |
+| developer override `$DIR/dev-override` + `$DIR/s1kiosk_radio.sh` | the loader's `/data/glassworks/dev/override` + `dev/radio.sh` |
+
+Unchanged: `$DIR` stays `/data/s1kiosk/radio`, because `otbr-agent` has `$DIR/run` (and the Thread
+settings under it) compiled in. Everything else in the v4 table holds. The app reads both sets of names
+for one release; `s1kiosk_radio.sh` and `s1kiosk_bundle.sh` stay in the repo for that release, for the
+old radio bundle that 0.4.3 boot images install.
+
 ## Root helper contract (v4)
 
 The root half of the modes lives in a helper. The Magisk boot patch installs it as an init service

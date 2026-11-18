@@ -73,17 +73,45 @@ describe('vbmeta (unit)', () => {
 });
 
 describe('s1Overlay (unit)', () => {
-  const base = { radioRc: enc.encode('a'), radioSh: enc.encode('b'), otbrAgent: enc.encode('c'), otCtl: enc.encode('d'),
-    firstbootRc: enc.encode('e'), firstbootSh: enc.encode('f'), netwatchRc: enc.encode('g'), netwatchSh: enc.encode('h'),
-    updateRc: enc.encode('i'), updateSh: enc.encode('j'), bundleRc: enc.encode('k'), bundleSh: enc.encode('l'),
+  /** A zip whose one entry is STORED: the central directory and its end record, all zipEntries reads. */
+  const storedZip = (): Uint8Array => {
+    const name = enc.encode('desc.txt');
+    const cd = new Uint8Array(46 + name.length);
+    const c = new DataView(cd.buffer);
+    c.setUint32(0, 0x02014b50, true);
+    c.setUint16(28, name.length, true);
+    cd.set(name, 46);
+    const end = new Uint8Array(22);
+    const e = new DataView(end.buffer);
+    e.setUint32(0, 0x06054b50, true);
+    e.setUint16(10, 1, true);
+    e.setUint32(12, cd.length, true);
+    e.setUint32(16, 0, true);
+    const zip = new Uint8Array(cd.length + end.length);
+    zip.set(cd); zip.set(end, cd.length);
+    return zip;
+  };
+  const base = { rc: enc.encode('a'), loaderSh: enc.encode('b'), radioSh: enc.encode('c'), otbrAgent: enc.encode('d'),
+    otCtl: enc.encode('e'), firstbootSh: enc.encode('f'), netwatchSh: enc.encode('g'), updateSh: enc.encode('h'),
     verify: enc.encode('m'), bundlePub: enc.encode(`${'ab'.repeat(32)}\n`) };
   it('refuses a key that is not an adb public key, accepts none', () => {
     expect(() => s1Overlay({ ...base, adbKeys: enc.encode('ssh-rsa AAAA') })).toThrow(/QAAAA/);
-    expect(s1Overlay({ ...base, adbKeys: new Uint8Array(0) })).toHaveLength(15);
+    expect(s1Overlay({ ...base, adbKeys: new Uint8Array(0) })).toHaveLength(11);
+  });
+  it('puts every file under its Glassworks name, in patch-boot-magisk.sh\'s order', () => {
+    const files = s1Overlay({ ...base, adbKeys: new Uint8Array(0), bootAnimation: storedZip() });
+    expect(files.map((f) => `${f.mode.toString(8)} ${f.path}`)).toEqual([
+      '644 overlay.d/glassworks.rc', '700 overlay.d/sbin/glassworks_loader.sh', '700 overlay.d/sbin/glassworks_verify',
+      '644 overlay.d/sbin/glassworks_bundle.pub', '600 overlay.d/sbin/glassworks_adb_keys', '700 overlay.d/sbin/glassworks_radio.sh',
+      '700 overlay.d/sbin/otbr-agent', '700 overlay.d/sbin/ot-ctl', '700 overlay.d/sbin/glassworks_firstboot.sh',
+      '700 overlay.d/sbin/glassworks_netwatch.sh', '700 overlay.d/sbin/glassworks_update.sh',
+      '644 overlay.d/sbin/glassworks_bootanimation.zip',
+    ]);
+    expect(files.some((f) => f.path.includes('s1kiosk'))).toBe(false);
   });
   it('refuses a radio bundle key that is not 32 hex bytes, and an empty verifier', () => {
     expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), bundlePub: enc.encode('abc') })).toThrow(/public key/);
-    expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), verify: new Uint8Array(0) })).toThrow(/verify/);
+    expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), verify: new Uint8Array(0) })).toThrow(/verifier/);
   });
 });
 
@@ -104,13 +132,11 @@ describe.skipIf(!HAVE_GOLDEN)('golden: compressors == magiskboot', () => {
 describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh', () => {
   const ov = (f: string) => g(`fixtures/overlay/${f}`);
   const overlay = (opts: { key?: boolean; anim?: boolean } = {}): OverlayFile[] => s1Overlay({
-    radioRc: ov('s1kiosk_radio.rc'), radioSh: ov('s1kiosk_radio.sh'), otbrAgent: ov('otbr-agent'), otCtl: ov('ot-ctl'),
-    firstbootRc: ov('s1kiosk_firstboot.rc'), firstbootSh: ov('s1kiosk_firstboot.sh'),
+    rc: ov('glassworks.rc'), loaderSh: ov('glassworks_loader.sh'), verify: ov('glassworks_verify'), bundlePub: ov('glassworks_bundle.pub'),
     adbKeys: opts.key === false ? new Uint8Array(0) : g('fixtures/test_adbkey.pub'),
-    netwatchRc: ov('s1kiosk_netwatch.rc'), netwatchSh: ov('s1kiosk_netwatch.sh'),
-    updateRc: ov('s1kiosk_update.rc'), updateSh: ov('s1kiosk_update.sh'),
-    bundleRc: ov('s1kiosk_bundle.rc'), bundleSh: ov('s1kiosk_bundle.sh'), verify: ov('s1kiosk_verify'), bundlePub: ov('s1kiosk_bundle.pub'),
-    branding: opts.anim === false ? undefined : { rc: ov('s1kiosk_branding.rc'), bootAnimation: ov('s1kiosk_bootanimation.zip') },
+    radioSh: ov('glassworks_radio.sh'), otbrAgent: ov('otbr-agent'), otCtl: ov('ot-ctl'),
+    firstbootSh: ov('glassworks_firstboot.sh'), netwatchSh: ov('glassworks_netwatch.sh'), updateSh: ov('glassworks_update.sh'),
+    bootAnimation: opts.anim === false ? undefined : ov('glassworks_bootanimation.zip'),
   });
   /** The config the CLI printed ("--- Magisk config:" in out/<case>.log). */
   const cliConfig = (c: string) => {

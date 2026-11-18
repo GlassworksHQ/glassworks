@@ -1,8 +1,8 @@
 #!/system/bin/sh
-# s1kiosk_update: root install service for S1 Kiosk app updates (docs/research/root.md), contract v1.
-# Runs as a disabled one-shot init service (s1kiosk_update.rc: root, u:r:su:s0). The app downloads a
+# glassworks_update: root install service for app updates of S1 Kiosk (sh.edm.s1kiosk) (docs/research/root.md), contract v1.
+# Runs as a disabled one-shot init service (the glassworks_update slot in glassworks.rc: root, u:r:su:s0). The app downloads a
 # release, checks its SHA-256, package name and signing certificate, writes it to $SRC and starts
-# this service with `setprop ctl.start s1kiosk_update`.
+# this service with `setprop ctl.start glassworks_update`.
 #
 # Other apps may be able to start init services too (SELinux is permissive on this firmware), and to
 # set properties. So this script takes no input at all except the one fixed file, and checks:
@@ -11,30 +11,30 @@
 #      its private dir), and $SRC is a single-link regular file of sane size;
 #   3. it installs a root-only copy (the original can't change under pm) with `pm install -r` and no
 #      -d: Android refuses another signing key for the same package, and downgrades. The copy is made
-#      by s1kiosk_verify --copy (boot images with it): an openat(O_NOFOLLOW) walk, the file opened
+#      by glassworks_verify --copy (boot images with it): an openat(O_NOFOLLOW) walk, the file opened
 #      O_NONBLOCK and checked on the fd, exactly its size copied, so a path swapped for a symlink, a
 #      FIFO or /dev/zero between the checks above and the copy can't redirect or hang it;
 #   4. afterwards the kiosk's versionCode must have gone up and no other package may have changed;
 #      a package that appeared is uninstalled again.
 #      If pm fails because the framework restarted mid-install (system_server's pid changed, #248),
 #      it waits for PackageManager and applies the same checks: the update counts only if they pass.
-# Status for the app: sys.s1kiosk.update.status = "<running|ok|error>: <detail>".
+# Status for the app: sys.glassworks.update.status = "<running|ok|error>: <detail>".
 PKG=sh.edm.s1kiosk
 ACTIVITY=$PKG/.MainActivity
 DATA=/data/data/$PKG
 SRC_DIR=$DATA/files/update
 SRC=$SRC_DIR/pending.apk
-STAGE_DIR=/data/s1kiosk/update          # root 0700
+STAGE_DIR=/data/glassworks/update          # root 0700
 STAGE=$STAGE_DIR/pending.apk
 MAX_BYTES=268435456                      # 256 MiB, as the app's own limit
 # s to wait for PackageManager after a framework restart. The .rc sets no environment, so it is 300
-# on a panel; S1U_RESTART_WAIT is for the off-device tests, and anything else is logged below.
-RESTART_WAIT=${S1U_RESTART_WAIT:-300}
-VERIFY=${0%/*}/s1kiosk_verify
+# on a panel; GWU_RESTART_WAIT is for the off-device tests, and anything else is logged below.
+RESTART_WAIT=${GWU_RESTART_WAIT:-300}
+VERIFY=${GW_BOOT:-${0%/*}}/glassworks_verify   # the boot image's, also when this script comes from a bundle
 
-say() { log -t s1kiosk_update "$*" 2>/dev/null; }
+say() { log -t glassworks_update "$*" 2>/dev/null; }
 # A property value holds at most 91 bytes (setprop refuses more), so the status is cut; the log has it all.
-status() { setprop sys.s1kiosk.update.status "$(printf %s "$1" | cut -c 1-91)"; say "$1"; }
+status() { setprop sys.glassworks.update.status "$(printf %s "$1" | cut -c 1-91)"; say "$1"; }
 # Only our own files: $SRC belongs to the app (it clears files/update/ itself), and a root rm
 # through a path the app controls could be redirected.
 cleanup() { rm -f "$STAGE" "$STAGE_DIR/before.txt" "$STAGE_DIR/after.txt"; }
@@ -52,7 +52,7 @@ snapshot() { pm list packages --show-versioncode 2>/dev/null | grep -v "^package
 num() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; return 0; }
 
 num "$RESTART_WAIT" || RESTART_WAIT=300
-[ "$RESTART_WAIT" = 300 ] || say "RESTART_WAIT is ${RESTART_WAIT}s (S1U_RESTART_WAIT), not 300"
+[ "$RESTART_WAIT" = 300 ] || say "RESTART_WAIT is ${RESTART_WAIT}s (GWU_RESTART_WAIT), not 300"
 status "running: checking the request"
 
 # 1. the kiosk's uid
@@ -77,12 +77,12 @@ num "$size" && [ "$size" -gt 0 ] && [ "$size" -le "$MAX_BYTES" ] || fail "pendin
 
 # 3. install a root-only copy
 [ -d "$STAGE_DIR" ] || mkdir -p "$STAGE_DIR"
-chown root:root /data/s1kiosk "$STAGE_DIR" && chmod 700 /data/s1kiosk "$STAGE_DIR" || fail "cannot prepare $STAGE_DIR"
+chown root:root /data/glassworks "$STAGE_DIR" && chmod 700 /data/glassworks "$STAGE_DIR" || fail "cannot prepare $STAGE_DIR"
 rm -f "$STAGE"
 if [ -x "$VERIFY" ]; then
   out=$("$VERIFY" --copy "$DATA" files/update/pending.apk "$uid" "$size" "$STAGE" 2>&1 >/dev/null) ||
-    fail "pending.apk: ${out#s1kiosk_verify: }"
-else # a boot image from before s1kiosk_verify
+    fail "pending.apk: ${out#glassworks_verify: }"
+else # a boot image from before glassworks_verify
   cp "$SRC" "$STAGE" && chmod 600 "$STAGE" || fail "cannot copy pending.apk"
 fi
 [ "$(stat -c %s "$STAGE")" = "$size" ] || fail "pending.apk changed while copying"

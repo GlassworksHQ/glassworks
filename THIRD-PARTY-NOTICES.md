@@ -370,9 +370,11 @@ The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0
 ### This project's files
 
 All MIT, from this repository:
-- The root helpers and their init files: `frames/aqara-s1-plus/tools/root/s1kiosk_*.sh`, `frames/aqara-s1-plus/tools/root/*.rc`,
-  `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.{sh,rc}`.
-- `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub`.
+- The frame loader, the root helpers and their init file: `frames/aqara-s1-plus/tools/root/glassworks_*.sh`,
+  `frames/aqara-s1-plus/tools/root/glassworks.rc`, `frames/aqara-s1-plus/tools/radio/glassworks_radio.sh`, and for one
+  release the old radio bundle's `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh` and
+  `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.sh`.
+- `frames/aqara-s1-plus/tools/root/glassworks_bundle.pub`.
 - The boot branding in `branding/glass-tile/` (`bootanimation.zip`, `bootlogo.bmp`). It shows text set
   in Inter (SIL OFL 1.1, fetched at build time). These downloads carry only images made with the font;
   the font itself ships in the S1 Kiosk APK (section 1, "Assets in the APK").
