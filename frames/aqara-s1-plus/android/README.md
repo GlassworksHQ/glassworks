@@ -169,7 +169,7 @@ $A --ez remote_debug true  # Gecko remote debugging. Restarts the app.
 $A --ez reload true
 $A --ez settings true      # open the settings dialog
 $A --ez hide_header false  # show HA header/sidebar
-$A --es screen_mode always # or presence (default)
+$A --es screen_mode presence # or always (default)
 $A --ei idle_off_sec 120    # screen off after 120 s idle (0 = never)
 $A --ef presence_range_m 1.0   # VI5300 range (needs WRITE_SECURE_SETTINGS)
 $A --es screen off         # or on

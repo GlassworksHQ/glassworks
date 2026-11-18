@@ -9,13 +9,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
-- **Setup offers silent updates when it can.** On a new setup, a *Silent updates* step follows Panes when
-  updates would ask for a tap and something can change that. On a tablet with Android 12 or newer it opens
-  Android's "Install unknown apps" page for Glassworks. On Android 6 to 11, and on newer Android while this
-  release targets an older API than Android wants for silent updates, it says a device owner skips the tap,
-  with a QR code to Kiln. On an S1 whose boot image has no update service, it says Kiln adds one. It's
-  never required: Continue or Not now moves on. Panels that are already set up don't see it, and updates
-  that already install by themselves skip it.
+- **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
+  service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
+  It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the
+  service, whose updates install by themselves, skips it.
+- **The Screen settings warn about a screen lock.** On a tablet with a PIN, pattern or password, Android locks
+  it when the screen turns off, and someone has to unlock it. The panel's **Settings → Screen** and the Manage
+  page now say so in amber, with the way out: turn the lock off in Android's settings, or keep the screen on.
 - **Glassworks for generic Android gets the Diagnostics pane.** The app on tablets and the lululemon Mirror, in
   both of its builds, now sends its CPU, RAM, storage, Wi-Fi and uptime to Home Assistant, as S1 Kiosk does, and
   shows them on its Diagnostics page on the panel and on the Manage page. These devices have no CPU temperature
@@ -182,6 +182,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   setting if it was already on. Other devices don't show the chip.
 
 ### Changed
+- **The screen stays on until you pick a timeout.** A panel that never chose a screen mode now keeps its screen
+  on (*Screen mode* `always`), so an S1 that never chose stops turning off after the update. To have it turn
+  off again, pick a time in **Settings → Screen → Turn off when idle**, turn on **Wake when someone's near**, or
+  set *Screen mode* or *Idle timeout* from Home Assistant. A choice you made stays as it is. While the screen is
+  always on, **Turn off when idle** reads *Never*, also on the S1, and Home Assistant's *Screen* light can still
+  turn it off on a device without device admin.
 - **The setup screen's Wi-Fi step leads with one way to join.** It shows the best way the panel can do
   right now: Bluetooth setup from Home Assistant, else **Set up from a phone** through the panel's own
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
@@ -587,6 +593,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   interface. Comes with the radio bundle.
 - **Settings menu: cards were cut off 30 dp from the top and bottom of the screen.** They now scroll
   all the way to the screen edges.
+- **Signing in works when Home Assistant's name also gives an IPv6 address the panel can't reach.** On a
+  network where `homeassistant.local` resolves to Home Assistant's IPv6 address as well as its IPv4 one,
+  for example a VLAN without IPv6 behind an mDNS reflector, the Manage page's sign-in stopped after about
+  9 seconds with "Home Assistant didn't say who signed in", and checking a panel's sign-in failed the same
+  way. The dashboard was fine. The panel now tries Home Assistant's addresses the way a browser does, so it
+  connects over IPv4 straight away. This covers the sign-in, keeping it signed in, finding Home Assistant,
+  notification pictures and the Thread and blueprint calls.
 
 ### Changed
 - **Updates are found among the repo's other releases.** The panel now picks its own newest release
