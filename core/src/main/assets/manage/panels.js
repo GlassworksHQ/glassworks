@@ -11,6 +11,8 @@
 import { authorizeUrl, base64url, copyRows, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, storedFor, tokenRequest, usable } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
+// Running, imports loaded: panels-boot.js leaves the page alone.
+root.dataset.started = '1';
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
 const session = root.dataset.session || '';
 const listCard = document.getElementById('gw-list');

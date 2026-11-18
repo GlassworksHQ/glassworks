@@ -200,8 +200,11 @@ manage a panel. Whether other users get a say is open (#124).
   sends it.
 - Your browser gets the panel's own sign-in cookie: `HttpOnly` (scripts can't read it) and
   `SameSite=Strict` (other sites can't use it). The panel stores only a hash of it.
-- Every form must come from the page itself: its `Origin` is checked, and it carries a token only
-  your signed-in page has. A link or form on another site can't make the panel do anything.
+- Every Manage form must come from the page itself: its `Origin` is checked, and it carries a token only
+  your signed-in page has. A link or form on another site can't make the panel do anything. One form is meant to
+  come from another page: the sign-in handoff from another panel's All panels (`/manage/ha/token`). It skips the
+  `Origin` check and needs a Home Assistant administrator's token instead, which the panel checks with its own Home
+  Assistant; without one it does nothing.
 - The code on the panel works once, for one browser and one purpose, for 5 minutes. Five wrong tries
   end a code; ten wrong tries in 15 minutes lock code entry for everyone until they're 15 minutes old.
   No new code goes up within 30 seconds of the last one, even when that one was used up or closed
@@ -241,8 +244,9 @@ manage a panel. Whether other users get a say is open (#124).
   also answer for Home Assistant and sign in as an administrator. This is a choice: most Home Assistant
   installs on a home network are `http://`, the panel's own dashboard sign-in crosses the same way, and
   the code on the panel is there for whoever would rather not.
-- **The Home Assistant token All panels carries.** All panels sends your Home Assistant access token to each
-  panel it lists, over the same plain HTTP. Someone who can read your Wi-Fi traffic could use it as you, in Home
+- **The Home Assistant token All panels carries.** All panels sends your Home Assistant access token, over the
+  same plain HTTP, to each listed panel on your network that answers as a panel (its `hello` names the model Home
+  Assistant has). One shown as **Not a panel** or **Not on your network** gets no token. Someone who can read your Wi-Fi traffic could use it as you, in Home
   Assistant too, until it runs out (30 minutes) or you press **Sign out** on that page while Home Assistant is
   reachable. The page keeps it in the tab; close the tab or sign out when you're done.
 - **A camera password you type here.** Setting a camera's password from this page sends it to the

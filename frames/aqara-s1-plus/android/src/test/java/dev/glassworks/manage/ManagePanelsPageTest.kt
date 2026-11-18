@@ -23,6 +23,7 @@ class ManagePanelsPageTest {
         val id = f.sessions.list(f.haBase).single().id
         assertTrue(html, html.contains("data-session=\"$id\""))
         assertTrue(html.contains("<script type=\"module\" src=\"/manage/js/panels.js\"></script>"))
+        assertTrue("a way out if the module can't start (CodeRabbit on #488)", html.contains("<script src=\"/manage/js/panels-boot.js\" defer></script>"))
         val csp = r.headers["Content-Security-Policy"]!!
         assertTrue(csp, csp.contains("script-src 'self';"))
         assertTrue(csp, csp.contains("connect-src 'self' http://*:8099 http://192.0.2.10:8123 ws://192.0.2.10:8123;"))

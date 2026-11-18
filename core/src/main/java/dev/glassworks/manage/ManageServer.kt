@@ -601,7 +601,7 @@ class ManageServer(
 
         /** All panels' scripts, served from the panel's assets (`manage/`). */
         const val SCRIPTS = "/manage/js/"
-        val SCRIPT_FILES = setOf("panels.js", "panels-core.js")
+        val SCRIPT_FILES = setOf("panels.js", "panels-core.js", "panels-boot.js")
 
         /** Where a page on another panel signs this browser in with its Home Assistant token (#466). */
         const val HANDOFF = "/manage/ha/token"
