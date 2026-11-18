@@ -236,8 +236,10 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
 
   let next = setProp(setProp(prop, 'ro.glassworks.frame.id', MIRROR_FRAME.id), 'ro.glassworks.frame.version', MIRROR_FRAME.version);
   const set = [`ro.glassworks.frame.version=${MIRROR_FRAME.version}`];
-  // the value is device-unique: the log names the key only
+  // the value is device-unique: the log names the key only. Without one, an earlier build's goes: after a failed
+  // flash Kiln patches the same image again, maybe for another Mirror.
   if (o.deviceMac) { next = setProp(next, DEVICE_MAC_PROP, o.deviceMac); set.push(DEVICE_MAC_PROP); }
+  else next = next.split('\n').filter((l) => !l.startsWith(`${DEVICE_MAC_PROP}=`)).join('\n');
 
   // No swipe lock screen, with the overlay: the two make the first boot with nothing to tap, and
   // without the overlay the first boot is the image's own. SettingsProvider's DatabaseHelper and

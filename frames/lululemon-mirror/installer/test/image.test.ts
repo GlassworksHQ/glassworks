@@ -256,6 +256,19 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest())).toBe(before2);
   }, 60_000);
 
+  it('drops an earlier build\'s device id when the next build has none: a rebuild may be for another Mirror (#560 review)', async () => {
+    const img = join(dir, 'rebuild.img');
+    mke2fs(img, 64, MAKE_EXT4FS, systemTree());
+    const disk = await load(img);
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, deviceMac: MAC, time: T });
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, time: T });
+    await dump(disk, img);
+    expect(fsck(img).code).toBe(0);
+    const prop = new TextDecoder().decode(debugfsCat(img, '/build.prop'));
+    expect(prop).not.toContain(DEVICE_MAC_PROP);
+    expect(prop).toContain(`\nro.glassworks.frame.version=${MIRROR_FRAME.version}\n`);
+  });
+
   it('takes the ABI that has libraries, not an empty lib/<abi>/ folder before it (#354 review)', async () => {
     const img = join(dir, 'abi.img');
     mke2fs(img, 64, MAKE_EXT4FS, systemTree());

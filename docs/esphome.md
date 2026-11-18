@@ -88,7 +88,7 @@ and its entities get new ids. Where each frame stands (#523):
 | S1 | Same device | An update installs in place and keeps the saved MAC. With the app's data wiped, `wlan0` is readable on its Android 10, so it comes out the same |
 | Mirror (Kiln or `tools/mirror/flash-node.ts`) | Same device, from the first flash that writes `ro.glassworks.device.mac` | A flash writes a fresh userdata, which wipes the app's data. Kiln derives the MAC from the serial its bootloader reports (`fastboot getvar serialno`), with the app's own formula, and writes it into `build.prop`. The Mirror's current MAC isn't the one derived from its serial (checked 2026-11-18), so the first flash with this moves it to a new device once |
 | Generic app, Android 6 to 7 | Same device | `ro.serialno` is readable |
-| Generic app, Android 8 and later | Same device, unless the device is factory reset or the APK's signing key changes | `ANDROID_ID`, which Android keeps for the same app signing key until a factory reset. `wlan0` and `ro.serialno` are hidden from apps there |
+| Generic app, Android 8 and later | Same device, unless the device is factory reset or the APK's signing key changes | `ANDROID_ID`, which Android keeps for the same app signing key until a factory reset. `wlan0` and `ro.serialno` are hidden from apps there. An install from before this change may have saved a random MAC: an update keeps it, but the first reinstall after it moves to the `ANDROID_ID` one, a new device once |
 
 ## Entities
 
