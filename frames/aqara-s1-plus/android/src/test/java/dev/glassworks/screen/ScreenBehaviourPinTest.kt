@@ -172,6 +172,17 @@ class ScreenBehaviourPinTest {
         assertEquals(emptyList<Boolean>(), h.keepOnCalls)
     }
 
+    @Test fun aPanelThatNeverPickedAScreenModeStaysOn() {
+        // #522: on a frame where nothing senses presence, "presence" only meant turning off when idle.
+        h.context.getSharedPreferences("kiosk", android.content.Context.MODE_PRIVATE).edit().remove("screen_mode").commit()
+        assertEquals("always", prefs.screenMode)
+        h.setClock(12, 0)
+        h.start()
+        h.userActivity()
+        h.advance(3_600_000)
+        assertEquals(emptyList<Boolean>(), h.keepOnCalls)
+    }
+
     @Test fun someoneNearKeepsTheScreenOnThenTheTimeoutStartsWhenTheyLeave() {
         h.setClock(12, 0)
         h.start()

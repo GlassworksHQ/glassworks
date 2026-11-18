@@ -36,6 +36,8 @@ class CoreSettings(
     /** The panel's address on Wi-Fi, for the setup page's (null while it has none). */
     private val panelIp: () -> String? = dev.glassworks.InstallerGlue::wlanIpv4,
     private val now: () -> Long = System::currentTimeMillis,
+    /** The device has a PIN, pattern or password ([dev.glassworks.platform.ScreenLock]): the Screen page says what that means. */
+    private val screenLock: () -> Boolean = { false },
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -71,6 +73,7 @@ class CoreSettings(
         )),
         SettingsPlace.SCREEN to SettingsSection(SCREEN, "Screen", presence() + listOfNotNull(
             idle(),
+            lock(),
             if (hardware.light) switch("Brightness", "Follows the room's light", { prefs.autoBrightness }) { prefs.autoBrightness = it; live.brightness() } else null,
             // Android's settings need a finger on the panel's own screen.
             deviceSettings?.takeIf { hardware.touch },
@@ -139,6 +142,16 @@ class CoreSettings(
     }
 
     /**
+     * A screen lock (#522): when the screen turns off, Android locks the device and someone has to unlock it by hand. Amber,
+     * with the two ways out; while the screen stays on by itself, only the one that's left. None without a lock.
+     */
+    private fun lock(): SettingsItem.Info? = if (!screenLock()) null else SettingsItem.Info(
+        title = { LOCK_TITLE },
+        detail = { if (prefs.screenMode == "always" || prefs.idleOffSec <= 0) LOCK_ALWAYS_ON else LOCK_TURNS_OFF },
+        fixable = { true },
+    )
+
+    /**
      * "Allow setup over the network" (#34): pairing for the setup page at `/setup` is open until Home Assistant
      * adds the panel; after that this opens it for 30 minutes, as the Home Assistant button and Kiln over USB do.
      */
@@ -181,6 +194,11 @@ class CoreSettings(
         const val ACCOUNT_TITLE = "Dashboard sign-in"
         const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
+        const val LOCK_TITLE = "Screen lock"
+        const val LOCK_TURNS_OFF = "This panel has a screen lock. When the screen turns off, someone has to unlock it. " +
+            "Turn the lock off in Android's settings, or keep the screen always on."
+        const val LOCK_ALWAYS_ON = "This panel has a screen lock. If Home Assistant turns the screen off, someone has to " +
+            "unlock it. Turn the lock off in Android's settings."
         const val LICENCES_TITLE = "Open source licences"
         const val LICENCES_DETAIL = "The open-source software in the app and the radio package"
 

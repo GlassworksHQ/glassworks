@@ -23,3 +23,7 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Updates from Home Assistant.** Each build offers only its own releases on its update entity. On Android 12
   and newer with "Install unknown apps" allowed, as device owner, or as a system app (the Mirror), an update
   installs without a tap. The *Silent updates* sensor says which applies.
+- **The screen stays on, and says when a screen lock gets in the way.** The screen stays on until someone picks
+  a time in **Settings → Screen → Turn off when idle**. On a device with a PIN, pattern or password, the Screen
+  settings and the Manage page say in amber that someone has to unlock it after the screen turns off, and how to
+  avoid that: turn the lock off in Android's settings, or keep the screen on.

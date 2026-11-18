@@ -61,7 +61,10 @@ Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream 
 stays off with the reason on the Camera page; presence works either way. The screen follows Android's standard proximity sensor (near means under
 5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
 no proximity sensor; then the screen goes off after the idle time and wakes on a touch. Until setup is done and
-the dashboard has loaded, it stays on (#449).
+the dashboard has loaded, it stays on (#449). The screen stays on until someone picks a time in **Settings → Screen →
+Turn off when idle** or turns on waking (#522). On a device with a PIN, pattern or password, Android locks it when the
+screen goes off, and someone has to unlock it: the Screen settings and the Manage page say so in amber, with the way
+out (turn the lock off in Android's settings, or keep the screen on).
 
 | | S1 Kiosk on a tablet | Glassworks for generic Android |
 |---|---|---|

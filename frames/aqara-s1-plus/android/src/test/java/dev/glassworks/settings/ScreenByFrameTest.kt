@@ -2,6 +2,7 @@ package dev.glassworks.settings
 
 import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
@@ -179,5 +180,36 @@ class ScreenByFrameTest {
         assertEquals("After 5 minutes", idle.shown(idle.value()))
         idle.save(120) {}
         assertEquals("always", prefs.screenMode)
+    }
+
+    private fun lock(secure: Boolean) = shadowOf(app.getSystemService(KeyguardManager::class.java)).setIsDeviceSecure(secure)
+
+    @Test fun noScreenLockNoNote() {
+        lock(false)
+        val (rows, html) = screen(generic())
+        assertFalse(rows.titles().toString(), CoreSettings.LOCK_TITLE in rows.titles())
+        assertFalse("screen lock" in html)
+    }
+
+    @Test fun aScreenLockIsAnAmberNoteOnThePanelAndOnManage() {
+        lock(true)
+        val (rows, html) = screen(generic())
+        assertEquals(listOf("Turn off when idle", CoreSettings.LOCK_TITLE, SettingsMenu.ANDROID_TITLE), rows.titles())
+        val note = rows.filterIsInstance<SettingsItem.Info>().single()
+        assertTrue("amber, as the Device page's Silent updates", note.fixable())
+        assertEquals("a fresh panel stays on (#522): only the lock is left to fix", CoreSettings.LOCK_ALWAYS_ON, note.detail())
+        assertTrue(html, """<span class="fix">${CoreSettings.LOCK_ALWAYS_ON}</span>""" in html)
+
+        rows.filterIsInstance<SettingsItem.Duration>().single().save(120) {}
+        assertEquals("a screen that turns off by itself: both ways out", CoreSettings.LOCK_TURNS_OFF, note.detail())
+        assertTrue("""<span class="fix">${CoreSettings.LOCK_TURNS_OFF}</span>""" in screen(generic()).second)
+    }
+
+    @Test fun aScreenLockShowsBesideAPresenceSensorToo() {
+        lock(true)
+        sensor(Sensor.TYPE_PROXIMITY, "vi5300 Proximity Sensor")
+        prefs.screenMode = "presence"; prefs.idleOffSec = 300
+        val rows = screen(AqaraS1Plus()).first
+        assertEquals(CoreSettings.LOCK_TURNS_OFF, rows.filterIsInstance<SettingsItem.Info>().single().detail())
     }
 }
