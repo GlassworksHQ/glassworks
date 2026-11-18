@@ -7,7 +7,6 @@ package dev.glassworks.setup
 import android.content.Context
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.SetupCard
 import dev.glassworks.pane.SetupHost
 import dev.glassworks.pane.SetupOp
@@ -94,7 +93,7 @@ class ThisDeviceStep(
             card.title(TITLE_TEXT)
             card.body(null)
             homeTile.tone(when { home -> Glass.GREEN; noHome -> Glass.ROSE; else -> Glass.AMBER })
-            homeTile.detail.text = when { home -> HOME_ON; noHome -> noHome(); else -> HOME_OFF }
+            homeTile.detail.text = when { home -> HOME_ON; noHome -> NO_HOME; else -> HOME_OFF }
             adminTile.tone(when { admin -> Glass.GREEN; noAdmin -> Glass.ROSE; else -> Glass.AMBER })
             adminTile.detail.text = when { admin -> SCREEN_ON; noAdmin -> NO_ADMIN; else -> SCREEN_OFF }
             card.content(rows)
@@ -139,12 +138,12 @@ class ThisDeviceStep(
         const val HOME = "Home screen"
         const val HOME_ON = "On: Glassworks is the default Home app"
         const val HOME_OFF = "Off: Glassworks isn't the default Home app"
-        fun noHome() = "Android didn't open it: ${GenericAndroid.homeSettingsPath()}"
+        const val NO_HOME = "Android didn't open it: search its Settings for “Home”"
         const val SCREEN = "Turn the screen off"
         const val SCREEN_ON = "On: Glassworks can turn the screen off when idle. Turn this off before you uninstall it."
         const val SCREEN_OFF = "Android asks to make Glassworks a device admin, so it can turn the screen off when idle. " +
             "To uninstall it later, turn that off first."
-        const val NO_ADMIN = "Android didn't open it: Settings, Security, Device admin apps"
+        const val NO_ADMIN = "Android didn't open it: search its Settings for “Device admin”"
         const val MAKE_HOME = "Make it the home screen"
         const val ALLOW_SCREEN_OFF = "Let it turn the screen off"
         /** What Android's "Activate device admin app?" dialog says Glassworks wants it for (`EXTRA_ADD_EXPLANATION`). */

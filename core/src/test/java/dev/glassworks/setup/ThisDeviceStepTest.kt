@@ -41,10 +41,11 @@ class ThisDeviceStepTest {
         var next = 0
         var home = 0
         var admin = 0
+        var redraws = 0
         val step = ThisDeviceStep({ grants }, { answered }, { answered = true }, { home++; opens }, { admin++; opens })
         val host = object : SetupHost {
             override val preview = false
-            override fun redraw() {}
+            override fun redraw() { this@Rig.redraws++ }
             override fun next() { this@Rig.next++ }
         }
         val screen by lazy { step.screen(RuntimeEnvironment.getApplication(), host) }
@@ -124,19 +125,17 @@ class ThisDeviceStepTest {
     @Test fun whenAndroidHasNothingToOpenTheRowSaysWhereToGoByHand() {
         val r = Rig(ThisDeviceStep.Grants(home = false, admin = false), opens = false)
         bound(r).primary!!()
-        assertEquals(ThisDeviceStep.noHome(), details(bound(r))[0].substringAfter(" | "))
+        assertEquals(ThisDeviceStep.NO_HOME, details(bound(r))[0].substringAfter(" | "))
     }
 
     @Test fun aButtonReadsTheGrantsAgainOnItsTap() {
         val r = Rig(ThisDeviceStep.Grants(home = true, admin = false))
         val card = bound(r)
         r.grants = ThisDeviceStep.Grants(home = false, admin = false) // the Home app changed since this draw
+        val before = r.redraws
         card.primary!!()
-        assertEquals("redrawn, no device admin dialog", 0, r.admin)
+        assertEquals("no device admin dialog", 0, r.admin)
+        assertEquals("redrawn instead", before + 1, r.redraws)
     }
 
-    @Test fun android6sHomeSettingsPath() {
-        assertEquals("Settings, Home", dev.glassworks.frame.GenericAndroid.homeSettingsPath(dev.glassworks.platform.PlatformApi(23)))
-        assertEquals("Settings, Apps, Default apps, Home app", dev.glassworks.frame.GenericAndroid.homeSettingsPath(dev.glassworks.platform.PlatformApi(24)))
-    }
 }

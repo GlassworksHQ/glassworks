@@ -177,7 +177,8 @@ on already. On a new setup after a Kiln install where the device refused one (a 
 here. Once it shows, it stays until Continue or Not now. A device set up before this step existed never sees it: its
 Device page rows say where to set each in Android's settings.
 
-**To uninstall later,** turn the device admin off first: Android's Settings, Security, Device admin apps, Glassworks.
+**To uninstall later,** turn the device admin off first: search Android's Settings for "Device admin" (the menus differ
+by Android version and maker), then turn Glassworks off. As device owner, undo that instead (below).
 Android won't uninstall an app while it is an active device admin. Kiln's Undo does this for you.
 
 To try a branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
