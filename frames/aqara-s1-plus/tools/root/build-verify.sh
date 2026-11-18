@@ -113,3 +113,4 @@ install -m 0755 "$W/s1kiosk_verify" "$OUT/s1kiosk_verify"
 } > "$OUT/NOTICE.s1kiosk_verify"
 cat "$OUT/BUILD-INFO.s1kiosk_verify.txt"
 file "$OUT/s1kiosk_verify" 2>/dev/null || true
+# throwaway
