@@ -34,9 +34,9 @@
 # Install (app side: stage files/frame/bundle-in/, setprop sys.glassworks.bundle.status requested,
 # setprop ctl.start glassworks_bundle). Status in sys.glassworks.bundle.status =
 # "<running|ok|error>: <detail>". App-readable state: $PUB_DIR/frame-bundle (root:root, dir 0755, file
-# 0644) = "<ok|bad|none> <frame version|-> <floor> <staged frame version|->", written at boot and after
-# an install: what is loaded, and what waits in $BDIR/next for the next restart ("staged, restart to
-# apply"). sys.glassworks.bundle.staged mirrors the last field (empty for "-") for display and logs. The
+# 0644) = "<ok|bad|none> <frame version|-> <floor> <staged frame version|->", written at boot (deleted
+# first, so an old one never stands for this boot's) and when an install stages a bundle: what is loaded,
+# and what waits in $BDIR/next for the next restart ("staged, restart to apply"). sys.glassworks.bundle.staged mirrors the last field (empty for "-") for display and logs. The
 # app decides from the file, never from a sys.* property (any app can set those). Not an ro.* property:
 # those can be set only once per boot, and here any app could set it first.
 #
@@ -222,6 +222,11 @@ publish() { # state frame-version: the app-readable state file, and the staged v
     mv -f "$PUB_DIR/.frame-bundle.tmp" "$PUB_DIR/frame-bundle"
 }
 
+republish() { # after an install: keep what is loaded (written at boot), and name what is staged
+  set -- $(cat "$PUB_DIR/frame-bundle" 2>/dev/null)
+  case "${1:-}" in ok|bad|none) publish "$1" "${2:--}" ;; *) publish none - ;; esac
+}
+
 own_dirs() { # the root-only state dirs, created on first use
   for d_ in "$ROOT" "$BDIR"; do
     [ -L "$d_" ] && rm -f "$d_"
@@ -241,30 +246,29 @@ check)
 boot)
   rm -rf "$RUN"; mkdir -p "$RUN" && chmod 700 "$RUN"
   own_dirs || say "cannot prepare $BDIR"
+  # A record from an earlier boot must never pass for this one's: the file is written again below.
+  rm -f "$PUB_DIR/frame-bundle"
   # A bundle staged by `install` loads now. The floor moves up only once it has passed the full check.
+  # Candidates, newest first: next, then next.old (left by an install that stopped between its two
+  # renames). The first that passes loads; the others are dropped.
   state=none; fv=$BOOT_FRAME_VERSION; why=""
-  # An install stopped between moving the staged bundle aside and moving the new one in: the old one
-  # still counts (it was reported staged), with the same checks as any.
-  if [ -e "$BDIR/next" ]; then rm -rf "$BDIR/next.old"
-  elif [ -e "$BDIR/next.old" ]; then mv "$BDIR/next.old" "$BDIR/next"; fi
-  if [ -e "$BDIR/next" ]; then
-    if check_dir "$BDIR/next"; then
-      nv=$VERSION; fl=$(floor); [ "$nv" -gt "$fl" ] && fl=$nv
-      rm -f "$BDIR/version.tmp"
-      if echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; then
-        rm -rf "$BDIR/old"
-        [ -e "$BDIR/current" ] && mv "$BDIR/current" "$BDIR/old"
-        if mv "$BDIR/next" "$BDIR/current"; then
-          rm -rf "$BDIR/old"; rm -f "$BDIR"/bad-*; say "frame bundle $FVER loaded"
-          state=ok; fv=$FVER
-        else
-          [ -e "$BDIR/old" ] && mv "$BDIR/old" "$BDIR/current"; say "cannot move the staged bundle in"
-        fi
+  for c_ in next next.old; do
+    [ -e "$BDIR/$c_" ] || continue
+    if [ $state = ok ]; then rm -rf "${BDIR:?}/$c_"; continue; fi
+    if ! check_dir "$BDIR/$c_"; then say "staged bundle ($c_) dropped: $WHY"; rm -rf "${BDIR:?}/$c_"; continue; fi
+    nv=$VERSION; fl=$(floor); [ "$nv" -gt "$fl" ] && fl=$nv
+    rm -f "$BDIR/version.tmp"
+    if echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; then
+      rm -rf "$BDIR/old"
+      [ -e "$BDIR/current" ] && mv "$BDIR/current" "$BDIR/old"
+      if mv "$BDIR/$c_" "$BDIR/current"; then
+        rm -rf "$BDIR/old"; rm -f "$BDIR"/bad-*; say "frame bundle $FVER loaded"
+        state=ok; fv=$FVER
+      else
+        [ -e "$BDIR/old" ] && mv "$BDIR/old" "$BDIR/current"; say "cannot move the staged bundle in"
       fi
-    else
-      say "staged bundle dropped: $WHY"; rm -rf "$BDIR/next"
     fi
-  fi
+  done
   if [ $state = ok ]; then :     # just promoted: checked in full above
   elif [ -e "$BDIR/current" ]; then
     if check_dir "$BDIR/current"; then
@@ -368,6 +372,12 @@ install)
   if [ ! -e "$BDIR/next" ] && [ ! -e "$1" ] && root_dir "$BDIR/current" && cmp -s "$STAGE/manifest" "$BDIR/current/manifest" && check_dir "$BDIR/current"; then
     rm -rf "$STAGE"; status "ok: frame bundle $FVER is already loaded"; exit 0
   fi
+  # The same bundle is staged already (its state file may not have been written): publish, don't copy.
+  if root_dir "$BDIR/next" && cmp -s "$STAGE/manifest" "$BDIR/next/manifest" && check_dir "$BDIR/next"; then
+    rm -rf "$STAGE"
+    republish || { status "error: frame bundle $FVER is staged, but its state file can't be written"; exit 1; }
+    status "ok: frame bundle $FVER staged; it loads at the next restart"; exit 0
+  fi
   status "running: copying the frame bundle"
   walk "$STAGE/manifest" copy "$STAGE" || fail "$WHY"
   [ "$VERSION" = "$v" ] || fail "manifest: version lines disagree"
@@ -379,9 +389,9 @@ install)
     fail "cannot stage the bundle"
   fi
   rm -rf "$BDIR/next.old"
-  # The state file keeps what is loaded (written at boot) and now names the staged version too.
-  set -- $(cat "$PUB_DIR/frame-bundle" 2>/dev/null)
-  case "${1:-}" in ok|bad|none) publish "$1" "${2:--}" ;; *) publish none - ;; esac
+  # The app decides from the state file: staging counts only once it says so. The bundle stays staged
+  # either way, and a second install of it only writes the file.
+  republish || { status "error: frame bundle $FVER is staged, but its state file can't be written"; exit 1; }
   status "ok: frame bundle $FVER staged ($NFILES files); it loads at the next restart"
   exit 0 ;;
 

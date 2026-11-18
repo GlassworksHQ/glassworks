@@ -29,6 +29,8 @@ w "$T/bin/getprop" <<'EOF'
 EOF
 w "$T/bin/setprop" <<'EOF'
 #!/bin/sh
+# /t/setprop-fail-once.<name>: the next write of that property fails, as setprop does when init refuses it
+[ -e "/t/setprop-fail-once.$1" ] && { rm -f "/t/setprop-fail-once.$1"; exit 1; }
 echo "$1=$2" >> /t/setprop.log
 case "$1" in
   ctl.start) echo running > "/t/props/init.svc.$2" ;;
@@ -407,6 +409,23 @@ check "no active record can be written: the boot copies run, and it says why" te
 rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 GW_RUN="$T/runblock/run" /system/bin/sh "$TBL/glassworks_loader.sh" run radio
 check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
 rm -f "$T/runblock"; L boot
+
+mkframe "$T/f5" 2.0.3 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f6" 2.0.4 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+stage_frame "$T/f5/frame-bundle"; install_frame >/dev/null; mv /data/glassworks/bundle/next "$T/keep5"
+stage_frame "$T/f6/frame-bundle"; install_frame >/dev/null; mv "$T/keep5" /data/glassworks/bundle/next.old
+echo junk >> /data/glassworks/bundle/next/services/radio.sh
+L boot
+check "next fails its check but next.old passes: next.old loads" test "$(prop ro.glassworks.frame.version)" = 2.0.3 -a ! -e /data/glassworks/bundle/next -a ! -e /data/glassworks/bundle/next.old
+
+: > "$T/pubblock"; stage_frame "$T/f6/frame-bundle"
+GW_PUB="$T/pubblock/pub" GW_RUN="$T/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" install >/dev/null 2>&1
+check "staged, but the state file can't be written: an error, not ok" has "$(prop sys.glassworks.bundle.status)" "error: frame bundle 2.0.4 is staged, but its state file can't be written"
+check "...the bundle stays staged" test -d /data/glassworks/bundle/next
+s=$(install_frame); rm -f "$T/pubblock"
+check "...the same install again only writes the state file" test "$s" = "ok: frame bundle 2.0.4 staged; it loads at the next restart"
+check "...which now names it" test "$(cat /data/glassworks-pub/frame-bundle | cut -d' ' -f4)" = 2.0.4
+L boot; check "...and it loads" test "$(prop ro.glassworks.frame.version)" = 2.0.4
 
 mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
 GW_LOADER_ONCE=1 L run radio; check "a developer script without the marker is ignored" test "$(prop test.radio)" != "dev|dev|1"
@@ -958,13 +977,13 @@ check "an allow-list cleared later stays empty (loopback only), never the old 'a
 echo sisdk > "$T/props/persist.s1kiosk.radio_zigbee"
 LOOPS=1 helper
 check "an old value changed later (a 0.4.3 image or app) is copied again" test "$(prop persist.glassworks.radio_zigbee)" = sisdk
-printf 'x%.0s' $(seq 1 100) > "$T/props/persist.s1kiosk.radio_zigbee"
+echo aqara > "$T/props/persist.s1kiosk.radio_zigbee"; touch "$T/setprop-fail-once.persist.glassworks.radio_zigbee"
 LOOPS=1 helper
 check "a copy that fails keeps the new value" test "$(prop persist.glassworks.radio_zigbee)" = sisdk
 check "...and the old record, so it is tried again" has "$(cat /data/s1kiosk/radio/.settings-moved)" "radio_zigbee sisdk"
-echo aqara > "$T/props/persist.s1kiosk.radio_zigbee"
 LOOPS=1 helper
-check "...and goes through once it can" test "$(prop persist.glassworks.radio_zigbee)" = aqara
+check "...the same old value goes through at the next start" test "$(prop persist.glassworks.radio_zigbee)" = aqara
+check "...and the record moves on" has "$(cat /data/s1kiosk/radio/.settings-moved)" "radio_zigbee aqara"
 rm -f "$T"/props/persist.s1kiosk.* "$T/props/persist.glassworks.timezone"
 
 

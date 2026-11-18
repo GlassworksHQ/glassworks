@@ -189,7 +189,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 | What | Where | Values |
 |---|---|---|
 | Frame id and version (what runs) | `ro.glassworks.frame.id`, `ro.glassworks.frame.version` | `aqara-s1-plus`; the loaded bundle's version, else the boot image's (`1.0.0`) |
-| Bundle state, and a staged bundle ("staged, restart to apply") | `/data/glassworks-pub/frame-bundle`, root 0644, written at boot and after each install | `<ok\|bad\|none> <loaded frame version\|-> <floor> <staged frame version\|->` |
+| Bundle state, and a staged bundle ("staged, restart to apply") | `/data/glassworks-pub/frame-bundle`, root 0644, written at boot (deleted first, so an old one never stands for this boot's) and when an install stages a bundle; an install that finds the bundle already loaded leaves it as it is | `<ok\|bad\|none> <loaded frame version\|-> <floor> <staged frame version\|->` |
 | The same, for display and logs | `sys.glassworks.bundle.state`, `sys.glassworks.bundle.staged` | `ok <version>` \| `bad: <why>` \| `none`; the staged version, empty when none |
 | The last install | `sys.glassworks.bundle.status` | `<running\|ok\|error>: <detail>` |
 
@@ -277,7 +277,8 @@ stopping after step 3 leaves the panel working as before.
    loads, a panel in `zigbee_tcp` with the Silicon Labs stack reports "needs a radio bundle with its
    runtime" and its coordinator is down. So Kiln has the app fetch and stage the frame release's bundle,
    restarts the panel once more, and calls the update done only when the loader's own record,
-   `/data/glassworks-pub/frame-bundle`, reads `ok <the release's version>`. `ro.glassworks.frame.version`
+   `/data/glassworks-pub/frame-bundle`, reads `ok <the release's version>`. The boot step deletes that file
+   before it starts, so a record there was written by the reboot Kiln asked for. `ro.glassworks.frame.version`
    alone doesn't prove it: the boot image and the first bundle are both 1.0.0. The radio status is a
    separate check after that.
 
@@ -378,7 +379,7 @@ FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3
 
 | Test | What it settles | Expect |
 |---|---|---|
-| L1 | `/data` at `post-fs-data`, and the `exec` step (on a store with no bundle: no `/data/glassworks/bundle/current` or `next`; with one, expect `ok <its version>` instead) | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; `logcat -d -s glassworks_loader` |
+| L1 | `/data` at `post-fs-data`, and the `exec` step (on a store with no bundle: no `/data/glassworks/bundle/current`, `next` or `next.old`; with one, expect `ok <its version>` instead) | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; `logcat -d -s glassworks_loader` |
 | L2 | The slots under init | `init.svc.glassworks_radio`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
 | L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.radio.source` = `boot`, otbr runs |
 | L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
