@@ -190,7 +190,7 @@ first ABI, `armeabi-v7a`:
 | ABI | Release asset | Radio bundle | Who runs it |
 |---|---|---|---|
 | `armeabi-v7a` | `s1-kiosk-<version>.apk` | yes | the S1 (32-bit userspace), other 32-bit devices |
-| `arm64-v8a` | `s1-kiosk-arm64-v8a-<version>.apk` | no (the bundle is the S1's root side) | arm64 tablets (generic-android), the arm64 emulator. The Mirror (Android 6) is planned: the app needs API 26, so it waits for the legacy APK (#198) |
+| `arm64-v8a` | `s1-kiosk-arm64-v8a-<version>.apk` | no (the bundle is the S1's root side) | arm64 tablets (generic-android), the arm64 emulator. Not the Mirror (Android 6): S1 Kiosk needs API 26, so Kiln installs the legacy build of Glassworks for generic Android there (#198, #411) |
 
 - **Every ABI's APK has the same versionCode**, `major*10000 + minor*100 + patch`. Store schemes put
   the ABI in the versionCode because a store must choose between APKs. Here the app chooses: it

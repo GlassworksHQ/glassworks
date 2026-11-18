@@ -1,11 +1,12 @@
 # Legacy engine: does GeckoView 144 run on Android 6–7, locked to Home Assistant?
 
-**Status (2026-11-15): working for the engine; the app itself is not yet.** GeckoView 144.0.2 (arm64-v8a) runs
+**Status (2026-11-17): the engine works; the app starts and shows the dashboard on the Mirror, and the rest is still to check.** GeckoView 144.0.2 (arm64-v8a) runs
 on a real lululemon Mirror (Android 6.0.1) and on API 23 and API 25 emulators. It draws Home Assistant's real
 frontend and runs the S1 app's helper extension (`window.s1kiosk`). The lockdown refuses everything outside the
 dashboard's origin, with a note on the page, and nothing reached the other origin in any run. The emulators'
-black tiles don't happen on the Mirror's Adreno 306. The S1 app's own screens still call API 24+ and crash on
-Android 6.
+black tiles don't happen on the Mirror's Adreno 306. Until Phase B (#412) the app's own screens called API 24+ and
+crashed on Android 6. Now the legacy build starts on the Mirror with no crashes (2026-11-17, #443) and loads the
+dashboard after a sign-in from a phone (2026-11-17, #459).
 
 Devices: a lululemon Studio Mirror (community image, Android 6.0.1, 929 MB RAM, Adreno 306, no root), run by the
 maintainer's root thread; Android emulators `system-images;android-23;default;arm64-v8a` (Android 6.0) and
@@ -310,8 +311,9 @@ the message says "…isn't the Home Assistant address the panel started with…"
 ## What runs on the legacy engine
 
 What #198's item 3 asks: the same core and panes as the current engine, where the engine allows. Two layers:
-the engine (verified on the Mirror and the emulators, above), and the app's own code on Android 6–7, which
-doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
+the engine (verified on the Mirror and the emulators, above), and the app's own code on Android 6–7. The app ran
+into API 24 at start (step 9); since Phase B (#412) it runs. On the Mirror it starts with no crashes (2026-11-17,
+#443) and loads the dashboard after a sign-in from a phone (2026-11-17, #459).
 
 **The engine, in the page:**
 
@@ -319,7 +321,7 @@ doesn't run yet (step 9: the S1 MainActivity calls API 24 at start).
 |---|---|---|
 | The dashboard (HA's frontend), sign-in through `/auth/authorize` | Works | Verified on the Mirror and API 23 (steps 5, 11) |
 | The helper extension: `window.s1kiosk`, the native port | Works | Verified (steps 4, 11) |
-| Hiding HA's header and sidebar, the external-auth bridge (`window.externalApp`) | Same `content.js`; needs the app's MainActivity to answer it | Untested: the app doesn't run on API 23 yet |
+| Hiding HA's header and sidebar, the external-auth bridge (`window.externalApp`) | Same `content.js`; needs the app's MainActivity to answer it | The bridge: inferred to work on the Mirror (2026-11-17, #459): after a sign-in from a phone the dashboard loaded signed in, which it can only do through the bridge. No log shows `getExternalAuth`. Hiding the header and sidebar: untested |
 | Camera cards | HLS only: WebRTC is off | Read (HA's frontend falls back when `RTCPeerConnection` is missing); untested |
 | Map cards, iframe and webpage cards, brand icons, anything from another origin | Blocked, with the note | Verified for the kinds of request (steps 4, 12); not with a real map card |
 | Downloads (backups, logs) | Refused | Verified (step 12) |
@@ -535,9 +537,12 @@ The legacy build is the `legacy` build type of Glassworks for generic Android (`
 `dev.glassworks.generic_android.legacy`, minSdk 23, `:engine-gecko-legacy` in place of `:engine-gecko`, core library
 desugaring, and a manifest (`src/legacy`) that overrides the minSdk 26 of the core, the pane API and the panes. How
 to build it, and why a build type and not a flavor: [its README](../../frames/generic-android/README.md#the-legacy-build-android-6-and-7).
-**Not tried on a device yet.** Phase B fixed `MainActivity`'s API 24+ calls, and the core's conformance test starts
-`MainActivity` on an API 23 emulator, but no Android 6-7 device has run the legacy APK. Try it on one where a crash
-loop is cheap first: with `BootReceiver` and the home screen on, a crash at start would repeat at every boot.
+**Run on the Mirror (2026-11-17).** Phase B fixed `MainActivity`'s API 24+ calls, and the core's conformance test starts
+`MainActivity` on an API 23 emulator. On the Mirror (Android 6.0.1) the legacy APK first crashed six times on the
+notification icon; with #443's fix it starts with no crashes, as the only home screen, on the portrait setup screen
+(#443's run). After a sign-in from a phone it loads the dashboard (#459's run). No Android 6-7 tablet has run it yet.
+Try a new build where a crash loop is cheap first: with `BootReceiver` and the home screen on, a crash at start would
+repeat at every boot.
 `:kiosk-legacy` (those entry points off) stays the safe way to try the engine alone.
 
 What Phase B added for the Mirror, from the device and not from frame code (`GenericAndroid`, `GenericAndroidDeviceTest`):
@@ -545,7 +550,7 @@ What Phase B added for the Mirror, from the device and not from frame code (`Gen
 | What | How | Tested |
 |---|---|---|
 | Portrait glass | `Frame.orientation` is `ANY` on the Mirror: the app follows Android's rotation (`SCREEN_ORIENTATION_FULL_USER`), and Kiln's first boot locks the Mirror's Android in portrait (`user_rotation=3`, auto-rotate off; `ro.sf.hwrotation` does nothing there, 2026-11-17). The app then stands upright on the glass (verified 2026-11-17, the root's run of #439, the maintainer's look). The S1's frame keeps landscape, as its manifest asks. Phase B first used the screen at rotation 0, which held a Pixel Tablet portrait on its dock (2026-11-16) | `OrientationTest` (the S1, the Pixel Tablet, the Mirror, an unknown tablet, a turn) |
-| No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule); untested on the Mirror |
+| No touchscreen | `Frame.input` is `Input.NONE` when Android lists input devices and none is a touchscreen: setup then works from a computer (#34, #404) | `GenericAndroidDeviceTest` (the rule). On the Mirror: the no-touch portrait setup screen showed (2026-11-17, #443's run); setup from a computer over Wi-Fi isn't checked yet |
 | Reboot | `REBOOT`: `PowerManager.reboot` | `RebootRouteTest` |
 
 What checks it, besides the unit tests of the shared sources:
@@ -605,7 +610,8 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
   redirects to another origin (`http` → `https`, a reverse proxy), and HA's external sign-in providers. Each is
   refused today and says so on the page.
 - GeckoView 143 wasn't needed: 144 didn't fail on the Mirror or either emulator.
-- The app itself on an Android 6-7 device: Phase B's code ran only on Robolectric and an API 23 emulator (no
-  GeckoView there: the conformance test's engine is blank).
-- The Mirror's `Build.MODEL` and `MANUFACTURER` have never been read on the unit. If the Mirror should lock portrait
-  whatever its Android says, it needs a `GenericAndroid.KNOWN` row, and that needs a real reading first.
+- The app itself on an Android 6-7 device: it starts and loads the dashboard on the Mirror (2026-11-17, #443 and
+  #459). Not checked there yet: hiding HA's header, Assist, Sendspin, camera presence, and a reboot.
+- The Mirror's `Build.MODEL` reads "MSM8916 for arm64" (the Glass Panes image's reference board), so the app tells a
+  Mirror by its boot image's fingerprint instead (#482). Portrait comes from Kiln's first boot
+  (`user_rotation=3`), not from a `GenericAndroid.KNOWN` row.
