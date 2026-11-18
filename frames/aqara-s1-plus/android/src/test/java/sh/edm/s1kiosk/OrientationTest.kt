@@ -67,8 +67,9 @@ class OrientationTest {
     }
 
     /**
-     * The Mirror stands portrait because its Android does (`ro.sf.hwrotation=270`, auto-rotate off, #198): the app
-     * turns with it and locks nothing. Its model isn't a frame row (lululemon-mirror/research has no reading of it).
+     * The Mirror stands portrait because Kiln's first boot locks its Android there (`user_rotation=3`, auto-rotate
+     * off, #198): the app turns with it and locks nothing. Its model isn't a frame row (lululemon-mirror/research has
+     * no reading of it).
      */
     @Test @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
     fun theMirrorStandsAsItsAndroidDoes() {
