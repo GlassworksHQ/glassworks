@@ -433,7 +433,10 @@ The original design notes:
   user signs in on the phone. HA redirects the phone back to the panel with an auth code, and the panel
   exchanges it for a **refresh token** (`/auth/token`). The phone shows "Panel signed in.". The Thread
   join's QR code (`/thread`) works the same way: a page that asks for an administrator, then
-  `/thread/continue`. The pages are one template in `SignInServer.kt` (system font, inline mark, dark
+  `/thread/continue`. The panel's setup page starts the same flow in its own tab with
+  `/signin/continue?then=setup`; its callback goes back to `/setup` instead (#453). Kiln over USB opens
+  `/signin/continue?then=kiln` in a pop-up; its callback closes that window, and Kiln moves on when the
+  panel reports the sign-in. The pages are one template in `SignInServer.kt` (system font, inline mark, dark
   or light as the phone is).
 - **PKCE.** The callback is plain HTTP on the LAN, so both sign-ins (this one and the Thread join's
   admin sign-in) use PKCE (RFC 7636, S256). Each attempt gets a fresh secret that stays on the panel.

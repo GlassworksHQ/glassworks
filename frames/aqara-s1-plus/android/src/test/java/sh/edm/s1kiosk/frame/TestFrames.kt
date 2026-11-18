@@ -2,6 +2,7 @@ package sh.edm.s1kiosk.frame
 
 import android.content.Context
 import android.hardware.input.InputManager
+import android.view.InputDevice
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.screen.LightSource
@@ -13,6 +14,10 @@ import org.robolectric.shadows.ShadowInputDevice
 /**
  * The devices tests and mockups stand for, each built as the app builds it there, so a screen shows that device's
  * name, input and orientation (#497). Never stand in for a device by overriding another frame's input.
+ *
+ * A frame reads the input devices listed when its input is read, and a test's devices are one list (Robolectric keeps
+ * them until it resets): build a device and read it before standing another up, as a test can't have the Mirror's keys
+ * and a tablet's touchscreen at once (#502).
  */
 object TestFrames {
     /** The Mirror's system properties: lululemon's boot image on the community `system` (DeviceFrame.LULULEMON_MIRROR). */
@@ -35,6 +40,22 @@ object TestFrames {
     fun tablet(context: Context, presence: PresenceSource? = null, light: LightSource? = null): Frame {
         ShadowBuild.setManufacturer("Google")
         ShadowBuild.setModel("Pixel Tablet")
+        touchscreen(context)
         return GenericAndroid(context, presence, light) { "" }
+    }
+
+    /**
+     * A touchscreen of the device's own, with an id of its own. Robolectric keeps the input devices a test adds until
+     * it resets, so [tablet] after [mirror] in one test would otherwise read only the Mirror's keys and no touchscreen
+     * (#502), and it adds a device only under an id it doesn't have. The device API sets an id and sources only through
+     * its hidden builder, so this sets them as Robolectric's own shadow sets a name.
+     */
+    private fun touchscreen(context: Context) {
+        val manager = context.getSystemService(InputManager::class.java)
+        val device = ShadowInputDevice.makeInputDeviceNamed("touchscreen")
+        val field = { name: String -> InputDevice::class.java.getDeclaredField(name).apply { isAccessible = true } }
+        field("mId").setInt(device, (manager.inputDeviceIds.maxOrNull() ?: -1) + 1)
+        field("mSources").setInt(device, InputDevice.SOURCE_TOUCHSCREEN)
+        shadowOf(manager).addInputDevice(device)
     }
 }

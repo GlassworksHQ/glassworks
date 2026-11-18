@@ -1,7 +1,7 @@
 // The setup steps that run over the app's setup channel: Home Assistant (the address, sign-in on the
 // panel's own page) and the radio role. The same code whether the channel comes over USB (Kiln's wizard,
 // through adb) or the LAN (the panel's own page, #34): only `open` differs.
-import { NOT_PAIRED, NotSent, Refused, validHaUrl, type SetupChannel, type SetupState, type WifiNetwork } from '@glassworks/setup-channel';
+import { kilnSignInUrl, NOT_PAIRED, NotSent, openSignInWindow, Refused, validHaUrl, type SetupChannel, type SetupState, type WifiNetwork } from '@glassworks/setup-channel';
 import type { Setup } from '../wizard/state';
 import { radioPlan, type PanelApp } from './radioPlan';
 
@@ -19,8 +19,13 @@ export interface ChannelSetupDeps {
   unreachable(e?: unknown): void;
   /** The installed app, which decides how a Thread router gets its network. No answer counts as an older app. */
   app(): Promise<PanelApp | undefined>;
-  /** Opens a tab; must run inside the click (popup blockers). */
+  /** Opens the sign-in's window (a pop-up, else a tab); must run inside the click (pop-up blockers). */
   openTab?: (url: string) => Window | null;
+  /**
+   * Signs in in this tab instead: the panel's own page goes to the panel's sign-in, which brings the browser back to
+   * it after Home Assistant (issue 453). Kiln's wizard leaves it out: leaving its page would drop the USB connection.
+   */
+  signInHere?: () => void;
 }
 
 /** What the step screens call: the wizard's Session, or the panel page's own controller. */
@@ -31,6 +36,8 @@ export interface SetupSteps {
   haAddress?: string;
   signIn(url: string): void;
   saveHa(url: string): Promise<void>;
+  /** Skip the sign-in (the panel asks for it on its own screen): keeps a valid address, then moves on. */
+  skipHa(url: string): Promise<void>;
   radio(): Promise<void>;
   applyRadio(mode: string): Promise<void>;
   /** Ends setup; a promise keeps the button that ran it busy until it settles. */
@@ -73,6 +80,8 @@ export class ChannelSetup {
   private channel?: SetupChannel;
   private haTimer?: ReturnType<typeof setInterval>;
   private joinTimer?: ReturnType<typeof setTimeout>;
+  /** Watches Kiln's sign-in window: one closed without a sign-in gives Sign in back. */
+  private windowTimer?: ReturnType<typeof setInterval>;
   /** Counts close()s: an open that close() overtook is closed, never kept or shown. */
   private gen = 0;
 
@@ -133,6 +142,7 @@ export class ChannelSetup {
     this.gen++;
     clearInterval(this.haTimer);
     clearTimeout(this.joinTimer);
+    clearInterval(this.windowTimer);
     void this.channel?.close().catch(() => {});
     this.channel = undefined;
   }
@@ -150,7 +160,10 @@ export class ChannelSetup {
     if (!c) return await this.d.done(); // older app: the panel's own setup does the rest
     c.onState = (s) => {
       const cur = this.d.phase();
-      if (cur.phase === 'ha') this.haState(s, { note: cur.note, signingIn: cur.signingIn && !s.ha.signedIn });
+      if (cur.phase !== 'ha') return;
+      // A sign-in this page started has finished in its own window: on to the next step, with no click.
+      if (cur.signingIn && s.ha.signedIn) { this.haState(s); void this.radio(); return; }
+      this.haState(s, { note: cur.note, signingIn: cur.signingIn });
     };
     this.haState(c.state!);
     clearInterval(this.haTimer);
@@ -225,19 +238,41 @@ export class ChannelSetup {
     this.d.show({ ...cur, joinNote: undefined, joining: { ssid, step: 'err', error: stillOnHotspot(ssid) } });
   }
 
-  /** Sign in: the tab opens inside the click, and is pointed at the panel's sign-in page once the address is saved. */
+  /**
+   * Sign in, once the address is saved: in this tab where [ChannelSetupDeps.signInHere] can, else in a window that
+   * opens inside the click (Kiln) and is pointed at the panel's sign-in. That window closes itself at the end, and
+   * this page moves on when the panel reports the sign-in ([homeAssistant]'s state).
+   */
   signIn(url: string): void {
     const s = this.d.phase();
     if (s.phase !== 'ha') return;
     if (!validHaUrl(url)) { this.haState({ ...this.channel!.state!, ha: s.ha }, { error: NOT_AN_ADDRESS }); return; }
-    const tab = (this.d.openTab ?? ((u) => window.open(u, '_blank')))('about:blank');
-    this.d.show({ ...s, error: undefined, signingIn: true, note: 'Sign in on the tab that opened. This page notices when you are done.' });
+    const here = this.d.signInHere;
+    const tab = here ? null : (this.d.openTab ?? (() => openSignInWindow()))('about:blank');
+    const note = here ? 'Opening Home Assistant\'s sign-in. You come back here after it.' : 'Sign in to Home Assistant in the window that opened. This step moves on by itself when the panel is signed in.';
+    this.d.show({ ...s, error: undefined, signingIn: true, note });
+    const g = this.gen;
+    // The person may have moved on (or the session closed) while the address was saved: then the sign-in is dropped,
+    // so it neither leaves this page nor points a window at the panel.
+    const still = () => {
+      const cur = this.d.phase();
+      return g === this.gen && this.d.here() && cur.phase === 'ha' && !!cur.signingIn;
+    };
     void (async () => {
       try {
         const st = url === this.channel?.state?.ha.url ? this.channel.state : await this.request((x) => x.setHa(url));
-        if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
-        if (tab) tab.location.href = st.ha.signinUrl;
-        else if (!window.open(st.ha.signinUrl, '_blank')) throw new Error('The browser blocked the sign-in tab. Allow pop-ups for this page, then sign in again.');
+        if (!still()) { tab?.close(); return; }
+        if (here) here();
+        else {
+          // The panel's own page (above) signs in on its own address and needs no `signinUrl`, which the panel leaves
+          // out when it has no Wi-Fi IPv4 address (the Mirror). Kiln's window needs it: it is Kiln's only way there.
+          if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
+          const to = kilnSignInUrl(st.ha.signinUrl);
+          const w = tab ?? window.open(to, '_blank');
+          if (!w) throw new Error('The browser blocked the sign-in window. Allow pop-ups for this page, then sign in again.');
+          if (tab) tab.location.href = to;
+          this.watchWindow(w);
+        }
       } catch (e) {
         tab?.close();
         const cur = this.d.phase();
@@ -257,17 +292,61 @@ export class ChannelSetup {
     await this.radio();
   }
 
+  /**
+   * Back on the page from the panel's sign-in (issue 453): on to the step after Home Assistant when the panel is signed in,
+   * else Home Assistant again. What the page knew went with the navigation; the panel's state has it.
+   */
+  /**
+   * Sign in waits while Kiln's sign-in window is open. Once it closes (the panel's last page closed it, or the person
+   * did), the panel says which: signed in moves on ([homeAssistant]'s state), anything else gives Sign in back.
+   */
+  private watchWindow(w: Window): void {
+    const g = this.gen;
+    clearInterval(this.windowTimer);
+    this.windowTimer = setInterval(() => {
+      const waiting = () => {
+        const cur = this.d.phase();
+        return g === this.gen && this.d.here() && cur.phase === 'ha' && cur.signingIn ? cur : undefined;
+      };
+      if (!waiting()) { clearInterval(this.windowTimer); return; }
+      if (!w.closed) return;
+      clearInterval(this.windowTimer);
+      void this.request((x) => x.getState()).catch(() => undefined).then((st) => {
+        const cur = waiting();
+        if (!cur || st?.ha.signedIn) return;
+        this.d.show({ ...cur, signingIn: false, note: 'The sign-in window closed before the panel was signed in. Sign in again.' });
+      });
+    }, 1000);
+  }
+
+  async afterSignIn(): Promise<void> {
+    const g = this.gen;
+    const st = await this.state().catch(() => undefined);
+    if (g !== this.gen) return; // closed meanwhile: this run is over
+    if (st?.ha.signedIn) await this.radio();
+    else await this.homeAssistant();
+  }
+
+  /** Moves on without signing in: a valid address is saved as Continue would; anything else is left for the panel. */
+  async skipHa(url: string): Promise<void> {
+    if (!validHaUrl(url)) return this.radio();
+    return this.saveHa(url);
+  }
+
   /** The radio role. */
   async radio(): Promise<void> {
     const g = this.gen;
-    if (!(await this.connect())) { if (g === this.gen) this.d.unreachable(); return; }
+    // closed (or replaced) while waiting on the panel: that answer, or its failure, is no one's to show
+    const stale = () => g !== this.gen || !this.d.here();
+    if (!(await this.connect())) { if (!stale()) this.d.unreachable(); return; }
     let st: SetupState;
     try {
       st = await this.request((x) => x.getState());
     } catch (e) {
-      this.d.unreachable(e); // e.g. the app restarted and didn't come back: say so, not "Connecting…" forever
+      if (!stale()) this.d.unreachable(e); // e.g. the app restarted and didn't come back: say so, not "Connecting…" forever
       return;
     }
+    if (stale()) return;
     this.ip = st.ip ?? this.ip; // also when setup starts here (#/radio): Done's hand-off needs it
     // A frame without a radio (any Android device, the Mirror) has no radio step: straight to Done.
     if (!st.radio) { await this.d.done(); return; }
