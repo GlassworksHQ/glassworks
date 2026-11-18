@@ -136,7 +136,7 @@ class BootSplashActivity : Activity() {
     }
 
     companion object {
-        private const val TAG = "S1Kiosk.Boot"
+        private const val TAG = "Glassworks.Boot"
         private const val RETRY_MS = 1000L
 
         private fun homeIntent() = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)

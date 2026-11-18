@@ -28,8 +28,8 @@ class AuthOnlyCommandTest {
     fun plaintextClientsCannotUseAuthOnlyEntities() {
         val identity = DeviceIdentity(
             name = "s1-panel", friendlyName = "S1 Panel", macAddress = "02:11:22:33:44:55",
-            esphomeVersion = "2026.10.2", compilationTime = "S1 Kiosk test", manufacturer = "Aqara",
-            model = "Panel Hub S1 Plus (S1 Kiosk)", voiceFeatures = 0,
+            esphomeVersion = "2026.10.2", compilationTime = "Glassworks test", manufacturer = "Aqara",
+            model = "Panel Hub S1 Plus (Glassworks)", voiceFeatures = 0,
         )
         val calls = Collections.synchronizedList(ArrayList<String>())
         val open = SelectEntity("open_select", "Open", options = listOf("A", "B"), get = { "A" }, set = { calls += "open $it" })

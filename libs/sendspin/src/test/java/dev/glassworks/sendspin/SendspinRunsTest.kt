@@ -519,7 +519,7 @@ class SendspinRunsTest {
 
     private companion object {
         val READY = SendspinPlayer.Status(SendspinPlayer.Phase.READY, serverName = "Music Assistant", paired = true)
-        val IDENTITY = SendspinPlayer.Identity("Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara", "S1 Kiosk 1.0.0", "02:00:00:00:00:01")
+        val IDENTITY = SendspinPlayer.Identity("Aqara S1 Plus", "Panel Hub S1 Plus (Glassworks)", "Aqara", "Glassworks 1.0.0", "02:00:00:00:00:01")
 
         fun CountDownLatch.awaitIgnoringInterrupts() {
             while (true) try { await(); return } catch (_: InterruptedException) {}

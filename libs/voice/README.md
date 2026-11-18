@@ -84,7 +84,7 @@ from esphome/micro-wake-word-models at a pinned commit, each checked against its
 | `UrlPlayer`, `VoiceEvent` | What the app supplies and what it hears. |
 | internal | The microWakeWord frontend (a port of TFLite Micro's) and detector, openWakeWord's feature pipeline, the TFLite glue and the model fetcher. |
 
-The manifest adds `RECORD_AUDIO` and `INTERNET`. Logs use the tag `S1Voice`. How the S1 uses it, and
+The manifest adds `RECORD_AUDIO` and `INTERNET`. Logs use the tag `Glassworks.Voice`. How the S1 uses it, and
 how the wake word was measured, is in [docs/esphome.md](../../docs/esphome.md) and
 [docs/research/microwakeword.md](../../docs/research/microwakeword.md).
 

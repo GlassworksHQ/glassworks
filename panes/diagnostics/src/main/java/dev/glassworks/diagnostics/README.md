@@ -64,7 +64,7 @@ pane doesn't know Gecko's process names.
 
 Once a minute, the pane reads `/proc/stat`, the CPU zone's `temp`, and `stat` and `smaps_rollup`
 for each of the app's processes. That is about a dozen small files on the S1. It also makes three
-binder calls: running processes, memory and Wi-Fi. The pane logs its own CPU time under `S1ESPHome`
+binder calls: running processes, memory and Wi-Fi. The pane logs its own CPU time under `Glassworks.ESPHome`
 (`diagnostics: sample N took X ms CPU`) for the first three samples and then once an hour. On the
 reference S1 the first three samples took 34, 28 and 28 ms (2026-11-12), about 0.05 % of one core.
 

@@ -34,7 +34,7 @@ class UrlExtraEngineStartTest {
     private fun restarts(next: String): Boolean = GeckoPinHarness(prefs = { it.urlSetting = dash }).use { h ->
         h.newIntent(Intent().putExtra("url", next))
         assertEquals(next, KioskPrefs(h.app).urlSetting)
-        h.logs("S1Kiosk").any { it.startsWith("restart deferred") }
+        h.logs("Glassworks").any { it.startsWith("restart deferred") }
     }
 
     @Test fun theSameHostOnAnotherPortRestarts() = assertTrue(restarts("http://192.0.2.10:8124/lovelace/0"))

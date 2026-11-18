@@ -20,9 +20,9 @@ Setup (a venv outside the repo; pass paths as arguments):
     # The voice, from https://huggingface.co/rhasspy/piper-voices (en/en_US/kristin/medium):
     #   en_US-kristin-medium.onnx (+ .onnx.json)
     # The models, as the panel fetches them (tools/voice/fetch-models.sh --no-push):
-    #   ~/.cache/s1kiosk/microwakeword-<commit>/{okay_nabu,hey_jarvis,alexa,hey_mycroft}.{tflite,json}
+    #   ~/.cache/glassworks/microwakeword-<commit>/{okay_nabu,hey_jarvis,alexa,hey_mycroft}.{tflite,json}
     /tmp/mww-venv/bin/python -I tools/voice/mww_reference.py \\
-        --voice /path/en_US-kristin-medium.onnx --models ~/.cache/s1kiosk/microwakeword-<commit> \\
+        --voice /path/en_US-kristin-medium.onnx --models ~/.cache/glassworks/microwakeword-<commit> \\
         --out libs/voice/src/test/resources
 """
 import argparse, json, wave
