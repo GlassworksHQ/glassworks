@@ -340,8 +340,10 @@ class ManageServer(
         // As the panel: a typed value, a duration, a choice or a window keeps its sheet open with why; the rest say it on the page.
         val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action || (item is SettingsItem.Choice && item.cards != null)) null
             else ManagePages.Dialog.Edit(key, problem, typed = raw.takeIf { item is SettingsItem.Text })
-        return settingsPage(host.status(), viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422,
-            problemSee = (item as? SettingsItem.Switch)?.see)!!
+        // The link follows the page as it is now: the refusal came from the state the save saw, not the one posted against.
+        val now = host.status()
+        val see = (now.sections.firstOrNull { it.id == id }?.let { SettingsChange.find(it, key) } as? SettingsItem.Switch)?.see
+        return settingsPage(now, viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422, problemSee = see)!!
     }
 
     /**

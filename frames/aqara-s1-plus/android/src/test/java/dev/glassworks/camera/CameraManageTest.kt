@@ -104,4 +104,17 @@ class CameraManageTest {
         assertEquals(422, r.status)
         assertTrue("the red line after the refused switch", r.text().contains("<p class=\"err\" role=\"alert\">$link</p>"))
     }
+
+    @Test fun theRefusalLinksToWhatRefusedItNotWhatThePagePostedAgainst() {
+        val (def, f) = manage(touch = false)
+        val b = admin(f)
+        val csrf = b.csrf()
+        val build = f.statusFn!!
+        var flip = true
+        // Privacy turns on between the page the POST reads and the save: the save refuses for privacy.
+        f.statusFn = { build().also { if (flip) { flip = false; def.prefs.privacy = true } } }
+        val r = b.post("/settings", mapOf("csrf" to csrf, "section" to CameraPane.ID, "key" to "ONVIF stream/Stream over ONVIF and RTSP", "value" to "on"))
+        assertEquals(422, r.status)
+        assertTrue(r.text(), r.text().contains("<p class=\"err\" role=\"alert\"><a class=\"see\" href=\"#i-privacy-camera-privacy\">${CameraPage.PRIVACY_ON}</a></p>"))
+    }
 }
