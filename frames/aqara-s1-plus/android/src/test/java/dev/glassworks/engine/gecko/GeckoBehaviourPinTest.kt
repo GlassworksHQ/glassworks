@@ -18,13 +18,13 @@ import org.mozilla.geckoview.GeckoSessionSettings
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.dashboard.Dashboard
 import dev.glassworks.dashboard.Dashboards
 import dev.glassworks.glassworks
 import java.io.File
-import sh.edm.s1kiosk.BuildConfig
+import dev.glassworks.s1.BuildConfig
 
 /**
  * What the kiosk asks of GeckoView and does with what GeckoView reports, pinned on the code before
@@ -112,7 +112,7 @@ class GeckoBehaviourPinTest {
         assertEquals(f.absolutePath, rs.configFilePath)
         assertTrue(rs.consoleOutputEnabled)
         assertTrue(rs.aboutConfigEnabled)
-        assertEquals(sh.edm.s1kiosk.BuildConfig.DEBUG, rs.remoteDebuggingEnabled) // the default follows the build type
+        assertEquals(dev.glassworks.s1.BuildConfig.DEBUG, rs.remoteDebuggingEnabled) // the default follows the build type
     }
 
     @Test

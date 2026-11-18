@@ -10,7 +10,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.RuntimeEnvironment
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.HelperFacts
 import dev.glassworks.radio.RadioMode

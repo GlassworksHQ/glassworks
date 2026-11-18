@@ -23,13 +23,13 @@ import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowPowerManager
 import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.GlassworksRuntime
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.auth.HaAuth
-import sh.edm.s1kiosk.base.BaseBackend
+import dev.glassworks.s1.base.BaseBackend
 import dev.glassworks.dashboard.Dashboards
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.radio.runningRadio
 import dev.glassworks.speaker.SendspinPrefs
 import dev.glassworks.assist.VoicePrefs

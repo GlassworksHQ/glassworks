@@ -1,7 +1,7 @@
 package dev.glassworks.camera
 
 import dev.glassworks.frame.Frame
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import android.app.Application
 import android.content.Context
 import android.graphics.Canvas
@@ -37,7 +37,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.HelperFacts
 import dev.glassworks.radio.RadioMode

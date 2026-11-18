@@ -1,9 +1,9 @@
 package dev.glassworks.device
 
 import dev.glassworks.platform.AppBuild
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -12,10 +12,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.base.BaseKind
-import sh.edm.s1kiosk.base.BaseLayout
-import sh.edm.s1kiosk.base.WallBasePane
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.base.BaseKind
+import dev.glassworks.s1.base.BaseLayout
+import dev.glassworks.s1.base.WallBasePane
 
 /** A pane's entitiesChanged makes the shell rebuild the whole list: its own entities and every pane's. */
 @RunWith(RobolectricTestRunner::class)

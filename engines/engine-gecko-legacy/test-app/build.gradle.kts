@@ -2,7 +2,7 @@
 // built on :engine-gecko-legacy for Android 6-7 instead of :engine-gecko. It exists so the frozen engine can run on
 // an emulator, a tablet and the lululemon Mirror before the generic-android frame (#23) replaces it.
 //
-// - Debug only, debug-signed, never published. applicationId sh.edm.s1kiosk.legacy, so it never installs over,
+// - Debug only, debug-signed, never published. applicationId dev.glassworks.s1.legacy, so it never installs over,
 //   or updates, the S1 app.
 // - The S1 app's module and its release APK don't change: this module only reads its folders.
 // - One ABI, -PlegacyAbi (root build.gradle.kts): arm64-v8a by default, the Mirror's.
@@ -20,10 +20,10 @@ val testBuild: String = (System.getenv("S1_TEST_BUILD")).orEmpty().trim()
     .also { if (!Regex("^[0-9a-f]{0,40}$").matches(it)) throw GradleException("S1_TEST_BUILD '$it' must be a commit hash") }
 
 android {
-    // The S1 app's: its sources use sh.edm.s1kiosk.R and sh.edm.s1kiosk.BuildConfig.
-    namespace = "sh.edm.s1kiosk"
+    // The S1 app's: its sources use dev.glassworks.s1.R and dev.glassworks.s1.BuildConfig.
+    namespace = "dev.glassworks.s1"
     defaultConfig {
-        applicationId = "sh.edm.s1kiosk.legacy"
+        applicationId = "dev.glassworks.s1.legacy"
         minSdk = 23
         targetSdk = 35
         versionCode = 1

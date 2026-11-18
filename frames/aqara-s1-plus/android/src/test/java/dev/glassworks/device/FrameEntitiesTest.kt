@@ -23,10 +23,10 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowInputDevice
 import org.robolectric.shadows.ShadowSensor
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.frame.AqaraS1Plus
 
 /**
  * #476: Home Assistant gets the screen entities a device can back, from the same facts as its Screen settings

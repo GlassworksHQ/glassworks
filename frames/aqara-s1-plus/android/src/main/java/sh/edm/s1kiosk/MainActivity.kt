@@ -1,4 +1,4 @@
 package sh.edm.s1kiosk
 
-/** The name Android, Kiln and the installed apps know this component by (#22). The code is [dev.glassworks.MainActivity]. */
+/** Kept at the S1 app's old component name (#22, #527): the HOME choice, Kiln, install.sh, Clarity and the root helper start it by this name. The code is [dev.glassworks.MainActivity]. */
 class MainActivity : dev.glassworks.MainActivity()

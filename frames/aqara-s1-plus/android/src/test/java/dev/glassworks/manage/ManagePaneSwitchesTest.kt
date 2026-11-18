@@ -14,13 +14,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.manage.S1Manage
 
 /**
  * #33 on #67: the S1's Manage page reads each pane's name and on/off from the sections the panel's menu

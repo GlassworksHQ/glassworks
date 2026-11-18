@@ -225,7 +225,7 @@ reacts to `TimersChanged` and `TimerFinished`. The voice assistant
 app a `DeviceHost`: the pane context, the device's thread, the speaker's players and chime player, the
 panel's address, and hooks for its stop and for cancelling a voice run. The app builds its panes from it in
 the order they start and list their entities, the frame's own panes included (the S1's:
-[`S1Panes.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/S1Panes.kt)). The device drops
+[`S1Panes.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/S1Panes.kt)). The device drops
 the ones the frame can't run (`CantRun`), then starts, stops and lists the rest. A pane that needs
 something from the device takes it in its constructor; it never reaches for the device itself.
 
@@ -270,7 +270,7 @@ not an IANA id). The time zone pane offers it on its page.
 ### Entities that change, and events
 
 A pane's entity list may change while the panel runs. The wall base
-([`WallBasePane.kt`](../../../../../../frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt)) adds relays, buttons and power
+([`WallBasePane.kt`](../../../../../../frames/aqara-s1-plus/panes/wall-base/src/main/java/dev/glassworks/s1/base/WallBasePane.kt)) adds relays, buttons and power
 sensors when a switch base is mounted. The pane then calls `ctx.entitiesChanged()`. The core builds
 the device's list again from its own entities and every pane's `entities()`, and gives it to Home
 Assistant, which reconnects and lists the entities again. `entities()` must return the new list from
@@ -298,7 +298,7 @@ private val prefs = SendspinPrefs(ctx.prefs(id))
 
 The frame decides which file holds a namespace. A namespace is the owner of a set of keys, not a
 file or a key prefix. On the S1 every pane's settings stay in `kiosk.xml`, under the key names they
-had before panes ([`PanePrefs.PANE_FILES`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/PanePrefs.kt)), because panels
+had before panes ([`PanePrefs.PANE_FILES`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/PanePrefs.kt)), because panels
 update in place and no stored value may move. `PrefsPinTest` pins every file, key, type and default.
 `ctx.prefs` refuses a namespace the frame does not know.
 
@@ -597,7 +597,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 The app makes one frame at start, and `GlassworksRuntime` holds it. The device shell
 (`PanelDevice`) reads only these members; `PanelDeviceFrameTest` fails if it reaches past them.
 
-The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
+The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
 presence source is the VI5300 time-of-flight sensor, with Lumi's `proximity_threshold` range table,
 and its light source is the MK6212 sensor. Its panes are the wall base (with Aqara's cloud daemon,
 which holds the wall base UART) and the time zone. It also holds the root update service (`rootUpdates`) and
