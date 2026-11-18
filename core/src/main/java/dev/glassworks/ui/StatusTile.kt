@@ -22,7 +22,8 @@ class StatusTile(context: Context) {
     private val dot = View(context)
     private val halo = FrameLayout(context).apply { addView(dot, FrameLayout.LayoutParams(g.px(9f), g.px(9f), Gravity.CENTER)) }
     val title = g.text(16.5f, Glass.TX, Inter.MEDIUM).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.END }
-    val detail = g.text(15f, Glass.MU).apply { setLineSpacing(0f, 1.2f); maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
+    /** Wraps to its full height: a line that ends with how to undo something must never lose its end (CodeRabbit on #524). */
+    val detail = g.text(15f, Glass.MU).apply { setLineSpacing(0f, 1.2f) }
     val view = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
