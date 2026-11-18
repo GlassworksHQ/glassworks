@@ -289,7 +289,7 @@ file** for the `.zip`.*
 <table>
 <tr>
 <td width="50%"><img src="../../../docs/img/kiln/restore.webp" alt="Restore: Keep it plugged in. Putting the original software back, 45 percent. Found your S1 Plus, started the installer in its memory, putting the original software back. Each part is checked after it is written."></td>
-<td width="50%"><img src="../../../docs/img/kiln/undo-done.webp" alt="The original software is back. One last step, on the panel: swipe down, tap Settings on the Glassworks notification, then Advanced settings, Factory reset. Button: Back to Kiln."></td>
+<td width="50%"><img src="../../../docs/img/kiln/undo-done.webp" alt="The original software is back. One last step, on the panel: swipe down, tap Settings on the app's notification, then Advanced settings, Factory reset. Button: Back to Kiln."></td>
 </tr>
 <tr>
 <td><em>Restore. Keep it plugged in.</em></td>
@@ -298,7 +298,7 @@ file** for the `.zip`.*
 </table>
 
 5. **Factory reset the panel**, if you chose *As it came from Aqara*. On the panel, swipe down from
-   the top, tap *Settings* on the Glassworks notification, then *Advanced settings → Factory reset*.
+   the top, tap *Settings* on the app's notification (*Glassworks*, or *S1 Kiosk* up to 0.4.3), then *Advanced settings → Factory reset*.
    A factory reset alone doesn't restore the software, so restore first. With *Keep its settings*
    the panel restarts with Aqara's software and apps, and your settings and Wi-Fi as they were.
 

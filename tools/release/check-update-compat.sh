@@ -6,7 +6,7 @@
 #   tools/release/check-update-compat.sh <apk>                  the S1 app, identifiers only
 #   tools/release/check-update-compat.sh --signed <apk>         also the release signing certificate
 #   tools/release/check-update-compat.sh --app <app> [--signed] <apk>
-#       <app>: s1-kiosk (the default), generic-android or generic-android-legacy (Glassworks for
+#       <app>: aqara-s1-plus (the default), generic-android or generic-android-legacy (Glassworks for
 #       generic Android and its legacy build, #23 and #198; their own key, generic-release-cert.sha256)
 #
 # What breaks updates in place, and is checked here:

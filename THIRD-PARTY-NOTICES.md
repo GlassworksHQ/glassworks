@@ -1,6 +1,7 @@
 # Third-party notices
 
-Glassworks' own code is MIT ([LICENSE](LICENSE)). This file lists the third-party code that the
+Glassworks' own code is MIT ([LICENSE](LICENSE)), except the Glassworks core, which is MPL-2.0
+([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)). This file lists the third-party code that the
 project distributes: in the S1 app's APK (with the signed radio bundle that release APKs carry), and in
 the files the web installer at https://s1.edm.sh serves. For each part it gives the version, the licence
 (as an SPDX identifier), where it comes from and where its source is. The libraries published to Maven
