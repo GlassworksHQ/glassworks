@@ -122,7 +122,8 @@ async function handle(req, res) {
   const p = panels[u.host];
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/panels') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': csp });
-    return res.end(readFileSync(pageFile));
+    // The page says whether this panel keeps a Home Assistant sign-in, as the real server does from the session.
+    return res.end(readFileSync(pageFile, 'utf8').replace(/data-ha-signin="[^"]*"/, 'data-ha-signin="' + (panelSignIn ? '1' : '') + '"'));
   }
   if (u.pathname === '/manage/ha/token' && req.method === 'POST') {
     const f = await form(req);

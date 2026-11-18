@@ -96,10 +96,15 @@ class ManageServer(
     private val kept = java.util.concurrent.ConcurrentHashMap<String, HaSignIn.Kept>()
 
     /** A signed-out session's questions go with it, and its kept Home Assistant sign-in is ended in HA. */
-    private fun forget(session: String) {
+    private fun forget(session: String): Boolean {
         asked.entries.removeIf { it.value.session == session }
-        kept.remove(session)?.let { signIn.end(it) }
+        val k = kept.remove(session) ?: unrevoked.remove(session) ?: return true
+        // HA didn't take the revoke: no longer usable, but kept aside to try again (Try again, the sweep).
+        return signIn.end(k).also { ended -> if (!ended) unrevoked[session] = k }
     }
+
+    /** Kept sign-ins whose revoke Home Assistant didn't take: not usable, tried again by [sweep] and by Try again. */
+    private val unrevoked = java.util.concurrent.ConcurrentHashMap<String, HaSignIn.Kept>()
 
     init {
         if (sweepMs > 0) java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "gw-manage-sweep").apply { isDaemon = true } }
@@ -113,9 +118,12 @@ class ManageServer(
     fun sweep() = dropEnded()
 
     private fun dropEnded() {
+        for (id in unrevoked.keys.toList()) forget(id)
         if (kept.isEmpty()) return
+        // The candidates first, then the live sessions: one signed in meanwhile isn't a candidate (CodeRabbit on #534).
+        val candidates = kept.keys.toList()
         val live = sessions.list(haBase()).map { it.id }.toSet()
-        for (id in kept.keys.toList()) if (id !in live) forget(id)
+        for (id in candidates) if (id !in live) forget(id)
     }
 
     /** Whether [session] has a Home Assistant sign-in kept for All panels (tests). */
@@ -518,7 +526,10 @@ class ManageServer(
             }
             "/settings" -> changeSetting(req, s, viewer)
             HA_ACCESS -> haAccess(s)
-            HA_FORGET -> { forget(s.id); event("${who(s)} ended the Home Assistant sign-in All panels used (${s.browser})"); json(200, JSONObject().put("ok", true)) }
+            HA_FORGET -> if (forget(s.id)) {
+                event("${who(s)} ended the Home Assistant sign-in All panels used (${s.browser})")
+                json(200, JSONObject().put("ok", true))
+            } else json(502, JSONObject().put("problem", "Home Assistant didn't confirm it ended the sign-in. Try again."))
             "/security/signout" -> {
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }

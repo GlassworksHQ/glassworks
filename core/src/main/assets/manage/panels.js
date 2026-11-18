@@ -364,6 +364,12 @@ async function start() {
   } catch (e) {
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
+  if (mine !== generation) return;
+  // The panel's kept sign-in may have ended meanwhile: ask for one, rather than reading the panels with none (CodeRabbit on #534).
+  if (!access) {
+    return say(listCard, 'Panels in Home Assistant', 'Sign in with a Home Assistant administrator to find the panels. This tab keeps the sign-in until you close it.',
+      h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
+  }
   // Each row as soon as its panel answers: a slow one doesn't hold the others back.
   await Promise.all(panels.map(async (p, i) => {
     const got = await readPanel(p, access);

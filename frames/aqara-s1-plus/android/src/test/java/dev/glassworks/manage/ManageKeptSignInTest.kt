@@ -78,6 +78,34 @@ class ManageKeptSignInTest {
         assertEquals(404, access(b).status)
     }
 
+    @Test fun aRevokeHomeAssistantDidntTakeIsReportedAndTriedAgain() {
+        val b = signedIn()
+        val csrf = b.csrf()
+        f.revokeWorks = false
+        val r = b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf))
+        assertEquals(502, r.status)
+        assertTrue(r.text().contains("didn't confirm"))
+        assertEquals("no longer usable", 404, access(b, csrf = csrf).status)
+        f.revokeWorks = true
+        assertEquals("Try again ends it", 200, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+        assertEquals(listOf("REFRESH", "REFRESH", "REFRESH"), f.revoked)
+        f.revoked.clear()
+        f.server.sweep()
+        assertTrue("nothing left to end", f.revoked.isEmpty())
+    }
+
+    @Test fun theSweepTriesAgainAnEndHomeAssistantDidntTake() {
+        val b = signedIn()
+        f.revokeWorks = false
+        b.post("/manage/signout", mapOf("csrf" to b.csrf()))
+        assertEquals(2, f.revoked.size)
+        f.revokeWorks = true
+        f.server.sweep()
+        assertEquals(3, f.revoked.size)
+        f.server.sweep()
+        assertEquals("done once taken", 3, f.revoked.size)
+    }
+
     @Test fun aNewHomeAssistantAddressEndsIt() {
         val b = signedIn()
         val id = sessionId()
