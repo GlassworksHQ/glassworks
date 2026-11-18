@@ -117,7 +117,7 @@ export class Session implements SetupSteps {
       here: () => !this.closed && this.s.screen === 'setup',
       done: () => this.finish(),
       unreachable: (e) => this.fail(3, e ?? new Error(`${this.d.frame.app} isn't answering. Is it installed and running?`), true),
-      // which S1 Kiosk is on the panel decides how a Thread router gets its network (read-only)
+      // which Glassworks is on the panel decides how a Thread router gets its network (read-only)
       app: async () => {
         const v = await kioskVersion(this.panel!, this.lid());
         return { version: v?.name, code: v?.code };
@@ -610,7 +610,7 @@ export class Session implements SetupSteps {
   }
 
   /**
-   * Giving the panel back to Aqara's apps removes or disables S1 Kiosk, so it only happens for a
+   * Giving the panel back to Aqara's apps removes or disables Glassworks, so it only happens for a
    * backup undo can restore (kiln-core's checkRestorable, the check the restore itself runs). A backup
    * that can't be restored stops here, with nothing on the panel changed.
    */

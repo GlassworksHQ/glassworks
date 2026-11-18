@@ -53,14 +53,14 @@ const ASK: Record<AskKind, { lead: string; title: string; body: string; pick: st
   adb: {
     lead: 'The panel is starting with its new software and is waiting for you.',
     title: 'Allow this page to set up the panel',
-    body: 'One last OK, so this page can install S1 Kiosk. Meanwhile, don\'t touch the panel\'s screen: leave Aqara\'s setup (language, Wi-Fi, terms) alone.',
+    body: 'One last OK, so this page can install Glassworks. Meanwhile, don\'t touch the panel\'s screen: leave Aqara\'s setup (language, Wi-Fi, terms) alone.',
     pick: 'QUAD-CORE R818 EVB2',
     note: 'That\'s the panel\'s name over USB. If it isn\'t in the list yet, keep the list open: it appears once the panel has started (up to a minute).',
   },
   connect: {
     lead: 'Connect to your installed panel to continue setting it up. Nothing is reflashed.',
     title: 'Allow this page to connect to the panel',
-    body: 'The panel should be running S1 Kiosk and plugged in to this computer. Your browser asks once; after that it reconnects by itself.',
+    body: 'The panel should be running Glassworks and plugged in to this computer. Your browser asks once; after that it reconnects by itself.',
     pick: 'QUAD-CORE R818 EVB2',
     note: 'That\'s the panel\'s name over USB. Not in the list? Check the cable, and run "adb kill-server" if adb is open on this computer.',
   },
@@ -142,7 +142,7 @@ function demoImprov(fail: boolean): ByteStream {
 }
 
 const BARS: Bar[] = ['backup', 'patch', 'flash', 'verify'];
-const TITLE = 'S1 Unleashed Installer';
+const TITLE = 'Glassworks Installer';
 
 class Installer {
   private bars: Record<Bar, number> = { backup: 0, patch: 0, flash: 0, verify: 0 };
@@ -331,7 +331,7 @@ class Installer {
           if (await this.connectPanel()) {
             this.setup ??= await this.openSetup();
             if (this.setup) await this.radioStep();
-            else this.adbRow('err', 'S1 Kiosk isn\'t answering', 'Is the app installed and running? Try #/resume to update it.', 'No answer');
+            else this.adbRow('err', 'Glassworks isn\'t answering', 'Is the app installed and running? Try #/resume to update it.', 'No answer');
           }
           break;
         default: this.show('welcome'); this.setRoute('');
@@ -352,7 +352,7 @@ class Installer {
       await this.getFlow();
       this.panel = (await webUsbDevices.knownAdb(this.key!).catch(() => undefined))
         ?? (await this.ask('connect', () => webUsbDevices.requestAdb(this.key!), new AbortController().signal));
-      this.adbRow('ok', 'Connected over adb', 'S1 Kiosk is installed', 'Connected');
+      this.adbRow('ok', 'Connected over adb', 'Glassworks is installed', 'Connected');
       $('#hands').hidden = true;
       return true;
     } catch (e) {
@@ -365,8 +365,8 @@ class Installer {
   /** An installed panel (design §8.2): skip FEL, connect over adb, update the app, then the rest. */
   private async resume() {
     if (!(await this.connectPanel())) return;
-    this.phase('settings', 'Set up the panel', 'Connected to your installed panel. Check these settings, then update S1 Kiosk and finish setting up.', 'Settings');
-    this.adbRow('ok', 'Connected over adb', 'Ready to update S1 Kiosk and finish setting up', 'Connected');
+    this.phase('settings', 'Set up the panel', 'Connected to your installed panel. Check these settings, then update Glassworks and finish setting up.', 'Settings');
+    this.adbRow('ok', 'Connected over adb', 'Ready to update Glassworks and finish setting up', 'Connected');
     ($('#finish') as HTMLButtonElement).disabled = false;
     $('#finish').textContent = 'Update and continue';
     $('#finish').onclick = () => this.finishApp();
@@ -554,7 +554,7 @@ class Installer {
     this.adbRow('wait', 'Waiting for the panel', 'First start takes a minute or two', 'Starting');
     try {
       this.panel = await this.flow!.connectAdb();
-      this.adbRow('ok', 'Connected over adb', 'Ready to install S1 Kiosk', 'Connected');
+      this.adbRow('ok', 'Connected over adb', 'Ready to install Glassworks', 'Connected');
       ($('#finish') as HTMLButtonElement).disabled = false;
       $('#finish-hint').textContent = '';
     } catch (e) {
@@ -576,7 +576,7 @@ class Installer {
     if (which.startsWith('wifi')) {
       // a simulated panel speaking Improv Serial: ?demo=wifi (works) or ?demo=wifi-fail (wrong password)
       this.show('app');
-      this.adbRow('ok', 'S1 Kiosk installed', 'Set as the home screen', 'Done');
+      this.adbRow('ok', 'Glassworks installed', 'Set as the home screen', 'Done');
       $('#hands').hidden = true;
       this.panel = { run: async () => ({ out: '', code: 0 }), push: async () => {},
         openStream: async (svc: string) => (svc === SETUP_SOCKET ? demoSetup() : demoImprov(which === 'wifi-fail')) };
@@ -641,7 +641,7 @@ class Installer {
   private async waitForAppSocket(socket: string, say: (s: string) => void, timeoutMs = 90_000): Promise<boolean> {
     const name = socket.replace(/^localabstract:/, '@');
     const until = Date.now() + timeoutMs;
-    say('Starting S1 Kiosk on the panel…');
+    say('Starting Glassworks on the panel…');
     while (Date.now() < until) {
       const r = await this.panel!.run(`grep -c ' ${name}$' /proc/net/unix`).catch(() => ({ out: '0', code: 1 }));
       if (Number.parseInt(r.out.trim(), 10) > 0) return true;
@@ -656,7 +656,7 @@ class Installer {
     if (!open) return undefined;
     const demo = import.meta.env.DEV && new URLSearchParams(location.search).has('demo'); // simulated panel
     if (!demo && !(await this.waitForAppSocket(IMPROV_SOCKET, say))) return undefined;
-    say('Connecting to S1 Kiosk…');
+    say('Connecting to Glassworks…');
     for (let i = 0; i < 5; i++) {
       try {
         const c = new ImprovSerialClient(await open(IMPROV_SOCKET));
@@ -683,7 +683,7 @@ class Installer {
     $('#wifi-connect').hidden = true;
     this.improv = await this.openImprov((m) => { $('#wifi-scan-st').textContent = m; });
     if (!this.improv) {
-      $('#wifi-scan-st').textContent = 'Couldn\'t reach S1 Kiosk on the panel';
+      $('#wifi-scan-st').textContent = 'Couldn\'t reach Glassworks on the panel';
       $('#wifi-st').className = 'status err';
       $('#wifi-st').textContent = 'Try again, or set up Wi-Fi on the panel: it shows Wi-Fi as the first step. Details are in the log.';
       btn.textContent = 'Try again';
@@ -974,7 +974,7 @@ class Installer {
       // The app can restart right after joining (it found Home Assistant and must reload its engine),
       // which cuts this connection before the result arrives. Reconnect and ask: Provisioned = on Wi-Fi.
       this.log(`${new Date().toTimeString().slice(0, 8)} Wi-Fi: ${(e as Error).message}; asking the panel again`);
-      const again = await this.openImprov((m) => this.wifiView('busy', ssid, 'join', m === 'Connecting to S1 Kiosk…' ? '' : m));
+      const again = await this.openImprov((m) => this.wifiView('busy', ssid, 'join', m === 'Connecting to Glassworks…' ? '' : m));
       const state = again ? await again.requestState().catch(() => 0) : 0;
       if (again && state === ImprovState.Provisioned) {
         this.improv = again;
@@ -1100,7 +1100,7 @@ class Installer {
   private async finishApp() {
     const btn = $('#finish') as HTMLButtonElement;
     btn.disabled = true;
-    this.adbRow('busy', 'Installing S1 Kiosk', 'Copying the app to the panel', 'Working');
+    this.adbRow('busy', 'Installing Glassworks', 'Copying the app to the panel', 'Working');
     $('#finish-hint').textContent = 'About a minute';
     try {
       const res = await this.flow!.setUpApp(this.panel!, {
@@ -1111,14 +1111,14 @@ class Installer {
         // A development build on the panel: Android needs it removed first (switch.ts). Ask, with
         // what will and won't be kept on this panel.
         confirmSwitch: async (plan) => {
-          this.adbRow('busy', 'Switching S1 Kiosk to this version', 'Waiting for you to confirm', 'Confirm');
+          this.adbRow('busy', 'Switching Glassworks to this version', 'Waiting for you to confirm', 'Confirm');
           const ok = window.confirm(`${describeSwitch(plan)}\n\nSwitch now?`);
-          if (ok) this.adbRow('busy', 'Switching S1 Kiosk to this version', plan.root ? 'Keeping its data · about a minute' : 'About a minute', 'Working');
+          if (ok) this.adbRow('busy', 'Switching Glassworks to this version', plan.root ? 'Keeping its data · about a minute' : 'About a minute', 'Working');
           return ok;
         },
       });
       const sw = res.switched;
-      this.adbRow('ok', sw ? 'S1 Kiosk switched to this version' : 'S1 Kiosk installed',
+      this.adbRow('ok', sw ? 'Glassworks switched to this version' : 'Glassworks installed',
         sw ? `${sw.dataKept ? 'Settings kept' : 'Settings reset'} · ${sw.wifi === 'lost' ? 'Wi-Fi needs its password again' : 'Wi-Fi kept'}` : 'Set as the home screen', 'Done');
       $('#hands').hidden = true;
       this.ip = res.ip;
@@ -1143,7 +1143,7 @@ class Installer {
       const total = r.meta.files.reduce((n, f) => n + f.size, 0);
       $('#bk-info').textContent = `${r.meta.id}.zip · ${r.meta.files.length} partitions · ${fmtSize(total)}${r.meta.bootWasPatched ? ' · from an already-installed panel' : ' · original software'}`;
       $('#bk-hint').textContent = r.meta.bootWasPatched
-        ? 'This panel already had S1 Unleashed, so this backup is not the original software. Keep the backup from your first install.'
+        ? 'This panel already had Glassworks, so this backup is not the original software. Keep the backup from your first install.'
         : 'Keep this first backup: it\'s the only copy of the original software. It is also kept in this browser.';
     }
     $('#done-undo').hidden = false;
@@ -1218,12 +1218,12 @@ class Installer {
     const keep = this.undoPath() === 'keep';
     const steps: [string, string][] = keep
       ? [
-          ['Give the panel back to Aqara\'s apps', 'With the panel running normally and plugged in. This page removes S1 Kiosk and turns Aqara\'s launcher, voice, updates and radio back on.'],
+          ['Give the panel back to Aqara\'s apps', 'With the panel running normally and plugged in. This page removes Glassworks and turns Aqara\'s launcher, voice, updates and radio back on.'],
           ['Restore the original software', 'Then put the panel in FEL mode. This page writes its own boot, verified-boot and splash partitions back from the backup.'],
         ]
       : [
           ['Restore the original software', 'Put the panel in FEL mode. This page writes its own boot, verified-boot and splash partitions back from the backup.'],
-          ['Factory reset the panel', 'Last, on the panel: swipe down from the top, tap Settings on the S1 Kiosk notification, then Advanced settings → Factory reset. That removes S1 Kiosk and everything set up on the panel. A factory reset alone does not restore the software, so restore first.'],
+          ['Factory reset the panel', 'Last, on the panel: swipe down from the top, tap Settings on the Glassworks notification, then Advanced settings → Factory reset. That removes Glassworks and everything set up on the panel. A factory reset alone does not restore the software, so restore first.'],
         ];
     const at = keep && this.appsGivenBack ? 1 : 0;
     const ol = $('#undo-order');
@@ -1297,7 +1297,7 @@ class Installer {
     $('#done-title').textContent = 'The original software is back';
     $('#done-body').textContent = this.undoPath() === 'keep'
       ? 'The panel is restarting with Aqara\'s software and apps. Your settings and Wi-Fi are as they were.'
-      : 'One last step, on the panel: swipe down from the top, tap Settings on the S1 Kiosk notification, then Advanced settings → Factory reset. After that it is exactly as it came from Aqara.';
+      : 'One last step, on the panel: swipe down from the top, tap Settings on the Glassworks notification, then Advanced settings → Factory reset. After that it is exactly as it came from Aqara.';
     $('#bk').hidden = true;
     $('#bk-hint').textContent = 'Keep your backup in case you want to install again later.';
     $('#done-undo').hidden = true;

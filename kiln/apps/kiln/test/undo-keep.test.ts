@@ -1,5 +1,5 @@
 // "Keep its settings" gives the panel back to Aqara's apps before the restore, and that removes or
-// disables S1 Kiosk. So it only runs for a backup undo can restore (kiln-core's checkRestorable); a
+// disables Glassworks. So it only runs for a backup undo can restore (kiln-core's checkRestorable); a
 // backup that can't be restored is refused with nothing on the panel changed.
 import { describe, expect, it, vi } from 'vitest';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';

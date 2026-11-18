@@ -1,4 +1,4 @@
-// "Keep the panel's settings": the apps go back (S1 Kiosk removed) only for a backup undo can restore.
+// "Keep the panel's settings": the apps go back (Glassworks removed) only for a backup undo can restore.
 import { describe, expect, it } from 'vitest';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { BackupRefused, type BackupPlan } from '@glassworks/kiln-core';

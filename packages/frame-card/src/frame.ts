@@ -69,7 +69,7 @@ export interface FrameDesign {
   /** what the device's userspace runs, preferred first; the app's release builds every frame's (#98). Optional so code that builds a FrameDesign without it still compiles */
   abis?: Abi[];
   /**
-   * The app Kiln installs on this frame, when it isn't S1 Kiosk: its package (`id`), the activity adb
+   * The app Kiln installs on this frame, when it isn't Glassworks: its package (`id`), the activity adb
    * starts it with (whose extras it trusts from adb), the activity its HOME filter is on (an alias),
    * and its device admin. Class names are full, as in the app's manifest.
    */

@@ -21,7 +21,7 @@ export const s1PlusUi = {
   asks: {
     fastboot: { title: 'One click to continue.', body: 'The panel restarted into the installer. Nothing has been written yet.', pick: 'USB download gadget' },
     adb: { title: 'One last click.', body: 'The panel is starting its new software. Leave its screen alone meanwhile.', pick: 'QUAD-CORE R818 EVB2' },
-    connect: { title: 'Connect to your panel.', body: 'It should be running S1 Kiosk and plugged in to this computer. Nothing is reflashed.', pick: 'QUAD-CORE R818 EVB2' },
+    connect: { title: 'Connect to your panel.', body: 'It should be running Glassworks and plugged in to this computer. Nothing is reflashed.', pick: 'QUAD-CORE R818 EVB2' },
   } satisfies Record<AskKind, AskCopy>,
   /** The device in recovery mode, as the browser lists it. */
   felPick: 'USB Device (1f3a:efe8)',
@@ -36,7 +36,7 @@ export const s1PlusUi = {
     drivers: `${DOCS}/install.md#1--check-this-browser`,
     learn: `${DOCS}/install.md`,
   },
-  app: 'S1 Kiosk',
+  app: 'Glassworks',
   /** The outside work each install phase uses (the recipe's, ids from frame.json `credits`). */
   credits,
   /** Undo's two depths (frames/aqara-s1-plus/docs/install.md#undo). */
