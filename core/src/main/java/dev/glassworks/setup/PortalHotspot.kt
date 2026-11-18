@@ -48,7 +48,8 @@ class PortalHotspot(
 
     private fun move() {
         val now = addresses()
-        if (now == null) { if (at != null) { at = null; portal.stop() }; return }
+        // No address (yet, or any more): nothing may keep listening, a partial start's listeners included.
+        if (now == null) { at = null; portal.stop(); return }
         if (now == at) return
         // Remembered only once every listener is up, so a start that missed one is tried again on the next read.
         at = if (portal.start(now)) now else null

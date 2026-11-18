@@ -214,7 +214,7 @@ class CaptivePortalTest {
         addresses = null
         h.start { events += it }
         inner.listener!!(Hotspot.Event.Started(net))
-        assertEquals("no address yet: not started", listOf("stop"), portal.calls)
+        assertEquals("no address yet: not started", 0, portal.calls.count { it.startsWith("start") })
         addresses = PortalAddresses(ap)
         wakes.removeAt(0).also { assertEquals(0, wakes.size) }()
         assertEquals("...until the recheck finds one", "start 192.168.43.1 null", portal.calls.last())
@@ -230,7 +230,7 @@ class CaptivePortalTest {
         h.start { }
         inner.listener!!(Hotspot.Event.Started(net))
         repeat(3) { wakes.removeAt(0)() } // 9 s with no address
-        assertEquals("nothing started yet", listOf("stop"), portal.calls)
+        assertEquals("nothing started yet", 0, portal.calls.count { it.startsWith("start") })
         addresses = PortalAddresses(ap)
         wakes.removeAt(0)()
         assertEquals("a later read finds it", "start 192.168.43.1 null", portal.calls.last())
@@ -254,6 +254,22 @@ class CaptivePortalTest {
         wakes.removeAt(0)()
         repeat(3) { wakes.removeAt(0)() }
         assertEquals("up at the third: kept from then on", 3, portal.calls.count { it.startsWith("start") })
+        h.stop()
+    }
+
+    @Test
+    fun `a partial start's listeners stop when the hotspot loses its address`() {
+        val portal = FakePortal().apply { up = false }
+        val inner = FakeHotspot()
+        val wakes = mutableListOf<() -> Unit>()
+        var addresses: PortalAddresses? = PortalAddresses(ap)
+        val h = PortalHotspot(inner, portal, { _, r -> wakes += r; { wakes.remove(r) } }, { addresses })
+        h.start { }
+        inner.listener!!(Hotspot.Event.Started(net))
+        assertEquals("start 192.168.43.1 null", portal.calls.last())
+        addresses = null
+        wakes.removeAt(0)()
+        assertEquals("no address any more: stopped, though the start was only partial", "stop", portal.calls.last())
         h.stop()
     }
 
