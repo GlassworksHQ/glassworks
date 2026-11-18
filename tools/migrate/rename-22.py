@@ -635,7 +635,11 @@ def s1_frame_setup():
             if sub in PACKAGES:  # a core class an S1 branch added under the old package goes with the core (base_rule)
                 return f'{attr}="{PACKAGES[sub]}.{cls}"'
         return m.group(0)
-    new = re.sub(r'(android:(?:name|targetActivity))="(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+)"', full, text)
+    # Class names only: the component tags' own name and targetActivity, never an <action> or <meta-data> name.
+    name = re.compile(r'(android:(?:name|targetActivity))="(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+)"')
+    tag = re.compile(r'<(?:application|activity|activity-alias|service|receiver|provider)\b[^>]*>')
+    new = tag.sub(lambda t: name.sub(full, t.group(0)), text)
+    new = new.replace(f'android:taskAffinity="{OLD}.', f'android:taskAffinity="{S1_NAMESPACE}.')
     if new != text:
         open(manifest, "w").write(new)
 

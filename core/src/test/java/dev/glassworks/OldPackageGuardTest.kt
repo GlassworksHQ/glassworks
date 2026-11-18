@@ -38,7 +38,10 @@ class OldPackageGuardTest {
 
     @Test fun eachS1SubclassIsOneLineOverItsCoreClass() {
         for ((path, core) in shims) {
-            val code = File(RepoFiles.root, path).readLines().filter { it.isNotBlank() && !it.startsWith("/**") && !it.startsWith("package ") }
+            val lines = File(RepoFiles.root, path).readLines()
+            val pkg = path.substringAfter("src/main/java/").substringBeforeLast('/').replace('/', '.')
+            assertEquals("$path is in the package its component name has", "package $pkg", lines.first { it.startsWith("package ") })
+            val code = lines.filter { it.isNotBlank() && !it.startsWith("/**") && !it.startsWith("package ") }
             val name = path.substringAfterLast('/').removeSuffix(".kt")
             assertEquals("$path holds only its subclass line", listOf("class $name : $core()"), code)
         }
