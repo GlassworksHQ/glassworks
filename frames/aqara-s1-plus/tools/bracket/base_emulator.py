@@ -19,7 +19,7 @@ Expose it to the panel without hardware:
     adb reverse tcp:9999 tcp:9999
     adb shell 'cd /data/local/tmp && /vendor/bin/socat pty,link=s3a,raw,echo=0 tcp:127.0.0.1:9999 &'
     adb shell /vendor/bin/bracket_cli /data/local/tmp/s3a 115200 200.1.159
-The S1 Kiosk app can connect directly: --es base_transport tcp:127.0.0.1:9999 (after adb reverse).
+The S1 app can connect directly: --es base_transport tcp:127.0.0.1:9999 (after adb reverse).
 
 Only one client at a time (like a UART). Stdin commands: t<N> toggle relay N (simulated
 physical press, sends a report), p<W> set power, r report power now, s show state, q quit.

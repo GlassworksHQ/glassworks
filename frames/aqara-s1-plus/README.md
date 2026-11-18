@@ -88,7 +88,7 @@ base. Out of the box it only runs Aqara's launcher and talks to Aqara's cloud. I
 WebView is Chromium 74, which is too old for the current Home Assistant frontend.
 
 Glassworks replaces the software layer and leaves the hardware alone. The panel boots into
-**S1 Kiosk**, a small open-source app built on GeckoView (Firefox's engine). It shows your
+**Glassworks**, a small open-source app built on GeckoView (Firefox's engine). It shows your
 dashboard and appears in Home Assistant as a single ESPHome device. You don't need an Aqara
 account, soldering, or a terminal.
 
@@ -218,7 +218,7 @@ Kiln runs entirely in your browser and uploads nothing. It walks you through fiv
 3. **Install.** Kiln starts its own bootloader in RAM, then backs up the panel's partitions in the
    browser. Only after that does it patch `boot` (Magisk plus the S1 helper), flash it and read it
    back to verify.
-4. **Set up.** S1 Kiosk is installed as the home screen, with your language, time zone and clock.
+4. **Set up.** Glassworks is installed as the home screen, with your language, time zone and clock.
    From the same page you set the panel's Wi-Fi (sent over USB), sign it in to Home Assistant, and
    choose the radio role.
 5. **Done.** Download the backup and keep it. Home Assistant finds the panel as an ESPHome device.
@@ -254,7 +254,7 @@ needs `sunxi-fel`, `fastboot`, `adb`, Docker and a U-Boot build):
 ```sh
 frames/aqara-s1-plus/tools/install/fel-install.sh ~/s1-backup          # FEL → back up → patch → flash → verify
 frames/aqara-s1-plus/tools/install.sh --url http://homeassistant.local:8123 \
-    --timezone America/Los_Angeles --locale en-US # install and configure S1 Kiosk over adb
+    --timezone America/Los_Angeles --locale en-US # install and configure Glassworks over adb
 ```
 
 See [docs/install.md](docs/install.md#command-line) for the details.
@@ -327,7 +327,7 @@ Each update is checked against its checksum and the project's signing key first.
   disabled rather than deleted.
 - **Undo is built in.** In the installer, choose *Undo a previous install*. *Back to how it came
   from Aqara* writes your backed-up partitions back over FEL; a factory reset on the panel then
-  removes S1 Kiosk and its settings. *Keep the panel's settings* removes S1 Kiosk over USB (or turns it off, if it
+  removes Glassworks and its settings. *Keep the panel's settings* removes Glassworks over USB (or turns it off, if it
   saved the panel's Wi-Fi) and brings Aqara's apps back; the panel keeps its Wi-Fi. From the CLI:
   `frames/aqara-s1-plus/tools/install/fel-install.sh --undo <backup-dir>` or `frames/aqara-s1-plus/tools/install.sh --undo`.
 - **Hard to brick.** FEL lives in the chip's mask ROM, so it can't be erased. As long as you
@@ -376,7 +376,7 @@ there again.
 
 No. The kiosk stops Aqara's cloud daemon a few seconds after boot and disables Aqara's apps and
 updater. It does reach out to GitHub: once to download the wake word models, and about once a
-day to check for S1 Kiosk updates. If you choose the Silicon Labs Zigbee stack, it downloads that
+day to check for Glassworks updates. If you choose the Silicon Labs Zigbee stack, it downloads that
 from Silicon Labs' GitHub once. Everything else stays on your LAN.
 </details>
 

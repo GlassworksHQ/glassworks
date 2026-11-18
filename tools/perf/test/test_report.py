@@ -1989,7 +1989,7 @@ def ran(sample, voice, sendspin, mic, screen_off=None):
 
 
 class PanesAsAsked(unittest.TestCase):
-    """s1v7: S1 Kiosk 0.4.3 lost the voice and Sendspin switches, so the "panes off" samples ran
+    """s1v7: The S1 app 0.4.3 lost the voice and Sendspin switches, so the "panes off" samples ran
     both, and Assist read -0.4 % of a core. Only samples whose kiosk log shows what their label says
     count, and the report says when Assist was off by its microphone mute alone."""
 

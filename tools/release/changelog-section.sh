@@ -2,7 +2,7 @@
 # Prints a changelog's section for one version (without its "## [x.y.z] - date" heading), for the
 # GitHub release notes. Fails if the version has no section or it is empty.
 #   tools/release/changelog-section.sh 1.2.3 [CHANGELOG.md]
-# CHANGELOG.md is S1 Kiosk's; the generic app's is frames/generic-android/CHANGELOG.md.
+# CHANGELOG.md is the S1 app's; the generic app's is frames/generic-android/CHANGELOG.md.
 set -euo pipefail
 V=${1:?version, e.g. 1.2.3}; F=${2:-CHANGELOG.md}
 out=$(awk -v v="$V" '

@@ -1,7 +1,7 @@
 # Third-party notices
 
-S1 Unleashed's own code is MIT ([LICENSE](LICENSE)). This file lists the third-party code that the
-project distributes: in the S1 Kiosk APK (with the signed radio bundle that release APKs carry), and in
+Glassworks' own code is MIT ([LICENSE](LICENSE)). This file lists the third-party code that the
+project distributes: in the S1 app's APK (with the signed radio bundle that release APKs carry), and in
 the files the web installer at https://s1.edm.sh serves. For each part it gives the version, the licence
 (as an SPDX identifier), where it comes from and where its source is. The libraries published to Maven
 Central (`dev.glassworks:*`, [docs/releasing.md](docs/releasing.md#libraries)) contain only this
@@ -24,7 +24,7 @@ missing from section 1.
 
 ## Contents
 
-1. [S1 Kiosk APK](#1-s1-kiosk-apk)
+1. [The S1 app APK](#1-the-s1-app-apk)
 2. [Radio bundle (inside release APKs)](#2-radio-bundle-inside-release-apks)
 3. [Web installer downloads](#3-web-installer-downloads)
 4. [The web installer page itself](#4-the-web-installer-page-itself)
@@ -35,7 +35,7 @@ missing from section 1.
 
 ---
 
-## 1. S1 Kiosk APK
+## 1. The S1 app APK
 
 `sh.edm.s1kiosk`, built from [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android) by
 `.github/workflows/release.yml`. These are the libraries in the APK: the release runtime classpath
@@ -76,7 +76,7 @@ build if one is missing here.
   (`AGENTS.md`, rule 4), in two apps: this legacy APK, and the legacy engine's debug test app
   (`sh.edm.s1kiosk.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
   ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
-  module, but none of its classes go into their APKs. S1 Kiosk doesn't use it.
+  module, but none of its classes go into their APKs. The S1 app doesn't use it.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
   build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
   - `androidx.annotation:annotation-experimental:1.5.1`
@@ -375,8 +375,8 @@ All MIT, from this repository:
 - `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub`.
 - The boot branding in `branding/glass-tile/` (`bootanimation.zip`, `bootlogo.bmp`). It shows text set
   in Inter (SIL OFL 1.1, fetched at build time). These downloads carry only images made with the font;
-  the font itself ships in the S1 Kiosk APK (section 1, "Assets in the APK").
-- The S1 Kiosk APK (sections 1 and 2).
+  the font itself ships in the S1 app's APK (section 1, "Assets in the APK").
+- The S1 app's APK (sections 1 and 2).
 - The Mirror's settings overlay, `frames/lululemon-mirror/overlay/GlassworksSettings.apk` (resource
   values only, built by its `build.sh`). It is signed with AOSP's public test key
   (`build/target/product/security/testkey`, android-6.0.1_r81, Apache-2.0, Copyright The Android Open

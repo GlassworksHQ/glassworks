@@ -39,7 +39,7 @@ everything about it is on its frame page.
 - **[The Aqara S1 Plus frame page](frames/aqara-s1-plus/README.md)**: what you get, what works
   today, the radio, updates, known issues, undo and the FAQ.
 
-Already running S1 Kiosk? New versions still arrive in Home Assistant under *Settings → Updates*.
+Already running Glassworks? New versions still arrive in Home Assistant under *Settings → Updates*.
 
 Jump to:
 <a id="install"></a><a id="what-you-need"></a><a id="the-web-installer-recommended"></a><a id="the-command-line"></a>[Install](frames/aqara-s1-plus/README.md#install) ·
@@ -142,7 +142,7 @@ else private, write to [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone h
 | [`frames/`](frames/README.md) | One folder per device: its README, its Kiln recipe (`installer/`) and its data (`design/frame.json`) |
 | [`packages/`](packages/frame-card/README.md) | Code shared with glassworks.dev: the frame card and 3D renderer |
 | [`site/`](site/README.md) | [glassworks.dev](https://www.glassworks.dev), the project site, and the brand's badges and banners |
-| [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android/README.md) | S1 Kiosk, the Android app (GeckoView, ESPHome API, voice, Sendspin), with the Glassworks core in `dev.glassworks` |
+| [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android/README.md) | Glassworks, the Android app (GeckoView, ESPHome API, voice, Sendspin), with the Glassworks core in `dev.glassworks` |
 | [`frames/generic-android/android`](frames/generic-android/README.md) | Glassworks for generic Android (`dev.glassworks.generic_android`): the core as an app for any Android 8+ device (Android 6-7 through its legacy build), with Assist, Sendspin and, on a device with a camera, the camera pane |
 | [`frames/aqara-s1-plus/tools/`](frames/aqara-s1-plus/tools/AGENTS.md) | The S1's command-line installer, U-Boot/FEL build, boot patch, radio helper |
 | `tools/` | Tools every frame shares: Clarity, release and size checks, dev tools |
@@ -173,7 +173,7 @@ times) shows the same list with each licence's full text.
 | Silicon Labs `libcpc` and CPC interface | Silicon Labs MSLA, Zlib | Built from Silicon Labs' public source into `otbr-agent` and the radio package, to talk to the panel's own radio |
 | GNU C library, GCC runtime | LGPL-2.1-or-later, GPL-3.0 with the GCC exception | Runtime for the radio tools, unmodified from Ubuntu 22.04 |
 | Simple Keyboard | Apache-2.0 | Optional on-screen keyboard |
-| GeckoView | MPL-2.0 | Maven dependency of S1 Kiosk |
+| GeckoView | MPL-2.0 | Maven dependency of Glassworks |
 | TensorFlow Lite, Media3 ExoPlayer, ZXing | Apache-2.0 | Wake word inference, audio, QR codes |
 | TFLite Micro audio frontend, kissfft | Apache-2.0, BSD-3-Clause | Ported to Kotlin for the wake word's audio features |
 | microWakeWord models | Apache-2.0 | **Not shipped.** The panel downloads them itself. |

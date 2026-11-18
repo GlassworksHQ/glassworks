@@ -254,7 +254,7 @@ export function StackStory({ release, post }: { release: StoryRelease; post?: St
                 Follow on GitHub
               </a>
               <a className={s.secondary} href={links.s1}>
-                See S1 Unleashed
+                See the Aqara S1 Plus
               </a>
             </div>
             <span className={s.scrollHint} aria-hidden="true">
@@ -289,7 +289,7 @@ export function StackStory({ release, post }: { release: StoryRelease; post?: St
               })}
             </ol>
             <p className={s.coda} style={{ opacity: done ? 1 : 0 }}>
-              Supporting a new panel means writing a new frame. S1 Unleashed is the Aqara S1 Plus frame, with the radio
+              Supporting a new panel means writing a new frame. The Aqara S1 Plus is one, with the radio
               and wall-base panes.
             </p>
           </div>

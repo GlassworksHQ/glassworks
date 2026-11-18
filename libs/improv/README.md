@@ -159,7 +159,7 @@ A web page then opens `localabstract:myapp_improv` over WebUSB adb with the
 also run `adb forward tcp:7000 localabstract:myapp_improv` and use any Improv Serial client on
 `localhost:7000`. Only adb (uid 2000, or 0 after `adb root`) may connect, so USB access with an
 authorized adb key is the physical authorization. That means it needs adb turned on, which suits
-kiosks, signage and other single-purpose devices. Glassworks's `ImprovSerialServer.kt` is the full
+kiosks, signage and other single-purpose devices. Glassworks' `ImprovSerialServer.kt` is the full
 example.
 
 ## Compared with the Improv spec

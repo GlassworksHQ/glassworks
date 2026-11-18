@@ -649,7 +649,7 @@ export default function BrandPage() {
             <div className={s.meta}>
               Title<span>Inter 300 · −2%</span>
             </div>
-            <div className={s.sTitle}>Install S1 Unleashed on your panel</div>
+            <div className={s.sTitle}>Install Glassworks on your panel</div>
           </div>
           <div className={s.spec}>
             <div className={s.meta}>
@@ -704,7 +704,7 @@ export default function BrandPage() {
                 <span className={s.thumb} />
                 <span>
                   <span className={s.fcName}>Aqara S1 Plus</span>
-                  <span className={s.fcSub}>S1 Unleashed · FEL install</span>
+                  <span className={s.fcSub}>Glassworks · FEL install</span>
                 </span>
                 <span className={`${s.pill} ${s.ok}`}>Tested</span>
               </div>
