@@ -29,7 +29,7 @@ class HaDiscovery(
     private val onChanged: (url: String, source: String) -> Unit,
 ) {
     companion object {
-        private const val TAG = "S1Discovery"
+        private const val TAG = "Glassworks.Discovery"
         const val SOURCE_MDNS = "mdns"
         const val SOURCE_ESPHOME = "esphome"
         const val SOURCE_MANUAL = "manual"

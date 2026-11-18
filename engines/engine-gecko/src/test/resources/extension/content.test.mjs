@@ -142,7 +142,7 @@ test("a page without a launch screen is ready once it has painted", () => {
 test("from the start, HA's launch screen draws at night, and only while it is there", () => {
   // Round 5 panel run: one fully white frame in two cold starts, timing alone can't rule it out.
   const p = page();
-  const style = p.appended.find((el) => el.tag === "style" && el.id === "s1kiosk-launch");
+  const style = p.appended.find((el) => el.tag === "style" && el.id === "glassworks-launch");
   assert.ok(style, "the style is added at document_start, before anything is drawn");
   const css = style.textContent;
   assert.match(css, /#ha-launch-screen\s*\{[^}]*background:\s*#0a0b0f/);
@@ -161,7 +161,7 @@ test("from the start, HA's launch screen draws at night, and only while it is th
 test("only the logo and the attribution are hidden: a failed start still says why", () => {
   // Verifier d7acb506, F1: HA writes "Could not load Home Assistant…" into the info box, inside the
   // launch screen. Hiding everything in it turned a failed start into a black screen.
-  const css = page().appended.find((el) => el.id === "s1kiosk-launch").textContent;
+  const css = page().appended.find((el) => el.id === "glassworks-launch").textContent;
   const rules = css.split("}").map((r) => r.split("{")).filter((r) => r[0].trim());
   const hidden = rules.filter(([, decl]) => /visibility:\s*hidden|display:\s*none|opacity:\s*0/.test(decl))
     .flatMap(([sel]) => sel.split(",").map((x) => x.trim()));
@@ -175,13 +175,13 @@ test("only the logo and the attribution are hidden: a failed start still says wh
 test("not on a page opened with ?kiosk=0 or ?edit=1", () => {
   // Verifier d7acb506, F2: like the header and sidebar rules.
   for (const search of ["?kiosk=0", "?edit=1"]) {
-    assert.equal(page({ search }).appended.filter((el) => el.id === "s1kiosk-launch").length, 0, search);
+    assert.equal(page({ search }).appended.filter((el) => el.id === "glassworks-launch").length, 0, search);
   }
 });
 
 test("a page without a launch screen drops the style at once", () => {
   const p = page({ launchScreen: false, externalAuth: false });
-  const style = p.appended.find((el) => el.id === "s1kiosk-launch");
+  const style = p.appended.find((el) => el.id === "glassworks-launch");
   p.domContentLoaded();
   assert.equal(style.removed, true);
 });

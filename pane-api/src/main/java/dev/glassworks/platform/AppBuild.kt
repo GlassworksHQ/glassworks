@@ -23,10 +23,10 @@ data class AppBuild(
     val testBuild: String = "",
     /**
      * The app's name as it announces itself: the service's notification, About, Home Assistant's device
-     * model and update card, Improv and Sendspin ("S1 Kiosk 0.4.3"). Each app passes its own (#23); the
-     * default is the S1's, which every S1 build and its tests have always sent.
+     * model and update card, Improv and Sendspin ("Glassworks 0.4.3"). Each app passes its own (#23); the
+     * default is the S1's.
      */
-    val product: String = S1_KIOSK,
+    val product: String = PRODUCT,
     /**
      * The small icon of the service's notification, a drawable of the app's that every Android the app runs on
      * loads. The status bar draws only its alpha, so a silhouette: the generic app's is the mark in white (#198). 0 is
@@ -38,7 +38,7 @@ data class AppBuild(
     val shown: String get() = if (testBuild.isEmpty()) versionName else "$versionName · test build $testBuild"
 
     companion object {
-        /** The S1 app's [product]. */
-        const val S1_KIOSK = "S1 Kiosk"
+        /** The S1 app's [product]. It was "S1 Kiosk" up to 0.4.3 (#527). */
+        const val PRODUCT = "Glassworks"
     }
 }

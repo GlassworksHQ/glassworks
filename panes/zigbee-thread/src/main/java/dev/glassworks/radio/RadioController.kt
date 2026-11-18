@@ -107,7 +107,7 @@ class RadioController(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     companion object {
-        const val TAG = "S1Kiosk.Radio"
+        const val TAG = "Glassworks.Radio"
         private const val SISDK_V = SisdkZigbeed.VERSION
         private val RANGE = Regex("""\(clients from ([^)]+)\)""")
         private const val WAIT_STEPS = 20

@@ -23,6 +23,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import dev.glassworks.Glassworks
+import dev.glassworks.frame.friendlyName
 
 /**
  * App updates from GitHub Releases, shown and installed through Home Assistant's update entity
@@ -37,7 +38,7 @@ import dev.glassworks.Glassworks
  *   it (older boot image, generic Android), Android's PackageInstaller. That asks for confirmation on
  *   the screen unless Android lets the app install without one ([silentUpdates]).
  *
- * Everything runs on one "s1-update" thread. [onChange] fires (on that thread) whenever the entity's
+ * Everything runs on one "glassworks-update" thread. [onChange] fires (on that thread) whenever the entity's
  * state may have changed.
  */
 class UpdateManager(
@@ -59,8 +60,12 @@ class UpdateManager(
     @Volatile var silentUpdates: SilentUpdates? = null
         private set
     private val exec: ScheduledExecutorService =
-        Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "s1-update").apply { isDaemon = true } }
+        Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "glassworks-update").apply { isDaemon = true } }
     val model = UpdateModel(runtime.build.versionName, runtime.build.product)
+    /** The Frame update entity's model (#139), checked with the app's releases; null on a frame with no releases of its own. */
+    val frame: FrameUpdateModel? = runtime.frame.frameRelease?.let { FrameUpdateModel(it, "${runtime.frame.friendlyName()} frame") }
+    /** The frame's newest release in the last release list, kept for a 304 like [cachedOffer]. */
+    private var cachedFrameOffer: FrameOffer? = null
     private val schedule = CheckSchedule()
     private var etag: String? = null
     private var cachedOffer: UpdateOffer? = null
@@ -95,6 +100,15 @@ class UpdateManager(
         }
         netCallback = null
         exec.shutdownNow()
+    }
+
+    /**
+     * The Frame update entity's command. Check is the app's check, which reads both. Install does nothing: no frame
+     * update installs from Home Assistant yet, and the card says how to install it.
+     */
+    fun onFrameCommand(command: Int) {
+        if (command == CMD_INSTALL) Log.i(TAG, "frame update: nothing installs from Home Assistant (${runtime.frame.frameRelease?.install ?: "not yet"})")
+        else onCommand(command)
     }
 
     /** HA's update entity command (`UpdateCommand`: 1 install, 2 check). */
@@ -191,10 +205,12 @@ class UpdateManager(
                 schedule.onSuccess(now)
                 cachedOffer = result.offer
                 model.onChecked(result.offer)
+                frame?.onChecked(cachedFrameOffer)
                 problemCleared()
                 val o = result.offer
                 Log.i(TAG, "check ($reason): latest ${o?.version ?: "none"}, installed ${runtime.build.versionName}" +
-                    if (model.updateAvailable) " -> update available" else "")
+                    (if (model.updateAvailable) " -> update available" else "") +
+                    frame?.let { f -> "; frame ${f.installed.shown}, latest ${f.offer?.version ?: "none"}" + if (f.updateAvailable) " -> frame update available" else "" }.orEmpty())
             }
             is CheckResult.Failed -> {
                 schedule.onFailure(now, result.retryAfterMs, result.network)
@@ -224,17 +240,19 @@ class UpdateManager(
             }
             return when (code) {
                 HttpURLConnection.HTTP_NOT_MODIFIED -> CheckResult.Found(cachedOffer)
-                HttpURLConnection.HTTP_NOT_FOUND -> { etag = null; CheckResult.Found(null) } // no release yet
+                HttpURLConnection.HTTP_NOT_FOUND -> { etag = null; cachedFrameOffer = null; CheckResult.Found(null) } // no release yet
                 HttpURLConnection.HTTP_OK -> {
                     val body = readCapped(c.inputStream, MAX_JSON_BYTES).toString(Charsets.UTF_8)
-                    val offer = try {
-                        val pick = Releases.newest(Releases.parseList(body), Platform.supportedAbis, runtime.releases)
-                        pick.problem?.let { problem("newest release not usable: $it") }
-                        pick.offer
+                    val list = try {
+                        Releases.parseList(body)
                     } catch (e: ReleaseFormatException) {
                         problem("release list not usable: ${e.message}")
-                        null
+                        emptyList()
                     }
+                    val pick = Releases.newest(list, Platform.supportedAbis, runtime.releases)
+                    pick.problem?.let { problem("newest release not usable: $it") }
+                    val offer = pick.offer
+                    cachedFrameOffer = runtime.frame.frameRelease?.let { FrameOffer.newest(list, it.id) }
                     etag = c.getHeaderField("ETag")
                     CheckResult.Found(offer)
                 }
@@ -491,7 +509,7 @@ class UpdateManager(
     }
 
     companion object {
-        const val TAG = "S1Kiosk.Update"
+        const val TAG = "Glassworks.Update"
         /** `UpdateCommand` (aioesphomeapi api.proto). */
         const val CMD_INSTALL = 1
         const val CMD_CHECK = 2

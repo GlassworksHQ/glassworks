@@ -18,7 +18,7 @@ class VoicePrefs(private val sp: SharedPreferences) {
     val enabled: Boolean get() = sp.getBoolean(KEY_ENABLED, true)
 
     /**
-     * The openWakeWord model file S1 Kiosk 0.4 and earlier saved, e.g. `hey_jarvis_v0.1.tflite`.
+     * The openWakeWord model file the S1 app 0.4 and earlier saved, e.g. `hey_jarvis_v0.1.tflite`.
      * Only read, to migrate it to [wakeWord]; never written now, so a downgrade keeps its word.
      */
     val legacyWakeModel: String

@@ -22,7 +22,7 @@ class UpdateModelTest {
         var v = m.view()
         assertTrue(v.missingState)
         assertEquals("1.2.0", v.currentVersion)
-        assertEquals("S1 Kiosk", v.title)
+        assertEquals("Glassworks", v.title)
         // latest = installed until a check succeeded: HA must never show "available" (or a blank version)
         assertEquals("1.2.0", v.latestVersion)
         assertEquals("not checked yet", m.statusText())

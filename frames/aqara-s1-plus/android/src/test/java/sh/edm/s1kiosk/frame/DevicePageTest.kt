@@ -201,6 +201,22 @@ class DevicePageTest {
         assertTrue(row.fixable())
     }
 
+    private fun frameVersion(s: SettingsSection) = s.items.filterIsInstance<SettingsItem.Info>().single { it.title() == "Frame version" }
+
+    /** #139: an S1 without the loader in its boot image has no stamp, so it shows the version before the first. */
+    @Test fun theS1sFrameVersionComesLast() {
+        val s = S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app, AqaraS1Plus().frameRelease) { null }
+        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Radio mode", "Silent updates", "Frame version"), titles(s))
+        assertEquals("Before 1.0.0", frameVersion(s).detail())
+        assertFalse("no release checked: nothing to do", frameVersion(s).fixable())
+    }
+
+    @Test fun theMirrorsFrameVersionSitsBeforeAndroid() {
+        val s = TestFrames.mirror(app).deviceSection(app)!!
+        assertEquals(listOf("Silent updates", "Device owner", "Model", "Frame version", "Android"), titles(s))
+        assertEquals("Before 1.0.0 (Glass Panes image 2)", frameVersion(s).detail())
+    }
+
     @Test fun theListIsDebloatShs() {
         val sh = RepoFiles.file("frames/aqara-s1-plus/tools/debloat/debloat.sh").readText()
         val safe = Regex("""(?m)^\s+(com\.[a-z0-9_.]+)\s+#""").findAll(sh).map { it.groupValues[1] }.toList()
@@ -214,7 +230,8 @@ class DevicePageTest {
     })
 
     @Test fun bothSurfacesShowTheSamePageUnderPanelAfterScreen() {
-        for (runtime in listOf(KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), KioskApp.runtime(GenericAndroid(app), build = AppBuild("1.0.0", 10000, debug = false)))) {
+        for (frame in listOf(AqaraS1Plus(), GenericAndroid(app), TestFrames.mirror(app))) {
+            val runtime = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false))
             val prefs = KioskPrefs(app)
             val panel = S1Settings.model(runtime, prefs, runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
             val ids = panel.sections.map { it.id }
@@ -228,6 +245,7 @@ class DevicePageTest {
             assertTrue(nav, nav.contains("href=\"/device\"><span class=\"nt\">${esc(device.title)}</span>"))
             val page = b.get("/device").text()
             for (t in titles(device)) assertTrue("$t on the Manage page", page.contains(esc(t.toString())))
+            assertEquals("#139: a Frame version row only where the frame has releases", frame.frameRelease != null, "Frame version" in titles(device))
         }
     }
 }

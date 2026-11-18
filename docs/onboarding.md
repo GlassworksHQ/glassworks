@@ -3,7 +3,7 @@
 > **Setting up a panel?** Follow [install.md](../frames/aqara-s1-plus/docs/install.md) (steps 4 and 5). This page is the design and
 > research behind those steps: how each piece works and what was verified.
 
-Goal: a user who has just installed S1 Kiosk never types a URL, token, IP or key on the panel.
+Goal: a user who has just installed Glassworks never types a URL, token, IP or key on the panel.
 Everything rides on standard Home Assistant mechanisms (ESPHome discovery, HA OAuth, Improv),
 not on a custom integration.
 
@@ -220,7 +220,7 @@ glue `frames/aqara-s1-plus/android/…/improv/ImprovSerialServer.kt`). [Improv S
 - Wi-Fi settings: state Provisioning, then joins through `ImprovController.connectFromInstaller` on
   the same `WifiProvisioner` as Improv via BLE (it turns Wi-Fi on first). Then state Provisioned +
   an RPC result with `http://<ip>:8099/signin`, or error 0x03 and back to Ready.
-- Request state (+ the URL as a result when provisioned), request device info (`S1 Kiosk`, app
+- Request state (+ the URL as a result when provisioned), request device info (`Glassworks`, app
   version, the frame's chip (`Allwinner A133` on the S1), and the friendly name as Home Assistant shows
   it, "Aqara S1 Plus" on the S1).
 - Scan: a fresh WifiManager scan (Wi-Fi turned on if off; results on `SCAN_RESULTS_AVAILABLE` or after
@@ -429,7 +429,10 @@ The original design notes:
   user signs in on the phone. HA redirects the phone back to the panel with an auth code, and the panel
   exchanges it for a **refresh token** (`/auth/token`). The phone shows "Panel signed in.". The Thread
   join's QR code (`/thread`) works the same way: a page that asks for an administrator, then
-  `/thread/continue`. The pages are one template in `SignInServer.kt` (system font, inline mark, dark
+  `/thread/continue`. The panel's setup page starts the same flow in its own tab with
+  `/signin/continue?then=setup`; its callback goes back to `/setup` instead (#453). Kiln over USB opens
+  `/signin/continue?then=kiln` in a pop-up; its callback closes that window, and Kiln moves on when the
+  panel reports the sign-in. The pages are one template in `SignInServer.kt` (system font, inline mark, dark
   or light as the phone is).
 - **PKCE.** The callback is plain HTTP on the LAN, so both sign-ins (this one and the Thread join's
   admin sign-in) use PKCE (RFC 7636, S256). Each attempt gets a fresh secret that stays on the panel.
@@ -566,7 +569,7 @@ Assistant."), with the way to change it second ("Use another network", "Add it b
    that doesn't answer ("The Music didn't answer."), shows in rose with every problem listed and keeps
    the step; the cards are locked while it applies. Then each pane that is on has its own steps under
    Panes (`PaneDefinition.setupSteps`, each with a `title` for its row and a `screen` for the card).
-   A pane with steps but no card is left out, with an error in the `S1Kiosk` log.
+   A pane with steps but no card is left out, with an error in the `Glassworks` log.
    **Radio**: "What should the radio do?", technology first (`radio/ui/RadioTechPicker.kt`): Zigbee
    (Coordinator, Repeater β) or Thread (Border router, Repeater β), no Off (that is the Panes card).
    Continue applies it through the same request as the installer's `radio.set_mode`, within 30 s
@@ -597,7 +600,7 @@ session without a refresh token):
 
 The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps). Once shown, the screen stays
 until all steps are done, so it doesn't flicker between steps. It is re-evaluated on connectivity,
-sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`S1Kiosk`:
+sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`Glassworks`:
 "Setup screen: <reasons> (step …)").
 
 Preview without changing state: `--ez show_setup true` (live step), `--es setup_step
