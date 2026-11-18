@@ -365,6 +365,9 @@ below as the release notes.
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
+  both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
+  reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.
 - **A screen without touch waits for Home Assistant after phone setup.** On the Mirror, the setup screen
   kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
   Assistant to add the panel, and where: Settings → Devices & services, or the old entry's

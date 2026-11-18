@@ -88,8 +88,8 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     private val coreAmber = layer(); private val swirl = layer(); private val coreSky = layer()
     private val coreGreen = layer(); private val coreRose = layer(); private val shine = layer()
     private val check = Check(context)
-    private val label = Slot(dy = 6f, durMs = 450f)
-    private val main = Slot(dy = 8f, durMs = 500f)
+    private val label = Slot(dy = 6f, durMs = 450f, maxDp = 840f)
+    private val main = Slot(dy = 8f, durMs = 500f, maxDp = 820f)
     private val hint = TextView(context).apply {
         styleLabel(this, FA)
         text = "Tap anywhere to cancel"
@@ -152,10 +152,16 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
         centred(shine, OrbArt.SPHERE_DP - 2, clip)
         centred(check, OrbArt.SPHERE_DP, stage)
 
-        for (v in label.views) addView(v, LayoutParams(px(840f), -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = px(252f) })
-        for (v in main.views) addView(v, LayoutParams(px(820f), -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = px(282f) })
+        for (v in label.views) addView(v, LayoutParams(label.widthPx, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = px(252f) })
+        for (v in main.views) addView(v, LayoutParams(main.widthPx, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = px(282f) })
         addView(hint, LayoutParams(-1, -2, Gravity.BOTTOM).apply { bottomMargin = px(22f) })
         resetMotion()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        if (w > 0) { label.fit(w); main.fit(w) }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
     override fun onAttachedToWindow() {
@@ -448,9 +454,14 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
         }
     }
 
-    /** One text slot: two stacked TextViews that cross-fade (outgoing drifts up, incoming rises). */
-    private inner class Slot(private val dy: Float, private val durMs: Float) {
+    /**
+     * One text slot: two stacked TextViews that cross-fade (outgoing drifts up, incoming rises), in a column [maxDp]
+     * wide, or narrower to keep a gutter on a narrow screen (the Mirror stands portrait, 540 dp).
+     */
+    private inner class Slot(private val dy: Float, private val durMs: Float, private val maxDp: Float) {
         val views = arrayOf(make(), make())
+        var widthPx = px(maxDp)
+            private set
         private val specs = arrayOfNulls<Spec>(2)
         private val base = FloatArray(2)
         private var front = 0
@@ -482,6 +493,17 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
             start = now
             fading = true
             frontAlpha = 0f
+        }
+
+        /** Sizes the column to a screen [screenPx] wide and fits the texts again. */
+        fun fit(screenPx: Int) {
+            val w = min(px(maxDp), screenPx - 2 * px(GUTTER_DP)).coerceAtLeast(1)
+            if (w == widthPx) return
+            widthPx = w
+            for (i in 0..1) {
+                views[i].layoutParams.width = w
+                specs[i]?.let { apply(i, it) }
+            }
         }
 
         fun clear() {
@@ -526,7 +548,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
                     tv.ellipsize = TextUtils.TruncateAt.END
                     base[i] = -3f * dp
                 }
-                Style.MAIN_TEXT, Style.MAIN_MUTED -> styleMain(tv, spec.text, if (spec.style == Style.MAIN_TEXT) TX else MU)
+                Style.MAIN_TEXT, Style.MAIN_MUTED -> styleMain(tv, spec.text, if (spec.style == Style.MAIN_TEXT) TX else MU, widthPx)
             }
             tv.text = spec.text
         }
@@ -543,17 +565,16 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
         tv.isAllCaps = true
     }
 
-    /** 36 sp light, −0.02 em, line height 1.2; steps down to 30 / 26 sp to fit (SPEC §2). */
-    private fun styleMain(tv: TextView, text: String, color: Int) {
+    /** 36 sp light, −0.02 em, line height 1.2; steps down to 30 / 26 sp to fit [width] (SPEC §2). */
+    private fun styleMain(tv: TextView, text: String, color: Int, width: Int) {
         tv.isAllCaps = false
         tv.letterSpacing = -0.02f
         tv.setSingleLine(false)
         tv.setTextColor(color)
-        val width = px(820f)
         val paint = TextPaint(tv.paint)
         fun sizePx(sp: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, resources.displayMetrics)
         fun extra(p: TextPaint) = p.fontMetricsInt.let { 1.2f * p.textSize - (it.descent - it.ascent) }
-        val fit = MainTextFit.choose { sp ->
+        val fit = MainTextFit.choose(MainTextFit.lastLines(width, px(820f))) { sp ->
             paint.textSize = sizePx(sp)
             paint.typeface = Inter.typeface(context, Inter.LIGHT, sp)
             StaticLayout.Builder.obtain(text, 0, text.length, paint, width)
@@ -574,6 +595,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     private companion object {
         const val DONE_HOLD_MS = 1_000L
         const val ERROR_HOLD_MS = 2_800L
+        const val GUTTER_DP = 32f
 
         // tablet-home-card / SetupOverlay tokens
         val TX = Color.parseColor("#f4f4f5")
