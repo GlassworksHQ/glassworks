@@ -148,3 +148,4 @@ export const OLD_HASH: Record<string, Step> = {
 export function fromHash(hash: string): Step | undefined {
   return OLD_HASH[hash.replace(/^#\/?/, '').replace(/\/+$/, '')];
 }
+// throwaway
