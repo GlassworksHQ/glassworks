@@ -21,7 +21,7 @@ It has the same settings as the panel's own menu, and changes them the same way.
 | Home Assistant & dashboard, Screen, each pane | Every setting the panel's own menu has, in the same order and words, and you can change each one here. Screen and some panes end with their [blueprints for Home Assistant](blueprints.md#adding-one-from-the-manage-page), such as Panel night mode. A pane's page has its on/off at the top right and shows what it's doing; a pane that's off says what that means. The radio's page links to the Thread join |
 | The device's page (S1 Plus, or the device's model) | What belongs to the device and to no pane. On the S1: **Block Aqara cloud**, the cloud daemon's state, which of Aqara's apps are turned off, the radio's mode (it opens the Radio page) and **Silent updates**. Elsewhere: **Silent updates**, whether the app is the device owner, the model and the Android version. **Silent updates** says whether an update from Home Assistant installs with nobody at the panel, and why; where it can't, how to change that on this kind of device, in amber ([Silent updates](esphome.md#silent-updates)) |
 | Log | The last 7 days, kept across reboots. Filter by warnings or errors, search, and **Download diagnostics** |
-| Security | The browsers signed in, each with **Sign out** |
+| Security | The browsers signed in, each with **Sign out**. Where the app may answer USB debugging (the Mirror): **Allow a new computer**, for the one asking now, and the **Allowed computers**, each with **Remove** |
 | About | Versions, frame, licences |
 
 On a phone the menu folds behind the ☰ button. Light or dark follows your phone or computer.
