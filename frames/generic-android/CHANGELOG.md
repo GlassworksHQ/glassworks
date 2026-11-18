@@ -39,3 +39,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   a time in **Settings → Screen → Turn off when idle**. On a device with a PIN, pattern or password, the Screen
   settings and the Manage page say in amber that someone has to unlock it after the screen turns off, and how to
   avoid that: turn the lock off in Android's settings, or keep the screen on.
+
+### Fixed
+- **The Mirror uses less memory, and its drawing no longer dies when the screen turns off.** The legacy build
+  draws in the app's own process instead of a separate GPU process, which Android killed whenever the screen went
+  off or a system dialog came up. It also no longer runs GeckoView's crash helper, which did nothing for the app
+  and was restarted about once a minute. Legacy build only. Not yet run on a real Mirror.
