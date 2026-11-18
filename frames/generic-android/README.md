@@ -190,8 +190,8 @@ publishes both builds on the tags above, with notes from [CHANGELOG.md](CHANGELO
 [docs/releasing.md](../../docs/releasing.md#glassworks-for-generic-android-and-its-legacy-build)). There has been
 no release of either yet.
 
-The commands below use the generic app's id, `dev.glassworks.generic_android`. For S1 Kiosk on a
-tablet, use `sh.edm.s1kiosk`.
+The commands below use the generic app's id and component names (`dev.glassworks.generic_android/dev.glassworks.…`).
+For the S1 app on a tablet, use its own: `sh.edm.s1kiosk/.AdminReceiver` and `sh.edm.s1kiosk/.improv.ImprovActivity`.
 
 There is no root update service here, so the app installs the new APK through Android's
 PackageInstaller. Two routes install it without anyone touching the screen:
