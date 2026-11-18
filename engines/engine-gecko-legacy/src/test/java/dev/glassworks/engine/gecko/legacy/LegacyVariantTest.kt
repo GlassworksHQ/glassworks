@@ -31,7 +31,7 @@ class LegacyVariantTest {
         assertEquals(false, prefs["fission.autostart"])
     }
 
-    /** The GPU process is killed whenever the app leaves the front on a Mirror (docs/research/mirror-memory.md). */
+    /** The GPU process is killed whenever the app leaves the front on a Mirror (frames/lululemon-mirror/research/mirror-memory.md). */
     @Test fun `no GPU process`() {
         assertEquals(false, Lockdown("test").prefs["layers.gpu-process.enabled"])
     }
