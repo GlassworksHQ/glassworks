@@ -365,11 +365,6 @@ sealed interface SettingsItem {
          * picked one lit, and a tap picks at once (the camera's use, #117's approved cards).
          */
         val cards: ((String) -> String)? = null,
-        /**
-         * Only a Home Assistant administrator may change it away from the panel: the Manage page refuses a browser
-         * signed in with the panel's code (the camera's use, which decides whether images leave the panel).
-         */
-        val adminOnly: Boolean = false,
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 

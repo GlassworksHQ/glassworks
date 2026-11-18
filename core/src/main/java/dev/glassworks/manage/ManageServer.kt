@@ -307,11 +307,6 @@ class ManageServer(
         // SettingsChange.change trims it, so a padded value (" run ") can't skip the question (CodeRabbit on #331).
         val raw = (if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
             else req.form["value"].orEmpty()).trim()
-        // Only a Home Assistant administrator's (the camera's use): the panel's code isn't enough.
-        if (item is SettingsItem.Choice && item.adminOnly && !viewer.homeAssistant) {
-            event("${who(s)} couldn't change $what: signed in with the panel's code")
-            return settingsPage(status, viewer, page.removePrefix("/"), problem = ManagePages.ADMIN_ONLY, code = 403)!!
-        }
         // A change that asks first on the panel asks here too, and runs only with the answer to that question:
         // a one-shot token the dialog carries, for this session and this exact change (#269 verifier).
         val question: SettingsItem.Confirm? = when {

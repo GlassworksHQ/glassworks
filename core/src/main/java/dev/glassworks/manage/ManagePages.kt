@@ -273,20 +273,16 @@ ${foot(viewer)}"""
         }
     }
 
-    /**
-     * A choice drawn as cards (#117's approved look): each card a button that posts its option, the picked one lit.
-     * One only a Home Assistant administrator may change is dimmed for the panel's code, with a line that says so.
-     */
+    /** A choice drawn as cards (#117's approved look): each card a button that posts its option, the picked one lit. */
     private fun cards(v: Viewer, section: String, key: String, item: SettingsItem.Choice, lines: (String) -> String): String {
         val now = safe { item.value() }
-        val locked = item.adminOnly && !v.homeAssistant
         val buttons = runCatching { item.options() }.getOrDefault(emptyList()).joinToString("") { (id, name) ->
             val on = id == now
-            """<button class="uc${if (on) " on" else ""}" type="submit" name="value" value="${esc(id)}" aria-pressed="$on"${if (locked) " disabled" else ""}>""" +
+            """<button class="uc${if (on) " on" else ""}" type="submit" name="value" value="${esc(id)}" aria-pressed="$on">""" +
                 """<b>${esc(name)}</b><span>${esc(safe { lines(id) })}</span></button>"""
         }
         return """<form class="ucs" id="${anchor(key)}" method="post" action="/settings">${fields(v, section, key)}<div class="gl">${esc(item.title)}</div>""" +
-            (if (locked) """<p class="ucn">${esc(ADMIN_ONLY)}</p>""" else "") + """<div class="ucg">$buttons</div></form>"""
+            """<div class="ucg">$buttons</div></form>"""
     }
 
     /** [text], as a link to the item at [key] on the same page when there is one. */
@@ -502,8 +498,6 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
 
         /** A row that opens something only the panel has. */
         const val ON_THE_PANEL = "On the panel"
-        /** Over a choice only a Home Assistant administrator may change, for a browser signed in with the panel's code. */
-        const val ADMIN_ONLY = "Only a Home Assistant administrator can change this. Sign out, then sign in with Home Assistant."
         /** A long choice's first line while nothing in it is picked. */
         const val PICK_ONE = "Pick one"
         /** The Blueprints card's line with the panel's code: Manage doesn't know who you are in Home Assistant. */
@@ -579,12 +573,12 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 .banner{display:flex;align-items:center;gap:13px;padding:10px 10px 10px 18px;border-radius:20px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);margin:14px 0}.banner span{flex:1}.banner form{margin:0}
 .main>.err{color:var(--rose);margin:10px 0}
 a.see{color:inherit;text-decoration:underline;text-underline-offset:3px}[id^="i-"]{scroll-margin-top:24px}
-.ucs{margin:0;padding:6px 0 18px;border-bottom:1px solid var(--edge)}.ucs .gl{margin-top:16px}.ucn{color:var(--muted);font-size:15px;margin:6px 0 12px}
+.ucs{margin:0;padding:6px 0 18px;border-bottom:1px solid var(--edge)}.ucs .gl{margin-top:16px}
 .ucg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
 .uc{display:flex;flex-direction:column;gap:4px;text-align:left;padding:16px 18px;border-radius:22px;border:1px solid var(--edge);background:var(--glass);color:var(--muted);font:inherit;cursor:pointer}
-.uc b{font-weight:400;font-size:19px}.uc span{font-size:14px;line-height:1.35;color:var(--muted)}.uc:hover:not(:disabled){background:var(--hover)}
+.uc b{font-weight:400;font-size:19px}.uc span{font-size:14px;line-height:1.35;color:var(--muted)}.uc:hover{background:var(--hover)}
 .uc.on{color:var(--fg);border:1.6px solid transparent;background:linear-gradient(var(--bg-2),var(--bg-2)) padding-box,linear-gradient(135deg,var(--sky),var(--violet)) border-box}
-.uc:disabled{opacity:.45;cursor:not-allowed}.uc:focus-visible{outline:2px solid var(--sky);outline-offset:3px}
+.uc:focus-visible{outline:2px solid var(--sky);outline-offset:3px}
 .chev{font-style:normal;color:var(--faint);font-size:22px;line-height:1}
 .ph{font-size:48px;font-weight:300;letter-spacing:-.02em;margin:0 0 6px}.sub{color:var(--muted);font-size:18px;margin:0 0 26px}
 .foot{color:var(--faint);font-size:14px;margin-top:6px}

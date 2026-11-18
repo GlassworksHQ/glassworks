@@ -125,14 +125,12 @@ class CameraDefinition(
     /**
      * The use as two cards, Presence only and Presence + camera: the panel's own when it has no cards, and the
      * cards' twin everywhere else (the Manage page, on every frame: it changes what the panel's settings change).
-     * A Home Assistant administrator's only away from the panel, as it decides whether images leave it. Under
-     * privacy it is refused, as the panel's cards are dimmed then.
+     * Under privacy it is refused, as the panel's cards are dimmed then.
      */
     private fun useChoice() = SettingsItem.Choice(
         USE_TITLE, { prefs.use.name },
         { listOf(CameraUse.PRESENCE.name to CameraPrefs.USE_PRESENCE, CameraUse.PRESENCE_AND_SNAPSHOTS.name to CameraPrefs.USE_CAMERA) },
         cards = { id -> if (id == CameraUse.PRESENCE.name) CameraPrefs.USE_PRESENCE_LINE else CameraPrefs.USE_CAMERA_LINE },
-        adminOnly = true,
     ) { v, done ->
         val use = CameraUse.entries.firstOrNull { it.name == v } ?: return@Choice done("Pick ${CameraPrefs.USE_PRESENCE} or ${CameraPrefs.USE_CAMERA}.")
         if (prefs.privacy && use != prefs.use) return@Choice done(CameraPage.PRIVACY_ON)

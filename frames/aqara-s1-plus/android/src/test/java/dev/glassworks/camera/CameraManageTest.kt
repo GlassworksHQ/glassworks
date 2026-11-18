@@ -21,8 +21,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * The camera's use on the Manage page (2026-11-18, the Mirror): the panel's two cards, on every frame, for a
- * Home Assistant administrator, and logged. "Needs Presence + camera." links to them. Before, the page said
+ * The camera's use on the Manage page (2026-11-18, the Mirror): the panel's two cards, on every frame, for
+ * either sign-in, and logged. "Needs Presence + camera." links to them. Before, the page said
  * "On the panel", which a frame without touch can't offer.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -60,7 +60,7 @@ class CameraManageTest {
             assertTrue("touch=$touch: the cards, Presence only lit", cards.contains(
                 "value=\"PRESENCE\" aria-pressed=\"true\"><b>Presence only</b><span>${CameraPrefs.USE_PRESENCE_LINE}</span>"))
             assertTrue(cards.contains("value=\"PRESENCE_AND_SNAPSHOTS\" aria-pressed=\"false\"><b>Presence + camera</b>"))
-            assertFalse("an administrator can pick", cards.contains("disabled"))
+            assertFalse("nothing dimmed", cards.contains("disabled"))
         }
     }
 
@@ -73,17 +73,13 @@ class CameraManageTest {
         assertTrue("lit now", b.get("/camera").text().contains("value=\"PRESENCE_AND_SNAPSHOTS\" aria-pressed=\"true\""))
     }
 
-    @Test fun thePanelsCodeSeesTheCardsButCantChangeThem() {
+    @Test fun thePanelsCodeChangesItTooAsOnThePanel() {
         val (def, f) = manage(touch = false)
         val b = withCode(f)
-        val page = b.get("/camera").text()
-        assertTrue(page.contains(ManagePages.ADMIN_ONLY))
-        assertTrue("dimmed", page.contains("value=\"PRESENCE_AND_SNAPSHOTS\" aria-pressed=\"false\" disabled>"))
-        val r = pick(f, b, CameraUse.PRESENCE_AND_SNAPSHOTS)
-        assertEquals(403, r.status)
-        assertTrue(r.text().contains(ManagePages.ADMIN_ONLY))
-        assertEquals(CameraUse.PRESENCE, def.prefs.use)
-        assertTrue(f.events.toString(), f.events.any { it.contains("couldn't change Camera › Camera use") })
+        assertFalse("not dimmed", b.get("/camera").text().substringAfter("<form class=\"ucs\"").substringBefore("</form>").contains("disabled"))
+        assertEquals("/camera", pick(f, b, CameraUse.PRESENCE_AND_SNAPSHOTS).headers["Location"])
+        assertEquals(CameraUse.PRESENCE_AND_SNAPSHOTS, def.prefs.use)
+        assertTrue(f.events.toString(), f.events.contains("Code sign-in set Camera › Camera use to Presence + camera"))
     }
 
     @Test fun underPrivacyTheUseIsRefusedAsThePanelsCardsAreDimmed() {

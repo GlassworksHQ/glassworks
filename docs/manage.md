@@ -39,8 +39,7 @@ and connections tiles, the mode (*Listen only* or *Listen and connect*), and its
 **Turn on Bluetooth** or **Turn on location** when one of them stops it.
 The camera page has what the panel's has, on every frame, touch screen or not: the two cards of
 "What may the camera do?" (*Presence only* and *Presence + camera*), privacy, and the ONVIF stream.
-Only a Home Assistant administrator can change the cards here (below). The stream's "Needs Presence +
-camera." links to them.
+Either sign-in can change them. The stream's "Needs Presence + camera." links to them.
 The time zone page has everything the panel's has: the zone, picked from a
 list grouped by region, whether the panel keeps it, and Home Assistant's zone, with **Use it** when
 Home Assistant keeps another zone's clock.
@@ -161,11 +160,6 @@ records who set or cleared it, never the password.
 such as turning the radio off, asks the same question here, and nothing changes until you answer it.
 In Home Assistant these switches only answer the panel's key; the code on the panel stands for being
 at the panel.
-
-**The camera's use needs a Home Assistant administrator** (2026-11-18). *Presence + camera* lets
-snapshots and the stream leave the panel, so a browser signed in with the panel's code sees the cards
-dimmed, with a line that says to sign in with Home Assistant, and a change from it is refused and logged.
-On the panel, whoever stands at it picks, as the approved design has it.
 
 ## Signing in
 

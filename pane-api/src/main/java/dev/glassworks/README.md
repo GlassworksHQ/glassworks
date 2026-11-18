@@ -376,8 +376,7 @@ its `confirm` when it costs something, as a `Switch` asks. A long `Choice` gives
 (the time zone's regions), and a browser lists it as one grouped list, not chips; its `line` is the row's
 words for the picked one when they say more than its name, and its `confirm` asks before a pick that
 costs something (the radio's role), on every surface. A `Choice` with `cards` gives each option a line,
-and a browser draws the options as cards, the picked one lit (the camera's use); `adminOnly` keeps it
-for a Home Assistant administrator on the Manage page. A `Switch`'s `see` names the item its line points
+and a browser draws the options as cards, the picked one lit (the camera's use). A `Switch`'s `see` names the item its line points
 at ("Needs Presence + camera." at the camera's use), and the Manage page links the line and a refusal
 to it. `Native` is a view only the panel draws,
 where its own layout is nicer than rows (the time zone's picker). Give it a `twin` (#269): the same
