@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Glassworks migration step 7 (#22): move the Kotlin and Java sources out of sh.edm.s1kiosk.* into
-dev.glassworks.*, and rewrite every reference to a moved class or file in the repo.
+"""Glassworks migration step 7 (#22), and the S1 frame's move (#527): move the Kotlin and Java sources out of
+sh.edm.s1kiosk.* into dev.glassworks.*, and rewrite every reference to a moved class or file in the repo.
 
     python3 tools/migrate/rename-22.py            apply, then print what is left
     python3 tools/migrate/rename-22.py --dry-run  print the moves only, change nothing
@@ -13,11 +13,13 @@ Re-runnable: every decision comes from the tree as it is. On a renamed tree it m
 rewrites nothing, so it also renames the files a branch adds after the rename landed. Start from a
 clean tree; if a run stops halfway, reset the tree and run it again.
 
-What stays in sh.edm.s1kiosk, and why, is in S1_MODULES and SHIM_MODULES below. The Android components
-move with the rest (COMPONENTS); each app in SHIM_MODULES gets a one-line subclass at the old name for every
-component its manifest declares, so the names Android, Kiln and the root side know never change. A component's
-old name in a string, a doc, Kiln or a manifest of those apps is its component name and is never rewritten.
-CHECK_UNCHANGED fails the run if any file that names them changed.
+The core went to dev.glassworks.* in #22; the S1 frame's own code (the S1 app and its wall-base pane) goes to
+dev.glassworks.s1.* in #527 (S1_PACKAGES), and the S1 app's namespace with it. What stays in sh.edm.s1kiosk is
+S1_SHIMS: one-line subclasses at the component names Android, the field and the root side hold (the HOME activity,
+the device admin, what check-update-compat.sh names, and the receiver a 0.4.3 install's PendingIntent targets).
+The S1 app's manifest names every component in full. A component's old name in a string, a doc, Kiln or a
+manifest is its component name and is never rewritten. CHECK_UNCHANGED fails the run if any file that names
+them changed.
 """
 import argparse
 import os
@@ -55,8 +57,21 @@ PACKAGES = {
     "update": "dev.glassworks.update",
     "voice": "dev.glassworks.assist",
 }
-# The S1 frame's own packages: never move, in any module.
-S1_PACKAGES = {"frame", "base"}
+# The S1 frame's own code (#527): old subpackage -> new, in the S1 app and its wall-base pane.
+S1_PACKAGES = {
+    "": "dev.glassworks.s1",
+    "base": "dev.glassworks.s1.base",
+    "frame": "dev.glassworks.s1.frame",
+    "manage": "dev.glassworks.s1.manage",
+    "settings": "dev.glassworks.s1.settings",
+}
+S1_NAMESPACE = "dev.glassworks.s1"
+# The S1 app's subclasses that keep their old names (#527): Android, Kiln, install.sh, the root helper and
+# check-update-compat.sh hold these. Its other components are declared under their dev.glassworks names.
+S1_SHIMS = {f"{OLD}.MainActivity", f"{OLD}.AdminReceiver", f"{OLD}.BootReceiver", f"{OLD}.improv.ImprovActivity",
+            f"{OLD}.update.UpdateInstallReceiver"}
+# The S1 app's activity alias: a manifest name, not a class; the HOME a tablet recorded may be it.
+S1_ALIAS = f"{OLD}.Launcher"
 # The Android components: old name -> where the code goes. Android remembers them by class name (device admin,
 # HOME, autostart, PackageInstaller's status PendingIntent, `am start -n` in Kiln, install.sh and Clarity).
 COMPONENTS = {
@@ -79,10 +94,11 @@ SHIM = """package {pkg}
 /** The name Android, Kiln and the installed apps know this component by (#22). The code is [{new}]. */
 class {name} : {new}()
 """
-# Modules whose sources keep their packages: the S1 frame (MIT) and the probe that poses as the S1 app.
-S1_MODULES = {"frames/aqara-s1-plus/panes/wall-base", "tools/mirror/probe-app"}
-S1_APP = "frames/aqara-s1-plus/android"  # its main sources stay; its tests follow the class they test
-# Text never rewritten: history, the probe (sh.edm.s1kiosk on purpose), this script.
+# The S1 frame's modules (MIT): their sources go to S1_PACKAGES, not PACKAGES.
+S1_MODULES = {"frames/aqara-s1-plus/panes/wall-base"}
+S1_APP = "frames/aqara-s1-plus/android"
+S1_GRADLE = {S1_APP + "/build.gradle.kts", "engines/engine-gecko-legacy/test-app/build.gradle.kts"}
+# Text never rewritten: history, the probe's README (it borrowed sh.edm.s1kiosk before #527), this script.
 SKIP_TEXT = ("CHANGELOG.md", "tools/mirror/probe-app/", "tools/migrate/rename-22.py")
 # Research notes are dated evidence: their logs and tables stay as recorded, only their links follow the move.
 RESEARCH = re.compile(r"(^|/)research/")
@@ -94,7 +110,6 @@ CHECK_UNCHANGED = [
     "frames/generic-android/installer/test/golden/generic-adb-commands.json",
     "frames/lululemon-mirror/design/frame.json",
     "frames/generic-android/installer/src/devices.ts",
-    "frames/aqara-s1-plus/android/src/main/AndroidManifest.xml",
     "frames/generic-android/android/src/main/AndroidManifest.xml",
     "frames/aqara-s1-plus/tools/root",
     "frames/aqara-s1-plus/tools/radio",
@@ -247,14 +262,14 @@ def decide(sources):
                 by_old[s.pkg][d] = s
 
     def base_rule(s):
-        if s.module in S1_MODULES or s.sub in S1_PACKAGES or s.sub not in PACKAGES:
-            return s.pkg
         if s.module in SHIM_MODULES and s.fq(s.stem) in COMPONENTS:
             return s.pkg  # an app's subclass at the old name (write_shims), not the component's code
+        if s.module in S1_MODULES or s.module == S1_APP or s.sub in ("base", "frame"):
+            return S1_PACKAGES.get(s.sub, s.pkg)
+        if s.sub not in PACKAGES:
+            return s.pkg
         if s.fq(s.stem) in COMPONENTS and not s.test:
             return COMPONENTS[s.fq(s.stem)].rsplit(".", 1)[0]
-        if s.module == S1_APP and (not s.test or s.sub == ""):
-            return s.pkg
         return PACKAGES[s.sub]
 
     mains = [s for s in sources if not s.test]
@@ -266,7 +281,7 @@ def decide(sources):
             for suffix in ("Test", "Tests", "Mockups", "PinTest", "Harness"):
                 if s.stem.endswith(suffix) and s.stem[: -len(suffix)] in by_old[s.pkg]:
                     tested = by_old[s.pkg][s.stem[: -len(suffix)]]
-            s.new_pkg = tested.new_pkg if tested and s.module not in S1_MODULES else base_rule(s)
+            s.new_pkg = tested.new_pkg if tested and s.module not in S1_MODULES and s.module != S1_APP else base_rule(s)
 
 
 def new_path(s):
@@ -280,6 +295,9 @@ def main():
     a = ap.parse_args()
     os.chdir(git("rev-parse", "--show-toplevel").strip())
 
+    clean = not git("status", "--porcelain").strip()
+    if clean and not a.check and not a.dry_run:
+        s1_frame_setup()
     code_files = [f for f in git("ls-files", "*.kt", "*.java").split("\n") if f]
     sources = [Source(f) for f in code_files]
     edm = [s for s in sources if s.sub is not None]
@@ -291,7 +309,7 @@ def main():
         sys.exit(1 if moving else 0)
     if not moving:
         print("nothing to move: rewriting old names that a rebased branch still uses")
-    if git("status", "--porcelain").strip() and not a.dry_run:
+    if not clean and not a.dry_run:
         raise SystemExit("the tree has changes: commit or reset them first, then run again")
 
     # Collisions: two top-level names, or two files of one name, in one package.
@@ -325,8 +343,8 @@ def main():
                 decl_map[s.fq(d)] = f"{s.new_pkg}.{d}"
             else:
                 keep_names.add(s.fq(d))
-    # Code a previous run (or #22 on main) already moved: a rebased branch may still name it the old way.
-    old_of = {new: OLD + (f".{sub}" if sub else "") for sub, new in PACKAGES.items()}
+    # Code a previous run (or #22 and #527 on main) already moved: a rebased branch may still name it the old way.
+    old_of = {new: OLD + (f".{sub}" if sub else "") for sub, new in [*PACKAGES.items(), *S1_PACKAGES.items()]}
     for s in sources:
         if s.sub is None and s.pkg in old_of and not s.test:
             for d in s.decls:
@@ -335,6 +353,8 @@ def main():
                     decl_map.setdefault(fq, f"{s.pkg}.{d}")
     for old, new in COMPONENTS.items():
         decl_map.setdefault(old, new)
+    for gen in ("R", "BuildConfig"):  # the S1 app's generated classes follow its namespace
+        decl_map[f"{OLD}.{gen}"] = f"{S1_NAMESPACE}.{gen}"
     targets = defaultdict(set)  # old package -> new packages its files went to
     for s in edm:
         targets[s.pkg].add(s.new_pkg)
@@ -509,7 +529,7 @@ def write_shims():
         names = re.findall(r'<(?:activity|service|receiver)\b[^>]*?android:name="([^"]+)"', open(manifest).read(), re.S)
         for n in names:
             fq = namespace + n if n.startswith(".") else n
-            if fq not in COMPONENTS:
+            if fq not in COMPONENTS or (module == S1_APP and fq not in S1_SHIMS):
                 continue
             shims[module].add(fq)
             path = f"{module}/src/main/java/{fq.replace('.', '/')}.kt"
@@ -554,10 +574,16 @@ def add_imports(text, src, by_old_pkg, graph, shims):
             if d in words and d not in imported and d not in own:
                 add.append(f"{other.new_pkg}.{d}")
                 imported.add(d)
-    if src.module in (S1_APP, "engines/engine-gecko-legacy/test-app") and src.pkg.startswith(OLD) and src.new_pkg != src.pkg:
+    if src.pkg == OLD and src.new_pkg != OLD:  # the S1 app's dropped subclasses: their code is the core's (#527)
+        for fq, new in COMPONENTS.items():
+            pkg, name = fq.rsplit(".", 1)
+            if pkg == OLD and fq not in S1_SHIMS and name in words and name not in imported and name not in own:
+                add.append(new)
+                imported.add(name)
+    if src.module in (S1_APP, "engines/engine-gecko-legacy/test-app", *S1_MODULES) and src.new_pkg != S1_NAMESPACE:
         for gen in ("R", "BuildConfig"):
-            if gen in words and gen not in imported:
-                add.append(f"{OLD}.{gen}")
+            if gen in words and gen not in imported and src.module != "frames/aqara-s1-plus/panes/wall-base":
+                add.append(f"{S1_NAMESPACE}.{gen}")
     if not add:
         return text
     semi = ";" if src.ext == "java" else ""
@@ -572,12 +598,49 @@ def add_imports(text, src, by_old_pkg, graph, shims):
     return "\n".join(lines)
 
 
+def s1_frame_setup():
+    """#527, before the move: the S1 app's namespace becomes S1_NAMESPACE (the legacy check app's too, with its own
+    id), its subclasses outside S1_SHIMS go, and its manifest names every component in full. Idempotent."""
+    for g in S1_GRADLE:
+        if os.path.exists(g):
+            t = open(g).read()
+            n = t.replace(f'namespace = "{OLD}"', f'namespace = "{S1_NAMESPACE}"')
+            n = n.replace(f'applicationId = "{OLD}.legacy"', f'applicationId = "{S1_NAMESPACE}.legacy"')
+            if n != t:
+                open(g, "w").write(n)
+    manifest = f"{S1_APP}/src/main/AndroidManifest.xml"
+    if not os.path.exists(manifest):
+        return
+    for fq in COMPONENTS:
+        path = f"{S1_APP}/src/main/java/{fq.replace('.', '/')}.kt"
+        if fq not in S1_SHIMS and os.path.exists(path):
+            git("rm", "-q", path)
+    text = open(manifest).read()
+
+    def full(m):
+        attr, name = m.group(1), m.group(2)
+        fq = OLD + name if name.startswith(".") else name
+        if fq in S1_SHIMS or fq == S1_ALIAS:
+            return f'{attr}="{fq}"'
+        if fq in COMPONENTS:
+            return f'{attr}="{COMPONENTS[fq]}"'
+        if fq.startswith(OLD + "."):
+            rest = fq[len(OLD) + 1:]
+            sub, _, cls = rest.rpartition(".")
+            if sub in S1_PACKAGES:
+                return f'{attr}="{S1_PACKAGES[sub]}.{cls}"'
+        return m.group(0)
+    new = re.sub(r'(android:(?:name|targetActivity))="(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+)"', full, text)
+    if new != text:
+        open(manifest, "w").write(new)
+
+
 def report(sources):
     left = defaultdict(list)
     for s in sources:
         if s.pkg == OLD or s.pkg.startswith(OLD + "."):
-            if s.module in S1_MODULES or s.module == S1_APP or s.sub in S1_PACKAGES:
-                kind = "S1 frame"
+            if s.module == S1_APP and s.fq(s.stem) in S1_SHIMS:
+                kind = "S1 component name kept"
             elif s.module in SHIM_MODULES and s.fq(s.stem) in COMPONENTS:
                 kind = "component name kept by its app"
             else:
@@ -585,7 +648,7 @@ def report(sources):
             left[kind].append(s.path)
     for kind, paths in sorted(left.items()):
         print(f"{kind}: {len(paths)} files left in {OLD}")
-        if kind != "S1 frame":
+        if kind != "S1 component name kept":
             for p in sorted(paths):
                 print(f"  {p}")
     if left.get("UNEXPECTED"):
