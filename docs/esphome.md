@@ -159,7 +159,6 @@ open the entity, and turn on *Enabled*.
 | Allow setup over the network | `lan_setup` | core | config | on | The way back to setup from a laptop once HA has the panel |
 | IP address | `ip_address` | core | diagnostic | on | People check it |
 | Silent updates | `silent_updates` | core | diagnostic | on | People check it: whether an update needs someone at the panel |
-| Web engine | `web_engine` | core | diagnostic | on | Only on the legacy build. It's the only sign HA gets that this panel runs a frozen engine that loads only Home Assistant |
 | Auto brightness | `auto_brightness` | core | config | off | Set once |
 | Idle timeout | `idle_timeout` | core | config | on | Automations: [Panel night mode](blueprints.md) sets it at night |
 | Max auto brightness | `max_brightness` | core | config | on | Automations: [Panel night mode](blueprints.md) lowers it at night |
@@ -296,7 +295,6 @@ So on a panel HA already has:
 | update `App update` (firmware) | `app_update` | the latest GitHub release vs this app; install from HA ([app updates](#app-updates)) |
 | text_sensor `Update status` | `update_status` | diagnostic; e.g. `up to date (1.2.0)`, `1.3.0 available`, `Downloading 1.3.0: 42%`, `Install of 1.3.0 failed: …` |
 | text_sensor `Silent updates` | `silent_updates` | diagnostic; whether app updates install with nobody at the panel, and why: `Yes: …` or `No: …` ([Silent updates](#silent-updates)) |
-| text_sensor `Web engine` | `web_engine` | diagnostic; only on the legacy build (Android 6 and 7 devices and the Mirror): `Frozen, loads only Home Assistant`. Its GeckoView gets no security fixes, so it loads only the dashboard's origin and never turns on remote debugging ([the legacy build](../frames/generic-android/README.md#the-legacy-build-android-6-and-7)) |
 | text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
 | text_sensor `Signed in` | `signed_in` | diagnostic; `yes` / `no`: whether the dashboard's Home Assistant has a QR sign-in on the panel (never the token). It says `no` after Home Assistant moved to another address, although the old sign-in is still stored ([onboarding.md](onboarding.md#4-login-without-typing-on-the-panel-qr-sign-in--external-auth-)) |
 | button `Sign out` | `sign_out` | revokes the refresh token at HA (`/auth/revoke`), deletes it, shows the sign-in screen. After Home Assistant moved it skips the revoke, which would send the token to an address that isn't the sign-in's, so the old token stays in the old Home Assistant's profile until deleted there |

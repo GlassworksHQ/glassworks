@@ -16,7 +16,7 @@ class GeckoVariantTest {
         assertEquals("", GeckoVariant.LABEL)
     }
 
-    /** #29: the engine the S1 and the generic app run doesn't say it is frozen, so they get no Web engine sensor. */
+    /** #29: the engine the S1 and the generic app run doesn't say it is frozen, so they show no Legacy chip. */
     @Test fun `the current engine is not locked down`() {
         val engine = GeckoEngine(settings = { error("not opened") }, extension = GeckoEngine.Extension("", "", ""), logTag = "test", generatedBy = "test")
         assertFalse(engine.lockedDown)

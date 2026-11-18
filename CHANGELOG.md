@@ -153,10 +153,11 @@ below as the release notes.
   mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
   Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
   generic app's icon; S1 Kiosk keeps its own.
-- **Home Assistant shows that the legacy build is locked to it.** On Android 6 and 7 and the lululemon Mirror,
-  a new *Web engine* diagnostic sensor reads *Frozen, loads only Home Assistant*. Its browser engine gets no
-  security fixes, so it opens only your Home Assistant. Remote debugging now stays off there too: the adb
-  extra that turns it on is ignored, and so is the setting if it was already on. Other devices don't get the sensor.
+- **The Manage page says what the legacy build can't do.** On Android 6 and 7 devices and the lululemon
+  Mirror, the Overview has a *Legacy* chip next to the version. Hover it, tap it or tab to it: its web engine
+  is frozen and gets no security fixes, so it loads only your Home Assistant, and remote debugging is off.
+  Remote debugging now stays off there for real: the adb extra that turns it on is ignored, and so is the
+  setting if it was already on. Other devices don't show the chip.
 
 ### Changed
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a

@@ -33,8 +33,8 @@ interface Engine {
     val name: String get() = ""
 
     /**
-     * True for the legacy engine (#198): a frozen GeckoView that loads only the dashboard's origin. Home Assistant
-     * gets a diagnostic entity that says so, and the app never turns on remote debugging for it (#29).
+     * True for the legacy engine (#198): a frozen GeckoView that loads only the dashboard's origin. The Manage page
+     * shows a Legacy chip that says so, and the app never turns on remote debugging for it (#29).
      */
     val lockedDown: Boolean get() = false
 }

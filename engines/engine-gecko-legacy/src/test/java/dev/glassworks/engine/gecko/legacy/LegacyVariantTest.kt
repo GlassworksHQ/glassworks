@@ -17,7 +17,7 @@ class LegacyVariantTest {
         assertTrue(GeckoVariant.LABEL.contains("Home Assistant only"))
     }
 
-    /** #29: the real legacy engine says it is frozen and held to Home Assistant, so the core lists Web engine. */
+    /** #29: the real legacy engine says it is frozen and held to Home Assistant, so Manage shows the Legacy chip. */
     @Test fun `the legacy engine says it is locked down`() {
         val engine = GeckoEngine(settings = { error("not opened") }, extension = GeckoEngine.Extension("", "", ""), logTag = "test", generatedBy = "test")
         assertTrue(engine.lockedDown)

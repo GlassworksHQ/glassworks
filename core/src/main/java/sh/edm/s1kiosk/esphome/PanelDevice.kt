@@ -638,12 +638,6 @@ class PanelDevice(
                 HaAuth.signOut("Home Assistant button") { exec.execute { server?.publishStates() } }
             },
         ),
-    ) + listOfNotNull(
-        // Only with the legacy engine (#29), so every other build's list stays as it was.
-        TextSensorEntity(
-            "web_engine", "Web engine", "mdi:shield-lock-outline", EntityCategory.DIAGNOSTIC,
-            get = { "Frozen, loads only Home Assistant" },
-        ).takeIf { runtime.engine.lockedDown },
     )
 
     private fun onMediaCommand(c: MediaPlayerCommandData) {

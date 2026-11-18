@@ -7,13 +7,10 @@ package dev.glassworks.generic
 import android.app.Application
 import android.content.Intent
 import dev.glassworks.engine.Engine
-import dev.glassworks.esphome.ApiEntity
-import dev.glassworks.esphome.DeviceIdentity
-import dev.glassworks.esphome.EntityCategory
+import dev.glassworks.manage.PanelStatus
 import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,14 +20,17 @@ import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.GlassworksApp
 import sh.edm.s1kiosk.GlassworksRuntime
 import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.esphome.PanelDevice
+import sh.edm.s1kiosk.auth.HaTokenClient
+import sh.edm.s1kiosk.auth.HttpPoster
+import sh.edm.s1kiosk.auth.SignInServer
 import sh.edm.s1kiosk.gecko.GeckoPinHarness
 import sh.edm.s1kiosk.gecko.GeckoShadows
+import sh.edm.s1kiosk.manage.AppManage
 import sh.edm.s1kiosk.update.ReleaseLine
 
 /**
- * #29: the legacy build's engine is frozen and loads only Home Assistant. Home Assistant gets a diagnostic entity
- * that says so, and remote debugging never comes on. The legacy build has no unit tests of its own
+ * #29: the legacy build's engine is frozen and loads only Home Assistant. The Manage page shows a Legacy chip that
+ * says so, and remote debugging never comes on. The legacy build has no unit tests of its own
  * (build.gradle.kts), so these run the release build's code with its engine marked [Engine.lockedDown], as the
  * legacy engine is.
  */
@@ -59,32 +59,19 @@ class LegacyEngineTest {
         }
     }
 
-    private fun entities(runtime: GlassworksRuntime): List<ApiEntity> {
-        val device = PanelDevice(app, runtime, runtime::devicePanes)
-        try {
-            device.initEntities(
-                DeviceIdentity(
-                    name = "test-000001", friendlyName = "Test", macAddress = "02:00:00:00:00:01",
-                    esphomeVersion = PanelDevice.ESPHOME_VERSION, compilationTime = "test", manufacturer = "Test",
-                    model = "Test", voiceFeatures = PanelDevice.VOICE_FEATURES,
-                ),
-            )
-            return device.entityList()
-        } finally {
-            device.stop()
-        }
+    private fun status(runtime: GlassworksRuntime): PanelStatus {
+        val tokens = HaTokenClient(object : HttpPoster {
+            override fun postForm(url: String, body: String) = 0 to ""
+            override fun get(url: String, maxBytes: Int) = 0 to ""
+        })
+        return AppManage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app)).status()
     }
 
-    @Test fun homeAssistantHearsTheLegacyEngineIsFrozenAndLockedToIt() {
+    @Test fun theManagePageShowsTheLegacyChipOnlyOnTheLegacyEngine() {
         val frame = GenericApp.frame(app)
         val legacy = GlassworksRuntime(frame, BUILD, LockedDown(GenericApp.engine(BUILD)), GenericParts(), releases = ReleaseLine.GENERIC_ANDROID_LEGACY)
-        val engine = entities(legacy).single { it.objectId == "web_engine" }
-        assertEquals("Web engine", engine.name)
-        assertEquals(EntityCategory.DIAGNOSTIC, engine.category)
-        assertFalse("on when Home Assistant adds the device", engine.disabledByDefault)
-        assertEquals("Frozen, loads only Home Assistant", engine.shownState())
-
-        assertNull("not on the generic app's engine", entities(GenericApp.runtime(frame, BUILD)).find { it.objectId == "web_engine" })
+        assertTrue(status(legacy).legacy)
+        assertFalse("not on the generic app's engine", status(GenericApp.runtime(frame, BUILD)).legacy)
     }
 
     @Test @Config(application = LegacyApp::class)
