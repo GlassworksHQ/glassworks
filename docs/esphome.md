@@ -953,3 +953,4 @@ not on the wall base's page. Their entity ids are the wall base pane's, as befor
 - text_sensor `Aqara cloud daemon` (`aqara_cloud`): `blocked`, `running`,
   `stopped (UART wall base backend owns /dev/ttyS3)`, `running (needed by the wall base, LocalService
   backend)`, or `error (…)`.
+
