@@ -98,6 +98,13 @@ class SessionStore(
         return sessions.values.filter { now < it.expiresMs }.sortedByDescending { it.lastUsedMs }
     }
 
+    /** The ids of the sessions not run out, for every HA address, ending none: the sweep reads, it doesn't prune. */
+    @Synchronized
+    fun liveIds(): Set<String> {
+        val now = clock()
+        return sessions.values.filter { now < it.expiresMs }.mapTo(HashSet()) { it.id }
+    }
+
     /** What [revoke] did. */
     enum class Revoked { NONE, DONE, NOT_SAVED }
 

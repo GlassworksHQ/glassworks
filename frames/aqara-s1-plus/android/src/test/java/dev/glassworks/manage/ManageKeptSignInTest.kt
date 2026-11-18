@@ -41,7 +41,10 @@ class ManageKeptSignInTest {
         val b = signedIn()
         assertEquals("without the form token", 403, access(b, csrf = null).status)
         assertEquals("from another site", 403, access(b, origin = "http://evil.example").status)
-        assertEquals("signed out", 303, f.Browser().post(ManageServer.HA_ACCESS, emptyMap()).status)
+        val signedOut = f.Browser().post(ManageServer.HA_ACCESS, emptyMap())
+        assertEquals("signed out: an answer All panels can read, not a redirect", 401, signedOut.status)
+        assertTrue(signedOut.text().contains(ManageServer.MANAGE_ENDED))
+        assertEquals(401, f.Browser().post(ManageServer.HA_FORGET, emptyMap()).status)
         assertTrue(f.refreshed.isEmpty())
     }
 
@@ -67,7 +70,7 @@ class ManageKeptSignInTest {
         val other = signedIn()
         other.post("/security/signout", mapOf("csrf" to other.csrf(), "id" to id))
         assertEquals(listOf("REFRESH"), f.revoked)
-        assertEquals("that browser is signed out: no token for it", 303, access(b, csrf = csrf).status)
+        assertEquals("that browser is signed out: no token for it", 401, access(b, csrf = csrf).status)
     }
 
     @Test fun allPanelsSignOutEndsItAndLeavesTheManageSession() {
@@ -161,6 +164,71 @@ class ManageKeptSignInTest {
         assertEquals("the sweep ended it", 3, f.revoked.size)
         f.server.sweep()
         assertEquals("once", 3, f.revoked.size)
+    }
+
+    @Test fun signingOutDoesntWaitForHomeAssistant() {
+        val b = signedIn()
+        val id = sessionId()
+        val later = ArrayList<() -> Unit>()
+        f.deferred = later
+        assertEquals(303, b.post("/manage/signout", mapOf("csrf" to b.csrf())).status)
+        assertTrue("the browser is signed out before HA answers", f.revoked.isEmpty())
+        assertFalse("and the sign-in is no longer usable", f.server.keepsHaSignIn(id))
+        f.deferred = null
+        later.forEach { it() }
+        assertEquals(listOf("REFRESH"), f.revoked)
+    }
+
+    @Test fun aSessionThatEndsWhileHomeAssistantRenewsItGetsNoToken() {
+        val b = signedIn()
+        val id = sessionId()
+        f.duringRefresh = { f.sessions.revoke(id) }
+        val r = access(b)
+        assertEquals(404, r.status)
+        assertFalse(r.text().contains("ACCESS-RENEWED"))
+    }
+
+    @Test fun theSweepReadsTheSessionsWithoutEndingANewAddresssOnes() {
+        signedIn()
+        val (_, other) = f.sessions.create("Alex", SignedInWith.HOME_ASSISTANT, "Safari on Mac", true, "http://192.0.2.11:8123")
+        // The sweep read the old address; a session for the new one was made meanwhile. The sweep mustn't end it.
+        f.server.sweep()
+        assertTrue(other.id in f.sessions.liveIds())
+    }
+
+    @Test fun aRevokeThatFailsAfterTheStopGoesToTheLastCleanup() {
+        val b = signedIn()
+        val csrf = b.csrf()
+        f.revokeWorks = false
+        assertEquals(502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+        val started = java.util.concurrent.CountDownLatch(1)
+        val gate = java.util.concurrent.CountDownLatch(1)
+        f.revokeStarted = started
+        f.revokeGate = gate
+        val sweeping = Thread { f.server.sweep() }.apply { start() }
+        try {
+            assertTrue(started.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            f.server.stop()
+            assertEquals("nothing left to drain yet: the sweep holds it", 3, f.revoked.size)
+            f.revokeGate = null
+        } finally {
+            gate.countDown()
+            sweeping.join(10_000)
+        }
+        assertFalse(sweeping.isAlive)
+        // HA still doesn't take it: the sweep's two tries, then the last cleanup's two, rather than nothing after the stop.
+        assertEquals(6, f.revoked.size)
+    }
+
+    @Test fun aSignInThatFinishesAfterTheStopIsEndedToo() {
+        val b = f.Browser()
+        b.get("/")
+        val start = b.post("/manage/ha", mapOf("next" to "/"))
+        val state = dev.glassworks.web.HttpServer.parseQuery(start.headers["Location"]!!.substringAfter('?'))["state"]!!
+        f.server.stop()
+        b.get("/manage/callback?code=CODE&state=$state", mapOf("sec-fetch-site" to "cross-site"))
+        assertEquals(listOf("REFRESH"), f.revoked)
+        assertFalse(f.server.keepsHaSignIn(sessionId()))
     }
 
     @Test fun theSweepTriesAgainAnEndHomeAssistantDidntTake() {

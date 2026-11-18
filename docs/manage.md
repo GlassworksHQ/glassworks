@@ -195,11 +195,12 @@ manage a panel. Whether other users get a say is open (#124).
 - The panel asks Home Assistant who you are and checks you're an administrator. Anyone else's token is
   **revoked straight away**. An administrator's sign-in is kept in the panel's memory for that browser's Manage
   session only, so All panels needs no second sign-in. It is never written to disk, a log or the
-  diagnostics, and the panel revokes it in Home Assistant when you sign out (here or from Security), and within a
-  minute of the session running out or the panel's Home Assistant address changing. If the app restarts, the panel
-  forgets it without revoking it; it then stays under your profile in Home Assistant (*Security → Refresh
-  tokens*) until it expires or you delete it. If Home Assistant doesn't take a revoke, the panel tries once
-  more and then logs a warning. Its own
+  diagnostics. The panel revokes it in Home Assistant when you sign out (here, from Security or on All panels) and
+  when its Manage page stops. It also checks about once a minute for sessions that ran out and for a Home Assistant
+  address that changed, and revokes their sign-ins then. If Home Assistant doesn't take a revoke, the panel tries
+  once more, logs a warning, and tries again at its later checks. If the app restarts, the panel forgets it without
+  revoking it; it then stays under your profile in Home Assistant (*Security → Refresh tokens*) until it expires
+  or you delete it. Its own
   long-lived sign-in (the one the dashboard uses) is separate, and the Manage page never shows or
   sends it.
 - Your browser gets the panel's own sign-in cookie: `HttpOnly` (scripts can't read it) and
@@ -229,9 +230,11 @@ manage a panel. Whether other users get a say is open (#124).
 **What plain HTTP on your network doesn't protect.** The page is `http://`, like Home Assistant on
 `http://`. Someone who can read your Wi-Fi traffic can see:
 
-- **The panel's cookie.** With it they can use the Manage page as you until it's signed out. The
-  cookie gets them nothing else: not Home Assistant (the panel already revoked that token), and not a
-  reboot (that needs the code on the panel's screen).
+- **The panel's cookie.** With it they can use the Manage page as you until it's signed out, but not
+  reboot (that needs the code on the panel's screen). If you signed in with Home Assistant, it also gets
+  them what All panels gets: fresh Home Assistant access tokens for your administrator account, for as long
+  as the session lasts (up to 30 days with *Remember this browser*) or until you sign out of All panels. A
+  session signed in with the code on the panel gets no Home Assistant token.
 - **Your Home Assistant password, if Home Assistant itself is on `http://`.** You type it on Home
   Assistant's own login page, not on the panel, so the panel never has it; but over plain HTTP that page
   sends it in the clear, as it does whenever you sign in to Home Assistant over `http://`. Revoking the
@@ -239,8 +242,9 @@ manage a panel. Whether other users get a say is open (#124).
   multi-factor sign-in adds a second step, so a caught password alone doesn't get anyone in.
 - **The sign-in's exchange with Home Assistant, if Home Assistant is on `http://`.** The panel trades
   the one-time code for Home Assistant's tokens, asks who you are and revokes them, over the address it
-  has, so over `http://` these pass in the clear for a few seconds. Revoking the refresh token also ends
-  its access token, so a caught token works only until then. If Home Assistant refuses the revoke twice,
+  has, so over `http://` these pass in the clear. Revoking the refresh token also ends its access tokens. An
+  administrator's refresh token stays valid while the panel keeps it for All panels, so a caught one works
+  until you sign out or the session ends; anyone else's is revoked within seconds. If Home Assistant refuses the revoke twice,
   the refresh token stays until you delete it (see above), and the Log says so. Someone who can *change* that traffic could
   also answer for Home Assistant and sign in as an administrator. This is a choice: most Home Assistant
   installs on a home network are `http://`, the panel's own dashboard sign-in crosses the same way, and

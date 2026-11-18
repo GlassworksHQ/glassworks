@@ -89,6 +89,9 @@ class ManageFixture(
     /** A revoke waited 10 s for [revokeGate] and went on: the test that set it failed to release it. */
     @Volatile var revokeGateTimedOut = false
 
+    /** While set, the server's background work waits here until the test runs it; else it runs at once. */
+    @Volatile var deferred: MutableList<() -> Unit>? = null
+
     /** Runs while Home Assistant renews a kept sign-in (an address that changes meanwhile). */
     @Volatile var duringRefresh: (() -> Unit)? = null
     var canReboot = true
@@ -159,7 +162,7 @@ class ManageFixture(
         monoMs = { monoMs },
         scripts = { name -> dev.glassworks.testing.RepoFiles.file("core/src/main/assets/manage/$name").readBytes() },
         sweepMs = 0,
-        background = { it() },
+        background = { work -> deferred?.add(work) ?: work() },
     )
 
     init {

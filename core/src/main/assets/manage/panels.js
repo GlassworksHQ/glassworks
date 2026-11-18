@@ -131,7 +131,11 @@ async function fromPanel() {
   const a = haSignIn ? await panelAccess(csrf) : null;
   if (mine !== generation) return null;
   // An outage keeps the sign-in where it is: the page says so and tries again, rather than asking for a new one.
-  if (a && a.outage) throw new Error(a.problem);
+  if (a && a.outage) throw Object.assign(new Error(a.problem), { panel: true });
+  if (a && a.manageEnded) {
+    keep(KEY, null);
+    throw Object.assign(new Error(a.problem), { panel: true, manageEnded: true });
+  }
   if (!a) { keep(KEY, null); return null; }
   // A renewal keeps who signed in, for the list's header; stored() is already this HA and this session's, or null.
   const user = was && was.viaPanel ? was.user : undefined;
@@ -143,14 +147,23 @@ async function fromPanel() {
 const end = (t) => (t.viaPanel ? panelForget(csrf) : revokeAt(ha, t.refresh));
 
 async function signOut() {
-  const mine = ++generation;
   const t = stored();
   keep(KEY, null);
-  // Signing out: the list goes, so a second click can't start the page again while this one waits (CodeRabbit on #534).
+  if (!t) return start();
+  return ending(t);
+}
+
+/**
+ * Ends [t], from Sign out or its Try again. The list or the button goes first, so a second click can't start another
+ * attempt while this one waits, and only the newest attempt decides what the page shows next (CodeRabbit on #534).
+ */
+async function ending(t) {
+  const mine = ++generation;
   copyCard.hidden = true;
   say(listCard, 'Panels in Home Assistant', 'Signing out…');
-  if (t && !(await end(t))) return mine === generation ? revokeFailed(t) : undefined;
-  if (mine === generation) start();
+  const ok = await end(t);
+  if (mine !== generation) return;
+  return ok ? start() : revokeFailed(t);
 }
 
 /** Home Assistant didn't confirm the revoke: the sign-in may stay active there. Say so, with a way to try again. */
@@ -158,7 +171,7 @@ function revokeFailed(t) {
   copyCard.hidden = true;
   say(listCard, 'Panels in Home Assistant',
     "Signed out of this page, but Home Assistant didn't confirm it ended the sign-in, so it may stay active there. Try again, or remove it in Home Assistant: your profile, Security, Refresh tokens.",
-    h('button', { class: 'pill', type: 'button', onclick: async () => ((await end(t)) ? start() : revokeFailed(t)) }, 'Try again'));
+    h('button', { class: 'pill', type: 'button', onclick: () => ending(t) }, 'Try again'));
 }
 
 /** Home Assistant's websocket: [types] asked in turn, their results in that order. */
@@ -339,6 +352,14 @@ async function apply(fromP, toP, rows, asked) {
 
 // ------------------------------------------------------------------ start
 
+/** The panel couldn't give a token: its outage, with Try again, or this Manage page's sign-in ended, with Sign in. */
+function panelProblem(e) {
+  copyCard.hidden = true;
+  return say(listCard, 'Panels in Home Assistant', e.message, e.manageEnded
+    ? h('button', { class: 'pill primary', type: 'button', onclick: () => location.assign('/') }, 'Sign in')
+    : h('button', { class: 'pill', type: 'button', onclick: start }, 'Try again'));
+}
+
 async function start() {
   const mine = ++generation;
   copyCard.hidden = true;
@@ -350,17 +371,26 @@ async function start() {
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
   // Signed in to this Manage page with Home Assistant: the panel's kept sign-in serves, no second one (#466 panel run).
-  let access = await token().catch(() => null);
+  // A panel-backed token renews through the panel already: its outage shows as it is, with no second request to the
+  // panel (CodeRabbit on #534). A tab's own that HA won't renew falls back to the panel's, then to Continue.
+  const viaPanel = !!stored()?.viaPanel;
+  let access = null;
+  let problem = null;
+  try {
+    access = await token();
+  } catch (e) {
+    if (e.panel) problem = e;
+  }
   if (mine !== generation) return;
-  if (!access && haSignIn) {
+  if (!access && !problem && haSignIn && !viaPanel) {
     try {
       access = await fromPanel();
     } catch (e) {
-      if (mine !== generation) return;
-      return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill', type: 'button', onclick: start }, 'Try again'));
+      problem = e;
     }
   }
   if (mine !== generation) return;
+  if (problem) return panelProblem(problem);
   if (!access) {
     return say(listCard, 'Panels in Home Assistant', 'Sign in with a Home Assistant administrator to find the panels. This tab keeps the sign-in until you close it.',
       h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
@@ -384,6 +414,9 @@ async function start() {
   try {
     access = await token();
   } catch (e) {
+    // Signed out meanwhile: the sign-out's screen stays (CodeRabbit on #534).
+    if (mine !== generation) return;
+    if (e.panel) return panelProblem(e);
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
   if (mine !== generation) return;

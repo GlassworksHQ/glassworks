@@ -93,6 +93,10 @@ let accessAsked = 0;
 /** Whether this panel confirms it ended its kept sign-in, and, while set, the promise it waits for first. */
 let forgetOk = true;
 let forgetHeld = null;
+/** The form token each forget brought. */
+const forgetCsrfs = [];
+/** What this panel answers a renewal with: 200, 503 (Home Assistant down) or 401 (the Manage session ended). */
+let accessStatus = 200;
 /** Whether the fake Home Assistant takes a revoke. */
 let revokeOk = true;
 const initial = JSON.stringify(panels);
@@ -144,10 +148,15 @@ async function handle(req, res) {
     if (f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
     accessAsked++;
     if (accessHeld) await accessHeld.promise;
+    if (accessStatus === 503) return send(res, 503, { problem: "Can't reach Home Assistant. Try again in a moment." });
+    if (accessStatus === 401) return send(res, 401, { problem: 'Your sign-in to this Manage page has ended. Sign in again.' });
     return send(res, 200, { access_token: 'fake-access-from-panel', expires_in: 1800 });
   }
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/forget' && req.method === 'POST') {
+    const f = await form(req);
+    forgetCsrfs.push(f.get('csrf'));
     if (forgetHeld) await forgetHeld.promise;
+    if (f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
     return forgetOk ? send(res, 200, { ok: true }) : send(res, 502, { problem: "Home Assistant didn't confirm it ended the sign-in. Try again." });
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
@@ -373,8 +382,11 @@ try {
   assert.ok(who, 'the list knows who signed in');
   await expire();
   const renewedBefore = handoffs.length;
+  const renewalsBefore = accessAsked;
   await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
   for (let i = 0; i < 50 && handoffs.length === renewedBefore; i++) await sleep(100);
+  assert.equal(accessAsked, renewalsBefore + 1, 'the Manage click renewed the token from the panel');
+  assert.equal(handoffs.length, renewedBefore + 1, 'and handed it to the panel');
   assert.equal(await js("JSON.parse(sessionStorage.getItem('gw-ha')).user"), who, 'still known after the renewal');
   // Sign out while Manage waits for a slow renewal from the panel, and the panel can't confirm the sign-out: the renewal's
   // late answer must not sign the page back in, and nothing goes to the other panel (CodeRabbit on #534).
@@ -383,24 +395,58 @@ try {
   forgetOk = false;
   const handoffsBefore = handoffs.length;
   const askedBefore = accessAsked;
+  const pages = async () => (await call('Target.getTargets')).targetInfos.filter((t) => t.type === 'page').length;
+  const pagesBefore = await pages();
   await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
   for (let i = 0; i < 50 && accessAsked === askedBefore; i++) await sleep(100);
   assert.equal(accessAsked, askedBefore + 1, 'Manage asked the panel for a renewal');
   forgetHeld = Promise.withResolvers();
+  const forgetsBefore = forgetCsrfs.length;
   await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Sign out').click()");
   // While the panel ends it, there is no second Sign out to click: one attempt decides what the page shows next.
   await until("document.querySelector('#gw-list .note')?.textContent === 'Signing out…'", 'signing out');
   assert.ok(!(await js("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Sign out')")), 'no second Sign out while the first waits');
+  for (let i = 0; i < 50 && forgetCsrfs.length === forgetsBefore; i++) await sleep(100);
+  assert.deepEqual(forgetCsrfs.slice(forgetsBefore), [csrfOnPage], "one forget, with the page's form token");
   forgetHeld.resolve();
   forgetHeld = null;
   await until("document.querySelector('#gw-list .note')?.textContent.includes(\"didn't confirm it ended the sign-in\")", 'the sign-out warning');
   accessHeld.resolve();
   accessHeld = null;
-  await sleep(1_000);
-  forgetOk = true;
+  // The late renewal is handled once open() gives up: it closes the tab it reserved.
+  for (let i = 0; i < 50 && (await pages()) !== pagesBefore; i++) await sleep(100);
+  assert.equal(await pages(), pagesBefore, 'the late renewal was handled: the reserved tab is closed');
   assert.equal(await js("sessionStorage.getItem('gw-ha')"), null, 'the late renewal stored no sign-in');
   assert.equal(handoffs.length, handoffsBefore, 'nothing went to the other panel after the sign-out');
   assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes(\"didn't confirm it ended the sign-in\")"), 'the sign-out warning stays');
+  // Try again works the same way: one attempt at a time (CodeRabbit on #534).
+  forgetHeld = Promise.withResolvers();
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Try again').click()");
+  await until("document.querySelector('#gw-list .note')?.textContent === 'Signing out…'", 'signing out again');
+  assert.ok(!(await js("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Try again')")), 'no second Try again while the first waits');
+  forgetHeld.resolve();
+  forgetHeld = null;
+  await until("document.querySelector('#gw-list .note')?.textContent.includes(\"didn't confirm it ended the sign-in\")", 'the warning again');
+  forgetOk = true;
+  // Home Assistant down when the panel renews an expired token: the page says so after one request, not two.
+  accessStatus = 200;
+  await call('Page.navigate', { url: PAGE });
+  await until(listed, 'the panels again, from the panel');
+  await expire();
+  accessStatus = 503;
+  const outageBefore = accessAsked;
+  await call('Page.navigate', { url: PAGE });
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Try again')", 'the outage');
+  await sleep(500);
+  assert.equal(accessAsked, outageBefore + 1, 'one request to the panel before the outage shows');
+  assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes(\"Can't reach Home Assistant\")"));
+  // This Manage page's own sign-in ended: Sign in, not Try again.
+  accessStatus = 401;
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Try again').click()");
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Sign in')", 'the ended Manage sign-in');
+  assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes('has ended')"));
+  await shot('12-manage-sign-in-ended');
+  accessStatus = 200;
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
   assert.ok(!haAddressSent, "no copy sent a panel's own Home Assistant address");
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');

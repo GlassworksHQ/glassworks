@@ -11,11 +11,11 @@ import org.junit.Test
 
 /** A revoke counts only when Home Assistant took it (CodeRabbit on #534). */
 class HaTokenClientTest {
-    private class Answers(vararg val statuses: Int) : HttpPoster {
+    private class Answers(vararg val statuses: Int, val body: String = "") : HttpPoster {
         val urls = ArrayList<String>()
         override fun postForm(url: String, body: String): Pair<Int, String> {
             urls += url
-            return statuses[urls.size - 1] to ""
+            return statuses[urls.size - 1] to this.body
         }
         override fun get(url: String, maxBytes: Int): Pair<Int, String> = error("not used")
     }
@@ -31,5 +31,16 @@ class HaTokenClientTest {
         assertFalse("no answer", c.revoke(auth))
         assertTrue("HA's 200", c.revoke(auth))
         assertEquals("http://homeassistant.local:8123/auth/revoke", http.urls.last())
+    }
+
+    /** Only a sign-in HA no longer has is refused: an account turned off keeps it, revocable (CodeRabbit on #534). */
+    @Test fun aRenewalHaRefusesForTheAccountKeepsTheSignIn() {
+        fun renew(status: Int, body: String) = HaGatewayClient(HaTokenClient(Answers(status, body = body))) { error("no socket") }
+            .refresh(auth.haBase, auth.clientId, auth.refreshToken) as dev.glassworks.manage.HaGateway.Tokens.Failed
+        assertTrue("invalid_grant: gone", renew(400, "{\"error\":\"invalid_grant\"}").refused)
+        val denied = renew(403, "{\"error\":\"access_denied\",\"error_description\":\"User is not active\"}")
+        assertFalse("access_denied: kept", denied.refused)
+        assertFalse(denied.unreachable)
+        assertTrue("no answer", renew(-1, "").unreachable)
     }
 }

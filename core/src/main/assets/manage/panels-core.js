@@ -421,6 +421,8 @@ export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
     return { outage: true, problem: "Can't reach this panel. Try again in a moment." };
   }
   if (r.status === 200 && r.body && typeof r.body.access_token === 'string') return r.body;
+  // This Manage page's own sign-in ended: trying again won't help, signing in to Manage again will (CodeRabbit on #534).
+  if (r.status === 401) return { manageEnded: true, problem: (r.body && r.body.problem) || 'Your sign-in to this Manage page has ended. Sign in again.' };
   if (r.status === 503) return { outage: true, problem: (r.body && r.body.problem) || "Can't reach Home Assistant. Try again in a moment." };
   return null;
 }
@@ -429,7 +431,8 @@ export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
 export async function panelForget(csrf, fetchFn = fetch, ms = REVOKE_MS) {
   try {
     const r = await timed(fetchFn, '/manage/ha/forget', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
-    return r.status === 200;
+    // 401: this Manage page's sign-in has ended, and the panel ends what it kept for it on its own.
+    return r.status === 200 || r.status === 401;
   } catch {
     return false;
   }
