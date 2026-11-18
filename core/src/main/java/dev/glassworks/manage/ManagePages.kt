@@ -169,14 +169,19 @@ ${foot(viewer)}"""
      */
     fun section(s: PanelStatus, v: Viewer, path: String, title: String, state: PaneState?, sec: SettingsSection?,
                 links: List<Pair<String, String>> = emptyList(), dialog: Dialog? = null, problem: String? = null, restart: Boolean = false,
-                notice: String? = null, problemSee: String? = null): String {
+                notice: String? = null, problemSee: String? = null, paused: Boolean = false): String {
         val heading = sec?.heading ?: title
         val why = sec?.let { runCatching { it.unavailable() }.getOrNull() }
         val master = sec?.master?.takeIf { why == null }?.let { m -> toggle(v, sec.id, SettingsChange.MASTER, m, heading) }.orEmpty()
         val head = """<div class="phr">${if (state != null) """<span class="crumb">Panes ›</span>""" else ""}<h1 class="ph">${esc(heading)}</h1>""" +
             """${state?.let { """<span class="pchip">${chip(it)}</span>""" }.orEmpty()}$master</div>"""
+        // A page whose rows change by themselves (the dock row) reloads itself: the page has no scripts. Never under a
+        // dialog, and the person can pause it (WCAG 2.2.1: a reload restarts a screen reader).
+        val live = sec != null && DockRow.shownIn(sec.items)
         val lines = listOfNotNull(
             why?.let { """<p class="sub">${esc("This pane can't run on this panel: $it.")}</p>""" },
+            if (!live) null else if (paused) """<p class="sub">${esc(LIVE_PAUSED)} <a href="${esc(path)}">Resume</a></p>"""
+                else """<p class="sub">${esc(LIVE_ON)} <a href="${esc(path)}?$LIVE_PARAM=off">Pause</a></p>""",
             problem?.let { """<p class="err" role="alert">${see(it, problemSee)}</p>""" },
             if (restart) """<div class="banner"><i class="dot work"></i><span>${esc(SettingsChange.RESTART_TEXT)}</span>${action(v, "/action/restart", "Restart now", "pill primary")}</div>""" else null,
         ).joinToString("")
@@ -186,8 +191,7 @@ ${foot(viewer)}"""
         val more = if (off || links.isEmpty()) "" else """<section class="card list">${links.joinToString("") { (label, href) ->
             """<a class="row" href="${esc(href)}"><div><b>${esc(label)}</b></div><i class="chev" aria-hidden="true">›</i></a>""" }}</section>"""
         val overlay = if (dialog != null && sec != null) dialog(v, path, sec, dialog) else ""
-        // The page has no scripts: one whose rows change by themselves (the dock row) reloads itself, never under a dialog.
-        val reload = if (overlay.isEmpty() && sec != null && DockRow.shownIn(sec.items)) """<meta http-equiv="refresh" content="$LIVE_RELOAD_S;url=${esc(path)}">""" else ""
+        val reload = if (live && !paused && overlay.isEmpty()) """<meta http-equiv="refresh" content="$LIVE_RELOAD_S;url=${esc(path)}">""" else ""
         return frame(s, path, title, v, head + lines + card + more, notice, overlay, reload)
     }
 
@@ -497,6 +501,10 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
         /** The sidebar's foot for a browser signed in with the code the panel showed. */
         /** How often a page with a live row ([DockRow]) reloads, in seconds: about as often as the panel's menu reads it (2 s). */
         const val LIVE_RELOAD_S = 3
+        /** The query parameter that pauses it (`?live=off`), and the line that says which it does. */
+        const val LIVE_PARAM = "live"
+        const val LIVE_ON = "This page reloads every 3 seconds to follow the dock."
+        const val LIVE_PAUSED = "Paused: this page doesn't follow the dock until you resume it."
         const val SIGNED_IN_WITH_CODE = "Signed in with the panel's code"
 
         /** A sign-in's Show on the page of a browser signed in with the panel's code. */

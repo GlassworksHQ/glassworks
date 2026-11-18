@@ -45,7 +45,8 @@ class DockWatcher(
     private var dockState: Int? = null
     /** What [onChange] last heard; null before [start]. */
     private var reported: Boolean? = null
-    @Volatile var docked = false
+    /** On a dock; null until [start] has read the sticky broadcasts, so nobody reads a guess. */
+    @Volatile var docked: Boolean? = null
         private set
     private var started = false
 

@@ -150,8 +150,11 @@ class PanelDevice(
     /** Whether the device sits on a dock; none on a frame that never docks ([Dock.NO]). Started and stopped on the main thread. */
     private val dockWatcher: DockWatcher? =
         if (frame.dock == Dock.NO) null else DockWatcher(ctx) { docked -> runCatching { exec.execute { onDock(docked) } } }
-    /** The *Docked* sensor, in the list while [Docked.hasEntity] says so. */
-    private val dockedEntity = BinarySensorEntity("docked", "Docked", deviceClass = "plug", get = { dockWatcher?.docked == true })
+    /**
+     * The *Docked* sensor, in the list while [Docked.hasEntity] says so. Its state is missing (Home Assistant: unknown)
+     * until the watcher's first read on the main thread, which can come after Home Assistant subscribes.
+     */
+    private val dockedEntity = BinarySensorEntity("docked", "Docked", deviceClass = "plug", get = { dockWatcher?.docked })
 
     // "Dashboard" select (docs/onboarding.md step 5): built from [appliedDashboards]; a changed
     // option list rebuilds the entity set (debounced, like the wall base) so HA re-lists it.
@@ -291,8 +294,8 @@ class PanelDevice(
 
     private fun hasDockedEntity() = Docked.hasEntity(frame.dock, prefs.dockSeen)
 
-    /** On its dock now, or null where Home Assistant has no Docked sensor ([Docked.hasEntity]). Any thread. */
-    fun docked(): Boolean? = if (hasDockedEntity()) dockWatcher?.docked == true else null
+    /** On its dock now, or null where Home Assistant has no Docked sensor ([Docked.hasEntity]) or before the first read. Any thread. */
+    fun docked(): Boolean? = if (hasDockedEntity()) dockWatcher?.docked else null
 
     /**
      * esphome-main, from [dockWatcher]. The first dock a device reports is kept ([KioskPrefs.dockSeen]); on a device

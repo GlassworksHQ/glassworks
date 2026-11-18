@@ -79,7 +79,9 @@ class DockWatcherTest {
 
     @Test fun startsFromTheStickyBatteryBroadcast() {
         send(battery(BatteryManager.BATTERY_PLUGGED_DOCK))
-        val w = watcher().also { it.start() }
+        val w = watcher()
+        assertEquals("unknown before its first read, not a guess", null, w.docked)
+        w.start()
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(true, w.docked)
         assertEquals("one call at start; the same value again is no change", listOf(true), heard)

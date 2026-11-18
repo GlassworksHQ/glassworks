@@ -358,8 +358,10 @@ again 0.8 s after it when it was put back.
 **On the panel and the Manage page too.** Where Home Assistant has the sensor, the frame's Device page (the
 panel's settings, *Pixel Tablet*, and the same page on the Manage page) ends with a status row: *Docked · On
 its dock*, or *Not docked*. It isn't a setting. The panel's menu reads it again every couple of seconds; the
-Manage page has no scripts, so a page with this row reloads itself every 3 seconds, never under an open dialog
-(`DockRow`, `ManagePages.LIVE_RELOAD_S`).
+Manage page has no scripts, so a page with this row reloads itself every 3 seconds, never under an open dialog,
+and says so with a **Pause** link (`?live=off`), since a reload restarts a screen reader (`DockRow`,
+`ManagePages.LIVE_RELOAD_S`). Home Assistant gets no state for the sensor until the app's first read of the
+broadcasts, not a guessed *off*.
 
 **Only where it means something.** Home Assistant gets the entity when any of these holds
 (`Docked.hasEntity`, `GenericAndroid.dockOf`):

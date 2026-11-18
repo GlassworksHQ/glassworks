@@ -124,6 +124,18 @@ class DockRowTest {
         assertFalse("no other page reloads", browser.get("/screen").text().contains("http-equiv=\"refresh\""))
     }
 
+    /** WCAG 2.2.1: the person can stop the reload (a reload restarts a screen reader), and start it again. */
+    @Test fun theReloadCanBePausedAndResumed() {
+        val browser = manage(running())
+        val live = browser.get("/device").text()
+        assertTrue(live, live.contains("""<a href="/device?live=off">Pause</a>"""))
+        val paused = browser.get("/device?live=off").text()
+        assertFalse("paused: no reload", paused.contains("http-equiv=\"refresh\""))
+        assertTrue("the row is still there", paused.contains("<b>Docked</b>"))
+        assertTrue(paused, paused.contains("""<a href="/device">Resume</a>"""))
+        assertFalse("no pause line where nothing reloads", browser.get("/screen").text().contains("?live=off"))
+    }
+
     @Test fun anOrdinaryTabletAndTheS1HaveNoRow() {
         ShadowBuild.setModel("Lenovo TB-X606F")
         battery(0)

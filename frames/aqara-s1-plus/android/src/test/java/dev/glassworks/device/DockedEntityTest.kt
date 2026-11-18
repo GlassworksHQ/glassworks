@@ -108,6 +108,26 @@ class DockedEntityTest {
         assertTrue("back on", device.dockedState())
     }
 
+    /** Home Assistant may subscribe before the main thread's first read: it gets no state then, not "off" (CodeRabbit, #444). */
+    @Test fun itsStateIsUnknownUntilTheFirstRead() {
+        battery(BatteryManager.BATTERY_PLUGGED_DOCK)
+        exec = ManualExecutor()
+        val runtime = runtime()
+        val device = PanelDevice(app, runtime, runtime::devicePanes, onApiHello = { _, _ -> }, exec = exec, mdns = RecordingMdns(), apiPort = 0,
+            apiBindAddress = InetAddress.getLoopbackAddress())
+        devices += device
+        device.start()
+        exec.runDue() // the server is up; the watcher's start is still queued on the main thread
+        val e = device.dockedEntity() as BinarySensorEntity
+        val get = BinarySensorEntity::class.java.getDeclaredField("get").apply { isAccessible = true }
+        @Suppress("UNCHECKED_CAST")
+        val read = get.get(e) as () -> Boolean?
+        assertNull("no state before the first read", read())
+        assertNull("and no row", device.docked())
+        idle()
+        assertEquals(true, read())
+    }
+
     @Test fun anOrdinaryTabletHasNone() {
         ShadowBuild.setModel("Lenovo TB-X606F")
         assertEquals(Dock.IF_SEEN, GenericAndroid(app).dock)

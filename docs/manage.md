@@ -148,6 +148,7 @@ the new value within a couple of seconds. The page doesn't follow the panel on i
 the sliders' included, are the ones from when it was drawn, so reload it to see a change made on the
 panel or in Home Assistant. One page reloads itself: a tablet's Device page while it has the dock row
 (*Docked* or *Not docked*, [esphome.md](esphome.md#docked)), every 3 seconds, but never while a dialog is open.
+A line under its heading says so, with **Pause**; paused, the page stays still until you click **Resume**.
 Each change goes in the Log with who made it, and a choice with what it is
 now: "Alex set Camera › Camera use to Presence + camera".
 
