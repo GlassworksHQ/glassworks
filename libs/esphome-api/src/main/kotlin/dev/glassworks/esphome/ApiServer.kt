@@ -227,6 +227,13 @@ public class ApiServer(
 
         /** The Noise protocol of an encrypted connection, as ESPHome's mDNS TXT `api_encryption` names it. */
         public const val NOISE_PROTOCOL: String = "Noise_NNpsk0_25519_ChaChaPoly_SHA256"
+
+        /**
+         * True if a client's `HelloRequest.client_info` is Home Assistant's: aioesphomeapi sends
+         * "Home Assistant" and HA's version. A script on the LAN or the ESPHome dashboard sends its own.
+         */
+        public fun isHomeAssistant(clientInfo: String): Boolean = clientInfo.startsWith("Home Assistant")
+
         internal const val API_MAJOR = 1
         /** ESPHome 2026.10/11 reports 1.20 (api_connection.cpp); we implement DeviceCapabilities (1.15+). */
         internal const val API_MINOR = 20
@@ -643,7 +650,7 @@ public class ApiServer(
             val bt = bluetooth ?: return
             if (bt.authOnly && !c.authenticated) {
                 EspHomeLog.w("[${c.id}] Bluetooth subscription refused: only from an authenticated (encrypted, provisioned) connection")
-                bt.onRefused()
+                bt.onRefused(c.clientInfo)
                 return
             }
             val previous = bluetoothConn

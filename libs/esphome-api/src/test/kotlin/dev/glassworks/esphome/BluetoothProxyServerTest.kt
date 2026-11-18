@@ -234,11 +234,11 @@ class BluetoothProxyServerTest {
      */
     @Test fun anUnprovisionedPanelRefusesTheSubscription() {
         val unprovisioned = ApiServer(0, { identity }, emptyList(), keys = NoiseKeys(MemoryKeyStore()), bindAddress = InetAddress.getLoopbackAddress())
-        var refused = 0
+        val refused = ArrayList<String>()
         unprovisioned.bluetooth = object : BluetoothProxyHandler {
             override val featureFlags = handler.featureFlags
             override fun onSubscribed(subscribed: Boolean) { calls += subscribed }
-            override fun onRefused() { refused++ }
+            override fun onRefused(clientInfo: String) { refused += clientInfo }
         }
         unprovisioned.start()
         try {
@@ -247,10 +247,16 @@ class BluetoothProxyServerTest {
                 assertTrue("the key can still be provisioned", c.await(Msg.DEVICE_INFO_RESPONSE).bool(26))
                 c.subscribe()
                 assertEquals("refused: the proxy heard of no subscriber", emptyList<Boolean>(), calls)
-                assertEquals("and was told why, so the panel can say so", 1, refused)
+                assertEquals("and was told why, and by whom, so the panel can say so", listOf("test"), refused)
                 assertFalse(unprovisioned.sendBluetoothAdvertisements(listOf(advertisement(1))))
             }
         } finally { unprovisioned.stop() }
+    }
+
+    @Test fun homeAssistantIsKnownByItsHello() {
+        assertTrue(ApiServer.isHomeAssistant("Home Assistant 2026.11.0"))
+        assertFalse(ApiServer.isHomeAssistant("aioesphomeapi"))
+        assertFalse(ApiServer.isHomeAssistant("test"))
     }
 
     @Test fun theNewestSubscriberWinsAndTheProxyStopsWhenItLeaves() {

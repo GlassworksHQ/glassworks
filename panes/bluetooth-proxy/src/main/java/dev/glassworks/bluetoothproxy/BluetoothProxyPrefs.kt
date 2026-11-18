@@ -6,6 +6,11 @@ package dev.glassworks.bluetoothproxy
 
 import android.content.SharedPreferences
 
+/**
+ * The Bluetooth proxy pane's settings, in the file `PaneContext.prefs("bluetooth-proxy")` gives it
+ * (`kiosk.xml` on the S1): on or off, the mode, and the adapter MAC it sent Home Assistant. Panels keep
+ * these keys: never rename them.
+ */
 class BluetoothProxyPrefs(private val sp: SharedPreferences) {
 
     /** The pane is on ([BluetoothProxyDefinition.switch] writes it). Off until someone turns it on (#67, #121). */

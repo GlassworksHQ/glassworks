@@ -149,7 +149,7 @@ the next one. "Verified" means tested on a real panel in a real home.
 | Set up over the network: the panel's own setup page (`:8099/setup`), paired with a code on its screen ([guide](../../docs/manage.md#set-up-over-the-network)) | 🧪 New · paired, the Home Assistant step, the radio kept and Done on the S1 (2026-11-16); allowing it from the settings and Kiln's link not yet |
 | Set up from a phone with no Wi-Fi: the panel's own setup Wi-Fi, a QR code on its screen ([guide](../../docs/manage.md#the-panels-own-wi-fi)) | 🧪 New · unit tests only; not yet run on a panel |
 | Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
-| Bluetooth proxy for Home Assistant: listen, or listen and connect ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14), the pane on 2026-11-16, and GATT connections with one real device on 2026-11-17; more than one link at once untested |
+| Bluetooth proxy for Home Assistant: listen, or listen and connect ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14), the pane on 2026-11-16, and GATT connections with two real devices, one at a time, on 2026-11-17; more than one link at once untested |
 | App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |
 | Time zone kept across reboots | ✅ Works (needs the boot software from v0.4.0) |
 | Radio: Zigbee coordinator for **ZHA** | ✅ Verified · keep the radio's network settings ([known issue](#known-issues)) |
@@ -419,7 +419,7 @@ browser, the radio and the wall base protocol: it's all written up in
 | Zigbee and Thread radio | Beta | Zigbee coordinator or router, and Thread. |
 | Time zone | Beta | Worked out: needs no special hardware. |
 | Diagnostics | Alpha | Worked out: needs no special hardware. Not yet checked on a panel. |
-| Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 on 2026-11-14 and the pane on 2026-11-16. GATT connections (*Listen and connect*, #246) worked with one real device on 2026-11-17; more than one link at once is untested. |
+| Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 on 2026-11-14 and the pane on 2026-11-16. GATT connections (*Listen and connect*, #246) worked with two real devices, one at a time, on 2026-11-17; more than one link at once is untested. |
 | Notifications | Alpha | Worked out: needs no special hardware (the speaker plays its sounds). First run on the S1 2026-11-14; the critical alert's rerun pending. |
 | Camera | No | Worked out: needs a camera. The S1 has none; its settings say the pane can't run. |
 | Wall base | Alpha | The driver passes against an emulator that Aqara's own `bracket_cli` accepts. It has not yet been tried on a real base ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)). |

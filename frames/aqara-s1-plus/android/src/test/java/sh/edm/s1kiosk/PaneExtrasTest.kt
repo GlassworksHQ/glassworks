@@ -29,7 +29,10 @@ class PaneExtrasTest {
             listOf(
                 "voice_enabled", "wake_model", "wake_threshold", "mic_gain", "mic_muted",
                 "sendspin_enabled", "sendspin_server", "sendspin_unpaired_access", "sendspin_flac",
-                "notifications_enabled", "bluetooth_proxy_enabled", "wall_base_enabled", "base_backend", "base_transport", "time_zone_enabled",
+                "notifications_enabled",
+                "bluetooth_proxy_enabled",
+                "wall_base_enabled", "base_backend", "base_transport",
+                "time_zone_enabled",
                 "diagnostics_enabled",
             ),
             extras.map { it.name },
