@@ -47,7 +47,7 @@ class SilentUpdatesStep(
 
     override fun done(): Boolean = answered() || !touch() || (!shown && offer(answer()) == null)
 
-    /** For the setup channel: whether updates are silent, what the step offers (`allow`, `device_owner`) and the reason. */
+    /** For the setup channel: whether updates are silent, what the step offers ([Offer.wire], or null) and the reason. */
     override fun channelState(): JSONObject? = answer()?.let { s ->
         JSONObject().put("silent", s.silent).put("reason", s.reason).put("offer", offer(s)?.wire ?: JSONObject.NULL).put("answered", answered())
     }

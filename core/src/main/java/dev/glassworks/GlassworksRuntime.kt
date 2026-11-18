@@ -88,8 +88,8 @@ class GlassworksRuntime(
     }
 
     /**
-     * The panes' setup steps, in order, for the setup screen and the setup channel. The only place that
-     * reads PaneDefinition.setupSteps (FramePanesTest checks). A step setup can't take
+     * The panes' setup steps, in order, then the device's own ([deviceSetupSteps]), for the setup screen and the setup
+     * channel. The only place that reads PaneDefinition.setupSteps (FramePanesTest checks). A step setup can't take
      * (SetupFlow.usable: a clashing id or request name) is left out with an error in the log, so a bad
      * pane never stops the app from starting.
      */
