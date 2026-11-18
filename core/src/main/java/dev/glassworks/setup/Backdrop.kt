@@ -165,14 +165,14 @@ class Backdrop : Drawable() {
             // voice orb): this is on screen at boot.
             Thread({
                 val t0 = SystemClock.elapsedRealtime()
-                val bmp = try { bake(w, h) } catch (t: Throwable) { Log.w("S1Kiosk", "backdrop bake failed", t); null }
+                val bmp = try { bake(w, h) } catch (t: Throwable) { Log.w("Glassworks", "backdrop bake failed", t); null }
                 if (bmp != null) {
-                    Log.i("S1Kiosk", "baked backdrop ${w}x$h in ${SystemClock.elapsedRealtime() - t0} ms")
+                    Log.i("Glassworks", "baked backdrop ${w}x$h in ${SystemClock.elapsedRealtime() - t0} ms")
                     main.post { done(bmp) }
                 } else {
                     main.post { if (baking == w to h) baking = null }
                 }
-            }, "s1-backdrop").apply { isDaemon = true }.start()
+            }, "glassworks-backdrop").apply { isDaemon = true }.start()
         }
 
         private fun done(bmp: Bitmap) {
@@ -194,7 +194,7 @@ class Backdrop : Drawable() {
                         BackdropMath.row(y, w, h, d, row)
                         System.arraycopy(row, 0, px, y * w, w)
                     }
-                }, "s1-backdrop-$i").apply { isDaemon = true; start() }
+                }, "glassworks-backdrop-$i").apply { isDaemon = true; start() }
             }
             workers.forEach { it.join() }
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

@@ -11,8 +11,8 @@ import org.junit.Test
 class SsMessagesTest {
 
     private val info = SsHelloInfo(
-        name = "S1 Panel", productName = "Panel Hub S1 Plus (S1 Kiosk)", manufacturer = "Aqara",
-        softwareVersion = "S1 Kiosk 0.1.0", macAddress = "aa:bb:cc:dd:ee:ff",
+        name = "S1 Panel", productName = "Panel Hub S1 Plus (Glassworks)", manufacturer = "Aqara",
+        softwareVersion = "Glassworks 0.1.0", macAddress = "aa:bb:cc:dd:ee:ff",
         formats = listOf(SsFormat.PCM_48K_STEREO_16), bufferCapacity = 1_500_000,
     )
 

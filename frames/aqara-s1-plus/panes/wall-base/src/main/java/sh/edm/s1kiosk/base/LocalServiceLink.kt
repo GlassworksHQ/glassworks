@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 class LocalServiceLink(ctx: Context, executor: Executor, private val listener: BaseLink.Listener) : BaseLink {
 
     companion object {
-        private const val TAG = "S1Base"
+        private const val TAG = "Glassworks.Base"
         private const val DID_PROP = "persist.sys.did"
         private const val RETRY_MS = 60_000L
         /** Callbacks whose values describe the panel's resources (the others are requests to it). */

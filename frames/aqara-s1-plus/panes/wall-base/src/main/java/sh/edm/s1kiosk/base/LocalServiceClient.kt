@@ -40,7 +40,7 @@ class LocalServiceClient(
     }
 
     companion object {
-        private const val TAG = "S1Base"
+        private const val TAG = "Glassworks.Base"
         const val PKG = "com.lumi.systemmanager"
         const val CLS = "com.lumi.systemmanager.service.gateway.LocalService"
         const val ACTION = "systemmanager.intent.action.LOCAL_SERVER"

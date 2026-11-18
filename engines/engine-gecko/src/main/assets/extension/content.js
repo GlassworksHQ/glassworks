@@ -1,4 +1,4 @@
-/* S1 Kiosk helper content script (MIT).
+/* Glassworks helper content script (MIT).
  *
  * - Kiosk mode for Home Assistant: hides the dashboard header (toolbar) and the sidebar.
  *   Disable per page with ?kiosk=0 (or ?edit=1), or globally in the app settings.
@@ -14,7 +14,7 @@
  */
 (() => {
   "use strict";
-  const APP = "s1kiosk";
+  const APP = "glassworks";
   const params = new URLSearchParams(location.search);
   const disabledByUrl = params.get("kiosk") === "0" || params.has("edit");
 
@@ -39,7 +39,7 @@
   if (!disabledByUrl) {
     try {
       launchStyle = document.createElement("style");
-      launchStyle.id = "s1kiosk-launch";
+      launchStyle.id = "glassworks-launch";
       launchStyle.textContent = LAUNCH_CSS;
       (document.head || document.documentElement).appendChild(launchStyle);
     } catch (e) { launchStyle = null; /* not fatal: the connecting screen still covers it */ }
@@ -83,8 +83,8 @@
     const huiRoot = sr(hui);
     // Don't hide the toolbar while the dashboard is being edited.
     const editing = huiRoot && huiRoot.querySelector(".edit-mode, hui-editor, .header.edit-mode");
-    if (cfg.hideHeader && !disabledByUrl && !editing) addStyle(huiRoot, "s1kiosk-hui", HUI_CSS);
-    else removeStyle(huiRoot, "s1kiosk-hui");
+    if (cfg.hideHeader && !disabledByUrl && !editing) addStyle(huiRoot, "glassworks-hui", HUI_CSS);
+    else removeStyle(huiRoot, "glassworks-hui");
   }
 
   function hideSidebar() {
@@ -158,7 +158,7 @@
       const fn = window.wrappedJSObject[name];
       if (typeof fn !== "function") return;
       fn(...args.map((a) => (a !== null && typeof a === "object" ? cloneInto(a, window) : a)));
-    } catch (e) { console.warn("s1kiosk: page callback " + name + " failed", e); }
+    } catch (e) { console.warn("glassworks: page callback " + name + " failed", e); }
   }
 
   function parsePayload(payload) {
@@ -193,7 +193,7 @@
     const CONFIG = {
       hasSettingsScreen: false, hasSidebar: false, canWriteTag: false, hasExoPlayer: false,
       canCommissionMatter: false, canImportThreadCredentials: false, hasAssist: false,
-      hasBarCodeScanner: 0, canSetupImprov: false, hasEntityAddTo: false, appVersion: "S1 Kiosk",
+      hasBarCodeScanner: 0, canSetupImprov: false, hasEntityAddTo: false, appVersion: "Glassworks",
       // The app covers the frontend with its connecting screen until it has drawn: the frontend then
       // drops its own launch screen at once and sends frontend/loaded (partial-panel-resolver.ts).
       hasSplashscreen: true,
@@ -209,14 +209,14 @@
         reply = { id: msg.id, type: "result", success: true, result: CONFIG };
       } else if (NEEDS_ANSWER.includes(msg.type)) {
         reply = { id: msg.id, type: "result", success: false,
-          error: { code: "not_supported", message: "Not supported by S1 Kiosk" } };
+          error: { code: "not_supported", message: "Not supported by Glassworks" } };
       }
       if (reply) setTimeout(() => callPage("externalBus", reply), 0);
     }, ext, { defineAs: "externalBus" });
   }
 
   if (params.get("external_auth") === "1") {
-    try { installExternalApp(); } catch (e) { console.warn("s1kiosk: external auth bridge failed", e); }
+    try { installExternalApp(); } catch (e) { console.warn("glassworks: external auth bridge failed", e); }
   }
 
   hideSidebar();

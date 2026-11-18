@@ -47,7 +47,7 @@ class ZigbeeRouterHost(
     data class Snapshot(val state: State, val detail: String)
 
     companion object {
-        const val MANUFACTURER = "S1 Unleashed"
+        const val MANUFACTURER = "Glassworks"
         const val MODEL = "S1 Panel Zigbee router"
         private const val ENDPOINT = 1
         private const val PROFILE_HA = 0x0104

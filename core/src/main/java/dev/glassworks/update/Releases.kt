@@ -36,7 +36,7 @@ data class UpdateOffer(
  * The ABIs this app is built for, each with its release APK's name stem: every ABI a frame runs
  * (`abis` in frames/<id>/design/frame.json; ApkAbiListsTest checks the two agree). Every ABI's APK has the same version and versionCode (docs/releasing.md "ABIs").
  */
-enum class ApkAbi(val id: String, /** S1 Kiosk's APK name before the version. */ val stem: String) {
+enum class ApkAbi(val id: String, /** The S1 app's APK name before the version. */ val stem: String) {
     /** The S1's ABI. Its name has been `s1-kiosk-<version>.apk` since the first release, and panels up to 0.4.3 look only for that name. */
     ARMEABI_V7A("armeabi-v7a", "s1-kiosk"),
     ARM64_V8A("arm64-v8a", "s1-kiosk-arm64-v8a");
@@ -55,11 +55,11 @@ enum class ApkAbi(val id: String, /** S1 Kiosk's APK name before the version. */
  * on the core has its own, so an app never offers itself another app's APK.
  */
 class ReleaseLine(
-    /** The app in the update check's user agent ("s1-kiosk/0.4.3"). */
+    /** The app in the update check's user agent ("glassworks-aqara-s1-plus/1.0.0"). */
     val id: String,
     /** This app's tag prefix: `<prefix>v1.2.3`. */
     val tagPrefix: String,
-    /** Whether a tag without the prefix (`v1.2.3`) is also this app's: S1 Kiosk's releases before the prefix. */
+    /** Whether a tag without the prefix (`v1.2.3`) is also this app's: the S1 app's releases before the prefix. */
     val plainTags: Boolean,
     private val stem: (ApkAbi) -> String,
 ) {
@@ -71,8 +71,8 @@ class ReleaseLine(
     fun shaName(abi: ApkAbi, v: AppVersion) = "${apkName(abi, v)}.sha256"
 
     companion object {
-        /** S1 Kiosk: `v1.2.3` or `aqara-s1-plus-v1.2.3`, with [ApkAbi]'s names. */
-        val S1_KIOSK = ReleaseLine("s1-kiosk", Releases.TAG_PREFIX, plainTags = true) { it.stem }
+        /** The S1 app: `v1.2.3` or `aqara-s1-plus-v1.2.3`, with [ApkAbi]'s names. */
+        val AQARA_S1_PLUS = ReleaseLine("glassworks-aqara-s1-plus", Releases.TAG_PREFIX, plainTags = true) { it.stem }
 
         /** Glassworks for generic Android (frames/generic-android): `generic-android-v1.2.3`, `glassworks-generic-android-<abi>-1.2.3.apk`. */
         val GENERIC_ANDROID = ReleaseLine("glassworks-generic-android", "generic-android-", plainTags = false) { abi -> "glassworks-generic-android-${abi.id}" }
@@ -108,7 +108,7 @@ object Releases {
     /** owner/repo of the official releases. Renamed on 2026-11-13; the old name must never be reused (docs/releasing.md "The repo name"). */
     const val REPO = "GlassworksHQ/glassworks"
     /**
-     * Recent releases, newest first: GitHub's largest page. It leaves room for the other lines' (S1 Kiosk, the
+     * Recent releases, newest first: GitHub's largest page. It leaves room for the other lines' (the S1 app, the
      * generic app and its legacy build) and the libraries' releases; an app whose newest release is older than
      * the repo's 100 newest sees no update until its next one (frames/generic-android/README.md, "Updates").
      */
@@ -117,8 +117,8 @@ object Releases {
     /** This app's tag prefix in the shared repo. Plain `v1.2.3` tags (all releases so far) stay valid. */
     const val TAG_PREFIX = "aqara-s1-plus-"
 
-    /** The version in one of S1 Kiosk's release tags (`v1.2.3`, `aqara-s1-plus-v1.2.3`); null for any other tag. */
-    fun tagVersion(tag: String): AppVersion? = ReleaseLine.S1_KIOSK.tagVersion(tag)
+    /** The version in one of the S1 app's release tags (`v1.2.3`, `aqara-s1-plus-v1.2.3`); null for any other tag. */
+    fun tagVersion(tag: String): AppVersion? = ReleaseLine.AQARA_S1_PLUS.tagVersion(tag)
 
     /** HA caps `release_summary` at 255 characters; the full notes are behind `release_url`. */
     const val MAX_SUMMARY = 255

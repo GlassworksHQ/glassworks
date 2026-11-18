@@ -21,7 +21,7 @@ class ImprovSessionTest {
         override fun identify() { identifies++ }
         override fun startWifi(ssid: String, password: String) { wifi += ssid to password }
         override fun scanNetworks() = networks
-        override fun deviceInfo() = listOf("S1 Kiosk", "0.1.0", "chip", "S1 Panel")
+        override fun deviceInfo() = listOf("Glassworks", "0.1.0", "chip", "S1 Panel")
         override fun maxResultSize() = maxResult
     }
 
@@ -116,7 +116,7 @@ class ImprovSessionTest {
         write(Improv.encode(Improv.CMD_DEVICE_INFO, emptyList()))
         val strings = Improv.strings(fx.results.single())!!.map { String(it) }
         // py-improv-ble-client 2.0.1 DeviceInfoRes requires exactly 4 strings
-        assertEquals(listOf("S1 Kiosk", "0.1.0", "chip", "S1 Panel"), strings)
+        assertEquals(listOf("Glassworks", "0.1.0", "chip", "S1 Panel"), strings)
         assertEquals(ImprovState.AUTHORIZATION_REQUIRED, s.state)
     }
 
