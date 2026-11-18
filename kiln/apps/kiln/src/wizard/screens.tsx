@@ -157,7 +157,7 @@ const LOCALES = ['en-US', 'en-GB', 'en-AU', 'en-CA', 'de-DE', 'fr-FR', 'fr-CA', 
 /**
  * The app going in, as the panel reports it (provision's AppPhase): one row per APK the recipe
  * installs, with its copy and its `pm install`, and the steps between. Android stops and restarts
- * S1 Kiosk while it installs and optimises it, and again on its first start: say so, so a restarting
+ * Glassworks while it installs and optimises it, and again on its first start: say so, so a restarting
  * panel reads as progress.
  */
 type Row = 'kiosk' | 'home' | 'keyboard' | 'prefs' | 'start';

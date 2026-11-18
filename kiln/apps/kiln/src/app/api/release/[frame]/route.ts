@@ -14,7 +14,7 @@ interface ReleaseLine {
 // generic-android is not here yet: its release line (`generic-android-vX.Y.Z`,
 // `glassworks-generic-android-<abi>-X.Y.Z.apk`) is in open PR 365, and no Kiln wizard installs it.
 const RELEASES = new Map<string, ReleaseLine>([
-  // S1 Kiosk: `vX.Y.Z` (every release so far) or `aqara-s1-plus-vX.Y.Z`, and the S1's armeabi-v7a APK.
+  // Glassworks: `vX.Y.Z` (every release so far) or `aqara-s1-plus-vX.Y.Z`, and the S1's armeabi-v7a APK.
   ['aqara-s1-plus', { tag: /^(?:aqara-s1-plus-)?v(\d+\.\d+\.\d+)$/, assets: (v) => [`s1-kiosk-${v}.apk`] }],
 ]);
 

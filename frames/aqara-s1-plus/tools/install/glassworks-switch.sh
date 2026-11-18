@@ -24,7 +24,7 @@ DE=${S1_DE:-/data/user_de/0/$PKG}
 WORK=${S1_WORK:-/data/s1kiosk/switch}
 STORES=${S1_WIFI_STORES:-/data/misc/wifi/WifiConfigStore.xml /data/misc_ce/0/wifi/WifiConfigStore.xml}
 
-fail() { echo "s1kiosk-switch: $*" >&2; exit 1; }
+fail() { echo "glassworks-switch: $*" >&2; exit 1; }
 
 # Prints kiosk-saved networks from WifiConfigStore.xml (Android 10 writes one element per line).
 #   mode=list: "<n> <kind> <ssid>";  mode=psk: the PreSharedKey of network <want>.

@@ -30,12 +30,12 @@ export const DEBLOAT = [
 /** Aqara's radio + cloud services, started again on undo (provider-first order, frames/aqara-s1-plus/docs/radio.md). */
 const AQARA_SERVICES = ['zigbee_cpcd', 'zigbee_socat', 'zigbee_zigbeed', 'zigbee_host', 'zigbee_agent', 'ha_matter', 'ha_master'];
 
-/** Each APK provision installs: S1 Kiosk, and the on-screen keyboard when the recipe has it. */
+/** Each APK provision installs: Glassworks, and the on-screen keyboard when the recipe has it. */
 export type AppApk = 'kiosk' | 'keyboard';
 
 /**
  * What the panel is doing while the app goes in, at the commands that start each part:
- * `apk` `copy`, an APK is pushed, then `install`, its `pm install` runs (for S1 Kiosk on Android 10 it
+ * `apk` `copy`, an APK is pushed, then `install`, its `pm install` runs (for Glassworks on Android 10 it
  * returns only after dex2oat has optimised it, about 22 s on an S1, frames/aqara-s1-plus/research/web-installer.md
  * §7.1, while Android stops and restarts the app twice); `home`, permissions, home app, DND and the
  * debloat; `prefs`, time zone, language and clock; `start`, the app starts with them (once more).
@@ -61,7 +61,7 @@ export interface ProvisionOptions {
   dndOff?: boolean;    // default true
 
   /**
-   * Called when Android refuses the APK because the installed S1 Kiosk has another signing key (a
+   * Called when Android refuses the APK because the installed Glassworks has another signing key (a
    * debug build): resolve true to switch (switch.ts: uninstall + install, data kept with root, Wi-Fi
    * re-sent), false to stop with nothing changed. Without it, provision stops.
    */
@@ -83,10 +83,10 @@ export interface SwitchResult {
 /** What provision found and did: the panel's Wi-Fi address, if it has one, and any key switch. */
 export interface Provisioned { ip?: string; switched?: SwitchResult }
 
-/** Android won't update the installed S1 Kiosk with this APK (other signing key), and no switch was made. */
+/** Android won't update the installed Glassworks with this APK (other signing key), and no switch was made. */
 export class KeyMismatchError extends Error {
   constructor(readonly plan: SwitchPlan) {
-    super(`S1 Kiosk on the panel is ${plan.debugBuild ? 'a development build, ' : ''}signed with a different key, so Android won't update it in place. Nothing was changed.`);
+    super(`Glassworks on the panel is ${plan.debugBuild ? 'a development build, ' : ''}signed with a different key, so Android won't update it in place. Nothing was changed.`);
   }
 }
 
@@ -138,11 +138,11 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
   r.step('Install kiosk app');
   phase({ step: 'apk', apk: 'kiosk', stage: 'copy' });
   let sw: SwitchOutcome | undefined;
-  const pmOut = await r.tryInstall('s1kiosk', opts.kioskApk, true, () => phase({ step: 'apk', apk: 'kiosk', stage: 'install' }));
+  const pmOut = await r.tryInstall('glassworks', opts.kioskApk, true, () => phase({ step: 'apk', apk: 'kiosk', stage: 'install' }));
   if (!/Success/.test(pmOut)) {
-    if (!isKeyMismatch(pmOut)) throw new Error(`installing s1kiosk failed: ${pmOut.trim()}`);
+    if (!isKeyMismatch(pmOut)) throw new Error(`installing Glassworks failed: ${pmOut.trim()}`);
     const plan = await planSwitch(p);
-    r.detail(`installed S1 Kiosk has another signing key${plan.debugBuild ? ' (development build)' : ''}; root: ${plan.root ? 'yes' : 'no'}; Wi-Fi saved by S1 Kiosk: ${plan.wifi.owner === 'kiosk' ? 'yes' : plan.wifi.owner === 'unknown' ? 'maybe' : 'no'}`);
+    r.detail(`installed Glassworks has another signing key${plan.debugBuild ? ' (development build)' : ''}; root: ${plan.root ? 'yes' : 'no'}; Wi-Fi saved by Glassworks: ${plan.wifi.owner === 'kiosk' ? 'yes' : plan.wifi.owner === 'unknown' ? 'maybe' : 'no'}`);
     if (!opts.confirmSwitch || !(await opts.confirmSwitch(plan))) throw new KeyMismatchError(plan);
     r.step('Switch to this build (remove the old one, install this one)');
     sw = await switchSigningKey(p, opts.kioskApk, plan, (d) => r.detail(d), sleep);
@@ -220,7 +220,7 @@ const KEYBOARD_PKG = 'rkr.simplekeyboard.inputmethod';
 const HOME_QUERY = 'cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME';
 
 /**
- * install.sh --undo: Aqara's apps, launcher, DND, keyboard and radio/cloud services back, and S1 Kiosk
+ * install.sh --undo: Aqara's apps, launcher, DND, keyboard and radio/cloud services back, and Glassworks
  * removed. The kiosk is a device admin, and Android refuses to disable or uninstall an active admin,
  * so it first asks the app to drop that and waits until it has. Ends by checking that HOME really is
  * Aqara's launcher again, and throws if not (rather than claiming success with the kiosk on screen).
@@ -228,7 +228,7 @@ const HOME_QUERY = 'cmd package resolve-activity --brief -a android.intent.actio
 export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<void> {
   const r = new Steps(p, onStep);
-  r.step('Removing S1 Kiosk\'s device admin');
+  r.step('Removing Glassworks\' device admin');
   const adminGone = await dropAdmin(p, sleep);
   r.detail(adminGone ? 'device admin removed' : 'device admin still active: removing the app may fail');
 
@@ -241,18 +241,18 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
   await r.try(`pm enable ${BAIDU_IME}`);
   await r.try(`ime set ${BAIDU_IME}/.ImeService`);
 
-  r.step('Removing S1 Kiosk');
+  r.step('Removing Glassworks');
   await r.try(`am force-stop ${PKG}`);
-  // Android 10 forgets every Wi-Fi network an app saved when the app is uninstalled, and S1 Kiosk
+  // Android 10 forgets every Wi-Fi network an app saved when the app is uninstalled, and Glassworks
   // saves the panel's Wi-Fi itself. Then it is disabled instead, which keeps the network.
   const wifi = await panelWifi(p);
   if (wifiAtRisk(wifi)) {
     await r.try(`pm disable-user --user 0 ${PKG}`);
-    r.detail(`kept S1 Kiosk installed but disabled: it saved the panel's Wi-Fi${wifi.ssid ? ` (${wifi.ssid})` : ''}, and Android forgets that network when S1 Kiosk is uninstalled`);
+    r.detail(`kept Glassworks installed but disabled: it saved the panel's Wi-Fi${wifi.ssid ? ` (${wifi.ssid})` : ''}, and Android forgets that network when Glassworks is uninstalled`);
   } else if (!/Success/.test(await r.try(`pm uninstall ${PKG}`))) {
     // the app restarts itself (foreground service): uninstall, or at least disable it
     await r.try(`pm disable-user --user 0 ${PKG}`);
-    r.detail('could not uninstall S1 Kiosk; disabled it instead');
+    r.detail('could not uninstall Glassworks; disabled it instead');
   }
   if ((await r.try(`pm list packages ${KEYBOARD_PKG}`)).includes(`package:${KEYBOARD_PKG}`)) {
     await r.try(`pm uninstall ${KEYBOARD_PKG}`);

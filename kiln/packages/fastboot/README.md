@@ -131,7 +131,7 @@ and sparse images through it. Nothing here has run on a real Mirror. What #41 st
 2. The transfer size: 1 MiB or upstream's 16 KiB, measured on the Mirror (test plan step 5).
 3. Whether the `flash:` timeout is long enough for a 256 MiB piece on its eMMC.
 4. A verify step without `readPartition` (LK has no `upload`). The Mirror's recipe checks over adb
-   after the first boot instead: the build fingerprint and S1 Kiosk (`firstBoot`).
+   after the first boot instead: the build fingerprint and Glassworks (`firstBoot`).
 5. Large images from disk: done in the Mirror's recipe. `@glassworks/ext4` streams the person's file into
    OPFS with a streaming SHA-256, and `flashBlob` gets the built images as OPFS `File`s.
 6. LK's exact replies for a refused partition and for the `has-slot`, `is-logical` and `current-slot`
