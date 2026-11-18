@@ -15,8 +15,10 @@ function panel() {
     radio: { mode: 'off', status: 'Off', helper: true, options: [{ id: 'off', label: 'Off', detail: '' }] },
   };
   const send = (o: object) => queueMicrotask(() => cb(new TextEncoder().encode(`${JSON.stringify(o)}\n`)));
-  return {
+  const self = {
     st,
+    /** set_ha answers only once this settles (a slow save). */
+    setHaGate: undefined as Promise<void> | undefined,
     signIn: () => { st.ha.signedIn = true; send({ event: 'state', state: st }); },
     stream: {
       onData: (f: (c: Uint8Array) => void) => { cb = f; },
@@ -24,12 +26,16 @@ function panel() {
       write: async (d: Uint8Array) => {
         for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
           const m = JSON.parse(line);
-          if (m.op === 'set_ha') st.ha.url = m.url;
+          if (m.op === 'set_ha') {
+            st.ha.url = m.url;
+            if (self.setHaGate) { const r = { id: m.id, ok: true, state: st }; void self.setHaGate.then(() => send(r)); continue; }
+          }
           send({ id: m.id, ok: true, state: st });
         }
       },
     } satisfies ByteStream,
   };
+  return self;
 }
 
 function kiln(p: ReturnType<typeof panel>) {
@@ -117,5 +123,19 @@ describe('Kiln\'s sign-in', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(k.opens()).toBe(1);
     expect(k.phase()).toEqual({ phase: 'waiting', note: '' });
+  });
+
+  it('a session closed while the address was saved points no window at the panel', async () => {
+    const p = panel();
+    let saved!: () => void;
+    p.setHaGate = new Promise((r) => { saved = r; });
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    k.steps.signIn('http://192.0.2.20:8123');
+    k.steps.close(); // a new session took over
+    saved();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(k.win.location.href).toBe('about:blank');
+    expect(k.win.close).toHaveBeenCalled();
   });
 });

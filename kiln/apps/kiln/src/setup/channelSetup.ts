@@ -251,14 +251,18 @@ export class ChannelSetup {
     const tab = here ? null : (this.d.openTab ?? (() => openSignInWindow()))('about:blank');
     const note = here ? 'Opening Home Assistant\'s sign-in. You come back here after it.' : 'Sign in to Home Assistant in the window that opened. This step moves on by itself when the panel is signed in.';
     this.d.show({ ...s, error: undefined, signingIn: true, note });
+    const g = this.gen;
+    // The person may have moved on (or the session closed) while the address was saved: then the sign-in is dropped,
+    // so it neither leaves this page nor points a window at the panel.
+    const still = () => {
+      const cur = this.d.phase();
+      return g === this.gen && this.d.here() && cur.phase === 'ha' && !!cur.signingIn;
+    };
     void (async () => {
       try {
         const st = url === this.channel?.state?.ha.url ? this.channel.state : await this.request((x) => x.setHa(url));
-        if (here) {
-          // the person may have moved on while the address was saved: leaving the page then would cut that short
-          const cur = this.d.phase();
-          if (this.d.here() && cur.phase === 'ha' && cur.signingIn) here();
-        }
+        if (!still()) { tab?.close(); return; }
+        if (here) here();
         else {
           // The panel's own page (above) signs in on its own address and needs no `signinUrl`, which the panel leaves
           // out when it has no Wi-Fi IPv4 address (the Mirror). Kiln's window needs it: it is Kiln's only way there.
