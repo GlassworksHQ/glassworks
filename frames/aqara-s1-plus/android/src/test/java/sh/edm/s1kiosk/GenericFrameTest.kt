@@ -112,7 +112,7 @@ class GenericFrameTest {
         assertEquals("pixel-tablet-a1b2c3", id.name)
         assertEquals("Pixel Tablet", id.friendlyName)
         assertEquals("Google", id.manufacturer)
-        assertEquals("Pixel Tablet (S1 Kiosk)", id.model)
+        assertEquals("Pixel Tablet (Glassworks)", id.model)
         assertEquals("it has a microphone, so it offers Assist", PanelDevice.VOICE_FEATURES, id.voiceFeatures)
     }
 
@@ -122,7 +122,7 @@ class GenericFrameTest {
         assertEquals("lululemon-mirror-a1b2c3", id.name)
         assertEquals("lululemon Studio Mirror", id.friendlyName)
         assertEquals("lululemon", id.manufacturer)
-        assertEquals("Studio Mirror (S1 Kiosk)", id.model)
+        assertEquals("Studio Mirror (Glassworks)", id.model)
     }
 
     @Test fun theS1StillAnnouncesItselfAsAnS1() {
@@ -130,7 +130,7 @@ class GenericFrameTest {
         assertEquals("aqara-s1-plus-a1b2c3", id.name)
         assertEquals("Aqara S1 Plus", id.friendlyName)
         assertEquals("Aqara", id.manufacturer)
-        assertEquals("Panel Hub S1 Plus (S1 Kiosk)", id.model)
+        assertEquals("Panel Hub S1 Plus (Glassworks)", id.model)
     }
 
     @Test fun aTabletRunsThePanesItsHardwareAllows() {
@@ -173,8 +173,8 @@ class GenericFrameTest {
     @Test fun musicAssistantAndImprovUseTheDevicesOwnName() {
         panePrefs.paneFile("sendspin").edit().putBoolean(SendspinPrefs.KEY_ENABLED, true).commit()
         for ((runtime, name, product, maker) in listOf(
-            Quad(generic(), "Pixel Tablet", "Pixel Tablet (S1 Kiosk)", "Google"),
-            Quad(KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), "Aqara S1 Plus", "Panel Hub S1 Plus (S1 Kiosk)", "Aqara"),
+            Quad(generic(), "Pixel Tablet", "Pixel Tablet (Glassworks)", "Google"),
+            Quad(KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)), "Aqara S1 Plus", "Panel Hub S1 Plus (Glassworks)", "Aqara"),
         )) {
             val (_, device) = run(runtime)
             val identity = (device.paneList().single { it.id == "sendspin" } as SendspinPane).player.identity
@@ -194,10 +194,10 @@ class GenericFrameTest {
     @Test fun theAppLogsTheFrameItPicked() {
         ShadowLog.clear()
         KioskApp().glassworks
-        assertTrue(ShadowLog.getLogsForTag("S1Kiosk").any { it.msg == "Frame: generic-android (tangorpro)" })
+        assertTrue(ShadowLog.getLogsForTag("Glassworks").any { it.msg == "Frame: generic-android (tangorpro)" })
         ShadowBuild.setHardware(AqaraS1Plus.HARDWARE)
         KioskApp().glassworks
-        assertTrue(ShadowLog.getLogsForTag("S1Kiosk").any { it.msg == "Frame: aqara-s1-plus (sun50iw10p1)" })
+        assertTrue(ShadowLog.getLogsForTag("Glassworks").any { it.msg == "Frame: aqara-s1-plus (sun50iw10p1)" })
     }
 
     @Test fun theDeviceSettingsLinkNamesTheDevicesOwnApp() {

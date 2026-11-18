@@ -3,6 +3,7 @@ package sh.edm.s1kiosk.frame
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.SystemClock
+import dev.glassworks.frame.FrameRelease
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.SettingsItem
@@ -22,7 +23,7 @@ import java.util.concurrent.Executors
  * pane. Block Aqara cloud (the wall base pane's setting and Home Assistant entity, `block_aqara_cloud`; the
  * pane still applies it), the cloud daemon's state, which of Aqara's apps are turned off
  * (frames/aqara-s1-plus/tools/debloat/debloat.sh), the radio's mode, which opens the Radio pane, and whether
- * app updates install silently (the boot image's root update service, #422).
+ * app updates install silently (the boot image's root update service, #422), and the frame version (#139).
  */
 class S1Device(
     private val cloud: AqaraCloud,
@@ -45,7 +46,7 @@ class S1Device(
         return values[key]
     }
 
-    fun section(context: Context, running: (String) -> Pane?): SettingsSection {
+    fun section(context: Context, release: FrameRelease? = null, running: (String) -> Pane?): SettingsSection {
         val wallBase = PanePrefs(context).wallBase
         return SettingsSection(GenericAndroid.DEVICE, TITLE, listOfNotNull(
             SettingsItem.Switch(BLOCK_TITLE, "Stops ha_master, the panel's link to Aqara's cloud", { wallBase.blockAqaraCloud }) { v, done ->
@@ -56,6 +57,7 @@ class S1Device(
             appsReadable(context).takeIf { it }?.let { SettingsItem.Info({ APPS_TITLE }, { apps(context) }) },
             SettingsItem.Link(RADIO_TITLE, radioMode(running), section = "radio"),
             GenericAndroid.silentUpdatesItem { rootService()?.let { SilentUpdates.read(context, it) } },
+            release?.let { GenericAndroid.frameVersionItem(context, it) },
         ))
     }
 

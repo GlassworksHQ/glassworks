@@ -1,32 +1,30 @@
 # Checks every pull request (and every push to main) without any secrets, so it runs the same on
 # forks. Nothing is signed or published here: test-build.yml makes installable builds and
-# release.yml makes releases.
+# release.yml makes releases. The changes job picks which jobs a change needs (tools/ci/changes.py; the map
+# is in docs/ci.md), and the nightly run runs them all.
 #
 #   app      every module's JVM unit tests, an unsigned release build, and
 #            tools/release/check-update-compat.sh (the APK still updates panels in place). When the
-#            Android code changes, also the ESPHome keepalive test against the real aioesphomeapi client
+#            libraries change, also the ESPHome keepalive test against the real aioesphomeapi client
 #   libs-api23  the libraries' lint (NewApi) and their androidTest checks on an API 23 emulator:
 #            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy and
 #            sendspin are linted only (an emulator has no Bluetooth to scan with, nor a Sendspin server)
 #   api23    the legacy build's floor (#198): lint's NewApi over the core, the pane API, the panes and the
 #            legacy engine at minSdk 23, and over the generic app's legacy build (tools/legacy/api23-report.py),
 #            failing on a call above API 23 that tools/legacy/api23-baseline.txt doesn't list. Then the generic
-#            app's own lint (lintDebug: its manifest, the system permissions it asks for on purpose). Only when
-#            the Android code or this file changes
+#            app's own lint (lintDebug: its manifest, the system permissions it asks for on purpose)
 #   libs-publish  a dry run of the Maven Central release (#153, docs/releasing.md "Libraries"): each
 #            library's public API checked against its api/<name>.api dump, every published library
 #            to mavenLocal, unsigned, its files checked, then fresh apps built
-#            against them (minSdk 23 at compileSdk 37.2 and 23, and Kotlin 2.0.21 on the JVM). Only when
-#            libs/, the Gradle build, the licence files or these scripts change
+#            against them (minSdk 23 at compileSdk 37.2 and 23, and Kotlin 2.0.21 on the JVM)
 #   wake-word  MicroWakeWordClipTest: the four real microWakeWord models (LiteRT in a hash-locked
-#            Python venv) behind the Kotlin pipeline, over a synthesised clip (#184). Only when the
-#            Android code or this file changes
+#            Python venv) behind the Kotlin pipeline, over a synthesised clip (#184)
 #   web     the npm workspaces from the repo root (job id kept, as branch protection names it):
 #            Kiln, its packages, the frame recipes and packages/*: typecheck, tests, both builds, and
 #            that the FEL routines' words in kiln/packages/fel/src/routines.ts are what routines.S
 #            assembles to (scripts/check-routines.sh, with Ubuntu's LLVM 18)
 #   refract  Refract, Kiln's download Worker (kiln/workers/refract, its own lockfile, not a root
-#            workspace): typecheck and its tests in workerd. Only when kiln/workers or this file changes
+#            workspace): typecheck and its tests in workerd
 #   scripts  frames/aqara-s1-plus/tools/install.sh's off-device tests, the perf test's rubric, report and grade
 #            (tools/perf), the docs' relative links, the libraries' parity tables, and that every glassworks.dev brand image the
 #            Markdown uses is live (a 404 fails; an unreachable site only warns)
@@ -34,7 +32,7 @@
 #            venv, HA's real frontend (the pinned build, 117 MB) playing it in the runner's Chrome, and
 #            the relay in the runner's Firefox (Gecko, the panel's engine)
 #   root     the root side (radio helper, bundle checks, s1kiosk_verify) in a 32-bit ARM container
-#            under QEMU. Slow, so it runs only when frames/aqara-s1-plus/tools/root, frames/aqara-s1-plus/tools/radio or this file changes
+#            under QEMU
 #   size     builds the release APKs (one per frame ABI) of this branch and of its base, splits them into the
 #            engine, the core, each pane and the shared libraries (tools/size/apksize.py), shows the
 #            change and fails over the frame's size budget (frames/<id>/budgets.json). The report is
@@ -45,39 +43,96 @@
 #            job summary. Then its legacy build (#198, arm64-v8a) builds, with its id, minSdk, the
 #            system permissions and its icons on API 23 (tools/legacy/apk-icons.py) checked; no budget
 #            yet. Every APK also goes through tools/release/check-update-compat.sh --app (it still updates
-#            installed copies in place). Only when something that goes into those APKs, or this file, changes
+#            installed copies in place)
 #   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
-#            Python image and fails if the committed files differ. A few minutes, so it runs only
-#            when branding/boot, branding/glass-tile, branding/bootlogos.json, the S1's frame.json
-#            or this file changes
+#            Python image and fails if the committed files differ
 #   site     glassworks.dev (site/): lint, typecheck, the static build, and the SEO check on the built
 #            site (every page in the sitemap with a title, description, canonical and preview image).
-#            The build also checks the frames' data, banners and Clarity grades. Only when site/,
-#            packages/, frames/, docs/, what the site reads from tools/perf, the root package files
-#            or this file changes
+#            The build also checks the frames' data, banners and Clarity grades
 name: PR checks
 
 on:
   pull_request:
   push:
     branches: [main]
+  # Every job once a night, whatever changed: the net under the changes job's map.
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# Android code, for the jobs that skip when none changed: every Gradle module, what builds them and this file. Git
-# pathspecs, split on spaces (no file matches a :(glob) word, so the shell leaves those as they are).
-env:
-  ANDROID_CODE: >-
-    libs core pane-api engines panes testing build-logic :(glob)frames/*/android/** :(glob)frames/*/panes/**
-    settings.gradle.kts build.gradle.kts gradle.properties gradlew gradlew.bat gradle .github/workflows/pr.yml
-
+# A new push to a PR cancels the PR's older run. Every other run has a group of its own, so a push to main
+# is never cancelled, nor held behind the next one.
 concurrency:
-  group: pr-${{ github.event.pull_request.number || github.ref }}
+  group: pr-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  # Which jobs this change needs (tools/ci/changes.py, docs/ci.md). Every other job needs it and skips at job
+  # level, so a skipped job takes no runner, and a skipped required check reports success. It fails closed:
+  # unless this job succeeds, every job runs, whatever outputs it wrote before it failed.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.pick.outputs.app }}
+      app_apk: ${{ steps.pick.outputs.app_apk }}
+      esphome: ${{ steps.pick.outputs.esphome }}
+      libs_api23: ${{ steps.pick.outputs.libs_api23 }}
+      api23: ${{ steps.pick.outputs.api23 }}
+      libs_publish: ${{ steps.pick.outputs.libs_publish }}
+      wake_word: ${{ steps.pick.outputs.wake_word }}
+      web: ${{ steps.pick.outputs.web }}
+      refract: ${{ steps.pick.outputs.refract }}
+      perf: ${{ steps.pick.outputs.perf }}
+      perf_webrtc: ${{ steps.pick.outputs.perf_webrtc }}
+      root: ${{ steps.pick.outputs.root }}
+      size: ${{ steps.pick.outputs.size }}
+      size_generic: ${{ steps.pick.outputs.size_generic }}
+      branding: ${{ steps.pick.outputs.branding }}
+      site: ${{ steps.pick.outputs.site }}
+    steps:
+      # A pull request checks out its merge commit: its first parent is the base it merges into.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Pick the jobs
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request) set -- --base HEAD^1 ;;
+            push) if git fetch -q --depth=1 origin "$BEFORE" 2>/dev/null; then set -- --base "$BEFORE"; else set -- --all; fi ;;
+            *) set -- --all ;;
+          esac
+          python3 tools/ci/changes.py "$@" --summary "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
+
+      # The size job's artifact, for the PR its numbers would have gone to: size-comment.yml replaces an earlier
+      # size comment with a note, since this PR no longer changes anything that goes into the APKs.
+      - name: No size check for this PR
+        if: github.event_name == 'pull_request' && steps.pick.outputs.size == 'false'
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/size"
+          printf '{"pr": %d, "head_sha": "%s", "skipped": true}\n' "$PR" "$HEAD_SHA" > "$RUNNER_TEMP/size/pr.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.event_name == 'pull_request' && steps.pick.outputs.size == 'false'
+        with:
+          name: apk-size
+          path: ${{ runner.temp }}/size/pr.json
+          retention-days: 7
+
   app:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.app != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -108,39 +163,26 @@ jobs:
         run: ./gradlew --no-daemon test
 
       - name: Release build (unsigned)
+        if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'
         run: ./gradlew --no-daemon :kiosk:assembleRelease
 
       - name: Still updates panels in place
+        if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'
         run: |
           tools/release/check-update-compat.sh frames/aqara-s1-plus/android/build/outputs/apk/release/kiosk-release-unsigned.apk
 
       # EspHomeKeepaliveTest (#180), EspHomeActionsCameraTest (#120), EspHomeHaEventTest (#118), EspHomeCapsTimeTest (#337),
       # EspHomeBluetoothConnectionsTest (#246) and BluetoothProxyHomeAssistantTest (#121) against the real aioesphomeapi
       # client. They skip without ESPHOME_PYTHON, so this step fails if one skipped. About 30 s (venv
-      # from hashed wheels, then those tests only), and only when the Android code or this file changed. The kiosk's EspHomeApiTest uses the same
+      # from hashed wheels, then those tests only), and only when the libraries changed. The kiosk's EspHomeApiTest uses the same
       # client but isn't here yet. It failed once in two CI runs (#184).
-      - name: aioesphomeapi tests needed?
-        id: esphome
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed: without a base commit to compare with, or when git fails, the tests run.
-        run: |
-          if [ -n "$BASE" ] && git fetch -q --depth=1 origin "$BASE" 2>/dev/null \
-             && changed=$(git diff --no-renames --name-only --end-of-options "$BASE" HEAD -- $ANDROID_CODE) \
-             && [ -z "$changed" ]; then
-            echo "No Android code changed; skipping the aioesphomeapi tests."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: steps.esphome.outputs.run == 'true'
+        if: needs.changes.result != 'success' || needs.changes.outputs.esphome != 'false'
         with:
           python-version: '3.12'
 
       - name: Keepalive, actions, camera, event and Bluetooth proxy tests (real aioesphomeapi client)
-        if: steps.esphome.outputs.run == 'true'
+        if: needs.changes.result != 'success' || needs.changes.outputs.esphome != 'false'
         run: |
           esphome_api=libs/esphome-api
           bluetooth_proxy=libs/bluetooth-proxy
@@ -165,6 +207,8 @@ jobs:
           done
 
   libs-api23:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_api23 != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -204,50 +248,26 @@ jobs:
   # list. The libraries are minSdk 23 already (libs-api23); this covers the core, the pane API, the panes and the
   # legacy engine. docs/research/legacy-engine.md has the table.
   api23:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.api23 != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-          fetch-depth: 0
-
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed like libs-publish: without a base commit, or when git diff fails, it runs.
-        run: |
-          paths="core pane-api panes engines frames libs testing build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle
-            tools/legacy .github/workflows/pr.yml"
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            echo "No base commit to compare with ($BASE); running the report."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
-            echo "git diff failed; running the report."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No Android code changed; skipping the API 23 report."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        if: steps.changed.outputs.run == 'true'
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
-        if: steps.changed.outputs.run == 'true'
         with:
           packages: platform-tools
       - name: Android SDK platform
-        if: steps.changed.outputs.run == 'true'
         run: sdkmanager --install "platforms;android-37.2"
       - name: No new call above API 23
-        if: steps.changed.outputs.run == 'true'
         run: |
           python3 tools/legacy/api23-report.py --check tools/legacy/api23-baseline.txt
           {
@@ -255,76 +275,48 @@ jobs:
             python3 tools/legacy/api23-report.py --no-gradle | sed -n '1,/^$/p'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: The generic app's lint
-        if: steps.changed.outputs.run == 'true'
         # Without the report's init script: every check, at its own minSdk. Its manifest asks for
         # INSTALL_PACKAGES, REBOOT and WRITE_SECURE_SETTINGS on purpose (tools:ignore="ProtectedPermissions").
         run: ./gradlew --no-daemon :generic-android:lintDebug
 
   libs-publish:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_publish != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-          fetch-depth: 0
-
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed like the root job's: without a base commit, or when git diff fails, it runs.
-        run: |
-          paths="libs build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle LICENSE THIRD-PARTY-NOTICES.md tools/release/check-lib-artifact.sh
-            tools/release/lib-consumer-check.sh .github/workflows/pr.yml .github/workflows/libs-release.yml"
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            echo "No base commit to compare with ($BASE); running the dry run."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
-            echo "git diff failed; running the dry run."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing the libraries' publishing reads changed; skipping the dry run."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        if: steps.changed.outputs.run == 'true'
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
-        if: steps.changed.outputs.run == 'true'
         with:
           packages: platform-tools
       # 23: lib-consumer-check.sh builds an app at compileSdk 23, the AARs' minCompileSdk.
       - name: Android SDK platforms
-        if: steps.changed.outputs.run == 'true'
         run: sdkmanager --install "platforms;android-37.2" "platforms;android-23"
 
       # Fails when a library's public API changed and libs/<name>/api/<name>.api didn't: run
       # ./gradlew apiDump and commit the dump (docs/releasing.md "The public API").
       - name: The public API matches its dump
-        if: steps.changed.outputs.run == 'true'
         run: ./gradlew --no-daemon apiCheck
 
       # No secrets here, so nothing is signed (the root build.gradle.kts signs only with a key).
       - name: Publish to mavenLocal
-        if: steps.changed.outputs.run == 'true'
         run: ./gradlew --no-daemon publishToMavenLocal
 
       - name: Check each library's files
-        if: steps.changed.outputs.run == 'true'
         run: |
           for build in $(grep -l 'id("com.vanniktech.maven.publish")' libs/*/build.gradle.kts); do
             tools/release/check-lib-artifact.sh "$(basename "$(dirname "$build")")"
           done
 
       - name: A fresh minSdk 23 app builds against them
-        if: steps.changed.outputs.run == 'true'
         run: tools/release/lib-consumer-check.sh
 
   # MicroWakeWordClipTest (#181, #184): each official microWakeWord model, run by LiteRT over a pipe to
@@ -332,6 +324,8 @@ jobs:
   # MWW_PYTHON, so this job fails if it skipped. The models come from raw.githubusercontent.com at
   # the commit WakeWords.kt pins, checked against its SHA-256s, and are cached by that commit.
   wake-word:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.wake_word != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -339,45 +333,25 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed: without a base commit to compare with, or when git fails, the test runs.
-        run: |
-          if [ -n "$BASE" ] && git fetch -q --depth=1 origin "$BASE" 2>/dev/null \
-             && changed=$(git diff --no-renames --name-only --end-of-options "$BASE" HEAD -- $ANDROID_CODE) \
-             && [ -z "$changed" ]; then
-            echo "No Android code changed; skipping the wake word test."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-
       # Same toolchain as the app job.
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        if: steps.changed.outputs.run == 'true'
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
-        if: steps.changed.outputs.run == 'true'
         with:
           packages: platform-tools
 
       - name: Android SDK platform
-        if: steps.changed.outputs.run == 'true'
         run: sdkmanager --install "platforms;android-37.2"
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: steps.changed.outputs.run == 'true'
         with:
           python-version: '3.12'
 
       - name: LiteRT venv (hashed wheels)
-        if: steps.changed.outputs.run == 'true'
         run: |
           requirements=libs/voice/mww-test-requirements.txt
           python -m venv "$RUNNER_TEMP/mww-venv"
@@ -386,7 +360,6 @@ jobs:
 
       - name: Models commit
         id: models
-        if: steps.changed.outputs.run == 'true'
         run: |
           wake_words=libs/voice/src/main/java/dev/glassworks/voice/WakeWords.kt
           commit=$(sed -n 's/.*const val MODELS_COMMIT\(: String\)\{0,1\} = "\([0-9a-f]\{40\}\)".*/\2/p' "$wake_words")
@@ -395,13 +368,11 @@ jobs:
 
       # The test checks every file's SHA-256 (ModelFetcher) and fetches again on a mismatch.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        if: steps.changed.outputs.run == 'true'
         with:
-          path: ~/.cache/s1kiosk/microwakeword-${{ steps.models.outputs.commit }}
+          path: ~/.cache/glassworks/microwakeword-${{ steps.models.outputs.commit }}
           key: microwakeword-${{ steps.models.outputs.commit }}
 
       - name: MicroWakeWordClipTest (real models)
-        if: steps.changed.outputs.run == 'true'
         run: |
           # --rerun: Gradle doesn't see MWW_PYTHON, so a cached result must not stand in for a run.
           failed=""
@@ -413,6 +384,8 @@ jobs:
           grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: the test skipped"; exit 1; }
 
   web:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.web != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -453,51 +426,29 @@ jobs:
           fi
 
   refract:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.refract != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-          fetch-depth: 0
-
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed like the site job's: without a base commit to compare with, or when git diff
-        # fails, Refract is checked.
-        run: |
-          paths="kiln/workers .github/workflows/pr.yml"
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            echo "No base commit to compare with ($BASE); checking Refract."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
-            echo "git diff failed; checking Refract."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing in kiln/workers changed; skipping Refract."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: steps.changed.outputs.run == 'true'
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: kiln/workers/refract/package-lock.json
-      - if: steps.changed.outputs.run == 'true'
-        run: npm ci --prefix kiln/workers/refract
+      - run: npm ci --prefix kiln/workers/refract
       - name: Typecheck
-        if: steps.changed.outputs.run == 'true'
         run: npm run typecheck --prefix kiln/workers/refract
       - name: Tests (workerd, through Miniflare)
-        if: steps.changed.outputs.run == 'true'
         run: npm test --prefix kiln/workers/refract
 
   scripts:
+    needs: changes
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -507,18 +458,22 @@ jobs:
       - name: frames/aqara-s1-plus/tools/install.sh off-device tests
         run: frames/aqara-s1-plus/tools/install/test/install-tests.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         with:
           node-version: '24'
       # Clarity's camera streams are made with ffmpeg; a test checks it makes the same bytes twice.
       - name: ffmpeg
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends ffmpeg > /dev/null
       # Clarity's tests in two sets (#268, tools/perf/test/parallel.py): the fast one first (seconds),
       # then the runner end to end against the fake panel, and the fakes, several at once.
       - name: Perf test rubric, report, grade and page statistics (fast set)
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: |
           python3 tools/perf/test/parallel.py --set fast
           node --test tools/perf/test/page.test.mjs tools/perf/test/grade.test.mjs tools/perf/test/browserguard.test.mjs
       - name: Perf test runner and fakes, end to end (slow set)
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: python3 tools/perf/test/parallel.py --set slow
       - name: APK size tool
         run: python3 -m unittest discover -s tools/size/test -v
@@ -528,12 +483,17 @@ jobs:
         run: python3 -m unittest discover -s branding/boot/test -v
       - name: Docs links
         run: python3 tools/check-doc-links.py
+      # Here, in a required check: a map that pr.yml or docs/ci.md no longer follows fails the PR.
+      - name: CI job selection (tools/ci/changes.py)
+        run: python3 -m unittest discover -s tools/ci/test -v
       - name: Library parity tables
         run: python3 tools/check-parity-tables.py
       - name: Brand images are live on glassworks.dev
         run: python3 tools/check-brand-images.py
 
   perf-webrtc:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.perf_webrtc != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -559,49 +519,28 @@ jobs:
           GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.gecko.test.mjs
 
   root:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.root != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-          fetch-depth: 0
-
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed like the branding job's: without a base commit to compare with (none, a
-        # force-pushed or garbage-collected one) or when git diff fails, the tests run.
-        run: |
-          paths="frames/aqara-s1-plus/tools/root frames/aqara-s1-plus/tools/radio .github/workflows/pr.yml"
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            echo "No base commit to compare with ($BASE); running the root-side tests."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
-            echo "git diff failed; running the root-side tests."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing under frames/aqara-s1-plus/tools/root or frames/aqara-s1-plus/tools/radio changed; skipping the root-side tests."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        if: steps.changed.outputs.run == 'true'
         with:
           platforms: arm
 
       - name: Build and self-test s1kiosk_verify
-        if: steps.changed.outputs.run == 'true'
         run: frames/aqara-s1-plus/tools/root/build-verify.sh
 
       - name: Root-side tests
-        if: steps.changed.outputs.run == 'true'
         run: frames/aqara-s1-plus/tools/radio/test/run.sh
 
   size:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90   # two ABIs on two commits, plus the radio bundle's sisdk build on a cache miss
     steps:
@@ -724,6 +663,8 @@ jobs:
           if-no-files-found: ignore
 
   size-generic:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size_generic != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -732,45 +673,20 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed like libs-publish's: without a base commit, or when git diff fails, it runs.
-        run: |
-          paths="frames/generic-android core pane-api panes libs engines testing build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle
-            LICENSE LICENSES THIRD-PARTY-NOTICES.md tools/size tools/legacy/apk-icons.py tools/release/check-update-compat.sh .github/workflows/pr.yml"
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            echo "No base commit to compare with ($BASE); checking the size."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
-            echo "git diff failed; checking the size."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing in the generic app's APK changed; skipping its size check."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
-        if: steps.changed.outputs.run == 'true'
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
-        if: steps.changed.outputs.run == 'true'
         with:
           packages: platform-tools
 
       - name: Android SDK platform
-        if: steps.changed.outputs.run == 'true'
         run: sdkmanager --install "platforms;android-37.2"
 
       - name: Release APKs, one per ABI of the frame
-        if: steps.changed.outputs.run == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/generic"
           for a in $(jq -r '.abis[]' frames/generic-android/design/frame.json); do
@@ -780,7 +696,6 @@ jobs:
           done
 
       - name: The legacy build (#198)
-        if: steps.changed.outputs.run == 'true'
         # The Mirror's ABI. Its GeckoView follows -PlegacyAbi, the APK -Ps1Abi: the build checks they match.
         run: |
           ./gradlew --no-daemon :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
@@ -799,7 +714,6 @@ jobs:
           echo "Legacy APK (arm64-v8a): $(stat -c %s "$apk") bytes" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Size and budget
-        if: steps.changed.outputs.run == 'true'
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
@@ -818,44 +732,23 @@ jobs:
             --json "$RUNNER_TEMP/generic/size.json" --md "$RUNNER_TEMP/generic/size.md"
 
       - name: Job summary
-        if: always() && steps.changed.outputs.run == 'true'
+        if: always()
         run: |
           [ -f "$RUNNER_TEMP/generic/size.md" ] && cat "$RUNNER_TEMP/generic/size.md" >> "$GITHUB_STEP_SUMMARY" || true
 
   branding:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.branding != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-          fetch-depth: 0
-
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed: without a base commit to compare with (none, a force-pushed or garbage-
-        # collected one) or when git diff fails, it rebuilds.
-        run: |
-          paths="branding/boot branding/glass-tile branding/lululemon-mirror branding/bootlogos.json frames/aqara-s1-plus/design/frame.json frames/lululemon-mirror/design/frame.json .github/workflows/pr.yml"
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            echo "No base commit to compare with ($BASE); rebuilding."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths); then
-            echo "git diff failed; rebuilding."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing the boot branding is built from changed; skipping the rebuild."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
 
       # The versions are the ones in branding/boot/README.md; the outputs are byte-identical on
       # macOS arm64 and in this image (checked 2026-11-13).
       - name: Rebuild the S1's and the Mirror's boot branding
-        if: steps.changed.outputs.run == 'true'
         run: |
           docker run --rm -v "$PWD":/w -w /w \
             python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 sh -euc '
@@ -865,7 +758,6 @@ jobs:
               python branding/boot/generate.py --frame lululemon-mirror --out branding/lululemon-mirror'
 
       - name: The committed files are what the generator writes
-        if: steps.changed.outputs.run == 'true'
         run: |
           sudo chown -R "$(id -u):$(id -g)" branding
           git status --short -- branding
@@ -873,6 +765,8 @@ jobs:
           test -z "$(git status --porcelain -- branding)"
 
   site:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.site != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -881,49 +775,19 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Changed?
-        id: changed
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        # Fails closed like the branding job's: without a base commit to compare with (none, a
-        # force-pushed or garbage-collected one) or when git diff fails, the site is checked.
-        # The docs link to files anywhere in the repo and the build checks those links, so any
-        # Markdown change, or any file deleted or renamed, also runs it.
-        run: |
-          paths="site packages frames docs tools/perf/grade.ts tools/perf/page/rubric.json package.json package-lock.json .github/workflows/pr.yml :(glob)**/*.md"
-          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            echo "No base commit to compare with ($BASE); checking the site."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif ! changed=$(git diff --name-only "$BASE" HEAD -- $paths && git diff --name-only --diff-filter=DR "$BASE" HEAD); then
-            echo "git diff failed; checking the site."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$changed" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Nothing the site is built from changed; skipping it."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: steps.changed.outputs.run == 'true'
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: package-lock.json
-      - if: steps.changed.outputs.run == 'true'
-        run: npm ci
+      - run: npm ci
       - name: Lint
-        if: steps.changed.outputs.run == 'true'
         run: npm run lint -w site
       - name: Typecheck
-        if: steps.changed.outputs.run == 'true'
         run: npm run typecheck -w site
       - name: Builds as Vercel builds it
-        if: steps.changed.outputs.run == 'true'
         run: npm run build -w site
       - name: Each docs route carries the Markdown and images it renders
-        if: steps.changed.outputs.run == 'true'
         run: npm run check:trace -w site
       - name: SEO check (sitemap, titles, descriptions, canonicals, preview images)
-        if: steps.changed.outputs.run == 'true'
         run: npm run check:seo -w site

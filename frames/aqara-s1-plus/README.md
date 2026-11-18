@@ -151,6 +151,7 @@ the next one. "Verified" means tested on a real panel in a real home.
 | Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
 | Bluetooth proxy for Home Assistant: listen, or listen and connect ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14), the pane on 2026-11-16, and GATT connections with two real devices, one at a time, on 2026-11-17; more than one link at once untested |
 | App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |
+| Frame version on the panel and the Manage page, and a *Frame update* entity in HA ([details](../../docs/esphome.md#frame-updates)) | 🧪 New · unit tests only. A panel without the loader shows *Before 1.0.0*; frame updates over the air come with the loader (#139) |
 | Time zone kept across reboots | ✅ Works (needs the boot software from v0.4.0) |
 | Radio: Zigbee coordinator for **ZHA** | ✅ Verified · keep the radio's network settings ([known issue](#known-issues)) |
 | Radio: Zigbee coordinator for **Zigbee2MQTT** | 🧪 Experimental · `ember` adapter: forming a network, resuming it and opening joining verified; not yet used for long with real devices |

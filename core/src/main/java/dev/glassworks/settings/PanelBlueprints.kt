@@ -76,7 +76,7 @@ class PanelBlueprints(
     }
 
     companion object {
-        private const val TAG = "S1Kiosk.Blueprints"
+        private const val TAG = "Glassworks.Blueprints"
         const val FRESH_MS = 15_000L
         const val NOT_SIGNED_IN = "The panel isn't signed in to Home Assistant, so it can't open the import."
         const val OTHER_HA = "The panel is signed in to another Home Assistant than its dashboard's."

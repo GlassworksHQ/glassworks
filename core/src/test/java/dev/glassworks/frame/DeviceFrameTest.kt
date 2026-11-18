@@ -83,6 +83,33 @@ class DeviceFrameTest {
         assertEquals("generic-android", GenericAndroid(app).board)
     }
 
+    /** #139: Kiln's stamp in build.prop, else the Glass Panes image its fingerprint names (image-patch.md has both). */
+    @Test fun theMirrorsFrameVersionComesFromKilnsStampElseItsImage() {
+        val stamped = device("Android", "MSM8916 for arm64", mirror + mapOf(FrameRelease.ID_PROP to "lululemon-mirror", FrameRelease.VERSION_PROP to "1.0.0")).frameRelease!!
+        assertEquals("lululemon-mirror", stamped.id)
+        assertEquals("1.0.0", stamped.stamp)
+        assertEquals(DeviceFrame.MIRROR_INSTALL, stamped.install)
+        val image2 = device("Android", "MSM8916 for arm64", mirror).frameRelease!!
+        assertNull(image2.stamp)
+        assertEquals("Glass Panes image 2", image2.image)
+        val image1 = mirror + ("ro.build.fingerprint" to "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys")
+        assertEquals("Glass Panes image 1", device("Android", "MSM8916 for arm64", image1).frameRelease!!.image)
+        val other = mirror + ("ro.build.fingerprint" to "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/1:userdebug/test-keys")
+        assertNull("an image Kiln doesn't know isn't named", device("Android", "MSM8916 for arm64", other).frameRelease!!.image)
+    }
+
+    @Test fun theImageKilnFlashesIsNamed() {
+        val ts = RepoFiles.file("frames/lululemon-mirror/installer/src/image.ts").readText()
+        val fingerprint = Regex("""fingerprint: '([^']+)'""").find(ts)!!.groupValues[1]
+        assertEquals("Glass Panes image 2", DeviceFrame.GLASS_PANES[fingerprint])
+    }
+
+    @Test fun aDeviceWithoutAFrameHasNoFrameReleases() {
+        assertNull(device("Google", "Pixel Tablet").frameRelease)
+        val props = mapOf(FrameRelease.ID_PROP to "lululemon-mirror", FrameRelease.VERSION_PROP to "1.0.0")
+        assertNull("a stamp alone doesn't make a Mirror", device("Google", "Pixel Tablet", props).frameRelease)
+    }
+
     @Test fun eachIsNamedAsItsFrameJson() {
         for (frame in DeviceFrame.ALL) {
             val json = JSONObject(RepoFiles.file("frames/${frame.id}/design/frame.json").readText())

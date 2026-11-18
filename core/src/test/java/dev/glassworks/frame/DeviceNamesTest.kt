@@ -30,8 +30,8 @@ class DeviceNamesTest {
      */
     private val name = Regex("""\b(Aqara|S1|lululemon|Mirror|Pixel|[Tt]ablets?|A133|Allwinner|NSPanel|Echo Show)\b""")
 
-    /** Not a device: the app's product name (AppBuild.S1_KIOSK) and Material Design icon ids (`mdi:tablet-dashboard`). */
-    private val notADevice = listOf(Regex("""S1 Kiosk"""), Regex("""mdi:[a-z0-9-]+"""))
+    /** Not a device: Material Design icon ids (`mdi:tablet-dashboard`). */
+    private val notADevice = listOf(Regex("""mdi:[a-z0-9-]+"""))
 
     /** A block comment in markup. Taken out before a file's lines are read, its newlines kept. */
     private val HTML_COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
@@ -415,7 +415,7 @@ class DeviceNamesTest {
         assertEquals("a template's name is code, not text", listOf("Aqara", "S1", "lululemon", "Mirror", "tablet"), texts.flatMap { names(it.second) })
         assertEquals("the inner literal's line", 3, texts.single { "Aqara" in it.second }.first)
 
-        val js = """var r=/["'`]/g,t=`Not supported by ${'$'}{n} on the Mirror`,u=a/b/c,v="S1 Kiosk ${'$'}{v}",w='Aqara',x=n++/2,y="Pixel""""
+        val js = """var r=/["'`]/g,t=`Not supported by ${'$'}{n} on the Mirror`,u=a/b/c,v="Glassworks ${'$'}{v}",w='Aqara',x=n++/2,y="Pixel""""
         assertEquals(listOf("Mirror", "Aqara", "Pixel"), Literals.of(js, Literals.Language.JS).flatMap { names(it.second) })
         assertEquals("a JavaScript comment ends at the first */", listOf("NSPanel"), Literals.of("""/* a /* b */ x="NSPanel" """, Literals.Language.JS).flatMap { names(it.second) })
         val java = """class C { /* a /* b */ String label = "Aqara"; String block = ""${'"'}
