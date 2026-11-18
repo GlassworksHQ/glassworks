@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.setup
+package dev.glassworks.setup
 
 import android.app.Application
 import android.content.Context
@@ -14,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import sh.edm.s1kiosk.frame.TestFrames
-import sh.edm.s1kiosk.ui.Mockup
+import dev.glassworks.ui.Mockup
 
 /**
  * The Home Assistant step's two sub-steps in every state the panel can be in, as SetupState decides them: the

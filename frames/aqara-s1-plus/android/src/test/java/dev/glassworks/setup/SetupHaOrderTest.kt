@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.setup
+package dev.glassworks.setup
 
 import android.app.Application
 import android.view.View
@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.frame.TestFrames
-import sh.edm.s1kiosk.ui.GroupedRail
+import dev.glassworks.ui.GroupedRail
 
 /**
  * The Home Assistant step lists Sign in, then Add it, in every state, on a touch frame and on one without, and the
