@@ -223,6 +223,14 @@ class AdbComputersTest {
         assertTrue(c.list().isEmpty())
     }
 
+    @Test fun `the same computer asking again while Allow waits is a new question`() {
+        val c = computers()
+        c.asked(a)
+        android = { comp, _ -> comp.asked(a) }
+        assertEquals(AdbComputers.Allowed.ONCE, c.allowAsking(a.fingerprint, remember = false, who = "Alex"))
+        assertEquals("the new question stays open", a, c.asking())
+    }
+
     @Test fun `two Allows at once each get their own answer`() {
         val c = computers()
         c.asked(a)
@@ -310,6 +318,11 @@ class RedactAdbKeyTest {
         val kept = Redact.text(line, keepAdbKeys = true)
         assertTrue(kept, kept.contains("adb key $fp"))
         assertTrue(kept, kept.contains("<mac>") && !kept.contains("abc"))
+    }
+
+    @Test fun `a secret that contains a fingerprint goes as a whole`() {
+        val kept = Redact.text("token=\"abc adb key $fp def\" then adb key $fp", keepAdbKeys = true)
+        assertEquals("token=\"<removed>\" then adb key $fp", kept)
     }
 
     @Test fun `the shared text drops it`() {

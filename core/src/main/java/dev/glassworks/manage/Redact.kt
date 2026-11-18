@@ -45,13 +45,12 @@ object Redact {
      */
     fun text(s: String, keepAdbKeys: Boolean = false): String {
         if (!keepAdbKeys) return all(adbKey.replace(s, "adb key <fingerprint>"))
-        val out = StringBuilder()
-        var at = 0
-        for (m in adbKey.findAll(s)) {
-            out.append(all(s.substring(at, m.range.first))).append(m.value)
-            at = m.range.last + 1
-        }
-        return out.append(all(s.substring(at))).toString()
+        // Each fingerprint stands aside as a marker no rule matches, so a secret that contains one goes as a whole,
+        // marker and all; the markers left are the fingerprints outside any secret.
+        val kept = adbKey.findAll(s).map { it.value }.toList()
+        var i = 0
+        val marked = adbKey.replace(s) { "\u0001${i++}\u0001" }
+        return Regex("\u0001(\\d+)\u0001").replace(all(marked)) { m -> kept.getOrNull(m.groupValues[1].toInt()) ?: "" }
     }
 
     private fun all(s: String): String = rules.fold(s) { acc, (re, to) -> re.replace(acc, to) }
