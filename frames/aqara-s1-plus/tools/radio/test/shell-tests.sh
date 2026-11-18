@@ -869,7 +869,7 @@ if name.endswith('-save'):
     # /t/ipt-save-fail: how many reads of the nat table fail next (a table that can't be read for a moment)
     # /t/ipt-nat-unreadable: every read of the nat table fails while it exists
     if table == 'nat' and os.path.exists('/t/ipt-nat-unreadable'):
-        sys.exit(1)
+        open('/t/ipt-nat-fails', 'a').write(name + '\n'); sys.exit(1)
     if table == 'nat' and os.path.exists('/t/ipt-save-fail'):
         n = int(open('/t/ipt-save-fail').read() or 0)
         if n > 0:
@@ -986,14 +986,25 @@ check "...and the next check removes the rules, then says off" gone
 ap_up; hostapd_on; portal; : > "$T/setprop.log"
 LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
 H=$!; first_check; P=$(pgrep -P "$H" -f s1kiosk_radio.sh | head -1)   # the helper itself, not its loops
-echo 1 > /t/ipt-save-fail; kill -9 "$P"
+# its two loops (time zone, portal) are its sh children; wait until both are there, then pause them
+i=0; until [ "$(pgrep -P "$P" -f s1kiosk_radio.sh | wc -l)" -ge 2 ] || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
+L=$(pgrep -P "$P" -f s1kiosk_radio.sh | tr '\n' ' ')
+check "(the helper's loops are up)" test "$(echo $L | wc -w)" -ge 2
+kill -STOP $L; kill -9 "$P"
 check "(the helper is killed)" sh -c "! kill -0 $P 2>/dev/null"
-i=0; until test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" || [ $i -ge 300 ]; do sleep 0.1; i=$((i + 1)); done
-check "the helper killed, a table unreadable once: the leftover loop still removes the rules" \
+: > /t/ipt-nat-fails; touch /t/ipt-nat-unreadable; kill -CONT $L
+# Unreadable until the leftover loop has failed 8 reads (several cleanup tries) or has ended: a loop that tried
+# once and gave up is gone by then, with the rules still there.
+i=0; until [ "$(wc -l < /t/ipt-nat-fails)" -ge 8 ] || [ -z "$(pgrep -f s1kiosk_radio.sh)" ] || [ $i -ge 600 ]; do
+  sleep 0.1; i=$((i + 1)); done
+check "(the leftover loop's cleanup reads fail)" test -s /t/ipt-nat-fails
+rm -f /t/ipt-nat-unreadable
+i=0; until test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
+check "the helper killed, a table unreadable at first: the leftover loop still removes the rules, both families" \
   test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
 i=0; while pgrep -f s1kiosk_radio.sh >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
 check "...and then it ends too" test -z "$(pgrep -f s1kiosk_radio.sh)"
-rm -f /t/ipt-save-fail; pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; hostapd_off
+pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; hostapd_off
 hostapd_on
 socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
 check "the sockets of another app: no rules" test -z "$(nat 4 | grep S1PORTAL)"
