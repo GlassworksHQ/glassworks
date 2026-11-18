@@ -29,6 +29,14 @@ export const GLASS_PANES = {
   fingerprint: 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys',
 } as const;
 
+/**
+ * The Mirror frame's version (#139): Kiln writes it into build.prop with the frame's id, and the app shows it and
+ * compares it with the newest `frames/lululemon-mirror/v<version>` release (docs/releasing.md, "Frame releases").
+ * Bump it with every change to what lands on a Mirror, and release that version. 1.0.0 comes out with Glassworks
+ * 1.0.0; until then Kiln writes a pre-release of it, which counts as older than 1.0.0.
+ */
+export const MIRROR_FRAME = { id: 'lululemon-mirror', version: '1.0.0-dev' } as const;
+
 export const LABELS = {
   system: 'u:object_r:system_file:s0',
   data: 'u:object_r:system_data_file:s0',
@@ -190,12 +198,13 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     log(SETTINGS_OVERLAY.path);
   }
 
+  let next = setProp(setProp(prop, 'ro.glassworks.frame.id', MIRROR_FRAME.id), 'ro.glassworks.frame.version', MIRROR_FRAME.version);
+  const set = [`ro.glassworks.frame.version=${MIRROR_FRAME.version}`];
+
   // No swipe lock screen, with the overlay: the two make the first boot with nothing to tap, and
   // without the overlay the first boot is the image's own. SettingsProvider's DatabaseHelper and
   // LockSettingsService both read it when they make a fresh userdata's settings (AOSP 6.0.1; the
   // image's services and SettingsProvider dex have the string, read 2026-11-16).
-  let next = prop;
-  const set: string[] = [];
   if (o.settingsOverlay) { next = setProp(next, 'ro.lockscreen.disable.default', 'true'); set.push('ro.lockscreen.disable.default=true'); }
   if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ${set.join(', ')}`); }
   if (services) { await fs.replaceFile(SERVICES_JAR, services, time); log(`${SERVICES_JAR}: lets in this adb key without asking, not the Glass Panes project key`); }
