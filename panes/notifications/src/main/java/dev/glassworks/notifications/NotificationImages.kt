@@ -84,7 +84,7 @@ class UrlConnectionGet(connectMs: Int = 5_000, readMs: Int = 10_000, connector: 
     private val http = HttpClient(connector, connectMs, readMs)
 
     override fun get(url: String, headers: Map<String, String>, maxBytes: Int): HttpGet.Response {
-        val r = http.request("GET", url, headers, maxBytes = maxBytes)
+        val r = http.request("GET", url, headers, maxBytes = maxBytes, bodyIf = { it == 200 })
         val type = r.header("Content-Type")
         if (r.status != 200) return HttpGet.Response(r.status, type, ByteArray(0), false)
         return HttpGet.Response(r.status, type, if (r.tooLarge) ByteArray(0) else r.body, r.tooLarge)

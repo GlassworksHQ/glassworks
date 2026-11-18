@@ -34,7 +34,10 @@ class HttpClient(
         fun header(name: String): String? = headers[name.lowercase()]
     }
 
-    /** Throws [IOException] when Home Assistant can't be reached or the answer isn't HTTP. Blocking. */
+    /**
+     * Throws [IOException] when Home Assistant can't be reached or the answer isn't HTTP. Blocking. The body is read
+     * only when [bodyIf] accepts the status; else the answer has an empty one and the connection closes.
+     */
     @Throws(IOException::class)
     fun request(
         method: String,
@@ -42,6 +45,7 @@ class HttpClient(
         headers: Map<String, String> = emptyMap(),
         body: ByteArray? = null,
         maxBytes: Int = 64 * 1024,
+        bodyIf: (status: Int) -> Boolean = { true },
     ): Response {
         val uri = try { URI(url) } catch (e: URISyntaxException) { throw IOException("not a URL: ${e.message}") }
         val tls = when (uri.scheme?.lowercase()) {
@@ -70,7 +74,7 @@ class HttpClient(
                 if (body != null) write(body)
                 flush()
             }
-            return read(BufferedInputStream(socket.getInputStream()), method, maxBytes)
+            return read(BufferedInputStream(socket.getInputStream()), method, maxBytes, bodyIf)
         } finally {
             runCatching { socket.close() }
             runCatching { plain.close() }
@@ -88,16 +92,20 @@ class HttpClient(
     }
 
     private companion object {
-        fun read(input: InputStream, method: String, maxBytes: Int): Response {
-            val status = line(input).split(' ').getOrNull(1)?.toIntOrNull() ?: throw IOException("not an HTTP answer")
+        fun read(input: InputStream, method: String, maxBytes: Int, bodyIf: (Int) -> Boolean): Response {
+            var status: Int
             val headers = HashMap<String, String>()
-            while (true) {
-                val l = line(input)
-                if (l.isEmpty()) break
-                val i = l.indexOf(':')
-                if (i > 0) headers[l.substring(0, i).trim().lowercase()] = l.substring(i + 1).trim()
-            }
-            val noBody = method == "HEAD" || status in 100..199 || status == 204 || status == 304
+            do {
+                status = line(input).split(' ').getOrNull(1)?.toIntOrNull() ?: throw IOException("not an HTTP answer")
+                headers.clear()
+                while (true) {
+                    val l = line(input)
+                    if (l.isEmpty()) break
+                    val i = l.indexOf(':')
+                    if (i > 0) headers[l.substring(0, i).trim().lowercase()] = l.substring(i + 1).trim()
+                }
+            } while (status in 100..199)
+            val noBody = method == "HEAD" || status == 204 || status == 304 || !bodyIf(status)
             val bodyInput = when {
                 noBody -> ByteArrayInputStream(ByteArray(0))
                 headers["transfer-encoding"]?.lowercase()?.contains("chunked") == true -> Chunked(input)
@@ -150,7 +158,7 @@ class HttpClient(
         override fun read(b: ByteArray, off: Int, len: Int): Int {
             if (done) return -1
             if (left == 0L) {
-                left = line(input).substringBefore(';').trim().toLongOrNull(16) ?: throw IOException("bad chunk size")
+                left = line(input).substringBefore(';').trim().toLongOrNull(16)?.takeIf { it >= 0 } ?: throw IOException("bad chunk size")
                 if (left == 0L) {
                     while (line(input).isNotEmpty()) Unit
                     done = true

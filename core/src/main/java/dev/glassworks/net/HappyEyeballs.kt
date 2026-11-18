@@ -99,7 +99,7 @@ class HappyEyeballs(
          * families from the first one's (RFC 8305 section 4, First Address Family Count 1).
          */
         fun order(addresses: List<InetAddress>): List<InetAddress> {
-            val usable = addresses.filterNot { it is Inet6Address && it.isLinkLocalAddress && it.scopeId == 0 }.distinct()
+            val usable = addresses.filterNot { it is Inet6Address && it.isLinkLocalAddress && it.scopeId == 0 }.distinctBy { it.hostAddress }
             val firstIs6 = usable.firstOrNull() is Inet6Address
             val (first, other) = usable.partition { (it is Inet6Address) == firstIs6 }
             return (0 until maxOf(first.size, other.size)).flatMap { i -> listOfNotNull(first.getOrNull(i), other.getOrNull(i)) }

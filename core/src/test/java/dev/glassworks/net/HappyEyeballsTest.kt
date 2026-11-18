@@ -43,6 +43,8 @@ class HappyEyeballsTest {
         assertEquals(listOf(v4(1), v6(2, 3)), HappyEyeballs.order(listOf(v4(1), v6(2, 3))))
         assertEquals(emptyList<InetAddress>(), HappyEyeballs.order(listOf(v6(1, 0))))
         assertEquals("a scoped twin of a dropped address stays", listOf(v6(1, 2)), HappyEyeballs.order(listOf(v6(1, 0), v6(1, 2))))
+        assertEquals("the same address on two interfaces is two targets", listOf(v6(1, 2), v6(1, 3)).map { it.hostAddress },
+            HappyEyeballs.order(listOf(v6(1, 2), v6(1, 3), v6(1, 2))).map { it.hostAddress })
     }
 
     @Test fun `an IPv6 address that never answers doesn't hold up IPv4`() {
