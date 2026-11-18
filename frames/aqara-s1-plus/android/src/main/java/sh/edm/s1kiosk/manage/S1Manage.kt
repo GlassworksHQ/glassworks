@@ -36,7 +36,7 @@ class S1Manage(
         }
 
         private val ROOT_PROPS = listOf("sys.s1kiosk.radio.status", "sys.s1kiosk.radio.version", "sys.s1kiosk.radio.fw", "sys.s1kiosk.net.status",
-            "sys.s1kiosk.update.version", "sys.s1kiosk.timezone.status", "persist.s1kiosk.radio_mode", "persist.s1kiosk.radio_zigbee")
+            "sys.s1kiosk.update.version", "sys.s1kiosk.timezone.status", "sys.s1kiosk.portal.status", "persist.s1kiosk.radio_mode", "persist.s1kiosk.radio_zigbee")
 
         internal val S1 = Own(
             paneLinks = { id -> if (id == "radio") listOf("Share Home Assistant's Thread network (start it on the panel first)" to ThreadJoin.PATH) else emptyList() },

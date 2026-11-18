@@ -39,6 +39,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
   so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
   permission first, and says why.
+- **On the S1, joining the panel's own Wi-Fi brings up its setup page.** As with a hotel's Wi-Fi, an iPhone
+  shows the panel's setup page as soon as it joins, with no address to type, and so does an Android 11 or newer
+  phone that joined from its Wi-Fi settings. Android 10 shows a "Sign in to Wi-Fi network" notification to tap.
+  Comes with the radio bundle.
 - **See how complete Glassworks is on each device.** Every frame's page on glassworks.dev has a
   checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
   and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the

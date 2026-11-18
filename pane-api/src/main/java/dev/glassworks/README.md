@@ -579,6 +579,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
+| `hotspotPortal` | Whether something with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) to the app's portal (udp 8053, tcp 8098), so a phone that joins opens the setup page by itself (#197). True on the S1, whose radio helper does it. False (the default): no portal. |
 | `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
 | `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |
 | `systemSettingsTitle` | What the settings call the device's own settings app when it isn't Android's (the S1's: Aqara's). Null (the default) means Android's. |
