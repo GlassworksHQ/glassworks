@@ -383,7 +383,7 @@ stage_frame "$T/f2/frame-bundle"; s=$(install_frame); check "a newer bundle stag
 L boot
 check "...and loads" test "$(prop ro.glassworks.frame.version)" = 2.0.0
 L run radio
-check "a bundle script that keeps exiting is marked bad" test -e /data/glassworks/bundle/bad-radio
+check "a bundle script that keeps exiting is marked bad, for its version" test "$(cat /data/glassworks/bundle/bad-radio)" = 2.0.0
 check "...and the boot copy takes over" test "$(prop test.radio)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
 rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
 check "...also on the next start" test "$(prop test.radio)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
@@ -435,7 +435,11 @@ L install >/dev/null 2>&1; rc=$?
 check "no record of this boot's decision: staged, but nothing made up for the state file" test $rc = 1 -a "$(cat /data/glassworks-pub/frame-bundle)" = "$before"
 L boot; check "...it loads at the next boot all the same" test "$(prop ro.glassworks.frame.version)" = 2.0.5
 mv /data/glassworks/bundle/current /data/glassworks/bundle/old
+check "(setup: the loaded bundle is moved aside)" test ! -e /data/glassworks/bundle/current -a -d /data/glassworks/bundle/old
 L boot; check "a promotion cut short between its renames: the loaded bundle comes back" test "$(prop ro.glassworks.frame.version)" = 2.0.5 -a -d /data/glassworks/bundle/current
+echo 2.0.4 > /data/glassworks/bundle/bad-radio; rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
+check "a bad-script marker written for another bundle doesn't count" test "$(prop test.radio)" = "bundle-script|bundle 2.0.5|/data/glassworks/bundle/current"
+rm -f /data/glassworks/bundle/bad-radio
 
 mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
 GW_LOADER_ONCE=1 L run radio; check "a developer script without the marker is ignored" test "$(prop test.radio)" != "dev|dev|1"

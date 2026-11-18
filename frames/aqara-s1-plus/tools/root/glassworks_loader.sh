@@ -254,19 +254,28 @@ boot)
   # renames). The first that passes loads; the others are dropped.
   state=none; fv=$BOOT_FRAME_VERSION; why=""
   # A promotion cut short between its two renames: the bundle that was loaded comes back.
-  if [ ! -e "$BDIR/current" ] && [ -e "$BDIR/old" ]; then mv "$BDIR/old" "$BDIR/current"; fi
+  # While current is missing, old is the only copy of the loaded bundle: nothing else moves until it is
+  # back, and nothing deletes old unless current exists.
+  stuck=""
+  if [ ! -e "$BDIR/current" ] && [ -e "$BDIR/old" ] && ! mv "$BDIR/old" "$BDIR/current"; then
+    stuck=1; say "cannot put the loaded bundle back from old; nothing is promoted this boot"
+  fi
   for c_ in next next.old; do
     [ -e "$BDIR/$c_" ] || continue
     if [ $state = ok ]; then rm -rf "${BDIR:?}/$c_"; continue; fi
+    [ -n "$stuck" ] && continue
     if ! check_dir "$BDIR/$c_"; then say "staged bundle ($c_) dropped: $WHY"; rm -rf "${BDIR:?}/$c_"; continue; fi
     nv=$VERSION; nf=$FVER
-    rm -rf "$BDIR/old"
+    [ -e "$BDIR/current" ] && rm -rf "$BDIR/old"
     # current must be gone before the candidate moves in: mv onto a directory would move it inside.
     if [ -e "$BDIR/current" ] && ! mv "$BDIR/current" "$BDIR/old"; then
       say "cannot move the loaded bundle aside; $c_ stays staged"; continue
     fi
+    # Markers are about the bundle that was loaded: none carries over to the new one, even if this boot
+    # stops right after the rename (a stop before it only means the old scripts get another chance).
+    rm -f "$BDIR"/bad-*
     if ! mv "$BDIR/$c_" "$BDIR/current"; then
-      [ -e "$BDIR/old" ] && mv "$BDIR/old" "$BDIR/current"
+      if [ -e "$BDIR/old" ] && ! mv "$BDIR/old" "$BDIR/current"; then stuck=1; fi
       say "cannot move the staged bundle in; $c_ stays staged"; continue
     fi
     # The floor only once the new bundle is in place, so a failed promotion leaves the loaded one
@@ -275,7 +284,7 @@ boot)
     rm -f "$BDIR/version.tmp"
     { echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; } ||
       say "cannot record the floor $fl (the loaded bundle's version still counts)"
-    rm -rf "$BDIR/old"; rm -f "$BDIR"/bad-*; say "frame bundle $nf loaded"
+    rm -rf "$BDIR/old"; say "frame bundle $nf loaded"
     state=ok; fv=$nf
   done
   if [ $state = ok ]; then :     # just promoted: checked in full above
@@ -329,7 +338,8 @@ run)
   fi
   why=""
   if [ -n "$B" ] && [ -f "$B/services/$slot.sh" ]; then
-    if [ -e "$BDIR/bad-$slot" ]; then
+    # A marker counts only for the bundle it was written for (it holds that bundle's frame version).
+    if [ -f "$BDIR/bad-$slot" ] && [ "$(cat "$BDIR/bad-$slot" 2>/dev/null)" = "$FV" ]; then
       why="bundle $FV: its $slot script kept exiting"
     elif [ -z "$long" ]; then
       GW_SOURCE="bundle $FV" GW_BUNDLE="$B" exec /system/bin/sh "$B/services/$slot.sh"
@@ -345,7 +355,7 @@ run)
         [ $quick -ge 3 ] && break
         sleep 2
       done
-      : > "$BDIR/bad-$slot"
+      echo "$FV" > "$BDIR/bad-$slot"
       why="bundle $FV: its $slot script kept exiting"
     fi
     [ -n "$why" ] && { say "$why; running the boot image's copy"; B=""; }
