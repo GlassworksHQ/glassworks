@@ -4,8 +4,9 @@
 
 // All panels' way out when its script can't start (CodeRabbit on #488). If panels.js or what it imports doesn't load, the
 // module never runs and the page would stay on "Finding your panels…" for good. A classic script, served from this panel
-// like the module (the page's CSP allows nothing else), so it also runs in a browser without modules. It comes before the
-// module and isn't deferred, so its timer starts even when the module's download stalls (CodeRabbit on #488).
+// like the module (the page's CSP allows nothing else), so it also runs in a browser without modules. Async: it neither
+// waits for the module nor holds it up, so either one stalling leaves the other free (CodeRabbit on #488). It comes after
+// #gw-panels in the page, so that is there when it runs.
 (function () {
   var root = document.getElementById('gw-panels');
   setTimeout(function () {
