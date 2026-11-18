@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.voice
+package dev.glassworks.assist
 
 import android.app.Activity
 import android.app.Application
@@ -20,8 +20,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowChoreographer
-import sh.edm.s1kiosk.VoiceOverlay
-import sh.edm.s1kiosk.ui.Mockup
+import dev.glassworks.VoiceOverlay
+import dev.glassworks.ui.Mockup
 import java.time.Duration
 
 /**
