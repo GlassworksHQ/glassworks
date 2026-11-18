@@ -75,7 +75,7 @@ jobs:
         run: |
           mkdir -p generic-dist
           frame_abis="$(jq -r '.abis[]' frames/generic-android/design/frame.json)"
-          builds="$(for a in $frame_abis; do echo "0.1.0 $a"; done; echo "0.1.1 arm64-v8a")"
+          builds="$(for a in $frame_abis; do echo "0.1.0 $a"; done; echo "0.1.1 arm64-v8a"; echo "0.1.4 arm64-v8a")"
           while read -r version a; do
             ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a" -PgenericVersion="$version" -Ps1TestBuild="$SHORT_SHA"
             cp frames/generic-android/android/build/outputs/apk/release/generic-android-release.apk \
