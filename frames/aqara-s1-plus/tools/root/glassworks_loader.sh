@@ -184,15 +184,15 @@ walk() {
 }
 
 # The version floor: the highest version ever loaded ($BDIR/version), and at least the current one.
-floor() {
-  f_=$(cat "$BDIR/version" 2>/dev/null); num "$f_" || f_=0
+floor() { # flr_/flc_: names no other function uses (shell functions share variables)
+  flr_=$(cat "$BDIR/version" 2>/dev/null); num "$flr_" || flr_=0
   # The loaded bundle's version counts only from a manifest that is ours: signed, and for this frame.
   if [ -f "$BDIR/current/manifest" ] && sig_ok "$BDIR/current" &&
      [ "$(sed -n 's/^frame \([^ ]*\) [^ ]*$/\1/p' "$BDIR/current/manifest" | head -1)" = "$FRAME_ID" ]; then
-    c_=$(sed -n 's/^version \([0-9][0-9]*\)$/\1/p' "$BDIR/current/manifest" 2>/dev/null | head -1)
-    num "$c_" && [ "$c_" -gt "$f_" ] && f_=$c_
+    flc_=$(sed -n 's/^version \([0-9][0-9]*\)$/\1/p' "$BDIR/current/manifest" 2>/dev/null | head -1)
+    num "$flc_" && [ "$flc_" -gt "$flr_" ] && flr_=$flc_
   fi
-  echo "$f_"
+  echo "$flr_"
 }
 
 sig_ok() { # dir: manifest + manifest.sig are regular files and the signature checks out
