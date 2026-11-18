@@ -14,6 +14,12 @@ line of each version is what Home Assistant shows on the update card. A change o
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
 
 ### Added
+- **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror (the legacy build), the Manage
+  page's **Security** section shows a computer that asks for USB debugging, with its fingerprint, and
+  **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
+  every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
+  records each, with the fingerprint. Android's own "Allow USB debugging?" no longer stays over the dashboard on
+  a screen without touch: the Security page is where you answer it. Needs a Mirror installed with this version.
 - **Glassworks as an app for any Android device.** It shows your Home Assistant dashboard full screen, and
   adds the device to Home Assistant over ESPHome with its screen, its sensors and the panes its hardware allows:
   Assist with timers on a device with a microphone, Sendspin on one with a speaker, the camera pane on one with a
