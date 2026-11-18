@@ -34,10 +34,11 @@ function panel() {
 
 function kiln(p: ReturnType<typeof panel>) {
   let phase: Setup = { phase: 'waiting', note: '' };
-  const win = { location: { href: 'about:blank' }, close: vi.fn() } as unknown as Window;
+  const win = { location: { href: 'about:blank' }, closed: false, close: vi.fn() } as unknown as { location: { href: string }; closed: boolean } & Window;
   const openTab = vi.fn(() => win);
+  let opens = 0;
   const steps = new ChannelSetup({
-    open: async () => { const c = new SetupChannel(p.stream); await c.getState(); return c; },
+    open: async () => { opens++; const c = new SetupChannel(p.stream); await c.getState(); return c; },
     phase: () => phase,
     show: (s) => { phase = s; },
     here: () => true,
@@ -46,7 +47,7 @@ function kiln(p: ReturnType<typeof panel>) {
     app: async () => undefined,
     openTab,
   });
-  return { steps, win, openTab, phase: () => phase };
+  return { steps, win, openTab, phase: () => phase, opens: () => opens };
 }
 
 describe('Kiln\'s sign-in', () => {
@@ -82,5 +83,39 @@ describe('Kiln\'s sign-in', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(k.phase()).toMatchObject({ phase: 'ha' });
     k.steps.close();
+  });
+
+  it('a window closed without a sign-in gives Sign in back', async () => {
+    const p = panel();
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    k.steps.signIn('http://192.0.2.20:8123');
+    await vi.waitFor(() => expect(k.win.location.href).toMatch(/then=kiln$/));
+    k.win.closed = true; // cancelled, or closed by hand
+    await vi.waitFor(() => expect(k.phase()).toMatchObject({ phase: 'ha', signingIn: false, note: expect.stringMatching(/closed before the panel was signed in/) }), { timeout: 3000 });
+    k.steps.close();
+  });
+
+  it('a window the panel\'s last page closed moves on, as the sign-in is done', async () => {
+    const p = panel();
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    k.steps.signIn('http://192.0.2.20:8123');
+    await vi.waitFor(() => expect(k.win.location.href).toMatch(/then=kiln$/));
+    p.st.ha.signedIn = true; // the callback stored the sign-in, then its page closed the window
+    k.win.closed = true;
+    await vi.waitFor(() => expect(k.phase()).toMatchObject({ phase: 'radio' }), { timeout: 3000 });
+    k.steps.close();
+  });
+
+  it('back from a sign-in after the session closed does nothing more', async () => {
+    const p = panel();
+    const k = kiln(p);
+    const back = k.steps.afterSignIn();
+    k.steps.close(); // a new session took over while the state was being read
+    await back;
+    await new Promise((r) => setTimeout(r, 10));
+    expect(k.opens()).toBe(1);
+    expect(k.phase()).toEqual({ phase: 'waiting', note: '' });
   });
 });

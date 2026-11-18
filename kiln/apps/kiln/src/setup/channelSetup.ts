@@ -80,6 +80,8 @@ export class ChannelSetup {
   private channel?: SetupChannel;
   private haTimer?: ReturnType<typeof setInterval>;
   private joinTimer?: ReturnType<typeof setTimeout>;
+  /** Watches Kiln's sign-in window: one closed without a sign-in gives Sign in back. */
+  private windowTimer?: ReturnType<typeof setInterval>;
   /** Counts close()s: an open that close() overtook is closed, never kept or shown. */
   private gen = 0;
 
@@ -140,6 +142,7 @@ export class ChannelSetup {
     this.gen++;
     clearInterval(this.haTimer);
     clearTimeout(this.joinTimer);
+    clearInterval(this.windowTimer);
     void this.channel?.close().catch(() => {});
     this.channel = undefined;
   }
@@ -257,8 +260,12 @@ export class ChannelSetup {
           const cur = this.d.phase();
           if (this.d.here() && cur.phase === 'ha' && cur.signingIn) here();
         }
-        else if (tab) tab.location.href = kilnSignInUrl(st.ha.signinUrl);
-        else if (!window.open(kilnSignInUrl(st.ha.signinUrl), '_blank')) throw new Error('The browser blocked the sign-in window. Allow pop-ups for this page, then sign in again.');
+        else {
+          const w = tab ?? window.open(kilnSignInUrl(st.ha.signinUrl), '_blank');
+          if (!w) throw new Error('The browser blocked the sign-in window. Allow pop-ups for this page, then sign in again.');
+          if (tab) tab.location.href = kilnSignInUrl(st.ha.signinUrl);
+          this.watchWindow(w);
+        }
       } catch (e) {
         tab?.close();
         const cur = this.d.phase();
@@ -282,8 +289,33 @@ export class ChannelSetup {
    * Back on the page from the panel's sign-in (issue 453): on to the step after Home Assistant when the panel is signed in,
    * else Home Assistant again. What the page knew went with the navigation; the panel's state has it.
    */
+  /**
+   * Sign in waits while Kiln's sign-in window is open. Once it closes (the panel's last page closed it, or the person
+   * did), the panel says which: signed in moves on ([homeAssistant]'s state), anything else gives Sign in back.
+   */
+  private watchWindow(w: Window): void {
+    const g = this.gen;
+    clearInterval(this.windowTimer);
+    this.windowTimer = setInterval(() => {
+      const waiting = () => {
+        const cur = this.d.phase();
+        return g === this.gen && this.d.here() && cur.phase === 'ha' && cur.signingIn ? cur : undefined;
+      };
+      if (!waiting()) { clearInterval(this.windowTimer); return; }
+      if (!w.closed) return;
+      clearInterval(this.windowTimer);
+      void this.request((x) => x.getState()).catch(() => undefined).then((st) => {
+        const cur = waiting();
+        if (!cur || st?.ha.signedIn) return;
+        this.d.show({ ...cur, signingIn: false, note: 'The sign-in window closed before the panel was signed in. Sign in again.' });
+      });
+    }, 1000);
+  }
+
   async afterSignIn(): Promise<void> {
+    const g = this.gen;
     const st = await this.state().catch(() => undefined);
+    if (g !== this.gen) return; // closed meanwhile: this run is over
     if (st?.ha.signedIn) await this.radio();
     else await this.homeAssistant();
   }
