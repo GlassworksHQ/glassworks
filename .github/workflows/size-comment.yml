@@ -19,11 +19,12 @@ permissions:
   actions: read
   pull-requests: write
 
-# One comment job at a time per PR branch, so an older run can't write after a newer one; each checks the
-# PR's live head just before it writes.
+# One comment job at a time per PR branch, in the order their runs finished (queue: max keeps every pending
+# one), so an older run can't write between a newer one's head check and its write.
 concurrency:
   group: size-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   comment:
@@ -43,31 +44,6 @@ jobs:
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n apk-size -D "$RUNNER_TEMP/in" \
             || echo "No apk-size artifact in run $RUN_ID (the size job didn't get that far)."
 
-      # The size job skips when the PR changes nothing that goes into the APKs (docs/ci.md). Then an earlier
-      # comment's numbers are stale: replace them with a note. Only a skip, never a failure, and only an
-      # existing comment. Same-repo PRs only: the run names no PR for a fork's.
-      - name: Size skipped
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          PR: ${{ github.event.workflow_run.pull_requests[0].number }}
-        run: |
-          set -eu
-          [ ! -f "$RUNNER_TEMP/in/size.json" ] && [ -n "$PR" ] || exit 0
-          size=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" --paginate -q '.jobs[] | select(.name == "size") | .conclusion')
-          [ "$size" = skipped ] || { echo "size: ${size:-no job}; nothing to change."; exit 0; }
-          [ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" -q .head.sha)" = "$HEAD_SHA" ] || { echo "PR #$PR moved on; a newer run will comment."; exit 0; }
-          # Two steps, so a failed lookup fails the step instead of reading as "no comment".
-          ids=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            -q '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- glassworks-apk-size -->"))) | .id')
-          id=$(printf '%s\n' "$ids" | head -n 1)
-          [ -n "$id" ] || { echo "No size comment on PR #$PR."; exit 0; }
-          printf '<!-- glassworks-apk-size -->\n**APK size:** not measured at %s. This PR no longer changes anything that goes into the APKs ([docs/ci.md](https://github.com/%s/blob/main/docs/ci.md)).\n' \
-            "$HEAD_SHA" "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/body.md"
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$RUNNER_TEMP/body.md" > /dev/null
-          echo "Marked PR #$PR's size comment as not measured."
-
       - name: Comment
         env:
           GH_TOKEN: ${{ github.token }}
@@ -75,17 +51,29 @@ jobs:
         run: |
           set -eu
           in="$RUNNER_TEMP/in"
-          [ -f "$in/size.json" ] && [ -f "$in/pr.json" ] || { echo "Nothing to post."; exit 0; }
+          [ -f "$in/pr.json" ] || { echo "Nothing to post."; exit 0; }
           pr=$(python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))["pr"]; assert type(v) is int and 0 < v < 10**7; print(v)' "$in/pr.json")
+          # pr.json alone, marked skipped (pr.yml's changes job): this PR no longer changes anything that goes
+          # into the APKs, so an earlier comment's numbers are stale. It only replaces a comment, never adds one.
+          skipped=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("skipped") is True)' "$in/pr.json")
+          if [ ! -f "$in/size.json" ] && [ "$skipped" != True ]; then echo "Nothing to post."; exit 0; fi
           # Only on the PR that commit is the head of: an artifact can't steer the comment elsewhere.
           head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" -q .head.sha)
           if [ "$head" != "$HEAD_SHA" ]; then
             echo "PR #$pr is at $head now, not $HEAD_SHA; a newer run will comment."
             exit 0
           fi
-          python3 tools/size/apksize.py render "$in/size.json" > "$RUNNER_TEMP/body.md"
-          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \
-            -q '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- glassworks-apk-size -->"))) | .id' | head -n 1)
+          # Two steps, so a failed lookup fails the step instead of reading as "no comment".
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \
+            -q '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- glassworks-apk-size -->"))) | .id')
+          id=$(printf '%s\n' "$ids" | head -n 1)
+          if [ -f "$in/size.json" ]; then
+            python3 tools/size/apksize.py render "$in/size.json" > "$RUNNER_TEMP/body.md"
+          else
+            [ -n "$id" ] || { echo "No size comment on PR #$pr to mark."; exit 0; }
+            printf '<!-- glassworks-apk-size -->\n**APK size:** not measured at %s. This PR no longer changes anything that goes into the APKs ([docs/ci.md](https://github.com/%s/blob/main/docs/ci.md)).\n' \
+              "$HEAD_SHA" "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/body.md"
+          fi
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$RUNNER_TEMP/body.md" > /dev/null
           else

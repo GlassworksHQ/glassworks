@@ -113,6 +113,23 @@ jobs:
           esac
           python3 tools/ci/changes.py "$@" --summary "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
 
+      # The size job's artifact, for the PR its numbers would have gone to: size-comment.yml replaces an earlier
+      # size comment with a note, since this PR no longer changes anything that goes into the APKs.
+      - name: No size check for this PR
+        if: github.event_name == 'pull_request' && steps.pick.outputs.size == 'false'
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/size"
+          printf '{"pr": %d, "head_sha": "%s", "skipped": true}\n' "$PR" "$HEAD_SHA" > "$RUNNER_TEMP/size/pr.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.event_name == 'pull_request' && steps.pick.outputs.size == 'false'
+        with:
+          name: apk-size
+          path: ${{ runner.temp }}/size/pr.json
+          retention-days: 7
+
   app:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
