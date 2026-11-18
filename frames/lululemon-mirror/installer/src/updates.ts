@@ -17,9 +17,15 @@ export type MirrorUpdates = { state: 'on' | 'normal-app' | 'not-granted'; privil
  * `android.permission.INSTALL_PACKAGES: granted=true` under its install permissions.
  */
 export function parseMirrorUpdates(dump: string, pkg: string): MirrorUpdates {
-  if (!dump.includes(`Package [${pkg}]`)) return { state: 'unknown', detail: `${pkg} isn't in dumpsys package` };
+  const start = dump.indexOf(`Package [${pkg}]`);
+  if (start < 0) return { state: 'unknown', detail: `${pkg} isn't in dumpsys package` };
   const privileged = /\bcodePath=\/system\/priv-app\//.test(dump) || /Flags=\[[^\]]*\bPRIVILEGED\b/.test(dump);
-  if (/\bandroid\.permission\.INSTALL_PACKAGES: granted=true\b/.test(dump)) return { state: 'on', privileged };
+  // the grant only from the installed copy's record: the first, up to the next line indented less than its fields.
+  // The image's copy under "Hidden system packages" keeps its own permissions, which may differ.
+  const lines = dump.slice(start).split(/\r?\n/);
+  const end = lines.findIndex((l, i) => i > 0 && l.trim() !== '' && /^ {0,3}\S/.test(l));
+  const active = (end < 0 ? lines : lines.slice(0, end)).join('\n');
+  if (/\bandroid\.permission\.INSTALL_PACKAGES: granted=true\b/.test(active)) return { state: 'on', privileged };
   return { state: privileged ? 'not-granted' : 'normal-app', privileged };
 }
 

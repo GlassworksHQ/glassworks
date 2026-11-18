@@ -47,6 +47,8 @@ describe('the S1', () => {
   it('Done: On when the boot image has the root update service', async () => {
     await s1('done');
     expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install with nobody at the panel. The root update service in its boot image installs them.');
+    // it lands after Done opens, so the live region says it too
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe('Done. Silent updates: On.');
   });
 
   it('Done: a tap each on a boot image from before the service, and how to add it', async () => {

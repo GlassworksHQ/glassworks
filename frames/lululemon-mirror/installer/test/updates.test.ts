@@ -17,6 +17,14 @@ describe('silent updates on the Mirror, read back (#422)', () => {
     expect(parseMirrorUpdates(updated, PKG)).toEqual({ state: 'on', privileged: true });
   });
 
+  it('reads the grant from the installed copy only, not the image\'s copy under Hidden system packages', () => {
+    const image = packageDump(PKG, 600, { privileged: true }).replace('Packages:\n', '');
+    const update = packageDump(PKG, 700, { privileged: true, granted: false }).replace('codePath=/system/priv-app/Glassworks', `codePath=/data/app/${PKG}-1`);
+    expect(parseMirrorUpdates(`${update}\nHidden system packages:\n${image}`, PKG)).toEqual({ state: 'not-granted', privileged: true });
+    const granted = packageDump(PKG, 700, { privileged: true }).replace('codePath=/system/priv-app/Glassworks', `codePath=/data/app/${PKG}-1`);
+    expect(parseMirrorUpdates(`${granted}\nHidden system packages:\n${image}`, PKG)).toEqual({ state: 'on', privileged: true });
+  });
+
   it('off for a normal app, installed over adb', () => {
     expect(parseMirrorUpdates(packageDump(PKG, 600), PKG)).toEqual({ state: 'normal-app', privileged: false });
   });
