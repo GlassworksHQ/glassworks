@@ -371,6 +371,11 @@ below as the release notes.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.
+- **The Manage page can pick what the camera may do.** Its camera page showed the use as "On the panel",
+  which a panel without touch, such as the Mirror, can't offer: turning on the ONVIF stream ended at
+  "Needs Presence + camera." It now has the panel's two cards, *Presence only* and *Presence + camera*,
+  on every panel, for a Home Assistant administrator, and the Log says who changed it. "Needs Presence +
+  camera." links to them.
 - **A screen without touch waits for Home Assistant after phone setup.** On the Mirror, the setup screen
   kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
   Assistant to add the panel, and where: Settings → Devices & services, or the old entry's

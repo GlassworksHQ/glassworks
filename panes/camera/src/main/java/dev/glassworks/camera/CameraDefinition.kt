@@ -70,10 +70,8 @@ class CameraDefinition(
         )).copy(address = address)
         // The camera doesn't change: once per page, as the address.
         val fit = read().streamFit
-        val use = pickers?.let { p -> usePickerItem(p) } ?: SettingsItem.Choice(
-            "Camera use", { prefs.use.name },
-            { listOf(CameraUse.PRESENCE.name to CameraPrefs.USE_PRESENCE, CameraUse.PRESENCE_AND_SNAPSHOTS.name to CameraPrefs.USE_CAMERA) },
-        ) { v, done -> prefs.use = CameraUse.valueOf(v); done(null) }
+        val use = pickers?.let { p -> usePickerItem(p) } ?: useChoice()
+        val refusal = CameraPage.streamRefusal(prefs.privacy, prefs.use, fit)
         return listOf(
             SettingsSection(
                 id, TITLE,
@@ -86,12 +84,13 @@ class CameraDefinition(
                     use,
                     SettingsItem.Tiles(3) { CameraPage.tiles(read(), time) },
                     SettingsItem.Group("Privacy", listOf(
-                        SettingsItem.Switch("Camera privacy", CameraPage.PRIVACY_DETAIL, { prefs.privacy }) { on, done -> prefs.privacy = on; done(null) },
+                        SettingsItem.Switch(PRIVACY_TITLE, CameraPage.PRIVACY_DETAIL, { prefs.privacy }) { on, done -> prefs.privacy = on; done(null) },
                     )),
                     SettingsItem.Group("ONVIF stream", listOf(
                         // Its line follows privacy and the use: a different line draws the page again (the
                         // overlay's shape has it), so a card tapped above it updates the switch too.
-                        SettingsItem.Switch("Stream over ONVIF and RTSP", CameraPage.streamDetail(prefs.privacy, prefs.use, fit), { prefs.onvif && prefs.policy.stillsMayLeave && fit is StreamFit.Size }) { on, done ->
+                        SettingsItem.Switch("Stream over ONVIF and RTSP", CameraPage.streamDetail(prefs.privacy, prefs.use, fit), { prefs.onvif && prefs.policy.stillsMayLeave && fit is StreamFit.Size },
+                            see = when (refusal) { CameraPage.NEEDS_CAMERA -> USE_TITLE; CameraPage.PRIVACY_ON -> "Privacy/$PRIVACY_TITLE"; else -> null }) { on, done ->
                             // Refused under privacy, in Presence only and on a camera that can't stream, as from Home Assistant (the approved design).
                             val no = CameraPage.streamRefusal(prefs.privacy, prefs.use, fit)
                             if (on && no != null) done(no) else { prefs.onvif = on; done(null) }
@@ -123,8 +122,26 @@ class CameraDefinition(
         )
     }
 
+    /**
+     * The use as two cards, Presence only and Presence + camera: the panel's own when it has no cards, and the
+     * cards' twin everywhere else (the Manage page, on every frame: it changes what the panel's settings change).
+     * A Home Assistant administrator's only away from the panel, as it decides whether images leave it. Under
+     * privacy it is refused, as the panel's cards are dimmed then.
+     */
+    private fun useChoice() = SettingsItem.Choice(
+        USE_TITLE, { prefs.use.name },
+        { listOf(CameraUse.PRESENCE.name to CameraPrefs.USE_PRESENCE, CameraUse.PRESENCE_AND_SNAPSHOTS.name to CameraPrefs.USE_CAMERA) },
+        cards = { id -> if (id == CameraUse.PRESENCE.name) CameraPrefs.USE_PRESENCE_LINE else CameraPrefs.USE_CAMERA_LINE },
+        adminOnly = true,
+    ) { v, done ->
+        val use = CameraUse.entries.firstOrNull { it.name == v } ?: return@Choice done("Pick ${CameraPrefs.USE_PRESENCE} or ${CameraPrefs.USE_CAMERA}.")
+        if (prefs.privacy && use != prefs.use) return@Choice done(CameraPage.PRIVACY_ON)
+        prefs.use = use
+        done(null)
+    }
+
     /** The two cards, as a native view: taps set the use at once, as Home Assistant's select does. */
-    private fun usePickerItem(p: CameraUsePickers) = SettingsItem.Native(USE_KEY) { host ->
+    private fun usePickerItem(p: CameraUsePickers) = SettingsItem.Native(USE_KEY, USE_TITLE, twin = { listOf(useChoice()) }) { host ->
         val picker = p.create(host.context)
         picker.onPick = { u -> prefs.use = u; picker.bind(u, enabled = !prefs.privacy) }
         object : SettingsItem.NativeView {
@@ -136,6 +153,9 @@ class CameraDefinition(
     companion object {
         const val TITLE = "Camera"
         const val USE_KEY = "camera-use"
+        /** The use's row: its key on the Manage page, and its name in the Log. */
+        const val USE_TITLE = "Camera use"
+        const val PRIVACY_TITLE = "Camera privacy"
         const val OFF_NOTE = "The camera pane is off. The camera stays closed, and its entities are unavailable in Home Assistant until you turn it on."
     }
 }

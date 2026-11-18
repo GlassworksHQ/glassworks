@@ -268,7 +268,7 @@ class ManageServer(
 
     /** A pane's or a core section's page by [id], or null when the panel has no such page. */
     private fun settingsPage(status: PanelStatus, viewer: ManagePages.Viewer, id: String, dialog: ManagePages.Dialog? = null,
-                             problem: String? = null, done: String? = null, code: Int = 200): HttpResponse? {
+                             problem: String? = null, done: String? = null, code: Int = 200, problemSee: String? = null): HttpResponse? {
         val pane = status.panes.firstOrNull { it.id == id }
         val section = status.sections.firstOrNull { it.id == (pane?.sectionId ?: id) }
         if (pane == null && section == null) return null
@@ -278,7 +278,7 @@ class ManageServer(
             d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider && item !is SettingsItem.Action)
         }
         return html(code, pages.section(status, viewer, "/$id", pane?.title ?: section!!.title, pane?.state, section, pane?.links.orEmpty(),
-            dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done)))
+            dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done), problemSee = problemSee))
     }
 
     private fun sectionNotice(done: String?): String? = when (done) {
@@ -307,6 +307,11 @@ class ManageServer(
         // SettingsChange.change trims it, so a padded value (" run ") can't skip the question (CodeRabbit on #331).
         val raw = (if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
             else req.form["value"].orEmpty()).trim()
+        // Only a Home Assistant administrator's (the camera's use): the panel's code isn't enough.
+        if (item is SettingsItem.Choice && item.adminOnly && !viewer.homeAssistant) {
+            event("${who(s)} couldn't change $what: signed in with the panel's code")
+            return settingsPage(status, viewer, page.removePrefix("/"), problem = ManagePages.ADMIN_ONLY, code = 403)!!
+        }
         // A change that asks first on the panel asks here too, and runs only with the answer to that question:
         // a one-shot token the dialog carries, for this session and this exact change (#269 verifier).
         val question: SettingsItem.Confirm? = when {
@@ -325,12 +330,18 @@ class ManageServer(
             event("${who(s)} $did $what (still applying)")
             return HttpResponse.seeOther("$page?done=pending")
         }
-        event(if (problem == null) "${who(s)} $did $what" else "${who(s)} couldn't ${if (item is SettingsItem.Action) "run" else "change"} $what: $problem")
+        event(when {
+            problem != null -> "${who(s)} couldn't ${if (item is SettingsItem.Action) "run" else "change"} $what: $problem"
+            // A choice says what it is now: "Alex set Camera › Camera use to Presence + camera".
+            item is SettingsItem.Choice -> "${who(s)} set $what to ${runCatching { item.options() }.getOrNull()?.firstOrNull { it.first == raw }?.second ?: raw}"
+            else -> "${who(s)} $did $what"
+        })
         if (problem == null) return HttpResponse.seeOther(if (SettingsChange.restarts(item)) "$page?done=restart" else page)
         // As the panel: a typed value, a duration, a choice or a window keeps its sheet open with why; the rest say it on the page.
-        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action) null
+        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action || (item is SettingsItem.Choice && item.cards != null)) null
             else ManagePages.Dialog.Edit(key, problem, typed = raw.takeIf { item is SettingsItem.Text })
-        return settingsPage(host.status(), viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422)!!
+        return settingsPage(host.status(), viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422,
+            problemSee = (item as? SettingsItem.Switch)?.see)!!
     }
 
     /**
