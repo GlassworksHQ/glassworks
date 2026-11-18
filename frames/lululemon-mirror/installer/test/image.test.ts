@@ -11,6 +11,7 @@ import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Sto
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
 import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
+import { MIRROR_FRAME } from '../src/image';
 import { fakeAdbKey, fakeServicesJar } from './fakes';
 import { DEXDUMP, disassemble } from './dexdump';
 
@@ -78,6 +79,14 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
   it('names an activity whose android:name is a resource plainly, not [object Object] (#385 delta verifier)', async () => {
     const home = app({ ...HOME_ACTIVITY(), attrs: { name: { ref: 0x7f0a0001 } } }, { enabled: false });
     await expect(checkMirrorApk(mirrorApk({ minSdk: 23, home }))).rejects.toThrow(/its home screen \(an activity named by a resource\) is turned off/);
+  });
+});
+
+describe('MIRROR_FRAME', () => {
+  it('is the frame\'s id and a SemVer version, as the app reads them (#139)', () => {
+    const frame = JSON.parse(readFileSync(new URL('../../design/frame.json', import.meta.url), 'utf8')) as { id: string };
+    expect(MIRROR_FRAME.id).toBe(frame.id);
+    expect(MIRROR_FRAME.version).toMatch(/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/);
   });
 });
 
@@ -158,6 +167,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     // nothing in the image reads ro.sf.hwrotation (2026-11-17): the first boot sets the rotation instead
     expect(prop).not.toContain('ro.sf.hwrotation');
     expect(prop).toMatch(/\nro\.lockscreen\.disable\.default=true\n$/);
+    // the frame version the app shows (#139), once, after the second run too
+    expect(prop.match(/^ro\.glassworks\.frame\.[a-z]+=.*$/gm)).toEqual(['ro.glassworks.frame.id=lululemon-mirror', `ro.glassworks.frame.version=${MIRROR_FRAME.version}`]);
+    expect(log).toContain(`build.prop: ro.glassworks.frame.version=${MIRROR_FRAME.version}, ro.lockscreen.disable.default=true`);
     expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
     for (const p of [DIR, `${DIR}/lib/arm64`, '/vendor/overlay']) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0755[\s\S]*User:\s+0\s+Group:\s+0/);
@@ -232,6 +244,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(log).toContain('1 native library for armeabi-v7a in /priv-app/Glassworks/lib/arm');
     // no settings overlay: the image's own first boot, so no lock-screen default either (--no-settings-overlay)
     expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).not.toContain('ro.lockscreen');
+    expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toContain(`\nro.glassworks.frame.version=${MIRROR_FRAME.version}\n`);
     expect(debugfs(img, 'ls /vendor')).not.toContain('overlay');
   }, 60_000);
 
