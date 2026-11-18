@@ -580,6 +580,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   interface. Comes with the radio bundle.
 - **Settings menu: cards were cut off 30 dp from the top and bottom of the screen.** They now scroll
   all the way to the screen edges.
+- **Signing in works when Home Assistant's name also gives an IPv6 address the panel can't reach.** On a
+  network where `homeassistant.local` resolves to Home Assistant's IPv6 address as well as its IPv4 one,
+  for example a VLAN without IPv6 behind an mDNS reflector, the Manage page's sign-in stopped after about
+  9 seconds with "Home Assistant didn't say who signed in", and checking a panel's sign-in failed the same
+  way. The dashboard was fine. The panel now tries Home Assistant's addresses the way a browser does, so it
+  connects over IPv4 straight away. This covers the sign-in, keeping it signed in, finding Home Assistant,
+  notification pictures and the Thread and blueprint calls.
 
 ### Changed
 - **Updates are found among the repo's other releases.** The panel now picks its own newest release
