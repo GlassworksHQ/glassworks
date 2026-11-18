@@ -346,13 +346,13 @@ gh workflow run generic-release.yml --repo GlassworksHQ/glassworks --ref main -f
 gh run download <run-id> --repo GlassworksHQ/glassworks -n generic-android-legacy-v0.2.0
 ```
 
-Before the version has its section in the CHANGELOG, the dry run warns and shows *Unreleased* as the notes; the tag
-would fail there.
+Before the version has its section in the CHANGELOG, the dry run warns and shows *Unreleased* as the notes (or a
+placeholder while *Unreleased* is empty); the tag would fail there.
 
 ### Release
 
 1. In `frames/generic-android/CHANGELOG.md`, rename *Unreleased* to `## [0.2.0] - <date>` (one-sentence first
-   line), and merge that.
+   line), add a new empty `## [Unreleased]` above it for the next changes, and merge that.
 2. Tag the merged commit, one tag per app you release:
 
 ```sh
@@ -365,7 +365,8 @@ gh run list --repo GlassworksHQ/glassworks --workflow generic-release.yml --limi
 
 Each tag runs the workflow once. Its `build` job (environment `release-signing`, read-only token):
 
-1. reads the app and version from the tag, and refuses a version that isn't higher than the line's last release;
+1. reads the app and version from the tag, and refuses a version that isn't higher than the line's last release
+   (`tools/release/check-newer-than-released.sh`);
 2. takes the notes from the CHANGELOG, before the slow build;
 3. builds `:generic-android:assembleRelease` (or `assembleLegacy`) with `-PgenericVersion` once per ABI of the
    frame, with `GENERIC_REQUIRE_RELEASE_SIGNING=true`;
@@ -375,7 +376,8 @@ Each tag runs the workflow once. Its `build` job (environment `release-signing`,
    permissions the Mirror needs;
 5. writes a `.sha256` for each.
 
-Then `publish` (tag pushes only, write token, no key) creates the release with every APK and `.sha256` in one
+Then `publish` (tag pushes only, write token, no key, one run per line at a time) checks the version again against
+the releases that exist by then, so two tags of one line pushed together can't publish out of order. It creates the release with every APK and `.sha256` in one
 `gh release create`, so a release never has half its ABIs. Installed copies see it within 24 hours, or at once
 through `homeassistant.update_entity` on the app's update entity.
 

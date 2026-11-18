@@ -42,6 +42,8 @@ jobs:
     environment: release-signing   # the APK key
     outputs:
       tag: ${{ steps.line.outputs.tag }}
+      line: ${{ steps.line.outputs.line }}
+      version: ${{ steps.line.outputs.version }}
       title: ${{ steps.line.outputs.title }}
       changelog-version: ${{ steps.notes.outputs.version }}
     env:
@@ -73,20 +75,14 @@ jobs:
           IFS=. read -r major minor patch <<< "$v"
           { echo "LINE=$line"; echo "TASK=$task"; echo "OUT=$out"; echo "PKG=$id"; echo "MIN_SDK=$min"
             echo "VERSION=$v"; echo "VERSION_CODE=$((major * 10000 + minor * 100 + patch))"; } >> "$GITHUB_ENV"
-          { echo "tag=$TAG"; echo "title=$title $v"; } >> "$GITHUB_OUTPUT"
+          { echo "tag=$TAG"; echo "line=$line"; echo "version=$v"; echo "title=$title $v"; } >> "$GITHUB_OUTPUT"
           echo "$TAG: $id $v (versionCode $((major * 10000 + minor * 100 + patch)))"
 
       - name: Higher than this line's last release
-        # An installed app only offers a newer version, and Android refuses a lower versionCode.
+        # Fails fast, before the build; publish checks again, one run per line at a time.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
-          last="$(sed -n -E "s/^$LINE-v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p" <<< "$tags" | sort -V | tail -n 1)"
-          echo "last $LINE release: ${last:-none}"
-          if [ -n "$last" ] && [ "$(printf '%s\n' "$last" "$VERSION" | sort -V | tail -n 1)" = "$last" ]; then
-            echo "::error::$VERSION is not higher than $LINE's last release, $last"; exit 1
-          fi
+        run: tools/release/check-newer-than-released.sh "$LINE" "$VERSION"
 
       - name: Release notes from frames/generic-android/CHANGELOG.md
         id: notes
@@ -96,7 +92,9 @@ jobs:
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           elif [ "$DRY_RUN" = true ]; then
             echo "::warning::no ## [$VERSION] section in frames/generic-android/CHANGELOG.md: the tag would fail here. Showing Unreleased."
-            tools/release/changelog-section.sh Unreleased frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+            # Right after a release, Unreleased is empty: the dry run still builds, with placeholder notes.
+            tools/release/changelog-section.sh Unreleased frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md" ||
+              echo "(Unreleased has no entries yet.)" > "$RUNNER_TEMP/notes.md"
             echo "version=Unreleased" >> "$GITHUB_OUTPUT"
           else
             exit 1
@@ -190,6 +188,11 @@ jobs:
     if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # One publish per line at a time (the two lines stay independent), so two tags of one line can't publish out
+    # of order: each re-checks the version against the releases that exist when it runs.
+    concurrency:
+      group: generic-release-publish-${{ needs.build.outputs.line }}
+      cancel-in-progress: false
     permissions:
       contents: write   # create the release and upload its assets (GITHUB_TOKEN only)
     env:
@@ -209,7 +212,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TITLE: ${{ needs.build.outputs.title }}
           CHANGELOG_VERSION: ${{ needs.build.outputs.changelog-version }}
+          LINE: ${{ needs.build.outputs.line }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
+          tools/release/check-newer-than-released.sh "$LINE" "$VERSION"
           tools/release/changelog-section.sh "$CHANGELOG_VERSION" frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           # One create with every asset, so a release never has half of its ABIs (docs/releasing.md "ABIs").
           # --latest=false: releases/latest must stay S1 Kiosk's (panels up to 0.4.3 read only that).
