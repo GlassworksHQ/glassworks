@@ -222,9 +222,10 @@ publish() { # state frame-version: the app-readable state file, and the staged v
     mv -f "$PUB_DIR/.frame-bundle.tmp" "$PUB_DIR/frame-bundle"
 }
 
-republish() { # after an install: keep what is loaded (written at boot), and name what is staged
-  set -- $(cat "$PUB_DIR/frame-bundle" 2>/dev/null)
-  case "${1:-}" in ok|bad|none) publish "$1" "${2:--}" ;; *) publish none - ;; esac
+republish() { # after an install: what this boot loaded (its root-only record), and what is staged now
+  root_file "$RUN/state" || return 1
+  set -- $(cat "$RUN/state")
+  case "${1:-}" in ok|bad|none) publish "$1" "${2:--}" ;; *) return 1 ;; esac
 }
 
 own_dirs() { # the root-only state dirs, created on first use
@@ -260,8 +261,11 @@ boot)
     rm -f "$BDIR/version.tmp"
     if echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; then
       rm -rf "$BDIR/old"
-      [ -e "$BDIR/current" ] && mv "$BDIR/current" "$BDIR/old"
-      if mv "$BDIR/$c_" "$BDIR/current"; then
+      # current must be gone before the candidate moves in: mv onto a directory would move it inside.
+      if [ -e "$BDIR/current" ] && ! mv "$BDIR/current" "$BDIR/old"; then
+        say "cannot move the loaded bundle aside; $c_ stays staged"; continue
+      fi
+      if [ ! -e "$BDIR/current" ] && mv "$BDIR/$c_" "$BDIR/current"; then
         rm -rf "$BDIR/old"; rm -f "$BDIR"/bad-*; say "frame bundle $FVER loaded"
         state=ok; fv=$FVER
       else
@@ -283,6 +287,8 @@ boot)
   fi
   setprop ro.glassworks.frame.id "$FRAME_ID"
   setprop ro.glassworks.frame.version "$fv"
+  # This boot's decision, root-only: what an install publishes again later, whatever the state file holds.
+  if [ $state = ok ]; then echo "ok $fv"; else echo "$state -"; fi > "$RUN/state" && chmod 600 "$RUN/state"
   if [ $state = ok ]; then setp sys.glassworks.bundle.state "ok $fv"; publish ok "$fv"
   elif [ $state = bad ]; then setp sys.glassworks.bundle.state "bad: $why"; publish bad -
   else setp sys.glassworks.bundle.state none; publish none -; fi
