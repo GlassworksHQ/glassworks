@@ -96,6 +96,8 @@ let accessAsked = 0;
 /** Whether this panel confirms it ended its kept sign-in, and, while set, the promise it waits for first. */
 let forgetOk = true;
 let forgetHeld = null;
+/** Whether this panel still keeps the sign-in: a forget drops it, confirmed by HA or not, as the real panel does. */
+let panelKeeps = true;
 /** The form token each forget brought. */
 const forgetCsrfs = [];
 /** What this panel answers a renewal with: 200, 503 (Home Assistant down) or 401 (the Manage session ended). */
@@ -156,7 +158,10 @@ async function handle(req, res) {
     const f = await form(req);
     if (staleCsrf || f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
     accessAsked++;
+    // The answer is settled when the panel takes the request (HA renewed it then); holding it is the network being slow.
+    const keeps = panelKeeps;
     if (accessHeld) await accessHeld.promise;
+    if (!keeps) return send(res, 404, { problem: 'No Home Assistant sign-in is kept for this browser.' });
     if (accessStatus === 503) return send(res, 503, { problem: "Can't reach Home Assistant. Try again in a moment." });
     if (accessStatus === 401) return send(res, 401, { problem: 'Your sign-in to this Manage page has ended. Sign in again.' });
     return send(res, 200, { access_token: 'fake-access-from-panel', expires_in: 1800 });
@@ -166,6 +171,7 @@ async function handle(req, res) {
     forgetCsrfs.push(f.get('csrf'));
     if (forgetHeld) await forgetHeld.promise;
     if (f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
+    panelKeeps = false;
     return forgetOk ? send(res, 200, { ok: true }) : send(res, 502, { problem: "Home Assistant didn't confirm it ended the sign-in. Try again." });
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
@@ -455,6 +461,8 @@ try {
   await until("document.querySelector('#gw-list .note')?.textContent.includes(\"didn't confirm it ended the sign-in\")", 'the warning again');
   forgetOk = true;
   // Home Assistant down when the panel renews an expired token: the page says so after one request, not two.
+  // Signed in to Manage with Home Assistant again: the panel keeps a new sign-in.
+  panelKeeps = true;
   accessStatus = 200;
   await call('Page.navigate', { url: PAGE });
   await until(listed, 'the panels again, from the panel');

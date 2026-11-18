@@ -261,9 +261,9 @@ export function usable(p) {
  * for a panel off the local network ([localHost]). Then the token-free [hello]; the token goes only to a panel that
  * passes it, and [p] comes back `trusted` then. A busy panel's 503 is tried again ([retrying]).
  */
-export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined, settingsMs = SETTINGS_MS) {
+export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined, settingsMs = SETTINGS_MS, stop = () => false) {
   if (p.local !== true) return { ...p, trusted: false, reach: { state: 'remote', why: REMOTE }, settings: null };
-  const get = (path, headers, timeout) => retrying(() => timed(fetchFn, p.origin + path, { headers }, timeout), sleep);
+  const get = (path, headers, timeout) => retrying(() => timed(fetchFn, p.origin + path, { headers }, timeout), sleep, stop);
   let hi;
   try {
     // Hello never answers 503 (it asks Home Assistant nothing), so only the settings read can wait: one read stays
@@ -273,6 +273,8 @@ export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = 
     return { ...p, trusted: false, reach: { state: 'down', why: DOWN }, settings: null };
   }
   if (!hello(p, hi.body)) return { ...p, trusted: false, reach: { state: 'stranger', why: STRANGER }, settings: null };
+  // Signed out while hello was on its way: the token goes nowhere after a sign-out (CodeRabbit on #534).
+  if (stop()) return { ...p, trusted: true, reach: { state: 'unchecked', why: UNCHECKED }, settings: null };
   // It answered hello, so from here on it is reachable: whatever goes wrong is said as what it is, never Down.
   try {
     const r = await get('/manage/api/settings', { Authorization: 'Bearer ' + access }, settingsMs);
@@ -436,6 +438,8 @@ export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
   // HA's address changed: this page has the old one, so it reloads rather than offer a sign-in there.
   if (r.status === 404 && r.body && r.body.reload) return { stale: true, problem: r.body.problem || 'Reload the page to go on.' };
   if (r.status === 503) return { outage: true, problem: (r.body && r.body.problem) || "Can't reach Home Assistant. Try again in a moment." };
+  // Any other server error: the panel's sign-in may be fine, so try again rather than sign in again (CodeRabbit on #534).
+  if (r.status >= 500) return { outage: true, problem: 'The panel ran into a problem. Try again in a moment.' };
   return null;
 }
 
@@ -449,7 +453,9 @@ export async function panelForget(csrf, fetchFn = fetch, ms = FORGET_MS) {
     // 401: this Manage page's sign-in has ended. The panel ends what it kept for it on its own, but can't confirm it
     // here, so it isn't a confirmation (CodeRabbit on #534).
     // 403: the form token is another session's (signed in again in another tab); Try again would be refused the same.
-    return r.status === 200 ? true : r.status === 401 ? 'ended' : r.status === 403 ? 'stale' : false;
+    // 200 with left: HA's address had changed, so the panel didn't send the token to the old one: not revoked.
+    if (r.status === 200) return r.body && r.body.left ? 'left' : true;
+    return r.status === 401 ? 'ended' : r.status === 403 ? 'stale' : false;
   } catch {
     return false;
   }

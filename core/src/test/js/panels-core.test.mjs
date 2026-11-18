@@ -494,3 +494,20 @@ test("a tab's renewal Home Assistant didn't answer is kept for Try again; a refu
   // The panel's forget waits for both its tries at Home Assistant.
   assert.ok(FORGET_MS >= 40_000 && FORGET_MS > TOKEN_MS);
 });
+
+test('after a sign-out mid-read no token goes out; server errors and a skipped revoke say what they are (CodeRabbit on #534)', async () => {
+  const p = { origin: 'http://kitchen-panel.local:8099', local: true, model: MODEL };
+  const urls = [];
+  let signedOut = false;
+  const fetchFn = async (url, init) => {
+    urls.push([url, init.headers && init.headers.Authorization]);
+    if (url.endsWith('/manage/api/hello')) { signedOut = true; return { status: 200, headers: { get: () => null }, json: async () => ({ api: 1, glassworks: true, model: MODEL }) }; }
+    return { status: 200, headers: { get: () => null }, json: async () => ({ api: 1, sections: [] }) };
+  };
+  await readPanel(p, 'TOKEN', fetchFn, 1_000, async () => {}, 1_000, () => signedOut);
+  assert.deepEqual(urls.map(([u, a]) => [u.slice(u.lastIndexOf('/manage')), a]), [['/manage/api/hello', undefined]], 'hello only, no bearer');
+  const answer = (status, body) => async () => ({ status, headers: { get: () => null }, json: async () => body });
+  assert.equal((await panelAccess('CSRF', answer(500, null), 1_000)).outage, true, 'a 500 is an outage, not a missing sign-in');
+  assert.equal(await panelForget('CSRF', answer(200, { ok: true, left: true }), 1_000), 'left', 'not revoked: HA moved');
+  assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
+});

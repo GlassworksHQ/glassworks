@@ -38,6 +38,7 @@ class HaTokenClientTest {
         fun renew(status: Int, body: String) = HaGatewayClient(HaTokenClient(Answers(status, body = body))) { error("no socket") }
             .refresh(auth.haBase, auth.clientId, auth.refreshToken) as dev.glassworks.manage.HaGateway.Tokens.Failed
         assertTrue("invalid_grant: gone", renew(400, "{\"error\":\"invalid_grant\"}").refused)
+        assertFalse("a proxy's 503 with that body isn't HA saying so", renew(503, "{\"error\":\"invalid_grant\"}").refused)
         val denied = renew(403, "{\"error\":\"access_denied\",\"error_description\":\"User is not active\"}")
         assertFalse("access_denied: kept", denied.refused)
         assertFalse(denied.unreachable)

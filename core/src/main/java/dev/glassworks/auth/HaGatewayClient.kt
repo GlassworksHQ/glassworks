@@ -41,9 +41,9 @@ class HaGatewayClient(private val tokens: HaTokenClient, private val connect: (S
     override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens =
         when (val r = tokens.refresh(StoredAuth(haBase, clientId, refreshToken))) {
             is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, null, r.expiresIn)
-            // invalid_grant: HA no longer has this sign-in. access_denied (an account turned off) keeps it: it may come back,
+            // invalid_grant with HA's 400: HA no longer has this sign-in (a proxy's 5xx with that body isn't HA saying so). access_denied (an account turned off) keeps it: it may come back,
             // and it must stay revocable (CodeRabbit on #534). Anything else is an outage.
-            is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0, refused = r.code == "invalid_grant")
+            is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0, refused = r.code == "invalid_grant" && r.httpStatus == 400)
         }
 
     override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean =

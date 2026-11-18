@@ -137,11 +137,12 @@ class HaSignIn(
     }
 
     /** Ends a kept sign-in in Home Assistant: its refresh token and every access token made from it. */
-    fun end(k: Kept): Boolean = revokeTwice(k.haBase, k.clientId, k.refreshToken)
+    /** [again]: whether the second try may still go (the caller checks HA's address hasn't moved meanwhile). */
+    fun end(k: Kept, again: () -> Boolean = { true }): Boolean = revokeTwice(k.haBase, k.clientId, k.refreshToken, again)
 
     /** True when Home Assistant took the revoke, at the first or the second try. */
-    private fun revokeTwice(haBase: String, clientId: String, refreshToken: String): Boolean {
-        if (gateway.revoke(haBase, clientId, refreshToken) || gateway.revoke(haBase, clientId, refreshToken)) return true
+    private fun revokeTwice(haBase: String, clientId: String, refreshToken: String, again: () -> Boolean = { true }): Boolean {
+        if (gateway.revoke(haBase, clientId, refreshToken) || (again() && gateway.revoke(haBase, clientId, refreshToken))) return true
         warn("Home Assistant didn't take the revoke of the Manage sign-in's token; it stays under the user's profile until removed there")
         return false
     }

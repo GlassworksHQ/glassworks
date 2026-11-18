@@ -303,6 +303,36 @@ class ManageKeptSignInTest {
         assertEquals(6, f.revoked.size)
     }
 
+    @Test fun allPanelsSignOutAfterAMoveSaysTheSignInWasLeftNotEnded() {
+        // How many times one forget reads the address, the grant's own check last: measured on another browser.
+        val dry = signedIn()
+        val dryCsrf = dry.csrf()
+        var reads = 0
+        f.haBaseFn = { reads++; "http://192.0.2.10:8123" }
+        assertEquals(200, dry.post(ManageServer.HA_FORGET, mapOf("csrf" to dryCsrf)).status)
+        val before = reads
+        f.revoked.clear()
+        // The address moves after the request is let in, just before the grant is checked.
+        val b = signedIn()
+        val csrf = b.csrf()
+        reads = 0
+        f.haBaseFn = { if (++reads < before) "http://192.0.2.10:8123" else "http://192.0.2.11:8123" }
+        val r = b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf))
+        f.haBaseFn = null
+        assertEquals(200, r.status)
+        assertTrue("not revoked: the address moved", JSONObject(r.text()).optBoolean("left"))
+        assertTrue("nothing sent to the old address", f.revoked.isEmpty())
+    }
+
+    @Test fun theSecondTryDoesntGoToAnAddressThatMovedDuringTheFirst() {
+        val b = signedIn()
+        f.revokeWorks = false
+        f.duringRevoke = { f.duringRevoke = null; f.haBase = "http://192.0.2.11:8123" }
+        b.post("/manage/signout", mapOf("csrf" to b.csrf()))
+        assertEquals("one try at the old address, not two", 1, f.revoked.size)
+        assertTrue(f.events.any { it.contains("address changed") })
+    }
+
     @Test fun aRevokeHaDoesntTakeAsThePageStopsIsInTheLog() {
         signedIn()
         f.revokeWorks = false

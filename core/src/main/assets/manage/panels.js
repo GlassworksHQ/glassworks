@@ -166,6 +166,11 @@ async function ending(t) {
   say(listCard, 'Panels in Home Assistant', 'Signing out…');
   const ok = await end(t);
   if (mine !== generation) return;
+  if (ok === 'left') {
+    return say(listCard, 'Panels in Home Assistant',
+      "Signed out of this page. This panel's Home Assistant address changed, so it couldn't end the sign-in at the old one. Remove it in Home Assistant: your profile, Security, Refresh tokens.",
+      h('button', { class: 'pill', type: 'button', onclick: start }, 'Start again'));
+  }
   if (ok === 'stale') {
     return say(listCard, 'Panels in Home Assistant',
       "This page is out of date, so it can't sign out here. Reload it and sign out again, or remove the sign-in in Home Assistant: your profile, Security, Refresh tokens.",
@@ -364,7 +369,7 @@ async function apply(fromP, toP, rows, asked) {
     // Change them too: the first run's other rows (a restart it asked for, what it copied) stay in the result (CodeRabbit on #488).
     const result = asked ? new Map([...asked, ...fresh]) : fresh;
     if (stale()) return;
-    const again = await readPanel(toP, access);
+    const again = await readPanel(toP, access, undefined, undefined, undefined, undefined, stale);
     if (stale()) return;
     panels = panels.map((p) => (p.origin === toP.origin ? again : p));
     drawList(stored()?.user || '');
@@ -460,7 +465,7 @@ async function start() {
   }
   // Each row as soon as its panel answers: a slow one doesn't hold the others back.
   await Promise.all(panels.map(async (p, i) => {
-    const got = await readPanel(p, access);
+    const got = await readPanel(p, access, undefined, undefined, undefined, undefined, () => mine !== generation);
     if (mine !== generation) return;
     panels[i] = got;
     drawList(me.name);

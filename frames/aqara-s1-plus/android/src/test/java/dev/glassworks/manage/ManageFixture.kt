@@ -62,6 +62,7 @@ class ManageFixture(
         }
         override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean {
             revoked += refreshToken
+            duringRevoke?.invoke()
             revokeStarted?.countDown()
             revokeGate?.let { if (!it.await(10, java.util.concurrent.TimeUnit.SECONDS)) revokeGateTimedOut = true }
             return revokeWorks
@@ -91,6 +92,9 @@ class ManageFixture(
 
     /** While set, the server's background work waits here until the test runs it; else it runs at once. */
     @Volatile var deferred: MutableList<() -> Unit>? = null
+
+    /** Runs while Home Assistant takes a revoke (an address that changes meanwhile). */
+    @Volatile var duringRevoke: (() -> Unit)? = null
 
     /** Runs while Home Assistant renews a kept sign-in (an address that changes meanwhile). */
     @Volatile var duringRefresh: (() -> Unit)? = null
