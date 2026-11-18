@@ -59,9 +59,6 @@ object WifiStep {
         val actions: List<Action>,
     )
 
-    /** Where Home Assistant lists the panel. Shown whenever Bluetooth setup is on. */
-    const val HA_HINT = "In Home Assistant: Settings → Devices & services → Discovered → “Improv via BLE”."
-
     fun improv(f: ImprovFacts): ImprovLine {
         val label = "Bluetooth setup"
         if (!f.running) {
@@ -70,8 +67,9 @@ object WifiStep {
                 Phase.UNAVAILABLE, "$label · off", "Bluetooth setup couldn't start",
                 "${sentence(err)} Choose a network here instead, or try again.", Tone.ROSE, listOf(Action.RETRY),
             ) else ImprovLine(
-                Phase.OFF, "$label · off", "Set up Wi-Fi from Home Assistant",
-                "Turn on Bluetooth setup, then add the panel from Home Assistant (“Improv via BLE”).",
+                // Short, as when it is on: the card's line above says how Home Assistant sends it (#468).
+                Phase.OFF, "$label · off", "Bluetooth setup is off",
+                "Then Home Assistant can add the panel.",
                 Tone.MUTED, listOf(Action.START),
             )
         }
@@ -89,7 +87,7 @@ object WifiStep {
                 )
                 else -> ImprovLine(
                     Phase.READY, "$label · on", "Bluetooth setup is on",
-                    "$HA_HINT Configure it there, then tap Allow here.",
+                    "Add the panel in Home Assistant, then tap Allow here.",
                     Tone.AMBER, listOf(Action.ALLOW, Action.NOT_NOW),
                 )
             }
