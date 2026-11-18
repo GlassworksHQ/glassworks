@@ -78,22 +78,25 @@ class BootSplashTest {
         fun activity(name: String): Element = checkNotNull(doc.getElementsByTagName("activity").let { list ->
             (0 until list.length).map { list.item(it) as Element }.firstOrNull { it.getAttributeNS(ANDROID, "name") == name }
         }) { "the manifest declares $name" }
-        fun priorities(e: Element) = e.getElementsByTagName("intent-filter").let { list ->
-            (0 until list.length).map { (list.item(it) as Element).getAttributeNS(ANDROID, "priority") }
-        }
-        fun categories(e: Element) = e.getElementsByTagName("category").let { list ->
+        fun names(e: Element, tag: String) = e.getElementsByTagName(tag).let { list ->
             (0 until list.length).map { (list.item(it) as Element).getAttributeNS(ANDROID, "name") }
         }
+        // The activity's MAIN + HOME + DEFAULT filter: the one that makes it a home screen.
+        fun homeFilter(e: Element): Element = checkNotNull(e.getElementsByTagName("intent-filter").let { list ->
+            (0 until list.length).map { list.item(it) as Element }.singleOrNull { f ->
+                "android.intent.action.MAIN" in names(f, "action") &&
+                    names(f, "category").containsAll(listOf("android.intent.category.HOME", "android.intent.category.DEFAULT"))
+            }
+        }) { "${e.getAttributeNS(ANDROID, "name")} has one MAIN/HOME/DEFAULT filter" }
 
         val boot = activity(splash)
         assertEquals("splash ships disabled", "false", boot.getAttributeNS(ANDROID, "enabled"))
         assertEquals("direct-boot aware", "true", boot.getAttributeNS(ANDROID, "directBootAware"))
         assertEquals("own process", ":boot", boot.getAttributeNS(ANDROID, "process"))
-        assertTrue("HOME filter priority", "${BootSplash.PRIORITY}" in priorities(boot))
-        assertTrue("HOME filter", categories(boot).containsAll(listOf("android.intent.category.HOME", "android.intent.category.DEFAULT")))
+        assertEquals("HOME filter priority", "${BootSplash.PRIORITY}", homeFilter(boot).getAttributeNS(ANDROID, "priority"))
         val kioskMain = activity(main)
         assertEquals("MainActivity stays credential-encrypted only", "", kioskMain.getAttributeNS(ANDROID, "directBootAware"))
-        assertTrue("MainActivity HOME keeps the default priority 0", priorities(kioskMain).all { it.isEmpty() })
+        assertEquals("MainActivity HOME keeps the default priority 0", "", homeFilter(kioskMain).getAttributeNS(ANDROID, "priority"))
     }
 
     private companion object {
