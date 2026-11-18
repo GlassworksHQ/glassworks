@@ -66,7 +66,8 @@ interface Frame {
      * Whether something on the device with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) traffic to the
      * app's portal (udp 8053 and tcp 8098, on the hotspot's own addresses), so a phone that joins opens the setup page
      * by itself (#197). The S1's radio helper does. False: the app runs no portal, and the phone opens the address the
-     * screen shows.
+     * screen shows. An opt-in, not a check: true starts the app's portal listeners, and on a device whose root side
+     * doesn't forward to them (an S1 with an older radio helper) they listen unused and the address stays the way in.
      */
     val hotspotPortal: Boolean get() = false
 

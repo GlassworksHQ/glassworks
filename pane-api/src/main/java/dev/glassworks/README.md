@@ -563,8 +563,10 @@ The S1 needs no root for it: the local-only hotspot is open to any app in the fo
 kiosk's foreground service counts. The hidden API changes two things on the device, and
 `HiddenApHotspot` puts both back whenever the hotspot ends: the device's saved hotspot settings, and
 the Wi-Fi client that Android turns off to start the AP. On most devices, the S1 among them, the Wi-Fi
-client is off while the hotspot runs. A captive portal that opens the page by itself needs root, and
-comes later.
+client is off while the hotspot runs. A captive portal needs root, so only a frame with root can have one:
+on the S1 (`hotspotPortal`), a phone that joins shows its Wi-Fi sign-in prompt, which opens the setup page. The
+address on the screen stays the way in when no prompt comes up, and on every other frame (`hotspotPortal` is false
+by default).
 
 `HotspotPermission` decides what the setup screen shows before it asks: the reason first, then
 Android's dialog, and where to allow it once Android won't ask again.

@@ -845,6 +845,9 @@ rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
 # (012BA8C0, little-endian), the AP's IPv6 2001:db8::1, a home network 192.0.2.10.
 echo "--- setup hotspot portal (#197)"
 reset_radio; mkdir -p /data/s1kiosk/radio "$T/net" "$T/ipt" "$T/hostapd"; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+# an unrelated filter rule in each family, which nothing in this section may touch
+FILTER='-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT'
+printf '%s\n' "$FILTER" > "$T/ipt/4-filter"; printf '%s\n' "$FILTER" > "$T/ipt/6-filter"
 echo off > "$T/props/persist.s1kiosk.radio_mode"
 cat > "$T/ipt.py" <<'PY'
 import os, sys
@@ -991,6 +994,7 @@ i=0; until [ "$(pgrep -P "$P" -f s1kiosk_radio.sh | wc -l)" -ge 2 ] || [ $i -ge 
 L=$(pgrep -P "$P" -f s1kiosk_radio.sh | tr '\n' ' ')
 check "(the helper's loops are up)" test "$(echo $L | wc -w)" -ge 2
 kill -STOP $L; kill -9 "$P"
+i=0; while kill -0 "$P" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done   # until its parent reaps it
 check "(the helper is killed)" sh -c "! kill -0 $P 2>/dev/null"
 : > /t/ipt-nat-fails; touch /t/ipt-nat-unreadable; kill -CONT $L
 # Unreadable until the leftover loop has failed 8 reads (several cleanup tries) or has ended: a loop that tried
@@ -1023,16 +1027,21 @@ check "no IPv6 socket: IPv4 only" test -n "$(nat 4 | grep '^-A S1PORTAL')" -a -z
 ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6; socks tcp "012BA8C0:1FA2 0A 10050"; socks tcp6; portal
 check "plain IPv4 sockets (udp, tcp) count too" test "$(nat 4 | grep -c '^-A S1PORTAL')" = 2
 ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
-H=$!; first_check; hostapd_on; bg_until rules4
-check "the loop between the helper's passes: up again within seconds" test -n "$(nat 4 | grep '^-A S1PORTAL')"
+# the whole portal: both families' rules, one jump each, and the status
+portal_up() {
+  test "$(prop sys.s1kiosk.portal.status)" = "on wlan0" && jumps4 && test "$(nat 4 | grep -c '^-A S1PORTAL')" = 2 &&
+    test "$(nat 6 | grep -c '^-A S1PORTAL')" = 1 && test "$(nat 6 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1
+}
+H=$!; first_check; hostapd_on; bg_until portal_up
+check "the loop between the helper's passes: up again within seconds, the whole of it" portal_up
 ap_up; portal; echo 6 > /t/ipt-refuse; rm -f "$T/ipt/6-nat"; portal
-check "ip6tables refuses after the IPv4 rules went in: nothing left half-done, and an error" \
-  test -z "$(nat 4 | grep '^-A S1PORTAL')" -a "$(prop sys.s1kiosk.portal.status)" = "error: iptables refused the rules"
+check "ip6tables refuses after the IPv4 rules went in: nothing left half-done (no chain, no jump), and an error" \
+  test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" -a "$(prop sys.s1kiosk.portal.status)" = "error: iptables refused the rules"
 rm -f /t/ipt-refuse; portal
 check "...and on once it takes them" test "$(prop sys.s1kiosk.portal.status)" = "on wlan0"
 hostapd_off; ap_up; portal
 check "a new helper removes what an old one left" test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
-check "...the filter table untouched" test -z "$(grep -h S1PORTAL "$T"/ipt/*-filter 2>/dev/null)"
+check "...the filter tables untouched" test "$(cat "$T/ipt/4-filter")" = "$FILTER" -a "$(cat "$T/ipt/6-filter")" = "$FILTER"
 for b in iptables ip6tables iptables-restore ip6tables-restore iptables-save ip6tables-save; do printf '#!/bin/sh\nexit 0\n' | w "$T/bin/$b"; done
 w "$T/bin/ip" <<'EOF'
 #!/bin/sh
