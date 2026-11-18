@@ -3,6 +3,7 @@
 // and one line on what it means. One look on every frame; each frame has its own words.
 import type { RootUpdates } from '@glassworks/aqara-s1-plus-installer';
 import type { MirrorUpdates } from '@glassworks/lululemon-mirror-installer';
+import './SilentUpdates.css';
 
 export interface SilentWords { word: string; tone: 'y' | 'n' | 'w'; line: string }
 
