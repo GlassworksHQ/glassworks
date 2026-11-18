@@ -27,7 +27,8 @@
     "open localabstract:s1kiosk_setup",
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
-    "close localabstract:s1kiosk_setup"
+    "close localabstract:s1kiosk_setup",
+    "dumpsys lock_settings"
   ],
   "api25": [
     "getprop ro.build.version.sdk",
@@ -55,7 +56,8 @@
     "open localabstract:s1kiosk_setup",
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
-    "close localabstract:s1kiosk_setup"
+    "close localabstract:s1kiosk_setup",
+    "dumpsys lock_settings"
   ],
   "api26": [
     "getprop ro.build.version.sdk",
@@ -83,7 +85,8 @@
     "open localabstract:s1kiosk_setup",
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
-    "close localabstract:s1kiosk_setup"
+    "close localabstract:s1kiosk_setup",
+    "dumpsys lock_settings"
   ],
   "api29": [
     "getprop ro.build.version.sdk",
@@ -111,7 +114,8 @@
     "open localabstract:s1kiosk_setup",
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
-    "close localabstract:s1kiosk_setup"
+    "close localabstract:s1kiosk_setup",
+    "dumpsys lock_settings"
   ],
   "api34": [
     "getprop ro.build.version.sdk",
@@ -141,6 +145,7 @@
     "open localabstract:s1kiosk_setup",
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
-    "close localabstract:s1kiosk_setup"
+    "close localabstract:s1kiosk_setup",
+    "dumpsys lock_settings"
   ]
 }

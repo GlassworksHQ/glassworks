@@ -11,6 +11,7 @@
 // 5. Start it, then make it the home screen: `cmd package set-home-activity` on Android 7+, else Android's
 //    chooser and one "Always" tap. Checked by package, as the Mirror's recipe does (#411).
 // 6. Hand over to setup over the LAN (#34): the app's setup channel gives its address, Kiln links its page.
+// 7. Read whether the device has a PIN, pattern or password (#522), for Done's advice. Read-only.
 import type { PanelShell } from '@glassworks/adb';
 import { Steps, apkInfo, apkPermissions, dropAdmin, kioskVersion, startApp, type ApkInfo, type StepFn } from '@glassworks/app-adb';
 import { parsePreferredHome } from '@glassworks/lululemon-mirror-installer';
@@ -95,7 +96,13 @@ export interface SilentUpdatesResult {
   detail?: string;
 }
 
-export interface GenericInstalled { plan: Plan; app: AppVersion; updated: boolean; grants: Grant[]; silentUpdates: SilentUpdatesResult; home: HomeResult; handoff: Handoff }
+/**
+ * The device's screen lock (#522): `secure` with a PIN, pattern or password, `none` with None or Swipe. Undefined
+ * when Kiln can't tell, and then Done says nothing.
+ */
+export type ScreenLock = 'secure' | 'none';
+
+export interface GenericInstalled { plan: Plan; app: AppVersion; updated: boolean; grants: Grant[]; silentUpdates: SilentUpdatesResult; home: HomeResult; handoff: Handoff; screenLock?: ScreenLock }
 
 /** The parts of install the screen follows, in order. `home` with `pick`: waiting for the person's tap. */
 export type GenericPhase =
@@ -402,6 +409,28 @@ export async function handOff(p: PanelShell, o: { tries?: number; sleep?: (ms: n
 }
 
 /**
+ * The screen lock in `dumpsys lock_settings`, for its first user (research/screen-lock.md). Android 11 and 15 name it
+ * (`CredentialType: Pin`, `None`, `PIN`, `NONE`); Android 8.0 doesn't, and its gatekeeper `SID` is 0 without a
+ * credential. Android 15 keeps a SID without one, but names the type. Undefined otherwise.
+ */
+export function parseScreenLock(dump: string): ScreenLock | undefined {
+  const user = /^\s*User 0\s*$([\s\S]*?)(?=^\s*User \d+\b|^\S|(?![\s\S]))/m.exec(dump)?.[1] ?? '';
+  const type = /^\s*CredentialType:\s*(\S+)/m.exec(user)?.[1];
+  if (type) return /^(none|-1)$/i.test(type) ? 'none' : 'secure';
+  const sid = /^\s*SID\s*[:=]\s*([0-9a-f]+)\s*$/im.exec(user)?.[1];
+  if (sid) return /^0+$/.test(sid) ? 'none' : 'secure';
+  return undefined;
+}
+
+/** Read-only: the screen lock (#522). The dump has the device's own IDs, so only the answer is logged. */
+async function readScreenLock(r: Steps): Promise<ScreenLock | undefined> {
+  const res = await r.p.run('dumpsys lock_settings');
+  const lock = res.code === 0 ? parseScreenLock(res.out) : undefined;
+  r.detail(`screen lock: ${lock === 'secure' ? 'a PIN, pattern or password' : lock === 'none' ? 'none or swipe' : 'unknown'}`);
+  return lock;
+}
+
+/**
  * Installs Glassworks (or its legacy build) on any Android 6+ device, grants what adb can, makes it the home
  * screen and hands over to setup. Throws Refused, with nothing changed, when the device or the APK is wrong.
  */
@@ -440,7 +469,8 @@ export async function installGeneric(p: PanelShell, o: GenericOptions): Promise<
   r.step('Hand over to setup');
   const handoff = await handOff(p, { tries: o.setupTries, sleep: o.sleep });
   r.detail(handoff.setupPage ? `setup page: ${handoff.setupPage}` : handoff.why ?? '');
-  return { plan, app: version, updated: !!plan.installed, grants, silentUpdates: silent, home, handoff };
+  const screenLock = await readScreenLock(r);
+  return { plan, app: version, updated: !!plan.installed, grants, silentUpdates: silent, home, handoff, ...(screenLock ? { screenLock } : {}) };
 }
 
 /**

@@ -38,7 +38,7 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
     return 0;
   }
   const res = await installGeneric(p, { apk, haUrl: value('--ha-url'), onStep });
-  log(JSON.stringify({ app: res.app, updated: res.updated, grants: res.grants, silentUpdates: res.silentUpdates, home: res.home, handoff: res.handoff }, null, 2));
+  log(JSON.stringify({ app: res.app, updated: res.updated, grants: res.grants, silentUpdates: res.silentUpdates, home: res.home, handoff: res.handoff, screenLock: res.screenLock ?? 'unknown' }, null, 2));
   return 0;
 }
 
