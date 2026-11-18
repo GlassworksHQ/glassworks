@@ -208,7 +208,11 @@ on a 0.4.3 boot image gets an update card that says to update with Kiln first.
 
 ### The Kiln update: no opening
 
-Route 1, in this order. Steps 1–3 write nothing, and step 4 is the first write:
+Route 1, in this order. Steps 1–3 don't touch `boot` or any other partition, and step 4 is the first
+partition write. Steps 1 and 3 do change `/data`: step 1 is an ordinary app update (it stays if the
+route stops there, like any app update), and the RAM-booted loader in step 3 copies the old
+`persist.s1kiosk.*` values to `persist.glassworks.*`. The 0.4.3 boot image ignores those copies, so
+stopping after step 3 leaves the panel working as before.
 
 1. **Over adb, on the 0.4.3 boot image.** Install the S1 frame 1.0.0 app with `pm install -r`.
    Its data stays: Wi-Fi, settings, the HA pairing. It installs its radio bundle, whose helper has the
@@ -223,6 +227,13 @@ Route 1, in this order. Steps 1–3 write nothing, and step 4 is the first write
 4. **Write.** Back to fastboot (`adb reboot bootloader`), `fastboot flash boot`, then `fastboot boot`
    the same image once more. From that system, the loader's `boot` export reads the partition back
    and Kiln compares hashes **before the panel ever boots from the new flash**. Then reboot.
+   - **If the hashes differ**, Kiln doesn't reboot. From the same RAM system it goes back to
+     fastboot and flashes step 1's backup, then reads it back the same way. If stock `flash` fails
+     there too, the panel stays on the RAM system until it is powered off, and the way back is the FEL
+     recovery: our U-Boot from RAM, `fastboot flash boot <backup>`, `fb-read-partition.sh boot` and a
+     hash compare ([root.md](root.md#one-command-fel-installsh), `fel-install.sh --undo`).
+   - **If the panel doesn't come up from flash** after a matching read-back, the same FEL recovery
+     applies. The backup is Kiln's own, so its undo takes it.
 
 If the panel never reaches fastboot, or stock fastboot refuses `boot` or `flash`, the route stops
 before any write, and the FEL button stays the way in. **Route 2** (root writes `boot` from Android,
@@ -245,7 +256,9 @@ All host-side and read-only. The images are local backups, never in the repo.
 
 ## Panel tests
 
-The root runs these from `~/.t3/glassworks-m1/139/panel-plan-b.md`. The results go here, with dates.
+None of these has run yet. The results go here, with dates. Each writes only bytes the panel already
+has. They need a panel with adb root (a dev boot image) for the backup and for T5. The root's run
+sheet with the same steps is outside the repo.
 
 | Test | What it settles | Writes |
 |---|---|---|
@@ -255,6 +268,51 @@ The root runs these from `~/.t3/glassworks-m1/139/panel-plan-b.md`. The results 
 | T3 | `fastboot boot` of the image the panel already runs: does Android come up from RAM? | Nothing |
 | T4 | `fastboot flash boot` of that same image (no change), read back from Android | `boot`, same bytes |
 | T5 | Route 2 on the dev panel: root writes the same image from Android, reads it back | `boot`, same bytes |
+
+**Before any test.** `unset ANDROID_SERIAL` (fastboot reads it too). Back up `boot` and `misc`,
+each read twice and compared, and keep the hashes:
+```sh
+B=<backup dir outside the repo>
+for p in boot misc; do
+  adb exec-out "su -c 'cat /dev/block/by-name/$p'" > "$B/$p.img"
+  adb exec-out "su -c 'cat /dev/block/by-name/$p'" | cmp - "$B/$p.img" || echo "MISMATCH $p: stop"
+done
+(cd "$B" && shasum -a 256 boot.img misc.img > SHA256SUMS)
+```
+Then make `boot-ram.img`: the same image with ` androidboot.gw139=ram` appended to the header's
+command line (offset 64, 512 bytes, NUL-padded). A RAM boot then shows `ro.boot.gw139=ram`, and a
+boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
+
+**Never run** `fastboot flashing unlock`, `fastboot erase` or `fastboot oem` on the stock U-Boot.
+
+1. **T0** (read-only): `getprop ro.crypto.state` (expect `unencrypted`), `ls -lL /dev/block/by-name/boot`,
+   `cat /dev/block/by-name/boot | head -c 8` as adb's shell (expect permission denied), and the keys
+   of `/proc/cmdline` (`tr ' ' '\n' | cut -d= -f1`). The full line holds the serial and MAC addresses:
+   keep it out of notes.
+2. **T1**: `adb reboot bootloader`, then `fastboot devices` for a minute. Record the USB vendor and
+   product IDs and `fastboot getvar product|version|max-download-size|secure|unlocked`. If Android
+   boots instead, nothing was written: go to T2.
+3. **T2** (only if T1 failed): `su -c 'printf bootloader | dd of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc,sync'`,
+   then `adb reboot`. Afterwards (from Android, or from T3's RAM system if U-Boot keeps landing in
+   fastboot) put it back with `dd if=/dev/zero … bs=32 count=1 conv=notrunc` and compare the first 2048
+   bytes with the backup.
+4. **T3**: in fastboot, `fastboot boot boot-ram.img`. Wait for `sys.boot_completed`, check
+   `ro.boot.gw139=ram`, root, the radio helper, Wi-Fi, and compare the `/proc/cmdline` keys with T0's.
+   If nothing comes up within 4 minutes, power-cycle: the panel boots from flash, unchanged.
+5. **T4** (only if T3 passed): back in fastboot, `fastboot flash boot boot.img`, then `fastboot boot
+   boot-ram.img`, and in that RAM system `su -c 'sha256sum /dev/block/by-name/boot'` must equal the
+   backup. Then `adb reboot`. On a mismatch, don't boot from flash: rewrite from the RAM system with T5's
+   commands, or use the FEL recovery.
+6. **T5**: `adb push boot.img /data/local/tmp/`, then as root
+   `dd if=/data/local/tmp/boot.img of=/dev/block/by-name/boot bs=1048576 conv=fsync && sync`,
+   `echo 3 > /proc/sys/vm/drop_caches` and `sha256sum /dev/block/by-name/boot` (must equal the
+   backup) before `adb reboot`. Delete the pushed copy.
+
+**FEL recovery** (needs the back cover open): hold the PCB button while plugging in USB-C, then
+`NO_BL31=1 frames/aqara-s1-plus/tools/fel/fel-boot.sh <u-boot build dir>`,
+`fastboot flash boot "$B/boot.img"` (and `misc` if T2 ran),
+`frames/aqara-s1-plus/tools/install/fb-read-partition.sh boot <file>`, compare the first 33554432
+bytes with `SHA256SUMS`, and `fastboot reboot`.
 
 ## Open questions
 
