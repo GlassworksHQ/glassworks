@@ -17,6 +17,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   each other. Signed in to a panel's Manage page with Home Assistant, All panels there needs no second
   sign-in; after you sign out of All panels, or the app restarts, it asks for one again. Every panel needs
   this version for the page to reach it.
+- **The panel shows its frame version.** The S1 Plus page in the panel's settings and on the Manage page has a new
+  *Frame version* row: the version of the parts of the panel Glassworks owns, such as its boot-side services and boot
+  animation, not Android's. A panel installed before frame versions shows *Before 1.0.0*. A new *Frame update*
+  entity in Home Assistant says when a newer frame version is out and how to install it. The first one comes with
+  Glassworks 1.0.0, and a panel installed before it needs one update with Kiln to get it.
 - **The Screen settings warn about a screen lock.** On a tablet with a PIN, pattern or password, Android locks
   it when the screen turns off, and someone has to unlock it. The panel's **Settings → Screen** and the Manage
   page now say so in amber, with the way out: turn the lock off in Android's settings, or keep the screen on.
@@ -168,8 +173,7 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   stepping each second. See [Open a view](docs/notifications.md#open-a-view).
 - **Glassworks has its own icon.** The launcher, the home app chooser and Settings show the Glassworks
   mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
-  Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
-  generic app's icon; S1 Kiosk keeps its own.
+  Android 13 and later it follows themed icons. The notification shows the mark in white.
 - **Glassworks for Android 6 and 7 tablets and the lululemon Mirror.** Devices on Android 6.0 to 7.1 get
   a legacy build of Glassworks for generic Android, a separate app with its own updates. Kiln knows which
   build a device needs and refuses the other one, and the legacy build is what it installs on the Mirror.
@@ -186,6 +190,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   setting if it was already on. Other devices don't show the chip.
 
 ### Changed
+- **S1 Kiosk is now Glassworks.** The panel's app shows as Glassworks, with the Glassworks icon, in the launcher,
+  in Android's Settings → Apps, in About and in its notification. In Home Assistant the device's model reads
+  *Panel Hub S1 Plus (Glassworks)* and the update card is called *Glassworks*. The rename keeps the device, its entities and
+  their ids, and the update installs over the old app with its settings. With the radio as a Zigbee
+  router, ZHA reads the maker as Glassworks after it interviews the panel again.
 - **The screen stays on until you pick a timeout.** A panel that never chose a screen mode now keeps its screen
   on (*Screen mode* `always`), so an S1 that never chose stops turning off after the update. To have it turn
   off again, pick a time in **Settings → Screen → Turn off when idle**, turn on **Wake when someone's near**, or

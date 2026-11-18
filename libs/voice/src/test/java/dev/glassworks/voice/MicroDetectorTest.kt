@@ -79,7 +79,7 @@ class MicroDetectorTest {
  * pymicro-wakeword reached (mww_reference.json). Not exact: the TFLite C library pymicro-wakeword
  * bundles and LiteRT round a few int8 outputs differently (Alexa in its phrase: 0.9742 and 0.9727
  * from the same features, checked 2026-11-12). The models are fetched by [ModelFetcher.micro] into
- * `~/.cache/s1kiosk/microwakeword-<commit>` (or MWW_MODELS_DIR).
+ * `~/.cache/glassworks/microwakeword-<commit>` (or MWW_MODELS_DIR).
  *
  *     uv venv -p 3.12 /tmp/mww-venv && uv pip install -p /tmp/mww-venv/bin/python --require-hashes -r libs/voice/mww-test-requirements.txt
  *     MWW_PYTHON=/tmp/mww-venv/bin/python ./gradlew :voice:testDebugUnitTest --tests '*MicroWakeWordClipTest*'
@@ -89,7 +89,7 @@ class MicroDetectorTest {
 class MicroWakeWordClipTest {
     private val python = System.getenv("MWW_PYTHON")
     private val dir = File(System.getenv("MWW_MODELS_DIR")
-        ?: "${System.getProperty("user.home")}/.cache/s1kiosk/microwakeword-${WakeWords.MODELS_COMMIT}")
+        ?: "${System.getProperty("user.home")}/.cache/glassworks/microwakeword-${WakeWords.MODELS_COMMIT}")
 
     private class PythonModel(python: String, model: File) : AutoCloseable {
         private val script = File(javaClass.classLoader!!.getResource("mww_model.py")!!.toURI())

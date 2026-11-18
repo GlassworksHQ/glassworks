@@ -29,9 +29,9 @@ class S1Manage(
         fun logSource(tag: String): String? = s1LogSource(tag) ?: AppManage.logSource(tag)
 
         private fun s1LogSource(tag: String): String? = when {
-            tag.startsWith("S1Kiosk.Radio") || tag.startsWith("S1Radio") -> "Radio"
-            tag.startsWith("S1Kiosk.TimeZone") -> "Time zone"
-            tag == "S1Base" -> "Wall base"
+            tag.startsWith("Glassworks.Radio") -> "Radio"
+            tag.startsWith("Glassworks.TimeZone") -> "Time zone"
+            tag == "Glassworks.Base" -> "Wall base"
             else -> null
         }
 

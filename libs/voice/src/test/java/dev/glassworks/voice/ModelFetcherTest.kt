@@ -13,11 +13,11 @@ import java.nio.file.Files
 
 /**
  * The real models come from the host cache tools/voice/fetch-models.sh fills
- * (~/.cache/s1kiosk/openwakeword-v0.5.1, or OWW_MODELS_DIR); without it the test is skipped.
+ * (~/.cache/glassworks/openwakeword-v0.5.1, or OWW_MODELS_DIR); without it the test is skipped.
  */
 class ModelFetcherTest {
     private val cache = File(System.getenv("OWW_MODELS_DIR")
-        ?: "${System.getProperty("user.home")}/.cache/s1kiosk/openwakeword-${ModelFetcher.VERSION}")
+        ?: "${System.getProperty("user.home")}/.cache/glassworks/openwakeword-${ModelFetcher.VERSION}")
 
     private fun haveCache() = ModelFetcher.FILES.keys.all { File(cache, it).isFile }
 

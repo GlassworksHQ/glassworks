@@ -75,7 +75,7 @@ class ExtrasGuardTest {
         GeckoPinHarness(start(launcher), prefs = { it.urlSetting = before }).use { h ->
             assertEquals("the alias reaches MainActivity", launcher, h.activity.intent.component?.className)
             assertEquals(before, url())
-            assertTrue(h.logs("S1Kiosk").any { it.startsWith("ignored the extras of a start through") })
+            assertTrue(h.logs("Glassworks").any { it.startsWith("ignored the extras of a start through") })
         }
     }
 

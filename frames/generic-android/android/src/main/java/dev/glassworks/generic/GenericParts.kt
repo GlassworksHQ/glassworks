@@ -52,7 +52,7 @@ import dev.glassworks.assist.wakeChime
 /**
  * The generic app's parts ([AppParts]): its fixed set of panes (#23), Assist with its timers and Sendspin, which
  * need a microphone and a speaker, the camera (#117), which needs a camera, and diagnostics, which needs nothing. A
- * device without a pane's hardware hides the pane (CantRun). The wiring of each pane is S1 Kiosk's (S1Panes), with
+ * device without a pane's hardware hides the pane (CantRun). The wiring of each pane is the S1 app's (S1Panes), with
  * the S1's own panes left out.
  */
 class GenericParts : AppParts {
@@ -103,7 +103,7 @@ class GenericParts : AppParts {
         voiceUi = VoiceUi(runtime.voiceState)
     }
 
-    /** Each pane's settings where S1 Kiosk keeps them ([PaneFiles]): `kiosk.xml`, opened through SecretFiles. */
+    /** Each pane's settings where the S1 app keeps them ([PaneFiles]): `kiosk.xml`, opened through SecretFiles. */
     override fun paneFile(context: Context, namespace: String): SharedPreferences {
         require(namespace in PANES) { "No settings file for pane '$namespace'" }
         return PaneFiles.open(context, namespace)
@@ -115,7 +115,7 @@ class GenericParts : AppParts {
     /** A voice event (main thread): the overlay, the voice state and the screen follow it. */
     private fun onVoiceEvent(runtime: GlassworksRuntime, e: VoiceEvent) {
         voiceUi = voiceUi.on(e)
-        try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("S1Kiosk.Voice", "voice overlay failed", t) }
+        try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("Glassworks.Voice", "voice overlay failed", t) }
         if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return
         runtime.voiceState = voiceUi.state
         if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) runtime.screen.wake("voice")

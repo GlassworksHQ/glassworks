@@ -31,7 +31,7 @@ object HaAuth {
     }
 
     /** The Manage log reads it as "Setup" (S1Manage.logSource). */
-    private const val LAN_TAG = "S1Kiosk.SetupChannel"
+    private const val LAN_TAG = "Glassworks.SetupChannel"
 
     private lateinit var prefs: KioskPrefs
     private val main = Handler(Looper.getMainLooper())

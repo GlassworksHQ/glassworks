@@ -62,6 +62,12 @@ interface Frame {
     /** The frame's way to install app updates without Android's confirmation; null to use PackageInstaller. */
     val rootUpdates: RootUpdates? get() = null
 
+    /**
+     * The frame's own version and releases (#139), or null on a device its vendor updates (any generic Android device):
+     * then it has no Frame version row and no Frame update entity.
+     */
+    val frameRelease: FrameRelease? get() = null
+
     /** A short name for the panel on its own pages (the S1's "S1 Plus"); null to use its friendly name. */
     val shortName: String? get() = null
 

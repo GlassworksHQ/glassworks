@@ -86,7 +86,7 @@ class ImprovSerialTest {
         override fun send(packet: ByteArray) { reader.push(packet).forEach { sent += it as Item.Packet } }
         override fun online() = online
         override fun redirectUrl() = if (online) "http://192.168.1.50:8099/signin" else ""
-        override fun info() = ImprovSerial.info("S1 Kiosk", "0.1.0", "Allwinner A133", "S1 Panel")
+        override fun info() = ImprovSerial.info("Glassworks", "0.1.0", "Allwinner A133", "S1 Panel")
         override fun scan() = scanned
         override fun connect(ssid: String, password: String, done: (String?) -> Unit) {
             connects += ssid to done
@@ -128,7 +128,7 @@ class ImprovSerialTest {
         s.onBytes(ImprovSerial.rpc(RPC_SCAN_WIFI))
         assertEquals(listOf(
             "state 2",
-            "result 3 [S1 Kiosk, 0.1.0, Allwinner A133, S1 Panel]",
+            "result 3 [Glassworks, 0.1.0, Allwinner A133, S1 Panel]",
             "result 4 [Home Net, -48, YES]",
             "result 4 [Cafe, -70, NO]",
             "result 4 []",
@@ -199,7 +199,7 @@ class ImprovSerialTest {
         val s = ImprovSerialSession(fx)
         val stream = bytes(0, 0x49, 7) + ImprovSerial.rpc(RPC_REQUEST_INFO) + bytes(0x0a) + ImprovSerial.rpc(RPC_REQUEST_STATE)
         stream.forEach { s.onBytes(byteArrayOf(it)) }
-        assertEquals(listOf("result 3 [S1 Kiosk, 0.1.0, Allwinner A133, S1 Panel]", "state 2"), fx.sent.map(::describe))
+        assertEquals(listOf("result 3 [Glassworks, 0.1.0, Allwinner A133, S1 Panel]", "state 2"), fx.sent.map(::describe))
     }
 
     @Test

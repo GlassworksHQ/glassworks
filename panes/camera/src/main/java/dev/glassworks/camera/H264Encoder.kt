@@ -113,7 +113,7 @@ class H264Encoder(
     }
 
     companion object {
-        private const val TAG = "S1Kiosk.Camera"
+        private const val TAG = "Glassworks.Camera"
         const val FPS = 15
 
         /** About 0.1 bit a pixel at [FPS]: 1.4 Mbit/s at 1280x720. */

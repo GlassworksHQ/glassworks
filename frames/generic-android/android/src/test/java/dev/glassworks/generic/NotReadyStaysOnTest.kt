@@ -45,7 +45,7 @@ class NotReadyStaysOnTest {
     // A picked time puts the screen mode to presence, as the Screen page's row does: "always" is the default (#522).
     private fun idle20s(set: (KioskPrefs) -> Unit = {}) = GeckoPinHarness(prefs = { it.idleOffSec = 20; it.screenMode = "presence"; set(it) })
 
-    private fun GeckoPinHarness.sleeps() = logs("S1Kiosk.Screen").filter { it.startsWith("sleep (idle") }
+    private fun GeckoPinHarness.sleeps() = logs("Glassworks.Screen").filter { it.startsWith("sleep (idle") }
     private fun GeckoPinHarness.setup() = rootChildren().filterIsInstance<SetupOverlay>().single()
 
     @Test fun theSetupScreenStaysOn() = idle20s().use { h ->
@@ -53,7 +53,7 @@ class NotReadyStaysOnTest {
         assertTrue("a fresh panel shows setup", h.setup().isShowing)
         h.advance(120_000)
         assertEquals(emptyList<String>(), h.sleeps())
-        assertTrue(h.logs("S1Kiosk.Screen").toString(), "stay on (not ready)" in h.logs("S1Kiosk.Screen"))
+        assertTrue(h.logs("Glassworks.Screen").toString(), "stay on (not ready)" in h.logs("Glassworks.Screen"))
     }
 
     /** Online over Wi-Fi: an active network with internet. */
@@ -86,7 +86,7 @@ class NotReadyStaysOnTest {
             assertTrue("offline past the grace: setup shows", h.setup().isShowing)
             assertFalse("Home Assistant added it before", h.setup().needsHomeAssistant)
             h.advance(30_000)
-            assertEquals(h.logs("S1Kiosk.Screen").toString(), listOf("sleep (idle 20s) admin=false"), h.sleeps())
+            assertEquals(h.logs("Glassworks.Screen").toString(), listOf("sleep (idle 20s) admin=false"), h.sleeps())
         }
     }
 

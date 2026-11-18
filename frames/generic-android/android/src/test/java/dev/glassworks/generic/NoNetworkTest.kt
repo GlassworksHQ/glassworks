@@ -80,7 +80,7 @@ class NoNetworkTest {
             val texts = h.loadingTexts()
             assertFalse(texts.toString(), texts.any { it.startsWith(OfflineText.WIFI_OFF_TITLE) })
             assertTrue(texts.toString(), texts.any { it.startsWith(OfflineText.NO_NETWORK_TITLE) })
-            assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.startsWith("Offline: Wi-Fi java.lang.SecurityException") })
+            assertTrue(h.logs("Glassworks").toString(), h.logs("Glassworks").any { it.startsWith("Offline: Wi-Fi java.lang.SecurityException") })
         }
     }
 }
