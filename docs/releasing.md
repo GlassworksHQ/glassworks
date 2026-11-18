@@ -311,16 +311,27 @@ versionCode).
 ### Before the first generic tag (once, admin)
 
 The tags need the same protection as S1 Kiosk's: only admins create them (the ruleset), and only they reach the key
-(the environment). Ruleset first, so the environment never lets in a tag that anyone with write access could push:
+(the environment). Ruleset first, so the environment never lets in a tag that anyone with write access could push. The
+block stops at the first error, and adds the environment's tags only after it has read both back from the ruleset:
 
 ```sh
-gh api -X PUT repos/GlassworksHQ/glassworks/rulesets/27082980 --input - <<'EOF'
-{"conditions": {"ref_name": {"exclude": [], "include": ["refs/tags/v*", "refs/tags/aqara-s1-plus-v*",
-  "refs/tags/generic-android-v*", "refs/tags/generic-android-legacy-v*"]}}}
-EOF
-for t in 'generic-android-v*' 'generic-android-legacy-v*'; do
-  gh api -X POST repos/GlassworksHQ/glassworks/environments/release-signing/deployment-branch-policies -f name="$t" -f type=tag
-done
+(
+  set -euo pipefail
+  repo=repos/GlassworksHQ/glassworks
+  tags=('generic-android-v*' 'generic-android-legacy-v*')
+  # The whole ruleset as it is, with the two tags added to its include list.
+  gh api "$repo/rulesets/27082980" --jq '{name, target, enforcement, bypass_actors, rules,
+      conditions: (.conditions | .ref_name.include += ["refs/tags/generic-android-v*", "refs/tags/generic-android-legacy-v*"]
+        | .ref_name.include |= unique)}' |
+    gh api -X PUT "$repo/rulesets/27082980" --input - > /dev/null
+  for t in "${tags[@]}"; do
+    gh api "$repo/rulesets/27082980" --jq '.conditions.ref_name.include[]' | grep -Fqx "refs/tags/$t" ||
+      { echo "the ruleset doesn't cover $t: stopping before the environment" >&2; exit 1; }
+  done
+  for t in "${tags[@]}"; do
+    gh api -X POST "$repo/environments/release-signing/deployment-branch-policies" -f name="$t" -f type=tag
+  done
+)
 ```
 
 Both patterns are needed: `generic-android-v*` doesn't match `generic-android-legacy-v1.2.3`.
