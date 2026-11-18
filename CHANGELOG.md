@@ -14,6 +14,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   animation, not Android's. A panel installed before frame versions shows *Before 1.0.0*. A new *Frame update*
   entity in Home Assistant says when a newer frame version is out and how to install it. The first one comes with
   Glassworks 1.0.0, and a panel installed before it needs one update with Kiln to get it.
+- **The Screen settings warn about a screen lock.** On a tablet with a PIN, pattern or password, Android locks
+  it when the screen turns off, and someone has to unlock it. The panel's **Settings → Screen** and the Manage
+  page now say so in amber, with the way out: turn the lock off in Android's settings, or keep the screen on.
 - **Glassworks for generic Android gets the Diagnostics pane.** The app on tablets and the lululemon Mirror, in
   both of its builds, now sends its CPU, RAM, storage, Wi-Fi and uptime to Home Assistant, as S1 Kiosk does, and
   shows them on its Diagnostics page on the panel and on the Manage page. These devices have no CPU temperature
@@ -180,6 +183,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   setting if it was already on. Other devices don't show the chip.
 
 ### Changed
+- **The screen stays on until you pick a timeout.** A panel that never chose a screen mode now keeps its screen
+  on (*Screen mode* `always`), so an S1 that never chose stops turning off after the update. To have it turn
+  off again, pick a time in **Settings → Screen → Turn off when idle**, turn on **Wake when someone's near**, or
+  set *Screen mode* or *Idle timeout* from Home Assistant. A choice you made stays as it is. While the screen is
+  always on, **Turn off when idle** reads *Never*, also on the S1, and Home Assistant's *Screen* light can still
+  turn it off on a device without device admin.
 - **The setup screen's Wi-Fi step leads with one way to join.** It shows the best way the panel can do
   right now: Bluetooth setup from Home Assistant, else **Set up from a phone** through the panel's own
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
@@ -191,6 +200,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   *Camera presence*. Home Assistant removes the ones a device can't back on the next reconnect after the
   update; if the hardware comes back, so does the entity, usually with its old id. An automation that used
   one stops working. Nothing changes on the S1.
+- **Setup signs in to Home Assistant without leaving you in another tab.** On the panel's setup page (`:8099/setup`),
+  **Sign in** now takes you to Home Assistant's sign-in in the same tab and brings you back to the setup
+  page at the next step, instead of leaving you in a second tab. Kiln over USB signs in in a small window
+  that closes by itself, and Kiln moves on to the radio without a click. The Home Assistant step offers one
+  way on: **Sign in** until the panel is signed in, then **Continue**; "Skip, sign in on the panel" keeps
+  the address and leaves the sign-in to the panel's screen. The list of steps shows only the steps
+  your panel has: a panel without a radio no longer lists a Radio step it skips.
 - **The S1's Bluetooth proxy goes by the panel's Bluetooth address.** The proxy now tells Home
   Assistant the panel's own Bluetooth address, as ESPHome proxies do, instead of its network address.
   Home Assistant moves the panel's scanner to the new address by itself, once, with nothing for you to

@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { describe, expect, it } from 'vitest';
-import { GENERIC, LEGACY, OwnFrameRefused, Refused, SILENT_LINES, handOff, installGeneric, planInstall, undoGeneric, undoSilentUpdates, type GenericPhase } from '../src';
+import { GENERIC, LEGACY, OwnFrameRefused, Refused, SILENT_LINES, handOff, installGeneric, parseScreenLock, planInstall, undoGeneric, undoSilentUpdates, type GenericPhase } from '../src';
 import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from './fakes';
 
 const GOLDEN = join(__dirname, 'golden/generic-adb-commands.json');
@@ -292,6 +292,76 @@ describe('silent updates (#422)', () => {
     const p = new FakeAndroid({});
     expect(await undoSilentUpdates(p)).toEqual({});
     expect(p.cmds.filter((c) => WRITES.test(c))).toEqual([]);
+  });
+});
+
+describe('the screen lock (#522)', () => {
+  // As the emulators answered with and without a lock, 2026-11-18 (research/screen-lock.md); IDs made up.
+  const API26 = (sid: string) => `Current lock settings service state:\nSP Enabled = false\n    User 0\n        SP Handle = 0\n        SID = ${sid}\n    mPasswordOwner=-1\n`;
+  const NEW = (sid: string, type: string) => [
+    'Current lock settings service state:', '', 'User State:', '  User 0', '    SP Handle: 1a2b3c4d5e6f7a8b', '    Last changed: 2026-11-18 04:00:00 (0011223344556677)',
+    `    SID: ${sid}`, '    Quality: 0', `    CredentialType: ${type}`, '    SeparateChallenge: true', '    Metrics: known', '  ',
+    'Storage:', '  User 0 [/data/system_de/0/spblob]:', '    186 2026-11-18 04:00:00 1a2b3c4d5e6f7a8b.spblob', '  ', 'StrongAuth:', '  PrimaryAuthFlags state:', '    userId=0, primaryAuthFlags=0', '',
+  ].join('\n');
+
+  it.each([
+    ['Android 8, no lock', API26('0'), 'none'],
+    ['Android 8, a PIN', API26('48e9d0039527242e'), 'secure'],
+    ['Android 11, none or swipe', NEW('0', 'None'), 'none'],
+    ['Android 11, a PIN', NEW('1234abcd5678ef90', 'Pin'), 'secure'],
+    ['Android 11, a password', NEW('1234abcd5678ef90', 'Password'), 'secure'],
+    ['Android 15, no lock: a SID all the same', NEW('1234abcd5678ef90', 'NONE'), 'none'],
+    ['Android 15, a PIN', NEW('1234abcd5678ef90', 'PIN'), 'secure'],
+    ['Android 15, a pattern', NEW('1234abcd5678ef90', 'PATTERN'), 'secure'],
+    ['a numeric type, none', NEW('0', '-1'), 'none'],
+  ])('%s', (_, dump, want) => expect(parseScreenLock(dump)).toBe(want));
+
+  it('says nothing when it can\'t tell', () => {
+    expect(parseScreenLock('')).toBeUndefined();
+    expect(parseScreenLock("Can't find service: lock_settings")).toBeUndefined();
+    expect(parseScreenLock('Current lock settings service state:\n  User 0\n    Quality: 0\n')).toBeUndefined();
+    expect(parseScreenLock(NEW('0', 'UNKNOWN'))).toBeUndefined();
+    expect(parseScreenLock(NEW('0', '3'))).toBeUndefined();
+    expect(parseScreenLock(NEW('1234abcd5678ef90', '').replace('CredentialType: ', 'CredentialType:'))).toBeUndefined();
+  });
+
+  it('a connection that drops on the read: the install is done all the same, the lock unknown', async () => {
+    const p = new FakeAndroid({ ...LEVELS.api34!, lock: 'pin' });
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'dumpsys lock_settings' ? Promise.reject(new Error('transfer failed')) : run(cmd));
+    const res = await installGeneric(p, { apk: apkFor(34), sleep: noSleep, setupTries: 2 });
+    expect(res.home.state).toBe('set');
+    expect(res.screenLock).toBeUndefined();
+  });
+
+  it('reads the user it is asked for, and without one only a dump of user 0 alone', () => {
+    const two = NEW('0', 'None').replace('Storage:', '  User 10\n    SID: 99\n    CredentialType: PIN\n  \nStorage:');
+    expect(parseScreenLock(two, 0)).toBe('none');
+    expect(parseScreenLock(two, 10)).toBe('secure');
+    expect(parseScreenLock(two)).toBeUndefined();
+    expect(parseScreenLock(two, 11)).toBeUndefined();
+    expect(parseScreenLock(NEW('0', 'None'))).toBe('none');
+  });
+
+  it.each(['api26', 'api34'])('%s: the user on the screen is the one read, and an unknown user with two is unknown', async (level) => {
+    expect((await run({ ...LEVELS[level]!, secondUser: 'pin' })).res.screenLock).toBe('secure');
+    expect((await run({ ...LEVELS[level]!, lock: 'pin', secondUser: 'none' })).res.screenLock).toBe('none');
+    expect((await run({ ...LEVELS[level]!, secondUser: 'pin', noCurrentUser: true })).res.screenLock).toBeUndefined();
+    expect((await run({ ...LEVELS[level]!, lock: 'pin', noCurrentUser: true })).res.screenLock).toBe('secure');
+  });
+
+  it.each(['api26', 'api29', 'api34'])('%s: Done gets the lock, and the log never has the dump\'s IDs', async (level) => {
+    const log: string[] = [];
+    const p = new FakeAndroid({ ...LEVELS[level]!, lock: 'pin' });
+    const res = await installGeneric(p, { apk: apkFor(p.o.sdk ?? 34), sleep: noSleep, setupTries: 2, onStep: (s, d) => log.push(s || d || '') });
+    expect(res.screenLock).toBe('secure');
+    expect(log).toContain('screen lock: a PIN, pattern or password');
+    expect(log.join('\n')).not.toMatch(/1234abcd/);
+    expect((await run(LEVELS[level]!)).res.screenLock).toBe('none');
+  });
+
+  it.each(['api23', 'api25'])('%s: Android 6 and 7 don\'t say, so Done says nothing', async (level) => {
+    expect((await run({ ...LEVELS[level]!, lock: 'pin' })).res.screenLock).toBeUndefined();
   });
 });
 

@@ -253,7 +253,7 @@ So on a panel HA already has:
 | switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
 | binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
 | sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
-| select `Screen mode` | `screen_mode` | `presence` / `always` |
+| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522) |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
 | number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |

@@ -375,4 +375,264 @@ class SignInServerTest {
         assertEquals(200, landing.status)
         for (h in listOf("Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy")) assertEquals(h, r.headers[h], landing.headers[h])
     }
+
+    // ------------------------------------------------------------------ the setup page's sign-in (#453)
+
+    /**
+     * The phone's cookies for the panel, kept as a browser keeps them: by name and path, a newer one replacing an
+     * older, a delete removing only the one at its own path, and sent only to paths under theirs.
+     */
+    private class Jar {
+        /** Name to (path, value). */
+        val cookies = LinkedHashMap<String, Pair<String, String>>()
+        fun keep(r: SignInServer.Response) = r.also {
+            val set = it.headers["Set-Cookie"] ?: return@also
+            val (name, value) = set.substringBefore(';').split('=', limit = 2)
+            val path = Regex("Path=([^;]+)").find(set)!!.groupValues[1]
+            if (!set.contains("Max-Age=0")) cookies[name] = path to value
+            else if (cookies[name]?.first == path) cookies.remove(name)
+        }
+        fun header(path: String) = cookies.entries.filter { path == it.value.first || path.startsWith(it.value.first + "/") }
+            .joinToString("; ") { "${it.key}=${it.value.second}" }.ifEmpty { null }
+        val names get() = cookies.keys.toList()
+    }
+
+    /** One request through the router as the phone's browser makes it, with its cookies. */
+    private fun call(s: SignInServer, path: String, jar: Jar? = null): SignInServer.Response {
+        val uri = URI(path)
+        val headers = mapOf("host" to "192.0.2.10:8099") + (jar?.header(uri.rawPath)?.let { mapOf("cookie" to it) } ?: emptyMap())
+        val r = s.handle(SignInServer.Request("GET", uri.rawPath, OAuth.parseQuery(uri.rawQuery), headers))
+        return jar?.keep(r) ?: r
+    }
+
+    private fun start(s: SignInServer, jar: Jar?, then: String = "?then=setup"): Pair<Map<String, String>, String> {
+        val r = call(s, "${SignInServer.CONTINUE}$then", jar)
+        assertEquals(302, r.status)
+        val q = OAuth.parseQuery(URI(r.headers["Location"]!!).rawQuery)
+        assertEquals("HA sees the same redirect_uri as the QR flow", "http://192.0.2.10:8099/callback", q["redirect_uri"])
+        return q to q["state"]!!
+    }
+
+    private fun callback(s: SignInServer, state: String, jar: Jar?, code: String = "c0de") =
+        call(s, "/callback?code=$code&state=${OAuth.enc(state)}", jar)
+
+    private fun text(r: SignInServer.Response) = r.body.toString(Charsets.UTF_8)
+    private fun setupWay(r: SignInServer.Response) = text(r).contains("""<a class="btn" href="/setup">Back to setup</a>""")
+
+    @Test
+    fun setupPageSignInGoesBackToTheSetupPage() {
+        val jar = Jar()
+        val (q, state) = start(server, jar)
+        assertEquals(mapOf("${SignInServer.HANDOFF}0" to ("/callback" to state)), jar.cookies)
+        val bind = call(server, "${SignInServer.CONTINUE}?then=setup").headers["Set-Cookie"]!!
+        assertTrue(bind, bind.matches(Regex("${SignInServer.HANDOFF}1=[A-Za-z0-9_-]{32}; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=1800")))
+        issueCode("c0de", q)
+        val r = callback(server, state, jar)
+        assertEquals(200, r.status)
+        assertTrue(text(r), text(r).contains("""<meta http-equiv="refresh" content="0;url=/setup#signed-in">"""))
+        assertNull("the binding is left to run out, not deleted", r.headers["Set-Cookie"])
+        assertEquals("RT", signedIn!!.first.refreshToken)
+        assertEquals(q["code_challenge"], OAuth.codeChallenge(tokenRequests.single()["code_verifier"]!!))
+        assertEquals("single use", 400, callback(server, state, Jar().apply { cookies["${SignInServer.HANDOFF}0"] = "/callback" to state }).status)
+    }
+
+    @Test
+    fun setupPageSignInIsRefusedInAnotherBrowserWithAWayBack() {
+        // the other browser has no cookie, or one for another sign-in of its own
+        val other = Jar()
+        start(server, other)
+        for (jar in listOf(null, other)) {
+            val (q, state) = start(server, Jar())
+            issueCode("c0de", q)
+            val r = callback(server, state, jar)
+            assertEquals(403, r.status)
+            assertTrue(text(r), text(r).contains("started in another browser") && setupWay(r))
+        }
+        assertNull(signedIn)
+        assertTrue("the code is never used", tokenRequests.isEmpty())
+    }
+
+    @Test
+    fun startingAnotherSetupSignInKeepsTheFirstOnesBinding() {
+        val jar = Jar()
+        val (q1, first) = start(server, jar)
+        val (q2, second) = start(server, jar) // a second tap, or a cross-site GET to /signin/continue?then=setup
+        assertEquals(2, jar.names.size)
+        issueCode("c0de", q1)
+        assertEquals(200, callback(server, first, jar).status)
+        assertEquals("the first one's callback leaves the second's binding", 2, jar.names.size)
+        issueCode("c1de", q2)
+        assertEquals(200, callback(server, second, jar, code = "c1de").status)
+        assertEquals(2, jar.names.size) // left to run out
+    }
+
+    private fun serverWith(store: StateStore) = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()),
+        { auth, ok -> signedIn = auth to ok }, states = store, bindAddress = loopback)
+
+    @Test
+    fun aCookieFromAPushedOutSignInDoesNotBindTheOneNowInItsSlot() {
+        val s = serverWith(StateStore(max = 2))
+        val stale = Jar()
+        start(s, stale) // slot 0, then pushed out by the next two
+        start(s, Jar())
+        val (q, now) = start(s, Jar())
+        assertEquals("gw_signin_0 for both", listOf("${SignInServer.HANDOFF}0"), stale.names)
+        issueCode("c0de", q)
+        val r = callback(s, now, stale)
+        assertEquals("the slot's name is not enough: the value must be this sign-in's state", 403, r.status)
+        assertTrue(tokenRequests.isEmpty())
+        assertNull(signedIn)
+    }
+
+    @Test
+    fun aCrossSiteStartCannotPushOutTheVictimsBinding() {
+        repeat(15) { start(server, Jar()) }
+        val victim = Jar()
+        val (q, state) = start(server, victim)
+        assertEquals(listOf("${SignInServer.HANDOFF}15"), victim.names)
+        start(server, victim) // the store is full: the oldest goes, and the new one takes its slot, not the victim's
+        assertEquals(state, victim.cookies["${SignInServer.HANDOFF}15"]!!.second)
+        issueCode("c0de", q)
+        assertEquals(200, callback(server, state, victim).status)
+    }
+
+    @Test
+    fun aFinishedSignInDoesNotTakeTheBindingOfANewerOneInItsSlot() {
+        // CodeRabbit on 32a226b1: A's callback frees slot 0; B starts in the same browser before A's answer arrives.
+        val jar = Jar()
+        val (qa, a) = start(server, jar)
+        issueCode("c0de", qa)
+        // A's callback is answered, but its answer hasn't reached the browser's cookies yet
+        val answerA = server.handle(SignInServer.Request("GET", "/callback", mapOf("code" to "c0de", "state" to a),
+            mapOf("host" to "192.0.2.10:8099", "cookie" to jar.header("/callback")!!)))
+        assertEquals(200, answerA.status)
+        val (qb, b) = start(server, jar)
+        assertEquals("B took A's slot", listOf("${SignInServer.HANDOFF}0"), jar.names)
+        jar.keep(answerA) // A's answer lands after B's binding
+        issueCode("c1de", qb)
+        assertEquals(200, callback(server, b, jar, code = "c1de").status)
+    }
+
+    @Test
+    fun aBrowserHoldsAFewBindingsAtMostHoweverManySignInsStart() {
+        val jar = Jar()
+        repeat(400) { start(server, jar) }
+        assertTrue("${jar.names.size} binding cookies", jar.names.size <= 16)
+        val cookie = jar.header("/callback")!!
+        assertTrue("${cookie.length} bytes", cookie.length < 1024)
+        // the newest still works
+        val (q, last) = start(server, jar)
+        issueCode("c0de", q)
+        assertEquals(200, callback(server, last, jar).status)
+    }
+
+    @Test
+    fun aStateOutsideTheAlphabetIsNoState() {
+        val jar = Jar()
+        val (_, state) = start(server, jar)
+        for (bad in listOf("$state;x", "$state x", "", "a".repeat(65))) {
+            val r = call(server, "/callback?code=c0de&state=${OAuth.enc(bad)}", jar)
+            assertEquals(bad, 400, r.status)
+            assertNull("nothing from the request goes into a header", r.headers["Set-Cookie"])
+        }
+        assertEquals("the real one is still bound", 1, jar.names.size)
+    }
+
+    @Test
+    fun aQrSignInAfterASetupOneSpeaksOfTheQrCode() {
+        val jar = Jar()
+        start(server, jar) // started from setup, never finished: its cookie stays
+        val (_, qr) = start(server, jar, then = "")
+        val r = callback(server, qr, jar, code = "refused-by-ha")
+        assertEquals(400, r.status)
+        assertTrue(text(r), text(r).contains("Scan the code on the panel again") && !setupWay(r))
+    }
+
+    @Test
+    fun everyWayOutOfASetupSignInSaysSoAndUsesUpItsState() {
+        val store = StateStore()
+        val s = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()), { auth, ok -> signedIn = auth to ok },
+            states = store, bindAddress = loopback)
+        for (path in listOf("cancelled", "refused", "expired")) {
+            val jar = Jar()
+            val (q, state) = start(s, jar)
+            val r = when (path) {
+                "cancelled" -> call(s, "/callback?error=access_denied&state=${OAuth.enc(state)}", jar)
+                "refused" -> callback(s, state, jar, code = "refused-by-ha")
+                else -> { store.consume(state); callback(s, state, jar) }
+            }
+            assertTrue("$path: ${text(r)}", r.status >= 400 && setupWay(r) && text(r).contains("Go back to setup"))
+            assertNull("$path: the binding is left to run out", r.headers["Set-Cookie"])
+            issueCode("c0de", q)
+            assertEquals("$path: the state is used up", 400, callback(s, state, jar).status)
+        }
+        assertNull(signedIn)
+    }
+
+    @Test
+    fun setupPageSignInExpiresAfterTenMinutesWithAWayBack() {
+        var now = 0L
+        val s = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()), { auth, ok -> signedIn = auth to ok },
+            states = StateStore(clock = { now }), bindAddress = loopback)
+        val jar = Jar()
+        val (q, state) = start(s, jar)
+        issueCode("c0de", q)
+        now = 10 * 60_000L
+        val r = callback(s, state, jar)
+        assertEquals(400, r.status)
+        assertTrue(text(r), text(r).contains("expired") && text(r).contains("Go back to setup and sign in again.") && setupWay(r))
+        assertNull(signedIn)
+    }
+
+    @Test
+    fun kilnsSignInClosesItsWindowOrSaysKilnHasMovedOn() {
+        val (q, state) = start(server, null, then = "?then=kiln")
+        issueCode("c0de", q)
+        val r = callback(server, state, null)
+        assertEquals(200, r.status)
+        val html = text(r)
+        assertTrue(html, html.contains("Signed in.") && html.contains("Kiln has moved on.") && html.contains("<script>window.close()</script>"))
+        for (tab in listOf("close this page", "other tab", "Panel signed in")) assertTrue(tab, !html.contains(tab, ignoreCase = true))
+        // the browser runs that one script and nothing else
+        val sha = java.util.Base64.getEncoder().encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest("window.close()".toByteArray()))
+        assertTrue(r.headers["Content-Security-Policy"]!!, r.headers["Content-Security-Policy"]!!.endsWith("; script-src 'sha256-$sha'"))
+        assertEquals("RT", signedIn!!.first.refreshToken)
+        assertNull("unbound, as the QR code's sign-in", r.headers["Set-Cookie"])
+    }
+
+    @Test
+    fun kilnsSignInFailuresSendThePersonBackToKiln() {
+        val (_, state) = start(server, null, then = "?then=kiln")
+        val r = callback(server, state, null, code = "refused-by-ha")
+        assertTrue(text(r), text(r).contains("Close this window and sign in again from Kiln.") && !text(r).contains("Scan the code") && !setupWay(r))
+        assertTrue("no other page runs a script", !text(r).contains("<script"))
+        assertTrue(r.headers["Content-Security-Policy"]!!, !r.headers["Content-Security-Policy"]!!.contains("script-src"))
+        val (_, cancelled) = start(server, null, then = "?then=kiln")
+        val c = call(server, "/callback?error=access_denied&state=${OAuth.enc(cancelled)}")
+        assertTrue(text(c), text(c).contains("Close this window and sign in again from Kiln.") && !text(c).contains("Scan the code"))
+    }
+
+    @Test
+    fun aRunOutSignInTheSetupPageDidNotStartNamesEveryStart() {
+        // a Kiln sign-in (unbound) past its 10 minutes: the panel no longer knows where it started
+        val store = StateStore()
+        val s = serverWith(store)
+        val (_, state) = start(s, null, then = "?then=kiln")
+        store.consume(state)
+        val r = callback(s, state, null)
+        assertEquals(400, r.status)
+        assertTrue(text(r), text(r).contains("scan the code on the panel, or sign in again from the setup page or Kiln") &&
+            !text(r).contains("It shows a new one") && !setupWay(r))
+    }
+
+    @Test
+    fun theQrSignInStaysAsItWas() {
+        val r = call(server, SignInServer.CONTINUE)
+        assertNull("no binding cookie for a QR sign-in", r.headers["Set-Cookie"])
+        val q = OAuth.parseQuery(URI(r.headers["Location"]!!).rawQuery)
+        issueCode("c0de", q)
+        val done = callback(server, q["state"]!!, null)
+        assertEquals(200, done.status)
+        assertTrue(text(done).contains("Panel signed in") && !text(done).contains("/setup"))
+    }
 }
