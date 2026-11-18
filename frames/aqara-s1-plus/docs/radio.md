@@ -432,8 +432,8 @@ Glassworks names, run in the loader's `glassworks_radio` slot. What changes agai
 |---|---|
 | init service `s1kiosk_radio`, `.rc` in the boot image | `glassworks_radio`, a slot in `glassworks.rc` that runs `glassworks_loader.sh run radio` |
 | `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status` | `sys.glassworks.radio.*`, `sys.glassworks.timezone.status`; `sys.glassworks.radio.version` = `5` |
-| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone` | `persist.glassworks.*`. For one release the helper reads the old name when the new one is empty (#528) |
-| the helper's own loader and the radio bundle (`$DIR/bundle`, `s1kiosk_bundle.sh`) | the frame loader and the frame bundle (`/data/glassworks/bundle`); the helper gets the checked bundle in `GW_BUNDLE`. `sys.s1kiosk.radio.bundle` is gone: the bundle state is the loader's |
+| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone` | `persist.glassworks.*`. At its first start on a panel the helper copies each old value to the new name where that is empty, once (marker `$DIR/.settings-moved`). After that only the new names count, so an allow-list cleared later stays empty (#528) |
+| the helper's own loader and the radio bundle (`$DIR/bundle`, `s1kiosk_bundle.sh`), installed and restarted at once | the frame loader and the frame bundle (`/data/glassworks/bundle`); the helper gets the checked bundle in `GW_BUNDLE`. An install only stages the bundle (`bundle/next`, status `ok: … staged`); it becomes active at the next reboot, when the loader checks and promotes it. Restarting `glassworks_radio` doesn't activate it. `sys.s1kiosk.radio.bundle` is gone: the bundle state is the loader's (`sys.glassworks.bundle.state`) |
 | `/data/s1kiosk-pub` (bundle state, Bluetooth address) | `/data/glassworks-pub` (`frame-bundle`, `bluetooth-address`) |
 | iptables chain `S1RADIO` | `GWRADIO` |
 | developer override `$DIR/dev-override` + `$DIR/s1kiosk_radio.sh` | the loader's `/data/glassworks/dev/override` + `dev/radio.sh` |

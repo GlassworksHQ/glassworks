@@ -76,6 +76,9 @@ size() { stat -c %s "$1" 2>/dev/null; }
 # Ours: exists, not a symlink, owned by root.
 root_dir() { [ -d "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %u "$1" 2>/dev/null)" = 0 ]; }
 root_file() { [ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %u "$1" 2>/dev/null)" = 0 ]; }
+uptime_s() { read -r u_ x_ < /proc/uptime; echo "${u_%%.*}"; }   # monotonic, unlike date
+# A zip that the boot animation player can open: the local file header magic and a desc.txt entry.
+anim_ok() { [ -s "$1" ] && [ "$(head -c 4 "$1" | od -An -tx1 | tr -d ' \n')" = 504b0304 ] && grep -aq desc.txt "$1"; }
 
 # semver <M.m.p>: prints M*1000000 + m*1000 + p; fails on anything else.
 semver() {
@@ -256,7 +259,10 @@ boot)
       state=bad; why=$WHY; say "frame bundle rejected: $WHY; running the boot image's copies"
     fi
   fi
-  [ $state = ok ] && echo "$BDIR/current $fv" > "$RUN/active" && chmod 600 "$RUN/active"
+  if [ $state = ok ] && ! { echo "$BDIR/current $fv" > "$RUN/active" && chmod 600 "$RUN/active"; }; then
+    rm -f "$RUN/active"; state=bad; why="cannot record the active bundle"; fv=$BOOT_FRAME_VERSION
+    say "$why; running the boot image's copies"
+  fi
   setprop ro.glassworks.frame.id "$FRAME_ID"
   setprop ro.glassworks.frame.version "$fv"
   if [ $state = ok ]; then setp sys.glassworks.bundle.state "ok $fv"; publish ok "$fv"
@@ -265,7 +271,10 @@ boot)
   # The boot animation: the bundle's, else the boot image's. A bind mount over the stock file, so
   # nothing is written to /system and the stock boot image brings the stock animation back.
   z=""
-  [ $state = ok ] && [ -f "$BDIR/current/bootanimation.zip" ] && z=$BDIR/current/bootanimation.zip
+  if [ $state = ok ] && [ -f "$BDIR/current/bootanimation.zip" ]; then
+    if anim_ok "$BDIR/current/bootanimation.zip"; then z=$BDIR/current/bootanimation.zip
+    else say "the bundle's boot animation is not a usable zip; using the boot image's"; fi
+  fi
   [ -z "$z" ] && [ -f "$HERE/glassworks_bootanimation.zip" ] && z=$HERE/glassworks_bootanimation.zip
   if [ -n "$z" ] && [ -f "$ANIM" ]; then
     mount -o bind "$z" "$ANIM" || say "cannot mount the boot animation"
@@ -298,11 +307,11 @@ run)
     else
       quick=0
       while :; do
-        t0=$(date +%s)
+        t0=$(uptime_s)
         GW_SOURCE="bundle $FV" GW_BUNDLE="$B" /system/bin/sh "$B/services/$slot.sh"
         rc=$?
         [ -n "$GW_LOADER_ONCE" ] && exit $rc   # tests only
-        if [ $(( $(date +%s) - t0 )) -lt 60 ]; then quick=$((quick + 1)); else quick=0; fi
+        if [ $(( $(uptime_s) - t0 )) -lt 60 ]; then quick=$((quick + 1)); else quick=0; fi
         say "$slot from bundle $FV exited ($rc), quick exits in a row: $quick"
         [ $quick -ge 3 ] && break
         sleep 2
@@ -348,8 +357,14 @@ install)
   status "running: copying the frame bundle"
   walk "$STAGE/manifest" copy "$STAGE" || fail "$WHY"
   [ "$VERSION" = "$v" ] || fail "manifest: version lines disagree"
-  rm -rf "$BDIR/next"
-  mv "$STAGE" "$BDIR/next" || fail "cannot stage the bundle"
+  # The bundle staged before stays until this one is in place.
+  rm -rf "$BDIR/next.old"
+  [ -e "$BDIR/next" ] && { mv "$BDIR/next" "$BDIR/next.old" || fail "cannot move the staged bundle aside"; }
+  if ! mv "$STAGE" "$BDIR/next"; then
+    [ -e "$BDIR/next.old" ] && mv "$BDIR/next.old" "$BDIR/next"
+    fail "cannot stage the bundle"
+  fi
+  rm -rf "$BDIR/next.old"
   status "ok: frame bundle $FVER staged ($NFILES files); it loads at the next restart"
   exit 0 ;;
 

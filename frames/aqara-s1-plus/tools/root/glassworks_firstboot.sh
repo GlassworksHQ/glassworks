@@ -5,13 +5,15 @@
 # Factory firmware exposes no adb. The installer bakes the installing computer's adb public key into
 # the boot image (overlay.d/sbin/glassworks_adb_keys); this authorizes that key and enables adb over USB,
 # so tools/install.sh can continue with no screen interaction.
-MARK=/data/glassworks/.firstboot-done
+MARK=${GWF_ROOT:-/data/glassworks}/.firstboot-done
+# A panel set up by a 0.4.3 boot image: provisioning ran then. TODO(#528): drop with the old names.
+OLD_MARK=${GWF_OLD:-/data/s1kiosk}/.firstboot-done
 KEYS=${GW_BOOT:-${0%/*}}/glassworks_adb_keys   # the boot image's, also when this script comes from a bundle
 ADB_KEYS=/data/misc/adb/adb_keys
 log() { echo "glassworks_firstboot: $*" > /dev/kmsg; }
 
-[ -e "$MARK" ] && exit 0
-mkdir -p /data/glassworks && chown root:root /data/glassworks && chmod 700 /data/glassworks
+{ [ -e "$MARK" ] || [ -e "$OLD_MARK" ]; } && exit 0
+mkdir -p "${MARK%/*}" && chown root:root "${MARK%/*}" && chmod 700 "${MARK%/*}"
 
 if [ -s "$KEYS" ]; then
   mkdir -p /data/misc/adb

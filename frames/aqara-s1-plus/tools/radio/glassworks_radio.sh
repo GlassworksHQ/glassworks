@@ -43,8 +43,8 @@
 # Frame bundles (contract v5): glassworks_loader.sh picks this script and passes GW_BOOT (the boot
 # image's files), GW_BUNDLE (the checked frame bundle, whose binaries and firmware win over the boot
 # image's), GW_SOURCE and GW_DEV. sys.glassworks.radio.source says which copy runs:
-# "boot[ (why)]" | "bundle <frame version>" | "dev". App settings are read with pget: the
-# persist.glassworks.* name, else the persist.s1kiosk.* one, for one release (#528).
+# "boot[ (why)]" | "bundle <frame version>" | "dev". At its first start on a panel it moves the app
+# settings from the persist.s1kiosk.* names to persist.glassworks.*, once (#528, see below).
 #
 # Radio firmware (contract v4): never automatic. The app writes "<id> <sha256 prefix>" to its own
 # files/radio/fw-request; within 3 s the helper stops the radio, flashes that image with Aqara's own
@@ -95,12 +95,6 @@ setp() { # name value: setprop refuses values over 91 bytes (PROP_VALUE_MAX) and
   setprop "$1" "$v_"
 }
 
-# Read an app setting: the Glassworks name, else the s1kiosk one an app from before the loader set.
-# TODO(#528): drop the s1kiosk fallback with the release that drops the old names.
-pget() {
-  v_=$(getprop "persist.glassworks.$1"); [ -n "$v_" ] || v_=$(getprop "persist.s1kiosk.$1")
-  echo "$v_"
-}
 
 BUNDLE=${GW_BOOT:-$BOOT}                 # the boot image's files (verifier, key, otbr-agent, ot-ctl)
 RBUNDLE=${GW_BUNDLE:-}                   # the frame bundle glassworks_loader.sh checked, or empty
@@ -150,6 +144,17 @@ APP_THREAD_LEAVE=radio/thread-leave           # app -> helper: forget the Thread
 
 # Root-only state dir; created on first run so a freshly flashed boot image needs no other install step.
 [ -d "$DIR" ] || { mkdir -p "$DIR" && chown root:root "$DIR" && chmod 700 "$DIR"; }
+# Once per panel: the app settings an app from before the loader set under the s1kiosk names move to
+# the Glassworks names, where the new one is empty. Only once, behind a root-only marker: after it, an
+# empty value means empty (an empty allow-list is loopback only), never the old value.
+# TODO(#528): drop with the release that drops the old names.
+if [ ! -e "$DIR/.settings-moved" ]; then
+  for k_ in radio_mode radio_zigbee radio_allow timezone; do
+    o_=$(getprop "persist.s1kiosk.$k_")
+    [ -n "$o_" ] && [ -z "$(getprop "persist.glassworks.$k_")" ] && setprop "persist.glassworks.$k_" "$o_"
+  done
+  : > "$DIR/.settings-moved"; chmod 600 "$DIR/.settings-moved"
+fi
 # Binaries: developer copies in $DIR (with dev-override only), then the radio bundle, then the boot image.
 bin() {
   if [ -n "$DEV" ] && [ -x "$DIR/$1" ]; then echo "$DIR/$1"
@@ -158,7 +163,7 @@ bin() {
 }
 [ -r "$DIR/radio.conf" ] && . "$DIR/radio.conf"
 
-MODE=${GWR_MODE:-$(pget radio_mode)}  # GWR_MODE: manual test without touching the persist prop
+MODE=${GWR_MODE:-$(getprop persist.glassworks.radio_mode)}  # GWR_MODE: manual test without touching the persist prop
 [ -n "$MODE" ] || MODE=off
 
 say() { log -t glassworks_radio "$*" 2>/dev/null; }
@@ -198,7 +203,7 @@ tz_valid() { # an Olson id: letters/digits/_+- in up to 3 /-separated parts, or 
 }
 tz_say() { [ "$1" = "$TZ_SHOWN" ] && return 0; TZ_SHOWN=$1; setp $TZ_STATUS "$1"; say "time zone: $1"; }
 tz_check() {
-  want_=$(pget timezone); have_=$(getprop persist.sys.timezone)
+  want_=$(getprop $TZ_PROP); have_=$(getprop persist.sys.timezone)
   if [ -z "$want_" ]; then
     # Panels set up before this existed: the zone the installer set is still in persist.sys.timezone
     # at boot, until Aqara's sync overwrites it. Adopt it once if it is a real choice.
@@ -256,14 +261,14 @@ take_app_file() {
   case $r_ in
     0) set -- $o_; TAKE_MTIME=${2:-0}; return 0 ;;
     3) return 1 ;;
-    4) o_=${o_#glassworks_verify: }; WHY="${1##*/} refused: ${o_%%: *}" ;;
+    4) o_=${o_#*_verify: }; WHY="${1##*/} refused: ${o_%%: *}" ;;
     *) WHY="cannot copy ${1##*/}" ;;
   esac
   rm -f "$3"; return 2
 }
 
 # --- Zigbee stack (zigbee_tcp only) ---------------------------------------------------------------
-ZWANT=${GWR_ZIGBEE:-${ZIGBEE_STACK:-$(pget radio_zigbee)}}
+ZWANT=${GWR_ZIGBEE:-${ZIGBEE_STACK:-$(getprop persist.glassworks.radio_zigbee)}}
 [ "$ZWANT" = sisdk ] || ZWANT=aqara
 ZRUN=aqara; [ "$MODE" = zigbee_tcp ] && [ "$ZWANT" = sisdk ] && ZRUN=sisdk
 SISDK_DIR=""; [ -n "$RBUNDLE" ] && [ -f "$RBUNDLE/sisdk/zigbeed.sh" ] && SISDK_DIR=$RBUNDLE/sisdk
@@ -429,7 +434,7 @@ ipt_restore() { if [ "$1" = 6 ]; then ip6tables-restore -w 5 --noflush; else ipt
 # or commas; "none" adds nothing; anything that isn't made of address characters is ignored.
 fw_wanted() {
   if [ -n "$RADIO_ALLOW" ]; then FW_SRC=conf; v_=$RADIO_ALLOW
-  else FW_SRC=app; v_=$(pget radio_allow); fi
+  else FW_SRC=app; v_=$(getprop $PROP_ALLOW); fi
   FW_LIST=""; FW_BAD=""
   set -f  # no globbing of tokens such as '*'
   for t_ in $(echo "$v_" | tr ',' ' '); do

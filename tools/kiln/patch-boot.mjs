@@ -51,7 +51,7 @@ registerHooks({
   },
 });
 const pkg = resolve(opt.package ?? join(REPO, 'kiln/packages/bootpatch'));
-const { patchBoot, s1Overlay } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
+const { patchBoot } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
 
 const read = (p) => new Uint8Array(readFileSync(p));
 const sha256 = (d) => createHash('sha256').update(d).digest('hex');
@@ -85,6 +85,8 @@ const from = opt['overlay-dir']
   }[name] ?? join(root, name));
 const adbKey = opt['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
 
+// The overlay always comes from this checkout, so --package changes only the patch algorithm.
+const { s1Overlay } = await import(pathToFileURL(join(REPO, 'kiln/packages/bootpatch/src/index.ts')).href);
 const overlay = s1Overlay({
   rc: from('glassworks.rc'), loaderSh: from('glassworks_loader.sh'), verify: from('glassworks_verify'), bundlePub: from('glassworks_bundle.pub'),
   adbKeys: adbKey === 'none' ? new Uint8Array(0) : read(adbKey),

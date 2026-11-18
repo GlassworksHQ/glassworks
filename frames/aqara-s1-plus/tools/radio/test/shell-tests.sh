@@ -306,7 +306,8 @@ w "$T/bin/mount" <<'MOUNT'
 #!/bin/sh
 echo "$*" >> /t/mounts
 MOUNT
-printf 'stock-anim' > "$T/anim.zip"; printf 'bundle-anim' > "$T/banim.zip"
+printf 'stock-anim' > "$T/anim.zip"; printf 'not a zip' > "$T/badanim.zip"
+python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_STORED); z.writestr("desc.txt", "1440 720 30\n"); z.close()' "$T/banim.zip"
 printf '#!/bin/sh\nsetprop test.radio "bundle-script|${GW_SOURCE}|${GW_BUNDLE}"\n' > "$T/svc-radio.sh"
 printf '#!/bin/sh\nexit 3\n' > "$T/svc-crash.sh"
 L() { GW_RUN="$T/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" "$@"; }
@@ -380,7 +381,7 @@ check "...and loads" test "$(prop ro.glassworks.frame.version)" = 2.0.0
 L run radio
 check "a bundle script that keeps exiting is marked bad" test -e /data/glassworks/bundle/bad-radio
 check "...and the boot copy takes over" test "$(prop test.radio)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
-GW_LOADER_ONCE=1 L run radio
+rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
 check "...also on the next start" test "$(prop test.radio)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
 s=$(install_frame); check "the same bundle with a slot marked bad installs again" has "$s" "staged"
 L boot; check "...and loading it clears the mark" test ! -e /data/glassworks/bundle/bad-radio
@@ -391,6 +392,14 @@ echo junk >> /data/glassworks/bundle/next/services/radio.sh
 L boot
 check "a staged bundle that fails its check is dropped at boot" test ! -e /data/glassworks/bundle/next -a "$(prop ro.glassworks.frame.version)" = 2.0.0
 check "...and doesn't move the floor" test "$(cat /data/glassworks/bundle/version)" = 2000000
+
+mkframe "$T/f4" 2.0.2 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700" --file "bootanimation.zip=$T/badanim.zip"
+stage_frame "$T/f4/frame-bundle"; install_frame >/dev/null; L boot
+check "a bundle animation that is not a usable zip: the boot image's is mounted" has "$(tail -1 "$T/mounts")" "$TBL/glassworks_bootanimation.zip"
+check "...and the bundle still loads" test "$(prop ro.glassworks.frame.version)" = 2.0.2
+: > "$T/runblock"; GW_RUN="$T/runblock/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" boot
+check "no active record can be written: the boot copies run, and it says why" test "$(prop ro.glassworks.frame.version)/$(prop sys.glassworks.bundle.state)" = "1.0.0/bad: cannot record the active bundle"
+rm -f "$T/runblock"; L boot
 
 mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
 GW_LOADER_ONCE=1 L run radio; check "a developer script without the marker is ignored" test "$(prop test.radio)" != "dev|dev|1"
@@ -481,7 +490,7 @@ d = struct.pack('<II', 0x03A617EB, 8) + bytes(8) + struct.pack('<II', 0xF40A0AF4
 open(sys.argv[1], 'wb').write(d)
 PY
 mkframe "$T/b9" 1.3.3 "$T/key.pem" --file "fw/h.gbl=$T/huge.gbl:0644" --firmware "huge=fw/h.gbl:0018:x"
-CUR=$T/b9/frame-bundle
+CUR=$T/b9/frame-bundle; rm -f "$T/props/sys.glassworks.radio.fw_targets"
 timeout 60 env GWR_ONCE=1 GWR_SLEEP=0 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_radio.sh" >/dev/null 2>&1
 check "a GBL tag length of 0xfffffff8 is refused (no endless loop)" test $? != 124 -a "$(prop sys.glassworks.radio.fw_targets)" = "stock:${STOCK_SHA:0:12}:0017"
 
@@ -928,15 +937,33 @@ check "the app's off marker: no zone kept or adopted" test "$(prop persist.glass
 check "...and the status names it, for the app to confirm" has "$(prop sys.glassworks.timezone.status)" "error: '(off)' is not a time zone id"
 pkill -f "sleep 1000"
 
-# An app from before the loader still sets the s1kiosk names; the helper reads them for one release (#528).
-rm -f "$T/props/persist.glassworks.timezone"; printf 'Europe/Madrid' > "$T/props/persist.s1kiosk.timezone"
-printf 'Antarctica/Casey' > "$T/props/persist.sys.timezone"; : > "$T/tz-calls"
+# An app from before the loader set the s1kiosk names: they move once, at the helper's first start (#528).
+reset_radio; rm -f "$T"/props/persist.glassworks.*
+echo off > "$T/props/persist.s1kiosk.radio_mode"; printf 'any' > "$T/props/persist.s1kiosk.radio_allow"
+printf 'Europe/Madrid' > "$T/props/persist.s1kiosk.timezone"; printf 'Asia/Tokyo' > "$T/props/persist.glassworks.timezone"
 LOOPS=1 helper
-check "the old setting name is read when the new one is empty" test "$(cat "$T/tz-calls")" = Europe/Madrid
-printf 'Asia/Tokyo' > "$T/props/persist.glassworks.timezone"; printf 'Antarctica/Casey' > "$T/props/persist.sys.timezone"; : > "$T/tz-calls"
+check "old settings move to the new names once" test "$(prop persist.glassworks.radio_mode)/$(prop persist.glassworks.radio_allow)" = "off/any"
+check "...a new name already set is kept" test "$(prop persist.glassworks.timezone)" = Asia/Tokyo
+check "...and a root-only marker says it is done" test "$(stat -c %a:%u /data/s1kiosk/radio/.settings-moved)" = 600:0
+rm -f "$T/props/persist.glassworks.radio_allow"
 LOOPS=1 helper
-check "...the new name wins when both are set" test "$(cat "$T/tz-calls")" = Asia/Tokyo
-rm -f "$T/props/persist.s1kiosk.timezone"
+check "an allow-list cleared later stays empty (loopback only), never the old 'any'" test -z "$(prop persist.glassworks.radio_allow)"
+rm -f "$T"/props/persist.s1kiosk.* "$T/props/persist.glassworks.timezone"
+
+
+# ------------------------------------------------------------------------------------ first boot
+echo "--- glassworks_firstboot.sh"
+cp "$R/frames/aqara-s1-plus/tools/root/glassworks_firstboot.sh" "$TB/"; echo 'QAAAAfake-key test@host' > "$TB/glassworks_adb_keys"
+fb() { rm -f "$T/settings.calls"; GW_BOOT="$TB" GWF_ROOT="$T/fbnew" GWF_OLD="$T/fbold" /system/bin/sh "$TB/glassworks_firstboot.sh" >/dev/null 2>&1; }
+mkdir -p "$T/fbold"; touch "$T/fbold/.firstboot-done"
+fb
+check "a panel provisioned by a 0.4.3 boot image is not provisioned again" test ! -e "$T/settings.calls" -a ! -e "$T/fbnew/.firstboot-done"
+rm -f "$T/fbold/.firstboot-done"
+fb
+check "...a fresh panel is: adb on" has "$(cat "$T/settings.calls" 2>/dev/null)" "put global adb_enabled 1"
+check "...and marked done" test -e "$T/fbnew/.firstboot-done"
+fb
+check "...once" test ! -e "$T/settings.calls"
 
 # ---------------------------------------------------------------------------------- Bluetooth address
 # #246: the adapter's address for the app's Bluetooth proxy. Made-up, locally administered addresses only.

@@ -81,7 +81,7 @@ chown root:root /data/glassworks "$STAGE_DIR" && chmod 700 /data/glassworks "$ST
 rm -f "$STAGE"
 if [ -x "$VERIFY" ]; then
   out=$("$VERIFY" --copy "$DATA" files/update/pending.apk "$uid" "$size" "$STAGE" 2>&1 >/dev/null) ||
-    fail "pending.apk: ${out#glassworks_verify: }"
+    fail "pending.apk: ${out#*_verify: }"
 else # a boot image from before glassworks_verify
   cp "$SRC" "$STAGE" && chmod 600 "$STAGE" || fail "cannot copy pending.apk"
 fi

@@ -45,6 +45,7 @@ APP_RE = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
 MSLA_SHA256 = {"a66d45842a770e1c449a55208a6d2a3b36786eb1c94bf10d3c3aac317274e3bb"}
 MAX_FILES = 200
 MAX_TOTAL = 96 * 1024 * 1024
+MAX_MANIFEST = 65536  # glassworks_loader.sh and s1kiosk_bundle.sh refuse a longer manifest
 
 
 def die(msg):
@@ -102,12 +103,14 @@ def main():
     ap.add_argument("--pubkey", help="verify the signature with this public key file (64 hex digits)")
     a = ap.parse_args()
 
+    if a.frame is None and a.frame_version is not None:
+        die("--frame-version needs --frame")
     if a.frame is not None:
         if a.version is not None or a.app_version is not None:
             die("--frame and --version are two formats: give one")
-        if not FRAME_RE.match(a.frame):
+        if not FRAME_RE.fullmatch(a.frame):
             die(f"bad frame id {a.frame!r}")
-        m = SEMVER_RE.match(a.frame_version or "")
+        m = SEMVER_RE.fullmatch(a.frame_version or "")
         if not m:
             die(f"bad frame version {a.frame_version!r}: MAJOR.MINOR.PATCH, each 0..999")
         version = int(m[1]) * 1_000_000 + int(m[2]) * 1_000 + int(m[3])
@@ -156,7 +159,7 @@ def main():
     if len(files) > MAX_FILES:
         die("too many files")
     total = 0
-    lines = head + [f"created {a.created}"]
+    lines = [*head, f"created {a.created}"]
     for dst in sorted(files):
         src, mode = files[dst]
         if not good_path(dst) or (out_name == "radio-bundle" and dst.count("/") > 3):
@@ -185,6 +188,8 @@ def main():
         lines.append(f"firmware {fid} {path} {app} {label}")
     lines.append("end")
     manifest = ("\n".join(lines) + "\n").encode()
+    if len(manifest) > MAX_MANIFEST:
+        die(f"manifest is {len(manifest)} bytes; panels refuse more than {MAX_MANIFEST}")
     for l in lines:
         if "  " in l or l != l.strip():
             die(f"manifest line {l!r} has stray spaces")
