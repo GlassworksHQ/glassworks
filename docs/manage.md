@@ -176,6 +176,13 @@ address changes.
 for everyone for about a minute. The Reboot button only shows where the app can reboot the panel
 (when it's the device owner).
 
+**Home Assistant's name gives more than one address.** A `.local` name can resolve to Home
+Assistant's IPv6 address as well as its IPv4 one, also on a network where the panel has no IPv6 (an
+mDNS reflector relays it from another VLAN). The panel tries the addresses the way a browser does: an
+address that doesn't answer gets a quarter of a second, then the next one starts, and the first to
+connect wins. Older versions tried only the first address, and the sign-in failed after about 9
+seconds.
+
 **Administrators only, for now.** Like Home Assistant's own device pages, only an administrator can
 manage a panel. Whether other users get a say is open (#124).
 
