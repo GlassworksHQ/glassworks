@@ -77,6 +77,23 @@ the nightly run and a manual run each get a group of their own (`github.run_id`)
 holds them. `core-emulators.yml` does the same. The test builds (`test-build.yml`,
 `generic-test-build.yml`) cancel per branch. Releases and the libraries' release never cancel.
 
+## Caches
+
+Every Gradle job restores Gradle's home through `gradle/actions/setup-gradle`. Runs on `main` (each push and
+the nightly run) save it, and PRs only read it, so a PR rebuilds and retests only what it changed.
+
+setup-gradle saves Gradle's home even when the job fails. On 2026-11-18 that kept `api23` red for every PR.
+From 18:32, main's `api23` couldn't resolve `groovy-3.0.22.jar` (and `app`, once, `tensorflow-lite-2.16.1.aar`),
+though Maven Central served both. Most likely the repository missed once and Gradle recorded the artifact as
+missing in its dependency metadata (inferred, not seen). Each later `api23` run restored that record, failed
+without asking again, and saved it again. So every Gradle job ends with a step that runs only on
+failure and deletes `~/.gradle/caches/modules-2/metadata-*`. The next run resolves its dependencies afresh,
+and the downloaded files stay. `tools/ci/test/test_changes.py` checks that each Gradle job ends with it.
+
+To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[…]` entries on `main`
+(`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another
+job's entry and saves a clean one.
+
 ## Adding a job or a path
 
 1. Add the job to `pr.yml` with `needs: changes` and

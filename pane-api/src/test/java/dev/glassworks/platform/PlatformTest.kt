@@ -46,6 +46,7 @@ class PlatformTest {
         Triple("hasApplicationExitInfo", 30) { it.hasApplicationExitInfo },
         Triple("foregroundServiceTypesNeedTheirPermission", 34) { it.foregroundServiceTypesNeedTheirPermission },
         Triple("hasSoftApConfiguration", 30) { it.hasSoftApConfiguration },
+        Triple("hasDockPowerSource", 33) { it.hasDockPowerSource },
     )
 
     @Test

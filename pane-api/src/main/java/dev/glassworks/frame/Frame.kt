@@ -89,6 +89,12 @@ interface Frame {
     val orientation: Orientation get() = Orientation.LANDSCAPE
 
     /**
+     * Whether the device can sit on a dock, and so whether Home Assistant gets the *Docked* sensor
+     * (`dev.glassworks.dock.Docked`). [Dock.NO] by default: a panel on a wall has none.
+     */
+    val dock: Dock get() = Dock.NO
+
+    /**
      * Work the frame runs while the app's service runs, or null for none (the S1's: Wi-Fi scans while the
      * screen is off, #3). [onForegroundOnly] asks the service to take the types it may have now, when the
      * work found it needs one it didn't have (the location type for a scan).
@@ -146,6 +152,18 @@ enum class NamedBy { FRAME, MODEL }
 
 /** Whether a frame's screen takes a tap ([Frame.input]). */
 enum class Input { TOUCH, NONE }
+
+/** Whether a frame's device can dock ([Frame.dock]). */
+enum class Dock {
+    /** It never docks (the S1): no *Docked* sensor, and nothing listens for a dock. */
+    NO,
+
+    /** It might (any Android device): the sensor comes once the device has reported a dock, and stays. */
+    IF_SEEN,
+
+    /** It does (a Pixel Tablet): the sensor is there from the start. */
+    YES,
+}
 
 /** How a frame's screen stands ([Frame.orientation]). [ANY]: as the device stands, which Android decides. */
 enum class Orientation { LANDSCAPE, PORTRAIT, ANY }

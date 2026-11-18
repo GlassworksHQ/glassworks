@@ -199,6 +199,8 @@ class GlassworksRuntime(
 
     override fun homeAssistantConnected(): Boolean = device?.homeAssistantConnected() == true
 
+    override fun docked(): Boolean? = device?.docked()
+
     override val panelCode = PanelCode()
 
     override val dashboardAccount = dev.glassworks.auth.DashboardAccount({ dev.glassworks.auth.HaAuth.stored }, dev.glassworks.auth.HaAuth::askAccount)

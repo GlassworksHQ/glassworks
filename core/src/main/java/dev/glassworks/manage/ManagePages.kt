@@ -4,6 +4,7 @@
 
 package dev.glassworks.manage
 
+import dev.glassworks.dock.DockRow
 import dev.glassworks.pane.BLUEPRINTS
 import dev.glassworks.pane.BlueprintAction
 import dev.glassworks.pane.BlueprintSurface
@@ -106,7 +107,7 @@ ${foot(viewer)}"""
     }
 
     /** The page: the nav, the phone's header, [main], and [overlay] over it all (a dialog). */
-    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = ""): String {
+    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = "", head: String = ""): String {
         val n = nav(s, current, viewer)
         val note = notice?.let { """<div class="notice" role="status"><i class="dot ok"></i>${esc(it)}</div>""" }.orEmpty()
         // Under a dialog the page is inert: Tab stays in the dialog, as in the panel's sheet.
@@ -114,7 +115,7 @@ ${foot(viewer)}"""
         val body = """<aside class="side"$inert>$n</aside>
 <header class="top"$inert>${PageShell.mark(Look.DONE, "m")}<span>${esc(if (current == "/") s.name else title)}</span><details class="menu"><summary aria-label="Menu"><span></span><span></span></summary><div class="drop">$n</div></details></header>
 <main class="main"$inert>$note$main</main>$overlay"""
-        return PageShell.document("$title · ${s.name}", MANAGE_CSS + DIALOG_CSS, body)
+        return PageShell.document("$title · ${s.name}", MANAGE_CSS + DIALOG_CSS, body, head = head)
     }
 
     private fun csrf(v: Viewer) = """<input type="hidden" name="csrf" value="${esc(v.csrf)}">"""
@@ -168,14 +169,19 @@ ${foot(viewer)}"""
      */
     fun section(s: PanelStatus, v: Viewer, path: String, title: String, state: PaneState?, sec: SettingsSection?,
                 links: List<Pair<String, String>> = emptyList(), dialog: Dialog? = null, problem: String? = null, restart: Boolean = false,
-                notice: String? = null, problemSee: String? = null): String {
+                notice: String? = null, problemSee: String? = null, paused: Boolean = false): String {
         val heading = sec?.heading ?: title
         val why = sec?.let { runCatching { it.unavailable() }.getOrNull() }
         val master = sec?.master?.takeIf { why == null }?.let { m -> toggle(v, sec.id, SettingsChange.MASTER, m, heading) }.orEmpty()
         val head = """<div class="phr">${if (state != null) """<span class="crumb">Panes ›</span>""" else ""}<h1 class="ph">${esc(heading)}</h1>""" +
             """${state?.let { """<span class="pchip">${chip(it)}</span>""" }.orEmpty()}$master</div>"""
+        // A page whose rows change by themselves (the dock row) reloads itself: the page has no scripts. Never under a
+        // dialog, and the person can pause it (WCAG 2.2.1: a reload restarts a screen reader).
+        val live = sec != null && DockRow.shownIn(sec.items)
         val lines = listOfNotNull(
             why?.let { """<p class="sub">${esc("This pane can't run on this panel: $it.")}</p>""" },
+            if (!live) null else if (paused) """<p class="sub">${esc(LIVE_PAUSED)} <a href="${esc(path)}">Resume</a></p>"""
+                else """<p class="sub">${esc(LIVE_ON)} <a href="${esc(path)}?$LIVE_PARAM=off">Pause</a></p>""",
             problem?.let { """<p class="err" role="alert">${see(it, problemSee)}</p>""" },
             if (restart) """<div class="banner"><i class="dot work"></i><span>${esc(SettingsChange.RESTART_TEXT)}</span>${action(v, "/action/restart", "Restart now", "pill primary")}</div>""" else null,
         ).joinToString("")
@@ -185,7 +191,8 @@ ${foot(viewer)}"""
         val more = if (off || links.isEmpty()) "" else """<section class="card list">${links.joinToString("") { (label, href) ->
             """<a class="row" href="${esc(href)}"><div><b>${esc(label)}</b></div><i class="chev" aria-hidden="true">›</i></a>""" }}</section>"""
         val overlay = if (dialog != null && sec != null) dialog(v, path, sec, dialog) else ""
-        return frame(s, path, title, v, head + lines + card + more, notice, overlay)
+        val reload = if (live && !paused && overlay.isEmpty()) """<meta http-equiv="refresh" content="$LIVE_RELOAD_S;url=${esc(path)}">""" else ""
+        return frame(s, path, title, v, head + lines + card + more, notice, overlay, reload)
     }
 
     /** A question or an item's edit over a settings page, as the panel's sheet ([Dialog]). */
@@ -492,6 +499,12 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
         val OWN_PAGES = mapOf("log" to "Log", "security" to "Security", "about" to "About")
 
         /** The sidebar's foot for a browser signed in with the code the panel showed. */
+        /** How often a page with a live row ([DockRow]) reloads, in seconds: about as often as the panel's menu reads it (2 s). */
+        const val LIVE_RELOAD_S = 3
+        /** The query parameter that pauses it (`?live=off`), and the line that says which it does. */
+        const val LIVE_PARAM = "live"
+        const val LIVE_ON = "This page reloads every 3 seconds to follow the dock."
+        const val LIVE_PAUSED = "Paused: this page doesn't follow the dock until you resume it."
         const val SIGNED_IN_WITH_CODE = "Signed in with the panel's code"
 
         /** A sign-in's Show on the page of a browser signed in with the panel's code. */

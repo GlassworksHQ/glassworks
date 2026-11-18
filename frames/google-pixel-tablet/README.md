@@ -49,6 +49,10 @@ Public specifications, not read from a unit yet (`"unverified": true`):
 | Screen | 10.95-inch, 2560 × 1600 |
 | Root | Not needed |
 
+**Dock.** `"dock": true`: the tablet sits on its charging speaker dock, so Home Assistant gets its *Docked*
+sensor from the start ([docs/esphome.md](../../docs/esphome.md#docked)). On the dock, Android says the battery
+charges from a dock (`Dock powered: true`, read on a unit 2026-11-17).
+
 `abis` is `arm64-v8a`: Tensor G2 devices run a 64-bit-only userspace. That is a public fact for the Pixel 7,
 not read on a Pixel Tablet yet. `getprop ro.product.cpu.abilist` on a unit confirms it. The release builds
 `arm64-v8a` for other frames anyway, so this entry changes no build.

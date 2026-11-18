@@ -35,6 +35,11 @@ internal class Lockdown(
         "dom.ipc.processCount" to 1,
         "dom.ipc.processPrelaunch.enabled" to false,
         "fission.autostart" to false,
+        // No GPU process: Gecko draws in the app's process. When the app leaves the front (the screen goes off, a
+        // system dialog), GeckoView 144 binds the GPU process at IDLE priority, which makes it a cached process to
+        // Android 6, and the Mirror's lowmemorykiller kills those at once: the "GPU crashes" seen on the Mirror
+        // (frames/lululemon-mirror/research/mirror-memory.md). The process itself also goes: about 35 MB on the API 23 emulator.
+        "layers.gpu-process.enabled" to false,
         // WebRTC talks to any address over UDP, where neither the delegates nor webRequest can see it. Off:
         // RTCPeerConnection is gone, and HA's frontend falls back to HLS for cameras.
         "media.peerconnection.enabled" to false,

@@ -147,6 +147,12 @@ open class PlatformApi(
         else -> apiLevel - 2
     }
 
+    /**
+     * The battery broadcast's `EXTRA_PLUGGED` can say `BatteryManager.BATTERY_PLUGGED_DOCK` (Android 13): the device
+     * charges from a dock. Below it no value means a dock, and only `ACTION_DOCK_EVENT` can say so.
+     */
+    val hasDockPowerSource: Boolean get() = apiLevel >= 33
+
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 

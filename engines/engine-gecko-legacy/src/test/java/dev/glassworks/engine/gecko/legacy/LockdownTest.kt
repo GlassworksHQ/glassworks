@@ -22,6 +22,7 @@ class LockdownTest {
                 "dom.ipc.processCount" to 1,
                 "dom.ipc.processPrelaunch.enabled" to false,
                 "fission.autostart" to false,
+                "layers.gpu-process.enabled" to false,
                 "media.peerconnection.enabled" to false,
                 "media.peerconnection.ice.default_address_only" to true,
                 "media.peerconnection.ice.no_host" to true,

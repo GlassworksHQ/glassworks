@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 aguilaair
-package sh.edm.s1kiosk;
+package dev.glassworks.mirror.probe;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;

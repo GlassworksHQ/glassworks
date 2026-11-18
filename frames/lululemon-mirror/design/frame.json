@@ -241,9 +241,9 @@
   "abis": ["arm64-v8a", "armeabi-v7a"],
   "app": {
     "id": "dev.glassworks.generic_android.legacy",
-    "activity": "sh.edm.s1kiosk.MainActivity",
+    "activity": "dev.glassworks.MainActivity",
     "home": "dev.glassworks.generic.Launcher",
-    "admin": "sh.edm.s1kiosk.AdminReceiver"
+    "admin": "dev.glassworks.AdminReceiver"
   },
   "specs": [
     {
