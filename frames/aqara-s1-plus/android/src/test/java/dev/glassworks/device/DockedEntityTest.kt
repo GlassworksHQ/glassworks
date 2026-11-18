@@ -83,10 +83,10 @@ class DockedEntityTest {
         return device
     }
 
-    private fun PanelDevice.docked(): ApiEntity? = entityList().firstOrNull { it.objectId == "docked" }
+    private fun PanelDevice.dockedEntity(): ApiEntity? = entityList().firstOrNull { it.objectId == "docked" }
 
     private fun PanelDevice.dockedState(): Boolean {
-        val e = docked() as BinarySensorEntity
+        val e = dockedEntity() as BinarySensorEntity
         val get = BinarySensorEntity::class.java.getDeclaredField("get").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         return (get.get(e) as () -> Boolean?)() == true
@@ -95,7 +95,7 @@ class DockedEntityTest {
     @Test fun aPixelTabletHasItFromTheStartAndItFollowsTheDock() {
         assertEquals(Dock.YES, GenericAndroid(app).dock)
         val device = run()
-        val e = device.docked() as BinarySensorEntity
+        val e = device.dockedEntity() as BinarySensorEntity
         assertEquals("Docked", e.name)
         assertEquals("on by default: people automate on it", false, e.disabledByDefault)
         assertEquals(dev.glassworks.esphome.EntityCategory.NONE, e.category)
@@ -111,29 +111,29 @@ class DockedEntityTest {
     @Test fun anOrdinaryTabletHasNone() {
         ShadowBuild.setModel("Lenovo TB-X606F")
         assertEquals(Dock.IF_SEEN, GenericAndroid(app).dock)
-        assertNull(run().docked())
+        assertNull(run().dockedEntity())
     }
 
     @Test fun aTabletWithGooglesDockManagerHasIt() {
         ShadowBuild.setModel("Pixel Tablet 2")
         shadowOf(app.packageManager).installPackage(PackageInfo().apply { packageName = GenericAndroid.DOCK_MANAGER })
         assertEquals(Dock.YES, GenericAndroid(app).dock)
-        assertTrue(run().docked() != null)
+        assertTrue(run().dockedEntity() != null)
     }
 
     @Test fun anyOtherTabletGetsItOnceItDocksAndKeepsIt() {
         ShadowBuild.setModel("Lenovo TB-X606F")
         val device = run()
-        assertNull(device.docked())
+        assertNull(device.dockedEntity())
         send(Intent(Intent.ACTION_DOCK_EVENT).putExtra(Intent.EXTRA_DOCK_STATE, Intent.EXTRA_DOCK_STATE_DESK))
-        assertTrue("the first dock adds it", device.docked() != null)
+        assertTrue("the first dock adds it", device.dockedEntity() != null)
         assertTrue(device.dockedState())
         assertTrue("kept", prefs.dockSeen)
         device.stop()
 
         send(Intent(Intent.ACTION_DOCK_EVENT).putExtra(Intent.EXTRA_DOCK_STATE, Intent.EXTRA_DOCK_STATE_UNDOCKED))
         val again = run()
-        assertTrue("after a restart, off its dock, it's still there", again.docked() != null)
+        assertTrue("after a restart, off its dock, it's still there", again.dockedEntity() != null)
         assertFalse(again.dockedState())
     }
 
@@ -141,9 +141,9 @@ class DockedEntityTest {
         ShadowBuild.setHardware(AqaraS1Plus.HARDWARE)
         battery(BatteryManager.BATTERY_PLUGGED_DOCK)
         val device = run(runtime(AqaraS1Plus()))
-        assertNull(device.docked())
+        assertNull(device.dockedEntity())
         assertFalse("nothing learnt", prefs.dockSeen)
         prefs.dockSeen = true
-        assertNull("not even after a dock was seen", run(runtime(AqaraS1Plus())).docked())
+        assertNull("not even after a dock was seen", run(runtime(AqaraS1Plus())).dockedEntity())
     }
 }

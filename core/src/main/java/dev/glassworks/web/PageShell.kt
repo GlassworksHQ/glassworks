@@ -91,9 +91,9 @@ svg.mk rect{stroke:var(--pl);stroke-width:2.4}.p0{stroke-opacity:.7}.p1{stroke-o
     }
 
     /** A whole page: [css] after the tokens, [body] as given. */
-    fun document(title: String, css: String, body: String, bodyClass: String = ""): String =
+    fun document(title: String, css: String, body: String, bodyClass: String = "", head: String = ""): String =
         """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light">$head
 <title>${esc(title)}</title><style>$TOKENS
 $css</style></head><body${if (bodyClass.isNotEmpty()) " class=\"$bodyClass\"" else ""}>$body</body></html>"""
 

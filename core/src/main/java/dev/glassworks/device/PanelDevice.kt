@@ -291,6 +291,9 @@ class PanelDevice(
 
     private fun hasDockedEntity() = Docked.hasEntity(frame.dock, prefs.dockSeen)
 
+    /** On its dock now, or null where Home Assistant has no Docked sensor ([Docked.hasEntity]). Any thread. */
+    fun docked(): Boolean? = if (hasDockedEntity()) dockWatcher?.docked == true else null
+
     /**
      * esphome-main, from [dockWatcher]. The first dock a device reports is kept ([KioskPrefs.dockSeen]); on a device
      * that might dock ([Dock.IF_SEEN]) that adds the sensor, and Home Assistant lists the entities again.

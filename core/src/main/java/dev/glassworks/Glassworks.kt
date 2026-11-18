@@ -78,6 +78,12 @@ interface Glassworks {
     /** Home Assistant is connected and listening to the panel's states now; false while the device isn't running. */
     fun homeAssistantConnected(): Boolean
 
+    /**
+     * Whether the device sits on its dock now, or null where it has no Docked sensor (docs/esphome.md#docked: the
+     * frame never docks, or might and hasn't yet) or while the device isn't running. The Device page's dock row reads it.
+     */
+    fun docked(): Boolean? = null
+
     /** Set while KioskService runs; the sign-in screen uses it for manual HA URL entry. */
     var discovery: HaDiscovery?
 

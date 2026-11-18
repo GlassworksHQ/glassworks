@@ -4,6 +4,7 @@
 
 package dev.glassworks.manage
 
+import dev.glassworks.dock.DockRow
 import dev.glassworks.pane.BLUEPRINTS
 import dev.glassworks.pane.BlueprintAction
 import dev.glassworks.pane.BlueprintSurface
@@ -106,7 +107,7 @@ ${foot(viewer)}"""
     }
 
     /** The page: the nav, the phone's header, [main], and [overlay] over it all (a dialog). */
-    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = ""): String {
+    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = "", head: String = ""): String {
         val n = nav(s, current, viewer)
         val note = notice?.let { """<div class="notice" role="status"><i class="dot ok"></i>${esc(it)}</div>""" }.orEmpty()
         // Under a dialog the page is inert: Tab stays in the dialog, as in the panel's sheet.
@@ -114,7 +115,7 @@ ${foot(viewer)}"""
         val body = """<aside class="side"$inert>$n</aside>
 <header class="top"$inert>${PageShell.mark(Look.DONE, "m")}<span>${esc(if (current == "/") s.name else title)}</span><details class="menu"><summary aria-label="Menu"><span></span><span></span></summary><div class="drop">$n</div></details></header>
 <main class="main"$inert>$note$main</main>$overlay"""
-        return PageShell.document("$title · ${s.name}", MANAGE_CSS + DIALOG_CSS, body)
+        return PageShell.document("$title · ${s.name}", MANAGE_CSS + DIALOG_CSS, body, head = head)
     }
 
     private fun csrf(v: Viewer) = """<input type="hidden" name="csrf" value="${esc(v.csrf)}">"""
@@ -185,7 +186,9 @@ ${foot(viewer)}"""
         val more = if (off || links.isEmpty()) "" else """<section class="card list">${links.joinToString("") { (label, href) ->
             """<a class="row" href="${esc(href)}"><div><b>${esc(label)}</b></div><i class="chev" aria-hidden="true">›</i></a>""" }}</section>"""
         val overlay = if (dialog != null && sec != null) dialog(v, path, sec, dialog) else ""
-        return frame(s, path, title, v, head + lines + card + more, notice, overlay)
+        // The page has no scripts: one whose rows change by themselves (the dock row) reloads itself, never under a dialog.
+        val reload = if (overlay.isEmpty() && sec != null && DockRow.shownIn(sec.items)) """<meta http-equiv="refresh" content="$LIVE_RELOAD_S;url=${esc(path)}">""" else ""
+        return frame(s, path, title, v, head + lines + card + more, notice, overlay, reload)
     }
 
     /** A question or an item's edit over a settings page, as the panel's sheet ([Dialog]). */
@@ -492,6 +495,8 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
         val OWN_PAGES = mapOf("log" to "Log", "security" to "Security", "about" to "About")
 
         /** The sidebar's foot for a browser signed in with the code the panel showed. */
+        /** How often a page with a live row ([DockRow]) reloads, in seconds: about as often as the panel's menu reads it (2 s). */
+        const val LIVE_RELOAD_S = 3
         const val SIGNED_IN_WITH_CODE = "Signed in with the panel's code"
 
         /** A sign-in's Show on the page of a browser signed in with the panel's code. */

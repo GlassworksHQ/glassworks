@@ -347,10 +347,19 @@ no category, and on by default, because people automate on it ([Categories and d
    `BATTERY_PLUGGED_DOCK`. Android 13 and later only; below it no value means a dock. A Pixel Tablet on its
    charging speaker dock says this (`dumpsys battery`: `Dock powered: true`, read on one 2026-11-17).
 2. The sticky `ACTION_DOCK_EVENT`'s `EXTRA_DOCK_STATE` is any dock (desk, car, low-end or high-end desk),
-   not `EXTRA_DOCK_STATE_UNDOCKED`. Whether the Pixel Tablet sends it is not known yet.
+   not `EXTRA_DOCK_STATE_UNDOCKED`. The Pixel Tablet sends it too: `EXTRA_DOCK_STATE` 4
+   (`EXTRA_DOCK_STATE_HE_DESK`) on its dock and 0 off it (read on one, 2026-11-18).
 
 It follows both broadcasts as they come (`DockWatcher`), while the app runs. Nothing polls, and nothing
-wakes the device: Android delivers them to the app's registered receiver.
+wakes the device: Android delivers them to the app's registered receiver. On the Pixel Tablet (generic app
+0.1.1, 2026-11-18) the sensor went off 0.9 s after Android's dock broadcast when the tablet was lifted, and on
+again 0.8 s after it when it was put back.
+
+**On the panel and the Manage page too.** Where Home Assistant has the sensor, the frame's Device page (the
+panel's settings, *Pixel Tablet*, and the same page on the Manage page) ends with a status row: *Docked · On
+its dock*, or *Not docked*. It isn't a setting. The panel's menu reads it again every couple of seconds; the
+Manage page has no scripts, so a page with this row reloads itself every 3 seconds, never under an open dialog
+(`DockRow`, `ManagePages.LIVE_RELOAD_S`).
 
 **Only where it means something.** Home Assistant gets the entity when any of these holds
 (`Docked.hasEntity`, `GenericAndroid.dockOf`):
@@ -363,7 +372,8 @@ wakes the device: Android delivers them to the app's registered receiver.
 
 Otherwise there's no entity, so an ordinary tablet's device page doesn't show one that is always off. The
 S1 frame never has it and listens for no dock. A device that gets it from the third rule gets it the
-moment it first docks: the panel lists its entities again and HA adds *Docked*.
+moment it first docks: the panel lists its entities again and HA adds *Docked*, and the Device page gets its
+row.
 
 ### Panes on and off
 

@@ -146,7 +146,9 @@ that only takes effect when the app starts again says so and offers **Restart no
 asks first on the panel (turning the radio off) asks here too. The panel's menu, if it's open, shows
 the new value within a couple of seconds. The page doesn't follow the panel on its own: its values,
 the sliders' included, are the ones from when it was drawn, so reload it to see a change made on the
-panel or in Home Assistant. Each change goes in the Log with who made it, and a choice with what it is
+panel or in Home Assistant. One page reloads itself: a tablet's Device page while it has the dock row
+(*Docked* or *Not docked*, [esphome.md](esphome.md#docked)), every 3 seconds, but never while a dialog is open.
+Each change goes in the Log with who made it, and a choice with what it is
 now: "Alex set Camera › Camera use to Presence + camera".
 
 A sign-in (a camera stream's user name and password) says Set or Not set. Its password is write-only:
