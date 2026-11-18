@@ -103,10 +103,11 @@ case "$cmd" in
   "dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver") put admin 1 ;;
   "pm disable-user --user 0 sh.edm.s1kiosk")
     [ "$(st disable)" = fail ] && { echo "Error: java.lang.SecurityException"; exit 255; }
+    [ "$(st installed)" = none ] && { echo "Error: java.lang.IllegalArgumentException: Unknown package: sh.edm.s1kiosk"; exit 255; }
     put disabled 1 ;;
   "pm enable sh.edm.s1kiosk") put disabled 0 ;;
   "pm uninstall sh.edm.s1kiosk")
-    if [ "$(st admin)" = 1 ] || [ "$(st uninstall)" = fail ]; then echo "Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]"; exit 1; fi
+    if [ "$(st admin)" = 1 ] || [ "$(st uninstall)" = fail ] || [ "$(st installed)" = none ]; then echo "Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]"; exit 1; fi
     put installed none; rm -rf "$S/panel/ce" "$S/panel/de"; echo Success ;;
   "pm install -r -g /data/local/tmp/glassworks-old.apk")
     [ "$(st old-install)" = fail ] && { echo "Failure [INSTALL_FAILED_INTERNAL_ERROR]"; exit 1; }
@@ -371,6 +372,11 @@ check "...says so" has "$out" "Android would not disable Glassworks"
 check "...not that it is disabled" hasnt "$out" "Glassworks is disabled"
 check "...still restarts Aqara's radio services" has "$(cat "$T/adb.log")" "setprop ctl.start ha_master"
 check "...still checks HOME" has "$(cat "$T/adb.log")" "cmd package resolve-activity"
+for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
+  panel "$fix"; printf none > "$T/installed"
+  out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+  check "retry after an undo that removed Glassworks ($fix): exit 0, says removed" bash -c '[ "$1" -eq 0 ] && grep -q "Glassworks is removed" <<<"$2"' _ $rc "$out"
+done
 unknown_wifi
 out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1)
 check "can't tell who saved the network: disables" has "$(cat "$T/adb.log")" "shell pm disable-user --user 0 sh.edm.s1kiosk"

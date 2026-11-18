@@ -12,7 +12,7 @@ import { initial } from '../src/wizard/state';
 async function setup(parts: Record<string, Uint8Array>, recipe = s1Plus) {
   const files = await Promise.all(Object.entries(parts).map(([p, d]) => backupFile(p, d)));
   const meta: BackupMeta = { id: 's1-backup-20261112-090000', created: '', bootWasPatched: false, files: files.map((f) => ({ part: f.part, size: f.data.length, sha256: f.sha256 })) };
-  const panel = { run: vi.fn(async (_cmd: string) => ({ out: '', code: 0 })), push: vi.fn(async () => {}) };
+  const panel = { run: vi.fn(async (_cmd: string) => ({ out: '', code: 0 })), push: vi.fn(async () => {}), close: vi.fn(async () => {}) };
   const requestAdb = vi.fn(async () => panel);
   const session = new Session({
     recipe, frame: s1PlusUi, requestFel: () => new Promise(() => {}),
@@ -59,6 +59,7 @@ describe('Undo, keeping the settings', () => {
       cmd.startsWith('cmd package resolve-activity') ? { out: 'com.aqara.inhome.launcher/.MainActivity\n', code: 0 }
       : cmd === 'pm uninstall sh.edm.s1kiosk' ? { out: 'Failure [DELETE_FAILED_INTERNAL_ERROR]\n', code: 1 }
       : cmd === 'pm disable-user --user 0 sh.edm.s1kiosk' ? { out: 'Error: java.lang.SecurityException\n', code: 255 }
+      : cmd === 'pm list packages sh.edm.s1kiosk' ? { out: 'package:sh.edm.s1kiosk\n', code: 0 }
       : { out: '', code: 0 }));
     await session.undoContinue();
     expect(session.store.state.undo).toMatchObject({
@@ -66,6 +67,7 @@ describe('Undo, keeping the settings', () => {
       locked: true,
       note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: expect.stringMatching(/would not turn Glassworks off[\s\S]*"As it came from Aqara"/) },
     });
+    expect(panel.close).toHaveBeenCalledTimes(1); // "Try again" picks the panel afresh
   });
 
   it('says Glassworks is removed when it is', async () => {
@@ -76,6 +78,7 @@ describe('Undo, keeping the settings', () => {
       : { out: '', code: 0 }));
     await session.undoContinue();
     expect(session.store.state.undo).toMatchObject({ appsBack: true, note: { kind: 'ok', sub: expect.stringMatching(/^Glassworks is removed\. Next/) } });
+    expect(panel.close).toHaveBeenCalledTimes(1);
   });
 
   it('goes on to give the apps back for a backup it can restore', async () => {

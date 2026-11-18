@@ -75,7 +75,12 @@ class SwitchPanel implements PanelShell {
       return ok('Success\n');
     }
     if (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk') { this.installed = 'debug'; this.disabled = false; return ok('Success\n'); }
-    if (cmd === 'pm disable-user --user 0 sh.edm.s1kiosk') { this.disabled = true; return ok(); }
+    if (cmd === 'pm disable-user --user 0 sh.edm.s1kiosk') {
+      if (this.installed === 'none') return { out: 'Error: java.lang.IllegalArgumentException: Unknown package: sh.edm.s1kiosk\n', code: 255 };
+      this.disabled = true;
+      return ok();
+    }
+    if (cmd === 'pm list packages sh.edm.s1kiosk') return ok(this.installed === 'none' ? '' : 'package:sh.edm.s1kiosk\n');
     if (cmd === 'pm enable sh.edm.s1kiosk') { this.disabled = false; return ok(); }
     if (cmd === 'dumpsys package sh.edm.s1kiosk') return ok('Packages:\n  Package [sh.edm.s1kiosk] (1a2b):\n    versionName=0.1.0\n    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]\n');
     if (cmd === `timeout 15 su -c 'id -u' 2>/dev/null`) return this.root ? ok('0\n') : { out: '', code: 1 };
@@ -335,6 +340,15 @@ describe('undo keeps the panel on its Wi-Fi', () => {
     const text: string[] = [];
     expect((await unprovision(p, (s, d) => text.push(s || d || ''), noSleep)).app).toBe('running');
     expect(text.some((t) => /disabled it instead/.test(t))).toBe(false);
+  });
+
+  it('a retry after an undo that removed Glassworks says it is removed, on either Wi-Fi path', async () => {
+    for (const dump of [fixture('dumpsys-wifi-other.txt'), fixture('dumpsys-wifi-kiosk.txt')]) {
+      const p = new UndoWifiPanel();
+      p.installed = 'none';
+      p.wifiDump = dump;
+      expect(await unprovision(p, () => {}, noSleep)).toEqual({ app: 'removed', note: 'Glassworks is removed.' });
+    }
   });
 
   it('uninstall refused, disable works: says it is turned off instead', async () => {

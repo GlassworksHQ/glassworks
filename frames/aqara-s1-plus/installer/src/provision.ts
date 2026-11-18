@@ -260,7 +260,11 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
     if (d.code !== 0) r.detail(`could not disable Glassworks (${d.out.trim() || `exit ${d.code}`})`);
     return d.code === 0;
   };
-  const running: UndoResult = { app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' };
+  const removed: UndoResult = { app: 'removed', note: 'Glassworks is removed.' };
+  // pm refuses to disable a package that isn't there: an earlier undo that stopped at the HOME check removed it
+  const notOff = async (): Promise<UndoResult> => ((await r.try(`pm list packages ${PKG}`)).split(/\r?\n/).some((l) => l.trim() === `package:${PKG}`)
+    ? { app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' }
+    : removed);
   let result: UndoResult;
   if (wifiAtRisk(wifi)) {
     const net = `the panel's Wi-Fi${wifi.ssid ? ` (${wifi.ssid})` : ''}`;
@@ -269,14 +273,14 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
         ? `kept Glassworks installed but disabled: it saved ${net}, and Android forgets that network when Glassworks is uninstalled`
         : `kept Glassworks installed but disabled: the installer can't tell who saved ${net}, and if Glassworks did, Android forgets it when Glassworks is uninstalled`);
       result = { app: 'disabled', note: 'Glassworks is installed but turned off, so the panel keeps its Wi-Fi.' };
-    } else result = running;
+    } else result = await notOff();
   } else if (/Success/.test(await r.try(`pm uninstall ${PKG}`))) {
-    result = { app: 'removed', note: 'Glassworks is removed.' };
+    result = removed;
   } else if (await disable()) {
     // the app restarts itself (foreground service): uninstall, or at least disable it
     r.detail('could not uninstall Glassworks; disabled it instead');
     result = { app: 'disabled', note: 'Android would not remove Glassworks, so it is turned off instead.' };
-  } else result = running;
+  } else result = await notOff();
   if ((await r.try(`pm list packages ${KEYBOARD_PKG}`)).includes(`package:${KEYBOARD_PKG}`)) {
     await r.try(`pm uninstall ${KEYBOARD_PKG}`);
   }

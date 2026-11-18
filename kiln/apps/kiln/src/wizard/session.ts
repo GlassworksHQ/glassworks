@@ -617,8 +617,9 @@ export class Session implements SetupSteps {
   private async giveBack(picked: Promise<PanelShell>, files: ReadonlyMap<string, Uint8Array>) {
     const busy = (sub: string) => this.dispatch({ type: 'undo', patch: { note: { kind: 'busy', title: 'Giving the panel back to Aqara\'s apps', sub } } });
     busy(`In the browser's list, pick ${this.d.frame.asks.connect.pick}.`);
+    let panel: PanelShell | undefined;
     try {
-      const panel = await picked;
+      panel = await picked;
       try {
         await checkRestorable(this.d.recipe.backup, files);
       } catch (e) {
@@ -644,6 +645,9 @@ export class Session implements SetupSteps {
     } catch (e) {
       const msg = notPicked(e) ? 'Nothing was picked.' : (e as Error).message;
       this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Couldn\'t reach the panel over adb.', sub: `${msg} Is it running and plugged in?` } } });
+    } finally {
+      // each give-back picks the panel again: let go of this one's USB first
+      await (panel as { close?: () => Promise<void> } | undefined)?.close?.().catch(() => {});
     }
   }
 }
