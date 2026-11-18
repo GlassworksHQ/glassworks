@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.esphome
+package dev.glassworks.device
 
 import android.app.Application
 import android.content.Intent
@@ -24,9 +24,9 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.GlassworksRuntime
+import dev.glassworks.GlassworksRuntime
 import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.KioskPrefs
+import dev.glassworks.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.frame.AqaraS1Plus
