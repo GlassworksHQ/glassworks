@@ -411,12 +411,12 @@ export async function handOff(p: PanelShell, o: { tries?: number; sleep?: (ms: n
 /**
  * The screen lock in `dumpsys lock_settings`, for its first user (research/screen-lock.md). Android 11 and 15 name it
  * (`CredentialType: Pin`, `None`, `PIN`, `NONE`); Android 8.0 doesn't, and its gatekeeper `SID` is 0 without a
- * credential. Android 15 keeps a SID without one, but names the type. Undefined otherwise.
+ * credential. Android 15 keeps a SID without one, but names the type. Undefined otherwise, also for a type it doesn't know.
  */
 export function parseScreenLock(dump: string): ScreenLock | undefined {
   const user = /^\s*User 0\s*$([\s\S]*?)(?=^\s*User \d+\b|^\S|(?![\s\S]))/m.exec(dump)?.[1] ?? '';
-  const type = /^\s*CredentialType:\s*(\S+)/m.exec(user)?.[1];
-  if (type) return /^(none|-1)$/i.test(type) ? 'none' : 'secure';
+  const type = /^[ \t]*CredentialType:[ \t]*(\S*)/m.exec(user)?.[1];
+  if (type !== undefined) return /^(none|-1)$/i.test(type) ? 'none' : /^(pin|password|pattern)$/i.test(type) ? 'secure' : undefined;
   const sid = /^\s*SID\s*[:=]\s*([0-9a-f]+)\s*$/im.exec(user)?.[1];
   if (sid) return /^0+$/.test(sid) ? 'none' : 'secure';
   return undefined;
@@ -424,8 +424,9 @@ export function parseScreenLock(dump: string): ScreenLock | undefined {
 
 /** Read-only: the screen lock (#522). The dump has the device's own IDs, so only the answer is logged. */
 async function readScreenLock(r: Steps): Promise<ScreenLock | undefined> {
-  const res = await r.p.run('dumpsys lock_settings');
-  const lock = res.code === 0 ? parseScreenLock(res.out) : undefined;
+  // Optional and after the install: a dropped connection here leaves the lock unknown, not the install failed.
+  const res = await r.p.run('dumpsys lock_settings').catch(() => undefined);
+  const lock = res?.code === 0 ? parseScreenLock(res.out) : undefined;
   r.detail(`screen lock: ${lock === 'secure' ? 'a PIN, pattern or password' : lock === 'none' ? 'none or swipe' : 'unknown'}`);
   return lock;
 }

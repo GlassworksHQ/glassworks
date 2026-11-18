@@ -25,6 +25,9 @@ probe() {
   echo "dumpsys window:";       sh dumpsys window | grep -i -E 'secure|keyguard' | head -6 | sed 's/^/  /' || true
   echo "dumpsys window policy:"; sh dumpsys window policy | grep -i -E 'secure' | head -4 | sed 's/^/  /' || true
   echo "dumpsys lock_settings:"; sh dumpsys lock_settings | grep -i -E 'quality|credential|secure' | head -6 | sed 's/^/  /' || true
+  # The SID is device-unique: only whether it is 0 (Android 8 without a credential) is printed.
+  sh dumpsys lock_settings | grep -E '^[[:space:]]*SID[[:space:]]*[:=]' | head -1 \
+    | awk '{ print ($NF ~ /^0+$/) ? "  SID: 0" : "  SID: non-zero (not shown)" }' || true
 }
 
 probe "as it is"

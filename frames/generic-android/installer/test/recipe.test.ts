@@ -320,6 +320,18 @@ describe('the screen lock (#522)', () => {
     expect(parseScreenLock('')).toBeUndefined();
     expect(parseScreenLock("Can't find service: lock_settings")).toBeUndefined();
     expect(parseScreenLock('Current lock settings service state:\n  User 0\n    Quality: 0\n')).toBeUndefined();
+    expect(parseScreenLock(NEW('0', 'UNKNOWN'))).toBeUndefined();
+    expect(parseScreenLock(NEW('0', '3'))).toBeUndefined();
+    expect(parseScreenLock(NEW('1234abcd5678ef90', '').replace('CredentialType: ', 'CredentialType:'))).toBeUndefined();
+  });
+
+  it('a connection that drops on the read: the install is done all the same, the lock unknown', async () => {
+    const p = new FakeAndroid({ ...LEVELS.api34!, lock: 'pin' });
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'dumpsys lock_settings' ? Promise.reject(new Error('transfer failed')) : run(cmd));
+    const res = await installGeneric(p, { apk: apkFor(34), sleep: noSleep, setupTries: 2 });
+    expect(res.home.state).toBe('set');
+    expect(res.screenLock).toBeUndefined();
   });
 
   it('reads the first user, not a second one\'s lock', () => {

@@ -99,9 +99,15 @@ Kiln's run on the emulators (2026-11-18), with a debug build of the generic app 
 2. `ADB_USB=0 ADB_MDNS=0 ANDROID_ADB_SERVER_PORT=5071 frames/generic-android/tools/probe-screen-lock.sh -s
    emulator-5590 --set-pin`. It reads every candidate (read-only), sets PIN 1234, reads again, clears it and reads a
    third time. Without `--set-pin` it only reads. Use `--set-pin` on an emulator only.
-3. The recipe end to end: `echo emulator-5590 > /tmp/gw522-serial`, `locksettings set-pin 1234`, then
-   `npx -y tsx@4.23.15 frames/generic-android/installer/run-node.ts --install --apk <generic apk> --serial-file
-   /tmp/gw522-serial`. Its last line is `"screenLock"`. This writes: it installs the app. `--undo` removes it.
+3. The recipe end to end, on the same adb server as step 1:
+   ```sh
+   export ADB_USB=0 ADB_MDNS=0 ANDROID_ADB_SERVER_PORT=5071
+   echo emulator-5590 > /tmp/gw522-serial
+   adb -s emulator-5590 shell locksettings set-pin 1234
+   npx -y tsx@4.23.15 frames/generic-android/installer/run-node.ts --install --apk <generic apk> --serial-file /tmp/gw522-serial
+   ```
+   Its last line is `"screenLock"`. This writes: it installs the app (`--undo` removes it) and sets a PIN, which the
+   `-read-only` emulator throws away when it stops, or `adb -s emulator-5590 shell locksettings clear --old 1234`.
 
 ## Open questions
 
