@@ -742,7 +742,7 @@ open class MainActivity : Activity() {
     //   --es open <url>         navigate once, without persisting
     //   --ef zoom 1.25          CSS px ratio (0 = auto); restarts the process
     //   --es secure_hosts a,b   extra secure-context hosts; restarts the process
-    //   --ez remote_debug true  Gecko remote debugging; restarts the process
+    //   --ez remote_debug true  Gecko remote debugging; restarts the process (ignored on the legacy engine, #29)
     //   --ez reload true        reload the page
     //   --ez restart true       restart the app process
     //   --es api_key <base64>   ESPHome API encryption key (32 bytes); --ez api_encryption true|false
@@ -782,8 +782,12 @@ open class MainActivity : Activity() {
             needsRestart = true
         }
         if (intent.hasExtra("remote_debug")) {
-            prefs.setRemoteDebugging(intent.getBooleanExtra("remote_debug", false))
-            needsRestart = true
+            if (runtime.engine.lockedDown) {
+                Log.i(TAG, "remote_debug ignored: the legacy engine is frozen and loads only Home Assistant, so it stays off")
+            } else {
+                prefs.setRemoteDebugging(intent.getBooleanExtra("remote_debug", false))
+                needsRestart = true
+            }
         }
         if (intent.hasExtra("hide_header") || intent.hasExtra("hide_sidebar")) {
             if (intent.hasExtra("hide_header")) prefs.hideHeader = intent.getBooleanExtra("hide_header", true)

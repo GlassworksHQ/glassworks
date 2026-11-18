@@ -182,8 +182,18 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Dashboards can read the panel's state as `window.glassworks`.** The presence, light and screen state a
   dashboard sees now has the Glassworks name, with a `glassworks-state` event when it changes. The old
   `window.s1kiosk` and `s1kiosk-state` keep working, so existing dashboards need no change.
+- **The Manage page says what the legacy build can't do.** On Android 6 and 7 devices and the lululemon
+  Mirror, the Overview has a *Legacy* chip next to the version. Hover it, tap it or tab to it: its web engine
+  is frozen and gets no security fixes, so it loads only your Home Assistant, and remote debugging is off.
+  Remote debugging now stays off there for real: the adb extra that turns it on is ignored, and so is the
+  setting if it was already on. Other devices don't show the chip.
 
 ### Changed
+- **The setup screen's Wi-Fi step leads with one way to join.** It shows the best way the panel can do
+  right now: Bluetooth setup from Home Assistant, else **Set up from a phone** through the panel's own
+  Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
+  **Other ways to set up ›**, and **Not now** is the quietest button on the card. The step now fits on a
+  small phone too. A panel without touch (the Mirror) looks as before.
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
   device whose presence sensor has a range (the S1), and *Auto brightness*, *Illuminance* and *Max auto
   brightness* only on one with a light sensor. On a tablet with a camera, presence is the Camera pane's
@@ -395,6 +405,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   which a panel without touch, such as the Mirror, can't offer: turning on the ONVIF stream ended at
   "Needs Presence + camera." It now has the panel's two cards, *Presence only* and *Presence + camera*,
   on every panel, and the Log says who changed it. "Needs Presence + camera." links to them.
+- **Setup's Home Assistant step: sign in first, then add it.** The two sub-steps now always read *Sign in*,
+  then *Add it*, and the marker sits on the one the card shows. Before, the screen could show the sign-in
+  under *Add it*, and after signing in *Sign in* turned green while *Add it* stayed current. If Home
+  Assistant added the panel before the sign-in, *Add it* shows green and *Sign in* is current.
 - **A screen without touch waits for Home Assistant after phone setup.** On the Mirror, the setup screen
   kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
   Assistant to add the panel, and where: Settings → Devices & services, or the old entry's

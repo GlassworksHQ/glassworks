@@ -12,5 +12,8 @@ internal object GeckoVariant {
     /** Shown after the engine's version on the Manage page. */
     const val LABEL = ""
 
+    /** Engine.lockedDown: only the legacy engine says it is frozen and held to Home Assistant (#29). */
+    const val LOCKED_DOWN = false
+
     fun guard(logTag: String): PageGuard? = null
 }
