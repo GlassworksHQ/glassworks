@@ -25,6 +25,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   camera. It names itself after the device. Android 8 and newer.
 - **A legacy build for Android 6 and 7.** The same app on an older browser engine (GeckoView 144), which opens
   only your Home Assistant. It is its own app with its own updates, and the build the lululemon Mirror runs.
+- **Know when a tablet is on its dock.** A Pixel Tablet has a *Docked* sensor in Home Assistant, on while it
+  sits on its dock and off when you lift it off, and its page in the settings and on the Manage page says
+  *Docked* or *Not docked*. Another tablet gets both once it has been on a dock; ordinary tablets have neither.
 - **Setup offers silent updates when it can.** On a new setup, a *Silent updates* step follows Panes when
   updates would ask for a tap and something can change that. On Android 12 or newer it opens Android's "Install
   unknown apps" page for Glassworks. On Android 6 to 11, and on newer Android while this release targets an older

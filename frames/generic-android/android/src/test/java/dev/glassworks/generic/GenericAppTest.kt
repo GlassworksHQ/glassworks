@@ -236,6 +236,20 @@ class GenericAppTest {
         assertFalse("nothing of the S1", device.entityList().any { it.objectId.startsWith("radio_") || it.objectId.startsWith("base_") })
     }
 
+    /** The Pixel Tablet docks (its frame.json's `dock`): this app gives Home Assistant its Docked sensor; another tablet has none until it docks (DockedEntityTest). */
+    @Test fun aPixelTabletHasTheDockedSensor() {
+        val (_, device) = run(runtime())
+        val docked = device.entityList().single { it.objectId == "docked" }
+        assertEquals("Docked", docked.name)
+        assertFalse("on by default", docked.disabledByDefault)
+    }
+
+    @Test fun anOrdinaryTabletHasNoDockedSensor() {
+        ShadowBuild.setModel("Lenovo TB-X606F")
+        val (_, device) = run(runtime())
+        assertTrue(device.entityList().none { it.objectId == "docked" })
+    }
+
     @Test fun aPaneTheDeviceCantRunIsHiddenEverywhere() {
         features(PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_CAMERA_ANY) // a speaker and a camera, no microphone
         val runtime = runtime()

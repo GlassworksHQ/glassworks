@@ -305,7 +305,8 @@ class ManageServer(
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
             else -> {
                 val edit = req.query["edit"]?.let { ManagePages.Dialog.Edit(it) }
-                settingsPage(status, viewer, path.removePrefix("/"), dialog = edit, done = req.query["done"])
+                settingsPage(status, viewer, path.removePrefix("/"), dialog = edit, done = req.query["done"],
+                    paused = req.query[ManagePages.LIVE_PARAM] == "off")
                     ?: html(404, pages.notFound(status, viewer))
             }
         }
@@ -313,7 +314,7 @@ class ManageServer(
 
     /** A pane's or a core section's page by [id], or null when the panel has no such page. */
     private fun settingsPage(status: PanelStatus, viewer: ManagePages.Viewer, id: String, dialog: ManagePages.Dialog? = null,
-                             problem: String? = null, done: String? = null, code: Int = 200, problemSee: String? = null): HttpResponse? {
+                             problem: String? = null, done: String? = null, code: Int = 200, problemSee: String? = null, paused: Boolean = false): HttpResponse? {
         val pane = status.panes.firstOrNull { it.id == id }
         val section = status.sections.firstOrNull { it.id == (pane?.sectionId ?: id) }
         if (pane == null && section == null) return null
@@ -323,7 +324,7 @@ class ManageServer(
             d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider && item !is SettingsItem.Action)
         }
         return html(code, pages.section(status, viewer, "/$id", pane?.title ?: section!!.title, pane?.state, section, pane?.links.orEmpty(),
-            dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done), problemSee = problemSee))
+            dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done), problemSee = problemSee, paused = paused))
     }
 
     private fun sectionNotice(done: String?): String? = when (done) {

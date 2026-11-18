@@ -31,6 +31,7 @@
     "height": 1600
   },
   "abis": ["arm64-v8a"],
+  "dock": true,
   "specs": [
     {
       "label": "Size",

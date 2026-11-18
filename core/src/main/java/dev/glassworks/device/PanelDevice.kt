@@ -10,6 +10,9 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import dev.glassworks.dock.DockWatcher
+import dev.glassworks.dock.Docked
+import dev.glassworks.frame.Dock
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.nodeName
@@ -153,6 +156,15 @@ class PanelDevice(
     private val authListener: (Boolean) -> Unit = { exec.execute { server?.publishStates() } }
     private val dashboardsListener: (List<Dashboard>) -> Unit = { exec.execute { checkDashboards() } }
 
+    /** Whether the device sits on a dock; none on a frame that never docks ([Dock.NO]). Started and stopped on the main thread. */
+    private val dockWatcher: DockWatcher? =
+        if (frame.dock == Dock.NO) null else DockWatcher(ctx) { docked -> runCatching { exec.execute { onDock(docked) } } }
+    /**
+     * The *Docked* sensor, in the list while [Docked.hasEntity] says so. Its state is missing (Home Assistant: unknown)
+     * until the watcher's first read on the main thread, which can come after Home Assistant subscribes.
+     */
+    private val dockedEntity = BinarySensorEntity("docked", "Docked", deviceClass = "plug", get = { dockWatcher?.docked })
+
     // "Dashboard" select (docs/onboarding.md step 5): built from [appliedDashboards]; a changed
     // option list rebuilds the entity set (debounced, like the wall base) so HA re-lists it.
     @Volatile private var appliedDashboards: List<Dashboard> = emptyList()
@@ -179,6 +191,7 @@ class PanelDevice(
             try { hook() } catch (e: Exception) { EspHomeLog.w("A pane's stop hook failed: $e") }
         }
         host?.let { it.cancelVoice = null; it.onVoicePlaying = null }
+        dockWatcher?.let { w -> if (Looper.myLooper() == Looper.getMainLooper()) w.stop() else main.post { w.stop() } }
         exec.shutdownNow()
         mdns.stop()
         synchronized(lifecycle) { server.also { server = null } }?.stop()
@@ -239,6 +252,7 @@ class PanelDevice(
             Dashboards.addListener(dashboardsListener)
             exec.scheduleWithFixedDelay({ checkDashboards() }, 2, 2, TimeUnit.SECONDS)
             exec.scheduleWithFixedDelay({ server?.publishStates() }, 5, 5, TimeUnit.SECONDS)
+            dockWatcher?.let { w -> ui { if (unlessStopped {}) w.start() } }
         }
         // A switch changed after its pane started and before the listener above: no event came for it. And
         // each pane that is off hears its own switch once, so it puts back what it undoes outside the app
@@ -285,7 +299,29 @@ class PanelDevice(
     // ------------------------------------------------------------------ dashboard select
 
     private fun assemble(): List<ApiEntity> =
-        EntityRegistry(panes).assemble(coreEntities + dashboardSelect(dashboardRebuild.applied()))
+        EntityRegistry(panes).assemble(coreEntities + listOfNotNull(dockedEntity.takeIf { hasDockedEntity() }) + dashboardSelect(dashboardRebuild.applied()))
+
+    private fun hasDockedEntity() = Docked.hasEntity(frame.dock, prefs.dockSeen)
+
+    /** On its dock now, or null where Home Assistant has no Docked sensor ([Docked.hasEntity]) or before the first read. Any thread. */
+    fun docked(): Boolean? = if (hasDockedEntity()) dockWatcher?.docked else null
+
+    /**
+     * esphome-main, from [dockWatcher]. The first dock a device reports is kept ([KioskPrefs.dockSeen]); on a device
+     * that might dock ([Dock.IF_SEEN]) that adds the sensor, and Home Assistant lists the entities again.
+     */
+    private fun onDock(docked: Boolean) {
+        if (docked && !prefs.dockSeen) {
+            val had = hasDockedEntity()
+            prefs.dockSeen = true
+            if (!had && hasDockedEntity()) {
+                EspHomeLog.i("First dock seen: adding the Docked sensor")
+                rebuildEntities()
+                return
+            }
+        }
+        server?.publishStates()
+    }
 
     private fun currentDashboardOption(list: List<Dashboard>) =
         DashboardOptions.currentOption(prefs.urlSetting, prefs.settingBase, list)

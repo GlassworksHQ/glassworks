@@ -68,6 +68,8 @@ export interface FrameDesign {
   boot?: { androidApi?: number; splash?: 'allwinner-boot-resource'; zipBudget?: number; rotate?: 90 | 270 };
   /** what the device's userspace runs, preferred first; the app's release builds every frame's (#98). Optional so code that builds a FrameDesign without it still compiles */
   abis?: Abi[];
+  /** the device can sit on a dock (the Pixel Tablet): the app gives Home Assistant its Docked sensor from the start (docs/esphome.md#docked) */
+  dock?: boolean;
   /**
    * The app Kiln installs on this frame, when it isn't S1 Kiosk: its package (`id`), the activity adb
    * starts it with (whose extras it trusts from adb), the activity its HOME filter is on (an alias),
@@ -166,7 +168,7 @@ export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'ap
 const FIELDS: Record<keyof FrameDesign, true> = {
   id: true, kind: true, base: true, name: true, brand: true, aka: true, status: true, summary: true, tagline: true, project: true,
   kiln: true, model: true, recovery: true, render: true, display: true, boot: true, abis: true, app: true, specs: true, panes: true,
-  provides: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true,
+  provides: true, dock: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true,
 };
 
 /**

@@ -21,6 +21,7 @@ kiosk|camera_use|String|null
 kiosk|dashboards|String|""
 kiosk|device_mac|String|""
 kiosk|diagnostics_enabled|Boolean|true
+kiosk|dock_seen|Boolean|false
 kiosk|ha_seen|Boolean|false
 kiosk|ha_url|String|""
 kiosk|ha_url_source|String|""
