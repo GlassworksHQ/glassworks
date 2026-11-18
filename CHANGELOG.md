@@ -9,6 +9,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
+  service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
+  It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the
+  service, whose updates install by themselves, skips it.
 - **The panel shows its frame version.** The S1 Plus page in the panel's settings and on the Manage page has a new
   *Frame version* row: the version of the parts of the panel Glassworks owns, such as its boot-side services and boot
   animation, not Android's. A panel installed before frame versions shows *Before 1.0.0*. A new *Frame update*
