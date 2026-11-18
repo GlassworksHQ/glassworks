@@ -103,7 +103,8 @@ in HA. If a request goes against it, say so and point at the page instead of bui
   - *Before* comes from `main`, at the same state and size as *after*.
   - Upload them to the PR body (GitHub user attachments). Don't commit PR screenshots to the repo;
     only images that docs use go in `docs/img/` (as `.webp`).
-- **Changelog.** Add a line under **[Unreleased]** in `CHANGELOG.md` when someone running a panel
+- **Changelog.** Add a line under **[Unreleased]** in `CHANGELOG.md` (S1 Kiosk's) or
+  `frames/generic-android/CHANGELOG.md` (the generic app and its legacy build; both, if both change) when someone running a panel
   or using the installer would notice the change: a feature, fixed behaviour, a new entity, a
   changed default, a new requirement. Internal refactors, CI and docs-only changes usually don't
   get one. The style:

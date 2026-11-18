@@ -1,0 +1,217 @@
+# Signed release of Glassworks for generic Android (#23) or its legacy build (#198) on its own tag
+# (docs/releasing.md, "Glassworks for generic Android and its legacy build"):
+#   git tag -a generic-android-v1.2.3 -m "Glassworks for generic Android 1.2.3"        && git push origin generic-android-v1.2.3
+#   git tag -a generic-android-legacy-v1.2.3 -m "Glassworks for generic Android 1.2.3, legacy build" && git push origin generic-android-legacy-v1.2.3
+# Each tag is one release line, the one the app's update check reads (core/.../update/Releases.kt, ReleaseLine):
+#   generic-android-v*         dev.glassworks.generic_android         glassworks-generic-android-<abi>-<version>.apk
+#   generic-android-legacy-v*  dev.glassworks.generic_android.legacy  glassworks-generic-android-legacy-<abi>-<version>.apk
+# one APK and its .sha256 per ABI in frames/generic-android/design/frame.json, signed with Glassworks' key (the
+# `release-signing` environment's GENERIC_* secrets, as generic-test-build.yml), notes from
+# frames/generic-android/CHANGELOG.md. Published with --latest=false: releases/latest stays S1 Kiosk's, which
+# panels up to 0.4.3 read (release.yml). S1 Kiosk's tags (v*, aqara-s1-plus-v*) never match here.
+#
+# A manual run (Actions tab, or `gh workflow run generic-release.yml --ref main -f tag=generic-android-v1.2.3`) is a
+# dry run: the same build job, with the APKs as an artifact, and no release. The environment only lets main,
+# test-build/** and the release tags in, so a run on any other branch or from a fork gets no key.
+#   build    builds, signs and checks the APKs (the key; read-only token)
+#   publish  tag pushes only: creates the release from build's artifact (write token; no key)
+# Every action is pinned by commit SHA (the tag in the comment is what it was at the time).
+name: Generic release
+
+on:
+  push:
+    tags: ['generic-android-v*', 'generic-android-legacy-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Dry run of this tag (generic-android-v1.2.3 or generic-android-legacy-v1.2.3): builds and signs, publishes nothing'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: generic-release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60   # two APK builds
+    environment: release-signing   # the APK key
+    outputs:
+      tag: ${{ steps.line.outputs.tag }}
+      title: ${{ steps.line.outputs.title }}
+      changelog-version: ${{ steps.notes.outputs.version }}
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      # Only a pushed tag publishes; a manual run, even with --ref set to a tag, is a dry run.
+      DRY_RUN: ${{ !(github.event_name == 'push' && github.ref_type == 'tag') }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Line and version from the tag
+        id: line
+        run: |
+          # = Releases.kt ReleaseLine.GENERIC_ANDROID and GENERIC_ANDROID_LEGACY: tag prefix, APK stem, package.
+          case "$TAG" in
+            generic-android-legacy-v*) line=generic-android-legacy task=assembleLegacy out=legacy/generic-android-legacy.apk
+              id=dev.glassworks.generic_android.legacy min=23 title="Glassworks for generic Android, legacy build" ;;
+            generic-android-v*) line=generic-android task=assembleRelease out=release/generic-android-release.apk
+              id=dev.glassworks.generic_android min=26 title="Glassworks for generic Android" ;;
+            *) echo "::error::tag '$TAG' is neither generic-android-vX.Y.Z nor generic-android-legacy-vX.Y.Z"; exit 1 ;;
+          esac
+          v="${TAG#"$line"-v}"
+          # Same rule as frames/generic-android/android/build.gradle.kts: MAJOR.MINOR.PATCH, minor and patch below
+          # 100. No pre-release tags: the app ignores them.
+          if ! [[ "$v" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
+            echo "::error::tag $TAG is not $line-vMAJOR.MINOR.PATCH (minor/patch < 100)"; exit 1
+          fi
+          IFS=. read -r major minor patch <<< "$v"
+          { echo "LINE=$line"; echo "TASK=$task"; echo "OUT=$out"; echo "PKG=$id"; echo "MIN_SDK=$min"
+            echo "VERSION=$v"; echo "VERSION_CODE=$((major * 10000 + minor * 100 + patch))"; } >> "$GITHUB_ENV"
+          { echo "tag=$TAG"; echo "title=$title $v"; } >> "$GITHUB_OUTPUT"
+          echo "$TAG: $id $v (versionCode $((major * 10000 + minor * 100 + patch)))"
+
+      - name: Higher than this line's last release
+        # An installed app only offers a newer version, and Android refuses a lower versionCode.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --json tagName --jq '.[].tagName')"
+          last="$(sed -n -E "s/^$LINE-v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p" <<< "$tags" | sort -V | tail -n 1)"
+          echo "last $LINE release: ${last:-none}"
+          if [ -n "$last" ] && [ "$(printf '%s\n' "$last" "$VERSION" | sort -V | tail -n 1)" = "$last" ]; then
+            echo "::error::$VERSION is not higher than $LINE's last release, $last"; exit 1
+          fi
+
+      - name: Release notes from frames/generic-android/CHANGELOG.md
+        id: notes
+        # Checked before the slow build. A dry run before the version's section exists shows Unreleased instead.
+        run: |
+          if tools/release/changelog-section.sh "$VERSION" frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md"; then
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          elif [ "$DRY_RUN" = true ]; then
+            echo "::warning::no ## [$VERSION] section in frames/generic-android/CHANGELOG.md: the tag would fail here. Showing Unreleased."
+            tools/release/changelog-section.sh Unreleased frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+            echo "version=Unreleased" >> "$GITHUB_OUTPUT"
+          else
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/notes.md"
+
+      # AGP 9.3 / Gradle 9.8 / Kotlin 2.4 need JDK 17+; the app is developed on Temurin 21.
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      - name: Release keystore
+        env:
+          GENERIC_KEYSTORE_B64: ${{ secrets.GENERIC_KEYSTORE_B64 }}
+        run: |
+          [ -n "$GENERIC_KEYSTORE_B64" ] || { echo "::error::secret GENERIC_KEYSTORE_B64 is not set (frames/generic-android/README.md)"; exit 1; }
+          umask 077
+          printf '%s' "$GENERIC_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/glassworks-release.jks"
+          echo "GENERIC_KEYSTORE_FILE=$RUNNER_TEMP/glassworks-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build the APKs, one per ABI
+        env:
+          GENERIC_REQUIRE_RELEASE_SIGNING: 'true'
+          GENERIC_KEYSTORE_PASSWORD: ${{ secrets.GENERIC_KEYSTORE_PASSWORD }}
+          GENERIC_KEY_ALIAS: glassworks   # not a secret; as a secret, GitHub would mask every "glassworks" in the log
+          GENERIC_KEY_PASSWORD: ${{ secrets.GENERIC_KEY_PASSWORD }}
+        run: |
+          mkdir dist
+          for abi in $(jq -r '.abis[]' frames/generic-android/design/frame.json); do
+            # The legacy engine's GeckoView follows -PlegacyAbi, the APK -Ps1Abi; the release build ignores -PlegacyAbi.
+            ./gradlew --no-daemon ":generic-android:$TASK" -Ps1Abi="$abi" -PlegacyAbi="$abi" -PgenericVersion="$VERSION"
+            # = ReleaseLine.apkName: <line's stem>-<abi>-<version>.apk
+            cp "frames/generic-android/android/build/outputs/apk/$OUT" "dist/glassworks-$LINE-$abi-$VERSION.apk"
+          done
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/glassworks-release.jks"
+
+      - name: Verify and checksum
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          aapt2="$(dirname "$apksigner")/aapt2"
+          cd dist
+          for apk in *.apk; do
+            abi="${apk#glassworks-"$LINE"-}"; abi="${abi%-"$VERSION".apk}"
+            "$apksigner" verify --verbose --print-certs "$apk"
+            # Glassworks' release key, the package, no sharedUserId, the components named from outside the APK.
+            ../tools/release/check-update-compat.sh --app "$LINE" --signed "$apk"
+            badging="$("$aapt2" dump badging "$apk")"
+            echo "${badging%%$'\n'*}"
+            grep -q "^package: name='$PKG' versionCode='$VERSION_CODE' versionName='$VERSION'" <<< "$badging" ||
+              { echo "::error::$apk is not $PKG $VERSION (versionCode $VERSION_CODE)"; exit 1; }
+            grep -q "^minSdkVersion:'$MIN_SDK'" <<< "$badging" || { echo "::error::$apk: minSdk is not $MIN_SDK"; exit 1; }
+            native="$(sed -n "s/^native-code: //p" <<< "$badging")"
+            [ "$native" = "'$abi'" ] || { echo "::error::$apk has native code for $native, not '$abi'"; exit 1; }
+            unzip -l "$apk" | grep -q "lib/$abi/libxul.so" || { echo "::error::$apk has no $abi GeckoView"; exit 1; }
+            # A privileged system app's permissions (the Mirror, #198), as generic-test-build.yml checks.
+            for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
+              grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::$apk doesn't ask for $perm"; exit 1; }
+            done
+            sha256sum "$apk" > "$apk.sha256" && cat "$apk.sha256"
+          done
+          apks=(./*.apk)
+          [ "${#apks[@]}" = "$(jq -r '.abis | length' ../frames/generic-android/design/frame.json)" ] ||
+            { echo "::error::not one APK per ABI"; exit 1; }
+          {
+            echo "### $TAG$([ "$DRY_RUN" = true ] && echo ' (dry run: nothing published)')"
+            for f in *; do echo "- \`$f\` ($(stat -c %s "$f") bytes)"; done
+            echo; echo "Notes:"; echo; cat "$RUNNER_TEMP/notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.TAG }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the release and upload its assets (GITHUB_TOKEN only)
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.build.outputs.tag }}
+          path: dist
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ needs.build.outputs.title }}
+          CHANGELOG_VERSION: ${{ needs.build.outputs.changelog-version }}
+        run: |
+          tools/release/changelog-section.sh "$CHANGELOG_VERSION" frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          # One create with every asset, so a release never has half of its ABIs (docs/releasing.md "ABIs").
+          # --latest=false: releases/latest must stay S1 Kiosk's (panels up to 0.4.3 read only that).
+          gh release create "$TAG" dist/*.apk dist/*.apk.sha256 \
+            --verify-tag --latest=false --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md"
