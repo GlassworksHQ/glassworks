@@ -247,6 +247,11 @@ sealed interface SettingsItem {
         /** The value as the row shows it ("After 2 minutes" for `120`). */
         val shown: (String) -> String = { it },
         val restartsApp: Boolean = false,
+        /**
+         * This panel's own, never another's (its Home Assistant address): All panels doesn't copy it from one panel to
+         * another, and a page on another panel can't change it (#466). The panel's own surfaces change it as before.
+         */
+        val perPanel: Boolean = false,
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 

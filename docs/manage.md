@@ -267,6 +267,8 @@ and there are no shared keys and no leader.
 - **What it reads.** Every setting the page can change, with its value as text, the way the page's forms send
   it. A sign-in (a camera's) says only whether it is set: no password or user name leaves the panel.
   Actions such as **Allow setup over the network** aren't listed.
+  The panel's own Home Assistant address (which is also its dashboard's) is marked as its own: All panels never
+  copies it, and a page on another panel can't change it.
 - **What it changes.** One setting at a time, through the same checks and saves as the panel's own menu.
   A change that asks first on the panel (turning the radio off) answers with the panel's question and a
   one-time id. It runs only when the same token sends the same change again with that id, within 5 minutes,

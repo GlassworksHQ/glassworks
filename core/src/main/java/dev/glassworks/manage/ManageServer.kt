@@ -221,7 +221,7 @@ class ManageServer(
         val ha = haBase()
         if (ok.haBase != ha?.trim()?.trimEnd('/')) return refused("Home Assistant's address changed", "Sign in again.")
         val (token, s) = sessions.create(ok.user.name, SignedInWith.HOME_ASSISTANT, SessionStore.browserName(req.headers["user-agent"]), false, ha)
-        event("${ok.user.name} signed in with Home Assistant from the Manage page on ${ManageApi.from(req)} (${s.browser})")
+        event("${ok.user.name} signed in with Home Assistant from the Manage page on ${ManageApi.from(req, req.form["from"])} (${s.browser})")
         // A page from another site posted here: a redirect would still be cross-site for the Strict cookie (see haCallback).
         val next = safeNext(req.form["next"])
         return html(200, PageShell.document(name(), "", """<meta http-equiv="refresh" content="0;url=${PageShell.esc(next)}">"""),

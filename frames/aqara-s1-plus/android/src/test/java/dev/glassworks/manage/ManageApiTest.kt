@@ -23,6 +23,7 @@ class ManageApiTest {
     private var radioOn = true
     private var role = "zigbee"
     private var cameraSet = true
+    private var haUrl = "http://homeassistant.local:8123/lovelace/0"
     private val f = ManageFixture()
 
     /** Not JWT-shaped, so the Log's redaction wouldn't catch it: only never writing it keeps it out. */
@@ -42,7 +43,10 @@ class ManageApiTest {
         val camera = SettingsSection("camera", "Camera", listOf(
             SettingsItem.SignIn("Stream sign-in", { cameraSet }, { "viewer" }) { _, d -> d(null) },
         ))
-        f.statusFn = { f.status.copy(sections = listOf(screen, radio, camera)) }
+        val dashboard = SettingsSection("dashboard", "Home Assistant & dashboard", listOf(
+            SettingsItem.Text("Home Assistant", "Found automatically", SettingsItem.TextKind.ADDRESS, { haUrl }, perPanel = true) { v, d -> haUrl = v; d(null) },
+        ))
+        f.statusFn = { f.status.copy(sections = listOf(screen, radio, camera, dashboard)) }
     }
 
     /** A page on another panel: its Origin, no cookie, the token as a bearer. */
@@ -63,7 +67,7 @@ class ManageApiTest {
         val j = json(r)
         assertEquals("0.9.2", j.getString("version"))
         val ids = (0 until j.getJSONArray("sections").length()).map { j.getJSONArray("sections").getJSONObject(it).getString("id") }
-        assertEquals(listOf("screen", "radio", "camera"), ids)
+        assertEquals(listOf("screen", "radio", "camera", "dashboard"), ids)
         val screen = j.getJSONArray("sections").getJSONObject(0).getJSONArray("items")
         assertEquals("actions aren't values: only the switch and the duration", 2, screen.length())
         val idleItem = screen.getJSONObject(1)
@@ -73,6 +77,17 @@ class ManageApiTest {
         val radio = j.getJSONArray("sections").getJSONObject(1).getJSONArray("items")
         assertEquals("the pane's on/off comes first, as its key says", "on", radio.getJSONObject(0).getString("key"))
         assertEquals("Thread border router", radio.getJSONObject(1).getJSONArray("options").getJSONArray(1).getString(1))
+    }
+
+    @Test fun thePanelsOwnHomeAssistantAddressIsNeverCopiedNorChangedFromAnotherPanel() {
+        val row = json(page().get()).getJSONArray("sections").getJSONObject(3).getJSONArray("items").getJSONObject(0)
+        assertEquals("Home Assistant", row.getString("key"))
+        assertFalse("marked as not copyable", row.getBoolean("copy"))
+        val r = page().post("section" to "dashboard", "key" to "Home Assistant", "value" to "http://192.0.2.10:8123")
+        assertEquals(422, r.status)
+        assertEquals(ManageApi.PER_PANEL, json(r).getString("problem"))
+        assertEquals("http://homeassistant.local:8123/lovelace/0", haUrl)
+        assertEquals(0, f.onMainCalls)
     }
 
     @Test fun aSignInSaysOnlyWhetherItIsSet() {
@@ -349,6 +364,21 @@ class ManageApiTest {
         assertEquals(401, page().get().status)
         f.haBaseFn = null
         assertEquals(200, page().get().status)
+    }
+
+    @Test fun aHandoffFromSafarisNewTabStillNamesThePageItCameFrom() {
+        // Safari posts the handoff from a new tab with `Origin: null` (the 2026-11-18 panel run logged "on null").
+        val b = f.Browser(fetchMetadata = false)
+        assertEquals(200, b.post(ManageServer.HANDOFF, mapOf("token" to token, "next" to "/", "from" to "192.0.2.41:8099"), mapOf("origin" to "null")).status)
+        assertTrue(f.events.toString(), f.events.any { it.startsWith("Alex signed in with Home Assistant from the Manage page on 192.0.2.41:8099 (") })
+        assertTrue(f.events.none { "on null" in it })
+        f.events.clear()
+        assertEquals(200, f.Browser(fetchMetadata = false).post(ManageServer.HANDOFF, mapOf("token" to token, "next" to "/"), mapOf("origin" to "null")).status)
+        assertTrue(f.events.toString(), f.events.any { it.startsWith("Alex signed in with Home Assistant from the Manage page on no page (") })
+        f.events.clear()
+        // A real Origin wins over what the page says about itself.
+        f.Browser(fetchMetadata = false).post(ManageServer.HANDOFF, mapOf("token" to token, "next" to "/", "from" to "evil.example"), mapOf("origin" to "http://192.0.2.41:8099"))
+        assertTrue(f.events.toString(), f.events.any { "on 192.0.2.41:8099 (" in it })
     }
 
     @Test fun aHandoffIsBoundToTheAddressThatConfirmedTheUser() {

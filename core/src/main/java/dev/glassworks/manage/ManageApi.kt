@@ -67,6 +67,8 @@ class ManageApi(
         val item = section?.let { SettingsChange.find(it, key) }
             ?: return json(req, 404, JSONObject().put("problem", "This panel doesn't have that setting.").put("missing", true))
         if (item is SettingsItem.SignIn || item is SettingsItem.Action) return json(req, 422, JSONObject().put("problem", "Change this on the panel's own Manage page."))
+        // The panel's own connection (its Home Assistant address): never from another panel's page (#466 panel run).
+        if (item is SettingsItem.Text && item.perPanel) return json(req, 422, JSONObject().put("problem", PER_PANEL))
         val raw = f["value"].orEmpty().trim()
         val what = what(section, key)
         question(item, raw)?.takeIf { !answered(f["answer"], owner, section.id, key, raw) }?.let { q ->
@@ -105,6 +107,7 @@ class ManageApi(
 
         const val REFUSED = "Home Assistant didn't confirm this sign-in. Sign in again."
         const val NO_HA = "This panel has no Home Assistant address on your network, so it can't check who you are."
+        const val PER_PANEL = "This is the panel's own, not copied from another panel. Change it on this panel's own Manage page."
         const val ADDRESS_CHANGED = "This panel's Home Assistant address changed. Sign in again."
         const val BUSY = "The panel is still asking Home Assistant about other sign-ins. Try again in a moment."
 
@@ -145,6 +148,7 @@ class ManageApi(
                 is SettingsItem.Choice -> o.put("kind", "choice").put("value", i.value()).put("shown", SettingsChange.shown(i))
                     .put("options", JSONArray(i.options().map { (id, name) -> JSONArray(listOf(id, name)) }))
                 is SettingsItem.Text -> o.put("kind", "text").put("value", i.value()).put("shown", SettingsChange.shown(i)).put("restarts", i.restartsApp)
+                    .also { if (i.perPanel) it.put("copy", false) }
                 is SettingsItem.SignIn -> o.put("kind", "sign-in").put("set", i.isSet())
                 else -> return@runCatching null
             }
@@ -163,8 +167,14 @@ class ManageApi(
         fun what(section: SettingsSection, key: String) =
             "${section.title} › " + if (key == SettingsChange.MASTER) "on/off" else key.replace("/", " › ")
 
-        /** Where a request came from, for the Log: its page's address, or "no page". Only the characters an address has. */
-        fun from(req: HttpRequest): String =
-            req.headers["origin"]?.substringAfter("://")?.filter { it.isLetterOrDigit() || it in ".:-[]" }?.take(80)?.ifEmpty { null } ?: "no page"
+        /**
+         * Where a request came from, for the Log: its page's address from `Origin`, else [stated], the address the page
+         * gave itself (Safari sends `Origin: null` on the handoff's post from a new tab, #466 panel run), else "no page".
+         */
+        fun from(req: HttpRequest, stated: String? = null): String =
+            host(req.headers["origin"]?.takeIf { "://" in it }?.substringAfter("://")) ?: host(stated) ?: "no page"
+
+        /** Only the characters an address has, at most 80. */
+        private fun host(s: String?): String? = s?.filter { it.isLetterOrDigit() || it in ".:-[]" }?.take(80)?.ifEmpty { null }
     }
 }
