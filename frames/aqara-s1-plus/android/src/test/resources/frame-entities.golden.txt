@@ -19,6 +19,7 @@ speaker
 ip_address
 app_version
 app_update
+frame_update
 update_status
 silent_updates
 home_assistant_url
@@ -359,6 +360,7 @@ speaker
 ip_address
 app_version
 app_update
+frame_update
 update_status
 silent_updates
 home_assistant_url
