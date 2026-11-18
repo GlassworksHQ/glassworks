@@ -289,3 +289,37 @@ export function reachability(status, body) {
   if (status === 503) return { state: 'busy', why: problem || 'It is busy asking Home Assistant about other sign-ins. Try again in a moment.' };
   return { state: 'refused', why: problem || 'It refused (' + status + ').' };
 }
+
+/**
+ * One setting to [p] (`POST /manage/api/settings`), as [outcome] says it. Each try gives up after [ms], like the
+ * settings read: the panel asks its Home Assistant first. A write that timed out may still have landed, so it says so.
+ */
+export async function writeSetting(p, access, fields, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined) {
+  try {
+    const res = await retrying(async () => {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), ms);
+      try {
+        return await fetchFn(p.origin + '/manage/api/settings', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + access }, body: new URLSearchParams(fields), signal: c.signal,
+        });
+      } finally {
+        clearTimeout(t);
+      }
+    }, sleep);
+    return outcome(res.status, await res.json().catch(() => null));
+  } catch (e) {
+    if (e && e.name === 'AbortError') return { state: 'failed', why: p.name + " didn't answer in time. The setting may have changed: check its page." };
+    return { state: 'failed', why: "Can't reach " + p.name + '.' };
+  }
+}
+
+/** Asks Home Assistant at [ha] to drop [refresh] and every access token made from it. True only when it said yes. */
+export async function revokeAt(ha, refresh, fetchFn = fetch) {
+  try {
+    const r = await fetchFn(ha + '/auth/revoke', { method: 'POST', body: new URLSearchParams({ token: refresh }) });
+    return r.status >= 200 && r.status < 300;
+  } catch {
+    return false;
+  }
+}

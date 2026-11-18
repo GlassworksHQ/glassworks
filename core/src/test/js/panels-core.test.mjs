@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, usable, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, revokeAt, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -266,4 +266,30 @@ test("a panel that answered hello is never Down: each settings answer is said as
 
 test('the settings read waits longer than hello: the panel asks its Home Assistant first', () => {
   assert.ok(SETTINGS_MS >= 12_000, String(SETTINGS_MS));
+});
+
+test('a copied setting gives up after its timeout and says it may have changed; a network failure says can\'t reach', async () => {
+  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Kitchen panel' };
+  const fields = { section: 'screen', key: 'Turn off when idle', value: '60' };
+  const seen = [];
+  const ok = await writeSetting(p, 'TOKEN', fields, async (url, init) => (seen.push([url, init.method, init.headers.Authorization, String(init.body)]),
+    { status: 200, json: async () => ({ ok: true, restart: false }), headers: { get: () => null } }), 1_000, noWait);
+  assert.deepEqual(ok, { state: 'done', restart: false });
+  assert.deepEqual(seen, [['http://kitchen-panel.local:8099/manage/api/settings', 'POST', 'Bearer TOKEN', 'section=screen&key=Turn+off+when+idle&value=60']]);
+
+  const silent = (url, init) => new Promise((_, no) => init.signal.addEventListener('abort', () => no(new DOMException('aborted', 'AbortError'))));
+  const late = await writeSetting(p, 'TOKEN', fields, silent, 30, noWait);
+  assert.deepEqual(late, { state: 'failed', why: "Kitchen panel didn't answer in time. The setting may have changed: check its page." });
+
+  const gone = await writeSetting(p, 'TOKEN', fields, async () => { throw new TypeError('Failed to fetch'); }, 1_000, noWait);
+  assert.deepEqual(gone, { state: 'failed', why: "Can't reach Kitchen panel." });
+});
+
+test('sign-out counts as done only when Home Assistant says so', async () => {
+  const calls = [];
+  const with_ = (status) => async (url, init) => (calls.push([url, String(init.body)]), { status });
+  assert.equal(await revokeAt('http://192.0.2.10:8123', 'REFRESH', with_(200)), true);
+  assert.deepEqual(calls[0], ['http://192.0.2.10:8123/auth/revoke', 'token=REFRESH']);
+  assert.equal(await revokeAt('http://192.0.2.10:8123', 'REFRESH', with_(500)), false);
+  assert.equal(await revokeAt('http://192.0.2.10:8123', 'REFRESH', async () => { throw new TypeError('Failed to fetch'); }), false);
 });

@@ -232,8 +232,8 @@ manage a panel. Whether other users get a say is open (#124).
   the code on the panel is there for whoever would rather not.
 - **The Home Assistant token All panels carries.** All panels sends your Home Assistant access token to each
   panel it lists, over the same plain HTTP. Someone who can read your Wi-Fi traffic could use it as you, in Home
-  Assistant too, until it runs out (30 minutes) or you press **Sign out** on that page. The page keeps it in the
-  tab; close the tab or sign out when you're done.
+  Assistant too, until it runs out (30 minutes) or you press **Sign out** on that page while Home Assistant is
+  reachable. The page keeps it in the tab; close the tab or sign out when you're done.
 - **A camera password you type here.** Setting a camera's password from this page sends it to the
   panel over the same plain HTTP, as every form does. To keep it off the network, set it on the
   panel's own screen instead. The panel never sends a stored password back.
@@ -259,7 +259,8 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 
 1. **Continue with Home Assistant.** This tab signs in to Home Assistant on its own (with PKCE), with an
    administrator, and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home
-   Assistant too.
+   Assistant too, when Home Assistant answers. If it doesn't, the page says the sign-in may stay active there, with
+   **Try again**; you can also remove it in Home Assistant under your profile, Security, Refresh tokens.
 2. **The panels.** The page asks Home Assistant for its devices and lists each ESPHome device whose **Visit**
    link is a Manage page (port 8099), with its area, address and version. A panel that doesn't answer within
    6 seconds shows as **Down**; the others still work. A panel on a version from before this page shows as Down

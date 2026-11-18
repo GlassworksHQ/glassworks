@@ -75,6 +75,8 @@ const contacted = new Set();
 /** Every request, as `METHOD host/path`. */
 const requests = [];
 let challenge = null;
+/** Whether the fake Home Assistant takes a revoke. */
+let revokeOk = true;
 const initial = JSON.stringify(panels);
 const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }, { area_id: 'garage', name: 'Garage' }, { area_id: 'office', name: 'Office' }, { area_id: 'porch', name: 'Porch' }];
 
@@ -105,7 +107,7 @@ async function handle(req, res) {
       if (!verified) return send(res, 400, { error: 'invalid_request', error_description: 'PKCE verifier does not match' });
       return send(res, 200, { access_token: 'fake-access', refresh_token: 'fake-refresh', expires_in: 1800, token_type: 'Bearer' });
     }
-    if (u.pathname === '/auth/revoke') return send(res, 200, '');
+    if (u.pathname === '/auth/revoke') return send(res, revokeOk ? 200 : 500, '');
   }
   const p = panels[u.host];
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/panels') {
@@ -270,6 +272,14 @@ try {
   await call('Page.navigate', { url: PAGE });
   await until("document.querySelector('#gw-list .note')?.textContent.includes('administrator')", 'the non-admin refusal');
   await shot('07-not-admin');
+  // Sign out while Home Assistant won't take the revoke: the page says the sign-in may stay active, and Try again ends it.
+  revokeOk = false;
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Sign out').click()");
+  await until("document.querySelector('#gw-list .note')?.textContent.includes(\"didn't confirm it ended the sign-in\")", 'the revoke warning');
+  await shot('10-sign-out-not-confirmed');
+  revokeOk = true;
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Try again').click()");
+  await until("document.querySelector('#gw-list .note')?.textContent.includes('Sign in with a Home Assistant administrator')", 'signed out after Try again');
   assert.deepEqual(refused, [], 'the CSP blocked nothing the page did');
   // The CSP is on: a request it doesn't allow is refused, and logged.
   await js("fetch('http://203.0.113.9:1234/').catch(() => 0)");

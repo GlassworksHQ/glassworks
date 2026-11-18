@@ -8,7 +8,7 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, outcome, panelsFrom, pkceChallenge, plan, readPanel, retrying, usable } from './panels-core.js';
+import { authorizeUrl, base64url, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, usable, writeSetting } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
@@ -114,8 +114,16 @@ function signIn() {
 async function signOut() {
   const t = stored();
   keep(KEY, null);
-  if (t) await fetch(ha + '/auth/revoke', { method: 'POST', body: new URLSearchParams({ token: t.refresh }) }).catch(() => {});
+  if (t && !(await revokeAt(ha, t.refresh))) return revokeFailed(t.refresh);
   start();
+}
+
+/** Home Assistant didn't confirm the revoke: the sign-in may stay active there. Say so, with a way to try again. */
+function revokeFailed(refresh) {
+  copyCard.hidden = true;
+  say(listCard, 'Panels in Home Assistant',
+    "Signed out of this page, but Home Assistant didn't confirm it ended the sign-in, so it may stay active there. Try again, or remove it in Home Assistant: your profile, Security, Refresh tokens.",
+    h('button', { class: 'pill', type: 'button', onclick: async () => ((await revokeAt(ha, refresh)) ? start() : revokeFailed(refresh)) }, 'Try again'));
 }
 
 /** Home Assistant's websocket: [types] asked in turn, their results in that order. */
@@ -255,16 +263,8 @@ async function apply(fromP, toP, rows, asked) {
   const access = await token().catch(() => null);
   if (!access) return start();
   for (const r of rows) {
-    let o;
-    try {
-      const res = await retrying(() => fetch(toP.origin + '/manage/api/settings', {
-        method: 'POST', headers: { Authorization: 'Bearer ' + access },
-        body: new URLSearchParams({ section: r.section, key: r.key, value: r.value, ...(asked ? { answer: asked.get(r.section + '\n' + r.key).ask.id } : {}) }),
-      }));
-      o = outcome(res.status, await res.json().catch(() => null));
-    } catch {
-      o = { state: 'failed', why: "Can't reach " + toP.name + '.' };
-    }
+    const o = await writeSetting(toP, access,
+      { section: r.section, key: r.key, value: r.value, ...(asked ? { answer: asked.get(r.section + '\n' + r.key).ask.id } : {}) });
     result.set(r.section + '\n' + r.key, o);
   }
   const again = await readPanel(toP, access);
