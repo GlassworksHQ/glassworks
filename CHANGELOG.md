@@ -391,6 +391,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   which a panel without touch, such as the Mirror, can't offer: turning on the ONVIF stream ended at
   "Needs Presence + camera." It now has the panel's two cards, *Presence only* and *Presence + camera*,
   on every panel, and the Log says who changed it. "Needs Presence + camera." links to them.
+- **Setup's Home Assistant step: sign in first, then add it.** The two sub-steps now always read *Sign in*,
+  then *Add it*, and the marker sits on the one the card shows. Before, the screen could show the sign-in
+  under *Add it*, and after signing in *Sign in* turned green while *Add it* stayed current. If Home
+  Assistant added the panel before the sign-in, *Add it* shows green and *Sign in* is current.
 - **A screen without touch waits for Home Assistant after phone setup.** On the Mirror, the setup screen
   kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
   Assistant to add the panel, and where: Settings → Devices & services, or the old entry's
