@@ -6,7 +6,7 @@
 # crashed the app at every start (2026-11-18, UsbDebugging$Requests). Newer Android accepts the same dex, so only
 # an API 23 install shows it. Fails on a rejected class in dev.glassworks or sh.edm.s1kiosk.
 #
-# What it touches: installs (or replaces) the APK on the device given, nothing else. The dex doesn't depend on the
+# What it touches: installs the APK on the device given and removes it after; it stops if the app is there already. The dex doesn't depend on the
 # ABI, so the APK's native libraries are dropped from a copy first, which lets the arm64 APK install on the CI
 # runners' x86_64 emulators. The copy is signed with a throwaway key made for the run.
 #
@@ -31,7 +31,11 @@ keytool -genkeypair -keystore "$work/k.jks" -storepass verify -keypass verify -a
 "$build_tools/apksigner" sign --ks "$work/k.jks" --ks-pass pass:verify --key-pass pass:verify "$work/aligned.apk"
 
 package="$("$build_tools/aapt2" dump badging "$work/aligned.apk" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")"
-"$adb" -s "$serial" uninstall "$package" >/dev/null 2>&1 || true
+# A device that has the app already would lose it and its data here: this check wants an emulator without it.
+if "$adb" -s "$serial" shell pm path "$package" 2>/dev/null | grep -q '^package:'; then
+  echo "verify-api23: $package is installed on $serial; use an emulator without it (this check removes the app after)" >&2
+  exit 2
+fi
 "$adb" -s "$serial" logcat -c
 "$adb" -s "$serial" install "$work/aligned.apk"
 "$adb" -s "$serial" logcat -d -s dex2oat:V > "$work/dex2oat.log"

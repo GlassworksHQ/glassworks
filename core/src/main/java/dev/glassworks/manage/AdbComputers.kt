@@ -174,6 +174,7 @@ class AdbComputers(
     private fun attempt(shown: String, remember: Boolean, who: String): Allowed {
         val key: AdbKey
         val s: Sent
+        val asked: Request?
         synchronized(this) {
             key = asking() ?: run {
                 event("$who tried to allow adb key $shown over USB: refused, no computer is asking now")
@@ -193,6 +194,7 @@ class AdbComputers(
             }
             s = Sent(key.fingerprint)
             sent = s
+            asked = last
         }
         try {
             allow(key)?.let { why ->
@@ -212,7 +214,8 @@ class AdbComputers(
                 event("$who allowed ${label(key)} over USB, but the panel stopped reading Android's log, so it can't tell whether Android took it")
                 return Allowed.UNCONFIRMED
             }
-            last = last?.takeIf { it.key == key }?.copy(answered = true) ?: last
+            // Only the request Allow was for: the same computer asking again meanwhile is a new question.
+            if (last === asked) last = asked?.copy(answered = true)
             if (!remember) {
                 event("$who allowed ${label(key)} over USB, for this connection")
                 return Allowed.ONCE
