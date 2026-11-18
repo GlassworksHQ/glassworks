@@ -74,6 +74,16 @@ class SetupHaOrderTest {
 
     @Test fun aTouchFrameSignsInThenAdds() = check({ TestFrames.s1() }, s1)
 
+    @Test fun continueOnAnAddItDoneBeforeTheSignInGoesBackToSignIn() {
+        // Home Assistant added the panel first: Add it is done but Panes isn't open yet, so Continue returns to Sign in.
+        val a = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val s = HaOrderCases.screen(a, TestFrames.s1(), HaOrderCases.all.toMap().getValue("added-not-signed-in"))
+        views(s).first { it.contentDescription == "Add it" && it.isClickable }.performClick()
+        assertEquals(true, "Added to Home Assistant." in texts(s))
+        views(s).filterIsInstance<TextView>().first { it.isShown && it.text.toString() == "Continue" }.performClick()
+        assertEquals(texts(s).toString(), true, "Scan to sign in." in texts(s))
+    }
+
     @Test
     @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
     fun theMirrorSignsInThenAdds() = check({ TestFrames.mirror(RuntimeEnvironment.getApplication()) }, mirror)

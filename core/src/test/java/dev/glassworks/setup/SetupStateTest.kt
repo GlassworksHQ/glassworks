@@ -355,6 +355,13 @@ class SetupStateTest {
         assertEquals("added before the sign-in", Triple(SetupFlow.SIGNIN, false, true), at(i.copy(haSeen = true)))
         assertEquals("both", Triple(SetupFlow.PANES, true, true), at(i.copy(signedIn = true, onAuthPage = false, haSeen = true)))
         assertEquals("not found", Triple(SetupFlow.SIGNIN, false, false), at(i.copy(haKnown = false, onAuthPage = false)))
+        // "Sign in on this panel instead" before Home Assistant added it: HA's login page stays uncovered, also after
+        // the grace; once the page is left (signed in there), Add it asks.
+        val panel = i.copy(usePanelLogin = true, showing = false)
+        assertFalse("on HA's login page", SetupState.decide(panel).show)
+        val left = SetupState.decide(panel.copy(onAuthPage = false, dashboardLoaded = true))
+        assertTrue(left.show)
+        assertEquals(SetupFlow.HA, left.step)
         // A session the page already has counts as signed in: on to Add it.
         assertEquals("cookie session", Triple(SetupFlow.HA, true, false), at(i.copy(onAuthPage = false, dashboardLoaded = true)))
     }

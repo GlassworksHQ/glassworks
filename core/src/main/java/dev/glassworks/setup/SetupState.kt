@@ -202,7 +202,10 @@ object SetupState {
         val noTouchStuck = i.input == Input.NONE && !i.joinExpected
         if (!i.online && (i.offlineForMs >= rules.offlineGraceMs || wifiSetupActive || i.neverSetUp || noTouchStuck)) reasons += "offline"
         if (i.online && !i.haKnown) reasons += "home assistant not found"
-        if (i.online && i.haKnown && !haEverRecorded && !i.haHelloThisProcess && i.uptimeMs >= rules.haGraceMs) {
+        // Not while the person signs in on Home Assistant's own login page ("Sign in on this panel instead"): Add it
+        // follows Sign in, so it asks once that page is left.
+        val panelLoginOpen = i.usePanelLogin && i.onAuthPage
+        if (i.online && i.haKnown && !haEverRecorded && !i.haHelloThisProcess && i.uptimeMs >= rules.haGraceMs && !panelLoginOpen) {
             reasons += "not added to home assistant"
         }
         if (i.online && i.haKnown && wantsSignin) reasons += "sign-in needed"

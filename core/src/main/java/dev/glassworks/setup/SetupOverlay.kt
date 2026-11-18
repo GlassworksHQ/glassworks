@@ -424,12 +424,15 @@ class SetupOverlay(
         bind(m, true)
     }
 
-    /** Continue on a step that is done: the next one (the current one ends the walk). */
+    /**
+     * Continue on a step that is done: the next one, or back to the current step when the next one can't open yet
+     * (Done, or Panes after an Add it that Home Assistant did before the sign-in).
+     */
     private fun advance() {
         val m = model ?: return
         val f = flow()
         val next = f.getOrNull(f.indexOf(shown()) + 1) ?: return
-        if (next == SetupFlow.DONE && !m.preview) { viewing = null; bind(m, true); return }
+        if (!m.preview && next != m.step && next !in m.done) { viewing = null; bind(m, true); return }
         open(next)
     }
 

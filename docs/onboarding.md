@@ -588,7 +588,8 @@ session without a refresh token):
   loading screen's offline text would point at a button nobody can press (#448);
 - online but HA isn't known at all (no saved URL, nothing discovered);
 - HA never added the panel: no HA client connected within 2 min of startup *and* no `ha_seen`, no
-  API key, not skipped;
+  API key, not skipped (not while the person signs in on HA's own login page after "Sign in on this panel
+  instead");
 - no refresh token *and* the GeckoView actually reached HA's `/auth/authorize` (or the user signed
   out on the panel), unless "Sign in on this panel instead" was chosen;
 - online, HA step done, the panes not chosen yet or a chosen pane's step not answered (so it comes back
