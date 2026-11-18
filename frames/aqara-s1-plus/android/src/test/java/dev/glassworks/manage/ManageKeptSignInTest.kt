@@ -130,6 +130,7 @@ class ManageKeptSignInTest {
         f.duringRefresh = { f.haBase = "http://192.0.2.11:8123" }
         val r = access(b)
         assertEquals(404, r.status)
+        assertTrue("the page reloads for the new address, not a sign-in at the old", JSONObject(r.text()).optBoolean("reload"))
         assertFalse(r.text().contains("ACCESS-RENEWED"))
         assertEquals("ended in HA", listOf("REFRESH"), f.revoked)
         assertFalse(f.server.keepsHaSignIn(id))
@@ -203,8 +204,10 @@ class ManageKeptSignInTest {
         val csrfs = browsers.map { it.csrf() }
         val held = java.util.concurrent.CountDownLatch(1)
         val inside = java.util.concurrent.CountDownLatch(ManageServer.MAX_RENEWING)
-        f.duringRefresh = { inside.countDown(); held.await(10, java.util.concurrent.TimeUnit.SECONDS) }
-        val slow = (0 until ManageServer.MAX_RENEWING).map { i -> Thread { access(browsers[i], csrf = csrfs[i]) }.apply { start() } }
+        val gateTimedOut = java.util.concurrent.atomic.AtomicBoolean(false)
+        f.duringRefresh = { inside.countDown(); if (!held.await(10, java.util.concurrent.TimeUnit.SECONDS)) gateTimedOut.set(true) }
+        val answers = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+        val slow = (0 until ManageServer.MAX_RENEWING).map { i -> Thread { answers[i] = access(browsers[i], csrf = csrfs[i]).status }.apply { start() } }
         try {
             assertTrue("two renewals wait on Home Assistant", inside.await(10, java.util.concurrent.TimeUnit.SECONDS))
             val third = access(browsers[2], csrf = csrfs[2])
@@ -214,8 +217,31 @@ class ManageKeptSignInTest {
             held.countDown()
             slow.forEach { it.join(10_000) }
         }
+        assertTrue("both renewals finished", slow.none { it.isAlive })
+        assertFalse("they were held until released", gateTimedOut.get())
+        assertEquals("both admitted renewals got their token", mapOf(0 to 200, 1 to 200), answers.toMap())
         f.duringRefresh = null
         assertEquals(200, access(browsers[2], csrf = csrfs[2]).status)
+    }
+
+    @Test fun aRevokeThatFailsInASweepWaitsForTheNextOne() {
+        f.Browser().signInWithHa(remember = false)
+        f.now += 13L * 3600 * 1000
+        f.revokeWorks = false
+        f.server.sweep()
+        assertEquals("two tries, then queued for a later pass, not two more at once", 2, f.revoked.size)
+        f.server.sweep()
+        assertEquals(4, f.revoked.size)
+    }
+
+    @Test fun aSessionThatEndsWhileARenewalFailsGetsSignInNotTryAgain() {
+        val b = signedIn()
+        val id = sessionId()
+        f.refreshAnswer = HaGateway.Tokens.Failed("unreachable", unreachable = true)
+        f.duringRefresh = { f.sessions.revoke(id) }
+        val r = access(b)
+        assertEquals(401, r.status)
+        assertTrue(r.text().contains(ManageServer.MANAGE_ENDED))
     }
 
     @Test fun aSweepEndsNewlyEndedSessionsFirstAndRetriesAFewAtATime() {

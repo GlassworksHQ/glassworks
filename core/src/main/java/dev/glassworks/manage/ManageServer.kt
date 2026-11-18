@@ -185,6 +185,9 @@ class ManageServer(
 
     private fun dropEnded() {
         // Copies made by iterating: toList()'s one-item shortcut can call next() on a key another thread just took.
+        // The retries are picked before the ends below: one that fails there is queued again for a later pass, not
+        // tried twice more at once (CodeRabbit on #534).
+        val due = unrevoked.keys.toCollection(ArrayList()).map { it to (retryOrder[it] ?: 0L) }.sortedBy { it.second }.take(RETRIES_PER_SWEEP)
         // The candidates first, then the live sessions: one signed in meanwhile isn't a candidate (CodeRabbit on #534).
         // Read without pruning: list() would end the sessions of another address, perhaps one just made for a new one.
         val candidates = kept.keys.toCollection(ArrayList())
@@ -198,8 +201,7 @@ class ManageServer(
         }
         // Then the revokes HA didn't take, the longest-waiting first and a few per pass: an HA that doesn't answer can't
         // hold back the newly ended ones above for long. The rest wait for the next pass (CodeRabbit on #534).
-        val due = unrevoked.keys.toCollection(ArrayList()).sortedBy { retryOrder[it] ?: 0L }.take(RETRIES_PER_SWEEP)
-        for (id in due) endKept(id)
+        for ((id, order) in due) if ((retryOrder[id] ?: 0L) == order) endKept(id)
     }
 
     /** At most this many renewals for All panels run at once, fewer than the web server's workers (four). */
@@ -387,18 +389,20 @@ class ManageServer(
     private fun haAccess(s: Session): HttpResponse {
         val k = kept[s.id] ?: return json(404, JSONObject().put("problem", "No Home Assistant sign-in is kept for this browser."))
         val moved = { k.haBase != haBase()?.trim()?.trimEnd('/') }
-        if (moved()) { endKept(s.id); return json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED)) }
+        // The page has the old address: it reloads to get the new one, rather than signing in at the old (CodeRabbit on #534).
+        val addressChanged = { json(404, JSONObject().put("problem", ADDRESS_RELOAD).put("reload", true)) }
+        if (moved()) { endKept(s.id); return addressChanged() }
         // Home Assistant slow to answer mustn't take every worker: the Manage page's other requests still get one.
         if (!renewing.tryAcquire()) return json(503, JSONObject().put("problem", "The panel is busy. Try again in a moment."))
         val t = try { signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken) } finally { renewing.release() }
+        // The Manage session ran out or was signed out while HA answered, whatever HA said: Sign in again, as for any
+        // ended one; the sweep ends what it kept (CodeRabbit on #534).
+        if (s.id !in sessions.liveIds()) return json(401, JSONObject().put("problem", MANAGE_ENDED))
         return when (t) {
             // The address may have changed while HA renewed it: no token for an address the panel no longer uses.
             is HaGateway.Tokens.Ok -> if (moved()) {
                 endKept(s.id)
-                json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED))
-            } else if (s.id !in sessions.liveIds()) {
-                // The Manage session ran out or was signed out while HA renewed it: Sign in again, as for any ended one.
-                json(401, JSONObject().put("problem", MANAGE_ENDED))
+                addressChanged()
             } else if (kept[s.id] !== k) {
                 // All panels' Sign out, or HA's refusal, came meanwhile: no token for a sign-in that's over.
                 json(404, JSONObject().put("problem", "This sign-in has ended."))
@@ -776,6 +780,7 @@ class ManageServer(
         const val HA_ACCESS = "/manage/ha/access"
         const val HA_FORGET = "/manage/ha/forget"
         const val MANAGE_ENDED = "Your sign-in to this Manage page has ended. Sign in again."
+        const val ADDRESS_RELOAD = "This panel's Home Assistant address changed. Reload the page to go on."
         /** Revokes HA didn't take that one sweep tries again; the rest wait for the next. */
         const val RETRIES_PER_SWEEP = 4
         /** All panels' renewals at once; the web server has four workers. */

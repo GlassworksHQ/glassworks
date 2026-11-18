@@ -82,8 +82,11 @@ let challenge = null;
 let haAddressSent = false;
 /** Handoffs a panel received: which panel, and the page it says it came from. */
 const handoffs = [];
-/** How long the fake Home Assistant takes to answer a token request. */
+/** How long the fake Home Assistant takes to answer a token request, and the status it answers a renewal with. */
 let tokenDelayMs = 0;
+let renewStatus = 200;
+/** The bearer each websocket to the fake Home Assistant signed in with. */
+const wsTokens = [];
 /** Whether this panel keeps the Manage sign-in's Home Assistant sign-in for All panels (#466 one sign-in). */
 let panelSignIn = false;
 /** While set, this panel holds its renewal of the kept sign-in's access token until the test releases it. */
@@ -133,6 +136,7 @@ async function handle(req, res) {
       const verified = f.get('grant_type') !== 'authorization_code' ||
         createHash('sha256').update(f.get('code_verifier') || '').digest('base64url') === challenge;
       if (!verified) return send(res, 400, { error: 'invalid_request', error_description: 'PKCE verifier does not match' });
+      if (f.get('grant_type') === 'refresh_token' && renewStatus !== 200) return send(res, renewStatus, { error: 'unavailable' });
       return send(res, 200, { access_token: 'fake-access', refresh_token: 'fake-refresh', expires_in: 1800, token_type: 'Bearer' });
     }
     if (u.pathname === '/auth/revoke') return send(res, revokeOk ? 200 : 500, '');
@@ -206,7 +210,7 @@ function websocket(req, socket) {
       const mask = buf.subarray(at, at + 4);
       const m = JSON.parse(Buffer.from(buf.subarray(at + 4, at + 4 + len).map((x, i) => x ^ mask[i % 4])).toString());
       buf = buf.subarray(at + 4 + len);
-      if (m.type === 'auth') { frame({ type: 'auth_ok' }); continue; }
+      if (m.type === 'auth') { wsTokens.push(m.access_token); frame({ type: 'auth_ok' }); continue; }
       const result = { 'auth/current_user': { id: 'u1', name: admin ? 'Alex' : 'Sam', is_admin: admin },
         'config/device_registry/list': devices, 'config/area_registry/list': areas, 'config_entries/get': entries }[m.type];
       frame({ id: m.id, type: 'result', success: true, result });
@@ -302,6 +306,15 @@ try {
   tokenDelayMs = 0;
   assert.deepEqual(handoffs, [{ host: 'bedroom-panel.local:8099', from: 'kitchen-panel.local:8099', token: true }], 'one handoff, from this page');
   assert.equal((await call('Target.getTargets')).targetInfos.filter((t) => t.type === 'page').length, tabsBefore + 1, 'in a new tab');
+  // Home Assistant doesn't answer the tab's own renewal: the tab keeps its sign-in and says Try again (CodeRabbit on #534).
+  await expire();
+  renewStatus = 503;
+  await call('Page.navigate', { url: PAGE });
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Try again')", 'Try again for the renewal');
+  assert.equal(await js("JSON.parse(sessionStorage.getItem('gw-ha'))?.refresh"), 'fake-refresh', 'the tab kept its sign-in');
+  renewStatus = 200;
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Try again').click()");
+  await until(listed, 'the panels after Try again');
 
   // Copy clicked twice: one copy runs, each setting is sent once.
   const posts = () => requests.filter((r) => r === 'POST bedroom-panel.local:8099/manage/api/settings').length;
@@ -382,6 +395,7 @@ try {
   await until(listed, 'the panels, with no second sign-in');
   assert.ok(!requests.slice(since).some((r) => r.includes('/auth/authorize')), "no trip to Home Assistant's login page");
   assert.ok(requests.slice(since).includes('POST kitchen-panel.local:8099/manage/ha/access'), "the token came from this panel's kept sign-in");
+  assert.equal(wsTokens.at(-1), 'fake-access-from-panel', "and Home Assistant got that token");
   await shot('11-one-sign-in');
   // A renewal from the panel keeps who signed in, for the list's header (CodeRabbit on #534).
   const who = await js("JSON.parse(sessionStorage.getItem('gw-ha')).user");

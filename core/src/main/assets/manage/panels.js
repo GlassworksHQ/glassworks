@@ -166,6 +166,11 @@ async function ending(t) {
   say(listCard, 'Panels in Home Assistant', 'Signing out…');
   const ok = await end(t);
   if (mine !== generation) return;
+  if (ok === 'stale') {
+    return say(listCard, 'Panels in Home Assistant',
+      "This page is out of date, so it can't sign out here. Reload it and sign out again, or remove the sign-in in Home Assistant: your profile, Security, Refresh tokens.",
+      h('button', { class: 'pill primary', type: 'button', onclick: () => location.reload() }, 'Reload'));
+  }
   if (ok === 'ended') {
     return say(listCard, 'Panels in Home Assistant',
       "Your sign-in to this Manage page has ended, so the panel can't confirm Home Assistant ended the sign-in. Sign in again, or remove it in Home Assistant: your profile, Security, Refresh tokens.",
@@ -235,7 +240,7 @@ async function open(p) {
   if (!access) {
     if (tab) tab.close();
     // The panel's own answer, as it gave it: no second request to it (CodeRabbit on #534).
-    return problem && problem.panel ? panelProblem(problem) : start();
+    return problem && (problem.panel || problem.transient) ? panelProblem(problem) : start();
   }
   const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: tab ? name : '_self' },
     h('input', { type: 'hidden', name: 'token', value: access }), h('input', { type: 'hidden', name: 'next', value: '/' }),
@@ -353,7 +358,7 @@ async function apply(fromP, toP, rows, asked) {
     }
     // Signed out meanwhile: what the sign-out drew stays.
     if (stale()) return;
-    if (!access) return problem && problem.panel ? panelProblem(problem) : start();
+    if (!access) return problem && (problem.panel || problem.transient) ? panelProblem(problem) : start();
     const answers = asked ? new Map(rows.map((r) => [r.section + '\n' + r.key, asked.get(r.section + '\n' + r.key).ask.id])) : null;
     const fresh = await copyRows(toP, access, rows, answers, undefined, undefined, undefined, stale);
     // Change them too: the first run's other rows (a restart it asked for, what it copied) stay in the result (CodeRabbit on #488).
@@ -404,7 +409,8 @@ async function start() {
   try {
     access = await token();
   } catch (e) {
-    if (e.panel) problem = e;
+    // The panel's answer, or Home Assistant not answering the tab's own renewal: say so, keep what the tab has.
+    if (e.panel || e.transient) problem = e;
   }
   if (mine !== generation) return;
   if (!access && !problem && haSignIn && !viaPanel) {
@@ -441,7 +447,7 @@ async function start() {
   } catch (e) {
     // Signed out meanwhile: the sign-out's screen stays (CodeRabbit on #534).
     if (mine !== generation) return;
-    if (e.panel) return panelProblem(e);
+    if (e.panel || e.transient) return panelProblem(e);
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
   if (mine !== generation) return;

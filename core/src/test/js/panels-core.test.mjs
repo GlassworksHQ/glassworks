@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { FORGET_MS, TOKEN_MS, MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -392,7 +392,7 @@ test("Home Assistant's token exchange has one deadline for the request and its b
   await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, stalledBody, 30), { message: "Home Assistant didn't answer in time. Try again." });
   await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => ({ status: 400, headers: { get: () => null }, json: async () => ({ error: 'invalid_grant' }) }), 1_000),
     { message: 'Home Assistant refused the sign-in. Sign in again.' });
-  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => { throw new TypeError('Failed to fetch'); }, 1_000), { message: "Can't reach Home Assistant." });
+  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => { throw new TypeError('Failed to fetch'); }, 1_000), { message: "Can't reach Home Assistant. Try again." });
 });
 
 test('no request to a panel or to Home Assistant follows a redirect', async () => {
@@ -480,4 +480,17 @@ test("All panels takes its token from the panel's kept sign-in, same origin, wit
   assert.equal(await panelForget('CSRF', answer(401, { problem: 'ended' }), 1_000), 'ended', "can't confirm: not a yes");
   // Another tab signed in to Manage again: this page's form token is stale. Reload, not a second HA sign-in.
   assert.equal((await panelAccess('CSRF', answer(403, { problem: 'expired' }), 1_000)).stale, true);
+  // HA's address changed: reload for the new one, not a sign-in at the old (CodeRabbit on #534).
+  assert.deepEqual(await panelAccess('CSRF', answer(404, { problem: 'Reload.', reload: true }), 1_000), { stale: true, problem: 'Reload.' });
+  assert.equal(await panelForget('CSRF', answer(403, { problem: 'expired' }), 1_000), 'stale', 'a stale page: Reload, not Try again');
+});
+
+test("a tab's renewal Home Assistant didn't answer is kept for Try again; a refusal isn't (CodeRabbit on #534)", async () => {
+  const fail = (status) => async () => ({ status, headers: { get: () => null }, json: async () => ({}) });
+  const thrown = async (f) => { try { await tokenRequest('http://ha.local', {}, f, 1_000); } catch (e) { return e; } };
+  assert.equal((await thrown(async () => { throw new TypeError('Failed to fetch'); })).transient, true);
+  assert.equal((await thrown(fail(503))).transient, true);
+  assert.equal((await thrown(fail(400))).transient, undefined);
+  // The panel's forget waits for both its tries at Home Assistant.
+  assert.ok(FORGET_MS >= 40_000 && FORGET_MS > TOKEN_MS);
 });

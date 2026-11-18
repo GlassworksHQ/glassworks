@@ -365,8 +365,10 @@ export async function tokenRequest(ha, form, fetchFn = fetch, ms = TOKEN_MS) {
   try {
     r = await timed(fetchFn, ha + '/auth/token', { method: 'POST', body: new URLSearchParams(form) }, ms);
   } catch (e) {
-    throw new Error(e && e.name === 'AbortError' ? "Home Assistant didn't answer in time. Try again." : "Can't reach Home Assistant.");
+    // No answer: the sign-in may be fine, so the tab keeps it and tries again (CodeRabbit on #534).
+    throw Object.assign(new Error(e && e.name === 'AbortError' ? "Home Assistant didn't answer in time. Try again." : "Can't reach Home Assistant. Try again."), { transient: true });
   }
+  if (r.status >= 500) throw Object.assign(new Error("Home Assistant couldn't answer. Try again."), { transient: true });
   if (r.status < 200 || r.status >= 300 || !r.body) throw new Error('Home Assistant refused the sign-in. Sign in again.');
   return r.body;
 }
@@ -392,6 +394,12 @@ export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
 
 /** How long sign-out waits for Home Assistant to take the revoke before it says it may not have. */
 export const REVOKE_MS = 10_000;
+
+/**
+ * How long the panel may take to end its kept sign-in: it tries Home Assistant twice, each try up to its connect and
+ * read timeouts (10 s each), so this covers both before the page says it wasn't confirmed (CodeRabbit on #534).
+ */
+export const FORGET_MS = 45_000;
 
 /**
  * The tab's kept Home Assistant sign-in ([raw], as stored) when it was made for this Home Assistant ([ha]) and this
@@ -425,6 +433,8 @@ export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
   if (r.status === 401) return { manageEnded: true, problem: (r.body && r.body.problem) || 'Your sign-in to this Manage page has ended. Sign in again.' };
   // The form token is another session's (signed in again in another tab): this page is out of date, not signed out of HA.
   if (r.status === 403) return { stale: true, problem: 'This page is out of date. Reload it to go on.' };
+  // HA's address changed: this page has the old one, so it reloads rather than offer a sign-in there.
+  if (r.status === 404 && r.body && r.body.reload) return { stale: true, problem: r.body.problem || 'Reload the page to go on.' };
   if (r.status === 503) return { outage: true, problem: (r.body && r.body.problem) || "Can't reach Home Assistant. Try again in a moment." };
   return null;
 }
@@ -433,12 +443,13 @@ export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
  * Ends the sign-in this panel keeps for All panels (`POST /manage/ha/forget`): it revokes it in Home Assistant. True when
  * HA confirmed it, false when not, and 'ended' when this Manage page's sign-in has ended, so the panel can't say.
  */
-export async function panelForget(csrf, fetchFn = fetch, ms = REVOKE_MS) {
+export async function panelForget(csrf, fetchFn = fetch, ms = FORGET_MS) {
   try {
     const r = await timed(fetchFn, '/manage/ha/forget', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
     // 401: this Manage page's sign-in has ended. The panel ends what it kept for it on its own, but can't confirm it
     // here, so it isn't a confirmation (CodeRabbit on #534).
-    return r.status === 200 ? true : r.status === 401 ? 'ended' : false;
+    // 403: the form token is another session's (signed in again in another tab); Try again would be refused the same.
+    return r.status === 200 ? true : r.status === 401 ? 'ended' : r.status === 403 ? 'stale' : false;
   } catch {
     return false;
   }
