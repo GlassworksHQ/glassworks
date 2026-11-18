@@ -6,6 +6,10 @@
 # minSdk 23 with core library desugaring, as the legacy build runs the core (tools/legacy/api23-emulator.gradle, a
 # Gradle init script). pr.yml's libs-api23 runs the libraries there.
 #
+# legacy-verify installs the generic app's legacy APK (the Mirror's, R8 and all) on an API 23 emulator and fails when
+# Android 6's verifier rejects a Glassworks class (tools/legacy/verify-api23.sh). The conformance test's APK can't show
+# this: R8 shapes the release's dex, and on the Mirror a class it built crashed the app at every start (#435).
+#
 # Cost: four jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a
 # minute of tests). Only when Android code or this file changes, on pull requests and on pushes to main. No secrets; GeckoView isn't in it (the
 # runners' emulators are x86_64, and no frame builds an x86 GeckoView), so the engine is a fake.
@@ -27,6 +31,7 @@ on:
       - 'gradle/**'
       - 'gradle.properties'
       - 'tools/legacy/api23-emulator.gradle'
+      - 'tools/legacy/verify-api23.sh'
       - '.github/workflows/core-emulators.yml'
   push:
     branches: [main]
@@ -45,6 +50,7 @@ on:
       - 'gradle/**'
       - 'gradle.properties'
       - 'tools/legacy/api23-emulator.gradle'
+      - 'tools/legacy/verify-api23.sh'
       - '.github/workflows/core-emulators.yml'
 
 permissions:
@@ -120,3 +126,46 @@ jobs:
           path: core/build/reports/androidTests/connected/
           retention-days: 7
           if-no-files-found: ignore
+
+  legacy-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    name: legacy APK verifies on API 23
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      # The Mirror's build, as the Generic test build makes it (arm64-v8a). The check drops its native libraries, so it
+      # installs on the x86_64 emulator; the dex is the same for every ABI.
+      - name: The legacy APK
+        run: ./gradlew --no-daemon :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Every Glassworks class passes Android 6's verifier
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 23
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: tools/legacy/verify-api23.sh frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk emulator-5554
