@@ -514,14 +514,14 @@ whose plates set one per step (`ui/StackView.kt`). Right: a card for the current
 Laid out for 960×480 dp. On a screen taller than wide (`onMeasure`, #415) it stacks into one column: the
 rail above the card, without the stack art, and the QR code under the card's text at full size.
 
-The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Add it, Sign
-in), **Panes** (Choose, then each pane's own steps while that pane is on), Done. A group shows its rows
+The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Sign in, Add
+it), **Panes** (Choose, then each pane's own steps while that pane is on), Done. A group shows its rows
 while one of them is current and folds to one row otherwise. The order is Wi-Fi → Home Assistant →
 Panes → Done (`SetupFlow.ids`): nothing a pane asks needs to come before signing in, and the radio's
 Thread router can then join Home Assistant's Thread network from its own step. Tapping a row opens
 it: in a live setup only a step that is done or current, in a preview any step. A step that is done
-says so and leads with **Continue** ("Connected to <SSID>.", "Added to Home Assistant.", "Signed
-in."), with the way to change it second ("Use another network", "Add it by hand").
+says so and leads with **Continue** ("Connected to <SSID>.", "Signed in.", "Added to Home
+Assistant."), with the way to change it second ("Use another network", "Add it by hand").
 
 1. **Wi-Fi**: "Connected to <SSID>" (Ethernet too), or "Not connected: set up Wi-Fi over Bluetooth
    from Home Assistant, or [Choose network]". The button opens `Settings.Panel.ACTION_WIFI` (falls
@@ -543,16 +543,18 @@ in."), with the way to change it second ("Use another network", "Add it by hand"
    [From the web installer](#from-the-web-installer-improv-serial--setup-channel-over-adb-)); the
    join uses the same `WifiProvisioner.connect` as Improv (it turns Wi-Fi on first) and its progress
    shows here: connecting to <SSID> (with the provisioner's progress), then connected or failed.
-2. **Home Assistant**: done once an ESPHome client whose Hello says "Home Assistant"
+2. **Sign in** (under Home Assistant): "Scan to sign in.", the QR code, and "Sign in on this panel
+   instead" (or "Find Home Assistant." with a URL field when HA wasn't found). It is answered by a refresh
+   token, or once the dashboard loads while a later step still waits (a panel signed in with a cookie
+   session). Without touch it shows the setup page's QR code until Home Assistant has added the panel,
+   then the sign-in's own. If Home Assistant added the panel first, Add it is green and Sign in current.
+3. **Add it** (under Home Assistant): done once an ESPHome client whose Hello says "Home Assistant"
    **subscribes to states**. HA's config flow only probes DeviceInfo during discovery, so a plain
    Hello doesn't count. `ApiServer.onStatesSubscribed` → `PanelDevice` persists `ha_seen` and
    notifies `SetupSignals`. Until then the step shows "Add it in Home Assistant. Settings → Devices &
    services → <the panel's name> → Add", "Waiting for Home Assistant…", and the panel's IP + port
-   6053 for a manual ESPHome add (or "Find Home Assistant." with a URL field when HA wasn't found).
-   **Skip** persists `setup_ha_skipped` (for kiosk-only use without the ESPHome device).
-3. **Sign in** (under Home Assistant): "Scan to sign in.", the QR code, and "Sign in on this panel
-   instead". It is answered by a refresh token, or once the dashboard loads with the panes still to
-   choose (a panel signed in with a cookie session).
+   6053 for a manual ESPHome add. Without touch, once signed in, it waits for Home Assistant to add the
+   panel (#484). **Skip** persists `setup_ha_skipped` (for kiosk-only use without the ESPHome device).
 4. **Panes**: "Choose", one card per pane that offers one (`PaneDefinition.setupChoice`): Voice
    (Assist and timers), Music (a Sendspin speaker), the Zigbee / Thread radio, the Bluetooth proxy
    (for BLE sensors, off by default; no card on a panel without Bluetooth LE) and the Wall base (the
@@ -592,7 +594,7 @@ session without a refresh token):
 - online, HA step done, the panes not chosen yet or a chosen pane's step not answered (so it comes back
   after a reboot).
 
-The current step is the first one not done (Wi-Fi → HA → Sign in → Panes → each pane's steps). Once shown, the screen stays
+The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps). Once shown, the screen stays
 until all steps are done, so it doesn't flicker between steps. It is re-evaluated on connectivity,
 sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`S1Kiosk`:
 "Setup screen: <reasons> (step …)").
