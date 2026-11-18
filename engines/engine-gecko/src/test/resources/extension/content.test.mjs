@@ -20,10 +20,12 @@ function page({ launchScreen = true, externalAuth = true, search = null } = {}) 
   const domListeners = {};
   const toPage = [];
   const appended = [];
+  const events = [];
+  const fromApp = [];
 
   const window = {
     wrappedJSObject: { externalBus: (m) => toPage.push(m) },
-    dispatchEvent() {},
+    dispatchEvent: (e) => events.push(e),
   };
   const document = {
     readyState: "loading",
@@ -42,7 +44,7 @@ function page({ launchScreen = true, externalAuth = true, search = null } = {}) 
     CustomEvent: class { constructor(t, o) { this.type = t; Object.assign(this, o); } },
     browser: { runtime: { connectNative: () => ({
       postMessage: (m) => posted.push(JSON.parse(JSON.stringify(m))),
-      onMessage: { addListener() {} },
+      onMessage: { addListener: (fn) => fromApp.push(fn) },
       onDisconnect: { addListener() {} },
     }) } },
     MutationObserver: class {
@@ -61,7 +63,9 @@ function page({ launchScreen = true, externalAuth = true, search = null } = {}) 
   vm.runInNewContext(SOURCE, ctx);
 
   return {
-    posted, toPage, window, appended,
+    posted, toPage, window, appended, events,
+    /** The app sends [m] over the native port. */
+    send(m) { fromApp.forEach((f) => f(m)); },
     ready: () => posted.filter((m) => m.type === "ready"),
     domContentLoaded() { document.readyState = "interactive"; (domListeners.DOMContentLoaded || []).forEach((f) => f()); },
     /** HA's frontend removes its launch screen. */
@@ -190,4 +194,14 @@ test("only one ready, however many signals come", () => {
   p.window.externalApp.externalBus(JSON.stringify({ id: 8, type: "frontend/loaded" }));
   p.frame(); p.frame(); p.advance(500);
   assert.equal(p.ready().length, 1);
+});
+
+test("panel state reaches the page as window.glassworks, and as window.s1kiosk for older dashboards", () => {
+  const p = page();
+  const state = { presence: true, proximityRaw: 3, lux: 120, screenOn: true, voice: "idle" };
+  p.send({ type: "state", state });
+  assert.deepEqual(p.window.wrappedJSObject.glassworks, state);
+  assert.equal(p.window.wrappedJSObject.s1kiosk, p.window.wrappedJSObject.glassworks, "one object, two names");
+  assert.deepEqual(p.events.map((e) => e.type), ["glassworks-state", "s1kiosk-state"]);
+  assert.ok(p.events.every((e) => e.detail === p.window.wrappedJSObject.glassworks));
 });

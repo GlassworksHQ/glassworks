@@ -159,6 +159,9 @@ below as the release notes.
   It runs a frozen web engine that gets no more security fixes, so it opens only your Home Assistant: maps,
   iframe cards and anything else from another address stay blank, with a note. There is no release yet;
   Kiln installs it as a test, from an APK you pick.
+- **Dashboards can read the panel's state as `window.glassworks`.** The presence, light and screen state a
+  dashboard sees now has the Glassworks name, with a `glassworks-state` event when it changes. The old
+  `window.s1kiosk` and `s1kiosk-state` keep working, so existing dashboards need no change.
 
 ### Changed
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
