@@ -511,6 +511,7 @@ test('after a sign-out mid-read no token goes out; server errors and a skipped r
   assert.equal(await panelForget('CSRF', answer(200, { ok: true, left: true }), 1_000), 'left', 'not revoked: HA moved');
   assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
   assert.equal(await panelForget('CSRF', answer(503, { problem: 'busy' }), 1_000), 'busy', 'not started: Try again, not "may stay active"');
+  assert.equal(await panelForget('CSRF', answer(200, null), 1_000), false, 'an unreadable answer confirms nothing');
   // The panel's renewal gets longer than a direct token request: its own call to HA can take most of 30 s.
   assert.ok(ACCESS_MS >= 30_000 && ACCESS_MS > TOKEN_MS);
 });

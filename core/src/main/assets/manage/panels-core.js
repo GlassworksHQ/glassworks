@@ -460,7 +460,8 @@ export async function panelForget(csrf, fetchFn = fetch, ms = FORGET_MS) {
     // here, so it isn't a confirmation (CodeRabbit on #534).
     // 403: the form token is another session's (signed in again in another tab); Try again would be refused the same.
     // 200 with left: HA's address had changed, so the panel didn't send the token to the old one: not revoked.
-    if (r.status === 200) return r.body && r.body.left ? 'left' : true;
+    // Only a readable { ok: true } confirms it: a body that didn't arrive may have said left (CodeRabbit on #534).
+    if (r.status === 200) return !r.body || r.body.ok !== true ? false : r.body.left ? 'left' : true;
     // 503: the panel was busy and didn't start; the sign-in is still kept, so it's for Try again, not "may stay active".
     return r.status === 401 ? 'ended' : r.status === 403 ? 'stale' : r.status === 503 ? 'busy' : false;
   } catch {
