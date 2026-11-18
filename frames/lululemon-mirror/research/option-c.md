@@ -276,12 +276,14 @@ W=$(mktemp -d) && cd "$W"
    (`bdb6b844…e35c1`). Unsparse it (`simg2img system.img system.raw`).
 2. List the vendor tree's names:
    `gh api 'repos/RSB4760/apq8016_vendor_qcom_proprietary/git/trees/97899ddbcd8916de7663ecd2102c70719460f5bf?recursive=1' --jq '.tree[]|select(.type=="blob")|.path' | grep '^prebuilt_HY22/target/product/msm8916_64/system/' | sed 's|^prebuilt_HY22/target/product/msm8916_64/system||' > "$W/hy22.txt"`
-3. `python3 -I "$REPO/tools/mirror/vendor-files.py" --raw "$W/system.raw" --vendor "$W/hy22.txt" --rules /path/to/sepolicy-rules.txt > "$W/option-c-vendor-files.tsv"`,
+3. `TMPDIR="$W" python3 -I "$REPO/tools/mirror/vendor-files.py" --raw "$W/system.raw" --vendor "$W/hy22.txt" --rules /path/to/sepolicy-rules.txt > "$W/option-c-vendor-files.tsv"`,
    then compare it with the one in the repo (`diff "$W/option-c-vendor-files.tsv" "$REPO/frames/lululemon-mirror/research/option-c-vendor-files.tsv"`).
    It needs `debugfs` and `llvm-readelf` (`brew install e2fsprogs llvm`). It runs in about 35 s on
    an M-series Mac. `--rules` is the unit's policy dump ([mirror-root.md](mirror-root.md) section 3,
-   kept outside the repo); without it the `shell` column is `?`.
-4. Delete `$W` (`system.img`, `system.raw`, the list) and the policy dump. Never commit them.
+   kept outside the repo); without it the `shell` column is `?`. With `TMPDIR="$W"` its scratch
+   copy of the image's ELF files (about 450 MB, deleted when it ends) is under `$W` too, so even a
+   killed run leaves nothing outside it.
+4. `cd "$REPO"`, then delete `$W` (`system.img`, `system.raw`, the list) and the policy dump. Never commit them.
 
 On a Mirror (only the root, read-only): `ANDROID_ADB_SERVER_PORT=<port> tools/mirror/vendor-pull-check.sh
 -s <serial> frames/lululemon-mirror/research/option-c-vendor-files.tsv`, through the adb server
