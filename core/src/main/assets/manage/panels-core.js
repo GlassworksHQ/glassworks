@@ -200,6 +200,13 @@ export function hello(p, body) {
 const DOWN = "Can't reach it. It may be off, or on a version from before this page: update it.";
 const STRANGER = "It doesn't answer as the panel Home Assistant lists at this address, so it gets no sign-in.";
 const REMOTE = "Its address isn't on your network, so the page doesn't contact it or send it a sign-in.";
+const UNCHECKED = "It answered, but didn't finish checking your sign-in with its Home Assistant in time. Try again in a moment.";
+
+/**
+ * How long the settings read may take. Longer than hello's: the panel asks its own Home Assistant first, which can
+ * take seconds when that address is slow (a stalled IPv6 connect, seen on the Pixel Tablet on 2026-11-18).
+ */
+export const SETTINGS_MS = 15_000;
 
 /** How many times a call that answers 503 with Retry-After is made in all, and the longest it waits in all, in s. */
 export const TRIES = 3;
@@ -237,12 +244,12 @@ export function usable(p) {
  * for a panel off the local network ([localHost]). Then the token-free [hello]; the token goes only to a panel that
  * passes it, and [p] comes back `trusted` then. A busy panel's 503 is tried again ([retrying]).
  */
-export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined) {
+export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined, settingsMs = SETTINGS_MS) {
   if (p.local !== true) return { ...p, trusted: false, reach: { state: 'remote', why: REMOTE }, settings: null };
-  const get = async (path, headers) => {
+  const get = async (path, headers, timeout) => {
     const r = await retrying(async () => {
       const c = new AbortController();
-      const t = setTimeout(() => c.abort(), ms);
+      const t = setTimeout(() => c.abort(), timeout);
       try {
         return await fetchFn(p.origin + path, { headers, signal: c.signal });
       } finally {
@@ -255,17 +262,18 @@ export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = 
   try {
     // Hello never answers 503 (it asks Home Assistant nothing), so only the settings read can wait: one read stays
     // within its timeouts plus [MAX_WAIT_S] s.
-    hi = await get('/manage/api/hello', {});
+    hi = await get('/manage/api/hello', {}, ms);
   } catch {
     return { ...p, trusted: false, reach: { state: 'down', why: DOWN }, settings: null };
   }
   if (!hello(p, hi.body)) return { ...p, trusted: false, reach: { state: 'stranger', why: STRANGER }, settings: null };
+  // It answered hello, so from here on it is reachable: whatever goes wrong is said as what it is, never Down.
   try {
-    const r = await get('/manage/api/settings', { Authorization: 'Bearer ' + access });
+    const r = await get('/manage/api/settings', { Authorization: 'Bearer ' + access }, settingsMs);
     const reach = reachability(r.status, r.body);
     return { ...p, trusted: true, reach, settings: reach.state === 'up' ? r.body : null };
   } catch {
-    return { ...p, trusted: true, reach: { state: 'down', why: DOWN }, settings: null };
+    return { ...p, trusted: true, reach: { state: 'unchecked', why: UNCHECKED }, settings: null };
   }
 }
 
@@ -275,5 +283,9 @@ export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = 
  */
 export function reachability(status, body) {
   if (status === 200 && body && body.api >= 1) return { state: 'up', version: body.version };
-  return { state: 'refused', why: (body && body.problem) || 'It refused (' + status + ').' };
+  const problem = body && typeof body.problem === 'string' ? body.problem : '';
+  // 401 means the panel's Home Assistant didn't confirm the token: unknown, expired, or Home Assistant didn't answer it.
+  if (status === 401) return { state: 'refused', why: "This panel couldn't confirm your sign-in with its Home Assistant." + (problem ? ' It said: ' + problem : '') };
+  if (status === 503) return { state: 'busy', why: problem || 'It is busy asking Home Assistant about other sign-ins. Try again in a moment.' };
+  return { state: 'refused', why: problem || 'It refused (' + status + ').' };
 }

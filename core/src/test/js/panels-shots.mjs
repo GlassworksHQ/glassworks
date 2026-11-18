@@ -60,12 +60,14 @@ const devices = [
   { id: 'h', name: 'Pixel Tablet', name_by_user: 'Hallway tablet', model: 'Pixel Tablet (Glassworks)', config_entries: ['esp-h'], area_id: 'hallway', configuration_url: 'http://hallway-tablet.local:8099', disabled_by: null },
   // In HA as a panel, but what answers at its address says it's something else: it must never get the token.
   { id: 'g', name: 'Garage panel', model: S1, config_entries: ['esp-g'], area_id: 'garage', configuration_url: 'http://garage-panel.local:8099', disabled_by: null },
+  // Answers hello, but its Home Assistant doesn't confirm the token (the Pixel Tablet on 2026-11-18): Refused, not Down.
+  { id: 'p', name: 'Porch panel', model: S1, config_entries: ['esp-p'], area_id: 'porch', configuration_url: 'http://porch-panel.local:8099', disabled_by: null },
   // In HA as a panel, at an address off the local network: it must get no request at all.
   { id: 'o', name: 'Office panel', model: S1, config_entries: ['esp-o'], area_id: 'office', configuration_url: 'http://203.0.113.7:8099', disabled_by: null },
   { id: 'ma', name: 'S1 Panel', model: S1, config_entries: ['ma'], area_id: null, configuration_url: null, disabled_by: null },
 ];
-const entries = [...['k', 'b', 'h', 'g', 'o'].map((x) => ({ entry_id: 'esp-' + x, domain: 'esphome' })), { entry_id: 'ma', domain: 'music_assistant' }];
-const hellos = { 'kitchen-panel.local:8099': S1, 'bedroom-panel.local:8099': S1, 'garage-panel.local:8099': 'ESP32-CAM', '203.0.113.7:8099': S1 };
+const entries = [...['k', 'b', 'h', 'g', 'o', 'p'].map((x) => ({ entry_id: 'esp-' + x, domain: 'esphome' })), { entry_id: 'ma', domain: 'music_assistant' }];
+const hellos = { 'kitchen-panel.local:8099': S1, 'bedroom-panel.local:8099': S1, 'garage-panel.local:8099': 'ESP32-CAM', 'porch-panel.local:8099': S1, '203.0.113.7:8099': S1 };
 /** Hosts that got an `Authorization` header, and the PKCE challenge the login page was given. */
 const tokenTo = new Set();
 /** Every host the page sent anything to. */
@@ -74,7 +76,7 @@ const contacted = new Set();
 const requests = [];
 let challenge = null;
 const initial = JSON.stringify(panels);
-const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }, { area_id: 'garage', name: 'Garage' }, { area_id: 'office', name: 'Office' }];
+const areas = [{ area_id: 'kitchen', name: 'Kitchen' }, { area_id: 'bedroom', name: 'Bedroom' }, { area_id: 'hallway', name: 'Hallway' }, { area_id: 'garage', name: 'Garage' }, { area_id: 'office', name: 'Office' }, { area_id: 'porch', name: 'Porch' }];
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
 const send = (res, status, body, type = 'application/json') => {
@@ -112,6 +114,8 @@ async function handle(req, res) {
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
+  if (u.host === 'porch-panel.local:8099' && u.pathname === '/manage/api/settings')
+    return send(res, 401, { problem: "Home Assistant didn't confirm this sign-in. Sign in again." });
   if (p && u.pathname === '/manage/api/settings') {
     if (req.method === 'GET') return send(res, 200, p);
     const f = await form(req);
@@ -209,7 +213,7 @@ async function shot(name) {
 }
 
 const PAGE = 'http://kitchen-panel.local:8099/panels';
-const listed = "document.querySelectorAll('#gw-list .chip').length === 5 && ![...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')";
+const listed = "document.querySelectorAll('#gw-list .chip').length === 6 && ![...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')";
 try {
   await call('Page.enable');
   await call('Log.enable');
@@ -223,6 +227,7 @@ try {
   await shot('02-panels-and-copy');
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Garage')).querySelector('.chip').textContent"), 'Not a panel');
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Office')).querySelector('.chip').textContent"), 'Not on your network');
+  assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Porch')).querySelector('.chip').textContent"), 'Refused', 'answered hello, then 401: Refused, not Down');
   await js("document.querySelector('#gw-copy button[type=submit]').click()");
   await until("document.querySelector('.cpa')", 'the copy result');
   await shot('03-copied-asks-first');
@@ -270,7 +275,7 @@ try {
   await js("fetch('http://203.0.113.9:1234/').catch(() => 0)");
   await sleep(300);
   assert.ok(refused.some((t) => t.includes('203.0.113.9')), 'the served CSP refuses what it should: ' + JSON.stringify(refused));
-  assert.deepEqual([...tokenTo].sort(), ['bedroom-panel.local:8099', 'kitchen-panel.local:8099'], 'the token went to the two panels that answered as panels, no one else');
+  assert.deepEqual([...tokenTo].sort(), ['bedroom-panel.local:8099', 'kitchen-panel.local:8099', 'porch-panel.local:8099'], 'the token went to the panels that answered as panels, no one else');
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');
 } finally {

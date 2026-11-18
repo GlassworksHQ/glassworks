@@ -263,7 +263,9 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 2. **The panels.** The page asks Home Assistant for its devices and lists each ESPHome device whose **Visit**
    link is a Manage page (port 8099), with its area, address and version. A panel that doesn't answer within
    6 seconds shows as **Down**; the others still work. A panel on a version from before this page shows as Down
-   too. One that answers as some other device shows as **Not a panel** and gets nothing; one at an address off your
+   too. A panel that answers but can't use your sign-in says why instead: **Refused** with its reason (its Home
+   Assistant didn't confirm the sign-in, or you're not an administrator), **Busy**, or **No answer** when its
+   check with Home Assistant takes longer than 15 seconds. Each row fills in as its panel answers. One that answers as some other device shows as **Not a panel** and gets nothing; one at an address off your
    network shows as **Not on your network** and isn't contacted. A panel busy asking Home Assistant about other
    sign-ins is asked again: 3 tries at most, and 5 seconds of waiting in all.
 3. **Manage** opens that panel's own Manage page in a new tab, already signed in.

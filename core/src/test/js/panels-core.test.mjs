@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, usable, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, usable, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -235,4 +235,35 @@ test('only a local, trusted panel with settings is usable, whatever the list hol
   for (const p of offLan) assert.ok(!p.trusted && !p.settings && !usable(p), JSON.stringify(p));
   assert.deepEqual(list.map(usable), [true, false, false]);
   assert.ok(!seen.some(([host]) => host === '203.0.113.7:8099'));
+});
+
+test("a panel that answered hello is never Down: each settings answer is said as what it is", async () => {
+  const hi = [200, { api: 1, glassworks: true, model: MODEL }];
+  const at = (settingsAnswer) => net({ 'kitchen-panel.local:8099': (path) => (path === '/manage/api/hello' ? hi : settingsAnswer()) }).fetchFn;
+  const read = (fetchFn, settingsMs = 6_000) => readPanel(panelAt('kitchen-panel.local:8099'), 'TOKEN', fetchFn, 6_000, noWait, settingsMs);
+
+  const noHello = await read(net({}).fetchFn);
+  assert.deepEqual([noHello.reach.state, noHello.reach.why.startsWith("Can't reach it")], ['down', true], 'no hello: Down');
+
+  const unconfirmed = await read(at(() => [401, { problem: "Home Assistant didn't confirm this sign-in. Sign in again." }]));
+  assert.equal(unconfirmed.reach.state, 'refused');
+  assert.equal(unconfirmed.reach.why, "This panel couldn't confirm your sign-in with its Home Assistant. It said: Home Assistant didn't confirm this sign-in. Sign in again.");
+
+  const notAdmin = await read(at(() => [403, { problem: "Sam isn't a Home Assistant administrator." }]));
+  assert.deepEqual([notAdmin.reach.state, notAdmin.reach.why], ['refused', "Sam isn't a Home Assistant administrator."]);
+
+  const busy = await read(at(() => [503, { problem: 'The panel is still asking Home Assistant about other sign-ins. Try again in a moment.' }, { 'retry-after': '2' }]));
+  assert.deepEqual([busy.reach.state, busy.reach.why], ['busy', 'The panel is still asking Home Assistant about other sign-ins. Try again in a moment.']);
+
+  // Its Home Assistant is slow to answer it (the tablet's stalled IPv6 connect, 2026-11-18): hello came back, the read didn't.
+  const silent = (url, init) => (url.endsWith('/manage/api/hello') ? Promise.resolve({ status: 200, json: async () => hi[1], headers: { get: () => null } })
+    : new Promise((_, no) => init.signal.addEventListener('abort', () => no(new DOMException('aborted', 'AbortError')))));
+  const slow = await read(silent, 30);
+  assert.equal(slow.reach.state, 'unchecked');
+  assert.ok(slow.reach.why.startsWith("It answered, but didn't finish checking your sign-in"), slow.reach.why);
+  for (const p of [unconfirmed, notAdmin, busy, slow]) assert.ok(!usable(p), 'none of them gets a Manage or a copy');
+});
+
+test('the settings read waits longer than hello: the panel asks its Home Assistant first', () => {
+  assert.ok(SETTINGS_MS >= 12_000, String(SETTINGS_MS));
 });

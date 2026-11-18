@@ -143,7 +143,7 @@ function ask(access, types) {
 
 // ------------------------------------------------------------------ the panels
 
-const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down'], refused: ['bad', 'Refused'], stranger: ['bad', 'Not a panel'], remote: ['off', 'Not on your network'] };
+const TONE = { asking: ['work', 'Asking'], up: ['ok', 'Up'], down: ['bad', 'Down'], refused: ['bad', 'Refused'], busy: ['work', 'Busy'], unchecked: ['work', 'No answer'], stranger: ['bad', 'Not a panel'], remote: ['off', 'Not on your network'] };
 
 /** A panel's own Manage page, in a new tab, signed in there with this tab's token (the panel checks it with Home Assistant). */
 async function open(p) {
@@ -310,7 +310,11 @@ async function start() {
   } catch (e) {
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
-  panels = await Promise.all(panels.map((p) => readPanel(p, access)));
+  // Each row as soon as its panel answers: a slow one doesn't hold the others back.
+  await Promise.all(panels.map(async (p, i) => {
+    panels[i] = await readPanel(p, access);
+    drawList(me.name);
+  }));
   drawList(me.name);
   drawCopy();
 }
