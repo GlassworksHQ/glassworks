@@ -423,16 +423,19 @@ GW_PUB="$T/pubblock/pub" GW_RUN="$T/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$
 check "staged, but the state file can't be written: an error, not ok" has "$(prop sys.glassworks.bundle.status)" "error: frame bundle 2.0.4 is staged, but its state file can't be written"
 check "...exit 1" test $rc = 1
 check "...the bundle stays staged" test -d /data/glassworks/bundle/next
+rm -rf "$APP/files/frame/bundle-in/services"   # the payload: a retry that copies again would fail now
 L install >/dev/null 2>&1; rc=$?; s=$(prop sys.glassworks.bundle.status); rm -f "$T/pubblock"
 check "...the same install again only writes the state file" test "$s" = "ok: frame bundle 2.0.4 staged; it loads at the next restart" -a $rc = 0
 check "...from this boot's own record, not the old file" test "$(cut -d' ' -f1,2 /data/glassworks-pub/frame-bundle)" = "ok 2.0.3"
 check "...which now names it" test "$(cat /data/glassworks-pub/frame-bundle | cut -d' ' -f4)" = 2.0.4
 L boot; check "...and it loads" test "$(prop ro.glassworks.frame.version)" = 2.0.4
-rm -f "$T/run/state"
+rm -f "$T/run/state"; before=$(cat /data/glassworks-pub/frame-bundle)
 mkframe "$T/f7" 2.0.5 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"; stage_frame "$T/f7/frame-bundle"
 L install >/dev/null 2>&1; rc=$?
-check "no record of this boot's decision: staged, but nothing made up for the state file" test $rc = 1 -a "$(cut -d' ' -f4 /data/glassworks-pub/frame-bundle)" = -
+check "no record of this boot's decision: staged, but nothing made up for the state file" test $rc = 1 -a "$(cat /data/glassworks-pub/frame-bundle)" = "$before"
 L boot; check "...it loads at the next boot all the same" test "$(prop ro.glassworks.frame.version)" = 2.0.5
+mv /data/glassworks/bundle/current /data/glassworks/bundle/old
+L boot; check "a promotion cut short between its renames: the loaded bundle comes back" test "$(prop ro.glassworks.frame.version)" = 2.0.5 -a -d /data/glassworks/bundle/current
 
 mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
 GW_LOADER_ONCE=1 L run radio; check "a developer script without the marker is ignored" test "$(prop test.radio)" != "dev|dev|1"

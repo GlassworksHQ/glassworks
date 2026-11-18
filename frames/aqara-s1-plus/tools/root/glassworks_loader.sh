@@ -253,25 +253,30 @@ boot)
   # Candidates, newest first: next, then next.old (left by an install that stopped between its two
   # renames). The first that passes loads; the others are dropped.
   state=none; fv=$BOOT_FRAME_VERSION; why=""
+  # A promotion cut short between its two renames: the bundle that was loaded comes back.
+  if [ ! -e "$BDIR/current" ] && [ -e "$BDIR/old" ]; then mv "$BDIR/old" "$BDIR/current"; fi
   for c_ in next next.old; do
     [ -e "$BDIR/$c_" ] || continue
     if [ $state = ok ]; then rm -rf "${BDIR:?}/$c_"; continue; fi
     if ! check_dir "$BDIR/$c_"; then say "staged bundle ($c_) dropped: $WHY"; rm -rf "${BDIR:?}/$c_"; continue; fi
-    nv=$VERSION; fl=$(floor); [ "$nv" -gt "$fl" ] && fl=$nv
-    rm -f "$BDIR/version.tmp"
-    if echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; then
-      rm -rf "$BDIR/old"
-      # current must be gone before the candidate moves in: mv onto a directory would move it inside.
-      if [ -e "$BDIR/current" ] && ! mv "$BDIR/current" "$BDIR/old"; then
-        say "cannot move the loaded bundle aside; $c_ stays staged"; continue
-      fi
-      if [ ! -e "$BDIR/current" ] && mv "$BDIR/$c_" "$BDIR/current"; then
-        rm -rf "$BDIR/old"; rm -f "$BDIR"/bad-*; say "frame bundle $FVER loaded"
-        state=ok; fv=$FVER
-      else
-        [ -e "$BDIR/old" ] && mv "$BDIR/old" "$BDIR/current"; say "cannot move the staged bundle in"
-      fi
+    nv=$VERSION; nf=$FVER
+    rm -rf "$BDIR/old"
+    # current must be gone before the candidate moves in: mv onto a directory would move it inside.
+    if [ -e "$BDIR/current" ] && ! mv "$BDIR/current" "$BDIR/old"; then
+      say "cannot move the loaded bundle aside; $c_ stays staged"; continue
     fi
+    if ! mv "$BDIR/$c_" "$BDIR/current"; then
+      [ -e "$BDIR/old" ] && mv "$BDIR/old" "$BDIR/current"
+      say "cannot move the staged bundle in; $c_ stays staged"; continue
+    fi
+    # The floor only once the new bundle is in place, so a failed promotion leaves the loaded one
+    # usable. floor() also counts the loaded bundle's version, so the floor holds if this write is lost.
+    fl=$(floor); [ "$nv" -gt "$fl" ] && fl=$nv
+    rm -f "$BDIR/version.tmp"
+    { echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; } ||
+      say "cannot record the floor $fl (the loaded bundle's version still counts)"
+    rm -rf "$BDIR/old"; rm -f "$BDIR"/bad-*; say "frame bundle $nf loaded"
+    state=ok; fv=$nf
   done
   if [ $state = ok ]; then :     # just promoted: checked in full above
   elif [ -e "$BDIR/current" ]; then
