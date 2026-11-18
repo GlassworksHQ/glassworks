@@ -297,6 +297,10 @@ class SetupStateTest {
         d = SetupState.decide(chosen.copy(paneSteps = radio(true), ownSteps = listOf(silent.copy(done = true)), showing = true))
         assertEquals(SetupFlow.DONE, d.step)
         assertTrue("silent_updates" in d.done)
+        // Not over Home Assistant's login page while the person signs in there ("Sign in on this panel instead").
+        val panelLogin = chosen.copy(signedIn = false, usePanelLogin = true, dashboardLoaded = false, paneSteps = radio(true))
+        assertFalse(silent.reason in SetupState.decide(panelLogin).reasons)
+        assertTrue(silent.reason in SetupState.decide(panelLogin.copy(dashboardLoaded = true)).reasons)
         // A frame with no panes at all: straight after Sign in.
         assertEquals("silent_updates", SetupState.decide(i.copy(paneSteps = emptyList())).step)
     }

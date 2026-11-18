@@ -224,7 +224,9 @@ object SetupState {
         // Before Continue on Panes every pending step asks; after it, only those of panes that are on.
         val asking = if (i.panesChosen) pendingWanted else pending
         if (wifiDone && haDone && asking != null) reasons += asking.reason
-        else if (wifiDone && haDone && ownPending != null) reasons += ownPending.reason // the device's own come after
+        // The device's own come after, and not over Home Assistant's own login page while the person signs in there
+        // (CodeRabbit on #513): they ask once the dashboard shows.
+        else if (wifiDone && haDone && ownPending != null && !panelLoginOpen) reasons += ownPending.reason
 
         // Only "done" once it's actually known: a stored sign-in, or Wi-Fi is done, HA is known and nothing
         // asks for one. While a later step still waits (Add it, Panes, a pane's step), "not asked yet" isn't
