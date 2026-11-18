@@ -210,7 +210,7 @@ class NotificationsPaneTest {
         val link = groups().first { it.title == "Interruptions" }.items.filterIsInstance<SettingsItem.Link>().single()
         val listed = SettingsChange.twinOf(link).filterIsInstance<SettingsItem.Info>().map { it.title() to it.detail() }
         assertEquals(listOf(NotificationsHub.TEST_TITLE to "${NotificationsHub.TEST_MESSAGE} · now"), listed)
-        assertTrue("nothing to change in it", SettingsChange.changeable(d.settings().single()).none { it.first.startsWith(link.title) })
+        assertTrue("nothing to change in it", SettingsChange.changeable(d.settings().single()).none { it.first.startsWith("Interruptions/${link.title}/") })
     }
 
     /** CodeRabbit on #228: "alert" on a normal one plays once and isn't cut off. */
