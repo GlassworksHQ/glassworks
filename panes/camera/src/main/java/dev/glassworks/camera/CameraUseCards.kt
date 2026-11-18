@@ -60,7 +60,7 @@ class CameraUseCards(context: Context) : LinearLayout(context), CameraUsePicker 
     }
 
     private val cards = listOf(
-        Card(CameraUse.PRESENCE, CameraPrefs.USE_PRESENCE, "Wakes the screen when someone walks up. No image leaves the panel.", CameraGlyph.Kind.PERSON),
+        Card(CameraUse.PRESENCE, CameraPrefs.USE_PRESENCE, CameraPrefs.USE_PRESENCE_LINE, CameraGlyph.Kind.PERSON),
         Card(CameraUse.PRESENCE_AND_SNAPSHOTS, CameraPrefs.USE_CAMERA, CameraPrefs.USE_CAMERA_LINE, CameraGlyph.Kind.CAMERA),
     )
 
