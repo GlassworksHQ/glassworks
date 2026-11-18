@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.gecko.legacy
 
+import dev.glassworks.engine.gecko.GeckoEngine
 import dev.glassworks.engine.gecko.GeckoVariant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -14,6 +15,12 @@ class LegacyVariantTest {
     @Test fun `the legacy engine is locked down`() {
         assertTrue(GeckoVariant.guard("test") is Lockdown)
         assertTrue(GeckoVariant.LABEL.contains("Home Assistant only"))
+    }
+
+    /** #29: the real legacy engine says it is frozen and held to Home Assistant, so Manage shows the Legacy chip. */
+    @Test fun `the legacy engine says it is locked down`() {
+        val engine = GeckoEngine(settings = { error("not opened") }, extension = GeckoEngine.Extension("", "", ""), logTag = "test", generatedBy = "test")
+        assertTrue(engine.lockedDown)
     }
 
     /** The Mirror has about 930 MB of RAM (the root's probes, 2026-11-15): one content process, none spare. */

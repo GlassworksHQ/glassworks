@@ -195,9 +195,12 @@ class KioskPrefs(
 
     // ---- screen policy (see dev.glassworks.screen.ScreenPolicy)
 
-    /** "presence" = on while someone is near / recently touched, off after idle; "always" = never off. */
+    /**
+     * "presence" = on while someone is near / recently touched, off after idle; "always" = never off. "always" until
+     * someone picks (#522): a frame with nothing that senses presence would otherwise just turn off when idle.
+     */
     override var screenMode: String
-        get() = sp.getString("screen_mode", "presence") ?: "presence"
+        get() = sp.getString("screen_mode", "always") ?: "always"
         set(v) = sp.edit().putString("screen_mode", v).apply()
 
     override var idleOffSec: Int

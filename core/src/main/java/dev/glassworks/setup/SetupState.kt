@@ -27,19 +27,21 @@ import dev.glassworks.pane.SetupStep
  *   or expected: the loading screen's offline text would point at a button nobody can press (#448).
  *   Once shown, it stays until every step is done (no flicker between steps).
  * - **Which step is current while it's shown?** The first one that isn't done, in order Wi-Fi →
- *   Home Assistant (add it, sign in) → Panes (choose, then each step of a pane that is on) → Done.
+ *   Home Assistant (sign in, add it) → Panes (choose, then each step of a pane that is on) → Done.
  *   Done means: online; HA has subscribed to the panel's states (it added the panel) or the user
  *   skipped it; signed in, or the dashboard loaded without asking; Continue on the Panes step (or
  *   nothing to ask); the pane's step says so.
  *
  * Home Assistant comes first, adding and signing in together (#63 round 2): a pane's step can then use
  * the sign-in, e.g. the radio joins Home Assistant's Thread network. Nothing in Panes is needed to sign in.
+ * Sign in comes before Add it: the panel signs in (on its screen, or from the setup page without touch), then waits
+ * for Home Assistant to add it (#484). If Home Assistant added it first, Add it is done and Sign in is current.
  */
 object SetupFlow {
     const val WIFI = "wifi"
-    /** Home Assistant's first sub-step: add the panel. */
+    /** Home Assistant's second sub-step: Home Assistant adds the panel. */
     const val HA = "ha"
-    /** Home Assistant's second sub-step: sign in. */
+    /** Home Assistant's first sub-step: sign in. */
     const val SIGNIN = "signin"
     /** Panes' first sub-step: which panes are on (one card per PaneDefinition.setupChoice). */
     const val PANES = "panes"
@@ -57,7 +59,7 @@ object SetupFlow {
      * ids of the steps of the panes that are on, which follow the Panes step in its group.
      */
     fun ids(panes: Boolean, paneSteps: List<String> = emptyList()): List<String> =
-        listOf(WIFI, HA, SIGNIN) + (if (panes) listOf(PANES) + paneSteps else emptyList()) + DONE
+        listOf(WIFI, SIGNIN, HA) + (if (panes) listOf(PANES) + paneSteps else emptyList()) + DONE
 
     private val CORE = setOf(WIFI, HA, PANES, SIGNIN, DONE)
 
@@ -200,7 +202,10 @@ object SetupState {
         val noTouchStuck = i.input == Input.NONE && !i.joinExpected
         if (!i.online && (i.offlineForMs >= rules.offlineGraceMs || wifiSetupActive || i.neverSetUp || noTouchStuck)) reasons += "offline"
         if (i.online && !i.haKnown) reasons += "home assistant not found"
-        if (i.online && i.haKnown && !haEverRecorded && !i.haHelloThisProcess && i.uptimeMs >= rules.haGraceMs) {
+        // Not while the person signs in on Home Assistant's own login page ("Sign in on this panel instead"), from the tap
+        // on, while that page loads too: Add it follows Sign in, so it asks once the page shows Home Assistant.
+        val panelLoginOpen = i.usePanelLogin && !i.dashboardLoaded
+        if (i.online && i.haKnown && !haEverRecorded && !i.haHelloThisProcess && i.uptimeMs >= rules.haGraceMs && !panelLoginOpen) {
             reasons += "not added to home assistant"
         }
         if (i.online && i.haKnown && wantsSignin) reasons += "sign-in needed"
@@ -208,17 +213,17 @@ object SetupState {
         val asking = if (i.panesChosen) pendingWanted else pending
         if (wifiDone && haDone && asking != null) reasons += asking.reason
 
-        // Only "done" once it's actually known: a stored sign-in, or Wi-Fi + HA are done and nothing asks
-        // for one. While a pane's step still waits, "not asked yet" isn't enough: Panes follows Sign in,
-        // so the screen would move on, then come back when HA's login page loads. It waits for the
+        // Only "done" once it's actually known: a stored sign-in, or Wi-Fi is done, HA is known and nothing
+        // asks for one. While a later step still waits (Add it, Panes, a pane's step), "not asked yet" isn't
+        // enough: the screen would move on, then come back when HA's login page loads. It waits for the
         // dashboard to load without asking (a session it already has) or the panel's own login page.
-        val panesWaiting = !panesDone || pendingWanted != null
+        val laterWaiting = !haDone || !panesDone || pendingWanted != null
         val signinDone = i.signedIn ||
-            (wifiDone && haDone && !wantsSignin && (!panesWaiting || i.dashboardLoaded || i.usePanelLogin))
+            (wifiDone && i.haKnown && !wantsSignin && (!laterWaiting || i.dashboardLoaded || i.usePanelLogin))
         val step = when {
             !wifiDone -> SetupFlow.WIFI
-            !haDone -> SetupFlow.HA
             !signinDone -> SetupFlow.SIGNIN
+            !haDone -> SetupFlow.HA
             !panesDone -> SetupFlow.PANES
             pendingWanted != null -> pendingWanted.id
             else -> SetupFlow.DONE

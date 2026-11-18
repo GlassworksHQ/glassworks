@@ -44,7 +44,8 @@
 #            branch only, no change column, so it costs two builds (about 4 minutes); the report is the
 #            job summary. Then its legacy build (#198, arm64-v8a) builds, with its id, minSdk, the
 #            system permissions and its icons on API 23 (tools/legacy/apk-icons.py) checked; no budget
-#            yet. Only when something that goes into those APKs, or this file, changes
+#            yet. Every APK also goes through tools/release/check-update-compat.sh --app (it still updates
+#            installed copies in place). Only when something that goes into those APKs, or this file, changes
 #   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
 #            Python image and fails if the committed files differ. A few minutes, so it runs only
 #            when branding/boot, branding/glass-tile, branding/bootlogos.json, the S1's frame.json
@@ -740,7 +741,7 @@ jobs:
         # Fails closed like libs-publish's: without a base commit, or when git diff fails, it runs.
         run: |
           paths="frames/generic-android core pane-api panes libs engines testing build-logic build.gradle.kts settings.gradle.kts gradle.properties gradle
-            LICENSE LICENSES THIRD-PARTY-NOTICES.md tools/size tools/legacy/apk-icons.py .github/workflows/pr.yml"
+            LICENSE LICENSES THIRD-PARTY-NOTICES.md tools/size tools/legacy/apk-icons.py tools/release/check-update-compat.sh .github/workflows/pr.yml"
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             echo "No base commit to compare with ($BASE); checking the size."
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -777,6 +778,7 @@ jobs:
           for a in $(jq -r '.abis[]' frames/generic-android/design/frame.json); do
             ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a"
             cp frames/generic-android/android/build/outputs/apk/release/generic-android-release-unsigned.apk "$RUNNER_TEMP/generic/$a.apk"
+            tools/release/check-update-compat.sh --app generic-android "$RUNNER_TEMP/generic/$a.apk"
           done
 
       - name: The legacy build (#198)
@@ -785,6 +787,7 @@ jobs:
         run: |
           ./gradlew --no-daemon :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
           apk=frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
+          tools/release/check-update-compat.sh --app generic-android-legacy "$apk"
           aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
           badging="$("$aapt2" dump badging "$apk")"
           grep -q "^package: name='dev.glassworks.generic_android.legacy'" <<< "$badging" || { echo "::error::the legacy APK isn't dev.glassworks.generic_android.legacy"; exit 1; }

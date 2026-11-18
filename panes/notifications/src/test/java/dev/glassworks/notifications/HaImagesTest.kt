@@ -5,6 +5,8 @@
 package dev.glassworks.notifications
 
 import com.sun.net.httpserver.HttpServer
+import dev.glassworks.net.HappyEyeballs
+import dev.glassworks.testing.UnreachableIpv6
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -101,5 +103,16 @@ class HaImagesTest {
         val reasons = listOf("$base/redirect", "$base/page", "$base/nope", "http://192.0.2.1/x")
             .map { (images(token = "s3cret").fetch(it) as ImageFetch.Failed).reason }
         assertTrue(reasons.none { it.contains("s3cret") })
+    }
+
+    @Test
+    fun anIpv6AddressThatNeverAnswersDoesNotHoldUpThePicture() {
+        val fieldBase = "http://${UnreachableIpv6.HOST}:${ha.address.port}"
+        val http = UrlConnectionGet(connector = HappyEyeballs(UnreachableIpv6.resolve, connectOne = UnreachableIpv6.connectOne))
+        val t0 = System.nanoTime()
+        val r = HaImages({ fieldBase }, { "t0k3n" }, http).fetch("$fieldBase/api/camera_proxy/camera.porch")
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        assertArrayEquals(jpeg, (r as ImageFetch.Ok).bytes)
+        assertTrue("took $ms ms", ms < UnreachableIpv6.FAST_MS)
     }
 }

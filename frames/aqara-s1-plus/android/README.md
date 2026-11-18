@@ -103,8 +103,9 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
   service for 10 minutes, so HA's `improv_ble` integration or improv-wifi.com can send it Wi-Fi
   details after someone taps **Allow** on the panel. See below and
   [docs/onboarding.md](../../../docs/onboarding.md) (step 1).
-- The page sees live panel state as `window.s1kiosk` (`{presence, proximityRaw, lux, screenOn, voice}`)
-  plus a `s1kiosk-state` event, so dashboards can react to presence.
+- The page sees live panel state as `window.glassworks` (`{presence, proximityRaw, lux, screenOn, voice}`)
+  plus a `glassworks-state` event, so dashboards can react to presence. `window.s1kiosk` and the
+  `s1kiosk-state` event still work: the same object and the same event, under the old names.
 
 ## Build
 
@@ -168,7 +169,7 @@ $A --ez remote_debug true  # Gecko remote debugging. Restarts the app.
 $A --ez reload true
 $A --ez settings true      # open the settings dialog
 $A --ez hide_header false  # show HA header/sidebar
-$A --es screen_mode always # or presence (default)
+$A --es screen_mode presence # or always (default)
 $A --ei idle_off_sec 120    # screen off after 120 s idle (0 = never)
 $A --ef presence_range_m 1.0   # VI5300 range (needs WRITE_SECURE_SETTINGS)
 $A --es screen off         # or on

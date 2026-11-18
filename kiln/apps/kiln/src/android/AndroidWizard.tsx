@@ -8,7 +8,7 @@ import { Panel, loadOrCreateAdbKey } from '@glassworks/adb';
 import { fmtSize } from '@glassworks/kiln-core';
 import { KIND_TEXT, STAGE_TEXT, type FrameDesign } from '@glassworks/frame-card';
 import {
-  BRANDS, androidName, type BrandId, type GenericPhase, type Grant, type Identified, type Place, type SilentUpdatesResult,
+  BRANDS, SILENT_LINES, androidName, type BrandId, type GenericPhase, type Grant, type Identified, type Place, type SilentUpdatesResult,
 } from '@glassworks/generic-android-installer';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
@@ -21,6 +21,7 @@ import type { RailMark, RailStep } from '../wizard/state';
 import { registry } from '../wizard/registry';
 import { ANDROID_BASE, keptAndroid } from './activity';
 import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from './demo';
+import { ScreenLockBlock } from './ScreenLockBlock';
 import { AndroidSession, androidMode, type AndroidState } from './session';
 import './android.css';
 
@@ -315,7 +316,39 @@ function GrantList({ grants, updates }: { grants: Grant[]; updates?: SilentUpdat
   );
 }
 
-/** What didn't apply, said once, with what it means. */
+/**
+ * Done's Silent updates block (issue 422, the maintainer, 2026-11-18): in place of the grants list's row, what Kiln did and
+ * what it means, with a word in the grants list's colours. Null where this build doesn't ask.
+ */
+export function silentBlock(u: SilentUpdatesResult, release: string): { word: string; tone: 'y' | 'n' | 'w'; line: string } | null {
+  switch (u.state) {
+    case 'allowed':
+      return { word: 'On', tone: 'y', line: 'Updates from Home Assistant install with nobody at the tablet. Kiln allowed “Install unknown apps” for Glassworks only. Undo takes it back.' };
+    case 'old-android':
+      return { word: 'A tap each', tone: 'n', line: `Android ${release} asks for a tap on each update. Updates still come from Home Assistant; someone taps Install on the tablet. Only a device owner skips the tap.` };
+    case 'declined':
+      return { word: 'A tap each', tone: 'n', line: 'Each update waits for a tap on the tablet, as asked. Updates still come from Home Assistant.' };
+    case 'refused':
+      if (u.line === SILENT_LINES.off) return { word: 'This tablet said no', tone: 'w', line: 'This tablet\'s software keeps “Install unknown apps” off. Updates still come from Home Assistant, with a tap on the tablet.' };
+      if (u.line === SILENT_LINES.allowed) return { word: 'Still on', tone: 'w', line: 'Android kept “Install unknown apps” allowed from an earlier install, so updates still install with nobody at the tablet.' };
+      return { word: 'Not confirmed', tone: 'n', line: 'Kiln couldn\'t read “Install unknown apps” back. Glassworks\' Device page on the tablet says which it is.' };
+    case 'not-asked':
+      return null;
+  }
+}
+
+function SilentBlock({ updates, release }: { updates: SilentUpdatesResult; release: string }) {
+  const b = silentBlock(updates, release);
+  if (!b) return null;
+  return (
+    <div className="su" role="group" aria-label="Silent updates">
+      <div className="spread"><span>Silent updates</span><i className={b.tone}>{b.word}</i></div>
+      <span className="small">{b.line}</span>
+    </div>
+  );
+}
+
+/** What didn't apply, said once, with what it means. [updates]: left out where Done's block says it. */
 function Refusals({ grants, updates }: { grants: Grant[]; updates?: SilentUpdatesResult }) {
   const lines = grants.filter((g) => g.result === 'refused').map((g) => GRANT_TEXT[g.what].without);
   if (updates?.state === 'refused') lines.push('each update may ask for a tap');
@@ -411,7 +444,9 @@ function Done({ s, session }: { s: AndroidState; session: AndroidSession }) {
           <span className="small">Nobody has run Glassworks on this model yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${name}`)}`}>Tell us how it goes</a></span>
         </div>
       )}
-      <Refusals grants={installed.grants} updates={installed.silentUpdates} />
+      <SilentBlock updates={installed.silentUpdates} release={s.plan!.device.release || androidName(s.plan!.device.sdk)} />
+      <ScreenLockBlock lock={installed.screenLock} />
+      <Refusals grants={installed.grants} />
       {page ? <>
         <div className="well">
           <span className="grow muted">Finish setting up on your network</span>

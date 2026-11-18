@@ -187,4 +187,12 @@ class OAuthTest {
         assertFalse(auth.isFor("http://192.0.2.20:8124"))
         assertFalse(auth.isFor("http://homeassistant.local:8123"))
     }
+
+    @Test
+    fun setupSignInsGetAFreeSlotAndAnEvictedOnesSlotIsReused() {
+        val s = StateStore(max = 3)
+        val slots = List(4) { s.create("c", "r", "h", then = Then.SETUP).slot }
+        assertEquals("the fourth pushes out the first and takes its slot", listOf(0, 1, 2, 0), slots)
+        assertEquals("a QR sign-in has none", -1, s.create("c", "r", "h").slot)
+    }
 }

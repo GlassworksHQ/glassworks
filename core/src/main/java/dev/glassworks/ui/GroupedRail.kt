@@ -31,6 +31,10 @@ class GroupedRail(context: Context) : LinearLayout(context) {
 
     var onTap: ((String) -> Unit)? = null
 
+    /** The rows last bound, in order, with their marks. */
+    var rows: List<Row> = emptyList()
+        private set
+
     /** Row heights and the gap between rows, in dp. */
     var rowDp = 39f
     var childDp = 34f
@@ -43,6 +47,7 @@ class GroupedRail(context: Context) : LinearLayout(context) {
     /** Draws [rows] with [selected] picked; [groups] names each group (id to title). */
     fun bind(rows: List<Row>, groups: Map<String, String>, selected: String?) {
         removeAllViews()
+        this.rows = rows
         val open = rows.firstOrNull { it.id == selected }?.group
         var i = 0
         while (i < rows.size) {

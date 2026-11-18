@@ -442,7 +442,7 @@ class ManageServer(
 
     /** A pane's or a core section's page by [id], or null when the panel has no such page. */
     private fun settingsPage(status: PanelStatus, viewer: ManagePages.Viewer, id: String, dialog: ManagePages.Dialog? = null,
-                             problem: String? = null, done: String? = null, code: Int = 200): HttpResponse? {
+                             problem: String? = null, done: String? = null, code: Int = 200, problemSee: String? = null): HttpResponse? {
         val pane = status.panes.firstOrNull { it.id == id }
         val section = status.sections.firstOrNull { it.id == (pane?.sectionId ?: id) }
         if (pane == null && section == null) return null
@@ -452,7 +452,7 @@ class ManageServer(
             d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider && item !is SettingsItem.Action)
         }
         return html(code, pages.section(status, viewer, "/$id", pane?.title ?: section!!.title, pane?.state, section, pane?.links.orEmpty(),
-            dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done)))
+            dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done), problemSee = problemSee))
     }
 
     private fun sectionNotice(done: String?): String? = when (done) {
@@ -493,12 +493,20 @@ class ManageServer(
             event("${who(s)} $did $what (still applying)")
             return HttpResponse.seeOther("$page?done=pending")
         }
-        event(if (problem == null) "${who(s)} $did $what" else "${who(s)} couldn't ${if (item is SettingsItem.Action) "run" else "change"} $what: $problem")
+        event(when {
+            problem != null -> "${who(s)} couldn't ${if (item is SettingsItem.Action) "run" else "change"} $what: $problem"
+            // A choice says what it is now: "Alex set Camera › Camera use to Presence + camera".
+            item is SettingsItem.Choice -> "${who(s)} set $what to ${runCatching { item.options() }.getOrNull()?.firstOrNull { it.first == raw }?.second ?: raw}"
+            else -> "${who(s)} $did $what"
+        })
         if (problem == null) return HttpResponse.seeOther(if (SettingsChange.restarts(item)) "$page?done=restart" else page)
         // As the panel: a typed value, a duration, a choice or a window keeps its sheet open with why; the rest say it on the page.
-        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action) null
+        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action || (item is SettingsItem.Choice && item.cards != null)) null
             else ManagePages.Dialog.Edit(key, problem, typed = raw.takeIf { item is SettingsItem.Text })
-        return settingsPage(host.status(), viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422)!!
+        // The link follows the page as it is now: the refusal came from the state the save saw, not the one posted against.
+        val now = host.status()
+        val see = (now.sections.firstOrNull { it.id == id }?.let { SettingsChange.find(it, key) } as? SettingsItem.Switch)?.see
+        return settingsPage(now, viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422, problemSee = see)!!
     }
 
     /**

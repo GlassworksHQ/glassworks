@@ -105,11 +105,18 @@ object VoiceTexts {
 object MainTextFit {
     data class Fit(val sizeSp: Float, val maxLines: Int)
 
-    fun choose(lineCount: (Float) -> Int): Fit = when {
+    fun choose(lastLines: Int = 3, lineCount: (Float) -> Int): Fit = when {
         lineCount(36f) <= 2 -> Fit(36f, 2)
         lineCount(30f) <= 2 -> Fit(30f, 2)
-        else -> Fit(26f, 3)
+        else -> Fit(26f, lastLines)
     }
+
+    /**
+     * Lines at 26 sp in a column [columnPx] wide: 3 in the full [fullPx] column, more in a narrower one (the Mirror's
+     * portrait screen), so about as much of a long reply shows before the ellipsis. Never more than 6, which stay
+     * above the cancel hint on a phone-sized screen.
+     */
+    fun lastLines(columnPx: Int, fullPx: Int): Int = (3 * fullPx / columnPx.coerceAtLeast(1)).coerceIn(3, 6)
 }
 
 /** Two-view text cross-fade (SPEC §4), with k the eased progress 0..1 as in the prototype. Pure. */

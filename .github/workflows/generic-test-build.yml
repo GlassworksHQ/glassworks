@@ -94,9 +94,6 @@ jobs:
         run: rm -f "$RUNNER_TEMP/glassworks-release.jks"
 
       - name: Verify and checksum
-        env:
-          # Glassworks' release certificate (CN=Glassworks, O=GlassworksHQ, 2026-11-17). Public, not a secret.
-          GLASSWORKS_CERT_SHA256: 564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa
         run: |
           apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
           aapt2="$(dirname "$apksigner")/aapt2"
@@ -104,17 +101,11 @@ jobs:
           cd generic-dist
           for apk in *.apk; do
             "$apksigner" verify "$apk"
-            # The certificate's SHA-256, not its name: a new key with the same name must fail here, or every
-            # installed build would refuse the next update (frames/generic-android/README.md, "Signing").
-            certs="$("$apksigner" verify --print-certs "$apk" 2>&1 || true)"
-            # Every signer line apksigner prints ("Signer #1 …" here, "V1 Signer: …", "V2 Signer: …" on CI's
-            # build-tools), reduced to the distinct certificates: exactly one, and it must be ours.
-            digests="$(sed -n 's/^.*Signer.*certificate SHA-256 digest: //p' <<< "$certs" | sort -u)"
-            if [ "$digests" != "$GLASSWORKS_CERT_SHA256" ]; then
-              echo "::error::$apk isn't signed with Glassworks' release key alone (signers: $(tr '\n' ' ' <<< "$digests"))"
-              echo "apksigner said:"; head -n 8 <<< "$certs" | cut -c1-200
-              exit 1
-            fi
+            case "$apk" in glassworks-generic-legacy-test-*) app=generic-android-legacy ;; *) app=generic-android ;; esac
+            # Glassworks' release key alone, by its certificate's SHA-256 (tools/release/generic-release-cert.sha256), not
+            # its name: a new key with the same name must fail here, or every installed build would refuse the next update
+            # (frames/generic-android/README.md, "Signing"). Also the package and the components named from outside.
+            ../tools/release/check-update-compat.sh --app "$app" --signed "$apk"
             badging="$("$aapt2" dump badging "$apk")"
             case "$apk" in
               glassworks-generic-legacy-test-*) id=dev.glassworks.generic_android.legacy min=23
