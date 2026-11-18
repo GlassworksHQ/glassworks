@@ -97,6 +97,8 @@ let forgetHeld = null;
 const forgetCsrfs = [];
 /** What this panel answers a renewal with: 200, 503 (Home Assistant down) or 401 (the Manage session ended). */
 let accessStatus = 200;
+/** Whether this panel fails to serve panels-core.js, so the module can't start. */
+let brokenModule = false;
 /** Whether the fake Home Assistant takes a revoke. */
 let revokeOk = true;
 const initial = JSON.stringify(panels);
@@ -160,6 +162,7 @@ async function handle(req, res) {
     return forgetOk ? send(res, 200, { ok: true }) : send(res, 502, { problem: "Home Assistant didn't confirm it ended the sign-in. Try again." });
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
+  if (brokenModule && u.pathname === '/manage/js/panels-core.js') return send(res, 404, 'Not found.', 'text/plain');
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
   // Slow, like a panel whose Home Assistant check takes a while: the page draws the others first.
   if (u.host === 'porch-panel.local:8099' && u.pathname === '/manage/api/settings')
@@ -447,6 +450,13 @@ try {
   assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes('has ended')"));
   await shot('12-manage-sign-in-ended');
   accessStatus = 200;
+  // The module can't load (CodeRabbit on #488): the page says to reload it, rather than "Finding your panels…" for good.
+  brokenModule = true;
+  await call('Page.navigate', { url: PAGE });
+  await sleep(1_000);
+  assert.equal(await js("document.querySelector('#gw-list .note')?.textContent"), 'Finding your panels…');
+  await until("document.querySelector('#gw-list .note')?.textContent.includes(\"couldn't start\")", 'the way out when the module fails');
+  brokenModule = false;
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
   assert.ok(!haAddressSent, "no copy sent a panel's own Home Assistant address");
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');

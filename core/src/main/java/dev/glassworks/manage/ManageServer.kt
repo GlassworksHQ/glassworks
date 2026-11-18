@@ -744,7 +744,7 @@ class ManageServer(
 
         /** All panels' scripts, served from the panel's assets (`manage/`). */
         const val SCRIPTS = "/manage/js/"
-        val SCRIPT_FILES = setOf("panels.js", "panels-core.js")
+        val SCRIPT_FILES = setOf("panels.js", "panels-core.js", "panels-boot.js")
 
         /** All panels' fresh access token from this session's kept Home Assistant sign-in, and its end (#466). */
         const val HA_ACCESS = "/manage/ha/access"
