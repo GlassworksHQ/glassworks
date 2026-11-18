@@ -5,6 +5,7 @@
 package dev.glassworks.engine.gecko
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -13,5 +14,11 @@ class GeckoVariantTest {
     @Test fun `the current engine guards nothing`() {
         assertNull(GeckoVariant.guard("test"))
         assertEquals("", GeckoVariant.LABEL)
+    }
+
+    /** #29: the engine the S1 and the generic app run doesn't say it is frozen, so they get no Web engine sensor. */
+    @Test fun `the current engine is not locked down`() {
+        val engine = GeckoEngine(settings = { error("not opened") }, extension = GeckoEngine.Extension("", "", ""), logTag = "test", generatedBy = "test")
+        assertFalse(engine.lockedDown)
     }
 }

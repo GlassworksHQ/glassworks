@@ -126,7 +126,7 @@ class GeckoEngine(
 
     override val name: String get() = "GeckoView ${org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION}${GeckoVariant.LABEL}"
 
-    override val lockedDown: Boolean get() = guard != null
+    override val lockedDown: Boolean get() = GeckoVariant.LOCKED_DOWN
 
     /**
      * GeckoView's manifest runs `GeckoChildProcessServices$tab0..39` in `:sandboxed_tab_<flags><n>` (the S1's

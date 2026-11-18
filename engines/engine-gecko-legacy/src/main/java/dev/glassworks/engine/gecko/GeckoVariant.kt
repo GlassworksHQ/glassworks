@@ -13,5 +13,8 @@ import dev.glassworks.engine.gecko.legacy.Lockdown
 internal object GeckoVariant {
     const val LABEL = " (legacy, Home Assistant only)"
 
+    /** Engine.lockedDown (#29), declared here rather than read from [guard]: a guard alone doesn't mean frozen. */
+    const val LOCKED_DOWN = true
+
     fun guard(logTag: String): PageGuard? = Lockdown(logTag)
 }
