@@ -436,6 +436,7 @@ open class MainActivity : Activity() {
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
+            glassworks.settleDeviceSteps(this)
             glassworks.setupHotspot?.cancel() // setup is over: its hotspot too (#197)
             hotspotAsked = false
             setupOverlay.finish { loadDashboardIfNeeded() }
