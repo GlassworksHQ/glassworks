@@ -286,7 +286,8 @@ Each panel lets a page on another panel read and change its settings. That page 
 Assistant access token, and each panel checks it with its own Home Assistant. No panel trusts another,
 and there are no shared keys and no leader. The page gives your Home Assistant token only to devices Home
 Assistant lists as Glassworks panels: an ESPHome device whose Visit link is a Manage page at an address on your
-network (a private or link-local address, or a `.local` name; anything else gets no request at all), and that
+network (a private, link-local or loopback address, `localhost` or a `.local` name; anything else gets no
+request at all), and that
 first answers a question without the token (`/manage/api/hello`) with the model Home Assistant lists for it.
 
 That check is a filter, not proof. The model is public, so anything can answer with it. A device that takes over

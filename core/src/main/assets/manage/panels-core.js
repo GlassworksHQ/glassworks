@@ -223,10 +223,13 @@ export const MAX_WAIT_S = 5;
  * can't hold the page (it waits for every panel) much past its own timeouts. A copy of N settings makes N requests,
  * so it can wait up to N × [MAX_WAIT_S] s. The last answer otherwise.
  */
-export async function retrying(call, sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))) {
+export async function retrying(call, sleep = (ms) => new Promise((ok) => setTimeout(ok, ms)), stop = () => false) {
   let left = MAX_WAIT_S;
+  let r;
   for (let i = 1; ; i++) {
-    const r = await call();
+    // Signed out during the wait: no further try; the last answer stands (CodeRabbit on #488).
+    if (i > 1 && stop()) return r;
+    r = await call();
     const header = r.status === 503 && r.headers ? r.headers.get('Retry-After') : null;
     const after = header == null || String(header).trim() === '' ? NaN : Number(header);
     if (i >= TRIES || !Number.isFinite(after) || after < 0 || left <= 0) return r;
@@ -288,13 +291,13 @@ export function reachability(status, body) {
  * One setting to [p] (`POST /manage/api/settings`), as [outcome] says it. Each try gives up after [ms], like the
  * settings read: the panel asks its Home Assistant first. A write that timed out may still have landed, so it says so.
  */
-export async function writeSetting(p, access, fields, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined) {
+export async function writeSetting(p, access, fields, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined, stop = () => false) {
   // Checked here too, not only by the caller: nothing else stands between a later caller and the token (CodeRabbit on #488).
   if (!usable(p)) return { state: 'failed', why: 'Not sent: ' + p.name + " isn't a trusted panel on your network now." };
   try {
     const res = await retrying(() => timed(fetchFn, p.origin + '/manage/api/settings', {
       method: 'POST', headers: { Authorization: 'Bearer ' + access }, body: new URLSearchParams(fields),
-    }, ms), sleep);
+    }, ms), sleep, stop);
     return outcome(res.status, res.body);
   } catch (e) {
     if (e && e.name === 'AbortError') return { state: 'failed', unreachable: true, why: p.name + " didn't answer in time. The setting may have changed: check its page." };
@@ -315,7 +318,7 @@ export async function copyRows(p, access, rows, answers = null, fetchFn = fetch,
     const r = rows[i];
     const k = r.section + '\n' + r.key;
     const id = answers && answers.get(k);
-    const o = await writeSetting(p, access, { section: r.section, key: r.key, value: r.value, ...(id ? { answer: id } : {}) }, fetchFn, ms, sleep);
+    const o = await writeSetting(p, access, { section: r.section, key: r.key, value: r.value, ...(id ? { answer: id } : {}) }, fetchFn, ms, sleep, stop);
     result.set(k, o);
     if (o.unreachable) {
       for (const rest of rows.slice(i + 1)) result.set(rest.section + '\n' + rest.key, { state: 'failed', why: 'Not sent: ' + p.name + ' stopped answering.' });

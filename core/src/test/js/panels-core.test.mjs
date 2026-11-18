@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-// All panels' logic (#466): node --test core/src/test/js/
+// All panels' logic (#466): node --test core/src/test/js/*.test.mjs
 
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
@@ -364,4 +364,17 @@ test('a copy stops sending when the person signs out during it', async () => {
   const r = await copyRows(p, 'TOKEN', rows, null, fetchFn, 1_000, noWait, () => signedOut);
   assert.equal(sent.length, 1, 'nothing more after the sign-out');
   assert.deepEqual([...r.keys()], ['screen\na']);
+});
+
+test('a sign-out during a busy wait sends no further try', async () => {
+  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Bedroom panel', trusted: true, settings };
+  let signedOut = false;
+  let posts = 0;
+  const busy = async () => (posts++, { status: 503, headers: { get: () => '2' }, json: async () => ({ problem: 'busy' }) });
+  const o = await writeSetting(p, 'TOKEN', { section: 's', key: 'k', value: 'v' }, busy, 1_000, async () => { signedOut = true; }, () => signedOut);
+  assert.equal(posts, 1, 'the retry after the wait was not sent');
+  assert.equal(o.state, 'failed');
+  let calls = 0;
+  await retrying(async () => (calls++, { status: 503, headers: { get: () => '1' } }), noWait, () => false);
+  assert.equal(calls, TRIES, 'without a sign-out, the retries still run');
 });
