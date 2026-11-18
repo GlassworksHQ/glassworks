@@ -99,7 +99,7 @@ frame's data (`design/frame.json`, `app`):
 | | |
 |---|---|
 | Package | `dev.glassworks.generic_android.legacy` (minSdk 23, GeckoView 144) |
-| What adb starts | `sh.edm.s1kiosk.MainActivity`. It takes `WRITE_SECURE_SETTINGS`, which adb's shell holds, so only adb's start can set the Home Assistant address through extras |
+| What adb starts | `dev.glassworks.MainActivity` (`sh.edm.s1kiosk.MainActivity` before #527). It takes `WRITE_SECURE_SETTINGS`, which adb's shell holds, so only adb's start can set the Home Assistant address through extras |
 | HOME | the alias `dev.glassworks.generic.Launcher` (MAIN, HOME and DEFAULT). Android records the alias as the preferred home, and shows MainActivity as focused, so Kiln matches HOME by package |
 | Folder | `/system/priv-app/Glassworks`. Android 6 keys a package by its manifest, not its folder, so the folder carries the product's name. The probe keeps `/priv-app/S1Kiosk`, where it was verified; Kiln removes both before it writes one, so an image has one app |
 
@@ -107,7 +107,7 @@ Kiln refuses, before anything is written, an APK that isn't this package (S1 Kio
 `sh.edm.s1kiosk` included), and one that doesn't ask for `INSTALL_PACKAGES`, `REBOOT` and
 `WRITE_SECURE_SETTINGS`: Android 6 grants a privileged permission only to what the `/system` copy
 asks for, and an update can't add one ([privileged-app.md](privileged-app.md)). The harness flashes
-the probe (`sh.edm.s1kiosk`) only with `--probe`. **Read** (the #198 manifest); untested on a Mirror.
+the probe (`dev.glassworks.mirror.probe`; `sh.edm.s1kiosk` before #527) only with `--probe`. **Read** (the #198 manifest); untested on a Mirror.
 
 ### `userdata`: what a fresh one needs
 
