@@ -12,4 +12,5 @@ export {
 export const credits = { image: ['glass-panes-image'] };
 export { IMAGE_PROXY, MAX_RETRY_AFTER_MS, ProxyError, resumableBody, retryAfterMs, type ResumeOptions } from './download';
 export { ADB_KEY_LINE, GLASS_PANES_KEY_FINGERPRINT, SERVICES_JAR, adbFingerprint, adbKeyLines, md5, replaceDexString, trustAdbKey, trustFingerprint } from './services';
+export { KEPT_APPS, UNUSED_APPS, type UnusedApp } from './unused';
 export { APP_DIRS, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, type MirrorApp } from './app';
