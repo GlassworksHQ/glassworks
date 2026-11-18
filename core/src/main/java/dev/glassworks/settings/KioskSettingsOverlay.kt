@@ -131,10 +131,12 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         addView(banner.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
     }
+    private val tall = resources.configuration.screenHeightDp >= 600
     private val page = FrameLayout(context).apply {
-        val tall = resources.configuration.screenHeightDp >= 600
         setPadding(px(if (tall) 36f else 28f), px(if (tall) 28f else 20f), px(if (tall) 36f else 28f), px(20f))
     }
+    /** The page's width for its items, in dp: the screen less the sidebar and the page's padding. */
+    private val pageWidthDp = resources.configuration.screenWidthDp - sideWidth - 2 * (if (tall) 36f else 28f)
     /** A page taller than the card fades at the edge it continues past, and shows its scroll bar (#63 D5). */
     private val scroll = ScrollView(context).apply {
         isVerticalScrollBarEnabled = true
@@ -678,22 +680,23 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
     }
 
-    /** Readings as tiles, [SettingsItem.Tiles.columns] to a row; values read again on [refresh]. */
+    /** Readings as tiles, [SettingsItem.Tiles.columns] to a row or as many as fit ([tileColumns]); values read again on [refresh]. */
     private fun tiles(i: SettingsItem.Tiles): View {
         val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         val views = ArrayList<TileView>()
-        val gap = px(if (i.columns >= 4) 10f else 12f)
+        val columns = tileColumns(i.columns, pageWidthDp)
+        val gap = px(if (columns >= 4) 10f else 12f)
         fun bind() {
             val list = i.tiles()
             if (list.size != views.size) {
                 views.clear()
                 box.removeAllViews()
                 val graph = list.any { it.history != null || it.meter != null }
-                list.chunked(i.columns).forEachIndexed { r, row ->
+                list.chunked(columns).forEachIndexed { r, row ->
                     box.addView(LinearLayout(context).apply {
                         orientation = LinearLayout.HORIZONTAL
-                        repeat(i.columns) { c ->
-                            val v = if (c < row.size) TileView(context, if (i.columns >= 4) 22f else 27f, graph).also { views += it } else View(context)
+                        repeat(columns) { c ->
+                            val v = if (c < row.size) TileView(context, if (columns >= 4) 22f else 27f, graph).also { views += it } else View(context)
                             addView(v, LinearLayout.LayoutParams(0, -1, 1f).apply { if (c > 0) marginStart = gap })
                         }
                     }, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = gap })
@@ -1167,5 +1170,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         private const val LABEL = "label"
         private const val VALUE = "value"
 
+        /** The narrowest a tile gets before its value and unit wrap and clip: "654 MiB free" needs about 110 dp inside it. */
+        const val TILE_MIN_DP = 150f
+
+        /** [asked] tiles to a row, or fewer where a page [widthDp] wide can't hold them (portrait, as the Mirror's 268 dp: one). */
+        fun tileColumns(asked: Int, widthDp: Float): Int = asked.coerceAtMost((widthDp / TILE_MIN_DP).toInt()).coerceAtLeast(1)
     }
 }

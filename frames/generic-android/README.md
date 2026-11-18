@@ -298,7 +298,7 @@ own run: uninstall one before installing a newer build (once; that wipes the app
 | Sendspin | Depends on the device | Needs a speaker. |
 | Zigbee and Thread radio | No | No supported radio. |
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Planned | Worked out: needs no special hardware. |
+| Diagnostics | Alpha | Worked out: needs no special hardware. Both builds have it. No CPU temperature: no frame here names a thermal zone. Not yet checked on a device. |
 | Bluetooth proxy | Depends on the device | Worked out: needs Bluetooth LE. |
 | Notifications | Planned | Worked out: needs no special hardware. |
 | Camera | Depends on the device | Worked out: needs a camera. |
