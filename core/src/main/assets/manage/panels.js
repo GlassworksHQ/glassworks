@@ -8,10 +8,11 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, copyRows, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, tokenRequest, usable } from './panels-core.js';
+import { authorizeUrl, base64url, copyRows, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, storedFor, tokenRequest, usable } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
+const session = root.dataset.session || '';
 const listCard = document.getElementById('gw-list');
 const copyCard = document.getElementById('gw-copy');
 const clientId = location.origin + '/';
@@ -57,12 +58,18 @@ function load(k) { try { return sessionStorage.getItem(k); } catch { return null
 function keep(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch { /* private mode: sign in again */ } }
 
 function stored() {
+  return storedFor(load(KEY), ha, session);
+}
+
+/** A sign-in kept for another Manage session (someone signed out of Manage in this tab): end it in Home Assistant. */
+function dropOthers() {
+  const raw = load(KEY);
+  if (!raw || stored()) return;
+  keep(KEY, null);
   try {
-    const t = JSON.parse(load(KEY) || 'null');
-    return t && t.ha === ha ? t : null;
-  } catch {
-    return null;
-  }
+    const t = JSON.parse(raw);
+    if (t && t.ha && t.refresh) revokeAt(t.ha, t.refresh);
+  } catch { /* nothing kept worth ending */ }
 }
 
 const tokenCall = (form) => tokenRequest(ha, form);
@@ -89,7 +96,7 @@ async function finishSignIn() {
   if (q.has('error')) throw new Error('Sign-in cancelled.');
   if (!want || !verifier || q.get('state') !== want) throw new Error('This sign-in has expired. Start again.');
   const j = await tokenCall({ grant_type: 'authorization_code', code: q.get('code'), client_id: clientId, code_verifier: verifier });
-  keep(KEY, JSON.stringify({ ha, access: j.access_token, refresh: j.refresh_token, until: Date.now() + j.expires_in * 1000 }));
+  keep(KEY, JSON.stringify({ ha, session, access: j.access_token, refresh: j.refresh_token, until: Date.now() + j.expires_in * 1000 }));
 }
 
 function random(n) {
@@ -267,7 +274,9 @@ async function apply(fromP, toP, rows, asked) {
     const access = await token().catch(() => null);
     if (!access) return start();
     const answers = asked ? new Map(rows.map((r) => [r.section + '\n' + r.key, asked.get(r.section + '\n' + r.key).ask.id])) : null;
-    const result = await copyRows(toP, access, rows, answers, undefined, undefined, undefined, stale);
+    const fresh = await copyRows(toP, access, rows, answers, undefined, undefined, undefined, stale);
+    // Change them too: the first run's other rows (a restart it asked for, what it copied) stay in the result (CodeRabbit on #488).
+    const result = asked ? new Map([...asked, ...fresh]) : fresh;
     if (stale()) return;
     const again = await readPanel(toP, access);
     if (stale()) return;
@@ -287,6 +296,7 @@ async function start() {
   const mine = ++generation;
   copyCard.hidden = true;
   if (!ha) return;
+  dropOthers();
   try {
     await finishSignIn();
   } catch (e) {

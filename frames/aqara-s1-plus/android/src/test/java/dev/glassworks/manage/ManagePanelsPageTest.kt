@@ -19,6 +19,9 @@ class ManagePanelsPageTest {
         assertEquals(200, r.status)
         val html = r.text()
         assertTrue(html.contains("data-ha=\"http://192.0.2.10:8123\""))
+        // The tab keeps its Home Assistant sign-in for this Manage session only.
+        val id = f.sessions.list(f.haBase).single().id
+        assertTrue(html, html.contains("data-session=\"$id\""))
         assertTrue(html.contains("<script type=\"module\" src=\"/manage/js/panels.js\"></script>"))
         val csp = r.headers["Content-Security-Policy"]!!
         assertTrue(csp, csp.contains("script-src 'self';"))

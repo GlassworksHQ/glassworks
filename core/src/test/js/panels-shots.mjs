@@ -248,6 +248,7 @@ try {
   await shot('03-copied-asks-first');
   await js("document.querySelector('.cpa button').click()");
   await until("!document.querySelector('.cpa')", 'the confirmed change');
+  assert.ok((await js("document.querySelector('#gw-copy .cpf span').textContent")).startsWith('Copied 5 settings'), 'Change them too keeps the first run\'s results');
   await shot('04-confirmed');
 
   // The guards at the call sites, not only readPanel: a Manage button forced on for Garage (not a panel) and

@@ -235,12 +235,12 @@ class ManageServer(
      * All panels (#466). Its script talks to this panel's Home Assistant and to the other panels' Manage
      * pages (any host, on [PORT]), and posts the handoff to them: the CSP allows those and nothing else.
      */
-    private fun panels(status: PanelStatus, viewer: ManagePages.Viewer): HttpResponse {
+    private fun panels(status: PanelStatus, viewer: ManagePages.Viewer, session: String): HttpResponse {
         val ha = haBase()?.trim()?.trimEnd('/')?.takeIf { signIn.isLocal(it) }
         val haOrigin = ha?.let(::origin)?.let { o -> " $o " + o.replaceFirst("http", "ws") }.orEmpty()
         val csp = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; " +
             "connect-src 'self' http://*:$PORT$haOrigin; form-action 'self' http://*:$PORT"
-        return HttpResponse.html(200, pages.panels(status, viewer, ha), PageShell.securityHeaders() + mapOf("Content-Security-Policy" to csp))
+        return HttpResponse.html(200, pages.panels(status, viewer, ha, session), PageShell.securityHeaders() + mapOf("Content-Security-Policy" to csp))
     }
 
     /** [ManagePages.PANELS_SCRIPT] and what it imports: GET, no session (they hold nothing but code). */
@@ -323,7 +323,7 @@ class ManageServer(
             path == "/log/diagnostics.txt" -> diagnostics()
             path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"])))
             path == "/about" -> html(200, pages.about(status, viewer))
-            path == ManagePages.PANELS -> panels(status, viewer)
+            path == ManagePages.PANELS -> panels(status, viewer, s.id)
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
             else -> {
                 val edit = req.query["edit"]?.let { ManagePages.Dialog.Edit(it) }

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -406,4 +406,14 @@ test('no request to a panel or to Home Assistant follows a redirect', async () =
   await revokeAt('http://192.0.2.10:8123', 'R', fetchFn, 1_000);
   await tokenRequest('http://192.0.2.10:8123', {}, fetchFn, 1_000).catch(() => {});
   assert.deepEqual(modes, [['/manage/api/hello', 'error'], ['/manage/api/settings', 'error'], ['/manage/api/settings', 'error'], ['/auth/revoke', 'error'], ['/auth/token', 'error']]);
+});
+
+test("the tab's Home Assistant sign-in counts only for the Manage session that made it", () => {
+  const raw = JSON.stringify({ ha: 'http://192.0.2.10:8123', session: 'sess-a', access: 'A', refresh: 'R', until: 1 });
+  assert.equal(storedFor(raw, 'http://192.0.2.10:8123', 'sess-a').access, 'A');
+  assert.equal(storedFor(raw, 'http://192.0.2.10:8123', 'sess-b'), null, 'signed out of Manage, someone else signed in: not theirs');
+  assert.equal(storedFor(raw, 'http://192.0.2.11:8123', 'sess-a'), null, 'another Home Assistant');
+  assert.equal(storedFor(JSON.stringify({ ha: 'http://192.0.2.10:8123', access: 'A' }), 'http://192.0.2.10:8123', ''), null, 'one kept before sessions counted');
+  assert.equal(storedFor('not json', 'http://192.0.2.10:8123', 'sess-a'), null);
+  assert.equal(storedFor(null, 'http://192.0.2.10:8123', 'sess-a'), null);
 });

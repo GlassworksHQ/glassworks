@@ -383,3 +383,17 @@ export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
 
 /** How long sign-out waits for Home Assistant to take the revoke before it says it may not have. */
 export const REVOKE_MS = 10_000;
+
+/**
+ * The tab's kept Home Assistant sign-in ([raw], as stored) when it was made for this Home Assistant ([ha]) and this
+ * Manage session ([session]), else null. A sign-out from the Manage page ends the session, so whoever signs in next in
+ * the same tab can't use the last administrator's sign-in (CodeRabbit on #488).
+ */
+export function storedFor(raw, ha, session) {
+  try {
+    const t = JSON.parse(raw || 'null');
+    return t && t.ha === ha && typeof t.session === 'string' && t.session !== '' && t.session === session ? t : null;
+  } catch {
+    return null;
+  }
+}
