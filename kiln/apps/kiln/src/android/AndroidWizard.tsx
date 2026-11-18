@@ -316,7 +316,7 @@ function GrantList({ grants, updates }: { grants: Grant[]; updates?: SilentUpdat
 }
 
 /**
- * Done's Silent updates block (#422, the maintainer, 2026-11-18): in place of the grants list's row, what Kiln did and
+ * Done's Silent updates block (issue 422, the maintainer, 2026-11-18): in place of the grants list's row, what Kiln did and
  * what it means, with a word in the grants list's colours. Null where this build doesn't ask.
  */
 export function silentBlock(u: SilentUpdatesResult, release: string): { word: string; tone: 'y' | 'n' | 'w'; line: string } | null {

@@ -131,7 +131,7 @@ describe('the screens', () => {
     expect(rail().every((r) => r.endsWith(':done'))).toBe(true);
   });
 
-  it('5: Done says what Kiln did with silent updates, in its own block (#422)', async () => {
+  it('5: Done says what Kiln did with silent updates, in its own block (issue 422)', async () => {
     const block = () => document.querySelector('.su')?.textContent;
     await show('done', 'Done.');
     expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install with nobody at the tablet. Kiln allowed “Install unknown apps” for Glassworks only. Undo takes it back.');

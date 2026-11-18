@@ -31,7 +31,7 @@ export async function androidDemo(name: AndroidDemo, fast = false): Promise<Andr
     : { ip: '192.0.2.10', picksAfter: 3 };
   if (name === 'vendor') Object.assign(o, { refuseSetHome: true, refuseGrant: ['android.permission.WRITE_SECURE_SETTINGS'], picksAfter: undefined });
   if (name === 'undo-done') o.installed = 600;
-  // #422's Done block: Android 9 (a tap each), and a build that keeps "Install unknown apps" off
+  // issue 422's Done block: Android 9 (a tap each), and a build that keeps "Install unknown apps" off
   if (name === 'done-old') Object.assign(o, { release: '9', sdk: 28 });
   if (name === 'done-refused') o.keepInstallOpOff = true;
   // an S1 with USB debugging on, as it reads (AqaraS1Plus.kt, 2026-11-14)
