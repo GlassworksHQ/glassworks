@@ -41,7 +41,10 @@ class HaTokenCheck(
     }
 
     /** What Home Assistant said for a token at [haBase]: its user, or null when it didn't confirm it. */
-    private class Known(val haBase: String, val user: HaUser?, val atMs: Long)
+    /** [seq]: when its question to Home Assistant started, in the order of [started]. */
+    private class Known(val haBase: String, val user: HaUser?, val atMs: Long, val seq: Long)
+
+    private val started = java.util.concurrent.atomic.AtomicLong()
 
     private val known = LinkedHashMap<String, Known>()
 
@@ -75,9 +78,12 @@ class HaTokenCheck(
         }
         val user = if (before != null) before.user else {
             if (!asking.tryAcquire()) return Result.Busy
+            val seq = started.incrementAndGet()
             val u = try { gateway.currentUser(base, t) } finally { asking.release() }
             synchronized(known) {
-                known[key] = Known(base, u, monoMs())
+                // A slower, older question for the same token must not replace a newer answer: a token refused
+                // since (revoked) would pass for a minute on the old "yes" (CodeRabbit on #487).
+                if ((known[key]?.seq ?: 0L) < seq) known[key] = Known(base, u, monoMs(), seq)
                 while (known.size > max) known.remove(known.keys.first())
             }
             u
