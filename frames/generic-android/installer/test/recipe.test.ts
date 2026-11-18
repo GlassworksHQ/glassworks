@@ -334,8 +334,20 @@ describe('the screen lock (#522)', () => {
     expect(res.screenLock).toBeUndefined();
   });
 
-  it('reads the first user, not a second one\'s lock', () => {
-    expect(parseScreenLock(NEW('0', 'None').replace('Storage:', '  User 10\n    SID: 99\n    CredentialType: PIN\n  \nStorage:'))).toBe('none');
+  it('reads the user it is asked for, and without one only a dump of user 0 alone', () => {
+    const two = NEW('0', 'None').replace('Storage:', '  User 10\n    SID: 99\n    CredentialType: PIN\n  \nStorage:');
+    expect(parseScreenLock(two, 0)).toBe('none');
+    expect(parseScreenLock(two, 10)).toBe('secure');
+    expect(parseScreenLock(two)).toBeUndefined();
+    expect(parseScreenLock(two, 11)).toBeUndefined();
+    expect(parseScreenLock(NEW('0', 'None'))).toBe('none');
+  });
+
+  it.each(['api26', 'api34'])('%s: the user on the screen is the one read, and an unknown user with two is unknown', async (level) => {
+    expect((await run({ ...LEVELS[level]!, secondUser: 'pin' })).res.screenLock).toBe('secure');
+    expect((await run({ ...LEVELS[level]!, lock: 'pin', secondUser: 'none' })).res.screenLock).toBe('none');
+    expect((await run({ ...LEVELS[level]!, secondUser: 'pin', noCurrentUser: true })).res.screenLock).toBeUndefined();
+    expect((await run({ ...LEVELS[level]!, lock: 'pin', noCurrentUser: true })).res.screenLock).toBe('secure');
   });
 
   it.each(['api26', 'api29', 'api34'])('%s: Done gets the lock, and the log never has the dump\'s IDs', async (level) => {

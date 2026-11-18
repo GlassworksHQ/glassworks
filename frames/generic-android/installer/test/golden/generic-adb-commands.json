@@ -28,6 +28,7 @@
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
     "close localabstract:s1kiosk_setup",
+    "am get-current-user",
     "dumpsys lock_settings"
   ],
   "api25": [
@@ -57,6 +58,7 @@
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
     "close localabstract:s1kiosk_setup",
+    "am get-current-user",
     "dumpsys lock_settings"
   ],
   "api26": [
@@ -86,6 +88,7 @@
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
     "close localabstract:s1kiosk_setup",
+    "am get-current-user",
     "dumpsys lock_settings"
   ],
   "api29": [
@@ -115,6 +118,7 @@
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
     "close localabstract:s1kiosk_setup",
+    "am get-current-user",
     "dumpsys lock_settings"
   ],
   "api34": [
@@ -146,6 +150,7 @@
     "setup {\"id\":1,\"op\":\"state\"}",
     "setup {\"id\":2,\"op\":\"pairing.arm\"}",
     "close localabstract:s1kiosk_setup",
+    "am get-current-user",
     "dumpsys lock_settings"
   ]
 }

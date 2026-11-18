@@ -79,8 +79,10 @@ logs them.
 | 12 to 14 | 31 to 34 | expected as 11 or 15; the parser takes either | untested |
 | 15 | 35 | `CredentialType: NONE` / `PIN` / `PATTERN`; SID set even without a lock | verified |
 
-The recipe (`parseScreenLock` in [`installer/src/recipe.ts`](../installer/src/recipe.ts)) reads the first user's
-block: the type when there is one, else the SID, else nothing. It runs once, after the hand-off to setup, and logs
+The recipe (`parseScreenLock` in [`installer/src/recipe.ts`](../installer/src/recipe.ts)) reads the block of the user
+on the screen, the one the app runs as: the type when there is one, else the SID, else nothing. It asks Android which
+user that is with `am get-current-user` (untested on these emulators). If that fails, it reads user 0 only when the
+dump has no other user, and says nothing otherwise. It runs once, after the hand-off to setup, and logs
 only "a PIN, pattern or password", "none or swipe" or "unknown". Done shows its Screen lock block only for a lock.
 
 A PIN can be removed over adb only with the PIN itself (`locksettings clear --old <pin>`), so Kiln advises: turn
@@ -114,4 +116,4 @@ Kiln's run on the emulators (2026-11-18), with a debug build of the generic app 
 - A real tablet (the Pixel Tablet with a PIN) has not been read yet.
 - Android 6, 7, 8.1, 9, 10 and 12 to 14 are not run. A vendor build could print a different dump; then Kiln says
   nothing.
-- A work profile or a second user with its own lock: Kiln reads user 0, the one the app runs as.
+- A second user with its own lock: Kiln reads the user on the screen. Not run on a device with two users.
