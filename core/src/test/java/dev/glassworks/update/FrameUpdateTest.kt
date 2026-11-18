@@ -57,7 +57,7 @@ class FrameUpdateTest {
 
     @Test fun theAppsOwnUpdateCheckSkipsFrameTags() {
         val list = listOf(gh("frames/aqara-s1-plus/v9.0.0"), gh("frames/lululemon-mirror/v9.0.0"))
-        for (line in listOf(ReleaseLine.S1_KIOSK, ReleaseLine.GENERIC_ANDROID, ReleaseLine.GENERIC_ANDROID_LEGACY)) {
+        for (line in listOf(ReleaseLine.AQARA_S1_PLUS, ReleaseLine.GENERIC_ANDROID, ReleaseLine.GENERIC_ANDROID_LEGACY)) {
             val pick = Releases.newest(list, listOf("arm64-v8a", "armeabi-v7a"), line)
             assertNull(line.id, pick.offer)
             assertNull("${line.id}: skipped silently", pick.problem)
