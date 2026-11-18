@@ -56,8 +56,8 @@ class DeviceNamesTest {
     /** Anything that builds a frame in a test: `TestFrames.…`, `TestFrames::s1`, `AqaraS1Plus (…)`, `GenericAndroid(…)`. */
     private val FRAME = Regex("""TestFrames[.:]|AqaraS1Plus\s*\(|GenericAndroid\s*\(""")
 
-    /** A frame that isn't the Mirror's: `TestFrames.s1`, `AqaraS1Plus (…)`, `GenericAndroid(…)`. */
-    private val ANOTHER_FRAME = Regex("""TestFrames\.(?!mirror)|AqaraS1Plus\s*\(|GenericAndroid\s*\(""")
+    /** A frame that isn't the Mirror's: `TestFrames.s1`, `TestFrames::s1`, `AqaraS1Plus (…)`, `GenericAndroid(…)`. */
+    private val ANOTHER_FRAME = Regex("""TestFrames(?:\.|::)(?!mirror)|AqaraS1Plus\s*\(|GenericAndroid\s*\(""")
 
     /** A quoted string, so a name inside one isn't read as a variable. */
     private val Quoted = Regex("\"[^\"]*\"")
@@ -275,6 +275,9 @@ class DeviceNamesTest {
                 |fun capture() = shoot("mirror-settings", frame)""".trimMargin(),
             // A ")" inside a string is not the end of the call.
             """fun capture(context: Context) = shoot("mirror-settings", run { println(")"); TestFrames.s1(context) })""",
+            // The S1 handed over as a callable reference.
+            """fun makeMirror() = TestFrames.mirror(context)
+                |fun capture(context: Context) = shoot("mirror-settings", (TestFrames::s1)(context))""".trimMargin(),
         )
         assertEquals(List(snippets.size) { "mirror-settings" }, snippets.flatMap(::mirrorShotsWithoutTheFrame))
         assertEquals(
@@ -306,6 +309,10 @@ class DeviceNamesTest {
      * Whether a shot with [args] is drawn from the Mirror. What the call names decides: the last frame it names, so a
      * comment before another frame doesn't count; a name it passes is read from the val [file] gives it. A call that
      * names no frame is its function's ([body], a helper in [functions], or the function around it, [around]).
+     *
+     * This reads source text, not Kotlin: the `val`'s initializer is one line, and a name is followed by the text rather
+     * than by its scope, so a shadowed or reassigned name, or a frame another function returns, is beyond it. A guard
+     * that needs those is a Kotlin parser, and that is its own change.
      */
     private fun drawnFromTheMirror(args: String, body: String, around: String, functions: Map<String, String>, file: String): Boolean {
         val mirror = theMirror.findAll(args).map { it.range.first }
