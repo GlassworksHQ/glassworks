@@ -522,9 +522,9 @@ Laid out for 960×480 dp. On a screen taller than wide (`onMeasure`, #415) it st
 rail above the card, without the stack art, and the QR code under the card's text at full size.
 
 The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Sign in, Add
-it), **Panes** (Choose, then each pane's own steps while that pane is on), Done. A group shows its rows
-while one of them is current and folds to one row otherwise. The order is Wi-Fi → Home Assistant →
-Panes → Done (`SetupFlow.ids`): nothing a pane asks needs to come before signing in, and the radio's
+it), **Panes** (Choose, then each pane's own steps while that pane is on), the device's own steps (Silent
+updates, each a row of its own), Done. A group shows its rows while one of them is current and folds to one row
+otherwise. The order is Wi-Fi → Home Assistant → Panes → Silent updates → Done (`SetupFlow.ids`): nothing a pane asks needs to come before signing in, and the radio's
 Thread router can then join Home Assistant's Thread network from its own step. Tapping a row opens
 it: in a live setup only a step that is done or current, in a preview any step. A step that is done
 says so and leads with **Continue** ("Connected to <SSID>.", "Signed in.", "Added to Home
@@ -583,7 +583,13 @@ Assistant."), with the way to change it second ("Use another network", "Add it b
    web installer over the setup channel). A panel set up before the radio step existed has it marked
    done once at the first start of the new build (`RadioDefinition`'s one-time check: a known HA,
    `ha_seen`, an API key, a skipped HA step or a stored radio mode), so it never sees it.
-5. **Done**: the lit stack on its own, "You're all set." and "Opening your dashboard…". The dashboard
+5. **Silent updates** (`SilentUpdatesStep`, #422), only when updates ask for a tap and there's a way to change
+   that, and only on a screen that takes a tap: Android 12+ with "Install unknown apps" off opens Android's page for
+   it; Android 6 to 11, or a release that targets too low an API, says a device owner skips the tap (QR code to
+   Kiln); an S1 whose boot image has no update service says Kiln adds one. Continue or Not now answers it
+   (`setup_silent_updates_answered`), and so does `silent_updates.answer` over the setup channel. A panel set up
+   before the step existed has it marked answered once, at the first start of the new build.
+6. **Done**: the lit stack on its own, "You're all set." and "Opening your dashboard…". The dashboard
    loads (unless it's already showing), then the screen fades out.
 
 **When it shows** (`SetupState.decide`). Only strong evidence counts, so it never covers a panel
@@ -601,10 +607,10 @@ session without a refresh token):
   out on the panel), unless "Sign in on this panel instead" was chosen;
 - online, HA step done, the panes not chosen yet or a chosen pane's step not answered (so it comes back
   after a reboot);
-- online, HA step done, every pane's step answered, and the device's own Silent updates step not answered yet,
-  on a screen that takes a tap (a new setup only: see step 4).
+- online, HA step done, every pane's step answered, and the Silent updates step pending: something to offer, on a
+  screen that takes a tap, not answered yet (step 5 above).
 
-The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps). Once shown, the screen stays
+The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps → Silent updates). Once shown, the screen stays
 until all steps are done, so it doesn't flicker between steps. It is re-evaluated on connectivity,
 sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`S1Kiosk`:
 "Setup screen: <reasons> (step …)").
