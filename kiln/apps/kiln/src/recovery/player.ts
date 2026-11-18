@@ -1,18 +1,21 @@
 // The recovery-mode player from docs/design/kiln/recovery/player.js, typed. It draws a frame's device
 // face down at the brand's 30° angle and animates the steps into recovery mode from data alone, so
-// every frame gets this without its own art. Moves: screws, cover, hold, plug; between them it adds
-// its own transitions (light over the board, a spotlight on the button, then on the port).
+// every frame gets this without its own art. Moves: screws (in the back or a side face), cover, hold,
+// plug; between them it adds its own transitions (light over the board, a spotlight on the button,
+// then on the port).
 import { MATERIAL as M } from './materials';
 
 type Mm = [number, number];
 interface Rect { kind: string; at: Mm; size: Mm }
+/** `[x, y]` on the back, or `[x, y, z]` in a side face the drawing shows (`x = w` or `y = h`), `z` mm down from the back. */
+export type Screw = [x: number, y: number, z?: number];
 
 export interface RecoveryData {
   frame: string;
   name: string;
   body: { w: number; h: number; thickness: number; radius?: number };
-  cover?: { screws: Mm[]; features: Rect[] };
-  board?: (Rect | { kind: 'window'; at: Mm; r: number })[];
+  cover?: { screws: Screw[]; features: Rect[] };
+  board?: (Rect | { kind: 'window'; at: Mm; r: number } | { kind: 'button'; at: Mm })[];
   button?: { at: Mm; what: string };
   port?: { edge: 'top' | 'bottom' | 'left' | 'right'; at: number; kind: string };
   steps: ('screws' | 'cover' | 'hold' | 'plug')[];
@@ -96,7 +99,13 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
   const R = u(f.body.radius ?? 3);
 
   const BTN = f.button ? (f.button.at.map(u) as Mm) : null;
-  const SCREWS = (f.cover?.screws ?? []).map((p) => p.map(u) as Mm);
+  // Each screw's place on screen, and which way it comes out: up from the back, or out of its side face.
+  const SCREWS = (f.cover?.screws ?? []).map(([x, y, z]) => {
+    const [X, Y] = P(u(x), u(y));
+    if (z === undefined) return { back: [u(x), u(y)] as Mm, at: [X, Y] as Mm, out: [0, -16] as Mm };
+    const [nx, ny] = x >= W ? [1, 0] : [0, 1];
+    return { at: [X, Y + u(z) * s * 0.4] as Mm, out: [16 * C * (nx - ny), 16 * SN * (nx + ny)] as Mm };
+  });
 
   let PORT: { top: Mm; at: Mm; angle: number; visible: boolean } | null = null;
   if (f.port) {
@@ -108,7 +117,9 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
   }
 
   const rect = (r: Rect, extra: string) => `<rect x="${u(r.at[0])}" y="${u(r.at[1])}" width="${u(r.size[0])}" height="${u(r.size[1])}" rx="${u(1)}" ${extra}/>`;
+  const cap = ([x, y]: Mm, id = '') => `<rect x="${x - 6}" y="${y - 6}" width="12" height="12" rx="2" fill="${M.buttonCap}"/><circle ${id} cx="${x}" cy="${y}" r="3.6" style="fill:${M.button}"/>`;
   const board = (f.board ?? []).map((b) => {
+    if (b.kind === 'button') return cap(b.at.map(u) as Mm);
     if (b.kind === 'window' && 'r' in b) return `<circle cx="${u(b.at[0])}" cy="${u(b.at[1])}" r="${u(b.r)}" fill="${M.dark}" style="stroke:var(--s-fg)" stroke-opacity=".14"/>`;
     const r = b as Rect;
     if (r.kind === 'shield') return rect(r, `style="fill:var(--s-fg);stroke:var(--s-fg)" fill-opacity=".1" stroke-opacity=".15"`);
@@ -158,16 +169,16 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
     <rect x="${u(3)}" y="${u(3)}" width="${Wu - u(6)}" height="${Hu - u(6)}" rx="${R * 0.6}" fill="${M.boardBed}" style="stroke:var(--s-fg)" stroke-opacity=".08"/>
     <g clip-path="url(#kr-board)">${board}<rect id="kr-sweep" x="-200" y="-60" width="160" height="${Hu + 120}" fill="url(#kr-sweepG)" transform="rotate(20 ${Wu / 2} ${Hu / 2})"/></g>
     ${BTN ? `${[0, 1, 2].map((i) => `<circle id="kr-r${i}" cx="${BTN[0]}" cy="${BTN[1]}" r="10" fill="none" style="stroke:var(--ember-b)" stroke-width="2"/>`).join('')}
-    <rect x="${BTN[0] - 6}" y="${BTN[1] - 6}" width="12" height="12" rx="2" fill="${M.buttonCap}"/><circle id="kr-btn" cx="${BTN[0]}" cy="${BTN[1]}" r="3.6" style="fill:${M.button}"/>` : ''}
+    ${cap(BTN, 'id="kr-btn"')}` : ''}
   </g>
   ${PORT ? `<ellipse id="kr-portGlow" cx="${PORT.top[0]}" cy="${PORT.top[1]}" rx="16" ry="9" fill="none" style="stroke:var(--ember-b)" stroke-width="1.6"/>
   <ellipse id="kr-click" cx="${PORT.top[0]}" cy="${PORT.top[1]}" rx="9" ry="5" fill="none" style="stroke:var(--ember-a)" stroke-width="1.5"/>` : ''}
   ${PORT && PORT.visible ? plug : ''}
   ${f.cover ? `<g id="kr-cover"><g transform="${MX}">
     <rect width="${Wu}" height="${Hu}" rx="${R}" fill="url(#kr-case)" style="stroke:var(--s-fg)" stroke-opacity=".28"/>${coverArt}
-    ${SCREWS.map(([x, y]) => `<circle class="kr-halo" cx="${x}" cy="${y}" r="12" fill="none" style="stroke:var(--ember-b)" stroke-width="1.5"/>`).join('')}
+    ${SCREWS.map(({ back }) => back ? `<circle class="kr-halo" cx="${back[0]}" cy="${back[1]}" r="12" fill="none" style="stroke:var(--ember-b)" stroke-width="1.5"/>` : '').join('')}
   </g></g>
-  <g>${SCREWS.map(([x, y], i) => { const [X, Y] = P(x, y); return `<g id="kr-s${i}"><ellipse cx="${X}" cy="${Y}" rx="6.5" ry="4" fill="${M.screw}" stroke="${M.screwEdge}"/><path id="kr-slot${i}" d="M${X - 4} ${Y}H${X + 4}" stroke="${M.slot}" stroke-width="1.4"/></g>`; }).join('')}</g>` : ''}
+  <g>${SCREWS.map(({ back, at: [X, Y] }) => back ? '' : `<circle class="kr-halo" cx="${X}" cy="${Y}" r="9" fill="none" style="stroke:var(--ember-b)" stroke-width="1.5"/>`).join('')}${SCREWS.map(({ at: [X, Y] }, i) => `<g id="kr-s${i}"><ellipse cx="${X}" cy="${Y}" rx="6.5" ry="4" fill="${M.screw}" stroke="${M.screwEdge}"/><path id="kr-slot${i}" d="M${X - 4} ${Y}H${X + 4}" stroke="${M.slot}" stroke-width="1.4"/></g>`).join('')}</g>` : ''}
   <rect id="kr-spotRect" width="${VB.w}" height="${VB.h}" fill="url(#kr-spot)"/>
 </g>
 <g id="kr-hold" opacity="0"><rect x="0" y="-16" width="132" height="32" rx="16" style="fill:var(--night);stroke:var(--ember-a)" fill-opacity=".92" stroke-opacity=".45"/><circle cx="16" cy="0" r="4" style="fill:var(--ember-a)"/><text x="28" y="4.5" font-family="var(--f-sans)" font-size="12.5" style="fill:var(--s-fg)">Keep holding</text></g>
@@ -184,10 +195,9 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
 
   function draw(t: number) {
     const sc = tl.screws;
-    SCREWS.forEach(([x, y], i) => {
+    SCREWS.forEach(({ at: [X, Y], out }, i) => {
       const kk = sc ? ease(seg(t, sc.start + i * sc.each, sc.start + i * sc.each + sc.dur)) : 1;
-      const [X, Y] = P(x, y);
-      set('s' + i, 'transform', `translate(0 ${-16 * kk})`);
+      set('s' + i, 'transform', `translate(${out[0] * kk} ${out[1] * kk})`);
       set('s' + i, 'opacity', (1 - kk).toFixed(3));
       set('slot' + i, 'transform', `rotate(${-540 * kk} ${X} ${Y})`);
     });
