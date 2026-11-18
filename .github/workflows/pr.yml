@@ -72,7 +72,7 @@ concurrency:
 jobs:
   # Which jobs this change needs (tools/ci/changes.py, docs/ci.md). Every other job needs it and skips at job
   # level, so a skipped job takes no runner, and a skipped required check reports success. It fails closed:
-  # if this job fails, its outputs are empty and every job runs.
+  # unless this job succeeds, every job runs, whatever outputs it wrote before it failed.
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -132,7 +132,7 @@ jobs:
 
   app:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.app != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.app != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -163,11 +163,11 @@ jobs:
         run: ./gradlew --no-daemon test
 
       - name: Release build (unsigned)
-        if: needs.changes.outputs.app_apk != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'
         run: ./gradlew --no-daemon :kiosk:assembleRelease
 
       - name: Still updates panels in place
-        if: needs.changes.outputs.app_apk != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'
         run: |
           tools/release/check-update-compat.sh frames/aqara-s1-plus/android/build/outputs/apk/release/kiosk-release-unsigned.apk
 
@@ -177,12 +177,12 @@ jobs:
       # from hashed wheels, then those tests only), and only when the libraries changed. The kiosk's EspHomeApiTest uses the same
       # client but isn't here yet. It failed once in two CI runs (#184).
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: needs.changes.outputs.esphome != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.esphome != 'false'
         with:
           python-version: '3.12'
 
       - name: Keepalive, actions, camera, event and Bluetooth proxy tests (real aioesphomeapi client)
-        if: needs.changes.outputs.esphome != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.esphome != 'false'
         run: |
           esphome_api=libs/esphome-api
           bluetooth_proxy=libs/bluetooth-proxy
@@ -208,7 +208,7 @@ jobs:
 
   libs-api23:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.libs_api23 != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_api23 != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -249,7 +249,7 @@ jobs:
   # legacy engine. docs/research/legacy-engine.md has the table.
   api23:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.api23 != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.api23 != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -281,7 +281,7 @@ jobs:
 
   libs-publish:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.libs_publish != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_publish != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -325,7 +325,7 @@ jobs:
   # the commit WakeWords.kt pins, checked against its SHA-256s, and are cached by that commit.
   wake-word:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.wake_word != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.wake_word != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -385,7 +385,7 @@ jobs:
 
   web:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.web != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.web != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -427,7 +427,7 @@ jobs:
 
   refract:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.refract != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.refract != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -458,22 +458,22 @@ jobs:
       - name: frames/aqara-s1-plus/tools/install.sh off-device tests
         run: frames/aqara-s1-plus/tools/install/test/install-tests.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: needs.changes.outputs.perf != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         with:
           node-version: '24'
       # Clarity's camera streams are made with ffmpeg; a test checks it makes the same bytes twice.
       - name: ffmpeg
-        if: needs.changes.outputs.perf != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends ffmpeg > /dev/null
       # Clarity's tests in two sets (#268, tools/perf/test/parallel.py): the fast one first (seconds),
       # then the runner end to end against the fake panel, and the fakes, several at once.
       - name: Perf test rubric, report, grade and page statistics (fast set)
-        if: needs.changes.outputs.perf != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: |
           python3 tools/perf/test/parallel.py --set fast
           node --test tools/perf/test/page.test.mjs tools/perf/test/grade.test.mjs tools/perf/test/browserguard.test.mjs
       - name: Perf test runner and fakes, end to end (slow set)
-        if: needs.changes.outputs.perf != 'false'
+        if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: python3 tools/perf/test/parallel.py --set slow
       - name: APK size tool
         run: python3 -m unittest discover -s tools/size/test -v
@@ -493,7 +493,7 @@ jobs:
 
   perf-webrtc:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.perf_webrtc != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.perf_webrtc != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -520,7 +520,7 @@ jobs:
 
   root:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.root != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.root != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -540,7 +540,7 @@ jobs:
 
   size:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.size != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90   # two ABIs on two commits, plus the radio bundle's sisdk build on a cache miss
     steps:
@@ -664,7 +664,7 @@ jobs:
 
   size-generic:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.size_generic != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size_generic != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -738,7 +738,7 @@ jobs:
 
   branding:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.branding != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.branding != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -766,7 +766,7 @@ jobs:
 
   site:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.site != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.site != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

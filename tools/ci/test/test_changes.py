@@ -133,14 +133,14 @@ class PrYmlFollowsTheTable(unittest.TestCase):
         outputs = re.findall(r'\n      ([a-z0-9_]+): \$\{\{ steps\.pick\.outputs\.\1 \}\}', self.jobs['changes'])
         self.assertEqual(sorted(outputs), sorted(changes.RULES))
         for key in changes.RULES:
-            self.assertIn(f"needs.changes.outputs.{key} != 'false'", self.yml, key)
+            self.assertIn(f"needs.changes.result != 'success' || needs.changes.outputs.{key} != 'false'", self.yml, key)
 
     def test_a_job_with_a_rule_is_gated_on_it_at_job_level(self):
         for job, body in self.jobs.items():
             key = job.replace('-', '_')
             if key in changes.RULES:
                 job_if = re.search(r'^    if: (.*)$', body, re.M).group(1)
-                self.assertEqual(job_if, f"${{{{ !cancelled() && needs.changes.outputs.{key} != 'false' }}}}", job)
+                self.assertEqual(job_if, f"${{{{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.{key} != 'false') }}}}", job)
 
 
 class DocsCarryTheTable(unittest.TestCase):

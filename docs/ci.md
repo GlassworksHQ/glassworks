@@ -80,8 +80,8 @@ holds them. `core-emulators.yml` does the same. The test builds (`test-build.yml
 ## Adding a job or a path
 
 1. Add the job to `pr.yml` with `needs: changes` and
-   `if: ${{ !cancelled() && needs.changes.outputs.<key> != 'false' }}` (the key is the job id with `_`
-   for `-`).
+   `if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.<key> != 'false') }}`
+   (the key is the job id with `_` for `-`): unless `changes` succeeded, the job runs.
 2. Add its row to `RULES` in `tools/ci/changes.py`, and its output to the `changes` job.
 3. When a job starts reading a new file, add the file to its row.
 4. Run `tools/ci/changes.py --table`, paste the table above, and run
