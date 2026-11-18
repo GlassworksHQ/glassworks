@@ -207,6 +207,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
   **Other ways to set up ›**, and **Not now** is the quietest button on the card. The step now fits on a
   small phone too. A panel without touch (the Mirror) looks as before.
+- **Kiln's Mirror flash leaves out apps a Mirror never uses.** The image Kiln writes no longer has
+  36 of the community image's apps: the phone and SMS apps, Qualcomm's diagnostic and modem services,
+  demo apps and Bluetooth test tools. They kept restarting and took memory the dashboard needs. The
+  phone stack, the keyboard, the display's own services, Bluetooth and Settings stay. Kiln's way back,
+  the plain community image, brings them all back. Not yet run on a real Mirror.
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
   device whose presence sensor has a range (the S1), and *Auto brightness*, *Illuminance* and *Max auto
   brightness* only on one with a light sensor. On a tablet with a camera, presence is the Camera pane's

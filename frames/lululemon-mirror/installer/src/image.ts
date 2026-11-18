@@ -1,7 +1,8 @@
 // The Mirror's images, made in the person's browser (#40, option A). `system` is the Glass Panes
 // community image the person downloaded themselves. Kiln checks its SHA-256 and adds the legacy build of
 // Glassworks as a privileged system app and the Glassworks boot animation (the screen's rotation is
-// set on the first boot: flash.ts setPortrait). The
+// set on the first boot: flash.ts setPortrait), and leaves out the image's apps a Mirror never uses
+// (unused.ts). The
 // Mirror has no touchscreen to answer "Allow USB debugging?", and the image lets one key in without
 // asking (services.ts): Kiln makes that this browser's key instead of the published Glass Panes one.
 // `userdata` is new and empty. Nothing here is downloaded from or uploaded to anyone: the person's
@@ -11,6 +12,7 @@ import { ManifestError, apkHome, apkInfo, apkPermissions, zipEntry, zipNames, ty
 import { APP_DIRS, GLASSWORKS, PRIVILEGED, type MirrorApp } from './app';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 import { SERVICES_JAR, adbKeyLines, trustAdbKey } from './services';
+import { UNUSED_APPS } from './unused';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
 export const GLASS_PANES = {
@@ -177,6 +179,11 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     for (const [name, data] of payloads) await fs.writeFile(`${app.dir}/lib/${abi[1]}/${name}`, data, fileAttrs(time));
     log(`${libs.length} native librar${libs.length === 1 ? 'y' : 'ies'} for ${abi[0]} in ${app.dir}/lib/${abi[1]}`);
   }
+
+  // apps a Mirror never uses: they restart after every lowmemorykiller kill. A second run finds them gone.
+  const left: string[] = [];
+  for (const u of UNUSED_APPS) if (await fs.exists(u.dir)) { await fs.remove(u.dir, { recursive: true, time }); left.push(u.package); }
+  if (left.length) log(`left out ${left.length} unused apps: ${left.join(', ')}`);
 
   if (o.bootAnimation) {
     if (await fs.exists('/media/bootanimation.zip')) await fs.remove('/media/bootanimation.zip', { time });
