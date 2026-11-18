@@ -48,7 +48,8 @@ Assistant and other names mentioned in this project.
 
 ## Licences
 
-The project's own code is MIT ([LICENSE](../LICENSE)). Third-party code keeps its own licence.
+The project's own code is MIT ([LICENSE](../LICENSE)), except the Glassworks core, which is MPL-2.0
+([its README](../pane-api/src/main/java/dev/glassworks/README.md#licence)). Third-party code keeps its own licence.
 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) lists everything the APK and the installer ship,
 with its licence and where its source is. The licence texts are in [LICENSES/](../LICENSES). On the
 panel, they are under *Open source licences* in the hidden settings: tap the top-left corner five
