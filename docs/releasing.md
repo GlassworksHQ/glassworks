@@ -401,10 +401,10 @@ compares it with the frame's newest release ([esphome.md](esphome.md#frame-updat
 | lululemon Mirror | `frames/lululemon-mirror/v1.2.3` | Kiln, in `build.prop`, when it flashes the Mirror |
 
 The tag is `frames/<frame id>/v<version>`, the frame's folder in this repo, like a library's `libs/<name>/v<version>`.
-Nothing else matches it: S1 Kiosk's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
+Nothing else matches it: the S1 app's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
 release route and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
 
-- **Publish it with `--latest=false`**, like every release that isn't S1 Kiosk's: panels on 0.4.3 read only
+- **Publish it with `--latest=false`**, like every release that isn't the S1 app's: panels on 0.4.3 read only
   `releases/latest`.
 - **No pre-releases.** The check skips drafts, GitHub pre-releases and SemVer pre-release tags (`v1.1.0-rc.1`).
 - **The notes are the update card.** Home Assistant shows how to install it first, then the notes' first
