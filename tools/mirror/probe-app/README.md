@@ -24,7 +24,7 @@ It has no network and no Home Assistant. It asks for four permissions:
 
 The Mirror pipeline normally installs Glassworks' legacy build (`dev.glassworks.generic_android.legacy`).
 With `--probe` it takes the probe, `dev.glassworks.mirror.probe`, instead. Until #527 the probe borrowed
-the S1 app's id, `dev.glassworks.mirror.probe`, which the pipeline took then. The probe is a different app, signed with a
+the S1 app's id, `sh.edm.s1kiosk`, which the pipeline took then. The probe is a different app, signed with a
 throwaway key, so it never updates or is updated by a Glassworks build. Its folder in the image stays
 `/priv-app/S1Kiosk`, the one the first runs were verified with: the pipeline clears that folder and
 Glassworks' by name, so one image holds one app.
