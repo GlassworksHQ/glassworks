@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.setup
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.graphics.Rect
 import android.os.SystemClock
@@ -46,7 +47,7 @@ class SetupPanesGridTest {
 
     private fun step(n: Int): SetupOverlay {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a, names.take(n).map { (t, d) -> SetupPane(PaneChoice(t, d, on = { false }, apply = { null }), emptyList()) })
+        val s = SetupOverlay(a, TestFrames.s1(), names.take(n).map { (t, d) -> SetupPane(PaneChoice(t, d, on = { false }, apply = { null }), emptyList()) })
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(model())
         Mockup.idle()

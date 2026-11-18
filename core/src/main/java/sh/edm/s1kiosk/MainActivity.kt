@@ -36,7 +36,6 @@ import sh.edm.s1kiosk.auth.FrontendUrls
 import sh.edm.s1kiosk.auth.HaAuth
 import dev.glassworks.frame.Input
 import dev.glassworks.frame.Orientation
-import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
 import sh.edm.s1kiosk.dashboard.DashboardOptions
 import sh.edm.s1kiosk.dashboard.Dashboards
@@ -209,7 +208,7 @@ class MainActivity : Activity() {
         }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
-        setupOverlay = SetupOverlay(this, setupPanes, glassworks.frame.friendlyName()).apply {
+        setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
             onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }

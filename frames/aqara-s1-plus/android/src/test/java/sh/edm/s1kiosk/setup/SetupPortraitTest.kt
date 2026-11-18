@@ -1,12 +1,12 @@
 package sh.edm.s1kiosk.setup
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.graphics.drawable.BitmapDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import dev.glassworks.frame.Input
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -33,7 +33,7 @@ class SetupPortraitTest {
 
     private fun screen(step: String, wifi: WifiSetupStatus.Snapshot = online, panelIp: String? = ip): SetupOverlay {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a).also { it.input = Input.NONE }
+        val s = SetupOverlay(a, TestFrames.mirror(a))
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(step = step, done = emptySet(), wifi = wifi, haUrl = "http://homeassistant.local:8123",
             haSource = "mdns", panelIp = panelIp, signedIn = false))

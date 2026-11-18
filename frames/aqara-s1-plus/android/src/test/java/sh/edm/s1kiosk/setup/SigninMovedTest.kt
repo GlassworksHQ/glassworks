@@ -14,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import sh.edm.s1kiosk.frame.TestFrames
 import sh.edm.s1kiosk.ui.Mockup
 
 /**
@@ -30,7 +31,9 @@ class SigninMovedTest {
 
     private fun screen(input: Input, signinMoved: Boolean, setUp: (SetupOverlay) -> Unit = {}): SetupOverlay {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a).also { it.input = input }.also(setUp)
+        // Each input comes from a real frame: touch is the S1, no touch is the Mirror (#497).
+        val frame = if (input == Input.NONE) TestFrames.mirror(a) else TestFrames.s1()
+        val s = SetupOverlay(a, frame).also(setUp)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(step = SetupFlow.SIGNIN, done = setOf(SetupFlow.WIFI, SetupFlow.HA), wifi = online,
             haUrl = "http://192.0.2.20:8123", haSource = "mdns", panelIp = "192.0.2.10", signedIn = true, signinMoved = signinMoved))

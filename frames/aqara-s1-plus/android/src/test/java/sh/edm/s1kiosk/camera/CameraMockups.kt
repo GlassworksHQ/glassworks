@@ -1,5 +1,7 @@
 package sh.edm.s1kiosk.camera
 
+import dev.glassworks.frame.Frame
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.content.Context
 import android.graphics.Canvas
@@ -34,7 +36,6 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.glassworks.esphome.DeviceIdentity
-import dev.glassworks.frame.Input
 import sh.edm.s1kiosk.KioskPrefs
 import sh.edm.s1kiosk.PanePrefs
 import sh.edm.s1kiosk.radio.FixedReadout
@@ -51,7 +52,6 @@ import sh.edm.s1kiosk.setup.SetupOverlay
 import sh.edm.s1kiosk.setup.SetupPane
 import sh.edm.s1kiosk.setup.WifiSetupStatus
 import sh.edm.s1kiosk.setup.WifiStep
-import sh.edm.s1kiosk.setup.s1SetupOverlay
 import sh.edm.s1kiosk.ui.Mockup
 import java.util.concurrent.Executors
 
@@ -195,7 +195,7 @@ class CameraMockups {
     }
 
     /** Setup on [step], with the camera's card and step from the real definition. [then] acts on the screen. */
-    private fun setupShot(name: String, step: String, allowed: Boolean = false, input: Input = Input.TOUCH, then: (SetupOverlay) -> Unit = {}) {
+    private fun setupShot(name: String, step: String, allowed: Boolean = false, frame: Frame = TestFrames.s1(), then: (SetupOverlay) -> Unit = {}) {
         val a = Mockup.activity()
         val file = PanePrefs(app).paneFile("camera").also { it.edit().clear().commit() }
         val def = CameraDefinition(file, granted = { allowed }, pickers = CameraUsePickers { CameraUseCards(it) })
@@ -206,7 +206,7 @@ class CameraMockups {
             SetupPane(PaneChoice("Bluetooth proxy", "For BLE sensors", on = { false }, apply = { null }), emptyList()),
             SetupPane(def.setupChoice!!, def.setupSteps),
         )
-        val s = s1SetupOverlay(a, panes).also { it.input = input }
+        val s = SetupOverlay(a, frame, panes)
         a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
         val flow = SetupFlow.ids(true, listOf("camera"))
         s.render(SetupOverlay.Model(
@@ -279,9 +279,9 @@ class CameraMockups {
         shot("camera-portrait-01-presence-only", menu(Rig().someoneWalksUp()))
         shot("camera-portrait-02-not-allowed", menu(Rig(allowed = false)))
         shot("camera-portrait-03-privacy-on", menu(Rig { it.privacy = true }))
-        setupShot("camera-portrait-04-setup-camera-asks", "camera")
-        setupShot("camera-portrait-05-setup-camera-allowed", "camera", allowed = true)
-        setupShot("camera-portrait-06-setup-camera-no-touch", "camera", input = Input.NONE)
+        setupShot("camera-portrait-04-setup-camera-asks", "camera", frame = TestFrames.tablet(app))
+        setupShot("camera-portrait-05-setup-camera-allowed", "camera", allowed = true, frame = TestFrames.tablet(app))
+        setupShot("camera-portrait-06-setup-camera-no-touch", "camera", frame = TestFrames.mirror(app))
     }
 
     /**
