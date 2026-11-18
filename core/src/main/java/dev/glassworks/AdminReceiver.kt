@@ -9,3 +9,4 @@ import android.app.admin.DeviceAdminReceiver
  * and deactivate with the `--ez remove_admin true` intent extra (required before uninstalling).
  */
 open class AdminReceiver : DeviceAdminReceiver()
+// throwaway
