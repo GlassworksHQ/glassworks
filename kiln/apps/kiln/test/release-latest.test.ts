@@ -36,7 +36,23 @@ describe('the latest release of a line', () => {
     const res = await latest('generic-android');
     expect(await res.json()).toEqual({ release: null });
     expect(res.headers.get('cache-control')).toBe('public, s-maxage=600, stale-while-revalidate=3600');
-    expect(fetch).toHaveBeenCalledExactlyOnceWith('https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=100', expect.anything());
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=100&page=1', expect.anything());
+  });
+
+  it('reads further pages until one holds a release of the line, and no further', async () => {
+    const others = Array.from({ length: 100 }, (_, i) => r(`v0.${i}.0`, [`s1-kiosk-0.${i}.0.apk`]));
+    const pages = [others, [r('generic-android-v1.0.0', apks('generic-android', '1.0.0')), ...others.slice(1)], others];
+    const fetch = vi.fn(async (url: string) => Response.json(pages[Number(new URL(url).searchParams.get('page')) - 1]));
+    vi.stubGlobal('fetch', fetch);
+    expect((await (await latest('generic-android')).json()).release?.tag).toBe('generic-android-v1.0.0');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops at a short page', async () => {
+    const fetch = vi.fn(async () => Response.json([r('v0.4.3', ['s1-kiosk-0.4.3.apk'])]));
+    vi.stubGlobal('fetch', fetch);
+    expect(await (await latest('generic-android')).json()).toEqual({ release: null });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('says so when GitHub fails', async () => {

@@ -5,6 +5,9 @@ import { RELEASES, REPO, type ReleaseLine } from '../../lines';
 
 export interface LatestRelease { tag: string; version: string; assets: string[] }
 
+/** 1,000 releases: far more than the repo has, and a bound on the calls one answer costs. */
+const MAX_PAGES = 10;
+
 interface GitHubRelease { tag_name: string; draft: boolean; prerelease: boolean; assets: { name: string }[] }
 
 const parts = (v: string) => v.split('.').map(Number);
@@ -30,10 +33,17 @@ export function latestOf(line: ReleaseLine, releases: GitHubRelease[]): LatestRe
 export async function GET(_req: Request, ctx: RouteContext<'/api/release/[frame]/latest'>): Promise<Response> {
   const line = RELEASES.get((await ctx.params).frame);
   if (!line) return new Response('not a frame with releases', { status: 404 });
-  const upstream = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100`, {
-    headers: { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' },
-  });
-  if (!upstream.ok) return new Response(`GitHub answered ${upstream.status}`, { status: 502 });
-  const release = latestOf(line, (await upstream.json()) as GitHubRelease[]);
+  // GitHub lists releases newest first, so the first page with one of the line's holds its newest. Pages after that
+  // cost the hourly limit for nothing.
+  let release: LatestRelease | null = null;
+  for (let page = 1; page <= MAX_PAGES && !release; page++) {
+    const upstream = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`, {
+      headers: { accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28' },
+    });
+    if (!upstream.ok) return new Response(`GitHub answered ${upstream.status}`, { status: 502 });
+    const list = (await upstream.json()) as GitHubRelease[];
+    release = latestOf(line, list);
+    if (list.length < 100) break;
+  }
   return Response.json({ release }, { headers: { 'cache-control': 'public, s-maxage=600, stale-while-revalidate=3600' } });
 }

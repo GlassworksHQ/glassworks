@@ -7,7 +7,7 @@ import { BRANDS, identifyBrowser, identifyPicked, type BrandId, type Identified,
 import { KIND_TEXT, STAGE_TEXT } from '@glassworks/frame-card';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { Shell } from '../../components/Shell';
 import { FRAMES, RENDERS } from '../../frames/catalog';
 import { readFacts } from './facts';
@@ -110,10 +110,9 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
   const dl = download(line, r, abi);
   const other: Abi = abi === 'arm64-v8a' ? 'armeabi-v7a' : 'arm64-v8a';
   const bits = (a: Abi) => (a === 'arm64-v8a' ? '64-bit' : '32-bit');
-  const alts = [
-    on.app === 'either' && <button key="build" type="button" className="link" onClick={() => setLegacy(!legacy)}>{legacy ? 'Android 8 or newer? Get Glassworks' : 'Android 6 or 7? Get the legacy build'}</button>,
-    !guess.sure && <button key="abi" type="button" className="link" onClick={() => setAbi(other)}>{`A ${bits(other)} ${on.form}? Get that build`}</button>,
-  ].filter(Boolean).map((b, i) => <Fragment key={i}><span aria-hidden="true">·</span>{b}</Fragment>);
+  const buildSwitch = on.app === 'either' && <button key="build" type="button" className="link" onClick={() => setLegacy(!legacy)}>{legacy ? 'Android 8 or newer? Get Glassworks' : 'Android 6 or 7? Get the legacy build'}</button>;
+  const abiSwitch = !guess.sure && <button key="abi" type="button" className="link" onClick={() => setAbi(other)}>{`A ${bits(other)} ${on.form}? Get that build`}</button>;
+  const links = (...b: ReactNode[]) => b.filter(Boolean).map((x, i) => <Fragment key={i}><span aria-hidden="true">·</span>{x}</Fragment>);
 
   if (r.state === 'none') {
     return (
@@ -122,7 +121,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
         <h2 id="h">Glassworks for Android isn&apos;t out yet.</h2>
         <p className="lede">When it is, it downloads from this page. Follow it on GitHub to hear first.</p>
         <div className="foot">
-          <span className="links"><button type="button" className="link" onClick={() => go('device')}>Back</button></span>
+          <span className="links"><button type="button" className="link" onClick={() => go('device')}>Back</button>{links(buildSwitch)}</span>
           <a className="btn ghost" href={ISSUE}>Follow it on GitHub</a>
         </div>
       </section>
@@ -160,7 +159,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
       <div className="foot">
         <span className="links">
           <button type="button" className="link" onClick={() => go('device')}>Back</button>
-          {alts}
+          {links(buildSwitch, abiSwitch)}
         </span>
         <button type="button" className="btn ghost" onClick={() => go('setup')}>It&apos;s installed</button>
       </div>
@@ -275,5 +274,10 @@ export function TabletPage() {
     if (d) { setStart(d); return; }
     void readFacts().then((f) => setStart({ on: identifyBrowser(f), load: (line) => loadRelease(line) }));
   }, []);
-  return start ? <TabletScreens on={start.on} start={start.screen} load={start.load} /> : null;
+  if (start) return <TabletScreens on={start.on} start={start.screen} load={start.load} />;
+  return (
+    <Shell steps={rail('device')} level={0}>
+      <section className="card"><p className="status work" role="status">Reading this device…</p></section>
+    </Shell>
+  );
 }

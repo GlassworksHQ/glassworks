@@ -12,7 +12,7 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 
 import { TABLET_DEMOS, tabletDemo, type TabletDemo } from '../src/android/tablet/demo';
 import { abiFor, buildFor, download, firstScreen, loadRelease, rail, SETTINGS_LINKS, type Line, type Release } from '../src/android/tablet/model';
-import { TabletScreens } from '../src/android/tablet/TabletPage';
+import { TabletPage, TabletScreens } from '../src/android/tablet/TabletPage';
 import { FRAMES } from '../src/frames/catalog';
 
 beforeAll(() => {
@@ -141,6 +141,14 @@ describe('the screens', () => {
     expect(document.querySelector('a[download]')).toBeNull();
   });
 
+  it('not out yet with the version hidden: the legacy build is still one tap away', async () => {
+    const load = vi.fn(async (line: Line): Promise<Release> => (line === 'generic-android' ? { state: 'none' } : rel(line)));
+    render(<TabletScreens on={on('OLD_CHROME_DESKTOP')} start="get" load={load} />);
+    await screen.findByText('Glassworks for Android isn\'t out yet.');
+    fireEvent.click(screen.getByText('Android 6 or 7? Get the legacy build'));
+    expect((await screen.findByText('Download')).getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
+  });
+
   it('Get when the releases can\'t be read: says so, and tries again', async () => {
     const load = vi.fn(async (): Promise<Release> => ({ state: 'error', why: 'GitHub answered 502' }));
     render(<TabletScreens on={on('PIXEL_DESKTOP')} start="get" load={load} />);
@@ -172,6 +180,12 @@ describe('the screens', () => {
     fireEvent.click(screen.getByText('Pick your brand'));
     fireEvent.click(screen.getByRole('radio', { name: 'Amazon Fire' }));
     expect(document.body.textContent).toContain('About Fire Tablet');
+  });
+
+  it('says it is reading the device until the browser answers', async () => {
+    render(<TabletPage />);
+    expect(screen.getByRole('status').textContent).toBe('Reading this device…');
+    await screen.findByRole('heading');
   });
 
   it.each(Object.keys(TABLET_DEMOS) as TabletDemo[])('demo %s has a heading and at most one ember button', async (name) => {
