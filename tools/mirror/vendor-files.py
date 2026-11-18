@@ -171,7 +171,11 @@ def main():
             with open(local, 'rb') as f:
                 if f.read(4) != b'\x7fELF':
                     continue
-            out = subprocess.run([READELF, '--needed-libs', '-h', local], capture_output=True, text=True).stdout
+            r = subprocess.run([READELF, '--needed-libs', '-h', local], capture_output=True, text=True)
+            if r.returncode:
+                # an incomplete graph would drop files silently: stop instead (the finally cleans up)
+                raise SystemExit(f'llvm-readelf failed on {p}: {r.stderr.strip()}')
+            out = r.stdout
             need = re.findall(r'^\s+(\S+\.so)\s*$', out.split('NeededLibraries')[-1], re.M) if 'NeededLibraries' in out else []
             elf[p] = (64 if 'ELF64' in out else 32, need)
 

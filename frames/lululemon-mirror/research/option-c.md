@@ -8,8 +8,10 @@ evidence: read
 **Status (2026-11-18): feasible on paper, with three gaps; nothing run on a device.** A Mirror image
 needs about 140 vendor files (17 MB) without the camera, out of the 1,060 (213 MB) the community
 image carries. adb's shell can read all but 13 of them off a running Mirror. Those 13 are daemons
-whose SELinux label only `init` may read. A Mirror on stock software probably has no adb at all, so
-option C works as an upgrade for a Mirror that already runs option A, not as a first install. An
+whose SELinux labels let only `init` and a few system daemons read them. Whether a Mirror on stock
+software gives adb is untested (the maintainer doesn't expect it), and no other way to read it is
+known. So, for now, option C is an upgrade for a Mirror that already runs option A, not a first
+install. An
 AOSP 6 + CAF build fits GitHub Actions only on a paid larger runner. Every AOSP system image carries
 GPL programs, which hard rule 4 doesn't allow us to ship today. The checks on the Mirror are in the
 root's panel plan.
@@ -164,10 +166,11 @@ Whether those copies are the same bytes is **untested**.
 
 So:
 
-- **A vendor file can't come off a stock Mirror before the first flash.** Fastboot can't read
-  either (the locked LK has no read-back, [mirror-root.md](mirror-root.md) section 7). Option C is
-  an **upgrade for a Mirror that runs option A**, not a first install. A stock Mirror goes through
-  option A first.
+- **No way is known to take a vendor file off a stock Mirror before the first flash.** Whether a
+  stock Mirror gives adb at all is **untested** (above, and an open question below). Fastboot can't
+  read (the locked LK has no read-back, [mirror-root.md](mirror-root.md) section 7). So, as far as
+  we know, option C is an **upgrade for a Mirror that runs option A**, not a first install, and a
+  stock Mirror goes through option A first.
 - **On a Glass Panes or option A Mirror, "the person's own files" are the Glass Panes files.** The
   1,060 vendor files on such a Mirror are the ones in the release (step 2 above). Pulling them over
   adb keeps them off our servers, which is the point. It doesn't change who made them.
@@ -261,21 +264,30 @@ Neither image touches anything but `system` and `userdata`.
 
 ## How to reproduce
 
-Off-device only. It writes nothing outside a scratch folder.
+Off-device only. It writes nothing outside a scratch folder. Run it from a new, empty folder, with
+the repo's path in `$REPO`, so nothing in the repo can be overwritten:
+
+```sh
+REPO=/path/to/glassworks
+W=$(mktemp -d) && cd "$W"
+```
 
 1. Get image 2's `system.img` from the Glass Panes release and check its SHA-256
    (`bdb6b844…e35c1`). Unsparse it (`simg2img system.img system.raw`).
 2. List the vendor tree's names:
-   `gh api 'repos/RSB4760/apq8016_vendor_qcom_proprietary/git/trees/97899ddbcd8916de7663ecd2102c70719460f5bf?recursive=1' --jq '.tree[]|select(.type=="blob")|.path' | grep '^prebuilt_HY22/target/product/msm8916_64/system/' | sed 's|^prebuilt_HY22/target/product/msm8916_64/system||' > hy22.txt`
-3. `python3 -I tools/mirror/vendor-files.py --raw system.raw --vendor hy22.txt --rules sepolicy-rules.txt > option-c-vendor-files.tsv`.
+   `gh api 'repos/RSB4760/apq8016_vendor_qcom_proprietary/git/trees/97899ddbcd8916de7663ecd2102c70719460f5bf?recursive=1' --jq '.tree[]|select(.type=="blob")|.path' | grep '^prebuilt_HY22/target/product/msm8916_64/system/' | sed 's|^prebuilt_HY22/target/product/msm8916_64/system||' > "$W/hy22.txt"`
+3. `python3 -I "$REPO/tools/mirror/vendor-files.py" --raw "$W/system.raw" --vendor "$W/hy22.txt" --rules /path/to/sepolicy-rules.txt > "$W/option-c-vendor-files.tsv"`,
+   then compare it with the one in the repo (`diff "$W/option-c-vendor-files.tsv" "$REPO/frames/lululemon-mirror/research/option-c-vendor-files.tsv"`).
    It needs `debugfs` and `llvm-readelf` (`brew install e2fsprogs llvm`). It runs in about 35 s on
    an M-series Mac. `--rules` is the unit's policy dump ([mirror-root.md](mirror-root.md) section 3,
    kept outside the repo); without it the `shell` column is `?`.
-4. Delete `system.img`, `system.raw` and the policy dump. Never commit them.
+4. Delete `$W` (`system.img`, `system.raw`, the list) and the policy dump. Never commit them.
 
-On a Mirror (only the root, read-only): `tools/mirror/vendor-pull-check.sh -s <serial>
-frames/lululemon-mirror/research/option-c-vendor-files.tsv`, through the adb server already bound
-to that Mirror. It `cat`s each file as adb's shell and hashes it on the computer.
+On a Mirror (only the root, read-only): `ANDROID_ADB_SERVER_PORT=<port> tools/mirror/vendor-pull-check.sh
+-s <serial> frames/lululemon-mirror/research/option-c-vendor-files.tsv`, through the adb server
+already bound to that Mirror. It stops unless that server answers on the port with the client's
+own version, so it never starts or replaces one. It `cat`s each file as adb's shell and hashes it
+on the computer.
 
 ## Open questions
 
