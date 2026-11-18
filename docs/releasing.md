@@ -352,7 +352,9 @@ placeholder while *Unreleased* is empty); the tag would fail there.
 ### Release
 
 1. In `frames/generic-android/CHANGELOG.md`, rename *Unreleased* to `## [0.2.0] - <date>` (one-sentence first
-   line), add a new empty `## [Unreleased]` above it for the next changes, and merge that.
+   line), add a new empty `## [Unreleased]` above it for the next changes, and merge that. If the version already
+   has its section, because the other app was released at it first, don't rename *Unreleased* again: tag the second
+   app on that section (add a line to it if the second app changed), so the file never has two `[0.2.0]` headings.
 2. Tag the merged commit, one tag per app you release:
 
 ```sh

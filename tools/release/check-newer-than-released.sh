@@ -7,7 +7,8 @@
 set -euo pipefail
 line="${1:?release line, e.g. generic-android}" version="${2:?version, e.g. 1.2.3}"
 repo="${3:-${GITHUB_REPOSITORY:?owner/repo}}"
-tags="$(gh release list --repo "$repo" --limit 1000 --json tagName --jq '.[].tagName')"
+# Published releases only: a draft or a pre-release (which the app ignores) hasn't raised what devices are offered.
+tags="$(gh release list --repo "$repo" --limit 1000 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName')"
 last="$(sed -n -E "s/^$line-v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p" <<< "$tags" | sort -V | tail -n 1)"
 echo "last $line release: ${last:-none}"
 if [ -n "$last" ] && [ "$(printf '%s\n' "$last" "$version" | sort -V | tail -n 1)" = "$last" ]; then
