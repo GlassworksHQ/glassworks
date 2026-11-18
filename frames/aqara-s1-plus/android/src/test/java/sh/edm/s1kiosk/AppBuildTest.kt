@@ -114,17 +114,17 @@ class AppBuildTest {
 
     /**
      * #23: an app on the core announces itself by its own name, which only [AppBuild.product] carries. The S1
-     * app hands in no name and keeps "Glassworks" (the tests above).
+     * app hands in no name and keeps the default, "Glassworks" (the tests above), so this one uses a name no app has.
      */
     @Test fun anotherAppAnnouncesItsOwnName() {
-        val other = build.copy(product = "Glassworks")
+        val other = build.copy(product = "Glassworks Tablet")
         val r = KioskApp.runtime(AqaraS1Plus(), other)
-        assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.ble(r.frame, other).take(2))
-        assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.serial(r.frame, other).take(2))
-        assertEquals("Glassworks", UpdateManager(app, r) {}.also { stops += it::stop }.model.title)
+        assertEquals(listOf("Glassworks Tablet", "9.8.7"), ImprovIdentity.ble(r.frame, other).take(2))
+        assertEquals(listOf("Glassworks Tablet", "9.8.7"), ImprovIdentity.serial(r.frame, other).take(2))
+        assertEquals("Glassworks Tablet", UpdateManager(app, r) {}.also { stops += it::stop }.model.title)
         val about = S1Settings.model(r, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {}, context = app)
             .sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
-        assertEquals("Glassworks 9.8.7 · test build f00ba47", about.title())
+        assertEquals("Glassworks Tablet 9.8.7 · test build f00ba47", about.title())
 
         PanePrefs(app).paneFile("assist").edit().putBoolean(VoicePrefs.KEY_ENABLED, false).commit()
         PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
@@ -134,9 +134,9 @@ class AppBuildTest {
             apiBindAddress = InetAddress.getLoopbackAddress()).also { stops += it::stop }
         device.start()
         exec.runDue()
-        assertEquals("Glassworks 9.8.7", mdns.identities.single().compilationTime)
-        assertEquals("Panel Hub S1 Plus (Glassworks)", mdns.identities.single().model)
-        assertEquals("Glassworks 9.8.7", device.paneList().filterIsInstance<SendspinPane>().single().player.identity.softwareVersion)
+        assertEquals("Glassworks Tablet 9.8.7", mdns.identities.single().compilationTime)
+        assertEquals("Panel Hub S1 Plus (Glassworks Tablet)", mdns.identities.single().model)
+        assertEquals("Glassworks Tablet 9.8.7", device.paneList().filterIsInstance<SendspinPane>().single().player.identity.softwareVersion)
     }
 
     /** What the runtime's engine starts Gecko with. */

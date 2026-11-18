@@ -157,8 +157,7 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   stepping each second. See [Open a view](docs/notifications.md#open-a-view).
 - **Glassworks has its own icon.** The launcher, the home app chooser and Settings show the Glassworks
   mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
-  Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
-  generic app's icon; S1 Kiosk keeps its own.
+  Android 13 and later it follows themed icons. The notification shows the mark in white.
 - **Glassworks for Android 6 and 7 tablets and the lululemon Mirror.** Devices on Android 6.0 to 7.1 get
   a legacy build of Glassworks for generic Android, a separate app with its own updates. Kiln knows which
   build a device needs and refuses the other one, and the legacy build is what it installs on the Mirror.
