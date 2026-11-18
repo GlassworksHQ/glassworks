@@ -184,6 +184,19 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
   copies run. A slot whose bundle script exits 3 times within a minute is marked bad, and that slot
   runs the boot copy from then on. That is the radio helper's rule today, applied to every slot.
 
+### What the app reads
+
+| What | Where | Values |
+|---|---|---|
+| Frame id and version (what runs) | `ro.glassworks.frame.id`, `ro.glassworks.frame.version` | `aqara-s1-plus`; the loaded bundle's version, else the boot image's (`1.0.0`) |
+| Bundle state, and a staged bundle ("staged, restart to apply") | `/data/glassworks-pub/frame-bundle`, root 0644, written at boot and after each install | `<ok\|bad\|none> <loaded frame version\|-> <floor> <staged frame version\|->` |
+| The same, for display and logs | `sys.glassworks.bundle.state`, `sys.glassworks.bundle.staged` | `ok <version>` \| `bad: <why>` \| `none`; the staged version, empty when none |
+| The last install | `sys.glassworks.bundle.status` | `<running\|ok\|error>: <detail>` |
+
+Decisions come from the file. Any app can set `sys.*` properties under permissive SELinux, so those are for
+display only. "Staged" is not an `ro.*` property, because `ro.*` can be set only once per boot (a second
+install in the same boot couldn't update it) and any app could set it first.
+
 ### The bundle
 
 The radio bundle's format ([root.md](root.md#radio-bundle-service)), extended:

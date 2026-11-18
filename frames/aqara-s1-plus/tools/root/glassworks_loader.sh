@@ -34,8 +34,11 @@
 # Install (app side: stage files/frame/bundle-in/, setprop sys.glassworks.bundle.status requested,
 # setprop ctl.start glassworks_bundle). Status in sys.glassworks.bundle.status =
 # "<running|ok|error>: <detail>". App-readable state: $PUB_DIR/frame-bundle (root:root, dir 0755, file
-# 0644) = "<ok|bad|none> <frame version|-> <floor>", written at boot and after an install. The app reads
-# that file, never a sys.* property (any app can set those).
+# 0644) = "<ok|bad|none> <frame version|-> <floor> <staged frame version|->", written at boot and after
+# an install: what is loaded, and what waits in $BDIR/next for the next restart ("staged, restart to
+# apply"). sys.glassworks.bundle.staged mirrors the last field (empty for "-") for display and logs. The
+# app decides from the file, never from a sys.* property (any app can set those). Not an ro.* property:
+# those can be set only once per boot, and here any app could set it first.
 #
 # Threat model: SELinux is permissive here, so any app may be able to start these services and set
 # properties. So the install takes no input but the kiosk's one staging dir, and:
@@ -204,11 +207,18 @@ check_dir() { # dir: a complete, signed bundle for this frame at or above the fl
   [ "$VERSION" -ge "$(floor)" ] || { WHY="version $FVER is below the floor $(floor)"; return 1; }
 }
 
-publish() { # state frame-version: the app-readable state file
+staged() { # the frame version of the bundle waiting in $BDIR/next for the next restart, or "-"
+  st_=""; [ -d "$BDIR/next" ] && st_=$(sed -n 's/^frame [^ ]* \([^ ]*\)$/\1/p' "$BDIR/next/manifest" 2>/dev/null | head -1)
+  echo "${st_:--}"
+}
+
+publish() { # state frame-version: the app-readable state file, and the staged version's mirror property
   if [ -L "$PUB_DIR" ] || { [ -e "$PUB_DIR" ] && ! root_dir "$PUB_DIR"; }; then rm -rf "$PUB_DIR"; fi
   mkdir -p "$PUB_DIR" && chown root:root "$PUB_DIR" && chmod 755 "$PUB_DIR" || return 1
+  sg_=$(staged)
+  if [ "$sg_" = - ]; then setprop sys.glassworks.bundle.staged ""; else setprop sys.glassworks.bundle.staged "$sg_"; fi
   rm -f "$PUB_DIR/.frame-bundle.tmp"
-  echo "$1 $2 $(floor)" > "$PUB_DIR/.frame-bundle.tmp" && chmod 644 "$PUB_DIR/.frame-bundle.tmp" &&
+  echo "$1 $2 $(floor) $sg_" > "$PUB_DIR/.frame-bundle.tmp" && chmod 644 "$PUB_DIR/.frame-bundle.tmp" &&
     mv -f "$PUB_DIR/.frame-bundle.tmp" "$PUB_DIR/frame-bundle"
 }
 
@@ -369,6 +379,9 @@ install)
     fail "cannot stage the bundle"
   fi
   rm -rf "$BDIR/next.old"
+  # The state file keeps what is loaded (written at boot) and now names the staged version too.
+  set -- $(cat "$PUB_DIR/frame-bundle" 2>/dev/null)
+  case "${1:-}" in ok|bad|none) publish "$1" "${2:--}" ;; *) publish none - ;; esac
   status "ok: frame bundle $FVER staged ($NFILES files); it loads at the next restart"
   exit 0 ;;
 

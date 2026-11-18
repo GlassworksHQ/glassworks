@@ -328,7 +328,7 @@ install_frame() { L install >/dev/null 2>&1; prop sys.glassworks.bundle.status; 
 reset_frame
 L boot
 check "no bundle: the boot image's frame id and version" test "$(prop ro.glassworks.frame.id)/$(prop ro.glassworks.frame.version)" = "aqara-s1-plus/1.0.0"
-check "...state none, published for the app" test "$(prop sys.glassworks.bundle.state)/$(cat /data/glassworks-pub/frame-bundle)" = "none/none - 0"
+check "...state none, published for the app" test "$(prop sys.glassworks.bundle.state)/$(cat /data/glassworks-pub/frame-bundle)" = "none/none - 0 -"
 check "...the boot image's animation is mounted" has "$(cat "$T/mounts")" "-o bind $TBL/glassworks_bootanimation.zip $T/anim.zip"
 GW_LOADER_ONCE=1 L run radio
 check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
@@ -338,9 +338,11 @@ stage_frame "$T/f1/frame-bundle"; s=$(install_frame)
 check "a signed frame bundle is staged" has "$s" "ok: frame bundle 1.0.1 staged"
 check "...it loads at the next boot, not now" test -d /data/glassworks/bundle/next -a ! -e /data/glassworks/bundle/current
 check "...the floor moves only when it loads" test ! -e /data/glassworks/bundle/version
+check "...staged, restart to apply: in the state file and its mirror property" test "$(cat /data/glassworks-pub/frame-bundle)/$(prop sys.glassworks.bundle.staged)" = "none - 0 1.0.1/1.0.1"
 L boot
 check "boot loads it: frame version 1.0.1" test "$(prop ro.glassworks.frame.version)" = 1.0.1
-check "...state ok, published with the floor" test "$(prop sys.glassworks.bundle.state)/$(cat /data/glassworks-pub/frame-bundle)" = "ok 1.0.1/ok 1.0.1 1000001"
+check "...nothing staged any more" test -z "$(prop sys.glassworks.bundle.staged)"
+check "...state ok, published with the floor" test "$(prop sys.glassworks.bundle.state)/$(cat /data/glassworks-pub/frame-bundle)" = "ok 1.0.1/ok 1.0.1 1000001 -"
 check "...root-only, nothing left staged" test "$(stat -c %a:%u /data/glassworks/bundle/current)" = 700:0 -a ! -e /data/glassworks/bundle/next
 check "...the bundle's animation is mounted" has "$(tail -1 "$T/mounts")" "/data/glassworks/bundle/current/bootanimation.zip $T/anim.zip"
 GW_LOADER_ONCE=1 L run radio
@@ -370,7 +372,7 @@ echo junk >> /data/glassworks/bundle/current/services/radio.sh
 L boot
 check "a damaged bundle: the boot image's frame version" test "$(prop ro.glassworks.frame.version)" = 1.0.0
 check "...state says why" has "$(prop sys.glassworks.bundle.state)" "bad: services/radio.sh does not match the manifest"
-check "...published as bad" test "$(cat /data/glassworks-pub/frame-bundle)" = "bad - 1000001"
+check "...published as bad" test "$(cat /data/glassworks-pub/frame-bundle)" = "bad - 1000001 -"
 check "...the boot image's animation" has "$(tail -1 "$T/mounts")" "$TBL/glassworks_bootanimation.zip"
 GW_LOADER_ONCE=1 L run radio
 check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
