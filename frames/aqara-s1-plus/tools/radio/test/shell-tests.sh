@@ -955,7 +955,9 @@ check "the hotspot's IPv6 address moved (IPv4 the same): the IPv6 rule follows i
   test "$(nat 6 | grep -c 'to-destination \[2001:db8:0:0:0:0:0:2\]:8053$')/$(nat 6 | grep -c '2001:db8::1\|0:0:0:0:0:1\]')" = 1/0
 ap_up; portal
 # first_check: until the helper started in the background has done its first check (its status line)
-first_check() { i=0; until grep -q '^sys.s1kiosk.portal.status=' "$T/setprop.log" || [ $i -ge 300 ]; do sleep 0.1; i=$((i + 1)); done; }
+# logged <pattern>: waits (60 s at most, an emulated ARM under load is slow) until setprop.log has a line for it
+logged() { i=0; until grep -q "$1" "$T/setprop.log" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; }
+first_check() { logged '^sys.s1kiosk.portal.status='; }
 # bg_until <test...>: waits (60 s at most, an emulated ARM under load is slow) until it holds, then stops the helper
 bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; }
 jumps4() { test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1; }
@@ -970,11 +972,24 @@ ap_up; portal; hostapd_off; portal
 check "hostapd gone (the hotspot stopped): removed" test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
 ap_up; hostapd_on; portal; hostapd_off; echo 1 > /t/ipt-save-fail; : > "$T/setprop.log"
 LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
-H=$!; first_check
+H=$!; logged '^sys.s1kiosk.portal.status=error'
 check "a rule table that can't be read at the hotspot's end: not called off" grep -q '^sys.s1kiosk.portal.status=error' "$T/setprop.log"
 gone() { test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" && test "$(prop sys.s1kiosk.portal.status)" = off; }
 bg_until gone; rm -f /t/ipt-save-fail
 check "...and the next check removes the rules, then says off" gone
+# The helper itself dies (killed, as init does on a restart) while the hotspot is up: the loop that outlives it
+# takes the rules away, and tries again when a table can't be read the first time.
+ap_up; hostapd_on; portal; : > "$T/setprop.log"
+LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check; P=$(pgrep -P "$H" -f s1kiosk_radio.sh | head -1)   # the helper itself, not its loops
+echo 1 > /t/ipt-save-fail; kill -9 "$P"
+check "(the helper is killed)" sh -c "! kill -0 $P 2>/dev/null"
+i=0; until test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" || [ $i -ge 300 ]; do sleep 0.1; i=$((i + 1)); done
+check "the helper killed, a table unreadable once: the leftover loop still removes the rules" \
+  test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
+i=0; while pgrep -f s1kiosk_radio.sh >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+check "...and then it ends too" test -z "$(pgrep -f s1kiosk_radio.sh)"
+rm -f /t/ipt-save-fail; pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; hostapd_off
 hostapd_on
 socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
 check "the sockets of another app: no rules" test -z "$(nat 4 | grep S1PORTAL)"

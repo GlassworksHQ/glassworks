@@ -811,7 +811,13 @@ portal_start() { # one check now (it also removes an earlier run's rules), then 
   parent_=$$
   ( while :; do
       sleep "$PORTAL_EVERY"
-      kill -0 "$parent_" 2>/dev/null || { portal_clear; exit 0; }
+      if ! kill -0 "$parent_" 2>/dev/null; then
+        # The helper is gone (init restarts it, and its first check clears too). Take the rules away now, and
+        # if a table can't be read, try again for a minute: cleanup only, never portal_check, which could put
+        # rules back. Bounded, so a loop that outlived its helper doesn't stay.
+        i_=0; until portal_clear || [ $i_ -ge 30 ]; do sleep "$PORTAL_EVERY"; i_=$((i_ + 1)); done
+        exit 0
+      fi
       portal_check
     done ) &
   PORTAL_PID=$!
