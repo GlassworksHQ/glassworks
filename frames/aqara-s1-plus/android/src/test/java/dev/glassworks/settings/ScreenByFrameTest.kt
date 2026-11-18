@@ -173,13 +173,19 @@ class ScreenByFrameTest {
         assertEquals("After 2 minutes", idle.shown(idle.value()))
     }
 
-    @Test fun withPresenceTurnOffWhenIdleLeavesTheWakeSwitchAlone() {
+    @Test fun withPresenceTooAPickedTimeTurnsTheScreenOffWhenIdle() {
+        // #522: "always" is the default, so a time picked on the S1 must put the mode back, or it would do nothing.
         sensor(Sensor.TYPE_PROXIMITY, "vi5300 Proximity Sensor")
         prefs.screenMode = "always"; prefs.idleOffSec = 300
-        val idle = screen(AqaraS1Plus()).first.filterIsInstance<SettingsItem.Duration>().first { it.title == "Turn off when idle" }
-        assertEquals("After 5 minutes", idle.shown(idle.value()))
+        val rows = screen(AqaraS1Plus()).first
+        val idle = rows.filterIsInstance<SettingsItem.Duration>().first { it.title == "Turn off when idle" }
+        assertEquals("the screen stays on: the row says so", "Never", idle.shown(idle.value()))
         idle.save(120) {}
-        assertEquals("always", prefs.screenMode)
+        assertEquals("presence", prefs.screenMode)
+        assertEquals("After 2 minutes", idle.shown(idle.value()))
+        assertTrue("so the wake switch reads on", rows.wake().value())
+        idle.save(0) {}
+        assertEquals("presence", prefs.screenMode)
     }
 
     private fun lock(secure: Boolean) = shadowOf(app.getSystemService(KeyguardManager::class.java)).setIsDeviceSecure(secure)

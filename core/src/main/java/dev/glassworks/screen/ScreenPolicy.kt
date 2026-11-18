@@ -132,6 +132,8 @@ class ScreenPolicy(
     }
 
     private var keepOn = true
+    /** A [sleep] without device admin is waiting for the system timeout: "always" mustn't take it back (#522). */
+    private var sleepAsked = false
     /** Keeps the screen on after a [wake], until [sleep] (#257). Main thread. */
     private var awake: PowerManager.WakeLock? = null
     private var awakeSince = 0L
@@ -311,9 +313,11 @@ class ScreenPolicy(
         }
         // Fallback: let the system timeout turn the screen off.
         setKeepOn(false)
+        sleepAsked = true
     }
 
     private fun setKeepOn(v: Boolean) {
+        if (v) sleepAsked = false
         if (keepOn == v) return
         keepOn = v
         onKeepScreenOn?.invoke(v)
@@ -329,7 +333,7 @@ class ScreenPolicy(
             // here, and the lock's ACQUIRE_CAUSES_WAKEUP would turn the screen back on.
             if (awake?.isHeld == true && pm.isInteractive && SystemClock.elapsedRealtime() - awakeSince >= AWAKE_REFRESH_MS) keepAwake()
             if (prefs.screenMode == "always") {
-                setKeepOn(true)
+                if (!sleepAsked) setKeepOn(true)
                 return
             }
             val now = SystemClock.elapsedRealtime()

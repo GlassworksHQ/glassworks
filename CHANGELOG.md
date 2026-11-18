@@ -180,9 +180,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ### Changed
 - **The screen stays on until you pick a timeout.** A panel that never chose a screen mode now keeps its screen
   on (*Screen mode* `always`), so an S1 that never chose stops turning off after the update. To have it turn
-  off again, turn on **Settings → Screen → Wake when someone's near** on a panel with a presence sensor, such as
-  the S1, or pick a time in **Turn off when idle** on one without. Setting *Screen mode* or *Idle timeout* from
-  Home Assistant works on both. A choice you made stays as it is.
+  off again, pick a time in **Settings → Screen → Turn off when idle**, turn on **Wake when someone's near**, or
+  set *Screen mode* or *Idle timeout* from Home Assistant. A choice you made stays as it is. While the screen is
+  always on, **Turn off when idle** reads *Never*, also on the S1, and Home Assistant's *Screen* light can still
+  turn it off on a device without device admin.
 - **The setup screen's Wi-Fi step leads with one way to join.** It shows the best way the panel can do
   right now: Bluetooth setup from Home Assistant, else **Set up from a phone** through the panel's own
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind

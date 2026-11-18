@@ -241,6 +241,18 @@ class ScreenBehaviourPinTest {
         assertEquals(listOf(false, true), h.keepOnCalls)
     }
 
+    @Test fun alwaysOnStillLetsHomeAssistantTurnTheScreenOffWithoutDeviceAdmin() {
+        // #522 (CodeRabbit on #525): "always" is the default, and its tick put keep-screen-on back at once.
+        prefs.screenMode = "always"
+        h.start()
+        h.sleep("home assistant")
+        h.advance(60_000)
+        assertEquals(listOf(false), h.keepOnCalls)
+        h.userActivity()
+        h.advance(60_000)
+        assertEquals("a touch keeps it on again", listOf(false, true), h.keepOnCalls)
+    }
+
     @Test fun wakeWithTheScreenOffTakesAWakeLock() {
         h.start(screenOn = false)
         h.wake("home assistant")

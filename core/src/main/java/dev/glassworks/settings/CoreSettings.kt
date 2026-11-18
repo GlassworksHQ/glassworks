@@ -124,21 +124,17 @@ class CoreSettings(
     }
 
     /**
-     * "Turn off when idle". Without presence it is the screen's only on/off: Home Assistant's `Screen mode` "always"
-     * (which the wake switch also sets) reads as Never, and a time here puts the mode back, so the row says what the screen does.
+     * "Turn off when idle", the same on every frame: Home Assistant's `Screen mode` "always" (the default since #522, and
+     * what the wake switch sets when off) reads as Never, and a time here puts the mode back to presence, as Home
+     * Assistant's *Idle timeout* does, so the row says what the screen does.
      */
-    private fun idle(): SettingsItem.Duration {
-        if (hardware.sensesPresence) return SettingsItem.Duration(
-            "Turn off when idle", value = { prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
-        ) { v, done -> prefs.idleOffSec = v; done(null) }
-        return SettingsItem.Duration(
-            "Turn off when idle", value = { if (prefs.screenMode == "always") 0 else prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
-        ) { v, done ->
-            prefs.idleOffSec = v
-            // Never leaves the mode as it is, so an "always" screen stays on.
-            if (v > 0) prefs.screenMode = "presence"
-            done(null)
-        }
+    private fun idle() = SettingsItem.Duration(
+        "Turn off when idle", value = { if (prefs.screenMode == "always") 0 else prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
+    ) { v, done ->
+        prefs.idleOffSec = v
+        // Never leaves the mode as it is, so an "always" screen stays on.
+        if (v > 0) prefs.screenMode = "presence"
+        done(null)
     }
 
     /**
