@@ -797,7 +797,8 @@ class Installer {
     let signingIn = false;
     const render = (s: SetupState) => {
       this.ip = s.ip ?? this.ip;
-      if (signingIn && s.ha.signedIn) { signingIn = false; void this.radioStep(); return; }
+      // only from this step: a sign-in that finishes after the person moved on mustn't redo the radio step
+      if (signingIn && s.ha.signedIn) { signingIn = false; if (!$('#ha-block').hidden) void this.radioStep(); return; }
       $('#ha-found').textContent = s.ha.discovered ? 'Found on your network' : 'Not found automatically: type it';
       if (!input.value) input.value = s.ha.url || s.ha.discovered || 'http://homeassistant.local:8123';
       const row = $('#ha-signin');
@@ -840,6 +841,7 @@ class Installer {
     };
     $('#ha-add').onclick = () => { $('#ha-add-dot').className = 'dot sm done'; };
     btn.onclick = async () => {
+      signingIn = false;
       const url = input.value.trim();
       if (url && url !== this.setup?.state?.ha.url) {
         if (!validHaUrl(url)) { st.className = 'status err'; st.textContent = 'That doesn\'t look like a web address (http://… or https://…).'; return; }

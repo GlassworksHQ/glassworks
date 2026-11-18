@@ -587,12 +587,12 @@ class SignInServerTest {
     fun kilnsSignInFailuresSendThePersonBackToKiln() {
         val (_, state) = start(server, null, then = "?then=kiln")
         val r = callback(server, state, null, code = "refused-by-ha")
-        assertTrue(text(r), text(r).contains("Sign in again from Kiln.") && !text(r).contains("Scan the code") && !setupWay(r))
+        assertTrue(text(r), text(r).contains("Close this window and sign in again from Kiln.") && !text(r).contains("Scan the code") && !setupWay(r))
         assertTrue("no other page runs a script", !text(r).contains("<script"))
         assertTrue(r.headers["Content-Security-Policy"]!!, !r.headers["Content-Security-Policy"]!!.contains("script-src"))
         val (_, cancelled) = start(server, null, then = "?then=kiln")
         val c = call(server, "/callback?error=access_denied&state=${OAuth.enc(cancelled)}")
-        assertTrue(text(c), text(c).contains("Sign in again from Kiln.") && !text(c).contains("Scan the code"))
+        assertTrue(text(c), text(c).contains("Close this window and sign in again from Kiln.") && !text(c).contains("Scan the code"))
     }
 
     @Test

@@ -189,7 +189,7 @@ class SignInServer(
         val again = when (then) {
             Then.QR -> "Scan the code to try again."
             Then.SETUP -> "Go back to setup and sign in again."
-            Then.KILN -> "Sign in again from Kiln."
+            Then.KILN -> "Close this window and sign in again from Kiln."
         }
         q["error"]?.let { err ->
             return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. $again", button = back)
@@ -250,14 +250,14 @@ class SignInServer(
     private fun retry(then: Then) = when (then) {
         Then.QR -> "scan the code again"
         Then.SETUP -> "sign in again from setup"
-        Then.KILN -> "sign in again from Kiln"
+        Then.KILN -> "close this window and sign in again from Kiln"
     }
 
     private fun expired(then: Then = Then.QR) = page(400, "Bad Request", "This link has expired",
         when (then) {
             Then.QR -> "Scan the code on the panel again. It shows a new one."
             Then.SETUP -> "Go back to setup and sign in again."
-            Then.KILN -> "Sign in again from Kiln."
+            Then.KILN -> "Close this window and sign in again from Kiln."
         },
         button = if (then == Then.SETUP) BACK_TO_SETUP else "", foot = "Codes last 10 minutes and work once.")
 
