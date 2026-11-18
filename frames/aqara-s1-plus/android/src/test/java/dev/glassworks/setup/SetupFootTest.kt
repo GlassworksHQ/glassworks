@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.setup
+package dev.glassworks.setup
 
 import android.app.Application
 import android.content.Context
@@ -23,8 +23,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import sh.edm.s1kiosk.frame.TestFrames
-import sh.edm.s1kiosk.ui.Mockup
-import sh.edm.s1kiosk.ui.StackView
+import dev.glassworks.ui.Mockup
+import dev.glassworks.ui.StackView
 
 /**
  * The card's buttons are its foot (#422): with a QR code beside the text, Continue sits in the card's corner under the
