@@ -24,6 +24,10 @@ lightly tested end to end. Nothing below is implemented unless marked ✅.
    HA login, password manager works), done. The panel never shows a login form.
 4. **Choose the panes**: voice, music and the Zigbee / Thread radio. A pane that is on then asks what
    it needs (the radio: its mode, then what to do in HA).
+   **Silent updates** follows, only when updates ask for a tap and there's a way to change that: an S1
+   whose boot image has no update service (Kiln adds it), or a tablet where Android needs "Install unknown
+   apps" allowed or a device owner (#422). Never required: Continue or Not now answers it. A panel that was
+   set up before this step existed never sees it.
 5. **Pick a dashboard** from a dropdown on the panel's device page in HA (defaults to your default
    dashboard). HA adds that dropdown turned off: turn on **Dashboard** first
    ([how](esphome.md#categories-and-defaults)).
@@ -598,7 +602,7 @@ sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`
 "Setup screen: <reasons> (step …)").
 
 Preview without changing state: `--ez show_setup true` (live step), `--es setup_step
-wifi|ha|signin|panes|radio|done` (a given step; a pane's step id opens that step), `--ez show_setup false` to close.
+wifi|ha|signin|panes|radio|silent_updates|done` (a given step; a pane's or the device's step id opens that step), `--ez show_setup false` to close.
 In preview, Skip, the manual URL and Continue save nothing, and "Preview · Close" is shown. `--ez show_signin true` = the Sign-in step.
 
 ## Build order

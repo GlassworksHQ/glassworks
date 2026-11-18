@@ -94,7 +94,8 @@ class FramePanesTest {
         assertEquals(emptyList<String>(), skipped)
         assertEquals(listOf("radio"), steps.map { it.id }) // a sub-step under Panes
         assertEquals(listOf("wifi", "ha", "signin", "panes", "radio", "done"), SetupFlow.ids(true, steps.map { it.id }))
-        assertEquals(steps, runtime.setupSteps(app))
+        // Then the device's own (Silent updates), after every pane's.
+        assertEquals(steps + runtime.deviceSetupSteps(app), runtime.setupSteps(app))
     }
 
     @Test
@@ -102,7 +103,7 @@ class FramePanesTest {
         val r = runtimeWith(FakeFrame("camera" to "look"))
         val definitions = r.paneDefinitions(app)
         val steps = r.setupSteps(app)
-        assertEquals(listOf("radio", "camera"), steps.map { it.id })
+        assertEquals(listOf("radio", "camera", "silent_updates"), steps.map { it.id })
 
         val core = CoreSettings(
             KioskPrefs(app), "0.0.0", status = { "screen on" }, deviceSettings = null,
@@ -120,7 +121,7 @@ class FramePanesTest {
         ShadowLog.clear()
         val r = runtimeWith(FakeFrame("wifi" to "go", "camera" to "look", "camera" to "pan", "radio" to "tune"))
         val steps = r.setupSteps(app)
-        assertEquals(listOf("radio", "camera"), steps.map { it.id })
+        assertEquals(listOf("radio", "camera", "silent_updates"), steps.map { it.id })
         val errors = ShadowLog.getLogsForTag("S1Kiosk").filter { it.type == Log.ERROR }.map { it.msg }
         assertEquals(errors.toString(), 3, errors.size)
         assertTrue(errors.toString(), errors[0].contains("'wifi'"))
@@ -171,7 +172,7 @@ class FramePanesTest {
         // answered on the panel, so setup leaves them out (and says so) instead of waiting for ever.
         ShadowLog.clear()
         val r = runtimeWith(FakeFrame("camera" to "look", card = false))
-        assertEquals(listOf("radio"), r.setupSteps(app).map { it.id })
+        assertEquals(listOf("radio", "silent_updates"), r.setupSteps(app).map { it.id })
         val errors = ShadowLog.getLogsForTag("S1Kiosk").filter { it.type == Log.ERROR }.map { it.msg }
         assertTrue(errors.toString(), errors.any { "'camera'" in it && "no card" in it })
     }

@@ -27,7 +27,8 @@ import dev.glassworks.pane.SetupStep
  *   or expected: the loading screen's offline text would point at a button nobody can press (#448).
  *   Once shown, it stays until every step is done (no flicker between steps).
  * - **Which step is current while it's shown?** The first one that isn't done, in order Wi-Fi →
- *   Home Assistant (add it, sign in) → Panes (choose, then each step of a pane that is on) → Done.
+ *   Home Assistant (add it, sign in) → Panes (choose, then each step of a pane that is on) → the device's own
+ *   steps (Silent updates) → Done.
  *   Done means: online; HA has subscribed to the panel's states (it added the panel) or the user
  *   skipped it; signed in, or the dashboard loaded without asking; Continue on the Panes step (or
  *   nothing to ask); the pane's step says so.
@@ -45,19 +46,24 @@ object SetupFlow {
     const val PANES = "panes"
     const val DONE = "done"
 
-    /** The rail's groups: a step id to the group it sits under, null for a step of its own. */
-    fun group(id: String): String? = when (id) {
+    /**
+     * The rail's groups: a step id to the group it sits under, null for a step of its own. [own]: the device's steps
+     * (after Panes, each a row of its own).
+     */
+    fun group(id: String, own: Collection<String> = emptyList()): String? = when (id) {
         WIFI, DONE -> null
         HA, SIGNIN -> HA
+        in own -> null
         else -> PANES
     }
 
     /**
      * Every step in order. [panes]: some pane has a card, so the Panes group is there; [paneSteps]: the
-     * ids of the steps of the panes that are on, which follow the Panes step in its group.
+     * ids of the steps of the panes that are on, which follow the Panes step in its group; [own]: the device's
+     * steps (#403's This tablet, #422's Silent updates), each a row of its own after Panes.
      */
-    fun ids(panes: Boolean, paneSteps: List<String> = emptyList()): List<String> =
-        listOf(WIFI, HA, SIGNIN) + (if (panes) listOf(PANES) + paneSteps else emptyList()) + DONE
+    fun ids(panes: Boolean, paneSteps: List<String> = emptyList(), own: List<String> = emptyList()): List<String> =
+        listOf(WIFI, HA, SIGNIN) + (if (panes) listOf(PANES) + paneSteps else emptyList()) + own + DONE
 
     private val CORE = setOf(WIFI, HA, PANES, SIGNIN, DONE)
 
@@ -84,10 +90,10 @@ object SetupFlow {
         }
     }
 
-    /** A step id from `--es setup_step <id>` (a pane's step too, e.g. `radio`), or null. */
-    fun parse(s: String?, panes: Boolean, paneSteps: List<String> = emptyList()): String? {
+    /** A step id from `--es setup_step <id>` (a pane's step too, e.g. `radio`, or the device's, `silent_updates`), or null. */
+    fun parse(s: String?, panes: Boolean, paneSteps: List<String> = emptyList(), own: List<String> = emptyList()): String? {
         val t = s?.trim() ?: return null
-        return ids(panes, paneSteps).firstOrNull { it.equals(t, ignoreCase = true) }
+        return ids(panes, paneSteps, own).firstOrNull { it.equals(t, ignoreCase = true) }
     }
 }
 
@@ -137,6 +143,11 @@ data class SetupInputs(
     val panesChosen: Boolean = false,
     /** The panes' steps, in order. */
     val paneSteps: List<PaneStepFacts> = emptyList(),
+    /**
+     * The device's own steps, in order (#422's Silent updates): after every pane's step, whatever the Panes step chose,
+     * and never part of it. Their [PaneStepFacts.wanted] is ignored.
+     */
+    val ownSteps: List<PaneStepFacts> = emptyList(),
     /** Improv (Wi-Fi over Bluetooth), for the Wi-Fi step. */
     val improv: ImprovFacts = ImprovFacts(),
     /** No trace of an earlier setup at all (see [SetupState.neverSetUp]): a fresh panel. */
@@ -169,7 +180,7 @@ data class SetupDecision(
     val improv: WifiStep.ImprovLine = WifiStep.improv(ImprovFacts()),
     /** The Panes step is answered (or there was nothing to ask). */
     val panesDone: Boolean = true,
-    /** The ids of the panes' steps that are done. */
+    /** The ids of the panes' steps, and of the device's own, that are done. */
     val paneDone: Set<String> = emptySet(),
 ) {
     /** Every step that is done, by id ([SetupFlow.DONE] never is: it's where the screen ends). */
@@ -191,6 +202,7 @@ object SetupState {
         val pending = i.paneSteps.firstOrNull { !it.done }
         val panesDone = i.panesChosen || pending == null
         val pendingWanted = i.paneSteps.firstOrNull { it.wanted && !it.done }
+        val ownPending = i.ownSteps.firstOrNull { !it.done }
 
         val reasons = ArrayList<String>(4)
         // Improv's Allow prompt and the installer's join progress live in the Wi-Fi step: no grace then.
@@ -207,12 +219,13 @@ object SetupState {
         // Before Continue on Panes every pending step asks; after it, only those of panes that are on.
         val asking = if (i.panesChosen) pendingWanted else pending
         if (wifiDone && haDone && asking != null) reasons += asking.reason
+        else if (wifiDone && haDone && ownPending != null) reasons += ownPending.reason // the device's own come after
 
         // Only "done" once it's actually known: a stored sign-in, or Wi-Fi + HA are done and nothing asks
         // for one. While a pane's step still waits, "not asked yet" isn't enough: Panes follows Sign in,
         // so the screen would move on, then come back when HA's login page loads. It waits for the
         // dashboard to load without asking (a session it already has) or the panel's own login page.
-        val panesWaiting = !panesDone || pendingWanted != null
+        val panesWaiting = !panesDone || pendingWanted != null || ownPending != null
         val signinDone = i.signedIn ||
             (wifiDone && haDone && !wantsSignin && (!panesWaiting || i.dashboardLoaded || i.usePanelLogin))
         val step = when {
@@ -221,12 +234,13 @@ object SetupState {
             !signinDone -> SetupFlow.SIGNIN
             !panesDone -> SetupFlow.PANES
             pendingWanted != null -> pendingWanted.id
+            ownPending != null -> ownPending.id
             else -> SetupFlow.DONE
         }
         // Once up, the screen stays until everything is done, so it doesn't flicker away between
         // steps (e.g. Wi-Fi joined, HA not discovered yet). It can't start on its own though.
         val show = reasons.isNotEmpty() || (i.showing && step != SetupFlow.DONE)
-        val paneDone = i.paneSteps.filter { it.done }.map { it.id }.toSet()
+        val paneDone = (i.paneSteps + i.ownSteps).filter { it.done }.map { it.id }.toSet()
         return SetupDecision(show, step, wifiDone, haDone, signinDone, reasons, WifiStep.improv(i.improv), panesDone, paneDone)
     }
 

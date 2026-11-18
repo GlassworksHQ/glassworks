@@ -61,6 +61,12 @@ interface Glassworks {
     fun setupPanes(context: Context): List<SetupPane>
 
     /**
+     * The device's own setup steps, after Panes, each a rail row of its own (#422's Silent updates). Made once. None by
+     * default.
+     */
+    fun deviceSetupSteps(context: Context): List<SetupStep> = emptyList()
+
+    /**
      * Whether camera frames are leaving the panel now (a still to Home Assistant, a stream), for the
      * privacy indicator (#117). Set by the camera pane; [onCameraLeaving] hears each change.
      */

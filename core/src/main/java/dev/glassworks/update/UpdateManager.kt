@@ -48,8 +48,12 @@ class UpdateManager(
     private val ctx = context.applicationContext
     /** The S1 boot image's root update service; null on a frame without one, which installs with PackageInstaller. */
     private val root = runtime.frame.rootUpdates
-    /** Whether [root] is in this boot image; null until [start] reads it (a getprop) on the update thread. */
-    @Volatile private var rootService: SilentUpdates.Root? = null
+    /**
+     * Whether [root] is in this boot image; null until [start] reads it (a getprop) on the update thread. Setup's Silent
+     * updates step reads it to answer on the main thread without a getprop.
+     */
+    @Volatile var rootService: SilentUpdates.Root? = null
+        private set
 
     /**
      * Whether updates install with nobody at the screen, and why (#422): Home Assistant's *Silent updates*. Read at

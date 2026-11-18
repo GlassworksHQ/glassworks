@@ -59,14 +59,26 @@ class SilentUpdatesStepTest {
         return screen to Card().also { screen.bind(it, entered = true) }
     }
 
-    @Test fun itShowsOnlyWhereThePersonCanChangeSomething() {
-        val nothingToDo = listOf(
-            SilentUpdates.RootService, SilentUpdates.SystemApp, SilentUpdates.DeviceOwner, SilentUpdates.SelfUpdate,
-            SilentUpdates.NoRootService, SilentUpdates.TargetTooLow("17", 35, 34), null,
-        )
+    /** One rule (the maintainer, 2026-11-18): the step shows whenever updates ask for a tap and there's a fix. */
+    @Test fun itShowsWheneverTheAnswerHasAFix() {
+        val nothingToDo = listOf(SilentUpdates.RootService, SilentUpdates.SystemApp, SilentUpdates.DeviceOwner, SilentUpdates.SelfUpdate, null)
         for (s in nothingToDo) assertTrue("done for $s", Rig(s).step.done())
-        assertFalse(Rig(SilentUpdates.UnknownAppsOff).step.done())
-        assertFalse(Rig(SilentUpdates.OldAndroid("9")).step.done())
+        val fixable = listOf(
+            SilentUpdates.UnknownAppsOff, SilentUpdates.OldAndroid("9"), SilentUpdates.NoRootService, SilentUpdates.TargetTooLow("17", 35, 34),
+        )
+        for (s in fixable) {
+            assertFalse("shown for $s", Rig(s).step.done())
+            assertTrue("has a fix: $s", s.fix != null)
+        }
+    }
+
+    @Test fun anOldBootImagePointsAtKiln() {
+        val (_, card) = bound(Rig(SilentUpdates.NoRootService))
+        assertEquals(SilentUpdatesStep.OWNER_TITLE, card.title)
+        assertEquals(SilentUpdatesStep.BOOT_IMAGE_BODY, card.body)
+        assertEquals(SilentUpdatesStep.KILN, card.qr)
+        assertEquals("boot_image", SilentUpdatesStep.offer(SilentUpdates.NoRootService)?.wire)
+        assertEquals("device_owner", SilentUpdatesStep.offer(SilentUpdates.TargetTooLow("17", 35, 34))?.wire)
     }
 
     @Test fun makingItsScreenDoesntShowIt() {

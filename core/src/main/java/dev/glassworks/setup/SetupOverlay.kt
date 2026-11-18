@@ -76,6 +76,8 @@ class SetupOverlay(
      * None: no Panes group.
      */
     private val setupPanes: List<SetupPane> = emptyList(),
+    /** The device's own steps (#422's Silent updates): each a row of its own after Panes (Glassworks.deviceSetupSteps). */
+    private val ownSteps: List<SetupStep> = emptyList(),
 ) : FrameLayout(context) {
 
     private val haName = frame.friendlyName()
@@ -154,8 +156,10 @@ class SetupOverlay(
     private var qrFor: String? = null
     private val main = Handler(Looper.getMainLooper())
 
-    /** Each pane's steps, by id, and which pane (its index in [choices]) they belong to. */
-    private val stepsById = setupPanes.flatMapIndexed { i, p -> p.steps.map { it.id to (i to it) } }.toMap()
+    /** Each pane's steps, by id, and which pane (its index in [choices]) they belong to; the device's own, [OWN]. */
+    private val stepsById = (setupPanes.flatMapIndexed { i, p -> p.steps.map { it.id to (i to it) } } + ownSteps.map { it.id to (OWN to it) }).toMap()
+
+    private val ownIds = ownSteps.map { it.id }
 
     /**
      * The step on screen when it isn't the current one: one picked on the rail or reached with Continue
@@ -164,8 +168,11 @@ class SetupOverlay(
     private var viewing: String? = null
 
     /** Every step in order, with the steps of the panes that are on ([wanted]). */
-    private fun flow(): List<String> =
-        SetupFlow.ids(choices.isNotEmpty(), stepsById.filter { (_, v) -> model?.preview == true || wanted(v.first) }.keys.toList())
+    private fun flow(): List<String> = SetupFlow.ids(
+        choices.isNotEmpty(),
+        stepsById.filter { (_, v) -> v.first != OWN && (model?.preview == true || wanted(v.first)) }.keys.toList(),
+        ownIds,
+    )
 
     // ---- left: the brand, the steps, the stack
     private val railRows = GroupedRail(context).apply { onTap = { id -> open(id) } }
@@ -470,7 +477,7 @@ class SetupOverlay(
     /** The step [id] of a pane belongs to a pane that is on: as chosen on the Panes step, else as it runs. */
     fun wanted(id: String): Boolean = stepsById[id]?.let { wanted(it.first) } ?: true
 
-    private fun wanted(pane: Int): Boolean = panes.wanted(pane)
+    private fun wanted(pane: Int): Boolean = pane == OWN || panes.wanted(pane)
 
     /** Every couple of seconds while the app runs: the panes' steps follow their state. */
     fun tick() {
@@ -526,7 +533,7 @@ class SetupOverlay(
         railRows.bind(
             flow.map { id ->
                 GroupedRail.Row(
-                    id, title(id), SetupFlow.group(id),
+                    id, title(id), SetupFlow.group(id, ownIds),
                     mark = when { id == shown || id == m.step -> GroupedRail.Mark.CURRENT; id in m.done -> GroupedRail.Mark.DONE; else -> GroupedRail.Mark.PENDING },
                     // Without touch (Input.NONE) nothing on this screen takes a tap, the rail included.
                     enabled = input == Input.TOUCH && (m.preview || id == m.step || id in m.done),
@@ -563,7 +570,7 @@ class SetupOverlay(
         if (shown == null) return
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
         val done = shown in m.done
-        cardLabel.text = SetupFlow.group(shown)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
+        cardLabel.text = SetupFlow.group(shown, ownIds)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
         if (input == Input.NONE) {
             // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in.
             if (shown == SetupFlow.SIGNIN) {
@@ -1163,6 +1170,9 @@ class SetupOverlay(
 
         /** The rail's stack art with the gap under it. */
         const val RAIL_ART_DP = 88f
+
+        /** [stepsById]'s pane index for the device's own steps: always wanted. */
+        private const val OWN = -1
 
         /** Continue on Panes waits this long for every card in all (the radio's Off waits for its helper). */
         const val BUDGET_MS = 30_000L

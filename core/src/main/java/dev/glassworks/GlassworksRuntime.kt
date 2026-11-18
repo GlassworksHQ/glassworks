@@ -22,7 +22,10 @@ import dev.glassworks.device.DeviceHost
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.setup.SetupFlow
 import dev.glassworks.setup.SetupPane
+import dev.glassworks.setup.SetupState
 import dev.glassworks.update.ReleaseLine
+import dev.glassworks.update.SilentUpdates
+import dev.glassworks.update.SilentUpdatesStep
 import dev.glassworks.update.UpdateManager
 import dev.glassworks.assist.OrbBakes
 
@@ -71,6 +74,7 @@ class GlassworksRuntime(
     override fun paneDefinitions(context: Context): List<PaneDefinition> = synchronized(this) {
         definitions ?: run {
             val ctx = context.applicationContext
+            migrateDeviceSteps(KioskPrefs(ctx))
             app.paneDefinitions(ctx, this, paneFrame.paneDefinitions(ctx)).map { CantRun.unless(it, frame.provides) }
         }.also { definitions = it }
     }
@@ -81,7 +85,33 @@ class GlassworksRuntime(
      * (SetupFlow.usable: a clashing id or request name) is left out with an error in the log, so a bad
      * pane never stops the app from starting.
      */
-    override fun setupSteps(context: Context): List<SetupStep> = setupPanes(context).flatMap { it.steps }
+    override fun setupSteps(context: Context): List<SetupStep> = setupPanes(context).flatMap { it.steps } + deviceSetupSteps(context)
+
+    private var deviceSteps: List<SetupStep>? = null
+
+    /**
+     * Silent updates (#422): shown during setup whenever updates ask for a tap and there's a way to change that. The
+     * answer is read on every ask, at most once a second, once [UpdateManager] has read the frame's root update service.
+     */
+    override fun deviceSetupSteps(context: Context): List<SetupStep> = synchronized(this) {
+        deviceSteps ?: run {
+            val ctx = context.applicationContext
+            val prefs = KioskPrefs(ctx)
+            val silent = SilentUpdates.Fresh { updates?.rootService?.let { SilentUpdates.read(ctx, it) } }
+            listOf(SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }))
+        }.also { deviceSteps = it }
+    }
+
+    /**
+     * Once per install of a build with the device's own steps: a panel that was set up before never sees them, as with
+     * the radio's step. Runs with the pane definitions, which the app makes before discovery can save a Home Assistant
+     * URL in this process.
+     */
+    private fun migrateDeviceSteps(prefs: KioskPrefs) {
+        if (prefs.deviceStepsMigrated) return
+        if (SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped)) prefs.silentUpdatesAnswered = true
+        prefs.deviceStepsMigrated = true
+    }
 
     /**
      * The panes on setup's Panes step, in definition order: each card with its pane's usable steps
