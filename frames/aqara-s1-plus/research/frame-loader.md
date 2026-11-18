@@ -273,17 +273,19 @@ sheet with the same steps is outside the repo.
 each read twice and compared, and keep the hashes:
 ```sh
 B=<backup dir outside the repo>
-(
-  set -eo pipefail
-  for p in boot misc; do
-    adb exec-out "su -c 'cat /dev/block/by-name/$p'" > "$B/$p.img"
-    [ -s "$B/$p.img" ]
-    adb exec-out "su -c 'cat /dev/block/by-name/$p'" | cmp - "$B/$p.img"
-  done
-  cd "$B" && shasum -a 256 boot.img misc.img > SHA256SUMS
-) || echo "BACKUP FAILED: stop here, write nothing"
+ok=1
+for p in boot misc; do
+  adb exec-out "su -c 'cat /dev/block/by-name/$p'" > "$B/$p.img" || ok=0
+  adb exec-out "su -c 'cat /dev/block/by-name/$p'" > "$B/$p.2.img" || ok=0
+  cmp -s "$B/$p.img" "$B/$p.2.img" || ok=0
+  rm -f "$B/$p.2.img"
+done
+[ "$(wc -c < "$B/boot.img")" -eq 33554432 ] || ok=0
+[ "$(wc -c < "$B/misc.img")" -eq 16777216 ] || ok=0
+if [ "$ok" = 1 ]; then (cd "$B" && shasum -a 256 boot.img misc.img | tee SHA256SUMS)
+else echo "BACKUP FAILED: stop here, write nothing"; fi
 ```
-`boot.img` must be 33554432 bytes and `misc.img` 16777216.
+The size checks matter: `adb exec-out` can succeed with an empty or short read when `su` fails.
 Then make `boot-ram.img`: the same image with ` androidboot.gw139=ram` appended to the header's
 command line (offset 64, 512 bytes, NUL-padded). A RAM boot then shows `ro.boot.gw139=ram`, and a
 boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
