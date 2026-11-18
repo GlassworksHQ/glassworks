@@ -152,7 +152,7 @@ Kiln's steps read to the panel's colours (always night, one white button, sky to
 
 ```sh
 npm run build:lan -w @glassworks/kiln-app          # writes core/src/main/assets/setup (committed)
-node kiln/apps/kiln/lan/fake-panel.mjs [--closed] [--offline]  # http://localhost:8099/setup against a fake panel; the code is 482913
+node kiln/apps/kiln/lan/fake-panel.mjs [--closed] [--offline] [--no-radio]  # http://localhost:8099/setup against a fake panel; the code is 482913
 ```
 
 CI rebuilds the page and fails when the committed files differ, so commit the build with its sources.
@@ -172,6 +172,20 @@ How it behaves:
   gives the outcome. The page keeps its channel and asks once more 45 s later (`JOIN_CHECK_MS`): an answer
   means the panel's setup Wi-Fi is still up and the join didn't happen, so the page says so, with Try again. The panel refuses `wifi.join` while it is on a network: a password never crosses a LAN
   as plain HTTP.
+- **Sign in** on the Home Assistant step saves the address, then goes to the panel's sign-in in the same
+  tab (`/signin/continue?then=setup`, #453). The panel binds that sign-in to this browser with a cookie
+  holding its state (single use, 10 minutes, PKCE as for the QR code). Each pending sign-in gets a cookie
+  slot no other pending one holds (`gw_signin_<n>`), so starting another never replaces it and a browser holds
+  at most 16 of them. The panel refuses its callback from any other browser with a way back to setup, and
+  after Home Assistant loads `/setup#signed-in` again. The binding cookie is left to run out (30 minutes), not deleted: once its state is used its slot is free, so a newer sign-in may already hold that name, and a leftover binds nothing. The
+  QR code's own sign-in is not bound, as before. The page reads where setup is from the
+  panel, then goes on to the radio step, or to Done on a panel without a radio. Kiln's wizard
+  over USB opens the sign-in in a pop-up instead (`/signin/continue?then=kiln`; a tab where pop-ups are
+  blocked), since leaving its page would drop the USB connection. The panel's last page closes that window, or
+  says "Signed in. Kiln has moved on." where the browser won't let it, and Kiln moves on to the radio step as
+  soon as the panel reports the sign-in, with no click.
+- The step rail lists the steps the panel has. Before pairing, the page reads the panel's state once over
+  the channel (which answers `state` to anyone) and lets it go; a frame without a radio has no Radio step.
 - Pairing is open until Home Assistant adds the panel. After that, the panel's **Allow setup over the
   network** button in Home Assistant, or Kiln over USB (`pairing.arm`), opens it for 30 minutes.
 - What is left: the panel has no write timeout on the WebSocket. A browser that stops reading while the

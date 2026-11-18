@@ -13,6 +13,7 @@ import { ANDROID_BASE, AndroidActivity, keptAndroid } from '../src/android/activ
 import { AndroidWizard, Screens } from '../src/android/AndroidWizard';
 import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from '../src/android/demo';
 import { AndroidSession, androidMode } from '../src/android/session';
+import { SCREEN_LOCK_HELP, SCREEN_LOCK_LINE } from '../src/android/ScreenLockBlock';
 import { registry } from '../src/wizard/registry';
 
 beforeAll(() => {
@@ -129,6 +130,31 @@ describe('the screens', () => {
     expect(screen.getByText('Open setup').getAttribute('href')).toBe('http://192.0.2.10:8099/setup');
     expect(embers()).toEqual(['Open setup']);
     expect(rail().every((r) => r.endsWith(':done'))).toBe(true);
+  });
+
+  it('5: Done says what Kiln did with silent updates, in its own block (issue 422)', async () => {
+    const block = () => document.querySelector('.su')?.textContent;
+    await show('done', 'Done.');
+    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install with nobody at the tablet. Kiln allowed “Install unknown apps” for Glassworks only. Undo takes it back.');
+    expect(document.querySelector('.grants')).toBeNull(); // the block replaces the grants list's row
+    cleanup();
+    await show('done-old', 'Done.');
+    expect(block()).toBe('Silent updatesA tap eachAndroid 9 asks for a tap on each update. Updates still come from Home Assistant; someone taps Install on the tablet. Only a device owner skips the tap.');
+    cleanup();
+    await show('done-refused', 'Done.');
+    expect(block()).toBe('Silent updatesThis tablet said noThis tablet\'s software keeps “Install unknown apps” off. Updates still come from Home Assistant, with a tap on the tablet.');
+    expect(document.querySelector('.warnbox')).toBeNull(); // said once, in the block
+  });
+
+  it('5: a tablet with a PIN: Done says someone has to unlock it, and how to turn the lock off (#522)', async () => {
+    const lock = () => document.querySelector('[aria-label="Screen lock"]');
+    await show('done-lock', 'Done.');
+    expect(lock()?.textContent).toBe(`Screen lockOn${SCREEN_LOCK_LINE} How to change it`);
+    expect(screen.getByText('How to change it').getAttribute('href')).toBe(SCREEN_LOCK_HELP);
+    expect(embers()).toEqual(['Open setup']);
+    cleanup();
+    await show('done', 'Done.');
+    expect(lock()).toBeNull(); // none or swipe: nothing to say
   });
 
   it('5: an unknown device: "untested device" and a way to report it', async () => {

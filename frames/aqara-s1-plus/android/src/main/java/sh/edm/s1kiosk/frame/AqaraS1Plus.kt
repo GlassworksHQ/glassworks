@@ -9,7 +9,9 @@ import dev.glassworks.frame.Capability.MICROPHONE
 import dev.glassworks.frame.Capability.S1_WALL_BASE
 import dev.glassworks.frame.Capability.SILABS_RADIO
 import dev.glassworks.frame.Capability.SPEAKER
+import dev.glassworks.frame.DeviceFrame
 import dev.glassworks.frame.Frame
+import dev.glassworks.frame.FrameRelease
 import dev.glassworks.frame.Hardware
 import dev.glassworks.frame.NamedBy
 import dev.glassworks.frame.RootUpdates
@@ -61,12 +63,21 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
     private val device by lazy { S1Device(aqaraCloud) }
 
-    override fun deviceSection(context: Context, running: (String) -> Pane?) = device.section(context, running)
+    override fun deviceSection(context: Context, running: (String) -> Pane?) = device.section(context, frameRelease, running)
 
     override val rootUpdates: RootUpdates = RootUpdateInstaller()
 
     /** The radio helper sends the setup hotspot's DNS and port 80 to the app's portal while it runs (#197). */
     override val hotspotPortal = true
+
+    /**
+     * The S1 frame's version (#139), which the loader in its boot image sets at boot. A panel without the loader has
+     * none and needs one Kiln update for it; after that, frame updates come over the air in signed bundles.
+     */
+    override val frameRelease: FrameRelease by lazy {
+        val stamp = FrameRelease.stamp(board, DeviceFrame::systemProperty)
+        FrameRelease(board, stamp, install = if (stamp != null) null else NEEDS_LOADER)
+    }
 
     /** Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3). One per service run. */
     override fun serviceWork(context: Context, onForegroundOnly: () -> Unit): ServiceWork =
@@ -97,6 +108,9 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
         /** What the settings menu calls the S1's own settings app (com.lumi.settings). */
         const val SETTINGS_TITLE = "Aqara's own settings"
+
+        /** How a panel without the loader gets a frame update (#139). */
+        const val NEEDS_LOADER = "To install it: update the panel once with Kiln, at ${FrameRelease.KILN}. Later frame updates install over the air"
 
         /**
          * `Build.HARDWARE` on the S1's A133 (read 2026-11-14), the S1 frame's only check. Its other build

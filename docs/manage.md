@@ -17,7 +17,7 @@ It has the same settings as the panel's own menu, and changes them the same way.
 
 | Page | What it has |
 |---|---|
-| Overview | Running or not, the app's version ("· test build <commit>" on a test build) and how long the app has run; Home Assistant, Wi-Fi (connected or not from Android's connectivity service; the network's name and signal where Android gives them to the app), the web engine, memory; every pane the panel can run, with its state (running, off, or can't run now and why). A pane the device has no hardware for isn't listed, here or on the panel. Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
+| Overview | Running or not, the app's version ("· test build <commit>" on a test build) and how long the app has run. On the legacy build (Android 6 and 7 devices and the Mirror), a **Legacy** chip next to the version: hover it, tap it or tab to it to read its limits (a frozen web engine that loads only your Home Assistant, remote debugging off); Home Assistant, Wi-Fi (connected or not from Android's connectivity service; the network's name and signal where Android gives them to the app), the web engine, memory; every pane the panel can run, with its state (running, off, or can't run now and why). A pane the device has no hardware for isn't listed, here or on the panel. Buttons: **Reload dashboard**, **Restart app**, **Reboot**, **Check for updates** |
 | Home Assistant & dashboard, Screen, each pane | Every setting the panel's own menu has, in the same order and words, and you can change each one here. Screen and some panes end with their [blueprints for Home Assistant](blueprints.md#adding-one-from-the-manage-page), such as Panel night mode. A pane's page has its on/off at the top right and shows what it's doing; a pane that's off says what that means. The radio's page links to the Thread join |
 | The device's page (S1 Plus, or the device's model) | What belongs to the device and to no pane. On the S1: **Block Aqara cloud**, the cloud daemon's state, which of Aqara's apps are turned off, the radio's mode (it opens the Radio page) and **Silent updates**. Elsewhere: **Silent updates**, whether the app is the device owner, the model and the Android version. **Silent updates** says whether an update from Home Assistant installs with nobody at the panel, and why; where it can't, how to change that on this kind of device, in amber ([Silent updates](esphome.md#silent-updates)) |
 | Log | The last 7 days, kept across reboots. Filter by warnings or errors, search, and **Download diagnostics** |
@@ -37,6 +37,9 @@ switches and each button's last press, or what a base adds when none is mounted.
 shows what the base reports, so reload to see it change. The Bluetooth proxy page shows what the panel's shows: how it's listening, the advertisements, scanner
 and connections tiles, the mode (*Listen only* or *Listen and connect*), and its entities, with
 **Turn on Bluetooth** or **Turn on location** when one of them stops it.
+The camera page has what the panel's has, on every frame, touch screen or not: the two cards of
+"What may the camera do?" (*Presence only* and *Presence + camera*), privacy, and the ONVIF stream.
+Either sign-in can change them. The stream's "Needs Presence + camera." links to them.
 The time zone page has everything the panel's has: the zone, picked from a
 list grouped by region, whether the panel keeps it, and Home Assistant's zone, with **Use it** when
 Home Assistant keeps another zone's clock.
@@ -144,7 +147,8 @@ that only takes effect when the app starts again says so and offers **Restart no
 asks first on the panel (turning the radio off) asks here too. The panel's menu, if it's open, shows
 the new value within a couple of seconds. The page doesn't follow the panel on its own: its values,
 the sliders' included, are the ones from when it was drawn, so reload it to see a change made on the
-panel or in Home Assistant. Each change goes in the Log with who made it.
+panel or in Home Assistant. Each change goes in the Log with who made it, and a choice with what it is
+now: "Alex set Camera › Camera use to Presence + camera".
 
 A sign-in (a camera stream's user name and password) says Set or Not set. Its password is write-only:
 no page, on the panel or here, shows it again once it is saved. Open it to change the user name, to
@@ -176,6 +180,13 @@ address changes.
 **Rebooting asks for the code on the panel** too, because a reboot takes the radio's network down
 for everyone for about a minute. The Reboot button only shows where the app can reboot the panel
 (when it's the device owner).
+
+**Home Assistant's name gives more than one address.** A `.local` name can resolve to Home
+Assistant's IPv6 address as well as its IPv4 one, also on a network where the panel has no IPv6 (an
+mDNS reflector relays it from another VLAN). The panel tries the addresses the way a browser does: an
+address that doesn't answer gets a quarter of a second, then the next one starts, and the first to
+connect wins. Older versions tried only the first address, and the sign-in failed after about 9
+seconds.
 
 **Administrators only, for now.** Like Home Assistant's own device pages, only an administrator can
 manage a panel. Whether other users get a say is open (#124).

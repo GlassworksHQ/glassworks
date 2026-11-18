@@ -156,6 +156,7 @@ open the entity, and turn on *Enabled*.
 | Restart app | `restart_app` | core | config | on | Used often |
 | Screen mode | `screen_mode` | core | config | on | Automations (night, away) |
 | App update | `app_update` | core | config | on | HA shows updates only while it is on |
+| Frame update | `frame_update` | core | config | on | Only on the S1 and the Mirror ([frame updates](#frame-updates)) |
 | Allow setup over the network | `lan_setup` | core | config | on | The way back to setup from a laptop once HA has the panel |
 | IP address | `ip_address` | core | diagnostic | on | People check it |
 | Silent updates | `silent_updates` | core | diagnostic | on | People check it: whether an update needs someone at the panel |
@@ -252,7 +253,7 @@ So on a panel HA already has:
 | switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
 | binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
 | sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
-| select `Screen mode` | `screen_mode` | `presence` / `always` |
+| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522) |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
 | number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |
@@ -293,6 +294,7 @@ So on a panel HA already has:
 | text_sensor `Time zone status` | `time_zone_status` | diagnostic; whether the zone is being kept |
 | text_sensor `App version` | `app_version` | diagnostic |
 | update `App update` (firmware) | `app_update` | the latest GitHub release vs this app; install from HA ([app updates](#app-updates)) |
+| update `Frame update` (firmware) | `frame_update` | the frame's latest release vs its frame version; on the S1 and the Mirror only ([frame updates](#frame-updates)) |
 | text_sensor `Update status` | `update_status` | diagnostic; e.g. `up to date (1.2.0)`, `1.3.0 available`, `Downloading 1.3.0: 42%`, `Install of 1.3.0 failed: …` |
 | text_sensor `Silent updates` | `silent_updates` | diagnostic; whether app updates install with nobody at the panel, and why: `Yes: …` or `No: …` ([Silent updates](#silent-updates)) |
 | text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
@@ -409,20 +411,21 @@ the four marked *on* are enabled when HA adds the panel. Turn the others on from
 
 The pane samples once a minute. It sends a value only when it moved by at least its band since the
 last value it sent, so a quiet panel sends almost nothing. It reads files in `/proc` and `/sys` and
-asks Android. It runs no shell commands and needs no root.
+asks Android. It runs no shell commands and needs no root. S1 Kiosk and the generic app (both of its
+builds, Android 6 and up) have it.
 
 | Entity | object_id | Default | Band | Source |
 |---|---|---|---|---|
-| sensor `CPU usage` (%) | `cpu_usage` | on | 1 % | `/proc/stat`, all cores, busy share over the last minute |
+| sensor `CPU usage` (%) | `cpu_usage` | on | 1 % | `/proc/stat`, all cores, busy share over the last minute. Unknown where SELinux keeps apps from `/proc/stat`: Android 8 and later, unless permissive as the S1's (untested on a tablet) |
 | sensor `App CPU usage` (%) | `app_cpu_usage` | off | 0.5 % | `/proc/<pid>/stat` of every app process (Gecko's too), as a share of all cores |
-| sensor `CPU temperature` (°C) | `cpu_temperature` | on | 0.5 °C | the frame's thermal zone; on the S1 `cpu_thermal_zone`. No entity on a frame without one |
+| sensor `CPU temperature` (°C) | `cpu_temperature` | on | 0.5 °C | the frame's thermal zone; on the S1 `cpu_thermal_zone`. No entity on a frame without one: the generic app's (the Pixel Tablet, the lululemon Mirror, any other device) |
 | sensor `RAM available` (MiB) | `memory_available` | off | 8 MiB | `ActivityManager.MemoryInfo.availMem` |
-| sensor `App RAM` (MiB) | `app_memory` | off | 4 MiB | PSS of every app process, from `/proc/<pid>/smaps_rollup`; unknown for a minute if one of them can't be read |
+| sensor `App RAM` (MiB) | `app_memory` | off | 4 MiB | PSS of every app process, from `/proc/<pid>/smaps_rollup`; unknown for a minute if one of them can't be read. A kernel without `smaps_rollup` (before Linux 4.14 and Android's 4.4 and 4.9, such as the Mirror's 3.10) sums the `Pss:` lines of `/proc/<pid>/smaps` |
 | sensor `Storage free` (GiB) | `storage_free` | off | 0.05 GiB | `StatFs` on `/data` |
-| sensor `Wi-Fi signal` (dBm) | `wifi_signal` | on | 2 dB | `WifiManager`; unknown while Wi-Fi is down |
-| sensor `Wi-Fi link speed` (Mbit/s) | `wifi_link_speed` | off | 1 Mbit/s | `WifiManager` |
+| sensor `Wi-Fi signal` (dBm) | `wifi_signal` | on | 2 dB | the Wi-Fi network `ConnectivityManager` has, then its `WifiInfo` (#263); unknown while Wi-Fi is down |
+| sensor `Wi-Fi link speed` (Mbit/s) | `wifi_link_speed` | off | 1 Mbit/s | as Wi-Fi signal |
 | sensor `Uptime` (timestamp) | `uptime` | on | 120 s | when the panel booted; HA shows "3 hours ago" |
-| sensor `App uptime` (timestamp) | `app_uptime` | off | 120 s | when the app process started |
+| sensor `App uptime` (timestamp) | `app_uptime` | off | 120 s | when the app process started: `Process.getStartElapsedRealtime`, or `/proc/self/stat` on Android 6 |
 | sensor `Web content processes` | `web_content_processes` | off | 1 | the engine's content processes (Gecko's tabs) |
 | text_sensor `Last restart reason` | `last_restart_reason` | off | | why the app's process last ended, e.g. `crash`, `low memory`, `app updated`; Android 11 and later. Always `unknown` on the S1 (Android 10) |
 
@@ -591,6 +594,33 @@ usual `--ez camera_enabled true` on the main activity, for example
   6. Any failure, or a phase stuck for 30 min (download) or 10 min (verify/install), ends with
      `in_progress` off and the reason on top of the summary.
 - A debug build can't update to a release: the keys differ, and the entity says so.
+
+### Frame updates
+
+`update/FrameUpdate.kt` (#139). A frame version is the version of the parts of a device that Glassworks owns: the
+S1's boot-side services, scripts and boot animation, or the Mirror's patched image (the Glass Panes release plus
+Kiln's recipe). It is not Android's version, which the Device page still shows as *Android*. Frame versions use
+semantic versioning and start at 1.0.0, with Glassworks 1.0.0.
+
+| Frame | Frame version row and *Frame update* entity | Installs from Home Assistant |
+|---|---|---|
+| S1 | Yes | Not yet. A panel without the loader in its boot image needs one Kiln update first, and the card says so |
+| Mirror | Yes | No. The card says to flash the Mirror again with Kiln |
+| Pixel Tablet, any other generic Android device | No: Google or the maker updates the device | - |
+
+- **The version** comes from two system properties: `ro.glassworks.frame.id` (the frame's id) and
+  `ro.glassworks.frame.version`. Kiln stamps them into the Mirror's `build.prop` when it flashes it. The S1's loader
+  will set them at boot. A device without them shows *Before 1.0.0*, and a Mirror names its Glass Panes image from
+  `ro.build.fingerprint` (*Before 1.0.0 (Glass Panes image 2)*). Such a device is older than any frame release.
+- **The check** is the app's own: the same release list, read at the same times. The newest stable release tagged
+  `frames/<id>/v<version>` is the frame's latest ([releasing.md](releasing.md#frame-releases)).
+- **State:** `current_version` is the frame version, `title` is the frame's name and "frame" (`Aqara S1 Plus frame`).
+  While no newer release is out, `latest_version` = `current_version`, as for the app. When one is out:
+  `latest_version`, `release_url`, and `release_summary`, which starts with how to install it.
+- **Install:** Home Assistant's ESPHome update entity always has an Install button. Here it does nothing (the
+  log says why), and the summary says how to install the update.
+- **The Device page and Manage** show a *Frame version* row from the same model: the version, and when a newer
+  one is out, which and how to install it, in amber.
 
 ### Silent updates
 

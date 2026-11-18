@@ -47,7 +47,7 @@ import dev.glassworks.assist.AssistDefinition
 
 /**
  * #23: Glassworks for generic Android is its own app on the core: its own id and name, Android's standard
- * sensors, and a fixed base set of panes (Assist with its timers, Sendspin). A pane the device has no hardware
+ * sensors, and a fixed base set of panes (Assist with its timers, Sendspin, the camera, diagnostics). A pane the device has no hardware
  * for is hidden everywhere: the settings, the Manage page, setup and Home Assistant.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -225,13 +225,13 @@ class GenericAppTest {
     @Test fun aTabletRunsTheBaseSetAndAnnouncesItselfAsGlassworks() {
         val runtime = runtime()
         val definitions = runtime.paneDefinitions(app)
-        assertEquals(listOf("assist", "sendspin", "camera"), definitions.map { it.id })
+        assertEquals(listOf("assist", "sendspin", "camera", "diagnostics"), definitions.map { it.id })
         assertTrue(definitions.none { it is CantRun })
 
         val (id, device) = run(runtime)
         assertEquals("Pixel Tablet (Glassworks)", id.model)
         assertEquals("Glassworks 1.0.0", id.compilationTime)
-        assertEquals(listOf("sendspin", "assist", "timers", "camera"), device.paneList().map { it.id })
+        assertEquals(listOf("sendspin", "assist", "timers", "camera", "diagnostics"), device.paneList().map { it.id })
         assertTrue("its camera's entities", device.entityList().map { it.objectId }.containsAll(listOf("camera", "camera_presence", "camera_privacy", "camera_pane")))
         assertFalse("nothing of the S1", device.entityList().any { it.objectId.startsWith("radio_") || it.objectId.startsWith("base_") })
     }
@@ -255,7 +255,7 @@ class GenericAppTest {
 
         val (id, device) = run(runtime)
         assertEquals("no voice features in Home Assistant", 0, id.voiceFeatures)
-        assertEquals("timers ride with Assist", listOf("sendspin", "camera"), device.paneList().map { it.id })
+        assertEquals("timers ride with Assist", listOf("sendspin", "camera", "diagnostics"), device.paneList().map { it.id })
         assertFalse(device.entityList().any { it.objectId == "mute_microphone" })
     }
 
@@ -269,19 +269,47 @@ class GenericAppTest {
         assertFalse("no step in setup", runtime.setupSteps(app).any { it.id == "camera" })
 
         val (_, device) = run(runtime)
-        assertEquals(listOf("sendspin", "assist", "timers"), device.paneList().map { it.id })
+        assertEquals(listOf("sendspin", "assist", "timers", "diagnostics"), device.paneList().map { it.id })
         val ids = device.entityList().map { it.objectId }
         assertEquals("no camera entity in Home Assistant", emptyList<String>(), ids.filter { it.startsWith("camera") || it == "onvif_stream" })
         assertTrue("the core's entities are there", "app_version" in ids)
     }
 
-    @Test fun aDeviceWithNeitherRunsNoPaneButStillRunsTheCore() {
+    @Test fun aDeviceWithNoneOfThatHardwareRunsOnlyDiagnosticsAndTheCore() {
         features()
         val runtime = runtime()
         assertEquals(listOf("assist", "sendspin", "camera"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
         val (_, device) = run(runtime)
-        assertTrue(device.paneList().isEmpty())
+        assertEquals(listOf("diagnostics"), device.paneList().map { it.id })
         assertTrue("the core's entities are there", device.entityList().any { it.objectId == "app_version" })
+    }
+
+    /**
+     * Diagnostics needs no hardware, so every device runs it: its page on the panel's settings and on Manage (the same
+     * section, as for every pane), and its sensors in Home Assistant. No frame here names a CPU thermal zone, so there
+     * is no temperature entity and no temperature tile, rather than a 0.
+     */
+    @Test fun diagnosticsIsOnThePanelOnManageAndInHomeAssistant() {
+        val runtime = runtime()
+        val (_, device) = run(runtime)
+        runtime.device = device
+        val ids = device.entityList().map { it.objectId }
+        for (id in listOf("diagnostics", "cpu_usage", "memory_available", "app_memory", "storage_free", "wifi_signal", "uptime", "app_uptime", "last_restart_reason")) {
+            assertTrue(id, id in ids)
+        }
+        assertFalse("no thermal zone, no temperature", "cpu_temperature" in ids)
+
+        val menu = S1Settings.model(runtime, KioskPrefs(app), runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
+        val page = menu.sections.single { it.id == "diagnostics" }
+        assertTrue("a pane in the rail", "diagnostics" in menu.panes)
+        val tiles = page.items.filterIsInstance<dev.glassworks.pane.SettingsItem.Tiles>().single().tiles().map { it.name }
+        assertEquals(listOf("CPU", "RAM", "Wi-Fi", "Storage", "Uptime"), tiles)
+
+        val status = manage(runtime).status()
+        assertTrue("on Manage's pane list", status.panes.any { it.id == "diagnostics" })
+        assertEquals("the same page on Manage", tiles,
+            status.sections.single { it.id == "diagnostics" }.items.filterIsInstance<dev.glassworks.pane.SettingsItem.Tiles>().single().tiles().map { it.name })
+        runtime.device = null
     }
 
     /** The launcher icon and the splash draw the mark branding/boot/splash_mark.py writes for S1 Kiosk: a copy, kept equal. */

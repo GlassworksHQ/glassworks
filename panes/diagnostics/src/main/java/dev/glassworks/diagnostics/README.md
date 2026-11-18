@@ -55,7 +55,7 @@ It is a core pane: every frame gets it. The entity list, bands and sources are i
 
 | Frame member | Used for |
 |---|---|
-| `cpuThermalZone` | The `type` of the CPU's thermal zone. Null: no temperature entity. The S1's is `cpu_thermal_zone`. |
+| `cpuThermalZone` | The `type` of the CPU's thermal zone. Null: no temperature entity. The S1's is `cpu_thermal_zone`; `GenericAndroid` (the generic app's frame, the Mirror and the Pixel Tablet included) names none. |
 
 The engine says which of the app's processes hold web content (`Engine.isContentProcess`), so the
 pane doesn't know Gecko's process names.
@@ -77,3 +77,10 @@ an off pane keeps its entities, and they must read unknown, not the last value s
 
 *Last restart reason* uses `ApplicationExitInfo`, which Android 11 added. On Android 10, the S1's,
 it reads `unknown`. The check is `Platform.hasApplicationExitInfo`.
+
+The generic app's legacy build runs the pane from Android 6. There, *App uptime* reads the start from
+`/proc/self/stat` (`Platform.hasProcessStartTime`). A kernel without `smaps_rollup` (before Linux 4.14
+and Android's 4.4 and 4.9; the lululemon Mirror's is 3.10) gives *App RAM* as the sum of the `Pss:`
+lines of `/proc/<pid>/smaps`, scanned as bytes. The probe checks `/proc/self/smaps_rollup` once. Not
+Android's own count (`ActivityManager.getProcessMemoryInfo`): on the Android 6 emulator (kernel 3.18)
+it reads 0 for every process, as `dumpsys meminfo` does there (2026-11-17).

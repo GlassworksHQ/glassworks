@@ -242,6 +242,8 @@ class SetupPanesTest {
         Mockup.idle()
         all(s, View::class.java).first { it.contentDescription == "Home Assistant" && it.isClickable }.performClick()
         Mockup.idle()
+        all(s, View::class.java).first { it.contentDescription == "Add it" && it.isClickable }.performClick()
+        Mockup.idle()
         assertTrue(shown(s, "Add it by hand") != null) // folded again
         shown(s, "Add it by hand")!!.performClick()
         s.hide()
@@ -258,7 +260,7 @@ class SetupPanesTest {
         assertTrue(shown(s, "Use another network") != null)
         shown(s, "Continue")!!.performClick()
         Mockup.idle()
-        assertTrue(shown(s, "Add it in Home Assistant.") != null || shown(s, "Added to Home Assistant.") != null)
+        assertTrue(shown(s, "Scan to sign in.") != null) // Home Assistant's first step
     }
 
     @Test
@@ -267,7 +269,7 @@ class SetupPanesTest {
         val p = overlay(m = model(SetupFlow.WIFI, done = emptySet(), preview = true, online = false))
         all(p, View::class.java).first { it.contentDescription == "Home Assistant" && it.isClickable }.performClick()
         Mockup.idle()
-        assertTrue(shown(p, "Add it in Home Assistant.") != null)
+        assertTrue(shown(p, "Scan to sign in.") != null)
         // Live: a step that isn't reached yet doesn't open.
         val live = overlay(m = model(SetupFlow.WIFI, done = emptySet(), online = false))
         all(live, View::class.java).firstOrNull { it.contentDescription == "Home Assistant" && it.isClickable }?.performClick()

@@ -202,6 +202,7 @@ public final class dev/glassworks/sendspin/WsClient {
 
 public final class dev/glassworks/sendspin/WsClient$Companion {
 	public final fun connect (Ljava/lang/String;II)Ldev/glassworks/sendspin/WsClient;
+	public final fun connect (Ljava/lang/String;IILkotlin/jvm/functions/Function3;)Ldev/glassworks/sendspin/WsClient;
 	public static synthetic fun connect$default (Ldev/glassworks/sendspin/WsClient$Companion;Ljava/lang/String;IIILjava/lang/Object;)Ldev/glassworks/sendspin/WsClient;
 }
 

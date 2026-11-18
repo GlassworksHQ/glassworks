@@ -2,6 +2,7 @@ package dev.glassworks.settings
 
 import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
@@ -44,7 +45,9 @@ import java.io.File
  * The Screen page on each frame (#471), on the panel and on the Manage page, from the real settings model:
  * the S1 (its VI5300 and light sensor), a Pixel Tablet (a light sensor and a camera, no proximity sensor),
  * a bare tablet (neither) and the lululemon Mirror (portrait, no touch; a camera, sensors unknown, drawn
- * without). Each page also scrolled to its Blueprints card (`-end`): Panel night mode (#473), for an administrator. Skipped unless asked:
+ * without). Each page also scrolled to its Blueprints card (`-end`): Panel night mode (#473), for an administrator. A Pixel
+ * Tablet with a PIN at its own size (`tablet-pin`, #522): the screen-lock note, as a fresh panel has it (always on) and with
+ * a timeout (`-timeout`). Skipped unless asked:
  *   ./gradlew :kiosk:testDebugUnitTest --tests '*ScreenByFrameMockups*' -Ps1MockupDir=<dir>
  */
 @RunWith(RobolectricTestRunner::class)
@@ -128,6 +131,18 @@ class ScreenByFrameMockups {
         sensor(Sensor.TYPE_LIGHT, "Ambient Light")
         features(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_BLUETOOTH_LE, PackageManager.FEATURE_CAMERA_ANY)
         shoot("generic", generic(), Mockup.W, Mockup.H)
+    }
+
+    @Test @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
+    fun pixelTabletWithAPin() {
+        assumeTrue(Mockup.dir != null)
+        tablet("Pixel Tablet")
+        sensor(Sensor.TYPE_LIGHT, "Ambient Light")
+        features(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_BLUETOOTH_LE, PackageManager.FEATURE_CAMERA_ANY)
+        shadowOf(app.getSystemService(KeyguardManager::class.java)).setIsDeviceSecure(true)
+        shoot("tablet-pin", generic(), 1280, 800)
+        KioskPrefs(app).apply { screenMode = "presence"; idleOffSec = 120 }
+        shoot("tablet-pin-timeout", generic(), 1280, 800)
     }
 
     @Test fun bareTablet() {

@@ -31,6 +31,7 @@ class ManageCssTest {
             "blueprint row" to listOf(El("div", "row", "bp"), El("div", "act"), chip),
             "nav item" to listOf(El("nav"), El("a", "ni"), chip),
             "pane heading" to listOf(El("div", "phr"), El("span", "pchip"), chip),
+            "Overview legacy chip" to listOf(El("section", "card", "hero"), El("div", "ht"), El("p", "meta", "lgm"), El("span", "lg"), El("button", "chip")),
         )
         val all = rules(ManagePages.MANAGE_CSS)
         for (phone in listOf(false, true)) {
@@ -64,6 +65,19 @@ class ManageCssTest {
             val hit = rules.filter { "menu" in it.selector && matches(it.selector, path) }.map { it.selector }
             assertEquals("${path.last().tag} in the dropdown", emptyList<String>(), hit)
         }
+    }
+
+    /** #29: the Legacy chip's limits stay hidden until hover, focus or a tap; then they sit under the chip, above the page. */
+    @Test
+    fun legacyTipIsHiddenAtRest() {
+        val all = rules(ManagePages.MANAGE_CSS)
+        val tip = listOf(El("section", "card", "hero"), El("p", "meta", "lgm"), El("span", "lg"), El("span", "tip"))
+        for (phone in listOf(false, true)) {
+            val rules = all.filter { phone || it.media?.contains("max-width") != true }
+            assertEquals("display, ${if (phone) "phone" else "desktop"}", "none", computed(rules, tip, "display"))
+            assertEquals("absolute", computed(rules, tip, "position"))
+        }
+        assertEquals("relative", computed(all, listOf(El("p", "meta", "lgm")), "position"))
     }
 
     /** The cascade keeps up with the stylesheet: a row's text still gets its own look. */
