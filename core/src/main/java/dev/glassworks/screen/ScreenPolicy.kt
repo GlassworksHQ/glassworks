@@ -300,7 +300,13 @@ class ScreenPolicy(
         if (holds.isEmpty() && started) updateBrightness(immediate = true)
     }
 
-    fun sleep(reason: String) {
+    fun sleep(reason: String) = sleep(reason, asked = true)
+
+    /**
+     * [asked]: someone turned the screen off (Home Assistant), not the idle timeout. Without device admin, "always" then
+     * waits for the system timeout; after an idle sleep it keeps the screen on again if the mode changed to "always".
+     */
+    private fun sleep(reason: String, asked: Boolean) {
         Log.i(logTag, "sleep ($reason) admin=$isAdmin")
         letGo()
         if (isAdmin) {
@@ -313,7 +319,7 @@ class ScreenPolicy(
         }
         // Fallback: let the system timeout turn the screen off.
         setKeepOn(false)
-        sleepAsked = true
+        sleepAsked = asked
     }
 
     private fun setKeepOn(v: Boolean) {
@@ -340,7 +346,7 @@ class ScreenPolicy(
             if (near || holds.isNotEmpty() || stays.isNotEmpty() || testHeld) lastActivity = now
             val timeoutSec = prefs.idleOffSec
             if (timeoutSec > 0 && keepOn && now - lastActivity >= timeoutSec * 1000L) {
-                sleep("idle ${timeoutSec}s")
+                sleep("idle ${timeoutSec}s", asked = false)
             }
         }
     }

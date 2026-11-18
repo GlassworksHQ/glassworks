@@ -253,6 +253,19 @@ class ScreenBehaviourPinTest {
         assertEquals("a touch keeps it on again", listOf(false, true), h.keepOnCalls)
     }
 
+    @Test fun switchingToAlwaysAfterAnIdleSleepKeepsTheScreenOn() {
+        // CodeRabbit on #525: only Home Assistant's sleep holds off "always", not the idle timeout's.
+        prefs.idleOffSec = 10
+        h.setClock(12, 0)
+        h.start()
+        h.userActivity()
+        h.advance(10_000)
+        assertEquals(listOf(false), h.keepOnCalls)
+        prefs.screenMode = "always"
+        h.advance(2_000)
+        assertEquals(listOf(false, true), h.keepOnCalls)
+    }
+
     @Test fun wakeWithTheScreenOffTakesAWakeLock() {
         h.start(screenOn = false)
         h.wake("home assistant")
