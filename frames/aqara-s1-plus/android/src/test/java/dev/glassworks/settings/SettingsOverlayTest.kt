@@ -66,7 +66,7 @@ class SettingsOverlayTest {
     /** #242: a change made on the Manage page (or in Home Assistant) shows on the open menu at its next refresh. */
     @Test
     fun rowsFollowAChangeMadeElsewhere() {
-        prefs.idleOffSec = 120
+        prefs.screenMode = "presence"; prefs.idleOffSec = 120
         prefs.autoBrightness = true
         val o = open()
         o.reload = { MenuFixture.model(o.context, radioDefinition(o.context, FixedReadout(null, running = true))) }
@@ -167,7 +167,7 @@ class SettingsOverlayTest {
     @Test
     fun cancelLeavesTheValue() {
         val o = open()
-        prefs.idleOffSec = 120
+        prefs.screenMode = "presence"; prefs.idleOffSec = 120
         o.previewSection("screen")
         Mockup.idle()
         row(o, "Turn off when idle").performClick()
@@ -198,7 +198,7 @@ class SettingsOverlayTest {
     @Test
     fun aDurationAppliesWhenPicked() {
         val o = open()
-        prefs.idleOffSec = 120
+        prefs.screenMode = "presence"; prefs.idleOffSec = 120
         o.previewSection("screen")
         Mockup.idle()
         row(o, "Turn off when idle").performClick()

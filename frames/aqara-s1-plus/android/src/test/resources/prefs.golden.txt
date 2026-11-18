@@ -45,7 +45,7 @@ kiosk|radio_ha_ipv6|String|null
 kiosk|radio_mode|String|null
 kiosk|radio_zigbee_stack|String|null
 kiosk|remote_debug|Boolean|BuildConfig.DEBUG
-kiosk|screen_mode|String|"presence"
+kiosk|screen_mode|String|"always"
 kiosk|secure_hosts|String|""
 kiosk|sendspin_enabled|Boolean|true
 kiosk|sendspin_flac|Boolean|true
