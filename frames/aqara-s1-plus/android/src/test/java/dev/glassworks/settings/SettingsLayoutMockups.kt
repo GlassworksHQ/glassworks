@@ -166,7 +166,7 @@ class SettingsLayoutMockups {
     fun mirror() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
         app.applicationInfo.targetSdkVersion = 35
-        val o = menu(sh.edm.s1kiosk.frame.TestFrames.mirror(app), "lululemon Studio Mirror", listOf(panes.voice()), setOf("diagnostics"), "1.1 of 2 GB")
+        val o = menu(dev.glassworks.s1.frame.TestFrames.mirror(app), "lululemon Studio Mirror", listOf(panes.voice()), setOf("diagnostics"), "1.1 of 2 GB")
         o.previewSection("device")
         Mockup.idle()
         Mockup.save("layout-mirror-08-device", o, Mockup.H, Mockup.W)

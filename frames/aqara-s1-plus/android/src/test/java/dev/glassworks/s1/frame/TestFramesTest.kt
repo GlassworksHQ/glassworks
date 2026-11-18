@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.frame
+package dev.glassworks.s1.frame
 
 import android.app.Application
 import dev.glassworks.frame.Input

@@ -72,7 +72,7 @@ class FrameEntitiesTest {
             listOf("screen", "auto_brightness", "illuminance", "screen_mode", "idle_timeout", "max_brightness", "camera_presence"),
         ) { sensor(Sensor.TYPE_LIGHT); camera() },
         Case(
-            "lululemon-mirror: a camera, no sensors, no touch", { generic(sh.edm.s1kiosk.frame.TestFrames.MIRROR_PROPS) },
+            "lululemon-mirror: a camera, no sensors, no touch", { generic(dev.glassworks.s1.frame.TestFrames.MIRROR_PROPS) },
             listOf("screen", "screen_mode", "idle_timeout", "camera_presence"),
         ) { camera(); keysOnly() },
     )
