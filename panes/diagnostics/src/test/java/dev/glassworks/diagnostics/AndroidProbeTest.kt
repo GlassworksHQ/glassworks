@@ -8,7 +8,6 @@ import android.app.ActivityManager
 import android.app.Application
 import android.net.wifi.WifiManager
 import android.os.DeadSystemException
-import android.os.Debug
 import android.os.Environment
 import android.os.Process
 import android.system.Os
@@ -78,8 +77,8 @@ class AndroidProbeTest {
         assertEquals(512L shl 20, probe().sample().memoryAvailableBytes)
     }
 
-    /** A kernel with `smaps_rollup` (the S1's 4.9): the app's RAM comes from it, not from Android's count. */
-    @Test @Config(shadows = [ProcessPssShadow::class])
+    /** A kernel with `smaps_rollup` (the S1's 4.9): the app's RAM comes from it, not from the longer `smaps`. */
+    @Test
     fun appRamComesFromSmapsRollupWhereTheKernelHasIt() {
         val proc = tmp.newFolder("proc-rollup")
         appProcesses(proc, 4242 to 100_000L, 4243 to 50_000L)
@@ -107,25 +106,18 @@ class AndroidProbeTest {
 }
 
 /**
- * The app's processes as Android lists them, each with a `smaps_rollup` of [pss] KiB under [proc]. [ProcessPssShadow]
- * gives Android's count for the same pids as twice that, so a test shows which source a reading came from.
+ * The app's processes as Android lists them, each with a `smaps_rollup` of [pss] KiB under [proc], and a `smaps` whose
+ * two mappings add up to twice that, so a test shows which file a reading came from.
  */
 private fun appProcesses(proc: File, vararg pss: Pair<Int, Long>) {
     val am = RuntimeEnvironment.getApplication().getSystemService(ActivityManager::class.java)
     shadowOf(am).setProcesses(pss.map { (pid, _) -> ActivityManager.RunningAppProcessInfo("dev.glassworks.generic_android.legacy", pid, null) })
-    for ((pid, kib) in pss) File(proc, "$pid").apply { mkdirs(); File(this, "smaps_rollup").writeText("Rss: 1 kB\nPss: $kib kB\n") }
-    ProcessPssShadow.pssKib = pss.associate { (pid, kib) -> pid to (kib * 2).toInt() }
-}
-
-/** Android's own PSS count, `getProcessMemoryInfo`, which Robolectric doesn't have: [pssKib] by pid. */
-@Implements(ActivityManager::class)
-class ProcessPssShadow : ShadowActivityManager() {
-    @Implementation
-    fun getProcessMemoryInfo(pids: IntArray): Array<Debug.MemoryInfo> =
-        pids.map { pid -> Debug.MemoryInfo().apply { otherPss = pssKib[pid] ?: 0 } }.toTypedArray()
-
-    companion object {
-        var pssKib: Map<Int, Int> = emptyMap()
+    for ((pid, kib) in pss) File(proc, "$pid").apply {
+        mkdirs()
+        File(this, "smaps_rollup").writeText("Rss: 1 kB\nPss: $kib kB\n")
+        File(this, "smaps").writeText(
+            "7762958000-7762959000 r-xp 00000000 fd:00 1 /system/lib64/libc.so\nRss: 1 kB\nPss: $kib kB\nSwapPss: 9 kB\n" +
+                "7762959000-776295a000 rw-p 00000000 00:00 0 [anon]\nPss: $kib kB\n")
     }
 }
 
@@ -137,9 +129,9 @@ class AndroidProbeApi23Test {
 
     /**
      * The generic app's legacy build on the lululemon Mirror: Android 6 on a 3.10 kernel, which has no `smaps_rollup`.
-     * Every reading the pane sends still has a value, App RAM from Android's own count.
+     * Every reading the pane sends still has a value, App RAM from `smaps`.
      */
-    @Test @Config(shadows = [ProcessPssShadow::class])
+    @Test
     fun everyReadingHasAValueOnAndroid6WithoutSmapsRollup() {
         val app = RuntimeEnvironment.getApplication()
         val proc = tmp.newFolder("proc-6")
@@ -159,7 +151,7 @@ class AndroidProbeApi23Test {
         val s = AndroidProbe(app, null, { false }, proc = proc, thermal = tmp.newFolder("thermal-6")).sample()
         assertEquals(CpuTimes(total = 1000, idle = 850), s.cpu)
         assertEquals(300L shl 20, s.memoryAvailableBytes)
-        assertEquals("Android's count, twice the rollups", 300_000L * 1024, s.appPssBytes)
+        assertEquals("from smaps, twice the rollups", 300_000L * 1024, s.appPssBytes)
         assertEquals(500L * ShadowStatFs.BLOCK_SIZE, s.storageFreeBytes)
         assertEquals(-60, s.wifiRssi)
         assertEquals(65, s.wifiLinkSpeed)
@@ -167,13 +159,14 @@ class AndroidProbeApi23Test {
         assertNull("no thermal zone, no temperature", s.cpuTemperature)
     }
 
-    /** A process Android can't count (0) leaves App RAM unknown: a subtotal is not the total. */
-    @Test @Config(shadows = [ProcessPssShadow::class])
-    fun aProcessAndroidCantCountLeavesAppRamUnknown() {
+    /** A process whose `smaps` can't be read (it just ended) leaves App RAM unknown: a subtotal is not the total. */
+    @Test
+    fun aProcessWithoutSmapsLeavesAppRamUnknown() {
         val proc = tmp.newFolder("proc-gone")
-        appProcesses(proc, 4242 to 100_000L)
+        appProcesses(proc, 4242 to 100_000L, 4243 to 50_000L)
         File(proc, "4242/smaps_rollup").delete()
-        ProcessPssShadow.pssKib = emptyMap()
+        File(proc, "4243/smaps_rollup").delete()
+        File(proc, "4243/smaps").delete()
         assertNull(AndroidProbe(RuntimeEnvironment.getApplication(), null, { false }, proc = proc, thermal = tmp.newFolder("thermal-gone")).sample().appPssBytes)
     }
 

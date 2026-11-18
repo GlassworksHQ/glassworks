@@ -418,7 +418,7 @@ builds, Android 6 and up) have it.
 | sensor `App CPU usage` (%) | `app_cpu_usage` | off | 0.5 % | `/proc/<pid>/stat` of every app process (Gecko's too), as a share of all cores |
 | sensor `CPU temperature` (°C) | `cpu_temperature` | on | 0.5 °C | the frame's thermal zone; on the S1 `cpu_thermal_zone`. No entity on a frame without one: the generic app's (the Pixel Tablet, the lululemon Mirror, any other device) |
 | sensor `RAM available` (MiB) | `memory_available` | off | 8 MiB | `ActivityManager.MemoryInfo.availMem` |
-| sensor `App RAM` (MiB) | `app_memory` | off | 4 MiB | PSS of every app process, from `/proc/<pid>/smaps_rollup`; unknown for a minute if one of them can't be read. A kernel without `smaps_rollup` (before Linux 4.14 and Android's 4.4 and 4.9, such as the Mirror's 3.10) uses Android's own count, `getProcessMemoryInfo` |
+| sensor `App RAM` (MiB) | `app_memory` | off | 4 MiB | PSS of every app process, from `/proc/<pid>/smaps_rollup`; unknown for a minute if one of them can't be read. A kernel without `smaps_rollup` (before Linux 4.14 and Android's 4.4 and 4.9, such as the Mirror's 3.10) sums the `Pss:` lines of `/proc/<pid>/smaps` |
 | sensor `Storage free` (GiB) | `storage_free` | off | 0.05 GiB | `StatFs` on `/data` |
 | sensor `Wi-Fi signal` (dBm) | `wifi_signal` | on | 2 dB | the Wi-Fi network `ConnectivityManager` has, then its `WifiInfo` (#263); unknown while Wi-Fi is down |
 | sensor `Wi-Fi link speed` (Mbit/s) | `wifi_link_speed` | off | 1 Mbit/s | as Wi-Fi signal |

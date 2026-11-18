@@ -6,6 +6,7 @@ package dev.glassworks.diagnostics
 
 import android.app.ApplicationExitInfo as E
 import java.io.File
+import java.io.InputStream
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.round
@@ -73,6 +74,40 @@ fun parseProcessStartTicks(procPidStat: String): Long? = dev.glassworks.platform
 fun parsePss(smapsRollup: String): Long? = smapsRollup.lineSequence()
     .firstOrNull { it.startsWith("Pss:") }
     ?.removePrefix("Pss:")?.trim()?.substringBefore(' ')?.toLongOrNull()?.times(1024)
+
+/**
+ * The sum of the `Pss:` lines of `/proc/<pid>/smaps`, one per mapping, in bytes; null when there are none or one has
+ * no number. It scans bytes, not lines: Gecko's main process has some 27,000 lines, and reading them as strings took
+ * 250-440 ms of CPU a sample on the Android 6 emulator (2026-11-17).
+ */
+fun sumPss(smaps: InputStream): Long? {
+    val buf = ByteArray(64 * 1024)
+    var sum: Long? = null
+    // How much of "Pss:" this line has matched; -1 once it can't be a Pss line.
+    var matched = 0
+    // The line's number, -1 before its first digit; [ended] once a byte after its digits came.
+    var kib = -1L
+    var ended = false
+    while (true) {
+        val n = smaps.read(buf)
+        if (n < 0) break
+        for (i in 0 until n) {
+            val c = buf[i].toInt()
+            if (c == '\n'.code) {
+                if (matched == PSS.size) { if (kib < 0) return null; sum = (sum ?: 0L) + kib * 1024 }
+                matched = 0; kib = -1; ended = false
+            } else if (matched in 0 until PSS.size) {
+                matched = if (c == PSS[matched].toInt()) matched + 1 else -1
+            } else if (matched == PSS.size && !ended) {
+                if (c in '0'.code..'9'.code) kib = (if (kib < 0) 0 else kib) * 10 + (c - '0'.code) else if (kib >= 0) ended = true
+            }
+        }
+    }
+    if (matched == PSS.size) { if (kib < 0) return null; sum = (sum ?: 0L) + kib * 1024 }
+    return sum
+}
+
+private val PSS = "Pss:".toByteArray()
 
 /** The sum of [parts], or null when there are none or one is unknown. A subtotal is not the total. */
 fun totalOrNull(parts: List<Long?>): Long? =

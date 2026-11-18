@@ -80,6 +80,7 @@ it reads `unknown`. The check is `Platform.hasApplicationExitInfo`.
 
 The generic app's legacy build runs the pane from Android 6. There, *App uptime* reads the start from
 `/proc/self/stat` (`Platform.hasProcessStartTime`). A kernel without `smaps_rollup` (before Linux 4.14
-and Android's 4.4 and 4.9; the lululemon Mirror's is 3.10) gives *App RAM* from Android's own count,
-`ActivityManager.getProcessMemoryInfo`, which reads all of `smaps` in the system server. The probe
-checks `/proc/self/smaps_rollup` once.
+and Android's 4.4 and 4.9; the lululemon Mirror's is 3.10) gives *App RAM* as the sum of the `Pss:`
+lines of `/proc/<pid>/smaps`, scanned as bytes. The probe checks `/proc/self/smaps_rollup` once. Not
+Android's own count (`ActivityManager.getProcessMemoryInfo`): on the Android 6 emulator (kernel 3.18)
+it reads 0 for every process, as `dumpsys meminfo` does there (2026-11-17).

@@ -83,13 +83,13 @@ class AndroidProbe(
     private val hasSmapsRollup by lazy { File(proc, "self/smaps_rollup").exists() }
 
     /**
-     * The PSS of [pids], from `smaps_rollup`. A kernel without it gets Android's own count instead, which reads all of
-     * `smaps` in the system server: costlier, and from Android 10 cached for minutes, so only where there is no other.
+     * The PSS of [pids], from `smaps_rollup`, or on a kernel without it the sum over `smaps`, a longer file. Not
+     * Android's own count (`getProcessMemoryInfo`): on the Android 6 emulator's 3.18 kernel it is 0 for every process.
      */
-    private fun appPss(pids: List<Int>): Long? =
-        if (hasSmapsRollup) totalOrNull(pids.map { read(File(proc, "$it/smaps_rollup"))?.let(::parsePss) })
-        else runCatching { am?.getProcessMemoryInfo(pids.toIntArray()) }.getOrNull()
-            ?.let { infos -> totalOrNull(infos.map { i -> i.totalPss.takeIf { it > 0 }?.let { it * 1024L } }) }
+    private fun appPss(pids: List<Int>): Long? = totalOrNull(pids.map { pid ->
+        if (hasSmapsRollup) read(File(proc, "$pid/smaps_rollup"))?.let(::parsePss)
+        else runCatching { File(proc, "$pid/smaps").inputStream().use(::sumPss) }.getOrNull()
+    })
 
     override fun lastExitReason(): Int? = runCatching { Platform.lastExitReason(context, context.packageName) }.getOrNull()
 
