@@ -273,12 +273,17 @@ sheet with the same steps is outside the repo.
 each read twice and compared, and keep the hashes:
 ```sh
 B=<backup dir outside the repo>
-for p in boot misc; do
-  adb exec-out "su -c 'cat /dev/block/by-name/$p'" > "$B/$p.img"
-  adb exec-out "su -c 'cat /dev/block/by-name/$p'" | cmp - "$B/$p.img" || echo "MISMATCH $p: stop"
-done
-(cd "$B" && shasum -a 256 boot.img misc.img > SHA256SUMS)
+(
+  set -eo pipefail
+  for p in boot misc; do
+    adb exec-out "su -c 'cat /dev/block/by-name/$p'" > "$B/$p.img"
+    [ -s "$B/$p.img" ]
+    adb exec-out "su -c 'cat /dev/block/by-name/$p'" | cmp - "$B/$p.img"
+  done
+  cd "$B" && shasum -a 256 boot.img misc.img > SHA256SUMS
+) || echo "BACKUP FAILED: stop here, write nothing"
 ```
+`boot.img` must be 33554432 bytes and `misc.img` 16777216.
 Then make `boot-ram.img`: the same image with ` androidboot.gw139=ram` appended to the header's
 command line (offset 64, 512 bytes, NUL-padded). A RAM boot then shows `ro.boot.gw139=ram`, and a
 boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
@@ -294,8 +299,10 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    boots instead, nothing was written: go to T2.
 3. **T2** (only if T1 failed): `su -c 'printf bootloader | dd of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc,sync'`,
    then `adb reboot`. Afterwards (from Android, or from T3's RAM system if U-Boot keeps landing in
-   fastboot) put it back with `dd if=/dev/zero … bs=32 count=1 conv=notrunc` and compare the first 2048
-   bytes with the backup.
+   fastboot) put the backup's first 32 bytes back: `head -c 32 "$B/misc.img" > misc32.bin`,
+   `adb push misc32.bin /data/local/tmp/`, then as root
+   `dd if=/data/local/tmp/misc32.bin of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc`, and compare
+   the first 2048 bytes with the backup.
 4. **T3**: in fastboot, `fastboot boot boot-ram.img`. Wait for `sys.boot_completed`, check
    `ro.boot.gw139=ram`, root, the radio helper, Wi-Fi, and compare the `/proc/cmdline` keys with T0's.
    If nothing comes up within 4 minutes, power-cycle: the panel boots from flash, unchanged.
