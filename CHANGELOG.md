@@ -9,6 +9,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Setup makes a downloaded app the panel on its own.** Glassworks for Android installed from the device's own
+  browser gets a *This device* step after Panes, with the two things Kiln would set: make it the home screen, and let
+  it turn the screen off when idle. Each is one button that opens Android's own page or dialog. Turning the screen off
+  makes Glassworks a device admin, so turn that off in Android's settings before you uninstall it. After a Kiln
+  install the step doesn't show, and the Device page shows both as rows. In Kiln, the grant that was called
+  "Screen on and off" is now *Secure settings*, and "Lock the screen" is *Turn the screen off*, which is what each does.
 - **Setup offers silent updates when it can.** On a new setup, a *Silent updates* step follows Panes when
   updates would ask for a tap and something can change that. On a tablet with Android 12 or newer it opens
   Android's "Install unknown apps" page for Glassworks. On Android 6 to 11, and on newer Android while this
