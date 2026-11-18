@@ -752,17 +752,21 @@ portal_ok() {
   [ "$(printf '%s\n' "$s_" | grep -c "^-A PREROUTING .*-j $PORTAL_CHAIN\$")" = 1 ]
 }
 
-portal_clear() { # removes everything of ours, both families (one read each when there is nothing)
+portal_clear() { # removes everything of ours, both families (one read each when there is nothing). 1 when a
+  # table couldn't be read, or our chain is still there afterwards: the caller tries again on its next check
+  r_=0
   for f_ in 4 6; do
-    s_=$(portal_save $f_ 2>/dev/null)
+    s_=$(portal_save $f_ 2>/dev/null) || { r_=1; continue; }
     case "$s_" in *"$PORTAL_CHAIN"*) ;; *) continue ;; esac
     printf '%s\n' "$s_" | grep "^-A PREROUTING .*-j $PORTAL_CHAIN\$" | while read -r l_; do
       # shellcheck disable=SC2086
       ipt $f_ -t nat -D ${l_#-A } 2>/dev/null
     done
     ipt $f_ -t nat -F $PORTAL_CHAIN 2>/dev/null; ipt $f_ -t nat -X $PORTAL_CHAIN 2>/dev/null
+    s_=$(portal_save $f_ 2>/dev/null) || { r_=1; continue; }
+    case "$s_" in *"$PORTAL_CHAIN"*) r_=1 ;; esac
   done
-  return 0
+  return $r_
 }
 
 portal_set() { # family "<iface> <v4> <prefix> [<v6>]": the chain's contents (atomic), then one jump
@@ -786,7 +790,9 @@ portal_check() {
   w_=$(portal_wanted)
   if [ -z "$w_" ]; then
     [ "$PORTAL_STATE" = off ] && return 0
-    portal_clear; PORTAL_STATE=off; portal_say off; return 0
+    # "off" only once both tables are seen clear; until then every check tries again
+    if portal_clear; then PORTAL_STATE=off; portal_say off; else portal_say "error: the rules could not be removed yet"; fi
+    return 0
   fi
   if portal_ok 4 "$w_" && portal_ok 6 "$w_"; then
     # in place (also a new helper finding its predecessor's): kept as they are, no gap for the phones

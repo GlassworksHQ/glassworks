@@ -866,6 +866,11 @@ def store(t, chains, rules):
     open(path(t), 'w').write(''.join(':%s\n' % c for c in chains if c not in builtin) + ''.join(r + '\n' for r in rules))
 def spec(r): return r.split(' ', 2)  # ['-A', chain, rest]
 if name.endswith('-save'):
+    # /t/ipt-save-fail: how many reads of the nat table fail next (a table that can't be read for a moment)
+    if table == 'nat' and os.path.exists('/t/ipt-save-fail'):
+        n = int(open('/t/ipt-save-fail').read() or 0)
+        if n > 0:
+            open('/t/ipt-save-fail', 'w').write(str(n - 1)); sys.exit(1)
     chains, rules = load(table); print('*' + table)
     for c in chains: print(':%s %s [0:0]' % (c, 'ACCEPT' if c in ('PREROUTING', 'INPUT') else '-'))
     for r in rules: print(r)
@@ -963,6 +968,13 @@ check "the redirect's socket gone: everything removed, both families" \
   test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" -a "$(prop sys.s1kiosk.portal.status)" = off
 ap_up; portal; hostapd_off; portal
 check "hostapd gone (the hotspot stopped): removed" test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
+ap_up; hostapd_on; portal; hostapd_off; echo 1 > /t/ipt-save-fail; : > "$T/setprop.log"
+LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check
+check "a rule table that can't be read at the hotspot's end: not called off" grep -q '^sys.s1kiosk.portal.status=error' "$T/setprop.log"
+gone() { test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" && test "$(prop sys.s1kiosk.portal.status)" = off; }
+bg_until gone; rm -f /t/ipt-save-fail
+check "...and the next check removes the rules, then says off" gone
 hostapd_on
 socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
 check "the sockets of another app: no rules" test -z "$(nat 4 | grep S1PORTAL)"
