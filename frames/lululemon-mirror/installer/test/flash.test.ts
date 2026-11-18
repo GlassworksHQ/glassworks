@@ -35,7 +35,18 @@ describe('fastboot checks (read-only)', () => {
     expect(r.ok).toBe(true);
     expect(r.checks.map((c) => c.what)).toEqual(['System partition', 'Userdata partition', 'Download size']);
     expect(r.userdataBytes).toBe(0x14cc00000);
-    expect(r.info).toEqual(['product MSM8916', 'max-download-size 0x20000000', 'secure not reported']);
+    expect(r.info).toEqual(['product MSM8916', 'max-download-size 0x20000000', 'secure not reported', 'Home Assistant id: no serial reported, so the app picks a new one']);
+    expect(r.deviceMac).toBeUndefined();
+  });
+
+  it('gives the Mirror the id the app derives from its serial, so every reflash keeps its Home Assistant device (#523)', async () => {
+    const sizes = { 'partition-size:system': `0x${SYSTEM_BYTES.toString(16)}`, 'partition-size:userdata': '0x14cc00000' };
+    // core's DeviceMacPinTest pins the same serial to the same bytes
+    const r = await checkFastboot(lk({ ...sizes, serialno: '0123456789abcdef' }));
+    expect(r.deviceMac).toBe('E6:79:E6:E0:96:A3');
+    expect(r.info.join('\n')).not.toContain('E6:79');
+    expect(r.info).toContain('Home Assistant id: from the serial, the same on every reflash');
+    expect((await checkFastboot(lk({ ...sizes, serialno: 'unknown' }))).deviceMac).toBeUndefined();
   });
 
   it('refuses another system size, or none reported', async () => {

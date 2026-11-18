@@ -11,7 +11,7 @@ import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Sto
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
 import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, KEPT_APPS, UNUSED_APPS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
-import { MIRROR_FRAME } from '../src/image';
+import { DEVICE_MAC_PROP, MIRROR_FRAME } from '../src/image';
 import { fakeAdbKey, fakeServicesJar } from './fakes';
 import { DEXDUMP, disassemble } from './dexdump';
 
@@ -25,6 +25,7 @@ function mirrorApk(o: Parameters<typeof fakeApk>[1] = {}): Uint8Array {
 }
 
 const T = 1_700_000_000;
+const MAC = 'E6:79:E6:E0:96:A3'; // made up: the id core's DeviceMacPinTest derives from its made-up serial
 const MAKE_EXT4FS = ['-O', '^metadata_csum,^64bit,^flex_bg,^dir_index,^huge_file,^dir_nlink,^extra_isize,uninit_bg,resize_inode'];
 const libs = { 'arm64-v8a': { 'libxul.so': new Uint8Array(randomBytes(300_000)), 'libmozglue.so': new Uint8Array(randomBytes(20_000)) }, 'armeabi-v7a': { 'libxul.so': new Uint8Array(10) } };
 const APK = mirrorApk({ libs });
@@ -167,9 +168,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const fs = await Ext4.open(disk);
     await fs.setLabel('/framework/services.jar', 'u:object_r:system_file:s0');
     const log: string[] = [];
-    await patchSystem(fs, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, time: T }, (l) => log.push(l));
+    await patchSystem(fs, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, deviceMac: MAC, time: T }, (l) => log.push(l));
     const after = { free: fs.freeBlocks, inodes: fs.freeInodes };
-    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, time: T }); // again: the same result
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY, deviceMac: MAC, time: T }); // again: the same result
     const again = await Ext4.open(disk);
     expect({ free: again.freeBlocks, inodes: again.freeInodes }).toEqual(after);
     await dump(disk, img);
@@ -186,7 +187,10 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(prop).toMatch(/\nro\.lockscreen\.disable\.default=true\n$/);
     // the frame version the app shows (#139), once, after the second run too
     expect(prop.match(/^ro\.glassworks\.frame\.[a-z]+=.*$/gm)).toEqual(['ro.glassworks.frame.id=lululemon-mirror', `ro.glassworks.frame.version=${MIRROR_FRAME.version}`]);
-    expect(log).toContain(`build.prop: ro.glassworks.frame.version=${MIRROR_FRAME.version}, ro.lockscreen.disable.default=true`);
+    expect(log).toContain(`build.prop: ro.glassworks.frame.version=${MIRROR_FRAME.version}, ${DEVICE_MAC_PROP}, ro.lockscreen.disable.default=true`);
+    // #523: the id the app takes when its data is new, once; the log names the key, never the device's value
+    expect(prop.match(/^ro\.glassworks\.device\.[a-z]+=.*$/gm)).toEqual([`${DEVICE_MAC_PROP}=${MAC}`]);
+    expect(log.join('\n')).not.toContain(MAC);
     expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
     for (const p of [DIR, `${DIR}/lib/arm64`, '/vendor/overlay']) {
       expect(debugfs(img, `stat ${p}`)).toMatch(/Mode:\s+0755[\s\S]*User:\s+0\s+Group:\s+0/);
@@ -247,6 +251,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     await expect(patchSystem(await Ext4.open(disk2), { adbKey: KEY, apk: mirrorApk({ minSdk: 23, home: 'none' }) })).rejects.toThrow(/it has no home screen \(no activity with MAIN, HOME and DEFAULT in one intent filter\)/);
     const tampered = OVERLAY.slice(); tampered[100]! ^= 1;
     await expect(patchSystem(await Ext4.open(disk2), { adbKey: KEY, apk: APK, settingsOverlay: tampered })).rejects.toThrow(/settings overlay isn't the one Kiln builds.*Nothing was changed/);
+    await expect(patchSystem(await Ext4.open(disk2), { adbKey: KEY, apk: APK, deviceMac: 'e6:79:e6:e0:96:a3' })).rejects.toThrow(/device id isn't a MAC.*Nothing was changed/);
     expect(hex(new Sha256().update(await disk.read(0, disk.blocks)).digest())).toBe(before);
     expect(hex(new Sha256().update(await disk2.read(0, disk2.blocks)).digest())).toBe(before2);
   }, 60_000);

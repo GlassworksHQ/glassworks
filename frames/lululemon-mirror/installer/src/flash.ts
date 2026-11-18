@@ -7,7 +7,7 @@ import { Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn 
 import { GLASSWORKS, type MirrorApp } from './app';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
-import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
+import { GLASS_PANES, buildUserdata, macFromSerial, patchSystem, type SystemPatch } from './image';
 import { adbKeyLines } from './services';
 import type { Check } from './recipe';
 
@@ -30,7 +30,9 @@ export interface FastbootLike {
   reboot(): Promise<void>;
 }
 
-export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[] }
+export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[];
+  /** The Mirror's id in Home Assistant, from its serial: the same on every reflash (#523). None when LK gives no serial. */
+  deviceMac?: string }
 
 const optional = async (fb: FastbootLike, name: string) => { try { return await fb.getvar(name); } catch { return undefined; } };
 
@@ -53,8 +55,10 @@ export async function checkFastboot(fb: FastbootLike): Promise<FastbootReport> {
     { what: 'Userdata partition', found: mb(userdata), ok: !!userdata && userdata >= 1024 ** 3 && userdata % 4096 === 0, need: 'at least 1 GiB, whole 4 KiB blocks' },
     { what: 'Download size', found: mb(maxBytes), ok: !!maxBytes && maxBytes >= 4096, need: 'max-download-size reported in hex (0x…), at least one 4 KiB block' },
   ];
-  const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`];
-  return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info };
+  const deviceMac = await macFromSerial(await optional(fb, 'serialno'));
+  const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`,
+    deviceMac ? 'Home Assistant id: from the serial, the same on every reflash' : 'Home Assistant id: no serial reported, so the app picks a new one'];
+  return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info, ...(deviceMac ? { deviceMac } : {}) };
 }
 
 /** Writes both images, system first, then restarts the Mirror. `onProgress(part, 0..1)`. */

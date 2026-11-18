@@ -70,12 +70,25 @@ Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphom
 | Field | Value |
 |---|---|
 | name / friendly name | `aqara-s1-plus-a1b2c3` / `Aqara S1 Plus`: what the device is, and the end of its MAC (see [Names](#names)). Before #260: `s1-panel` / `Glassworks Panel` |
-| MAC (unique id in HA) | the Wi-Fi MAC of `wlan0` if readable, else a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`), else a random one; persisted in prefs (`device_mac`). The first two come out the same after a reinstall, so HA keeps the same device |
+| MAC (unique id in HA) | Kept in prefs (`device_mac`) once chosen. With none saved, the first of: `ro.glassworks.device.mac` (Kiln writes it into the Mirror's image, see [Identity across reinstalls](#identity-across-reinstalls)); the Wi-Fi MAC of `wlan0` if readable; a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`); one derived from `ANDROID_ID`; else a random one |
 | manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (Glassworks)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (Glassworks)`. Up to 0.4.3 the S1 app said `(S1 Kiosk)` |
 | esphome_version / compilation_time | `2026.10.2` / `Glassworks <app version>` (HA shows "2026.10.2 (Glassworks 0.1.0)") |
 | API version | 1.20 (as ESPHome 2026.10/11); `DeviceCapabilitiesRequest` is answered |
 | Sendspin | `DeviceCapabilitiesResponse.sendspin` = `{feature_flags: PAIRING_TOKEN, client_id}`; `SendspinPairingTokenRequest` (159) → `SendspinPairingTokenResponse` (160), token only over Noise with a key ([sendspin.md](sendspin.md#esphome-hand-off-how-ha-gives-ma-the-token)) |
 | voice_assistant_feature_flags | 61 = VOICE_ASSISTANT 1 + API_AUDIO 4 + TIMERS 8 + ANNOUNCE 16 + START_CONVERSATION 32 (0 when `voice_enabled` is false). Voice turned on or off while the panel runs changes it, and the panel asks Home Assistant to reconnect so it reads it again (#67) |
+
+
+### Identity across reinstalls
+
+Home Assistant keys the device and every entity's unique id by the MAC above. A new MAC means a new device in HA,
+and its entities get new ids. Where each frame stands (#523):
+
+| Frame | After a reinstall or reflash | Why |
+|---|---|---|
+| S1 | Same device | An update installs in place and keeps the saved MAC. With the app's data wiped, `wlan0` is readable on its Android 10, so it comes out the same |
+| Mirror (Kiln or `tools/mirror/flash-node.ts`) | Same device, from the first flash that writes `ro.glassworks.device.mac` | A flash writes a fresh userdata, which wipes the app's data. Kiln derives the MAC from the serial its bootloader reports (`fastboot getvar serialno`), with the app's own formula, and writes it into `build.prop`. The Mirror's current MAC isn't the one derived from its serial (checked 2026-11-18), so the first flash with this moves it to a new device once |
+| Generic app, Android 6 to 7 | Same device | `ro.serialno` is readable |
+| Generic app, Android 8 and later | Same device, unless the device is factory reset or the APK's signing key changes | `ANDROID_ID`, which Android keeps for the same app signing key until a factory reset. `wlan0` and `ro.serialno` are hidden from apps there |
 
 ## Entities
 

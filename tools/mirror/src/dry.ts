@@ -58,6 +58,9 @@ export async function dryImage(work: string, room = 0): Promise<{ path: string; 
   return { path, want: { name: 'system.img', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }, bytes: blocks * 4096 };
 }
 
+/** A made-up serial for the dry LK (PanelDevice's DeviceMacPinTest uses the same one). */
+export const DRY_SERIAL = '0123456789abcdef';
+
 /**
  * FakeLk plus the variables the Mirror's checks read. Both partitions report the Mirror's sizes, so
  * checkFastboot's real checks run, but hold only what the dry run writes: the dry image, and a
@@ -73,7 +76,7 @@ export class DryLk extends FakeLk {
     const cmd = data.length <= 64 ? new TextDecoder().decode(data) : '';
     const answer = cmd === 'getvar:partition-size:system' ? `0x${SYSTEM_BYTES.toString(16)}`
       : cmd === 'getvar:partition-size:userdata' ? `0x${USERDATA_BYTES.toString(16)}`
-        : cmd === 'getvar:product' ? 'MSM8916' : cmd === 'reboot' ? '' : undefined;
+        : cmd === 'getvar:product' ? 'MSM8916' : cmd === 'getvar:serialno' ? DRY_SERIAL : cmd === 'reboot' ? '' : undefined;
     if (answer === undefined) return super.out(data);
     this.commands.push(cmd);
     this.replies.push(new TextEncoder().encode(`OKAY${answer}`));

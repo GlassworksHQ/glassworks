@@ -104,6 +104,7 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
   const res: InstallResult = {};
   let fb: FastbootLike | undefined;
   let userdataBytes = 0;
+  let deviceMac: string | undefined;
   let loaded: Awaited<ReturnType<typeof loadSystem>> | undefined;
   let rawFd: number | undefined;
   const raw = join(o.work, 'system.raw'), sysOut = join(o.work, 'system.sparse'), udOut = join(o.work, 'userdata.sparse');
@@ -144,13 +145,14 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         r.info.forEach((i) => d.log(`    ${i}`));
         if (!r.ok) throw new Error('the fastboot checks failed. Nothing was written.');
         userdataBytes = o.userdataBytes ?? r.userdataBytes;
+        deviceMac = r.deviceMac;
       }],
       [`Build the images (${ours.name}, boot animation, services.jar trusting the adb key; a fresh userdata)`, async () => {
         // patched in place: a build that fails ends the run, and the next run loads and checks the file again
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); },
             // image.ts's own lines: the APK's libraries, the unused apps left out, build.prop, services.jar
             (line) => d.log(`    ${line}`));

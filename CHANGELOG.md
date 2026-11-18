@@ -423,6 +423,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **A Mirror reflash keeps its Home Assistant device.** Kiln and the headless flash give the Mirror an id from its
+  serial number and keep it in the image, so a later reflash comes back as the same device with the same entity
+  ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall
+  now keeps the device where Android allows it.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.
