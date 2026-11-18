@@ -162,8 +162,9 @@ Installed from the tablet's own browser, the app has only what Android gives any
 | Turn the screen off | Let it turn the screen off | "Activate device admin app?", with the reason: Glassworks turns the screen off when the panel is idle, and nothing else |
 
 Not now skips both; the Device page keeps both rows. Kiln sets both over adb, and setup skips the step when both are
-on already. After a Kiln install where the device refused one (a vendor build), setup still offers it here. Once it
-shows, it stays until Continue or Not now.
+on already. On a new setup after a Kiln install where the device refused one (a vendor build), setup still offers it
+here. Once it shows, it stays until Continue or Not now. A device set up before this step existed never sees it: its
+Device page rows say where to set each in Android's settings.
 
 **To uninstall later,** turn the device admin off first: Android's Settings, Security, Device admin apps, Glassworks.
 Android won't uninstall an app while it is an active device admin. Kiln's Undo does this for you.
