@@ -72,6 +72,16 @@ class SilentUpdatesStepTest {
         }
     }
 
+    @Test fun withoutTouchItNeverHoldsSetupButTheChannelCanStillAnswerIt() {
+        var answered = false
+        val noTouch = SilentUpdatesStep({ SilentUpdates.OldAndroid("6.0.1") }, { answered }, { answered = true }, touch = { false })
+        assertTrue("nobody can tap Continue there", noTouch.done())
+        assertEquals("device_owner", noTouch.channelState()!!.getString("offer"))
+        assertNull(noTouch.ops.getValue("answer").run(JSONObject()))
+        assertTrue(answered)
+        assertFalse("with touch it asks", SilentUpdatesStep({ SilentUpdates.OldAndroid("6.0.1") }, { false }, {}, touch = { true }).done())
+    }
+
     @Test fun anOldBootImagePointsAtKiln() {
         val (_, card) = bound(Rig(SilentUpdates.NoRootService))
         assertEquals(SilentUpdatesStep.OWNER_TITLE, card.title)

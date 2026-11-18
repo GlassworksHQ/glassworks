@@ -97,6 +97,9 @@ class GlassworksRuntime(
 
     private var deviceSteps: List<SetupStep>? = null
 
+    /** The frame's screen takes a tap: read once, when setup first asks (a binder call). */
+    private val touch by lazy { frame.input == Input.TOUCH }
+
     /**
      * This device (#403), only on a touch screen with no frame of its own (a tablet: GenericAndroid), then Silent updates
      * (#422): shown during setup whenever updates ask for a tap and there's a way to change that. The Silent updates
@@ -108,8 +111,8 @@ class GlassworksRuntime(
             val prefs = KioskPrefs(ctx)
             val silent = SilentUpdates.Fresh { updates?.rootService?.let { SilentUpdates.read(ctx, it) } }
             listOfNotNull(
-                thisDevice(ctx).takeIf { frame is GenericAndroid && frame.input == Input.TOUCH },
-                SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }),
+                thisDevice(ctx).takeIf { frame is GenericAndroid && touch },
+                SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }, { touch }),
             )
         }.also { deviceSteps = it }
     }

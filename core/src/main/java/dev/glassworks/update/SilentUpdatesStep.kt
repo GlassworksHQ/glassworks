@@ -29,6 +29,11 @@ class SilentUpdatesStep(
     private val answer: () -> SilentUpdates?,
     private val answered: () -> Boolean,
     private val markAnswered: () -> Unit,
+    /**
+     * The screen takes a tap. Without one (the frame's Input.NONE) the card can't show its buttons, so the step never
+     * holds setup there; the setup channel can still answer it (CodeRabbit on #513).
+     */
+    private val touch: () -> Boolean = { true },
 ) : SetupStep {
     override val id = ID
     override val title = "Silent updates"
@@ -40,7 +45,7 @@ class SilentUpdatesStep(
      */
     @Volatile private var shown = false
 
-    override fun done(): Boolean = answered() || (!shown && offer(answer()) == null)
+    override fun done(): Boolean = answered() || !touch() || (!shown && offer(answer()) == null)
 
     /** For the setup channel: whether updates are silent, what the step offers (`allow`, `device_owner`) and the reason. */
     override fun channelState(): JSONObject? = answer()?.let { s ->
