@@ -64,7 +64,7 @@ body:
   - type: input
     id: app_version
     attributes:
-      label: S1 Kiosk version
+      label: Glassworks version
       description: The panel's **App version** sensor in Home Assistant. Write "not installed" if the problem is in the installer.
       placeholder: 0.4.3
     validations:
@@ -95,7 +95,7 @@ body:
       label: Diagnostics
       description: |
         Whatever applies: the installer's log, the **Radio status**, **Radio helper** or **Update status**
-        sensors, or `adb logcat -s S1Kiosk S1ESPHome S1Voice S1Sendspin`. Remove tokens, Wi-Fi
+        sensors, or `adb logcat -s Glassworks Glassworks.ESPHome Glassworks.Voice Glassworks.Sendspin`. Remove tokens, Wi-Fi
         passwords and Thread datasets first.
       render: text
 

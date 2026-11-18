@@ -52,7 +52,8 @@ class AppBuildTest {
 
     @Test fun theApkHandsInItsBuildConfig() {
         val kiosk = KioskApp()
-        assertEquals(AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD), kiosk.build)
+        assertEquals(AppBuild(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, BuildConfig.DEBUG, BuildConfig.TEST_BUILD,
+            notificationIcon = R.drawable.ic_notification), kiosk.build)
         assertSame(kiosk.build, kiosk.glassworks.build)
     }
 
@@ -66,12 +67,12 @@ class AppBuildTest {
         assertEquals("9.8.7", updates.model.currentVersion)
         val open = UpdateManager::class.java.getDeclaredMethod("open", String::class.java).apply { isAccessible = true }
         val c = open.invoke(updates, "https://192.0.2.10/") as HttpURLConnection
-        assertEquals("s1-kiosk/9.8.7 (+https://github.com/GlassworksHQ/glassworks)", c.getRequestProperty("User-Agent"))
+        assertEquals("glassworks-aqara-s1-plus/9.8.7 (+https://github.com/GlassworksHQ/glassworks)", c.getRequestProperty("User-Agent"))
     }
 
     @Test fun improvSaysTheGivenVersion() {
-        assertEquals(listOf("S1 Kiosk", "9.8.7"), ImprovIdentity.ble(runtime.frame, build).take(2))
-        assertEquals(listOf("S1 Kiosk", "9.8.7"), ImprovIdentity.serial(runtime.frame, build).take(2))
+        assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.ble(runtime.frame, build).take(2))
+        assertEquals(listOf("Glassworks", "9.8.7"), ImprovIdentity.serial(runtime.frame, build).take(2))
     }
 
     @Test fun homeAssistantAndMusicAssistantGetTheGivenVersion() {
@@ -85,10 +86,10 @@ class AppBuildTest {
         device.start()
         exec.runDue()
 
-        assertEquals("S1 Kiosk 9.8.7", mdns.identities.single().compilationTime)
+        assertEquals("Glassworks 9.8.7", mdns.identities.single().compilationTime)
         assertEquals("9.8.7", text(device.entityList().single { it.objectId == "app_version" } as TextSensorEntity))
         val sendspin = device.paneList().filterIsInstance<SendspinPane>().single()
-        assertEquals("S1 Kiosk 9.8.7", sendspin.player.identity.softwareVersion)
+        assertEquals("Glassworks 9.8.7", sendspin.player.identity.softwareVersion)
     }
 
     @Test fun theManagePageShowsTheGivenBuild() {
@@ -100,20 +101,20 @@ class AppBuildTest {
         val status = manage.status()
         assertEquals("9.8.7 · test build f00ba47", status.version)
         val about = status.sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
-        assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", about.title())
-        assertEquals("Version: S1 Kiosk 9.8.7 · test build f00ba47 (90807)", manage.diagnostics().lineSequence().first())
+        assertEquals("Glassworks 9.8.7 · test build f00ba47", about.title())
+        assertEquals("Version: Glassworks 9.8.7 · test build f00ba47 (90807)", manage.diagnostics().lineSequence().first())
     }
 
     @Test fun theSettingsMenuShowsTheGivenBuild() {
         val model = S1Settings.model(runtime, KioskPrefs(app), emptyList(), deviceSettings = false, fullScreen = {}, context = app)
         assertEquals("9.8.7 · test build f00ba47", model.version)
         val about = model.sections.single { it.id == "about" }.items.filterIsInstance<SettingsItem.Info>().first()
-        assertEquals("S1 Kiosk 9.8.7 · test build f00ba47", about.title())
+        assertEquals("Glassworks 9.8.7 · test build f00ba47", about.title())
     }
 
     /**
      * #23: an app on the core announces itself by its own name, which only [AppBuild.product] carries. The S1
-     * app hands in no name and keeps "S1 Kiosk" (the tests above).
+     * app hands in no name and keeps "Glassworks" (the tests above).
      */
     @Test fun anotherAppAnnouncesItsOwnName() {
         val other = build.copy(product = "Glassworks")

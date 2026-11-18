@@ -175,6 +175,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   setting if it was already on. Other devices don't show the chip.
 
 ### Changed
+- **S1 Kiosk is now Glassworks.** The panel's app shows as Glassworks, with the Glassworks icon, in the launcher,
+  in Android's Settings → Apps, in About and in its notification. In Home Assistant the device's model reads
+  *Panel Hub S1 Plus (Glassworks)* and the update card is called *Glassworks*. The device, its entities and their ids
+  stay as they are, and the update installs over the old app with every setting kept. With the radio as a Zigbee
+  router, ZHA reads the maker as Glassworks after it interviews the panel again.
 - **The setup screen's Wi-Fi step leads with one way to join.** It shows the best way the panel can do
   right now: Bluetooth setup from Home Assistant, else **Set up from a phone** through the panel's own
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind

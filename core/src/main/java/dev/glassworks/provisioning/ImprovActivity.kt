@@ -21,12 +21,12 @@ open class ImprovActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val extras = intent?.extras
-        Log.i("S1Kiosk.Improv", "ImprovActivity: ${extras?.keySet()?.joinToString()}")
+        Log.i("Glassworks.Improv", "ImprovActivity: ${extras?.keySet()?.joinToString()}")
         try {
             // An activity in the foreground may start the (already foreground) service directly.
             startService(Intent(this, glassworks.components.service).apply { extras?.let { putExtras(it) } })
         } catch (e: Exception) {
-            Log.w("S1Kiosk.Improv", "could not reach KioskService", e)
+            Log.w("Glassworks.Improv", "could not reach KioskService", e)
         }
         finish()
     }

@@ -9,7 +9,7 @@ import org.json.JSONObject
 import java.io.IOException
 
 internal object SsLog {
-    private const val TAG = "S1Sendspin"
+    private const val TAG = "Glassworks.Sendspin"
     private val onAndroid = System.getProperty("java.vendor")?.contains("Android") == true
     fun d(msg: String) = if (onAndroid) { android.util.Log.d(TAG, msg); Unit } else println("D/$TAG: $msg")
     fun i(msg: String) = if (onAndroid) { android.util.Log.i(TAG, msg); Unit } else println("I/$TAG: $msg")

@@ -127,7 +127,7 @@ internal class AudioTrackSink(
  *   server's clock onto an [AudioTrack] (USAGE_MEDIA). If FLAC keeps failing, the player reconnects
  *   offering PCM only (see [statusText]).
  *
- * Its secrets, volume and pairings are in the [SsStore] it is given. Logs use the tag `S1Sendspin`
+ * Its secrets, volume and pairings are in the [SsStore] it is given. Logs use the tag `Glassworks.Sendspin`
  * and never contain a key or token.
  */
 public class SendspinPlayer internal constructor(

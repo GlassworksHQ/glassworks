@@ -67,7 +67,7 @@ class ManageOverviewTest {
         assertEquals("0.4.3 · test build abc1234", s.version)
         // About's version line is the About section's own, as on the panel (#242).
         val about = s.sections.single { it.id == "about" }.items.filterIsInstance<dev.glassworks.pane.SettingsItem.Info>().first()
-        assertEquals("S1 Kiosk 0.4.3 · test build abc1234", about.title())
+        assertEquals("Glassworks 0.4.3 · test build abc1234", about.title())
     }
 
     @Config(sdk = [29])

@@ -163,7 +163,7 @@ class SettingsMenuTest {
     @Test
     fun aboutHasNoDebugLine() {
         val about = menu().first { it.id == "about" }.items[0] as SettingsItem.Info
-        assertEquals("S1 Kiosk 0.4.3", about.title())
+        assertEquals("Glassworks 0.4.3", about.title())
         assertEquals("", about.detail())
         val log = menu().first { it.id == "log" }.items[0] as SettingsItem.Info
         assertEquals("screen on", log.detail())

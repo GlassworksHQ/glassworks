@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicReference
 object ImprovSerialServer {
     /** Abstract socket name (adb: `localabstract:s1kiosk_improv`). */
     const val SOCKET = "s1kiosk_improv"
-    private const val TAG = "S1Kiosk.ImprovSerial"
+    private const val TAG = "Glassworks.ImprovSerial"
     /** The client waits 20 s for a scan; Wi-Fi may have to be turned on first. */
     private const val SCAN_WAIT_MS = 15_000L
 

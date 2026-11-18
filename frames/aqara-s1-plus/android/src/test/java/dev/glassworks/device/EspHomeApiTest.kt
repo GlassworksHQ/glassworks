@@ -51,7 +51,7 @@ class EspHomeApiTest {
     private fun entities(): List<ApiEntity> {
         var update = UpdateStateData(
             missingState = true, inProgress = false, hasProgress = false, progress = 0f, currentVersion = "1.2.0",
-            latestVersion = "", title = "S1 Kiosk", releaseSummary = "", releaseUrl = "",
+            latestVersion = "", title = "Glassworks", releaseSummary = "", releaseUrl = "",
         )
         var screenOn = true
         var brightness = 0.8f
@@ -106,8 +106,8 @@ class EspHomeApiTest {
 
         val identity = DeviceIdentity(
             name = "s1-panel", friendlyName = "S1 Panel", macAddress = "02:11:22:33:44:55",
-            esphomeVersion = "2026.10.2", compilationTime = "S1 Kiosk test", manufacturer = "Aqara",
-            model = "Panel Hub S1 Plus (S1 Kiosk)", voiceFeatures = 61, webserverPort = 8099,
+            esphomeVersion = "2026.10.2", compilationTime = "Glassworks test", manufacturer = "Aqara",
+            model = "Panel Hub S1 Plus (Glassworks)", voiceFeatures = 61, webserverPort = 8099,
         )
         val key = ByteArray(32) { (it * 7 + 1).toByte() }
         val keyB64 = Base64.getEncoder().encodeToString(key)
@@ -230,7 +230,7 @@ class EspHomeApiTest {
             val checked = r.getJSONObject("update_checked")
             assertEquals("1.3.0", checked.getString("latest"))
             assertEquals("1.2.0", checked.getString("current"))
-            assertEquals("S1 Kiosk", checked.getString("title"))
+            assertEquals("Glassworks", checked.getString("title"))
             assertEquals("* new things", checked.getString("summary"))
             assertEquals("https://github.com/GlassworksHQ/glassworks/releases/tag/v1.3.0", checked.getString("url"))
             val installing = r.getJSONObject("update_installing")

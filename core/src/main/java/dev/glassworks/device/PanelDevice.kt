@@ -86,8 +86,17 @@ class PanelDevice(
     )
 
     companion object {
-        /** The library's logs go under the tag the docs use (`adb logcat -s S1ESPHome`). */
-        const val ESPHOME_LOG_TAG = "S1ESPHome"
+        /**
+         * The MAC for a chip [serial]. The salt is the device's identity, not branding: a new one gives every panel a new
+         * MAC and HA a new device, so it keeps the old app's name (#527).
+         */
+        internal fun macFromSerial(serial: String): ByteArray = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("s1kiosk-device-mac:$serial".toByteArray()).copyOf(6).also {
+                it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte() // unicast, locally administered
+            }
+
+        /** The library's logs go under the tag the docs use (`adb logcat -s Glassworks.ESPHome`). */
+        const val ESPHOME_LOG_TAG = "Glassworks.ESPHome"
 
         init { EspHomeLog.tag = ESPHOME_LOG_TAG }
 
@@ -710,10 +719,7 @@ class PanelDevice(
         val serial = systemProperty("ro.serialno").takeIf { it.length >= 8 && it != "unknown" }
         val (bytes, source) = when {
             usable != null -> usable to "wlan0"
-            serial != null -> java.security.MessageDigest.getInstance("SHA-256")
-                .digest("s1kiosk-device-mac:$serial".toByteArray()).copyOf(6).also {
-                    it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte() // unicast, locally administered
-                } to "serial"
+            serial != null -> macFromSerial(serial) to "serial"
             else -> ByteArray(6).also {
                 SecureRandom().nextBytes(it)
                 it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte()
@@ -743,13 +749,13 @@ class PanelDevice(
     private fun acquireLocks() {
         try {
             val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "s1kiosk:esphome").apply {
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "glassworks:esphome").apply {
                 setReferenceCounted(false)
                 acquire()
             }
             val wm = ctx.getSystemService(Context.WIFI_SERVICE) as WifiManager
             @Suppress("DEPRECATION")
-            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "s1kiosk:esphome").apply {
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "glassworks:esphome").apply {
                 setReferenceCounted(false)
                 acquire()
             }

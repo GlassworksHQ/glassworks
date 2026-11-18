@@ -13,7 +13,7 @@
     <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.camera,dev.glassworks.panes.assist,dev.glassworks.panes.bluetoothproxy,dev.glassworks.panes.timers,dev.glassworks.panes.notifications,dev.glassworks.panes.sendspin,dev.glassworks.frames.s1.wallbase,dev.glassworks.panes.diagnostics,dev.glassworks.panes.radio,dev.glassworks.sendspin,dev.glassworks.voice" />
 
     <application
-        android:label="S1 Kiosk legacy"
+        android:label="Glassworks legacy check"
         tools:replace="android:label">
 
         <activity android:name="sh.edm.s1kiosk.MainActivity" android:enabled="false" tools:replace="android:enabled" />

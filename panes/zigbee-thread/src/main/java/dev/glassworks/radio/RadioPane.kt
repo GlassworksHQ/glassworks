@@ -136,7 +136,7 @@ class RadioPane(
                 stackStore = prefs,
                 bundle = RadioBundle(ShellProps, AssetBundleSource(app.assets), app.filesDir, log = { Log.i(RadioController.TAG, it) }),
                 zigbeedFetcher = { dest, progress ->
-                    SisdkZigbeed.fetch(dest, app.cacheDir, "s1-kiosk/${ctx.build.versionName} (+https://github.com/GlassworksHQ/glassworks)", progress)
+                    SisdkZigbeed.fetch(dest, app.cacheDir, "glassworks-aqara-s1-plus/${ctx.build.versionName} (+https://github.com/GlassworksHQ/glassworks)", progress)
                 },
             )
         }
