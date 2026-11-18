@@ -165,6 +165,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   `window.s1kiosk` and `s1kiosk-state` keep working, so existing dashboards need no change.
 
 ### Changed
+- **The setup screen's Wi-Fi step leads with one way to join.** It shows the best way the panel can do
+  right now: Bluetooth setup from Home Assistant, else **Set up from a phone** through the panel's own
+  Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
+  **Other ways to set up ›**, and **Not now** is the quietest button on the card. The step now fits on a
+  small phone too. A panel without touch (the Mirror) looks as before.
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
   device whose presence sensor has a range (the S1), and *Auto brightness*, *Illuminance* and *Max auto
   brightness* only on one with a light sensor. On a tablet with a camera, presence is the Camera pane's
