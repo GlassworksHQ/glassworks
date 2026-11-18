@@ -216,7 +216,7 @@ class DevicePageTest {
 
     @Test fun theMirrorsFrameVersionSitsBeforeAndroid() {
         val s = TestFrames.mirror(app).deviceSection(app)!!
-        assertEquals(listOf("Silent updates", "Device owner", "Model", "Frame version", "Android"), titles(s))
+        assertEquals(listOf("Silent updates", "Home screen", "Turn the screen off", "Device owner", "Model", "Frame version", "Android"), titles(s))
         assertEquals("Before 1.0.0 (Glass Panes image 2)", frameVersion(s).detail())
     }
 

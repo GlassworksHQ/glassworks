@@ -103,8 +103,8 @@ class GenericAndroid(
         const val DEVICE = "device"
         const val SILENT_UPDATES_TITLE = "Silent updates"
         const val HOME_TITLE = "Home screen"
-        const val HOME_YES = "Yes: Glassworks opens when the device starts"
-        const val HOME_NO = "No: another app opens when the device starts. To change it: Android's Settings, Apps, Default apps, Home app"
+        const val HOME_YES = "Yes: Glassworks is the default Home app"
+        const val HOME_NO = "No: Glassworks isn't the default Home app. To change it: Android's Settings, Apps, Default apps, Home app"
         const val SCREEN_OFF_TITLE = "Turn the screen off"
         const val SCREEN_OFF_YES = "Yes: Glassworks is a device admin, so it can turn the screen off when idle. " +
             "Turn that off in Android's Settings, Security, Device admin apps before you uninstall it"

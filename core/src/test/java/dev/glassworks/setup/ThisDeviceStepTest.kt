@@ -97,6 +97,23 @@ class ThisDeviceStepTest {
         assertTrue(ThisDeviceStep.ADMIN_EXPLANATION.contains("turns the screen off") && ThisDeviceStep.ADMIN_EXPLANATION.contains("uninstall"))
     }
 
+    @Test fun aDoneStepOpenedFromTheRailStaysDone() {
+        val r = Rig(ThisDeviceStep.Grants(home = true, admin = true))
+        bound(r)
+        assertTrue(r.step.done())
+    }
+
+    @Test fun continueReadsTheGrantsAgain() {
+        val r = Rig(ThisDeviceStep.Grants(home = false, admin = false))
+        bound(r)
+        r.grants = ThisDeviceStep.Grants(home = true, admin = true)
+        val card = bound(r)
+        r.grants = ThisDeviceStep.Grants(home = true, admin = false) // Android took the admin back before the tap
+        card.primary!!()
+        assertFalse("not answered: it asks again", r.answered)
+        assertEquals(0, r.next)
+    }
+
     @Test fun notNowAnswersIt() {
         val r = Rig(ThisDeviceStep.Grants(home = false, admin = false))
         bound(r).secondary!!()

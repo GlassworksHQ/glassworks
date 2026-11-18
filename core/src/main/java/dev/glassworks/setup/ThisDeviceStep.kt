@@ -84,8 +84,9 @@ class ThisDeviceStep(
         private var noAdmin = false
 
         override fun bind(card: SetupCard, entered: Boolean) {
-            if (!host.preview) shown = true
             val g = grants()
+            // Only a live card with something missing latches: one opened from the rail once done stays done (#524).
+            if (!host.preview && g?.missing == true) shown = true
             last = g
             val home = g?.home == true
             val admin = g?.admin == true
@@ -105,7 +106,8 @@ class ThisDeviceStep(
                     card.primary(ALLOW_SCREEN_OFF) { ask { noAdmin = !askAdmin(context) } }
                     card.secondary("Not now") { done() }
                 }
-                else -> card.primary("Continue") { done() }
+                // Read again on Continue: a grant Android took back since this draw asks again (#524). Not now still skips.
+                else -> card.primary("Continue") { if (grants()?.missing == true) host.redraw() else done() }
             }
         }
 
@@ -130,8 +132,8 @@ class ThisDeviceStep(
         const val TITLE = "This device"
         const val TITLE_TEXT = "Make it a panel."
         const val HOME = "Home screen"
-        const val HOME_ON = "On: Glassworks opens when the device starts"
-        const val HOME_OFF = "Off: another app opens when the device starts"
+        const val HOME_ON = "On: Glassworks is the default Home app"
+        const val HOME_OFF = "Off: Glassworks isn't the default Home app"
         const val NO_HOME = "Android didn't open it: Settings, Apps, Default apps, Home app"
         const val SCREEN = "Turn the screen off"
         const val SCREEN_ON = "On: Glassworks can turn the screen off when idle. Turn this off before you uninstall it."
