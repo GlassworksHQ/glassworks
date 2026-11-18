@@ -78,7 +78,9 @@ class BootSplashTest {
         assertTrue("own process", "android:process=\":boot\"" in block)
         assertTrue("HOME filter priority", "android:priority=\"${BootSplash.PRIORITY}\"" in block)
         assertTrue("HOME filter", "android.intent.category.HOME" in block && "android.intent.category.DEFAULT" in block)
-        val main = m.substringAfter("android:name=\".MainActivity\"").substringBefore("</activity>")
+        val mainName = "android:name=\"sh.edm.s1kiosk.MainActivity\""
+        assertTrue("the manifest declares MainActivity", mainName in m)
+        val main = m.substringAfter(mainName).substringBefore("</activity>")
         assertFalse("MainActivity stays credential-encrypted only", "directBootAware" in main)
         assertFalse("MainActivity HOME keeps the default priority 0", "android:priority" in main)
     }

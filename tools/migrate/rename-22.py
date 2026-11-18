@@ -357,6 +357,7 @@ def main():
         decl_map.setdefault(old, new)
     for gen in ("R", "BuildConfig"):  # the S1 app's generated classes follow its namespace
         decl_map[f"{OLD}.{gen}"] = f"{S1_NAMESPACE}.{gen}"
+    decl_map[f"{OLD}.legacy"] = f"{S1_NAMESPACE}.legacy"  # the legacy check app's id (s1_frame_setup)
     targets = defaultdict(set)  # old package -> new packages its files went to
     for s in edm:
         targets[s.pkg].add(s.new_pkg)
@@ -389,7 +390,7 @@ def main():
         segs = tok.split(".")
         for k in range(len(segs), 3, -1):
             pre = ".".join(segs[:k])
-            if pre in COMPONENTS and not components:
+            if pre in COMPONENTS and not components and pre in S1_SHIMS:
                 return tok
             if pre in decl_map:
                 return decl_map[pre] + tok[len(pre):]
@@ -631,6 +632,8 @@ def s1_frame_setup():
             sub, _, cls = rest.rpartition(".")
             if sub in S1_PACKAGES:
                 return f'{attr}="{S1_PACKAGES[sub]}.{cls}"'
+            if sub in PACKAGES:  # a core class an S1 branch added under the old package goes with the core (base_rule)
+                return f'{attr}="{PACKAGES[sub]}.{cls}"'
         return m.group(0)
     new = re.sub(r'(android:(?:name|targetActivity))="(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+)"', full, text)
     if new != text:
