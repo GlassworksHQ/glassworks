@@ -790,15 +790,23 @@ class Installer {
     this.setup ??= await this.openSetup();
     if (!this.setup) return this.showDone(this.ip, this.wifiSsid); // older app: the panel's own setup does the rest
     const c = this.setup;
-    this.phase('ha', 'Connect it to Home Assistant', 'Tell the panel where Home Assistant is, then sign in. You can also do this on the panel.', 'Home Assistant', () => void this.radioStep());
+    // Every way out of this step (Skip, Continue, a sign-in finishing) goes through leave(): once, and after it a late
+    // state changes nothing here (not the radio step's form, not its shared button).
+    let left = false;
+    let signingIn = false; // a sign-in this page started, in its own window: when the panel reports it, the page moves on
+    const leave = () => {
+      if (left) return;
+      left = true;
+      signingIn = false;
+      void this.radioStep();
+    };
+    this.phase('ha', 'Connect it to Home Assistant', 'Tell the panel where Home Assistant is, then sign in. You can also do this on the panel.', 'Home Assistant', leave);
     const input = $('#ha-url') as HTMLInputElement;
     const st = $('#ha-st');
-    // a sign-in this page started, in its own window: when the panel reports it, the page moves on by itself
-    let signingIn = false;
     const render = (s: SetupState) => {
       this.ip = s.ip ?? this.ip;
-      // only from this step: a sign-in that finishes after the person moved on mustn't redo the radio step
-      if (signingIn && s.ha.signedIn) { signingIn = false; if (!$('#ha-block').hidden) void this.radioStep(); return; }
+      if (left) return;
+      if (signingIn && s.ha.signedIn) { leave(); return; }
       $('#ha-found').textContent = s.ha.discovered ? 'Found on your network' : 'Not found automatically: type it';
       if (!input.value) input.value = s.ha.url || s.ha.discovered || 'http://homeassistant.local:8123';
       const row = $('#ha-signin');
@@ -841,14 +849,14 @@ class Installer {
     };
     $('#ha-add').onclick = () => { $('#ha-add-dot').className = 'dot sm done'; };
     btn.onclick = async () => {
-      signingIn = false;
+      if (left) return;
       const url = input.value.trim();
       if (url && url !== this.setup?.state?.ha.url) {
         if (!validHaUrl(url)) { st.className = 'status err'; st.textContent = 'That doesn\'t look like a web address (http://… or https://…).'; return; }
         btn.disabled = true;
         try { await this.withSetup((x) => x.setHa(url)); } catch (e) { st.className = 'status err'; st.textContent = (e as Error).message; btn.disabled = false; return; }
       }
-      void this.radioStep();
+      leave();
     };
   }
 
