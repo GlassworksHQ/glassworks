@@ -58,7 +58,7 @@ class AndroidProbe(
             contentProcesses = processes.takeIf { it.isNotEmpty() }?.count { isContentProcess(it.processName) },
             cpuTemperature = temperature?.let(::read)?.trim()?.toIntOrNull()?.let { it / 1000f },
             memoryAvailableBytes = runCatching { am?.let { ActivityManager.MemoryInfo().also(it::getMemoryInfo).availMem } }.getOrNull(),
-            appPssBytes = totalOrNull(pids.map { read(File(proc, "$it/smaps_rollup"))?.let(::parsePss) }),
+            appPssBytes = appPss(pids),
             storageFreeBytes = runCatching { StatFs(Environment.getDataDirectory().path).availableBytes }.getOrNull(),
             wifiRssi = wifi?.rssi,
             wifiLinkSpeed = wifi?.linkSpeedMbps,
@@ -78,6 +78,18 @@ class AndroidProbe(
         if (Platform.hasProcessStartTime) Process.getStartElapsedRealtime()
         else read(File(proc, "self/stat"))?.let(::parseProcessStartTicks)?.let { it * 1000 / ticksPerSecond }
         ).also { appStart = it }
+
+    /** Linux 4.14 has `smaps_rollup`, as do Android's 4.4 and 4.9 kernels; older ones (the Mirror's 3.10) don't. */
+    private val hasSmapsRollup by lazy { File(proc, "self/smaps_rollup").exists() }
+
+    /**
+     * The PSS of [pids], from `smaps_rollup`, or on a kernel without it the sum over `smaps`, a longer file. Not
+     * Android's own count (`getProcessMemoryInfo`): on the Android 6 emulator's 3.18 kernel it is 0 for every process.
+     */
+    private fun appPss(pids: List<Int>): Long? = totalOrNull(pids.map { pid ->
+        if (hasSmapsRollup) read(File(proc, "$pid/smaps_rollup"))?.let(::parsePss)
+        else runCatching { File(proc, "$pid/smaps").inputStream().use(::sumPss) }.getOrNull()
+    })
 
     override fun lastExitReason(): Int? = runCatching { Platform.lastExitReason(context, context.packageName) }.getOrNull()
 

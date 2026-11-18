@@ -2,7 +2,8 @@
  *
  * - Kiosk mode for Home Assistant: hides the dashboard header (toolbar) and the sidebar.
  *   Disable per page with ?kiosk=0 (or ?edit=1), or globally in the app settings.
- * - Exposes panel state to the page as `window.s1kiosk` and a `s1kiosk-state` DOM event.
+ * - Exposes panel state to the page as `window.glassworks` and a `glassworks-state` DOM event.
+ *   `window.s1kiosk` and `s1kiosk-state` stay, the same object and event, for dashboards written before (#22).
  * - External auth bridge (only on pages the app loaded with ?external_auth=1, i.e. once the panel
  *   is signed in with the QR code): `window.externalApp` with getExternalAuth / revokeExternalAuth /
  *   externalBus, the "V1" interface the HA frontend uses for the Android Companion app
@@ -99,7 +100,9 @@
   function publishState(state) {
     try {
       const detail = cloneInto(state, window);
+      window.wrappedJSObject.glassworks = detail;
       window.wrappedJSObject.s1kiosk = detail;
+      window.dispatchEvent(new CustomEvent("glassworks-state", { detail }));
       window.dispatchEvent(new CustomEvent("s1kiosk-state", { detail }));
     } catch (e) { /* not fatal */ }
   }

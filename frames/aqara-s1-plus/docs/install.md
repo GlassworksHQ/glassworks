@@ -182,11 +182,12 @@ another network**.
 </table>
 
 **Home Assistant.** Kiln shows the address the panel found on your network, or asks you to type
-it. **Sign in** opens the panel's own sign-in page in a new tab, the same one its QR code points
-to, so your login goes from Home Assistant straight to the panel. This page notices when you are
-done. Then click **Continue**.
+it. **Sign in** opens Home Assistant's sign-in in a small window, through the panel, so your login
+goes from Home Assistant straight to the panel. When you are signed in, the window closes and Kiln
+moves on to the radio by itself. (A browser that blocks pop-ups gets a tab instead; it ends on
+"Signed in. Kiln has moved on.")
 
-<img src="../../../docs/img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field, a Sign in button. Link: Skip, do it on the panel. Button: Continue." width="100%">
+<img src="../../../docs/img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field. Link: Skip, sign in on the panel. Button: Sign in." width="100%">
 
 *Home Assistant also finds the panel by itself. Click **Add** on the discovered panel in
 Settings → Devices & services.*
@@ -482,4 +483,5 @@ within seconds after boot, and whenever it changes later.
 | *Something went wrong while writing*, or a read-back didn't match | Kiln stops and doesn't restart the panel, which may not start now. Don't unplug it while Kiln is writing. Once it has stopped, unplug it, put it in recovery mode again (hold the button, plug in) and use *Undo with your backup*, or try again. FEL is always available. |
 | *The panel didn't finish starting* | Unplug it and plug it back in, then use **Finish setting up**. |
 | *This backup can't undo the install* | See [Which backup](#which-backup). Nothing on the panel was changed. |
+| Signing in stops after a few seconds with *Home Assistant didn't say who signed in*, but the dashboard works | Home Assistant's name probably resolves to an IPv6 address the panel can't reach (`ping6 homeassistant.local` fails, `ping` works). Update the app: newer versions try every address, as a browser does ([Signing in](../../../docs/manage.md#signing-in)). Or use Home Assistant's IPv4 address as its address. |
 | The screen turns off at night | The panel has no night mode of its own since #473: check for an automation in Home Assistant that sets its *Idle timeout*, such as one from the [Panel night mode](../../../docs/blueprints.md) blueprint. With `install.sh --keep-dnd`, Aqara's own Do Not Disturb (22:00–07:00) also forces it off; see [frames/aqara-s1-plus/research/screen-policy.md](../research/screen-policy.md). |

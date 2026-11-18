@@ -1,8 +1,8 @@
 package dev.glassworks.auth
 
+import dev.glassworks.net.HappyEyeballs
+import dev.glassworks.net.HttpClient
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** Minimal HTTP for the auth endpoints; an interface so tests can use a fake HA. */
 interface HttpPoster {
@@ -13,45 +13,23 @@ interface HttpPoster {
     fun get(url: String, maxBytes: Int = 64 * 1024): Pair<Int, String>
 }
 
-class UrlConnectionPoster(private val timeoutMs: Int = 10_000) : HttpPoster {
-    override fun postForm(url: String, body: String): Pair<Int, String> = try {
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = timeoutMs
-        c.readTimeout = timeoutMs
-        c.requestMethod = "POST"
-        c.doOutput = true
-        c.instanceFollowRedirects = false
-        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-        c.setRequestProperty("Accept", "application/json")
-        c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-        val code = c.responseCode
-        val stream = if (code >= 400) c.errorStream else c.inputStream
-        val text = stream?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
-        c.disconnect()
-        code to text
-    } catch (e: IOException) {
-        -1 to (e.message ?: e.javaClass.simpleName)
+/**
+ * [HttpPoster] over [HttpClient], which connects to Home Assistant as a browser does ([HappyEyeballs]): a `.local`
+ * name that also resolves to an IPv6 address the panel can't reach still connects over IPv4 at once.
+ * [timeoutMs] bounds the connect and each read.
+ */
+class UrlConnectionPoster(timeoutMs: Int = 10_000, connector: HappyEyeballs = HappyEyeballs()) : HttpPoster {
+    private val http = HttpClient(connector, timeoutMs, timeoutMs)
+
+    override fun postForm(url: String, body: String): Pair<Int, String> = call {
+        http.request("POST", url, mapOf("Content-Type" to "application/x-www-form-urlencoded", "Accept" to "application/json"),
+            body.toByteArray(Charsets.UTF_8), maxBytes = 256 * 1024)
     }
 
-    override fun get(url: String, maxBytes: Int): Pair<Int, String> = try {
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = timeoutMs
-        c.readTimeout = timeoutMs
-        c.instanceFollowRedirects = false
-        val code = c.responseCode
-        val stream = if (code >= 400) c.errorStream else c.inputStream
-        val bytes = stream?.use { s ->
-            val buf = java.io.ByteArrayOutputStream()
-            val chunk = ByteArray(4096)
-            while (buf.size() < maxBytes) {
-                val n = s.read(chunk)
-                if (n < 0) break
-                buf.write(chunk, 0, minOf(n, maxBytes - buf.size()))
-            }
-            buf.toByteArray()
-        } ?: ByteArray(0)
-        c.disconnect()
-        code to bytes.toString(Charsets.UTF_8)
+    override fun get(url: String, maxBytes: Int): Pair<Int, String> = call { http.request("GET", url, maxBytes = maxBytes) }
+
+    private fun call(request: () -> HttpClient.Response): Pair<Int, String> = try {
+        request().let { it.status to it.body.toString(Charsets.UTF_8) }
     } catch (e: IOException) {
         -1 to (e.message ?: e.javaClass.simpleName)
     }

@@ -68,6 +68,30 @@ export interface FakeAndroidOptions {
   /** the app has no setup channel (an older build) or no pairing.arm */
   noChannel?: boolean;
   noPairing?: boolean;
+  /** the screen lock: a PIN, or none (default); `dumpsys lock_settings` answers as that API level does (lockSettingsDump) */
+  lock?: 'pin' | 'none';
+  /** a second user, 10, on the screen (`am get-current-user`), with this lock; user 0 keeps [lock] */
+  secondUser?: 'pin' | 'none';
+  /** `am get-current-user` fails */
+  noCurrentUser?: boolean;
+}
+
+/**
+ * `dumpsys lock_settings` for user 0 (research/screen-lock.md): 8.0 a gatekeeper SID (0 without a credential), 11 the
+ * credential type, 15 the type in capitals with a SID even without one, as the emulators answered on 2026-11-18. Android
+ * 6 and 7 are untested: here they print nothing. SIDs and handles are made up.
+ */
+export function lockSettingsDump(sdk: number, pin: boolean, second?: boolean): string {
+  if (sdk < 26) return '';
+  const sid = (on: boolean) => (sdk >= 34 || on ? '1234abcd5678ef90' : '0');
+  const users: [number, boolean][] = [[0, pin], ...(second === undefined ? [] : [[10, second] as [number, boolean]])];
+  if (sdk < 29) {
+    return `Current lock settings service state:\nSP Enabled = ${sdk >= 28}\n${users.map(([u, on]) => `    User ${u}\n        SP Handle = 0\n        SID = ${sid(on)}\n`).join('')}`;
+  }
+  const type = (on: boolean) => (sdk >= 34 ? (on ? 'PIN' : 'NONE') : (on ? 'Pin' : 'None'));
+  return ['Current lock settings service state:', '', 'User State:',
+    ...users.flatMap(([u, on]) => [`  User ${u}`, '    SP Handle: 0', `    SID: ${sid(on)}`, '    Quality: 0', `    CredentialType: ${type(on)}`, '    SeparateChallenge: true', '  ']),
+    'Storage:', '  User 0 [/data/system_de/0/spblob]:', '  ', ''].join('\n');
 }
 
 export class FakeAndroid implements PanelShell {
@@ -148,6 +172,8 @@ export class FakeAndroid implements PanelShell {
       this.admins.add(this.app.admin);
       return ok(`Success: Active admin set to component {${this.app.admin}}\n`);
     }
+    if (cmd === 'dumpsys lock_settings') return ok(lockSettingsDump(sdk, o.lock === 'pin', o.secondUser === undefined ? undefined : o.secondUser === 'pin'));
+    if (cmd === 'am get-current-user') return o.noCurrentUser ? { out: 'Unknown command: get-current-user\n', code: 1 } : ok(o.secondUser ? '10\n' : '0\n');
     if (cmd === 'dumpsys device_policy') return ok(`Current Device Policy Manager state:\n  Enabled Device Admins (User 0, provisioningState: 0):\n${[...this.admins].map((a) => `    ${a}:\n      uid=10123\n`).join('')}`);
     if ((m = /^am start -n (\S+)/.exec(cmd)) && m[1] === this.app.activity) {
       if (cmd.endsWith('--ez remove_admin true') && this.app.admin) this.admins.delete(this.app.admin);

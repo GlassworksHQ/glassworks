@@ -36,6 +36,23 @@ class ReadingsTest {
         assertNull(parsePss("Rss: 1 kB\n"))
     }
 
+    /** A kernel without `smaps_rollup` (Android 6's): every mapping's `Pss:`, not `SwapPss:` or Android 12's `Pss_Anon:`. */
+    @Test fun smapsPssIsTheSumOfItsMappings() {
+        val smaps = "7762958000-7762959000 r-xp 00000000 fd:00 1 /system/lib64/libc.so\nRss: 8 kB\nPss: 83 kB\nPss_Anon: 5 kB\nSwapPss: 4 kB\n" +
+            "7762959000-776295a000 rw-p 00000000 00:00 0\nPss: 17 kB\n"
+        assertEquals(100L * 1024, sumPss(smaps.byteInputStream()))
+        assertEquals("no newline at the end", 100L * 1024, sumPss(smaps.removeSuffix("\n").byteInputStream()))
+        assertNull(sumPss("Rss: 1 kB\n".byteInputStream()))
+        assertNull("a torn read is unknown", sumPss("Pss: 83 kB\nPss: \n".byteInputStream()))
+    }
+
+    /** Gecko's main process: thousands of mappings, so lines cross the reader's 64 KiB buffer. */
+    @Test fun aLongSmapsSumsAcrossReads() {
+        val mapping = "7762958000-7762959000 r-xp 00000000 fd:00 1 /data/app/dev.glassworks.generic_android.legacy-1/lib/arm64/libxul.so\n" +
+            "Size: 4 kB\nRss: 4 kB\nPss: 3 kB\nShared_Clean: 0 kB\nSwapPss: 0 kB\n"
+        assertEquals(5000L * 3 * 1024, sumPss(mapping.repeat(5000).byteInputStream()))
+    }
+
     @Test fun aTotalNeedsEveryPart() {
         assertEquals(30L, totalOrNull(listOf(10L, 20L)))
         assertNull("one process could not be read", totalOrNull(listOf(10L, null)))

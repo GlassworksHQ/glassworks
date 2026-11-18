@@ -121,7 +121,7 @@ The boot logo before Android starts stays lululemon's: it lives in the signed bo
 | Sendspin | Planned | It has stereo speakers. |
 | Zigbee and Thread radio | No | No Zigbee or Thread radio. |
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Planned | Worked out: needs no special hardware. |
+| Diagnostics | Planned | Worked out: needs no special hardware. The legacy build has the pane, with no CPU temperature. Not yet run on a Mirror. |
 | Bluetooth proxy | Planned | Worked out: has Bluetooth LE (its WCN3660B, read from a teardown). |
 | Notifications | Planned | Worked out: needs no special hardware. |
 | Camera | Planned | Worked out: has a camera (5 MP, front). The legacy build has the pane: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on (`camera_pane` in Home Assistant); Kiln grants the camera. Not yet run on a Mirror. |
@@ -143,6 +143,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [mirror-root.md](research/mirror-root.md): Can we root the Mirror dev unit cheaply and safely? The AOSP `su` route is a dead end; a platform test-key app gives uid system with no flash; three `system`-only leads stay open. Nothing flashed (#40)
 - [privileged-app.md](research/privileged-app.md): Does an app in `/system/priv-app` get Android 6's privileged permissions (silent updates, reboot, secure settings) and keep them after it updates? Yes: read from AOSP 6.0.1 and verified on the unit with the probe app (2026-11-16). Whether it can approve a computer's adb key: read; the permission verified on the unit (read-only), the approval untested (#29)
 - [adbd-keys.md](research/adbd-keys.md): Why doesn't adbd accept a key from `/data/misc/adb/adb_keys`? The stock lululemon boot's adbd most likely doesn't verify against that file. The AOSP key-loading timing is ruled out and SELinux is ruled out by the policy; a malformed key file is narrowed, not ruled out. So the `services.jar` rewrite (#426) is the only lever Kiln has without the boot partition, which it never writes (read/inferred, 2026-11-16, #29)
+- [mirror-memory.md](research/mirror-memory.md): Why Glassworks "crashes" on the Mirror: the lowmemorykiller at memory status critical, not a crash; the memory budget, why GeckoView 144's GPU process dies when the app leaves the front, and what the app and the image cut (2026-11-18)
 
 ## Files
 

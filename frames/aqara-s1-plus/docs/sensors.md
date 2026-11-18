@@ -56,8 +56,9 @@ See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `sh/edm/s1kiosk/fra
 - Instant screen-off uses `DevicePolicyManager.lockNow()` if the app is a device admin
   (`dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver`). Otherwise it falls back
   to the system screen-off timeout.
-- The live state is exposed to the dashboard page as `window.s1kiosk`
-  (`{presence, proximityRaw, lux, screenOn, voice}`) plus a `s1kiosk-state` DOM event.
+- The live state is exposed to the dashboard page as `window.glassworks`
+  (`{presence, proximityRaw, lux, screenOn, voice}`) plus a `glassworks-state` DOM event.
+  The old names, `window.s1kiosk` and `s1kiosk-state`, still work and carry the same state.
 
 All of this is exposed to Home Assistant through the panel's ESPHome device (presence, illuminance,
 screen light, idle timeout, max auto brightness, presence range); see [esphome.md](../../../docs/esphome.md).

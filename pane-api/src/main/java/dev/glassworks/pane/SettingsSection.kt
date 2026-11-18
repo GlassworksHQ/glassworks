@@ -262,6 +262,11 @@ sealed interface SettingsItem {
         val restartsApp: Boolean = false,
         /** Asked before the change to this value, or null to apply it at once. */
         val confirm: (Boolean) -> Confirm? = { null },
+        /**
+         * The key of the item on this page that [detail] points at, or null: the camera stream's "Needs Presence +
+         * camera." points at the camera's use. The Manage page links the line, and a refusal, to that item.
+         */
+        val see: String? = null,
         val save: (Boolean, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
@@ -360,6 +365,11 @@ sealed interface SettingsItem {
         val line: ((String) -> String)? = null,
         /** Asked before picking the id given, or null to apply it at once (the radio's role, #269), as [Switch.confirm]. */
         val confirm: (String) -> Confirm? = { null },
+        /**
+         * A line under each option id, or null. With lines, a surface draws the options as cards side by side, the
+         * picked one lit, and a tap picks at once (the camera's use, #117's approved cards).
+         */
+        val cards: ((String) -> String)? = null,
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 

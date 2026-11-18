@@ -172,6 +172,17 @@ class ScreenBehaviourPinTest {
         assertEquals(emptyList<Boolean>(), h.keepOnCalls)
     }
 
+    @Test fun aPanelThatNeverPickedAScreenModeStaysOn() {
+        // #522: on a frame where nothing senses presence, "presence" only meant turning off when idle.
+        h.context.getSharedPreferences("kiosk", android.content.Context.MODE_PRIVATE).edit().remove("screen_mode").commit()
+        assertEquals("always", prefs.screenMode)
+        h.setClock(12, 0)
+        h.start()
+        h.userActivity()
+        h.advance(3_600_000)
+        assertEquals(emptyList<Boolean>(), h.keepOnCalls)
+    }
+
     @Test fun someoneNearKeepsTheScreenOnThenTheTimeoutStartsWhenTheyLeave() {
         h.setClock(12, 0)
         h.start()
@@ -227,6 +238,31 @@ class ScreenBehaviourPinTest {
         h.sleep("home assistant")
         assertEquals(listOf(false), h.keepOnCalls)
         h.wake("home assistant")
+        assertEquals(listOf(false, true), h.keepOnCalls)
+    }
+
+    @Test fun alwaysOnStillLetsHomeAssistantTurnTheScreenOffWithoutDeviceAdmin() {
+        // #522 (CodeRabbit on #525): "always" is the default, and its tick put keep-screen-on back at once.
+        prefs.screenMode = "always"
+        h.start()
+        h.sleep("home assistant")
+        h.advance(60_000)
+        assertEquals(listOf(false), h.keepOnCalls)
+        h.userActivity()
+        h.advance(60_000)
+        assertEquals("a touch keeps it on again", listOf(false, true), h.keepOnCalls)
+    }
+
+    @Test fun switchingToAlwaysAfterAnIdleSleepKeepsTheScreenOn() {
+        // CodeRabbit on #525: only Home Assistant's sleep holds off "always", not the idle timeout's.
+        prefs.idleOffSec = 10
+        h.setClock(12, 0)
+        h.start()
+        h.userActivity()
+        h.advance(10_000)
+        assertEquals(listOf(false), h.keepOnCalls)
+        prefs.screenMode = "always"
+        h.advance(2_000)
         assertEquals(listOf(false, true), h.keepOnCalls)
     }
 
