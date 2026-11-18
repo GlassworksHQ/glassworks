@@ -194,6 +194,6 @@ and S1's own branding stay plain. The S1's own detail (status, install, radio, F
 voice, Sendspin), which declares the hardware it `requires`. **Kiln** = the installer (`kiln/` plus
 `frames/aqara-s1-plus/tools/install.sh`). New Kotlin packages for the core go under `dev.glassworks.*`. The S1 app keeps
 `sh.edm.s1kiosk`, because the boot helpers hardcode it. The core's Android components (`MainActivity`, `AdminReceiver`, `BootReceiver`,
-`KioskService`, `ImprovActivity`, `UpdateInstallReceiver`, `CameraAdbActivity`) live in `dev.glassworks.*`; each app
+`KioskService`, `ImprovActivity`, `UpdateInstallReceiver`, `CameraAdbActivity`) live in `dev.glassworks.*`. The S1 app
 declares one-line subclasses at the `sh.edm.s1kiosk.*` names its installed apps know and hands them to the core
-(`AppComponents`). Nothing else goes under `sh/edm` outside the S1 frame (`OldPackageGuardTest`).
+(`AppComponents`); the generic app names the core's classes directly (#527). Nothing else goes under `sh/edm` outside the S1 frame (`OldPackageGuardTest`).

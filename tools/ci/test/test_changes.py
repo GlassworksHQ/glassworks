@@ -76,7 +76,7 @@ class WhatTheWorkspacesRead(unittest.TestCase):
     def test_web_runs_for_files_the_workspaces_read_from_the_modules(self):
         for f in ('testing/kotlin/dev/glassworks/testing/RepoFiles.kt', 'core/src/main/res/font/inter.ttf',
                   'core/src/main/assets/setup/setup.js', 'panes/camera/src/main/java/dev/glassworks/camera/pane.json',
-                  'panes/camera/blueprints/x.yaml', 'tools/mirror/probe-app/src/main/java/sh/edm/s1kiosk/Probe.java'):
+                  'panes/camera/blueprints/x.yaml', 'tools/mirror/probe-app/src/main/java/dev/glassworks/mirror/probe/Probe.java'):
             self.assertIn('web', running(f), f)
 
     def test_web_skips_module_code_resources_tests_and_markdown(self):

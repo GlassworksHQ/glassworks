@@ -124,9 +124,9 @@ class GenericAppTest {
             assertEquals(category, listOf(GenericParts.LAUNCHER), found.map { it.activityInfo.name })
         }
         val info = pm.getPackageInfo(app.packageName, PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_ACTIVITIES)
-        assertTrue(info.services.orEmpty().any { it.name == "sh.edm.s1kiosk.KioskService" })
-        assertTrue(info.receivers.orEmpty().map { it.name }.containsAll(listOf("sh.edm.s1kiosk.BootReceiver", "sh.edm.s1kiosk.update.UpdateInstallReceiver")))
-        val main = info.activities.orEmpty().single { it.name == "sh.edm.s1kiosk.MainActivity" }
+        assertTrue(info.services.orEmpty().any { it.name == "dev.glassworks.KioskService" })
+        assertTrue(info.receivers.orEmpty().map { it.name }.containsAll(listOf("dev.glassworks.BootReceiver", "dev.glassworks.update.UpdateInstallReceiver")))
+        val main = info.activities.orEmpty().single { it.name == "dev.glassworks.MainActivity" }
         assertEquals("other apps can't start it with settings in its extras", "android.permission.WRITE_SECURE_SETTINGS", main.permission)
     }
 
@@ -137,7 +137,7 @@ class GenericAppTest {
         val viaLauncher = start(GenericParts.LAUNCHER)
         assertTrue("dropped", dev.glassworks.MainActivity.screenExtras(viaLauncher, parts::trustsExtras))
         assertNull(viaLauncher.extras)
-        val direct = start("sh.edm.s1kiosk.MainActivity")
+        val direct = start("dev.glassworks.MainActivity")
         assertFalse("kept", dev.glassworks.MainActivity.screenExtras(direct, parts::trustsExtras))
         assertEquals("http://192.0.2.66/", direct.getStringExtra("url"))
     }
