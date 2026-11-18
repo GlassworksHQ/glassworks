@@ -111,10 +111,10 @@ class ManageServer(
      */
     private fun endSession(session: String, now: Boolean = false) {
         asked.entries.removeIf { it.value.session == session }
-        if (now) { endKept(session); return }
+        if (now) { endKept(session); leftFor.remove(session); return }
         // One step under the lock: a forget that comes in between finds it in one map or the other, never in neither.
         synchronized(grants) { kept.remove(session)?.also { queue(session, it) } } ?: return
-        background { endKept(session) }
+        background { endKept(session); leftFor.remove(session) }
     }
 
     /**
@@ -129,11 +129,11 @@ class ManageServer(
                 // The sweep's pick: only if it's still the entry it picked, not one queued again since (CodeRabbit on #534).
                 if (order != null && retryOrder[id] != order) return Ended.DONE
                 kept.remove(id) ?: unrevoked.remove(id)?.also { retryOrder.remove(id) }
-            } ?: return Ended.DONE
-            if (moved(k)) { leftAtOldAddress(); return Ended.LEFT }
+            } ?: return if (id in leftFor) Ended.LEFT else Ended.DONE
+            if (moved(k)) { leftAtOldAddress(); leftFor += id; return Ended.LEFT }
             // The address is checked again before HA's second try too: the token never follows it to an old one.
             if (signIn.end(k) { !moved(k) }) return Ended.DONE
-            if (moved(k)) { leftAtOldAddress(); return Ended.LEFT }
+            if (moved(k)) { leftAtOldAddress(); leftFor += id; return Ended.LEFT }
             // HA didn't take the revoke: no longer usable, but kept aside to try again (Try again, the sweep).
             retryLater(id, k)
             return Ended.NOT_CONFIRMED
@@ -141,6 +141,12 @@ class ManageServer(
             ending.remove(id)
         }
     }
+
+    /**
+     * Sessions whose kept sign-in was left at an old address: a later Try again (the first answer lost) still says so,
+     * not "done", until the session ends (CodeRabbit on #534).
+     */
+    private val leftFor: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** How [endKept] went: revoked in HA, left at an old HA address unrevoked, or not confirmed (tried again later). */
     private enum class Ended { DONE, LEFT, NOT_CONFIRMED }

@@ -322,6 +322,11 @@ class ManageKeptSignInTest {
         assertEquals(200, r.status)
         assertTrue("not revoked: the address moved", JSONObject(r.text()).optBoolean("left"))
         assertTrue("nothing sent to the old address", f.revoked.isEmpty())
+        // The first answer lost, the page tries again: still left, not done.
+        f.haBaseFn = { "http://192.0.2.10:8123" }
+        val again = b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf))
+        f.haBaseFn = null
+        assertTrue("Try again still says it was left", JSONObject(again.text()).optBoolean("left"))
     }
 
     @Test fun theSecondTryDoesntGoToAnAddressThatMovedDuringTheFirst() {
