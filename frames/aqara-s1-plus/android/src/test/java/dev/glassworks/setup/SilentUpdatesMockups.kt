@@ -29,7 +29,7 @@ class SilentUpdatesMockups {
     @Before fun interFromSources() = Mockup.interFromSources()
 
     private fun shot(
-        name: String, step: String, w: Int, h: Int, silent: SilentUpdates = SilentUpdates.UnknownAppsOff,
+        name: String, step: String, w: Int, h: Int, silent: SilentUpdates? = SilentUpdates.UnknownAppsOff,
         frame: (Context) -> Frame = { TestFrames.tablet(it) },
     ) {
         val a = Mockup.activity()
@@ -56,6 +56,7 @@ class SilentUpdatesMockups {
         shot("$prefix-2-on", SilentUpdatesStep.ID, w, h, SilentUpdates.SelfUpdate)
         shot("$prefix-3-android9", SilentUpdatesStep.ID, w, h, SilentUpdates.OldAndroid("9"))
         shot("$prefix-4-target-too-low", SilentUpdatesStep.ID, w, h, SilentUpdates.TargetTooLow("14", 34, 33))
+        shot("$prefix-6-checking", SilentUpdatesStep.ID, w, h, null) // the answer isn't read yet
     }
 
     @Test
