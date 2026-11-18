@@ -19,7 +19,8 @@ line of each version is what Home Assistant shows on the update card. A change o
   **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
   every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
   records each, with the fingerprint. Android's own "Allow USB debugging?" no longer stays over the dashboard on
-  a screen without touch: the Security page is where you answer it. Needs a Mirror installed with this version.
+  a screen without touch: the Security page is where you answer it. Needs a fresh flash with Kiln: an update
+  over an older install doesn't get the two permissions it needs.
 - **Glassworks as an app for any Android device.** It shows your Home Assistant dashboard full screen, and
   adds the device to Home Assistant over ESPHome with its screen, its sensors and the panes its hardware allows:
   Assist with timers on a device with a microphone, Sendspin on one with a speaker, the camera pane on one with a
