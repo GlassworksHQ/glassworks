@@ -60,17 +60,22 @@ class GenericApp : Application(), GlassworksApp {
          * line would be offered releases that need Android 8.
          */
         internal fun releaseLine(applicationId: String): ReleaseLine =
-            if (applicationId.removeSuffix(".debug") == LEGACY_APPLICATION_ID) ReleaseLine.GENERIC_ANDROID_LEGACY else ReleaseLine.GENERIC_ANDROID
+            if (legacy(applicationId)) ReleaseLine.GENERIC_ANDROID_LEGACY else ReleaseLine.GENERIC_ANDROID
+
+        private fun legacy(applicationId: String) = applicationId.removeSuffix(".debug") == LEGACY_APPLICATION_ID
 
         /**
          * What the engine starts with, from the settings: read once, at the first open. The dashboard is the
-         * origin the legacy engine stays on (#198); the current engine doesn't read it. As S1 Kiosk's (KioskApp).
+         * origin the legacy engine stays on (#198); the current engine doesn't read it. As S1 Kiosk's (KioskApp),
+         * but the legacy build never turns on remote debugging (#29), even with the setting left on from before.
          */
-        internal fun engineSettings(context: Context, build: AppBuild): EngineSettings =
-            KioskPrefs(context).run { EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug), dashboard = url.ifEmpty { null }) }
+        internal fun engineSettings(context: Context, build: AppBuild, applicationId: String = BuildConfig.APPLICATION_ID): EngineSettings =
+            KioskPrefs(context).run {
+                EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug) && !legacy(applicationId), dashboard = url.ifEmpty { null })
+            }
 
         /** GeckoView with the kiosk's helper extension: the same engine, extension and page API as S1 Kiosk's. */
-        private fun engine(build: AppBuild): Engine = GeckoEngine(
+        internal fun engine(build: AppBuild): Engine = GeckoEngine(
             settings = { context -> engineSettings(context, build) },
             extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
             logTag = TAG,

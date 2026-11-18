@@ -637,6 +637,9 @@ the engine starts. Nothing in the session moves or widens it, not even the app's
 another origin, which is refused. A new dashboard address restarts the process: the settings menu's
 field does, and so does the installer when `KioskPrefs.engineStart()` changes.
 
+`engine.lockedDown` is true for the legacy engine (its `GeckoVariant.LOCKED_DOWN`). The Manage page's Overview then
+shows a Legacy chip that says what it can't do, and the core ignores the `remote_debug` extra (#29).
+
 | What the page tries | Legacy engine |
 |---|---|
 | A page, iframe, image, fetch or WebSocket from the dashboard's origin | Loads |
