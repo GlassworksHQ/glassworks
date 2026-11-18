@@ -102,7 +102,7 @@ const forgetCsrfs = [];
 let accessStatus = 200;
 /** While set, this panel takes the page's form token for another session's (signed in again in another tab). */
 let staleCsrf = false;
-/** Which script this panel stalls on, if any; the stalled answers, to end later. */
+/** Which script this panel stalls on, if any; the stalled answers ({ res, open }), to end later. */
 let stallScript = null;
 const stalled = [];
 /** Whether the fake Home Assistant takes a revoke. */
@@ -169,7 +169,11 @@ async function handle(req, res) {
     return forgetOk ? send(res, 200, { ok: true }) : send(res, 502, { problem: "Home Assistant didn't confirm it ended the sign-in. Try again." });
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
-  if (stallScript && u.pathname === '/manage/js/' + stallScript) return void stalled.push(res);
+  if (stallScript && u.pathname === '/manage/js/' + stallScript) {
+    const s = { res, open: true };
+    res.on('close', () => { s.open = false; });
+    return void stalled.push(s);
+  }
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
   // Slow, like a panel whose Home Assistant check takes a while: the page draws the others first.
   if (u.host === 'porch-panel.local:8099' && u.pathname === '/manage/api/settings')
@@ -501,14 +505,17 @@ try {
   for (let i = 0; i < 50 && !stalled.length; i++) await sleep(100);
   assert.equal(stalled.length, 1, 'the module asked for panels-core.js, and it hangs');
   await until("document.querySelector('#gw-list .note')?.textContent.includes(\"couldn't start\")", 'the way out when the module stalls');
-  assert.equal(stalled.length, 1, 'still pending when the notice showed');
-  for (const r of stalled.splice(0)) send(r, 404, 'Not found.', 'text/plain');
+  assert.ok(stalled[0].open, 'that request was still open when the notice showed');
+  for (const s of stalled.splice(0)) send(s.res, 404, 'Not found.', 'text/plain');
   // The fallback's own download stalls: the module isn't held up by it.
   stallScript = 'panels-boot.js';
   await call('Page.navigate', { url: PAGE });
+  for (let i = 0; i < 50 && !stalled.length; i++) await sleep(100);
+  assert.equal(stalled.length, 1, 'the page asked for panels-boot.js, and it hangs');
   await until("document.getElementById('gw-panels')?.dataset.started === '1'", 'the module running past a stalled fallback');
+  assert.ok(stalled[0].open, 'the fallback was still loading when the module started');
   stallScript = null;
-  for (const r of stalled.splice(0)) send(r, 404, 'Not found.', 'text/plain');
+  for (const s of stalled.splice(0)) send(s.res, 404, 'Not found.', 'text/plain');
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
   assert.ok(!haAddressSent, "no copy sent a panel's own Home Assistant address");
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');
