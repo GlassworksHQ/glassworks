@@ -130,7 +130,8 @@ InstallFlow. Other `?demo=` names jump to one screen (`src/wizard/demo.ts`), for
 `app` and `app-update` (settings before a first install and an update), `app-installing` and
 `app-keyboard` (the install's steps), `wifi` (the panel on Wi-Fi already) and `wifi-new` (it isn't),
 `radio-thread` and `radio-thread-old` (a Thread router on a Glassworks that gets the network from
-Home Assistant, and on 0.4.3, which can't). The Mirror's test page has its own. The fastboot install: `?demo=flash-image`, `flash-downloading`, `flash-proxy-failed`
+Home Assistant, and on 0.4.3, which can't), and `done-old-boot` (Done on a boot image without the root update service,
+so its Silent updates block says each update asks for a tap). The Mirror's test page has its own. The fastboot install: `?demo=flash-image`, `flash-downloading`, `flash-proxy-failed`
 (the fallback), `flash-checking`, `flash-wrong` (a wrong file), `flash-ready`, `flash-fastboot`, `flash-fastboot-wrong`, `flash-confirm` (the stock warning),
 `flash-working`, `flash-adb`, `flash-done`, `flash-done-chooser` (another launcher survived), `flash-error` (a refused write, with the retry without FILL) and `flash-back` (the way back). The adb-only path: `?demo=run`
 clicks through a simulated Mirror (`src/mirror/demo.ts`); `pick`, `pick-wrong` (an APK that isn't Glassworks),
