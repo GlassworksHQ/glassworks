@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **The panel shows its frame version.** The S1 Plus page in the panel's settings and on the Manage page has a new
+  *Frame version* row: the version of the parts of the panel Glassworks owns, such as its boot-side services and boot
+  animation, not Android's. A panel installed before frame versions shows *Before 1.0.0*. A new *Frame update*
+  entity in Home Assistant says when a newer frame version is out and how to install it. The first one comes with
+  Glassworks 1.0.0, and a panel installed before it needs one update with Kiln to get it.
 - **Glassworks for generic Android gets the Diagnostics pane.** The app on tablets and the lululemon Mirror, in
   both of its builds, now sends its CPU, RAM, storage, Wi-Fi and uptime to Home Assistant, as S1 Kiosk does, and
   shows them on its Diagnostics page on the panel and on the Manage page. These devices have no CPU temperature

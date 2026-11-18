@@ -612,6 +612,10 @@ class PanelDevice(
             "app_update", "App update", "mdi:cellphone-arrow-down",
             get = { updates.model.view() }, onCommand = updates::onCommand,
         ),
+        // The frame's own parts (#139): only on a frame with releases of its own, the S1 and the Mirror.
+        *listOfNotNull(updates.frame?.let { f ->
+            UpdateEntity("frame_update", "Frame update", "mdi:package-up", get = f::view, onCommand = updates::onFrameCommand)
+        }).toTypedArray(),
         TextSensorEntity(
             "update_status", "Update status", "mdi:update", EntityCategory.DIAGNOSTIC,
             disabledByDefault = true, get = { updates.statusText() },

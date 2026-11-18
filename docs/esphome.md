@@ -156,6 +156,7 @@ open the entity, and turn on *Enabled*.
 | Restart app | `restart_app` | core | config | on | Used often |
 | Screen mode | `screen_mode` | core | config | on | Automations (night, away) |
 | App update | `app_update` | core | config | on | HA shows updates only while it is on |
+| Frame update | `frame_update` | core | config | on | Only on the S1 and the Mirror ([frame updates](#frame-updates)) |
 | Allow setup over the network | `lan_setup` | core | config | on | The way back to setup from a laptop once HA has the panel |
 | IP address | `ip_address` | core | diagnostic | on | People check it |
 | Silent updates | `silent_updates` | core | diagnostic | on | People check it: whether an update needs someone at the panel |
@@ -293,6 +294,7 @@ So on a panel HA already has:
 | text_sensor `Time zone status` | `time_zone_status` | diagnostic; whether the zone is being kept |
 | text_sensor `App version` | `app_version` | diagnostic |
 | update `App update` (firmware) | `app_update` | the latest GitHub release vs this app; install from HA ([app updates](#app-updates)) |
+| update `Frame update` (firmware) | `frame_update` | the frame's latest release vs its frame version; on the S1 and the Mirror only ([frame updates](#frame-updates)) |
 | text_sensor `Update status` | `update_status` | diagnostic; e.g. `up to date (1.2.0)`, `1.3.0 available`, `Downloading 1.3.0: 42%`, `Install of 1.3.0 failed: …` |
 | text_sensor `Silent updates` | `silent_updates` | diagnostic; whether app updates install with nobody at the panel, and why: `Yes: …` or `No: …` ([Silent updates](#silent-updates)) |
 | text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
@@ -592,6 +594,33 @@ usual `--ez camera_enabled true` on the main activity, for example
   6. Any failure, or a phase stuck for 30 min (download) or 10 min (verify/install), ends with
      `in_progress` off and the reason on top of the summary.
 - A debug build can't update to a release: the keys differ, and the entity says so.
+
+### Frame updates
+
+`update/FrameUpdate.kt` (#139). A frame version is the version of the parts of a device that Glassworks owns: the
+S1's boot-side services, scripts and boot animation, or the Mirror's patched image (the Glass Panes release plus
+Kiln's recipe). It is not Android's version, which the Device page still shows as *Android*. Frame versions use
+semantic versioning and start at 1.0.0, with Glassworks 1.0.0.
+
+| Frame | Frame version row and *Frame update* entity | Installs from Home Assistant |
+|---|---|---|
+| S1 | Yes | Not yet. A panel without the loader in its boot image needs one Kiln update first, and the card says so |
+| Mirror | Yes | No. The card says to flash the Mirror again with Kiln |
+| Pixel Tablet, any other generic Android device | No: Google or the maker updates the device | - |
+
+- **The version** comes from two system properties: `ro.glassworks.frame.id` (the frame's id) and
+  `ro.glassworks.frame.version`. Kiln stamps them into the Mirror's `build.prop` when it flashes it. The S1's loader
+  will set them at boot. A device without them shows *Before 1.0.0*, and a Mirror names its Glass Panes image from
+  `ro.build.fingerprint` (*Before 1.0.0 (Glass Panes image 2)*). Such a device is older than any frame release.
+- **The check** is the app's own: the same release list, read at the same times. The newest stable release tagged
+  `frames/<id>/v<version>` is the frame's latest ([releasing.md](releasing.md#frame-releases)).
+- **State:** `current_version` is the frame version, `title` is the frame's name and "frame" (`Aqara S1 Plus frame`).
+  While no newer release is out, `latest_version` = `current_version`, as for the app. When one is out:
+  `latest_version`, `release_url`, and `release_summary`, which starts with how to install it.
+- **Install:** Home Assistant's ESPHome update entity always has an Install button. Here it does nothing (the
+  log says why), and the summary says how to install the update.
+- **The Device page and Manage** show a *Frame version* row from the same model: the version, and when a newer
+  one is out, which and how to install it, in amber.
 
 ### Silent updates
 

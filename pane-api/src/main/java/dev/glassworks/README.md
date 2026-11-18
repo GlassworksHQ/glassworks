@@ -583,6 +583,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
 | `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
+| `frameRelease` | The frame's own version and releases (#139, `FrameRelease`): its id, the version the device carries in `ro.glassworks.frame.id` and `ro.glassworks.frame.version`, and how an update installs. The core adds a *Frame version* row to the Device page and a *Frame update* entity for it. Null (the default) means neither: a device its vendor updates. The S1 and the Mirror have one. |
 | `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |
 | `systemSettingsTitle` | What the settings call the device's own settings app when it isn't Android's (the S1's: Aqara's). Null (the default) means Android's. |
 | `input` | `TOUCH` (the default), or `NONE` for a screen that takes no tap (the lululemon Mirror's). With `NONE` the panel only displays during setup: the setup page's address and QR code, and the pairing code without Close. Setup happens from a computer over the network (`/setup`, #34). |
