@@ -231,6 +231,20 @@ class AdbComputersTest {
         assertEquals("the new question stays open", a, c.asking())
     }
 
+    @Test fun `each computer let in is passed on, so the screen can put Android's question away`() {
+        var letIn = 0
+        val c = AdbComputers(file, allow = { null }, event = { events += it }, clock = { now }, confirmMs = 10, letIn = { letIn++ })
+        c.asked(a)
+        c.allowAsking(a.fingerprint, remember = true, who = "Alex")
+        assertEquals("from the page", 1, letIn)
+        c.asked(a)
+        assertEquals("from the list", 2, letIn)
+        c.asked(b)
+        assertEquals("not for one that waits", 2, letIn)
+        c.allowAsking(a.fingerprint, remember = true, who = "Alex")
+        assertEquals("nor for a refused Allow", 2, letIn)
+    }
+
     @Test fun `two Allows at once each get their own answer`() {
         val c = computers()
         c.asked(a)
