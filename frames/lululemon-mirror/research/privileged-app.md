@@ -276,6 +276,29 @@ Read at `android-6.0.1_r81`, `services/usb/java/com/android/server/usb/UsbDebugg
 | 246 | `writeKey` only when `alwaysAllow` is set | The app passes `false`: `adb_keys` doesn't grow, and Remove takes a computer out for good |
 | 458 | `dump` prints "Last key received" as the fingerprint only | Not used: it can't supply the key, and it doesn't change when the same computer asks again |
 
+### Android's own question stays on the glass (#435, verified 2026-11-18)
+
+The root's Mirror run (2026-11-18) passed every step, but SystemUI's "Allow USB debugging?"
+(`com.android.systemui/.usb.UsbDebuggingActivity`) stayed focused over the dashboard after Allow, and came back each
+time an unknown or removed key asked. On a screen with no touch nobody can dismiss it. It finishes itself only when
+the computer is unplugged.
+
+On an Android 6 arm64 emulator (2026-11-18, the app as a priv-app with `MANAGE_USB` and `READ_LOGS`, the AVD set to
+`hw.screen=no-touch` so the frame's input is `NONE`; the dialog started as root with `am start -n
+com.android.systemui/.usb.UsbDebuggingActivity --es key … --es fingerprints …`):
+
+| What | Result |
+|---|---|
+| `am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS` | The dialog stays focused: it doesn't listen for it |
+| A HOME intent for the app (`setPackage`) | Covers the dialog, but starts a second dashboard in a new task (the `Launcher` alias) |
+| The app's own task to the front (`ActivityManager.getAppTasks()`, `AppTask.moveToFront()`, no permission) | Glassworks' running `MainActivity` back in front, the dialog's task behind it (`dumpsys activity`: t10 over t9 and t11) |
+| ActivityManager's `START u0 {… cmp=com.android.systemui/.usb.UsbDebuggingActivity …}` on the system log | The app sees it (its reader adds `ActivityManager:I`) and covers 1.9 to 3.2 s later on the emulator |
+| The cover on the app's main thread | Up to 20 s late while the dashboard starts; it now runs on its own thread |
+
+So on a frame whose input is `NONE` the app puts its own task back over the dialog when the dialog starts, and after
+it lets a computer in. A frame with touch keeps Android's dialog. The Security page is where the question is
+answered.
+
 **Any app can write these lines.** Logging under the `UsbDebuggingManager` tag needs no permission, so another
 app on the panel can forge a request or a refusal. That can only mislead the card: a forged request shows a
 computer that isn't asking, and Android refuses its approval because the fingerprint isn't the one it waits on

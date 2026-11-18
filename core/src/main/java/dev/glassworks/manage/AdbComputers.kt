@@ -89,6 +89,8 @@ class AdbComputers(
     private val confirmMs: Long = 3_000L,
     /** Whether Android's log is being read now: without it a refusal can't arrive, and Allow confirms nothing. */
     private val listening: () -> Boolean = { true },
+    /** A computer was let in, from the page or from the list: the screen can put Android's own question away. */
+    private val letIn: () -> Unit = {},
 ) {
     /** A computer on the list: its key, who added it and when. */
     data class Listed(val key: AdbKey, val addedMs: Long, val by: String)
@@ -128,6 +130,7 @@ class AdbComputers(
         }
         val problem = allow(on.key)
         last = Request(key, clock(), answered = problem == null)
+        if (problem == null) letIn()
         event(if (problem == null) "Asked Android to let in ${label(on.key)} over USB: it's on the allowed list"
             else "Couldn't let in ${label(on.key)} over USB: $problem")
     }
@@ -216,6 +219,7 @@ class AdbComputers(
             }
             // Only the request Allow was for: the same computer asking again meanwhile is a new question.
             if (last === asked) last = asked?.copy(answered = true)
+            letIn()
             if (!remember) {
                 event("$who allowed ${label(key)} over USB, for this connection")
                 return Allowed.ONCE

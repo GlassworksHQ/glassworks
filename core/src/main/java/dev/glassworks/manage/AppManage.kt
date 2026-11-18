@@ -35,6 +35,7 @@ import dev.glassworks.pane.SettingsSection
 import dev.glassworks.pane.shown
 import dev.glassworks.platform.Platform
 import dev.glassworks.platform.UsbDebugging
+import dev.glassworks.frame.Input
 import dev.glassworks.platform.WifiLink
 import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
@@ -102,7 +103,7 @@ open class AppManage(
         else AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event,
             // following is volatile and read without Requests' lock on purpose: the reader holds that lock while it calls
             // onHeard, which takes AdbComputers' own, so locking here (inside Allow) would invert the order.
-            listening = { adbRequests?.following == true })
+            listening = { adbRequests?.following == true }, letIn = { coverQuestion(log = false) })
     }
 
     private val adbRequests: UsbDebugging.Requests? = adb?.let { c ->
@@ -112,6 +113,7 @@ open class AppManage(
                     is UsbDebugging.Heard.Asked -> AdbKey.parse(h.key)?.let(c::asked)
                     UsbDebugging.Heard.LetInByImage -> c.letInByImage()
                     is UsbDebugging.Heard.Refused -> c.refused(h.got, h.waiting)
+                    UsbDebugging.Heard.QuestionShown -> coverQuestion(log = true)
                 }
             }, onError = { Log.w(TAG, it) })
         }
@@ -135,6 +137,27 @@ open class AppManage(
         // Without its log reader the card could see no computer asking, so it shows only with both.
         usb = adb?.takeIf { adbRequests != null }?.let { ManageUsbDebugging(it, ManagePages()::time, ::event) },
     )
+
+    /**
+     * On a screen that takes no tap, Android's "Allow USB debugging?" would stay over the dashboard with nobody able to
+     * answer it: the app's home screen goes back over it, and the Security page is where it's answered (#435). A
+     * screen with touch keeps Android's dialog. A moment's wait lets the dialog come up first. Off the main thread, which
+     * can be busy for seconds while the dashboard starts (20 s on an API 23 emulator, 2026-11-18). [log]: say so in the
+     * Log, once per question; the cover after a computer is let in is silent.
+     */
+    private fun coverQuestion(log: Boolean) {
+        if (runtime.frame.input != Input.NONE) return
+        Thread({
+            try {
+                Thread.sleep(COVER_DELAY_MS)
+            } catch (_: InterruptedException) {
+                return@Thread
+            }
+            val problem = UsbDebugging.cover(app)
+            if (problem != null) event("Couldn't put the dashboard back over Android's USB debugging question: $problem")
+            else if (log) event("Put the dashboard back over Android's USB debugging question: answer it under Security")
+        }, "glassworks-adb-cover").apply { isDaemon = true; start() }
+    }
 
     /** A part of the page that couldn't load: in the logcat and the page's Log, which is still up. */
     private fun partFailed(msg: String) {
@@ -376,6 +399,9 @@ open class AppManage(
         const val TAG = "S1Manage"
 
         private const val ADB_CARD = "Allow a new computer"
+
+        /** How long the cover waits for Android's dialog to come up. */
+        private const val COVER_DELAY_MS = 500L
 
         /** How long a restart or reboot waits, so the page that started it reaches the browser first. */
         const val ACTION_DELAY_MS = 1_000L

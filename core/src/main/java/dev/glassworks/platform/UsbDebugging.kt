@@ -53,6 +53,25 @@ object UsbDebugging {
         "${e.javaClass.simpleName}: ${e.message}"
     }
 
+    /**
+     * Brings the app's own screen back over Android's "Allow USB debugging?" on a screen nobody can tap: its running
+     * task to the front ([android.app.ActivityManager.AppTask.moveToFront], no permission for the app's own task), or
+     * its home screen when none runs. A HOME intent alone starts a second dashboard in a new task (API 23 emulator,
+     * 2026-11-18). Android 6 doesn't close that dialog for `ACTION_CLOSE_SYSTEM_DIALOGS` (same emulator): it stays
+     * behind and ends when the computer is unplugged. Null when done, else why not.
+     */
+    fun cover(context: Context): String? = try {
+        val task = context.getSystemService(android.app.ActivityManager::class.java)?.appTasks?.firstOrNull()
+        if (task != null) task.moveToFront()
+        else context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME)
+                .setPackage(context.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        null
+    } catch (e: RuntimeException) {
+        "${e.javaClass.simpleName}: ${e.message}"
+    }
+
     /** What the system log says about a computer asking. */
     sealed interface Heard {
         /** A computer asked with this key line (`<base64> user@host`). */
@@ -63,17 +82,23 @@ object UsbDebugging {
 
         /** Android refused an approval of [got]: [waiting] is the computer it waits on, null when none (`:241`). */
         data class Refused(val got: String, val waiting: String?) : Heard
+
+        /** Android put its own "Allow USB debugging?" on the screen (ActivityManager's `START` of SystemUI's activity). */
+        data object QuestionShown : Heard
     }
 
     /** One system log line as [Heard], or null when it says neither. */
     fun heard(line: String): Heard? {
         if (ASKED in line) return Heard.Asked(line.substringAfter(ASKED).trim())
         if (OWNER.containsMatchIn(line)) return Heard.LetInByImage
+        if (SHOWN.containsMatchIn(line)) return Heard.QuestionShown
         val r = REFUSED.find(line) ?: return null
         return Heard.Refused(r.groupValues[1], r.groupValues[2].takeIf { it != "null" })
     }
 
     private const val ASKED = "Received public key: "
+    /** SystemUI's `UsbDebuggingActivity` (or its secondary-user twin) starting: `START u0 {… cmp=com.android.systemui/.usb.UsbDebuggingActivity …}`. */
+    private val SHOWN = Regex("START u\\d+ \\{[^}]*cmp=\\S+/\\S*UsbDebugging\\w*Activity")
     /** The image's own line when it lets its owner in ("Authorizing the … owner's ADB key", image-patch.md), whatever device it names. */
     private val OWNER = Regex("Authorizing the \\S+ owner's ADB key")
     private val REFUSED = Regex("Fingerprints do not match\\. Got ([0-9A-F:]+), expected (\\S+)")
@@ -87,7 +112,7 @@ object UsbDebugging {
         private val onHeard: (Heard) -> Unit,
         private val onError: (String) -> Unit = {},
         private val retryMs: Long = 10_000,
-        private val logcat: () -> Process = { ProcessBuilder("logcat", "-b", "system", "-T", "1", "-s", "UsbDebuggingManager:D").redirectErrorStream(true).start() },
+        private val logcat: () -> Process = { ProcessBuilder("logcat", "-b", "system", "-T", "1", "-s", "UsbDebuggingManager:D", "ActivityManager:I").redirectErrorStream(true).start() },
     ) {
         private var running = false
         private var generation = 0

@@ -35,6 +35,14 @@ class UsbDebuggingHeardTest {
         assertNull(UsbDebugging.heard("--------- beginning of system"))
     }
 
+    @Test fun `Android's own question coming up on the screen`() {
+        assertEquals(UsbDebugging.Heard.QuestionShown, UsbDebugging.heard(
+            "11-17 20:47:13.343  1218  3801 I ActivityManager: START u0 {flg=0x10000000 cmp=com.android.systemui/.usb.UsbDebuggingActivity (has extras)} from uid 1000 on display 0"))
+        assertEquals(UsbDebugging.Heard.QuestionShown, UsbDebugging.heard(
+            "I/ActivityManager(  873): START u0 {flg=0x10000000 cmp=com.android.systemui/.usb.UsbDebuggingSecondaryUserActivity} from uid 1000"))
+        assertNull(UsbDebugging.heard("I/ActivityManager(  873): START u0 {act=android.intent.action.MAIN cmp=com.android.settings/.Settings} from uid 2000"))
+    }
+
     @Test fun `Android refusing an approval, with the computer it waits on or none`() {
         val got = "AF:0F:9E:EB:A4:B4:AF:75:6D:1F:86:23:46:4D:36:D2"
         val waiting = "6C:F6:AF:69:38:B4:24:7B:F0:27:6D:5B:F6:A1:ED:7C"
