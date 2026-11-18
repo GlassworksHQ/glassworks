@@ -159,7 +159,25 @@ public class WsClient private constructor(
          * not on the main thread. Throws [IOException] when it can't connect or the server refuses.
          */
         @Throws(IOException::class)
-        public fun connect(url: String, connectTimeoutMs: Int = 5_000, readTimeoutMs: Int = 30_000): WsClient {
+        public fun connect(url: String, connectTimeoutMs: Int = 5_000, readTimeoutMs: Int = 30_000): WsClient =
+            connect(url, connectTimeoutMs, readTimeoutMs) { host, port, timeoutMs ->
+                Socket().apply {
+                    try { connect(InetSocketAddress(host, port), timeoutMs) } catch (e: IOException) { close(); throw e }
+                }
+            }
+
+        /**
+         * As [connect], with the TCP connection from [openSocket]: given the URL's host, its port and
+         * [connectTimeoutMs], it returns a connected socket or throws [IOException]. The app passes one that
+         * tries every address the host resolves to, as a browser does.
+         */
+        @Throws(IOException::class)
+        public fun connect(
+            url: String,
+            connectTimeoutMs: Int,
+            readTimeoutMs: Int,
+            openSocket: (host: String, port: Int, timeoutMs: Int) -> Socket,
+        ): WsClient {
             val uri = URI(url)
             val tls = when (uri.scheme) {
                 "ws" -> false
@@ -169,11 +187,10 @@ public class WsClient private constructor(
             val host = uri.host ?: throw IOException("no host in $url")
             val port = if (uri.port > 0) uri.port else if (tls) 443 else 80
             val path = (uri.rawPath?.ifEmpty { "/" } ?: "/") + (uri.rawQuery?.let { "?$it" } ?: "")
-            val plain = Socket()
+            val plain = openSocket(host, port, connectTimeoutMs)
             var s: Socket = plain
             try {
                 plain.tcpNoDelay = true
-                plain.connect(InetSocketAddress(host, port), connectTimeoutMs)
                 if (tls) {
                     val ssl = (SSLSocketFactory.getDefault() as SSLSocketFactory)
                         .createSocket(plain, host, port, true) as SSLSocket

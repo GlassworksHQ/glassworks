@@ -1,5 +1,6 @@
 package dev.glassworks.auth
 
+import dev.glassworks.net.HappyEyeballs
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -148,8 +149,9 @@ class WsHaSocket private constructor(private val ws: dev.glassworks.sendspin.WsC
     override fun close() = ws.close()
 
     companion object {
+        /** Connects as a browser does ([HappyEyeballs]), so an IPv6 address the panel can't reach doesn't stall it. */
         @Throws(IOException::class)
-        fun connect(url: String): WsHaSocket =
-            WsHaSocket(dev.glassworks.sendspin.WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 15_000))
+        fun connect(url: String, connector: HappyEyeballs = HappyEyeballs()): WsHaSocket =
+            WsHaSocket(dev.glassworks.sendspin.WsClient.connect(url, connectTimeoutMs = 8_000, readTimeoutMs = 15_000, openSocket = connector::connect))
     }
 }

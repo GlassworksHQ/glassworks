@@ -4,10 +4,9 @@
 
 package dev.glassworks.notifications
 
-import java.io.ByteArrayOutputStream
+import dev.glassworks.net.HappyEyeballs
+import dev.glassworks.net.HttpClient
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** What fetching a notification's picture gave. */
 sealed class ImageFetch {
@@ -77,32 +76,17 @@ class HaImages(
     }
 }
 
-/** [HttpGet] over [HttpURLConnection]: no redirects, 5 s to connect and 10 s to read. */
-class UrlConnectionGet(private val connectMs: Int = 5_000, private val readMs: Int = 10_000) : HttpGet {
+/**
+ * [HttpGet] over [HttpClient], which connects as a browser does ([HappyEyeballs]): no redirects, 5 s to connect
+ * and 10 s for each read.
+ */
+class UrlConnectionGet(connectMs: Int = 5_000, readMs: Int = 10_000, connector: HappyEyeballs = HappyEyeballs()) : HttpGet {
+    private val http = HttpClient(connector, connectMs, readMs)
+
     override fun get(url: String, headers: Map<String, String>, maxBytes: Int): HttpGet.Response {
-        val c = URL(url).openConnection() as HttpURLConnection
-        try {
-            c.instanceFollowRedirects = false
-            c.connectTimeout = connectMs
-            c.readTimeout = readMs
-            c.useCaches = false
-            for ((k, v) in headers) c.setRequestProperty(k, v)
-            val status = c.responseCode
-            if (status != 200) return HttpGet.Response(status, c.contentType, ByteArray(0), false)
-            val buf = ByteArrayOutputStream()
-            var tooLarge = false
-            c.inputStream.use { input ->
-                val chunk = ByteArray(16 * 1024)
-                while (true) {
-                    val n = input.read(chunk)
-                    if (n < 0) break
-                    if (buf.size() + n > maxBytes) { tooLarge = true; break }
-                    buf.write(chunk, 0, n)
-                }
-            }
-            return HttpGet.Response(status, c.contentType, if (tooLarge) ByteArray(0) else buf.toByteArray(), tooLarge)
-        } finally {
-            c.disconnect()
-        }
+        val r = http.request("GET", url, headers, maxBytes = maxBytes)
+        val type = r.header("Content-Type")
+        if (r.status != 200) return HttpGet.Response(r.status, type, ByteArray(0), false)
+        return HttpGet.Response(r.status, type, if (r.tooLarge) ByteArray(0) else r.body, r.tooLarge)
     }
 }
