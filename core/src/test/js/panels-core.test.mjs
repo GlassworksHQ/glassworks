@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -416,4 +416,34 @@ test("the tab's Home Assistant sign-in counts only for the Manage session that m
   assert.equal(storedFor(JSON.stringify({ ha: 'http://192.0.2.10:8123', access: 'A' }), 'http://192.0.2.10:8123', ''), null, 'one kept before sessions counted');
   assert.equal(storedFor('not json', 'http://192.0.2.10:8123', 'sess-a'), null);
   assert.equal(storedFor(null, 'http://192.0.2.10:8123', 'sess-a'), null);
+});
+
+test('a write that the panel answers after the read timeout still counts as done, and the copy goes on', async () => {
+  assert.ok(WRITE_MS > SETTINGS_MS);
+  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Bedroom panel', trusted: true, settings };
+  // A clock in steps instead of real seconds: the first answer comes "after 18 s", past the 15 s read timeout.
+  const realSetTimeout = globalThis.setTimeout;
+  let now = 0;
+  const timers = [];
+  globalThis.setTimeout = (f, ms) => { const t = { at: now + ms, f }; timers.push(t); return t; };
+  const realClear = globalThis.clearTimeout;
+  globalThis.clearTimeout = (t) => { const i = timers.indexOf(t); if (i >= 0) timers.splice(i, 1); };
+  const advance = (ms) => { now += ms; for (const t of timers.filter((x) => x.at <= now)) { timers.splice(timers.indexOf(t), 1); t.f(); } };
+  try {
+    let calls = 0;
+    const fetchFn = () => new Promise((ok) => {
+      calls++;
+      const answer = () => ok({ status: 200, headers: { get: () => null }, json: async () => ({ ok: true, restart: false }) });
+      if (calls === 1) { const wait = { at: now + 18_000, f: answer }; timers.push(wait); } else answer();
+    });
+    const rows = ['a', 'b'].map((k) => ({ section: 'screen', key: k, value: '1' }));
+    const running = copyRows(p, 'TOKEN', rows, null, fetchFn, undefined, async () => {});
+    for (let i = 0; i < 20 && calls < 2; i++) { await new Promise((r) => realSetTimeout(r, 0)); advance(1_000); }
+    const r = await running;
+    assert.deepEqual([...r.values()].map((o) => o.state), ['done', 'done'], 'the 18 s save counted, and the next row was sent');
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClear;
+  }
 });

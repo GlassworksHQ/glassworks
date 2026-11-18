@@ -213,6 +213,12 @@ const UNCHECKED = "It answered, but didn't finish checking your sign-in with its
  */
 export const SETTINGS_MS = 15_000;
 
+/**
+ * How long a write may take: longer than the panel's own wait for a save (`ManageServer.SAVE_WAIT_MS`, 20 s, after
+ * which it answers "still applying"), plus its sign-in check and the answer (CodeRabbit on #488).
+ */
+export const WRITE_MS = 30_000;
+
 /** How many times a call that answers 503 with Retry-After is made in all, and the longest it waits in all, in s. */
 export const TRIES = 3;
 export const MAX_WAIT_S = 5;
@@ -288,10 +294,10 @@ export function reachability(status, body) {
 }
 
 /**
- * One setting to [p] (`POST /manage/api/settings`), as [outcome] says it. Each try gives up after [ms], like the
- * settings read: the panel asks its Home Assistant first. A write that timed out may still have landed, so it says so.
+ * One setting to [p] (`POST /manage/api/settings`), as [outcome] says it. Each try gives up after [ms] ([WRITE_MS]):
+ * the panel checks the sign-in and may wait for the save first. A write that timed out may still have landed, so it says so.
  */
-export async function writeSetting(p, access, fields, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined, stop = () => false) {
+export async function writeSetting(p, access, fields, fetchFn = fetch, ms = WRITE_MS, sleep = undefined, stop = () => false) {
   // Checked here too, not only by the caller: nothing else stands between a later caller and the token (CodeRabbit on #488).
   if (!usable(p)) return { state: 'failed', why: 'Not sent: ' + p.name + " isn't a trusted panel on your network now." };
   try {
@@ -310,7 +316,7 @@ export async function writeSetting(p, access, fields, fetchFn = fetch, ms = SETT
  * one-shot question id, when the person agreed. Stops at the first write [p] didn't answer: the rest say they weren't sent.
  * [stop]: asked before each write; true ends the copy there (the person signed out).
  */
-export async function copyRows(p, access, rows, answers = null, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined, stop = () => false) {
+export async function copyRows(p, access, rows, answers = null, fetchFn = fetch, ms = WRITE_MS, sleep = undefined, stop = () => false) {
   const result = new Map();
   for (let i = 0; i < rows.length; i++) {
     // Signed out meanwhile: nothing more is sent with the token.

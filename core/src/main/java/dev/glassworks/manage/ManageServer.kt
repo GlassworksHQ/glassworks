@@ -53,7 +53,7 @@ class ManageServer(
     private val pages: ManagePages = ManagePages(),
     private val event: (String) -> Unit = {},
     /** How long a settings change may take before the page answers "still applying" (the radio's off waits on the radio). */
-    private val saveWaitMs: Long = 20_000,
+    private val saveWaitMs: Long = SAVE_WAIT_MS,
     /** A monotonic clock in ms for the questions' expiry: a wall clock that jumps (NTP, a time zone) mustn't stretch or cut it. */
     private val monoMs: () -> Long = { System.nanoTime() / 1_000_000 },
     /** All panels' scripts by file name ([ManagePages.PANELS_SCRIPT]), or null when this build has none (#466). */
@@ -576,6 +576,9 @@ class ManageServer(
         const val HANDOFFS_PER_WINDOW = 5
         const val HANDOFF_WINDOW_MS = 10_000L
         const val HANDOFF_PAUSE = "This address started several sign-ins in a short time. Try again in a few seconds."
+
+        /** How long a settings change may take before the answer is "still applying"; All panels' writes wait longer (#466). */
+        const val SAVE_WAIT_MS = 20_000L
 
         /** Every panel's Manage page is on this port; All panels finds the others by it (#466). */
         const val PORT = 8099

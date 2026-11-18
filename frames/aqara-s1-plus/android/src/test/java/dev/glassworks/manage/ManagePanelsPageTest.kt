@@ -78,6 +78,15 @@ class ManagePanelsPageTest {
         assertEquals(404, anon.get(ManageServer.SCRIPTS + "other.js").status)
     }
 
+    @Test fun aCopyWaitsLongerThanThePanelWaitsForASave() {
+        // Otherwise a save that ends between the two gives up in the browser while the panel answers "done".
+        val core = f.Browser().get(ManageServer.SCRIPTS + "panels-core.js").text()
+        val writeMs = Regex("export const WRITE_MS = ([0-9_]+);").find(core)!!.groupValues[1].replace("_", "").toLong()
+        assertTrue("WRITE_MS $writeMs, the panel's save wait ${ManageServer.SAVE_WAIT_MS}", writeMs >= ManageServer.SAVE_WAIT_MS + 5_000)
+        val settingsMs = Regex("export const SETTINGS_MS = ([0-9_]+);").find(core)!!.groupValues[1].replace("_", "").toLong()
+        assertTrue("reads keep their own, shorter timeout", settingsMs < writeMs)
+    }
+
     @Test fun thePagesScriptFindsPanelsOnThePortTheCspAllows() {
         val core = f.Browser().get(ManageServer.SCRIPTS + "panels-core.js").text()
         assertTrue(core.contains("export const PORT = '${ManageServer.PORT}';"))
