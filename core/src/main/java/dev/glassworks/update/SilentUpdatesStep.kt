@@ -16,10 +16,11 @@ import dev.glassworks.pane.SetupStep
 import org.json.JSONObject
 
 /**
- * Setup's Silent updates step (#422's approved design): shown only where the person can make updates install with
- * nobody at the screen. With "Install unknown apps" off (Android 12+), it opens Android's page for it. On Android
- * 6 to 11 it says a device owner skips the tap, and points at Kiln. Never required: "Not now" and "Continue" both
- * answer it, and [answered] keeps that across restarts so setup doesn't come back for it.
+ * Setup's Silent updates step (#422's approved design): shown whenever updates ask for a tap and there is a way to
+ * change that (the maintainer, 2026-11-18). With "Install unknown apps" off (Android 12+), it opens Android's page for
+ * it. On Android 6 to 11, or where the app targets too low an API, it says a device owner skips the tap; on an S1
+ * whose boot image has no update service, that Kiln adds one. Those two point at Kiln. Never required: "Not now" and
+ * "Continue" both answer it, and [answered] keeps that across restarts so setup doesn't come back for it.
  *
  * [answer] is asked on every 2 s tick and several times per draw: give it a [SilentUpdates.Fresh]. [answered] and
  * [markAnswered] are the app's storage.
@@ -28,6 +29,11 @@ class SilentUpdatesStep(
     private val answer: () -> SilentUpdates?,
     private val answered: () -> Boolean,
     private val markAnswered: () -> Unit,
+    /**
+     * The screen takes a tap. Without one (the frame's Input.NONE) the card can't show its buttons, so the step never
+     * holds setup there; the setup channel can still answer it (CodeRabbit on #513).
+     */
+    private val touch: () -> Boolean = { true },
 ) : SetupStep {
     override val id = ID
     override val title = "Silent updates"
@@ -39,15 +45,19 @@ class SilentUpdatesStep(
      */
     @Volatile private var shown = false
 
-    override fun done(): Boolean = answered() || (!shown && offer(answer()) == null)
+    /**
+     * Not done while the answer isn't known yet (the update manager reads the frame's root service at its start): setup
+     * waits on this step rather than end before its first offer can show (CodeRabbit on #513).
+     */
+    override fun done(): Boolean = answered() || !touch() || (!shown && answer().let { it != null && offer(it) == null })
 
-    /** For the setup channel: whether updates are silent, what the step offers (`allow`, `device_owner`) and the reason. */
+    /** For the setup channel: whether updates are silent, what the step offers ([Offer.wire], or null) and the reason. */
     override fun channelState(): JSONObject? = answer()?.let { s ->
         JSONObject().put("silent", s.silent).put("reason", s.reason).put("offer", offer(s)?.wire ?: JSONObject.NULL).put("answered", answered())
     }
 
     /** For the setup channel and the LAN page: answers the step, as "Not now" does. */
-    override val ops = mapOf("answer" to SetupOp { markAnswered(); null })
+    override val ops = mapOf("answer" to SetupOp { if (answer() == null) NOT_READ else { markAnswered(); null } })
 
     override fun screen(context: Context, host: SetupHost): SetupScreen = Screen(context, host)
 
@@ -57,19 +67,28 @@ class SilentUpdatesStep(
         private var noSettings = false
 
         override fun bind(card: SetupCard, entered: Boolean) {
-            if (!host.preview) shown = true
             val s = answer()
+            // Only a live card with something to offer latches: one opened from the rail once done stays done.
+            if (!host.preview && offer(s) != null) shown = true
             lastSilent = s?.silent
             when {
-                s?.silent == true -> {
+                s == null -> {
+                    card.title(CHECKING_TITLE)
+                    card.body(CHECKING_BODY)
+                }
+                s.silent -> {
                     card.title(ALLOW_TITLE)
                     card.body(ALLOW_BODY)
                     card.status(ON, SetupCard.Tone.GREEN)
                     card.primary("Continue") { done() }
                 }
-                s is SilentUpdates.OldAndroid -> {
+                s is SilentUpdates.OldAndroid || s is SilentUpdates.TargetTooLow || s == SilentUpdates.NoRootService -> {
                     card.title(OWNER_TITLE)
-                    card.body(ownerBody(s.android))
+                    card.body(when (s) {
+                        is SilentUpdates.OldAndroid -> ownerBody(s.android)
+                        is SilentUpdates.TargetTooLow -> targetBody(s)
+                        else -> BOOT_IMAGE_BODY
+                    })
                     card.qr(KILN)
                     card.status(OPTIONAL)
                     card.primary("Continue") { done() }
@@ -113,17 +132,30 @@ class SilentUpdatesStep(
         const val ON = "On: updates install by themselves"
         const val NO_SETTINGS = "Android didn't open the page. Allow it under Settings, Apps, Glassworks, Install unknown apps."
         const val OPEN_SETTINGS = "Open Android's settings"
-        const val OWNER_TITLE = "Updates ask for a tap"
+        const val OWNER_TITLE = "A tap per update"
         const val OPTIONAL = "Optional"
+        const val CHECKING_TITLE = "Checking updates"
+        const val CHECKING_BODY = "A moment: Glassworks is reading whether updates can install by themselves here."
+        /** The setup channel's answer while [answer] isn't known yet. */
+        const val NOT_READ = "Silent updates isn't read yet. Try again in a moment."
         const val KILN = "https://kiln.glassworks.dev"
 
         fun ownerBody(android: String) =
             "On Android $android, only a device owner skips it. Kiln can set that up on a reset device with no accounts, and undo it."
 
+        /** The S1 with a boot image from before the root update service. */
+        const val BOOT_IMAGE_BODY = "This panel's boot image has no update service. Kiln adds it from a computer, and keeps your settings."
+
+        fun targetBody(s: SilentUpdates.TargetTooLow) =
+            "Android ${s.android} skips the tap only for apps that target API ${s.needed} or higher, and this one targets ${s.has}. " +
+                (if (s.unknownApps) "" else "Such a release also needs “Install unknown apps” allowed for Glassworks. ") +
+                "Until then, only a device owner skips it. Kiln can set that up."
+
         /** What the step offers for [s], or null when there's nothing to do on this device. */
         fun offer(s: SilentUpdates?): Offer? = when (s) {
             SilentUpdates.UnknownAppsOff -> Offer.ALLOW_UNKNOWN_APPS
-            is SilentUpdates.OldAndroid -> Offer.DEVICE_OWNER
+            is SilentUpdates.OldAndroid, is SilentUpdates.TargetTooLow -> Offer.DEVICE_OWNER
+            SilentUpdates.NoRootService -> Offer.BOOT_IMAGE
             else -> null
         }
     }
@@ -132,7 +164,9 @@ class SilentUpdatesStep(
     enum class Offer(val wire: String) {
         /** Android 12+: allow "Install unknown apps" in Android's settings. */
         ALLOW_UNKNOWN_APPS("allow"),
-        /** Android 6 to 11: device owner, which Kiln sets up on a reset device. */
+        /** Android 6 to 11, or an app that targets too low an API: device owner, which Kiln sets up on a reset device. */
         DEVICE_OWNER("device_owner"),
+        /** The S1 with an old boot image: Kiln adds the root update service. */
+        BOOT_IMAGE("boot_image"),
     }
 }

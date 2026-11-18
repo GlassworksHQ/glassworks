@@ -61,6 +61,22 @@ interface Glassworks {
     fun setupPanes(context: Context): List<SetupPane>
 
     /**
+     * The device's own setup steps, after Panes, each a rail row of its own (#422's Silent updates). Made once. None by
+     * default.
+     */
+    fun deviceSetupSteps(context: Context): List<SetupStep> = emptyList()
+
+    /**
+     * Setup is over, on the panel or from a browser over the network: each of the device's own steps counts as
+     * answered, also one that setup skipped because there was nothing to ask. A grant lost later then never brings the
+     * setup screen back over a working panel, and a browser's Done never leaves the panel waiting on one (CodeRabbit
+     * on #524). The Device page still shows what each step would ask.
+     */
+    fun settleDeviceSteps(context: Context) {
+        deviceSetupSteps(context).forEach { step -> step.ops["answer"]?.run(org.json.JSONObject()) }
+    }
+
+    /**
      * Whether camera frames are leaving the panel now (a still to Home Assistant, a stream), for the
      * privacy indicator (#117). Set by the camera pane; [onCameraLeaving] hears each change.
      */
