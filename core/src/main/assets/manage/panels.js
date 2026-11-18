@@ -380,6 +380,8 @@ async function apply(fromP, toP, rows, asked) {
 
 /** The panel couldn't give a token: its outage, with Try again, or this Manage page's sign-in ended, with Sign in. */
 function panelProblem(e) {
+  // It takes the screen over: a slow panel's late answer from the last discovery can't draw the list back (CodeRabbit on #534).
+  generation++;
   copyCard.hidden = true;
   return say(listCard, 'Panels in Home Assistant', e.message, e.manageEnded
     ? h('button', { class: 'pill primary', type: 'button', onclick: () => location.assign('/') }, 'Sign in')

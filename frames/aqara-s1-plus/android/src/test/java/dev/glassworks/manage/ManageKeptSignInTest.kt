@@ -132,8 +132,18 @@ class ManageKeptSignInTest {
         assertEquals(404, r.status)
         assertTrue("the page reloads for the new address, not a sign-in at the old", JSONObject(r.text()).optBoolean("reload"))
         assertFalse(r.text().contains("ACCESS-RENEWED"))
-        assertEquals("ended in HA", listOf("REFRESH"), f.revoked)
+        assertTrue("never sent to the old address", f.revoked.isEmpty())
+        assertTrue(f.events.any { it.contains("address changed") })
         assertFalse(f.server.keepsHaSignIn(id))
+    }
+
+    @Test fun anAddressThatChangesWhileARenewalFailsSaysReloadToo() {
+        val b = signedIn()
+        f.refreshAnswer = HaGateway.Tokens.Failed("invalid_grant", refused = true)
+        f.duringRefresh = { f.haBase = "http://192.0.2.11:8123" }
+        val r = access(b)
+        assertEquals(404, r.status)
+        assertTrue(JSONObject(r.text()).optBoolean("reload"))
     }
 
     @Test fun stoppingThePageEndsWhatItStillKeepsAndRetriesNothingAfter() {
@@ -150,7 +160,7 @@ class ManageKeptSignInTest {
         assertTrue("nothing left after the stop", f.revoked.isEmpty())
     }
 
-    @Test fun aGrantNoSessionTookIsTriedAgainWhenHomeAssistantDidntTakeItsRevoke() {
+    @Test fun aGrantNoSessionTookIsRevokedWhereItCameFromAndNotRetriedThereAfter() {
         val b = f.Browser()
         b.get("/")
         val start = b.post("/manage/ha", mapOf("next" to "/"))
@@ -162,9 +172,8 @@ class ManageKeptSignInTest {
         assertEquals(2, f.revoked.size)
         f.revokeWorks = true
         f.server.sweep()
-        assertEquals("the sweep ended it", 3, f.revoked.size)
-        f.server.sweep()
-        assertEquals("once", 3, f.revoked.size)
+        assertEquals("the address it came from is no longer the panel's: dropped, not sent there again", 2, f.revoked.size)
+        assertTrue(f.events.any { it.contains("address changed") })
     }
 
     @Test fun signingOutDoesntWaitForHomeAssistant() {
@@ -203,15 +212,18 @@ class ManageKeptSignInTest {
         val browsers = List(3) { signedIn() }
         val csrfs = browsers.map { it.csrf() }
         val held = java.util.concurrent.CountDownLatch(1)
-        val inside = java.util.concurrent.CountDownLatch(ManageServer.MAX_RENEWING)
+        val inside = java.util.concurrent.CountDownLatch(ManageServer.MAX_HA_CALLS)
         val gateTimedOut = java.util.concurrent.atomic.AtomicBoolean(false)
         f.duringRefresh = { inside.countDown(); if (!held.await(10, java.util.concurrent.TimeUnit.SECONDS)) gateTimedOut.set(true) }
         val answers = java.util.concurrent.ConcurrentHashMap<Int, Int>()
-        val slow = (0 until ManageServer.MAX_RENEWING).map { i -> Thread { answers[i] = access(browsers[i], csrf = csrfs[i]).status }.apply { start() } }
+        val slow = (0 until ManageServer.MAX_HA_CALLS).map { i -> Thread { answers[i] = access(browsers[i], csrf = csrfs[i]).status }.apply { start() } }
         try {
             assertTrue("two renewals wait on Home Assistant", inside.await(10, java.util.concurrent.TimeUnit.SECONDS))
             val third = access(browsers[2], csrf = csrfs[2])
             assertEquals("busy, try again: not another worker stuck on HA", 503, third.status)
+            assertEquals("All panels' Sign out shares the slots", 503, browsers[2].post(ManageServer.HA_FORGET, mapOf("csrf" to csrfs[2])).status)
+            val check = f.Browser().get(ManageApi.SETTINGS, mapOf("authorization" to "Bearer OTHER-PANELS-TOKEN"))
+            assertEquals("and so does another panel's token check", 503, check.status)
             assertTrue(f.server.keepsHaSignIn(f.sessions.list(f.haBase).first { it.csrf == csrfs[2] }.id))
         } finally {
             held.countDown()
@@ -291,6 +303,14 @@ class ManageKeptSignInTest {
         assertEquals(6, f.revoked.size)
     }
 
+    @Test fun aRevokeHaDoesntTakeAsThePageStopsIsInTheLog() {
+        signedIn()
+        f.revokeWorks = false
+        f.server.stop()
+        assertEquals(2, f.revoked.size)
+        assertTrue(f.events.any { it.contains("as the page stopped") })
+    }
+
     @Test fun aSignInThatFinishesAfterTheStopIsEndedToo() {
         val b = f.Browser()
         b.get("/")
@@ -314,12 +334,13 @@ class ManageKeptSignInTest {
         assertEquals("done once taken", 3, f.revoked.size)
     }
 
-    @Test fun aNewHomeAssistantAddressEndsIt() {
-        val b = signedIn()
+    @Test fun aNewHomeAssistantAddressDropsItWithoutSendingItToTheOldOne() {
+        signedIn()
         val id = sessionId()
         f.haBase = "http://192.0.2.11:8123"
         f.server.sweep()
-        assertEquals(listOf("REFRESH"), f.revoked)
+        assertTrue("the old address may be someone else now", f.revoked.isEmpty())
+        assertTrue(f.events.any { it.contains("address changed") && !it.contains("REFRESH") })
         assertFalse(f.server.keepsHaSignIn(id))
     }
 

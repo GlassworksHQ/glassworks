@@ -67,7 +67,14 @@ class ManageServer(
     private val random = SecureRandom()
 
     /** A Home Assistant token another panel's page brings, checked with this panel's own Home Assistant (#466). */
-    private val tokens = HaTokenCheck(signIn.gateway, haBase, signIn::isLocal, monoMs)
+    /**
+     * Home Assistant calls on the web server's threads (All panels' renewals and sign-outs, other panels' token checks)
+     * share these few slots, fewer than its four workers: Home Assistant slow to answer leaves the rest of the Manage page
+     * a worker. One that finds them full answers "busy, try again" (CodeRabbit on #534).
+     */
+    private val haCalls = java.util.concurrent.Semaphore(MAX_HA_CALLS)
+
+    private val tokens = HaTokenCheck(signIn.gateway, haBase, signIn::isLocal, monoMs, asking = haCalls)
 
     private val handoffs = PerAddress(HANDOFFS_PER_WINDOW, HANDOFF_WINDOW_MS)
 
@@ -119,6 +126,7 @@ class ManageServer(
         if (!ending.add(id)) return false
         try {
             val k = synchronized(grants) { kept.remove(id) ?: unrevoked.remove(id)?.also { retryOrder.remove(id) } } ?: return true
+            if (moved(k)) { leftAtOldAddress(); return true }
             // HA didn't take the revoke: no longer usable, but kept aside to try again (Try again, the sweep).
             return signIn.end(k).also { ended -> if (!ended) retryLater(id, k) }
         } finally {
@@ -158,8 +166,26 @@ class ManageServer(
         for (id in kept.keys.toCollection(ArrayList())) kept.remove(id)?.let(left::add)
         for (id in unrevoked.keys.toCollection(ArrayList())) unrevoked.remove(id)?.let(left::add)
         retryOrder.clear()
-        if (left.isNotEmpty()) background { for (k in left) runCatching { signIn.end(k) } }
+        if (left.isEmpty()) return
+        background {
+            for (k in left) {
+                if (moved(k)) { leftAtOldAddress(); continue }
+                // The last try: one HA doesn't take stays in HA, and the Log says where to remove it (CodeRabbit on #534).
+                if (runCatching { signIn.end(k) }.getOrDefault(false) != true) {
+                    event("Home Assistant didn't confirm it ended a Manage sign-in as the page stopped. It stays under that person's profile in Home Assistant (Security, Refresh tokens) until removed there.")
+                }
+            }
+        }
     }
+
+    /**
+     * Whether [k] came from another Home Assistant address than the panel's now. Its refresh token never goes to the old
+     * address: whatever answers there now may not be that Home Assistant. The panel's own sign-in does the same
+     * (`HaAuth.signOut`: "Home Assistant moved, so no revoke sent"), CodeRabbit on #534.
+     */
+    private fun moved(k: HaSignIn.Kept) = k.haBase != haBase()?.trim()?.trimEnd('/')
+
+    private fun leftAtOldAddress() = event("Home Assistant's address changed, so a Manage sign-in wasn't revoked at the old one. It stays under that person's profile in Home Assistant (Security, Refresh tokens) until removed there.")
 
     private val sweeper = if (sweepMs > 0) java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "gw-manage-sweep").apply { isDaemon = true } }
         .also { it.scheduleWithFixedDelay({ runCatching { sweep() } }, sweepMs, sweepMs, java.util.concurrent.TimeUnit.MILLISECONDS) }
@@ -204,8 +230,7 @@ class ManageServer(
         for ((id, order) in due) if ((retryOrder[id] ?: 0L) == order) endKept(id)
     }
 
-    /** At most this many renewals for All panels run at once, fewer than the web server's workers (four). */
-    private val renewing = java.util.concurrent.Semaphore(MAX_RENEWING)
+
 
     /** Whether [session] has a Home Assistant sign-in kept for All panels (tests). */
     fun keepsHaSignIn(session: String): Boolean = kept.containsKey(session)
@@ -388,22 +413,20 @@ class ManageServer(
      */
     private fun haAccess(s: Session): HttpResponse {
         val k = kept[s.id] ?: return json(404, JSONObject().put("problem", "No Home Assistant sign-in is kept for this browser."))
-        val moved = { k.haBase != haBase()?.trim()?.trimEnd('/') }
+        val movedNow = { moved(k) }
         // The page has the old address: it reloads to get the new one, rather than signing in at the old (CodeRabbit on #534).
         val addressChanged = { json(404, JSONObject().put("problem", ADDRESS_RELOAD).put("reload", true)) }
-        if (moved()) { endKept(s.id); return addressChanged() }
+        if (movedNow()) { endKept(s.id); return addressChanged() }
         // Home Assistant slow to answer mustn't take every worker: the Manage page's other requests still get one.
-        if (!renewing.tryAcquire()) return json(503, JSONObject().put("problem", "The panel is busy. Try again in a moment."))
-        val t = try { signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken) } finally { renewing.release() }
+        if (!haCalls.tryAcquire()) return json(503, JSONObject().put("problem", BUSY))
+        val t = try { signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken) } finally { haCalls.release() }
         // The Manage session ran out or was signed out while HA answered, whatever HA said: Sign in again, as for any
         // ended one; the sweep ends what it kept (CodeRabbit on #534).
         if (s.id !in sessions.liveIds()) return json(401, JSONObject().put("problem", MANAGE_ENDED))
+        // The address changed while HA answered, whatever it said: reload for the new one (CodeRabbit on #534).
+        if (movedNow()) { endKept(s.id); return addressChanged() }
         return when (t) {
-            // The address may have changed while HA renewed it: no token for an address the panel no longer uses.
-            is HaGateway.Tokens.Ok -> if (moved()) {
-                endKept(s.id)
-                addressChanged()
-            } else if (kept[s.id] !== k) {
+            is HaGateway.Tokens.Ok -> if (kept[s.id] !== k) {
                 // All panels' Sign out, or HA's refusal, came meanwhile: no token for a sign-in that's over.
                 json(404, JSONObject().put("problem", "This sign-in has ended."))
             } else json(200, JSONObject().put("access_token", t.accessToken).put("expires_in", t.expiresIn))
@@ -636,7 +659,8 @@ class ManageServer(
             }
             "/settings" -> changeSetting(req, s, viewer)
             HA_ACCESS -> haAccess(s)
-            HA_FORGET -> if (endKept(s.id)) {
+            HA_FORGET -> if (!haCalls.tryAcquire()) json(503, JSONObject().put("problem", BUSY))
+            else if (try { endKept(s.id) } finally { haCalls.release() }) {
                 event("${who(s)} ended the Home Assistant sign-in All panels used (${s.browser})")
                 json(200, JSONObject().put("ok", true))
             } else json(502, JSONObject().put("problem", "Home Assistant didn't confirm it ended the sign-in. Try again."))
@@ -784,7 +808,8 @@ class ManageServer(
         /** Revokes HA didn't take that one sweep tries again; the rest wait for the next. */
         const val RETRIES_PER_SWEEP = 4
         /** All panels' renewals at once; the web server has four workers. */
-        const val MAX_RENEWING = 2
+        const val MAX_HA_CALLS = 2
+        const val BUSY = "The panel is busy. Try again in a moment."
 
         /** Where a page on another panel signs this browser in with its Home Assistant token (#466). */
         const val HANDOFF = "/manage/ha/token"

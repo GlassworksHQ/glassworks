@@ -484,6 +484,17 @@ try {
   await sleep(500);
   assert.equal(accessAsked, manageBefore + 1, 'one request to the panel from the Manage click');
   accessStatus = 200;
+  // Manage while a slow panel is still being read, and the panel says the Manage sign-in ended: Sign in stays, the slow
+  // panel's late answer doesn't draw the list back over it (CodeRabbit on #534).
+  await call('Page.navigate', { url: PAGE });
+  await until("[...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking') && [...document.querySelectorAll('#gw-list .row')].some((r) => r.textContent.includes('Bedroom') && r.querySelector('.chip')?.textContent === 'Up')", 'Bedroom up, Porch still asking');
+  await expire();
+  accessStatus = 401;
+  await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Sign in')", 'Sign in from the Manage click');
+  await sleep(2_000);
+  assert.ok(await js("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Sign in')"), 'Sign in still there after the slow panel answered');
+  accessStatus = 200;
   // Signed in again in another tab: this page's form token is another session's. Reload, not a second HA sign-in.
   staleCsrf = true;
   await call('Page.navigate', { url: PAGE });

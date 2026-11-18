@@ -172,7 +172,10 @@ at the panel.
    address, that sign-in ends when the panel first stores one; sign in again then.
 
 **Remember this browser for 30 days** keeps you signed in on that browser. Without it, the sign-in
-ends when you close the browser (at the latest after 12 hours). Security lists every signed-in
+ends when you close the browser (at the latest after 12 hours). The Home Assistant sign-in the panel keeps for
+All panels doesn't end when you close the browser: it ends when you sign out, when the Manage page stops, or at the
+panel's check about a minute after the session runs out (12 hours at most without *Remember*). Sign out to end it
+at once. Security lists every signed-in
 browser and signs any of them out. All of them are signed out when the panel's Home Assistant
 address changes.
 
@@ -196,9 +199,12 @@ manage a panel. Whether other users get a say is open (#124).
   **revoked straight away**. An administrator's sign-in is kept in the panel's memory for that browser's Manage
   session only, so All panels needs no second sign-in. It is never written to disk, a log or the
   diagnostics. The panel revokes it in Home Assistant when you sign out (here, from Security or on All panels) and
-  when its Manage page stops. It also checks about once a minute for sessions that ran out and for a Home Assistant
-  address that changed, and revokes their sign-ins then. If Home Assistant doesn't take a revoke, the panel tries
-  once more, logs a warning, and tries again at its later checks. If the app restarts, the panel forgets it without
+  when its Manage page stops. It also checks about once a minute for sessions that ran out, and revokes their
+  sign-ins then. If Home Assistant doesn't take a revoke, the panel tries once more, logs a warning, and tries again
+  at its later checks; as the Manage page stops there is no later check, and the Log says the sign-in stays. When
+  the panel's Home Assistant address changes, it drops the sign-in without revoking it: the token never goes to the
+  old address, where something else may answer now (the panel's own sign-in does the same). The Log says so, and the
+  sign-in stays under your profile until you remove it. If the app restarts, the panel forgets it without
   revoking it; it then stays under your profile in Home Assistant (*Security → Refresh tokens*) until it expires
   or you delete it. Its own
   long-lived sign-in (the one the dashboard uses) is separate, and the Manage page never shows or
@@ -286,7 +292,9 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
    Assistant no longer takes it, the Manage session stays but All panels asks for **Continue with Home
    Assistant** again. After the app restarts, a browser that ticked *Remember this browser* is still signed in to
    Manage, and All panels asks for Continue; any other browser signs in to Manage again first. If this Manage
-   page's own sign-in has ended, All panels says so, with **Sign in**. Signed in with the code on the panel, the
+   page's own sign-in has ended, All panels says so, with **Sign in**. Only a sign-in with Home Assistant on this
+   panel's own Manage page is kept: one that came through **Manage** on another panel's All panels keeps none, so
+   All panels on this panel asks for Continue. Signed in with the code on the panel, the
    page asks for Continue too: the
    tab signs in to Home Assistant on its own (with PKCE), with an administrator, and keeps the sign-in until you
    close the tab. **Sign out** on the page ends it in Home

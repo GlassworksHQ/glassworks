@@ -218,7 +218,7 @@ object HaAuth {
                 auth == null -> Unit
                 // Revoking sends the token: never to an address that isn't the sign-in's own.
                 !auth.isFor(prefs.haBase) -> AuthLog.i("Signed out ($reason); Home Assistant moved, so no revoke sent")
-                else -> AuthLog.i("Signed out ($reason); revoke ${if (tokens.revoke(auth)) "sent" else "not reachable"}")
+                else -> AuthLog.i("Signed out ($reason); revoke ${if (tokens.revoke(auth)) "confirmed" else "not confirmed"}")
             }
             done(clearLocal())
         }
