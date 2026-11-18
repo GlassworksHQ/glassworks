@@ -530,7 +530,10 @@ open class MainActivity : Activity() {
         if (!onDashboard && !justLoaded) loadDashboard()
     }
 
-    /** `--ez show_setup true [--es setup_step wifi|ha|panes|signin|done]`, `--ez show_signin true` (= signin). */
+    /**
+     * `--ez show_setup true [--es setup_step <id>]` (a core step, wifi|signin|ha|panes|done, a pane's step such as `radio`,
+     * or a device step such as `silent_updates`), `--ez show_signin true` (= signin).
+     */
     private fun applySetupPreview(intent: Intent) {
         val asked = intent.getStringExtra("setup_step")
         val step = SetupFlow.parse(asked, setupPanes.isNotEmpty(), paneSteps.map { it.id }, deviceSteps.map { it.id })
