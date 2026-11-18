@@ -16,6 +16,7 @@ rules every part follows.
 | [sendspin.md](sendspin.md) | The native Music Assistant player (Sendspin): setup, pairing, synced playback |
 | [perf.md](perf.md) | Clarity, the performance test and grade for any frame: how to run it, what it measures, the rubric and its sources, the report format |
 | [size.md](size.md) | APK size per frame and per pane in CI: the parts, the assets lint, the size budgets, the PR comment |
+| [ci.md](ci.md) | For contributors: which CI jobs run for which change, cancelled runs, adding a job |
 | [releasing.md](releasing.md) | For maintainers: the signing keys, GitHub secrets, tagging a release, the radio bundle |
 | [branding.md](branding.md) | Where the Glassworks brand lives, and which badge or banner each part of this repo uses |
 | [legal.md](legal.md) | Legal notes: your own device, no copy protection bypassed, what is and isn't shipped, trademarks, licences ([third-party notices](../THIRD-PARTY-NOTICES.md)) |
