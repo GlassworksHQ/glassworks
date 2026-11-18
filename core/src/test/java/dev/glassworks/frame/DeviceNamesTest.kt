@@ -37,7 +37,7 @@ class DeviceNamesTest {
     private val HTML_COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
 
     /** A shot's name as a test or mockup saves it: `Mockup.save("…")`, `shoot("""…""")`, `shot ("…")`, `setupShot("…")`. */
-    private val shot = Regex("""(?:save|shoot|shot|setupShot)\s*\(\s*"{1,3}([^"]*)""")
+    private val shot = Regex("""\b(?:save|shoot|shot|setupShot)\s*\(\s*"{1,3}([^"]*)""")
 
     /**
      * A function's line, the name it gives when that is an identifier, and the indent it starts at (see [functions]).
@@ -53,8 +53,8 @@ class DeviceNamesTest {
     /** `TestFrames.mirror(…)` or `TestFrames::mirror`: the Mirror's own frame. */
     private val theMirror = Regex("""TestFrames(\.|::)mirror""")
 
-    /** Anything that builds a frame in a test: `TestFrames.…`, `TestFrames::s1`, `AqaraS1Plus(…)`, `GenericAndroid(…)`. */
-    private val FRAME = Regex("""TestFrames[.:]|AqaraS1Plus\(|GenericAndroid\(""")
+    /** Anything that builds a frame in a test: `TestFrames.…`, `TestFrames::s1`, `AqaraS1Plus (…)`, `GenericAndroid(…)`. */
+    private val FRAME = Regex("""TestFrames[.:]|AqaraS1Plus\s*\(|GenericAndroid\s*\(""")
 
     /** A shot's name that says the Mirror: `mirror`, `mirror-settings`, `ways-no-touch-mirror`. */
     private val MIRROR_SHOT = Regex("""(^|-)(?i:mirror)(-|$)""")
@@ -220,9 +220,9 @@ class DeviceNamesTest {
     /**
      * A test or mockup that saves a shot named for the Mirror draws it from `TestFrames.mirror` (#502), never from
      * `TestFrames.s1()`: `shoot("mirror")` would otherwise show the S1's name and touch. The frame is the one the shot's
-     * own function builds, or one of the file's functions it calls (`makeMirror()`), so a file may draw the S1 in one
-     * function and the Mirror in another. A file that builds no frame draws no device and is out of scope (the voice
-     * overlay, which stands a view group up instead).
+     * call names, or the one its function builds — a helper it calls (`makeMirror()`) or the function around it, so a
+     * file may draw the S1 in one function and the Mirror in another. A file that builds no frame draws no device and is
+     * out of scope (the voice overlay, which stands a view group up instead).
      */
     @Test
     fun theMirrorShotsAreDrawnFromTheMirrorsFrame() {
@@ -237,15 +237,17 @@ class DeviceNamesTest {
         )
     }
 
-    /** [code]'s Mirror shots that its own function doesn't draw from `TestFrames.mirror`; a file without a frame has none. */
+    /** [code]'s Mirror shots that aren't drawn from the Mirror's frame; a file that builds no frame has none. */
     private fun mirrorShotsWithoutTheFrame(code: String): List<String> {
         if (!FRAME.containsMatchIn(code)) return emptyList()
         val functions = functions(code)
-        val bodies = functions.mapNotNull { (name, body) -> name?.let { it to body } }.toMap()
-        return functions
-            .map { (_, body) -> body to shotsIn(body).filter { MIRROR_SHOT.containsMatchIn(it) } }
-            .filter { (body, shots) -> shots.isNotEmpty() && !drawsTheMirror(body, bodies) }
-            .flatMap { it.second }.distinct()
+        val bodies = functions.mapNotNull { f -> f.name?.let { it to f.body } }.toMap()
+        return functions.flatMap { f ->
+            val around = functions.filter { it.start <= f.start && it.end >= f.end && it !== f }.joinToString("\n") { it.body }
+            shotCalls(f.body)
+                .filter { (name, args) -> MIRROR_SHOT.containsMatchIn(name) && !drawnFromTheMirror(args, f.body, around, bodies) }
+                .map { it.first }
+        }.distinct()
     }
 
     @Test
@@ -255,15 +257,22 @@ class DeviceNamesTest {
             """fun capture(context: Context) = shoot("mirror-settings", TestFrames.s1(context))""",
             """fun capture(context: Context) = shoot(${raw}mirror-settings${raw}, TestFrames.s1(context))""",
             """@Test fun capture(context: Context) = shoot ("mirror-settings", TestFrames.s1(context))""",
+            """fun capture(context: Context) = GenericAndroid (context, prop = { "" }).let { shoot("mirror-settings", it) }""",
         )
-        assertEquals(listOf("mirror-settings", "mirror-settings", "mirror-settings"), snippets.flatMap(::mirrorShotsWithoutTheFrame))
+        assertEquals(List(4) { "mirror-settings" }, snippets.flatMap(::mirrorShotsWithoutTheFrame))
         assertEquals(
-            "the Mirror's own frame, in its function or a helper it calls",
+            "the Mirror's own frame, in the call, its function or a helper it calls",
             emptyList<String>(),
             listOf(
                 """fun capture(context: Context) = shoot("mirror-settings", TestFrames.mirror(context))""",
                 """fun makeMirror(context: Context) = TestFrames.mirror(context)
                     |fun capture(context: Context) = shoot("mirror-settings", makeMirror(context))""".trimMargin(),
+                // A local shot function uses the frame its enclosing function built.
+                """fun capture(context: Context) {
+                    |    val frame = TestFrames.mirror(context)
+                    |    fun saveMirror() = shoot("mirror-settings", frame)
+                    |    saveMirror()
+                    |}""".trimMargin(),
             ).flatMap(::mirrorShotsWithoutTheFrame),
         )
         assertEquals(
@@ -271,14 +280,49 @@ class DeviceNamesTest {
             listOf("mirror-settings"),
             mirrorShotsWithoutTheFrame(
                 """fun makeMirror(context: Context) = TestFrames.mirror(context)
-                    |fun capture(context: Context) = shoot("mirror-settings", TestFrames.s1(context))
-                    |fun other(context: Context) = makeMirror(context)""".trimMargin(),
+                    |fun capture(context: Context) {
+                    |    val preview = makeMirror(context)
+                    |    shoot("mirror-settings", TestFrames.s1(context))
+                    |}""".trimMargin(),
             ),
+        )
+        assertEquals(
+            "a function that saves no shot has none",
+            emptyList<String>(),
+            mirrorShotsWithoutTheFrame("""fun capture(context: Context) = loadSnapshot ("mirror-settings", TestFrames.s1(context))"""),
         )
     }
 
-    /** The shot names [body] saves. */
-    private fun shotsIn(body: String): List<String> = shot.findAll(body).map { it.groupValues[1] }.toList()
+    /**
+     * Whether a shot with [args] is drawn from the Mirror: its own call says so, or a frame it passes is the Mirror's;
+     * a call that names another frame is not, and one that names none is its function's ([body], a helper in [functions],
+     * or the function around it, [around]).
+     */
+    private fun drawnFromTheMirror(args: String, body: String, around: String, functions: Map<String, String>): Boolean = when {
+        theMirror.containsMatchIn(args) -> true
+        FRAME.containsMatchIn(args) -> false
+        else -> drawsTheMirror(body, functions) || drawsTheMirror(around, functions)
+    }
+
+    /** The shot names [text] saves. */
+    private fun shotsIn(text: String): List<String> = shot.findAll(text).map { it.groupValues[1] }.toList()
+
+    /** Each shot [text] saves: its name, and the text between its call's parentheses. */
+    private fun shotCalls(text: String): List<Pair<String, String>> = shot.findAll(text).map { m ->
+        m.groupValues[1] to argsAt(text, text.indexOf('(', m.range.first))
+    }.toList()
+
+    /** [text] from the parenthesis at [open] to the one that closes it, or to the end. */
+    private fun argsAt(text: String, open: Int): String {
+        var depth = 0
+        for (i in open until text.length) {
+            when (text[i]) {
+                '(' -> depth++
+                ')' -> if (--depth == 0) return text.substring(open + 1, i)
+            }
+        }
+        return text.substring((open + 1).coerceAtMost(text.length))
+    }
 
     /**
      * Whether [body] draws the Mirror: it says `TestFrames.mirror`, or it calls one of the file's own [functions], as a
@@ -289,16 +333,20 @@ class DeviceNamesTest {
             CALL.findAll(body).map { it.groupValues[1] }.filter { it !in seen }
                 .any { name -> functions[name]?.let { drawsTheMirror(it, functions, seen + name) } == true }
 
+    /** One of [functions]: its name when that is an identifier, its text, and where it starts and ends in the file. */
+    private class Fn(val name: String?, val body: String, val start: Int, val end: Int)
+
     /**
-     * [code]'s functions, each with its name (null when it isn't an identifier) and its own text: from a function's line
-     * to the next one at the same or a lower indent, so a shot is read against the frame its function builds. Only
-     * spaces and tabs count as the indent, so a blank line before a function is not part of its indent.
+     * [code]'s functions, each with its own text: from a function's line to the next one at the same or a lower indent,
+     * so a shot is read against the frame its function builds. Only spaces and tabs count as the indent, so a blank line
+     * before a function is not part of its indent.
      */
-    private fun functions(code: String): List<Pair<String?, String>> {
+    private fun functions(code: String): List<Fn> {
         val starts = FUNCTION.findAll(code)
             .map { Triple(it.range.first, it.groupValues[1].length, it.groupValues[2]) }.toList()
         return starts.mapIndexed { i, (start, indent, name) ->
-            name.ifEmpty { null } to code.substring(start, starts.drop(i + 1).firstOrNull { it.second <= indent }?.first ?: code.length)
+            val end = starts.drop(i + 1).firstOrNull { it.second <= indent }?.first ?: code.length
+            Fn(name.ifEmpty { null }, code.substring(start, end), start, end)
         }
     }
 
