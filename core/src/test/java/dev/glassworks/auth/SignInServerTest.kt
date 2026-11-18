@@ -613,6 +613,19 @@ class SignInServerTest {
     }
 
     @Test
+    fun aRunOutSignInTheSetupPageDidNotStartNamesEveryStart() {
+        // a Kiln sign-in (unbound) past its 10 minutes: the panel no longer knows where it started
+        val store = StateStore()
+        val s = serverWith(store)
+        val (_, state) = start(s, null, then = "?then=kiln")
+        store.consume(state)
+        val r = callback(s, state, null)
+        assertEquals(400, r.status)
+        assertTrue(text(r), text(r).contains("scan the code on the panel, or sign in again from the setup page or Kiln") &&
+            !text(r).contains("It shows a new one") && !setupWay(r))
+    }
+
+    @Test
     fun theQrSignInStaysAsItWas() {
         val r = call(server, SignInServer.CONTINUE)
         assertNull("no binding cookie for a QR sign-in", r.headers["Set-Cookie"])

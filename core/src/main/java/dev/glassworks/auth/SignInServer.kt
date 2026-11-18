@@ -184,13 +184,14 @@ class SignInServer(
 
     private fun callback(q: Map<String, String>, pending: PendingSignIn?, bound: Boolean): Response {
         // Every way out of here says where to start again. A sign-in the panel still knows says where it started; one
-        // it doesn't (run out) has only the setup page's cookie to say so.
-        val then = pending?.then ?: if (bound) Then.SETUP else Then.QR
+        // it doesn't (run out) has only the setup page's cookie to say so, and otherwise the page names every start.
+        val then: Then? = pending?.then ?: if (bound) Then.SETUP else null
         val back = if (then == Then.SETUP) BACK_TO_SETUP else ""
         val again = when (then) {
             Then.QR -> "Scan the code to try again."
             Then.SETUP -> "Go back to setup and sign in again."
             Then.KILN -> "Close this window and sign in again from Kiln."
+            null -> "Start the sign-in again where you began it."
         }
         q["error"]?.let { err ->
             return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. $again", button = back)
@@ -224,7 +225,7 @@ class SignInServer(
                 when {
                     r.isInvalidCode -> expired(then)
                     r.httpStatus <= 0 -> page(502, "Bad Gateway", "Can't reach Home Assistant",
-                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${retry(then)}.", button = back)
+                        "The panel couldn't reach ${esc(pending.haBase)}. Check the network and ${retry(pending.then)}.", button = back)
                     else -> page(502, "Bad Gateway", "Can't sign in",
                         "Home Assistant refused the sign-in (${esc(r.code)}). $again", button = back)
                 }
@@ -254,11 +255,13 @@ class SignInServer(
         Then.KILN -> "close this window and sign in again from Kiln"
     }
 
-    private fun expired(then: Then = Then.QR) = page(400, "Bad Request", "This link has expired",
+    /** [then] null: the panel no longer knows where this sign-in started, so the page names every start. */
+    private fun expired(then: Then? = Then.QR) = page(400, "Bad Request", "This link has expired",
         when (then) {
             Then.QR -> "Scan the code on the panel again. It shows a new one."
             Then.SETUP -> "Go back to setup and sign in again."
             Then.KILN -> "Close this window and sign in again from Kiln."
+            null -> "Start again where you began: scan the code on the panel, or sign in again from the setup page or Kiln."
         },
         button = if (then == Then.SETUP) BACK_TO_SETUP else "", foot = "Codes last 10 minutes and work once.")
 

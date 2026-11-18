@@ -19,6 +19,8 @@ function panel() {
     st,
     /** set_ha answers only once this settles (a slow save). */
     setHaGate: undefined as Promise<void> | undefined,
+    /** state answers only once this settles. */
+    stateGate: undefined as Promise<void> | undefined,
     signIn: () => { st.ha.signedIn = true; send({ event: 'state', state: st }); },
     stream: {
       onData: (f: (c: Uint8Array) => void) => { cb = f; },
@@ -26,6 +28,7 @@ function panel() {
       write: async (d: Uint8Array) => {
         for (const line of new TextDecoder().decode(d).split('\n').filter(Boolean)) {
           const m = JSON.parse(line);
+          if (m.op === 'state' && self.stateGate) { const r = { id: m.id, ok: true, state: st }; void self.stateGate.then(() => send(r)); continue; }
           if (m.op === 'set_ha') {
             st.ha.url = m.url;
             if (self.setHaGate) { const r = { id: m.id, ok: true, state: st }; void self.setHaGate.then(() => send(r)); continue; }
@@ -43,17 +46,18 @@ function kiln(p: ReturnType<typeof panel>) {
   const win = { location: { href: 'about:blank' }, closed: false, close: vi.fn() } as unknown as { location: { href: string }; closed: boolean } & Window;
   const openTab = vi.fn(() => win);
   let opens = 0;
+  const done = vi.fn();
   const steps = new ChannelSetup({
     open: async () => { opens++; const c = new SetupChannel(p.stream); await c.getState(); return c; },
     phase: () => phase,
     show: (s) => { phase = s; },
     here: () => true,
-    done: () => {},
+    done,
     unreachable: (e) => { throw e; },
     app: async () => undefined,
     openTab,
   });
-  return { steps, win, openTab, phase: () => phase, opens: () => opens };
+  return { steps, win, openTab, phase: () => phase, opens: () => opens, done };
 }
 
 describe('Kiln\'s sign-in', () => {
@@ -137,5 +141,21 @@ describe('Kiln\'s sign-in', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(k.win.location.href).toBe('about:blank');
     expect(k.win.close).toHaveBeenCalled();
+  });
+
+  it('the radio step\'s answer after the session closed shows nothing', async () => {
+    const p = panel();
+    const k = kiln(p);
+    await k.steps.homeAssistant();
+    const before = k.phase();
+    let answered!: () => void;
+    p.stateGate = new Promise((r) => { answered = r; });
+    const radio = k.steps.radio();
+    k.steps.close(); // a new session took over while the panel was being read
+    answered();
+    await radio;
+    await new Promise((r) => setTimeout(r, 10));
+    expect(k.phase()).toBe(before);
+    expect(k.done).not.toHaveBeenCalled();
   });
 });

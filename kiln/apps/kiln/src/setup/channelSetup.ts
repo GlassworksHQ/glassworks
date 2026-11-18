@@ -336,14 +336,17 @@ export class ChannelSetup {
   /** The radio role. */
   async radio(): Promise<void> {
     const g = this.gen;
-    if (!(await this.connect())) { if (g === this.gen) this.d.unreachable(); return; }
+    // closed (or replaced) while waiting on the panel: that answer, or its failure, is no one's to show
+    const stale = () => g !== this.gen || !this.d.here();
+    if (!(await this.connect())) { if (!stale()) this.d.unreachable(); return; }
     let st: SetupState;
     try {
       st = await this.request((x) => x.getState());
     } catch (e) {
-      this.d.unreachable(e); // e.g. the app restarted and didn't come back: say so, not "Connecting…" forever
+      if (!stale()) this.d.unreachable(e); // e.g. the app restarted and didn't come back: say so, not "Connecting…" forever
       return;
     }
+    if (stale()) return;
     this.ip = st.ip ?? this.ip; // also when setup starts here (#/radio): Done's hand-off needs it
     // A frame without a radio (any Android device, the Mirror) has no radio step: straight to Done.
     if (!st.radio) { await this.d.done(); return; }

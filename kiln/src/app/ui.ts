@@ -835,10 +835,14 @@ class Installer {
     btn.disabled = false;
     // Sign in: the window must open inside the click, so open it first and point it after saving the address. Its
     // last page closes it (then=kiln), and render() moves on when the panel says it is signed in.
+    // one save-and-open at a time: two would both point the shared sign-in window at the panel
+    let opening = false;
     $('#ha-signin-btn').onclick = () => {
+      if (opening) return;
       const url = input.value.trim();
       if (!validHaUrl(url)) { st.className = 'status err'; st.textContent = 'That doesn\'t look like a web address (http://… or https://…).'; return; }
       const tab = openSignInWindow();
+      opening = true;
       signingIn = true;
       st.className = 'status';
       st.textContent = 'Sign in to Home Assistant in the window that opened. This step moves on by itself when the panel is signed in.';
@@ -853,7 +857,7 @@ class Installer {
           st.className = 'status err';
           st.textContent = (e as Error).message;
         }
-      })();
+      })().finally(() => { opening = false; });
     };
     $('#ha-add').onclick = () => { $('#ha-add-dot').className = 'dot sm done'; };
     btn.onclick = async () => {
