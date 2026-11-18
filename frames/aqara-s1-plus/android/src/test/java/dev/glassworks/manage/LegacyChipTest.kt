@@ -8,7 +8,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import sh.edm.s1kiosk.manage.AppManage
 
 /**
  * #29: on the legacy build, the Overview's Legacy chip says what its frozen engine can't do. Its words are a

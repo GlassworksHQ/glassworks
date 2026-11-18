@@ -17,16 +17,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.GlassworksApp
-import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.auth.HaTokenClient
-import sh.edm.s1kiosk.auth.HttpPoster
-import sh.edm.s1kiosk.auth.SignInServer
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
-import sh.edm.s1kiosk.manage.AppManage
-import sh.edm.s1kiosk.update.ReleaseLine
+import dev.glassworks.GlassworksApp
+import dev.glassworks.GlassworksRuntime
+import dev.glassworks.KioskPrefs
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.HttpPoster
+import dev.glassworks.auth.SignInServer
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.manage.AppManage
+import dev.glassworks.update.ReleaseLine
 
 /**
  * #29: the legacy build's engine is frozen and loads only Home Assistant. The Manage page shows a Legacy chip that

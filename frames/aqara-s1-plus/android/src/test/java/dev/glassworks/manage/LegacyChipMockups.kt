@@ -1,12 +1,13 @@
-package sh.edm.s1kiosk.manage
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import dev.glassworks.manage.ManageFixture
-import dev.glassworks.manage.PaneRow
-import dev.glassworks.manage.Tile
+package dev.glassworks.manage
+
 import dev.glassworks.pane.PaneState
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import sh.edm.s1kiosk.ui.Mockup
+import dev.glassworks.ui.Mockup
 import java.io.File
 
 /**
