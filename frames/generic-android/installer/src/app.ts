@@ -1,6 +1,6 @@
 // The two builds of Glassworks for generic Android (#403, maintainer 2026-11-16: app ids are per build).
 // Android 8+ gets `dev.glassworks.generic_android`; Android 6-7 its legacy build, `.legacy` (#198). Both
-// have the same components, from the core (package sh.edm.s1kiosk) and the generic app
+// have the same components, from the core (dev.glassworks.*) and the generic app
 // (frames/generic-android/android). test/app.test.ts checks these names against the build and manifest.
 import type { AppId } from '@glassworks/app-adb';
 
@@ -17,9 +17,9 @@ export interface GenericApp extends AppId {
 const ID = 'dev.glassworks.generic_android';
 const parts = (pkg: string) => ({
   package: pkg,
-  activity: `${pkg}/sh.edm.s1kiosk.MainActivity`,
+  activity: `${pkg}/dev.glassworks.MainActivity`,
   home: `${pkg}/dev.glassworks.generic.Launcher`,
-  admin: `${pkg}/sh.edm.s1kiosk.AdminReceiver`,
+  admin: `${pkg}/dev.glassworks.AdminReceiver`,
 });
 
 export const GENERIC: GenericApp = { name: 'Glassworks', build: 'generic', apis: { min: 26 }, ...parts(ID) };

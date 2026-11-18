@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
+import dev.glassworks.dock.DockRow
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.openSystemSettings
 import dev.glassworks.frame.systemSettings
@@ -66,6 +67,7 @@ object S1Settings {
         }
         // The frame's own page; a frame whose page fails keeps the rest.
         val device = runCatching { frame.deviceSection(context, runtime::runningPane) }.onFailure { Log.w(TAG, "the device page failed", it) }.getOrNull()
+            ?.let { DockRow.withRow(it, runtime::docked) }
         val own = core.sections() + listOfNotNull(device?.let { SettingsPlace.DEVICE to it })
         val ha = withHaLink(settingsOrder(own, sections)) { HaLink.of(connected = runtime.homeAssistantConnected(), added = prefs.haSeen) }
         return KioskSettingsOverlay.Model(ha, version, sections.map { it.id }.toSet(), frameName(runtime))

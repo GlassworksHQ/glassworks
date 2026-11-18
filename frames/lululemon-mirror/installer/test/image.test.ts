@@ -10,7 +10,7 @@ import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from '@glasswor
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
-import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
+import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, KEPT_APPS, UNUSED_APPS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
 import { MIRROR_FRAME } from '../src/image';
 import { fakeAdbKey, fakeServicesJar } from './fakes';
 import { DEXDUMP, disassemble } from './dexdump';
@@ -60,11 +60,14 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
     const home = [...PERMS.map((e) => e.attrs!.name === 'android.permission.REBOOT' ? { ...e, attrs: { ...e.attrs, maxSdkVersion: '22' } } : e), ...app(HOME_ACTIVITY())];
     await expect(checkMirrorApk(fakeApk(PKG, { minSdk: 23, home }))).rejects.toThrow(/doesn't ask for REBOOT\./);
   });
-  it('refuses S1 Kiosk\'s id by default, and takes it only as the probe (MIRROR_PROBE)', async () => {
+  it('refuses the S1 app\'s id, and takes the probe\'s only as the probe (MIRROR_PROBE)', async () => {
     const s1 = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
     await expect(checkMirrorApk(s1)).rejects.toThrow(/this APK is sh\.edm\.s1kiosk, not Glassworks \(dev\.glassworks\.generic_android\.legacy\)/);
-    await expect(checkMirrorApk(s1, MIRROR_PROBE)).resolves.toMatchObject({ package: 'sh.edm.s1kiosk' });
-    await expect(checkMirrorApk(mirrorApk({ minSdk: 23 }), MIRROR_PROBE)).rejects.toThrow(/not the Mirror probe \(sh\.edm\.s1kiosk\)/);
+    await expect(checkMirrorApk(s1, MIRROR_PROBE)).rejects.toThrow(/not the Mirror probe \(dev\.glassworks\.mirror\.probe\)/);
+    const probe = fakeApk('dev.glassworks.mirror.probe', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
+    await expect(checkMirrorApk(probe, MIRROR_PROBE)).resolves.toMatchObject({ package: 'dev.glassworks.mirror.probe' });
+    await expect(checkMirrorApk(probe)).rejects.toThrow(/this APK is dev\.glassworks\.mirror\.probe, not Glassworks/);
+    await expect(checkMirrorApk(mirrorApk({ minSdk: 23 }), MIRROR_PROBE)).rejects.toThrow(/not the Mirror probe \(dev\.glassworks\.mirror\.probe\)/);
   });
   it('says a manifest it can\'t parse can\'t be read, never a RangeError', async () => {
     const apk = mirrorApk({ minSdk: 23 });
@@ -79,6 +82,17 @@ describe('checkMirrorApk: the APK the Mirror can run as its only screen', () => 
   it('names an activity whose android:name is a resource plainly, not [object Object] (#385 delta verifier)', async () => {
     const home = app({ ...HOME_ACTIVITY(), attrs: { name: { ref: 0x7f0a0001 } } }, { enabled: false });
     await expect(checkMirrorApk(mirrorApk({ minSdk: 23, home }))).rejects.toThrow(/its home screen \(an activity named by a resource\) is turned off/);
+  });
+});
+
+describe('UNUSED_APPS: the image\'s apps Kiln leaves out', () => {
+  it('names each app once, in its own folder under /app or /priv-app, and never one that must stay', () => {
+    const pkgs = UNUSED_APPS.map((u) => u.package), dirs = UNUSED_APPS.map((u) => u.dir);
+    expect(new Set(pkgs).size).toBe(pkgs.length);
+    expect(new Set(dirs).size).toBe(dirs.length);
+    for (const d of dirs) expect(d).toMatch(/^\/(app|priv-app)\/[A-Za-z0-9_.-]+$/);
+    expect(pkgs.filter((p) => KEPT_APPS.includes(p))).toEqual([]);
+    expect(dirs).not.toContain(GLASSWORKS.dir);
   });
 });
 
@@ -134,7 +148,10 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
 
   function systemTree(fingerprint: string = GLASS_PANES.fingerprint, services: Uint8Array | null = jar): string {
     const root = join(dir, `sys-${Math.random().toString(36).slice(2)}`);
-    for (const d of ['priv-app/Settings', 'app/Provision', 'media/audio', 'framework']) mkdirSync(join(root, d), { recursive: true });
+    for (const d of ['priv-app/Settings', 'app/Provision', 'media/audio', 'framework', 'app/Stk', 'priv-app/Dialer', 'priv-app/TeleService']) mkdirSync(join(root, d), { recursive: true });
+    for (const a of ['app/Stk/Stk.apk', 'priv-app/Dialer/Dialer.apk', 'priv-app/TeleService/TeleService.apk']) writeFileSync(join(root, a), randomBytes(20_000));
+    mkdirSync(join(root, 'priv-app/Dialer/oat/arm64'), { recursive: true });
+    writeFileSync(join(root, 'priv-app/Dialer/oat/arm64/Dialer.odex'), randomBytes(30_000));
     if (services) writeFileSync(join(root, 'framework/services.jar'), services);
     writeFileSync(join(root, 'build.prop'), `ro.build.fingerprint=${fingerprint}\npersist.sys.usb.config=diag,serial_smd,rmnet_bam,adb\n`);
     writeFileSync(join(root, 'priv-app/Settings/Settings.apk'), randomBytes(100_000));
@@ -180,6 +197,11 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
       expect(debugfs(img, `ea_get ${p} security.selinux`)).toContain('u:object_r:system_file:s0');
     }
     expect(log).toContain('2 native libraries for arm64-v8a in /priv-app/Glassworks/lib/arm64');
+    // the unused apps are gone, folders and all; the phone stack stays
+    expect(log).toContain('left out 2 unused apps: com.android.dialer, com.android.stk');
+    expect(debugfs(img, 'ls /app')).not.toContain('Stk');
+    expect(debugfs(img, 'ls /priv-app')).not.toContain('Dialer');
+    expect(debugfs(img, 'ls /priv-app')).toContain('TeleService');
     // the image lets in this key without asking, not the Glass Panes project key; the jar keeps its owner, mode and label
     const services = debugfsCat(img, '/framework/services.jar');
     const dex = Buffer.from((await zipEntry(new Uint8Array(services), 'classes.dex'))!).toString('latin1');
@@ -252,7 +274,7 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const img = join(dir, 'swap.img');
     mke2fs(img, 64, MAKE_EXT4FS, systemTree());
     const disk = await load(img);
-    const probe = fakeApk('sh.edm.s1kiosk', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
+    const probe = fakeApk('dev.glassworks.mirror.probe', { minSdk: 23, home: [...PERMS, ...app(HOME_ACTIVITY())] });
     await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: probe, app: MIRROR_PROBE, time: T });
     await dump(disk, img);
     expect(debugfs(img, 'ls /priv-app')).toContain('S1Kiosk');
@@ -366,7 +388,15 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       // the template buildImages puts the saved network after (read 2026-11-16 from image 2)
       expect(new TextDecoder().decode(await real.readFile('/etc/wifi/wpa_supplicant.conf'))).toBe(TEMPLATE);
       expect((await real.readdir('/vendor')).map((e) => e.name)).not.toContain('overlay'); // ours is the only overlay
+      // every unused folder is in the pinned image and holds the app the list names
+      for (const u of UNUSED_APPS) {
+        const apk = (await real.readdir(u.dir)).find((e) => e.name.endsWith('.apk'))!;
+        const manifest = (await zipEntry(await real.readFile(`${u.dir}/${apk.name}`), 'AndroidManifest.xml'))!;
+        expect(axmlAttribute(manifest, 'manifest', 'package'), u.dir).toBe(u.package);
+      }
       await patchSystem(real, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY });
+      for (const u of UNUSED_APPS) expect(await real.exists(u.dir), u.dir).toBe(false);
+      for (const d of ['/priv-app/TeleService', '/priv-app/TelephonyProvider', '/priv-app/Telecom', '/priv-app/ContactsProvider', '/app/LatinIME', '/app/PPPreference', '/app/SVIService', '/app/CABLService']) expect(await real.exists(d), d).toBe(true);
       const out = openSync(join(dir, 'out.img'), 'w');
       let pos = 0;
       await writeSparse(disk, (b) => { writeSync(out, b, 0, b.length, pos); pos += b.length; });

@@ -4,9 +4,12 @@ import os
 import struct
 import sys
 import unittest
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import app_icon  # noqa: E402
+
+ANDROID = "{http://schemas.android.com/apk/res/android}"
 
 
 class AppIconTest(unittest.TestCase):
@@ -19,8 +22,8 @@ class AppIconTest(unittest.TestCase):
     def test_both_apps_launch_with_the_brands_icon(self):
         for res in app_icon.APPS:
             manifest = os.path.join(os.path.dirname(res), "AndroidManifest.xml")
-            with open(manifest, encoding="utf-8") as f:
-                self.assertIn('android:icon="@mipmap/ic_launcher"', f.read(), manifest)
+            app = ET.parse(manifest).getroot().find("application")
+            self.assertEqual("@mipmap/ic_launcher", app.get(ANDROID + "icon"), manifest)
 
     def test_android_6_has_a_png_at_every_density(self):
         for density, px in app_icon.PNGS.items():

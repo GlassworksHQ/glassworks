@@ -1,7 +1,8 @@
 // The Mirror's images, made in the person's browser (#40, option A). `system` is the Glass Panes
 // community image the person downloaded themselves. Kiln checks its SHA-256 and adds the legacy build of
 // Glassworks as a privileged system app and the Glassworks boot animation (the screen's rotation is
-// set on the first boot: flash.ts setPortrait). The
+// set on the first boot: flash.ts setPortrait), and leaves out the image's apps a Mirror never uses
+// (unused.ts). The
 // Mirror has no touchscreen to answer "Allow USB debugging?", and the image lets one key in without
 // asking (services.ts): Kiln makes that this browser's key instead of the published Glass Panes one.
 // `userdata` is new and empty. Nothing here is downloaded from or uploaded to anyone: the person's
@@ -11,6 +12,7 @@ import { ManifestError, apkHome, apkInfo, apkPermissions, zipEntry, zipNames, ty
 import { APP_DIRS, GLASSWORKS, PRIVILEGED, type MirrorApp } from './app';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 import { SERVICES_JAR, adbKeyLines, trustAdbKey } from './services';
+import { UNUSED_APPS } from './unused';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
 export const GLASS_PANES = {
@@ -51,6 +53,22 @@ const MIRROR_API = 23;
 
 /** APK ABI folder → the folder Android 6's package manager looks in for a bundled app's libraries. */
 const LIB_DIRS: [string, string][] = [['arm64-v8a', 'arm64'], ['armeabi-v7a', 'arm']];
+
+/**
+ * The APK's own native libraries that patchSystem unpacks into the image: the zip names under
+ * lib/<abi>/*.so for the first of the Mirror's two ABIs that has any (arm64-v8a, then armeabi-v7a),
+ * and the folder Android 6 reads them from. Android 6 doesn't unpack a bundled app's libraries from
+ * its APK: they sit next to it, uncompressed. Undefined when the APK has none.
+ */
+export function apkLibs(apk: Uint8Array): { abi: string; dir: string; names: string[] } | undefined {
+  const all = zipNames(apk);
+  for (const [abi, dir] of LIB_DIRS) {
+    // an empty lib/<abi>/ folder doesn't count
+    const names = all.filter((n) => n.startsWith(`lib/${abi}/`) && n.endsWith('.so') && !n.slice(`lib/${abi}/`.length).includes('/'));
+    if (names.length) return { abi, dir, names };
+  }
+  return undefined;
+}
 
 export interface SystemPatch {
   /**
@@ -146,18 +164,15 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   }
   const app = o.app ?? GLASSWORKS;
   await checkMirrorApk(o.apk, app);
-  const names = zipNames(o.apk);
-  // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them: an empty lib/<abi>/ folder doesn't count
-  const soIn = (a: string) => names.filter((n) => n.startsWith(`lib/${a}/`) && n.endsWith('.so') && !n.slice(`lib/${a}/`.length).includes('/'));
-  const abi = LIB_DIRS.find(([a]) => soIn(a).length > 0);
-  const libs = abi ? soIn(abi[0]) : [];
+  // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them
+  const native = apkLibs(o.apk);
   // read every library before the first write: one Kiln can't unpack must leave the image as it was
   const payloads: [string, Uint8Array][] = [];
   const seen = new Set<string>();
-  for (const n of libs) {
+  for (const n of native?.names ?? []) {
     const dest = n.split('/').pop()!;
     // two entries for the same lib/<abi>/<name>.so would write one then fail on the second: refuse before any write
-    if (seen.has(dest)) throw new Error(`this APK lists ${abi![0]}/${dest} more than once. Nothing was changed.`);
+    if (seen.has(dest)) throw new Error(`this APK lists ${native!.abi}/${dest} more than once. Nothing was changed.`);
     seen.add(dest);
     const data = await zipEntry(o.apk, n).catch((e: Error) => { throw new Error(`${e.message}. Nothing was changed.`); });
     if (!data) throw new Error(`this APK lists ${n} but Kiln can't read it. Nothing was changed.`);
@@ -172,11 +187,16 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   await fs.writeFile(`${app.dir}/${app.file}`, o.apk, fileAttrs(time));
   log(`${app.dir}/${app.file} (${o.apk.length} bytes)`);
   // Android 6 doesn't unpack a bundled app's libraries from its APK: they sit next to it, by ABI
-  if (abi && libs.length) {
-    await fs.mkdirs(`${app.dir}/lib/${abi[1]}`, dirAttrs(time));
-    for (const [name, data] of payloads) await fs.writeFile(`${app.dir}/lib/${abi[1]}/${name}`, data, fileAttrs(time));
-    log(`${libs.length} native librar${libs.length === 1 ? 'y' : 'ies'} for ${abi[0]} in ${app.dir}/lib/${abi[1]}`);
+  if (native) {
+    await fs.mkdirs(`${app.dir}/lib/${native.dir}`, dirAttrs(time));
+    for (const [name, data] of payloads) await fs.writeFile(`${app.dir}/lib/${native.dir}/${name}`, data, fileAttrs(time));
+    log(`${native.names.length} native librar${native.names.length === 1 ? 'y' : 'ies'} for ${native.abi} in ${app.dir}/lib/${native.dir}`);
   }
+
+  // apps a Mirror never uses: they restart after every lowmemorykiller kill. A second run finds them gone.
+  const left: string[] = [];
+  for (const u of UNUSED_APPS) if (await fs.exists(u.dir)) { await fs.remove(u.dir, { recursive: true, time }); left.push(u.package); }
+  if (left.length) log(`left out ${left.length} unused apps: ${left.join(', ')}`);
 
   if (o.bootAnimation) {
     if (await fs.exists('/media/bootanimation.zip')) await fs.remove('/media/bootanimation.zip', { time });

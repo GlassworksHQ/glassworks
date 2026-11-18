@@ -129,6 +129,11 @@ class KioskPrefs(
         get() = sp.getBoolean(KEY_WIFI_SEEN, false)
         set(v) = sp.edit().putBoolean(KEY_WIFI_SEEN, v).apply()
 
+    /** The device has reported a dock at least once: Home Assistant keeps its *Docked* sensor from then on (dev.glassworks.dock.Docked). */
+    var dockSeen: Boolean
+        get() = sp.getBoolean("dock_seen", false)
+        set(v) = sp.edit().putBoolean("dock_seen", v).apply()
+
     /** "Skip" on the setup screen's Add-to-Home-Assistant step. */
     var haSetupSkipped: Boolean
         get() = sp.getBoolean("setup_ha_skipped", false)

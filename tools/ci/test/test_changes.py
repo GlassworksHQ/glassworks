@@ -76,7 +76,7 @@ class WhatTheWorkspacesRead(unittest.TestCase):
     def test_web_runs_for_files_the_workspaces_read_from_the_modules(self):
         for f in ('testing/kotlin/dev/glassworks/testing/RepoFiles.kt', 'core/src/main/res/font/inter.ttf',
                   'core/src/main/assets/setup/setup.js', 'panes/camera/src/main/java/dev/glassworks/camera/pane.json',
-                  'panes/camera/blueprints/x.yaml', 'tools/mirror/probe-app/src/main/java/sh/edm/s1kiosk/Probe.java'):
+                  'panes/camera/blueprints/x.yaml', 'tools/mirror/probe-app/src/main/java/dev/glassworks/mirror/probe/Probe.java'):
             self.assertIn('web', running(f), f)
 
     def test_web_skips_module_code_resources_tests_and_markdown(self):
@@ -150,6 +150,18 @@ class PrYmlFollowsTheTable(unittest.TestCase):
             if key in changes.RULES:
                 job_if = re.search(r'^    if: (.*)$', body, re.M).group(1)
                 self.assertEqual(job_if, f"${{{{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.{key} != 'false') }}}}", job)
+
+
+class GradleJobsForgetMisses(unittest.TestCase):
+    def test_every_gradle_job_ends_by_dropping_dependency_metadata_on_failure(self):
+        last = ("      - name: Forget Gradle's dependency metadata after a failure\n        if: failure()\n"
+                "        run: rm -rf ~/.gradle/caches/modules-2/metadata-*\n")
+        for name in ('pr.yml', 'core-emulators.yml'):
+            jobs = re.split(r'^  [a-z0-9-]+:\n', (ROOT / '.github/workflows' / name).read_text().split('\njobs:\n', 1)[1], flags=re.M)
+            gradle = [j for j in jobs if 'gradle/actions/setup-gradle@' in j]
+            self.assertTrue(gradle, name)
+            for job in gradle:
+                self.assertTrue(job.rstrip('\n').endswith(last.rstrip('\n')), job[:200])
 
 
 class DocsCarryTheTable(unittest.TestCase):

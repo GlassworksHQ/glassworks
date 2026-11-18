@@ -47,8 +47,8 @@ describe('S1 Kiosk over adb', () => {
   });
 
   it('doesn\'t wait on another app\'s admin whose package starts with this one\'s', async () => {
-    const app = { package: 'dev.glassworks.generic_android', activity: 'dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity' };
-    const s = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? '    dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.AdminReceiver:\n' : '', code: 0 }));
+    const app = { package: 'dev.glassworks.generic_android', activity: 'dev.glassworks.generic_android/dev.glassworks.MainActivity' };
+    const s = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? '    dev.glassworks.generic_android.legacy/dev.glassworks.AdminReceiver:\n' : '', code: 0 }));
     expect(await dropAdmin(s, async () => {}, app)).toBe(true);
     expect(s.cmds.filter((c) => c === 'dumpsys device_policy')).toHaveLength(1);
   });

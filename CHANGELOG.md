@@ -79,6 +79,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
   A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
   computer until Glassworks for Android has a release.
+- **Know when the tablet is on its dock.** A Pixel Tablet now has a *Docked* sensor in Home Assistant: on
+  while it sits on its dock, off when you lift it off. Automate on it, for example to
+  show another dashboard while someone holds the tablet. The tablet's page in the panel's settings, and on the
+  Manage page, says *Docked* or *Not docked* as it changes. Other tablets get both once they have been on a
+  dock; the S1 and ordinary tablets have neither.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -208,6 +213,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
   **Other ways to set up ›**, and **Not now** is the quietest button on the card. The step now fits on a
   small phone too. A panel without touch (the Mirror) looks as before.
+- **Kiln's Mirror flash leaves out apps a Mirror never uses.** The image Kiln writes no longer has
+  36 of the community image's apps: the phone and SMS apps, Qualcomm's diagnostic and modem services,
+  demo apps and Bluetooth test tools. They kept restarting and took memory the dashboard needs. The
+  phone stack, the keyboard, the display's own services, Bluetooth and Settings stay. Kiln's way back,
+  the plain community image, brings them all back. Not yet run on a real Mirror.
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
   device whose presence sensor has a range (the S1), and *Auto brightness*, *Illuminance* and *Max auto
   brightness* only on one with a light sensor. On a tablet with a camera, presence is the Camera pane's
