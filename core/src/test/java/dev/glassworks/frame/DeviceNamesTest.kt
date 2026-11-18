@@ -15,16 +15,27 @@ import java.io.File
  * [Frame.shortName], [Frame.hardware]), so the Mirror never reads "Aqara S1 Plus". The scan reads the string literals
  * (not the comments) of every module outside `frames/`: the core, the pane API, the engines, the panes and the
  * libraries, with their web assets, which include the setup page's built bundle (`npm run build:lan`, which CI checks
- * against its sources) and the Gecko extension. Manage's pages are Kotlin in the core.
+ * against its sources) and the Gecko extension, and their pane and page JSON and CSS. Manage's pages are Kotlin in the
+ * core. The S1 app's own tests and mockups are checked too: a shot that shows the Mirror is drawn from its frame
+ * (`theMirrorShotsAreDrawnFromTheMirrorsFrame`).
  *
  * Frame-only code may name its own device: everything under `frames/<id>/`, and a pane in [FRAME_ONLY_PANES].
  */
 class DeviceNamesTest {
-    /** A device or its maker, as a person would read it. Lowercase "mirror" and ids such as `aqara-s1-plus` don't count. */
+    /**
+     * A device or its maker, as a person would read it. Lowercase "mirror" and ids such as `aqara-s1-plus` don't count.
+     *
+     * The list is today's devices, spelled out: **a new frame's name has to be added here** (a Sonoff panel, a Galaxy
+     * Tab, …), or this scan reads past it and the shared app may name it (#502). `DeviceFrame`'s devices are here too.
+     */
     private val name = Regex("""\b(Aqara|S1|lululemon|Mirror|Pixel|[Tt]ablets?|A133|Allwinner|NSPanel|Echo Show)\b""")
 
     /** Not a device: the app's product name (AppBuild.S1_KIOSK) and Material Design icon ids (`mdi:tablet-dashboard`). */
     private val notADevice = listOf(Regex("""S1 Kiosk"""), Regex("""mdi:[a-z0-9-]+"""))
+
+    /** A block comment in markup, and in CSS. Taken out before a file's lines are read, its newlines kept. */
+    private val HTML_COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
+    private val CSS_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
 
     /**
      * Panes only one frame can run, by the capability only that frame provides (frame.json's `provides`). They may name
@@ -46,6 +57,11 @@ class DeviceNamesTest {
         !rel.startsWith("frames/") && rel !in FRAME_ONLY_PANES
     }
 
+    /** The shared app's files the scan reads: code, the web assets, and the pane and page JSON and CSS. */
+    private fun scanned(): List<File> = RepoFiles.sources(atLeast = 250, inModules = shared) {
+        it.extension in setOf("kt", "java", "js", "mjs", "html", "xml", "json", "css")
+    }
+
     /** What [text] names, once the product name and icon ids are taken out. */
     private fun names(text: String): List<String> =
         name.findAll(notADevice.fold(text) { t, r -> r.replace(t, " ") }).map { it.value }.toList()
@@ -55,13 +71,17 @@ class DeviceNamesTest {
         "kt" -> Literals.of(f.readText(), Literals.Language.KOTLIN)
         "java" -> Literals.of(f.readText(), Literals.Language.JAVA)
         "js", "mjs" -> Literals.of(f.readText(), Literals.Language.JS)
-        else -> f.readText().replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL)) { m -> "\n".repeat(m.value.count { it == '\n' }) }
-            .lines().mapIndexed { i, l -> i + 1 to l }
+        "css" -> lines(f.readText(), CSS_COMMENT)
+        else -> lines(f.readText(), HTML_COMMENT) // JSON and markup: JSON has no comments to take out
     }
+
+    /** [text]'s lines, with each [comments] match blanked and its newlines kept, so the numbers stay the file's. */
+    private fun lines(text: String, comments: Regex): List<Pair<Int, String>> =
+        text.replace(comments) { m -> "\n".repeat(m.value.count { it == '\n' }) }.lines().mapIndexed { i, l -> i + 1 to l }
 
     @Test
     fun `the shared app names no device`() {
-        val files = RepoFiles.sources(atLeast = 250, inModules = shared) { it.extension in setOf("kt", "java", "js", "mjs", "html", "xml") }
+        val files = scanned()
         val found = files.flatMap { f ->
             val allowed = runCatching { ALLOWED[RepoFiles.packagePath(f)] }.getOrNull().orEmpty()
             texts(f).filter { (_, text) -> text !in allowed && names(text).isNotEmpty() }
@@ -75,13 +95,46 @@ class DeviceNamesTest {
     }
 
     @Test
-    fun `the scan reads the setup page, the extension and Manage`() {
-        val files = RepoFiles.sources(atLeast = 250, inModules = shared).map(RepoFiles::rel)
-        for (f in listOf("core/src/main/assets/setup/setup.js", "engines/engine-gecko/src/main/assets/extension/content.js")) {
+    fun `the scan reads the setup page, the extension, Manage and the pane and page JSON`() {
+        val files = scanned().map(RepoFiles::rel)
+        for (f in listOf(
+            "core/src/main/assets/setup/setup.js", "engines/engine-gecko/src/main/assets/extension/content.js",
+            "core/src/main/assets/setup/setup.css", "core/src/main/java/dev/glassworks/screen/page.json",
+            "panes/camera/src/main/java/dev/glassworks/camera/pane.json",
+        )) {
             assertTrue(f, f in files)
         }
         assertTrue(files.any { it.endsWith("dev/glassworks/manage/ManagePages.kt") })
         assertTrue("the setup page's literals, not one blob", Literals.of(RepoFiles.file("core/src/main/assets/setup/setup.js").readText(), Literals.Language.JS).size > 1000)
+        val css = File.createTempFile("device-names", ".css").apply {
+            deleteOnExit()
+            writeText("/* the Mirror, a Pixel Tablet */\n.a { color: red }\n")
+        }
+        assertEquals("a CSS comment names no device", emptyList<String>(), texts(css).flatMap { names(it.second) })
+    }
+
+    /**
+     * A test or mockup that saves a shot named for the Mirror draws it from `TestFrames.mirror` (#502), never from
+     * `TestFrames.s1()`: `shoot("mirror")` would otherwise show the S1's name and touch. A file that builds no frame
+     * draws no device and is out of scope (the voice overlay, which stands a view group up instead).
+     */
+    @Test
+    fun theMirrorShotsAreDrawnFromTheMirrorsFrame() {
+        val tests = RepoFiles.sources(atLeast = 120, sourceSet = "test", inModules = listOf(RepoFiles.s1App)) { it.extension == "kt" }
+        val frames = Regex("""TestFrames\.|AqaraS1Plus\(|GenericAndroid\(""")
+        val theMirror = Regex("""TestFrames(\.|::)mirror""")
+        val shot = Regex("""(?:save|shoot|shot|setupShot)\(\s*"([^"]*)"""")
+        val mirrorShot = Regex("""(^|-)(?i:mirror)(-|$)""")
+        val found = tests.filter { f ->
+            val code = f.readText()
+            frames.containsMatchIn(code) && !theMirror.containsMatchIn(code) &&
+                shot.findAll(code).any { mirrorShot.containsMatchIn(it.groupValues[1]) }
+        }.map { "${RepoFiles.rel(it)}: a Mirror shot, no TestFrames.mirror" }
+        assertTrue(
+            "A shot named for the Mirror, drawn from another frame. Build it with TestFrames.mirror(context):\n" +
+                found.joinToString("\n"),
+            found.isEmpty(),
+        )
     }
 
     @Test
