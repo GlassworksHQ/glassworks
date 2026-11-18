@@ -52,6 +52,8 @@ PERF = ('tools/perf', 'frames/*/budgets.json', 'frames/*/clarity')
 
 LIBS = ('libs', 'build-logic')
 
+HOTSPOT_NAME = 'frames/aqara-s1-plus/tools/radio/hotspot-name'
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -64,8 +66,10 @@ class Rule:
 
 # Keys are pr.yml's job ids with `_` for `-`, or a step group inside a job (app_apk, esphome, perf).
 RULES = {
-    'app': Rule('app: every module\'s unit tests', when=ANDROID + TEST_INPUTS),
-    'app_apk': Rule('app: release build, update check', when=ANDROID + APK_INPUTS + ('tools/release/check-update-compat.sh',)),
+    # hotspot-name: the S1's setup hotspot overlay, which app builds beside the release APK (#430).
+    'app': Rule('app: every module\'s unit tests', when=ANDROID + TEST_INPUTS + (HOTSPOT_NAME,)),
+    'app_apk': Rule('app: release build, update check', when=ANDROID + APK_INPUTS + (
+        'tools/release/check-update-compat.sh', HOTSPOT_NAME)),
     'esphome': Rule('app: aioesphomeapi tests', when=LIBS),
     'libs_api23': Rule('libs-api23', when=LIBS),
     'api23': Rule('api23', when=ANDROID + ('tools/legacy',)),
