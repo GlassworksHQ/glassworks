@@ -68,6 +68,10 @@ fun Test.readsRepoFiles(repo: File) {
         include("**/sh/edm/**")
         exclude("**/build/**", "**/node_modules/**", "**/.gradle/**", "**/.git/**", "**/.next/**", "dumps/**")
     }).withPropertyName("oldPackage").withPathSensitivity(PathSensitivity.RELATIVE)
+    // DeviceNamesTest reads a frame app's own tests and mockups, and the shots they save (#502): a new Mirror shot,
+    // or a shot drawn from another frame, re-runs it instead of taking it UP-TO-DATE.
+    inputs.files(fileTree(File(repo, "frames")) { include("*/android/src/test/**/*.kt") })
+        .withPropertyName("frameAppTests").withPathSensitivity(PathSensitivity.RELATIVE)
     val files = listOf(
         "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
         "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",

@@ -41,8 +41,8 @@
 
 ---
 
-Glassworks is the device-neutral core being pulled out of
-[S1 Unleashed](../../../../../../README.md) one step at a time. A **frame** describes a device.
+Glassworks is the device-neutral core in
+[this repository](../../../../../../README.md), pulled out of the S1's app one step at a time. A **frame** describes a device.
 A **pane** is a feature: the Music Assistant player, voice, timers, the radio. This package
 (`dev.glassworks.pane`) is the contract between the two.
 
@@ -341,7 +341,7 @@ Assistant and answers at once, and the state's `radio.threadJoin` follows it to 
 reply or state carries a secret.
 
 **A step id is the step's own.** `GlassworksRuntime.setupSteps` gathers the steps through
-`SetupFlow.usable`. It leaves out, with an error in the `S1Kiosk` log, a step whose id is a core
+`SetupFlow.usable`. It leaves out, with an error in the `Glassworks` log, a step whose id is a core
 step (`wifi`, `ha`, `panes`, `signin`, `done`) or a setup-channel state key (`ip`, `ha`), or an earlier step's,
 and a step whose request names are already taken. A bad step costs only itself: the app still
 starts and the channel still answers. `FramePanesTest` checks a frame's step and section with a
@@ -584,6 +584,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
 | `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
+| `frameRelease` | The frame's own version and releases (#139, `FrameRelease`): its id, the version the device carries in `ro.glassworks.frame.id` and `ro.glassworks.frame.version`, and how an update installs. The core adds a *Frame version* row to the Device page and a *Frame update* entity for it. Null (the default) means neither: a device its vendor updates. The S1 and the Mirror have one. |
 | `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |
 | `systemSettingsTitle` | What the settings call the device's own settings app when it isn't Android's (the S1's: Aqara's). Null (the default) means Android's. |
 | `input` | `TOUCH` (the default), or `NONE` for a screen that takes no tap (the lululemon Mirror's). With `NONE` the panel only displays during setup: the setup page's address and QR code, and the pairing code without Close. Setup happens from a computer over the network (`/setup`, #34). |
@@ -676,7 +677,7 @@ sets the flag again at the end of its own shutdown.
 The files in `dev.glassworks` are licensed under the
 [Mozilla Public License 2.0](../../../../../../LICENSES/MPL-2.0.txt), except the libraries in
 [`libs/`](../../../../../../libs): `dev.glassworks.esphome` with its subpackages, and
-`dev.glassworks.improv`. Those are MIT, like the rest of S1 Unleashed.
+`dev.glassworks.improv`. Those are MIT, like the rest of the repository.
 
 The MPL works file by file. You can ship Glassworks inside a closed product, and your own frames
 and panes, in their own files, can use any licence. Changes to Glassworks' own files must be

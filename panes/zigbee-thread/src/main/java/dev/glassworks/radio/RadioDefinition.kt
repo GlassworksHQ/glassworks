@@ -466,8 +466,8 @@ class RadioDefinition(
             return RadioDefinition(prefs, setUpBefore, AppReadout(running, prefs, haBase), running)
         }
 
-        private const val TAG = "S1Kiosk.SetupChannel"
-        private const val MAIN_TAG = "S1Kiosk"
+        private const val TAG = "Glassworks.SetupChannel"
+        private const val MAIN_TAG = "Glassworks"
         internal const val NATIVE_KEY = "radio"
         internal const val NOT_RUNNING = "The kiosk service isn't running yet; try again in a moment."
         /** Why the radio can't run (the settings page; the nav says "Can't run"). Public for tests. */

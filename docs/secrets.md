@@ -44,7 +44,7 @@ panel then needs setting up again: sign in, give it the API key, pair Sendspin. 
 
 If the key store says the key is gone for good (its entry is corrupted or permanently invalidated),
 the panel makes a new key and treats the secrets as not set: signed out, no API key, not paired. It
-removes the unreadable values, logs it once under `S1Kiosk.Secrets` without the values, and asks for
+removes the unreadable values, logs it once under `Glassworks.Secrets` without the values, and asks for
 them again through its usual setup. It never crashes over it.
 
 If the key's entry is simply absent (wiped by the system or a vendor bug), the panel can't tell that
@@ -80,7 +80,7 @@ app already read stays in its memory and keeps working. Until then:
 
 A change that would write a secret, or replace or drop an unreadable one, is refused whole, with the
 other settings in the same change, so nothing is half written. Each kind of problem is logged once
-under `S1Kiosk.Secrets`, without the value. A device with no Keystore at all (never one with Android 6
+under `Glassworks.Secrets`, without the value. A device with no Keystore at all (never one with Android 6
 or later) stores its secrets as they were before the secret store.
 
 Nothing on the panel goes into a backup or a device-to-device transfer (`allowBackup="false"` and

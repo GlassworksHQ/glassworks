@@ -102,7 +102,7 @@ class GenericAppTest {
         return AppManage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app))
     }
 
-    @Test fun itIsItsOwnAppNotS1Kiosk() {
+    @Test fun itIsItsOwnAppNotTheS1s() {
         assertEquals("dev.glassworks.generic_android", BuildConfig.APPLICATION_ID)
         assertEquals("Glassworks", app.getString(R.string.app_name))
         assertEquals("Glassworks", GenericApp().build.product)
@@ -142,7 +142,7 @@ class GenericAppTest {
         assertEquals("http://192.0.2.66/", direct.getStringExtra("url"))
     }
 
-    /** #23: it updates from its own releases (generic-android-v…), never S1 Kiosk's, and says so to GitHub. */
+    /** #23: it updates from its own releases (generic-android-v…), never the S1 app's, and says so to GitHub. */
     @Test fun itUpdatesFromItsOwnReleases() {
         val runtime = runtime()
         assertSame(ReleaseLine.GENERIC_ANDROID, runtime.releases)
@@ -326,8 +326,8 @@ class GenericAppTest {
         runtime.device = null
     }
 
-    /** The launcher icon and the splash draw the mark branding/boot/splash_mark.py writes for S1 Kiosk: a copy, kept equal. */
-    @Test fun theMarkIsTheBrandsAsS1KiosksIs() {
+    /** The launcher icon and the splash draw the mark branding/boot/splash_mark.py writes for the S1 app: a copy, kept equal. */
+    @Test fun theMarkIsTheBrandsAsTheS1AppsIs() {
         val own = java.io.File(RepoFiles.root, "frames/generic-android/android/src/main/res/drawable/glassworks_mark.xml")
         assertEquals(java.io.File(RepoFiles.s1App, "src/main/res/drawable/glassworks_mark.xml").readText(), own.readText())
     }

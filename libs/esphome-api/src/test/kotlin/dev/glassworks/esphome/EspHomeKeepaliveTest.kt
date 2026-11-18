@@ -29,8 +29,8 @@ import java.util.concurrent.atomic.AtomicReference
 class EspHomeKeepaliveTest {
     private val identity = DeviceIdentity(
         name = "s1-panel", friendlyName = "S1 Panel", macAddress = "02:11:22:33:44:55",
-        esphomeVersion = "2026.10.2", compilationTime = "S1 Kiosk test", manufacturer = "Aqara",
-        model = "Panel Hub S1 Plus (S1 Kiosk)", voiceFeatures = 0,
+        esphomeVersion = "2026.10.2", compilationTime = "Glassworks test", manufacturer = "Aqara",
+        model = "Panel Hub S1 Plus (Glassworks)", voiceFeatures = 0,
     )
     private val counter = AtomicInteger()
     private fun server(keepaliveMs: Long, unresponsiveMs: Long) =

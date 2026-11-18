@@ -10,7 +10,7 @@ Code: the player is the [`sendspin`](../libs/sendspin/README.md) library (`dev.g
 `TimeFilter`, `PlaybackScheduler`, `WsClient`, `Flac`, `AudioPipeline`); `SendspinPlayer` and
 `MediaCodecFlacDecoder` are the Android glue. The pane, `panes/sendspin/src/main/java/dev/glassworks/speaker/`,
 adds the settings, the entities, the settings page and `PrefsSsStore`, which keeps the keys sealed. It is owned by `PanelDevice` and runs in the foreground
-`KioskService`. Logs: `adb logcat -s S1Sendspin`.
+`KioskService`. Logs: `adb logcat -s Glassworks.Sendspin`.
 
 ## Setup
 
@@ -25,7 +25,7 @@ key, which HA provisions automatically):
    integration; an entity id never changes once made). It is separate from the ESPHome `media_player.<device>_speaker`,
    which keeps working for TTS, announcements and HA media.
 
-Verified on the panel on 2026-11-09 (MA 2.10.9, HA 2026.11.0):
+Verified on the panel on 2026-11-09 (MA 2.10.9, HA 2026.11.0), before the log tags became `Glassworks.*` (#527):
 
 ```
 S1Sendspin: Noise handshake with 3EXw96k5… done (sentinel PSK)
@@ -132,7 +132,7 @@ Read and cross-checked: the spec's `README.md` (at `c281aeb`); in aiosendspin 10
 
 ### Hello, activation, pairing
 
-- `client/hello`: `name` the friendly name ("Aqara S1 Plus"), `device_info` (the maker / the model (S1 Kiosk) / app
+- `client/hello`: `name` the friendly name ("Aqara S1 Plus"), `device_info` (the maker / the model (Glassworks) / app
   version / MAC), `supported_roles` `["player@v1", "metadata@v1"]`, and
   `player@v1_support {supported_formats: [{codec: flac, channels: 2, sample_rate: 48000,
   bit_depth: 16}, {codec: pcm, channels: 2, sample_rate: 48000, bit_depth: 16}],

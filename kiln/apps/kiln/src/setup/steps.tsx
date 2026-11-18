@@ -134,14 +134,21 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
       <h2 id="h">{setup.ha.signedIn ? 'Signed in to Home Assistant.' : 'Sign in to Home Assistant.'}</h2>
       <p className="lede">{setup.ha.discovered ? `Found at ${new URL(setup.ha.discovered).host}.` : 'Not found by itself. Type its address.'}</p>
       <label className="field"><span>Address</span><input className="input" value={url} onChange={(e) => { setTyped(e.target.value); steps.haAddress = e.target.value; }} inputMode="url" autoComplete="off" /></label>
-      {!setup.ha.signedIn && <button type="button" className="btn ghost" style={{ justifySelf: 'start' }} disabled={busy} onClick={() => void steps.click('sign-in', () => steps.signIn(url.trim()))}>Sign in</button>}
       {setup.ha.signedIn && <p className="status ok">The panel is signed in.</p>}
       {setup.note && !setup.ha.signedIn && <p className="status" role="status">{setup.note}</p>}
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
-      <div className="foot">
-        <button type="button" className="link" disabled={busy} onClick={() => void steps.click('radio', () => steps.radio())}>Skip, do it on the panel</button>
-        <button type="button" className="btn ember" disabled={setup.busy || busy} onClick={() => void steps.click('save-ha', () => steps.saveHa(url.trim()))}>Continue</button>
-      </div>
+      {/* One way on: Sign in until the panel is signed in (the step then moves on by itself), Continue after. */}
+      {setup.ha.signedIn ? (
+        <div className="foot">
+          <span />
+          <button type="button" className="btn ember" disabled={setup.busy || busy} onClick={() => void steps.click('save-ha', () => steps.saveHa(url.trim()))}>Continue</button>
+        </div>
+      ) : (
+        <div className="foot">
+          <button type="button" className="link" disabled={setup.busy || busy} onClick={() => void steps.click('skip-ha', () => steps.skipHa(url.trim()))}>Skip, sign in on the panel</button>
+          <button type="button" className="btn ember" disabled={setup.busy || setup.signingIn || busy} onClick={() => void steps.click('sign-in', () => steps.signIn(url.trim()))}>Sign in</button>
+        </div>
+      )}
     </section>
   );
 }

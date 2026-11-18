@@ -29,7 +29,7 @@ class TimeZoneKeeper(
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) {
     companion object {
-        const val TAG = "S1Kiosk.TimeZone"
+        const val TAG = "Glassworks.TimeZone"
         const val PROP = "persist.s1kiosk.timezone"
         const val PROP_STATUS = "sys.s1kiosk.timezone.status"
 

@@ -16,13 +16,13 @@ class ManageLogSourceTest {
         val e = ManageLog.fromLogcat(line(PanelDevice.ESPHOME_LOG_TAG, "Home Assistant has added the panel"), S1Manage::logSource)!!
         assertEquals("Home Assistant", e.source)
         assertEquals(LogEntry.Level.INFO, e.level)
-        assertEquals("S1ESPHome", PanelDevice.ESPHOME_LOG_TAG)
+        assertEquals("Glassworks.ESPHome", PanelDevice.ESPHOME_LOG_TAG)
     }
 
     @Test fun theAppsOwnTags() {
-        assertEquals("Radio", S1Manage.logSource("S1Kiosk.Radio"))
-        assertEquals("Voice", S1Manage.logSource("S1Voice"))
-        assertEquals("App", S1Manage.logSource("S1Kiosk"))
+        assertEquals("Radio", S1Manage.logSource("Glassworks.Radio"))
+        assertEquals("Voice", S1Manage.logSource("Glassworks.Voice"))
+        assertEquals("App", S1Manage.logSource("Glassworks"))
         assertNull(S1Manage.logSource("GeckoConsole"))
         assertNull("the Manage page logs its own events directly", S1Manage.logSource(S1Manage.TAG))
     }

@@ -32,7 +32,7 @@ open class CameraAdbActivity : Activity() {
                 val at = v.indexOf(':')
                 val ok = at > 0 && at < v.length - 1
                 val saved = runCatching { c.signIn = if (ok) v.substring(0, at) to v.substring(at + 1) else null }.isSuccess
-                Log.i("S1Kiosk.Camera", if (!saved) "stream sign-in not saved: the key store isn't available" else if (ok) "stream sign-in set" else "stream sign-in cleared")
+                Log.i("Glassworks.Camera", if (!saved) "stream sign-in not saved: the key store isn't available" else if (ok) "stream sign-in set" else "stream sign-in cleared")
             }
         }
         finish()
