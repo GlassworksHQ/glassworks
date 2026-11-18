@@ -38,6 +38,14 @@
 .grants .y { color: var(--ok-ink); }
 .grants .n { color: var(--faint); }
 .grants .w { color: var(--turn-ink); }
+/* #422: Done's Silent updates block, the grants row's look with a line that says what it means */
+.su { display: grid; gap: 6px; border: 1px solid var(--edge); border-radius: 12px; padding: 11px 14px; }
+.su .spread > span { font-size: 14px; }
+.su i { font-style: normal; font-size: 13px; }
+.su .y { color: var(--ok-ink); }
+.su .n { color: var(--faint); }
+.su .w { color: var(--turn-ink); }
+.su .small { line-height: 1.45; }
 .warnbox { border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent); background: color-mix(in srgb, var(--amber) 6%, transparent); border-radius: 12px; padding: 10px 12px; font-size: 13.5px; color: var(--turn-ink); }
 
 /* the card is too narrow for the frame card and "What Kiln does" side by side below about 1000 px (rail included) */
