@@ -184,8 +184,53 @@ class ManageKeptSignInTest {
         val id = sessionId()
         f.duringRefresh = { f.sessions.revoke(id) }
         val r = access(b)
-        assertEquals(404, r.status)
+        assertEquals("the Manage session ended: Sign in again", 401, r.status)
+        assertTrue(r.text().contains(ManageServer.MANAGE_ENDED))
         assertFalse(r.text().contains("ACCESS-RENEWED"))
+    }
+
+    @Test fun allPanelsSignOutWhileHomeAssistantRenewsItGetsNoToken() {
+        val b = signedIn()
+        val csrf = b.csrf()
+        f.duringRefresh = { f.duringRefresh = null; b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)) }
+        val r = access(b, csrf = csrf)
+        assertEquals("the Manage session is fine, the HA sign-in is over", 404, r.status)
+        assertFalse(r.text().contains("ACCESS-RENEWED"))
+    }
+
+    @Test fun renewalsLeaveWorkersForTheRestOfThePage() {
+        val browsers = List(3) { signedIn() }
+        val csrfs = browsers.map { it.csrf() }
+        val held = java.util.concurrent.CountDownLatch(1)
+        val inside = java.util.concurrent.CountDownLatch(ManageServer.MAX_RENEWING)
+        f.duringRefresh = { inside.countDown(); held.await(10, java.util.concurrent.TimeUnit.SECONDS) }
+        val slow = (0 until ManageServer.MAX_RENEWING).map { i -> Thread { access(browsers[i], csrf = csrfs[i]) }.apply { start() } }
+        try {
+            assertTrue("two renewals wait on Home Assistant", inside.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            val third = access(browsers[2], csrf = csrfs[2])
+            assertEquals("busy, try again: not another worker stuck on HA", 503, third.status)
+            assertTrue(f.server.keepsHaSignIn(f.sessions.list(f.haBase).first { it.csrf == csrfs[2] }.id))
+        } finally {
+            held.countDown()
+            slow.forEach { it.join(10_000) }
+        }
+        f.duringRefresh = null
+        assertEquals(200, access(browsers[2], csrf = csrfs[2]).status)
+    }
+
+    @Test fun aSweepEndsNewlyEndedSessionsFirstAndRetriesAFewAtATime() {
+        f.revokeWorks = false
+        repeat(ManageServer.RETRIES_PER_SWEEP + 2) {
+            val b = signedIn()
+            assertEquals(502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to b.csrf())).status)
+        }
+        f.Browser().signInWithHa(remember = false)
+        val ended = sessionId()
+        f.now += 13L * 3600 * 1000
+        f.revoked.clear()
+        f.server.sweep()
+        assertFalse("the newly ended one was tried", f.server.keepsHaSignIn(ended))
+        assertEquals("it, then a few queued ones, two tries each", 2 * (1 + ManageServer.RETRIES_PER_SWEEP), f.revoked.size)
     }
 
     @Test fun theSweepReadsTheSessionsWithoutEndingANewAddresssOnes() {
@@ -278,9 +323,16 @@ class ManageKeptSignInTest {
     @Test fun noTokenInTheLogTheDiagnosticsOrAWarning() {
         val b = signedIn()
         access(b)
+        // A revoke HA doesn't take, so there is a warning to look at.
+        f.revokeWorks = false
         b.post(ManageServer.HA_FORGET, mapOf("csrf" to b.csrf()))
+        assertTrue("a warning was written", f.warnings.isNotEmpty())
+        f.revokeWorks = true
         for (e in f.events) f.log.append(LogEntry(f.now, LogEntry.Level.INFO, "Manage", e))
-        val diagnostics = signedIn().get("/log/diagnostics.txt").text()
+        val download = signedIn().get("/log/diagnostics.txt")
+        assertEquals(200, download.status)
+        assertTrue(download.headers["Content-Disposition"].orEmpty().startsWith("attachment"))
+        val diagnostics = download.text()
         for (secret in listOf("REFRESH", "ACCESS-RENEWED", "ACCESS")) {
             assertTrue(secret, f.events.none { secret in it })
             assertFalse(secret, secret in diagnostics)

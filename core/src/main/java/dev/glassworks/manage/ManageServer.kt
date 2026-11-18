@@ -105,8 +105,8 @@ class ManageServer(
     private fun endSession(session: String, now: Boolean = false) {
         asked.entries.removeIf { it.value.session == session }
         if (now) { endKept(session); return }
-        val k = kept.remove(session) ?: return
-        unrevoked[session] = k
+        // One step under the lock: a forget that comes in between finds it in one map or the other, never in neither.
+        synchronized(grants) { kept.remove(session)?.also { queue(session, it) } } ?: return
         background { endKept(session) }
     }
 
@@ -118,7 +118,7 @@ class ManageServer(
     private fun endKept(id: String): Boolean {
         if (!ending.add(id)) return false
         try {
-            val k = kept.remove(id) ?: unrevoked.remove(id) ?: return true
+            val k = synchronized(grants) { kept.remove(id) ?: unrevoked.remove(id)?.also { retryOrder.remove(id) } } ?: return true
             // HA didn't take the revoke: no longer usable, but kept aside to try again (Try again, the sweep).
             return signIn.end(k).also { ended -> if (!ended) retryLater(id, k) }
         } finally {
@@ -135,8 +135,20 @@ class ManageServer(
     /** Set by [stop]: a sign-in kept or left unrevoked after it goes to the last cleanup, not to a sweep that won't come. */
     @Volatile private var stopping = false
 
-    private fun retryLater(id: String, k: HaSignIn.Kept) {
+    /** Guards moving a grant between [kept] and [unrevoked]. */
+    private val grants = Any()
+
+    /** When each [unrevoked] entry was queued: the sweep tries the longest-waiting first, a few per pass. */
+    private val retryOrder = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val queued = java.util.concurrent.atomic.AtomicLong()
+
+    private fun queue(id: String, k: HaSignIn.Kept) {
         unrevoked[id] = k
+        retryOrder[id] = queued.incrementAndGet()
+    }
+
+    private fun retryLater(id: String, k: HaSignIn.Kept) {
+        synchronized(grants) { queue(id, k) }
         if (stopping) drain()
     }
 
@@ -145,6 +157,7 @@ class ManageServer(
         val left = ArrayList<HaSignIn.Kept>()
         for (id in kept.keys.toCollection(ArrayList())) kept.remove(id)?.let(left::add)
         for (id in unrevoked.keys.toCollection(ArrayList())) unrevoked.remove(id)?.let(left::add)
+        retryOrder.clear()
         if (left.isNotEmpty()) background { for (k in left) runCatching { signIn.end(k) } }
     }
 
@@ -172,18 +185,25 @@ class ManageServer(
 
     private fun dropEnded() {
         // Copies made by iterating: toList()'s one-item shortcut can call next() on a key another thread just took.
-        for (id in unrevoked.keys.toCollection(ArrayList())) endKept(id)
-        if (kept.isEmpty()) return
         // The candidates first, then the live sessions: one signed in meanwhile isn't a candidate (CodeRabbit on #534).
         // Read without pruning: list() would end the sessions of another address, perhaps one just made for a new one.
         val candidates = kept.keys.toCollection(ArrayList())
-        val live = sessions.liveIds()
-        val ha = haBase()?.trim()?.trimEnd('/')
-        for (id in candidates) {
-            if (id !in live) endSession(id, now = true)
-            else if (kept[id]?.let { it.haBase != ha } == true) endKept(id)
+        if (candidates.isNotEmpty()) {
+            val live = sessions.liveIds()
+            val ha = haBase()?.trim()?.trimEnd('/')
+            for (id in candidates) {
+                if (id !in live) endSession(id, now = true)
+                else if (kept[id]?.let { it.haBase != ha } == true) endKept(id)
+            }
         }
+        // Then the revokes HA didn't take, the longest-waiting first and a few per pass: an HA that doesn't answer can't
+        // hold back the newly ended ones above for long. The rest wait for the next pass (CodeRabbit on #534).
+        val due = unrevoked.keys.toCollection(ArrayList()).sortedBy { retryOrder[it] ?: 0L }.take(RETRIES_PER_SWEEP)
+        for (id in due) endKept(id)
     }
+
+    /** At most this many renewals for All panels run at once, fewer than the web server's workers (four). */
+    private val renewing = java.util.concurrent.Semaphore(MAX_RENEWING)
 
     /** Whether [session] has a Home Assistant sign-in kept for All panels (tests). */
     fun keepsHaSignIn(session: String): Boolean = kept.containsKey(session)
@@ -368,13 +388,19 @@ class ManageServer(
         val k = kept[s.id] ?: return json(404, JSONObject().put("problem", "No Home Assistant sign-in is kept for this browser."))
         val moved = { k.haBase != haBase()?.trim()?.trimEnd('/') }
         if (moved()) { endKept(s.id); return json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED)) }
-        return when (val t = signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken)) {
+        // Home Assistant slow to answer mustn't take every worker: the Manage page's other requests still get one.
+        if (!renewing.tryAcquire()) return json(503, JSONObject().put("problem", "The panel is busy. Try again in a moment."))
+        val t = try { signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken) } finally { renewing.release() }
+        return when (t) {
             // The address may have changed while HA renewed it: no token for an address the panel no longer uses.
             is HaGateway.Tokens.Ok -> if (moved()) {
                 endKept(s.id)
                 json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED))
-            } else if (kept[s.id] !== k || s.id !in sessions.liveIds()) {
-                // Signed out, run out or ended elsewhere while HA renewed it: no token for a sign-in that's over.
+            } else if (s.id !in sessions.liveIds()) {
+                // The Manage session ran out or was signed out while HA renewed it: Sign in again, as for any ended one.
+                json(401, JSONObject().put("problem", MANAGE_ENDED))
+            } else if (kept[s.id] !== k) {
+                // All panels' Sign out, or HA's refusal, came meanwhile: no token for a sign-in that's over.
                 json(404, JSONObject().put("problem", "This sign-in has ended."))
             } else json(200, JSONObject().put("access_token", t.accessToken).put("expires_in", t.expiresIn))
             // HA refused it (revoked there, or run out): drop it, and All panels asks for a sign-in. Anything else (no
@@ -750,6 +776,10 @@ class ManageServer(
         const val HA_ACCESS = "/manage/ha/access"
         const val HA_FORGET = "/manage/ha/forget"
         const val MANAGE_ENDED = "Your sign-in to this Manage page has ended. Sign in again."
+        /** Revokes HA didn't take that one sweep tries again; the rest wait for the next. */
+        const val RETRIES_PER_SWEEP = 4
+        /** All panels' renewals at once; the web server has four workers. */
+        const val MAX_RENEWING = 2
 
         /** Where a page on another panel signs this browser in with its Home Assistant token (#466). */
         const val HANDOFF = "/manage/ha/token"

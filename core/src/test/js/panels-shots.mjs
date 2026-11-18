@@ -97,6 +97,8 @@ let forgetHeld = null;
 const forgetCsrfs = [];
 /** What this panel answers a renewal with: 200, 503 (Home Assistant down) or 401 (the Manage session ended). */
 let accessStatus = 200;
+/** While set, this panel takes the page's form token for another session's (signed in again in another tab). */
+let staleCsrf = false;
 /** Whether this panel fails to serve panels-core.js, so the module can't start. */
 let brokenModule = false;
 /** Whether the fake Home Assistant takes a revoke. */
@@ -147,7 +149,7 @@ async function handle(req, res) {
   }
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/access' && req.method === 'POST' && panelSignIn) {
     const f = await form(req);
-    if (f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
+    if (staleCsrf || f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
     accessAsked++;
     if (accessHeld) await accessHeld.promise;
     if (accessStatus === 503) return send(res, 503, { problem: "Can't reach Home Assistant. Try again in a moment." });
@@ -403,6 +405,8 @@ try {
   await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
   for (let i = 0; i < 50 && accessAsked === askedBefore; i++) await sleep(100);
   assert.equal(accessAsked, askedBefore + 1, 'Manage asked the panel for a renewal');
+  for (let i = 0; i < 50 && (await pages()) !== pagesBefore + 1; i++) await sleep(100);
+  assert.equal(await pages(), pagesBefore + 1, 'the click reserved a tab');
   forgetHeld = Promise.withResolvers();
   const forgetsBefore = forgetCsrfs.length;
   await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Sign out').click()");
@@ -450,6 +454,32 @@ try {
   assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes('has ended')"));
   await shot('12-manage-sign-in-ended');
   accessStatus = 200;
+  // Manage on a row while the panel can't renew: the panel's outage shows after one request, not two (CodeRabbit on #534).
+  await call('Page.navigate', { url: PAGE });
+  await until(listed, 'the panels, before the Manage outage');
+  await expire();
+  accessStatus = 503;
+  const manageBefore = accessAsked;
+  await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Try again')", 'the outage from Manage');
+  await sleep(500);
+  assert.equal(accessAsked, manageBefore + 1, 'one request to the panel from the Manage click');
+  accessStatus = 200;
+  // Signed in again in another tab: this page's form token is another session's. Reload, not a second HA sign-in.
+  staleCsrf = true;
+  await call('Page.navigate', { url: PAGE });
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Reload')", 'the stale page');
+  assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes('out of date')"));
+  staleCsrf = false;
+  // The panel no longer keeps the sign-in (an app restart): the tab's fresh token from it goes too; Continue is asked.
+  await call('Page.navigate', { url: PAGE });
+  await until(listed, 'the panels, with a fresh token from the panel');
+  assert.ok(await js("JSON.parse(sessionStorage.getItem('gw-ha')).viaPanel"));
+  panelSignIn = false;
+  await call('Page.navigate', { url: PAGE });
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent.startsWith('Continue with Home Assistant'))", 'Continue after the panel forgot');
+  assert.equal(await js("sessionStorage.getItem('gw-ha')"), null);
+  panelSignIn = true;
   // The module can't load (CodeRabbit on #488): the page says to reload it, rather than "Finding your panels…" for good.
   brokenModule = true;
   await call('Page.navigate', { url: PAGE });

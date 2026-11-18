@@ -149,12 +149,20 @@ object HaAuth {
             server = s
         } catch (e: IOException) {
             AuthLog.w("Cannot listen on ${OAuth.SIGNIN_PORT}: ${e.message}; retrying in 10 s")
-            main.postDelayed({ startServer(context) }, 10_000)
+            // Cancelled by stopServer: a stopped service mustn't get its web server back (CodeRabbit on #534).
+            val retry = Runnable { bindRetry = null; startServer(context) }
+            bindRetry = retry
+            main.postDelayed(retry, 10_000)
         }
     }
 
+    /** The pending retry when the port was busy, until it runs or [stopServer] cancels it. */
+    private var bindRetry: Runnable? = null
+
     @Synchronized
     fun stopServer() {
+        bindRetry?.let(main::removeCallbacks)
+        bindRetry = null
         server?.stop()
         server = null
         manage?.stop()

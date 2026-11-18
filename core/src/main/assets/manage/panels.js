@@ -138,6 +138,7 @@ async function fromPanel() {
     keep(KEY, null);
     throw Object.assign(new Error(a.problem), { panel: true, manageEnded: true });
   }
+  if (a && a.stale) throw Object.assign(new Error(a.problem), { panel: true, stale: true });
   if (!a) { keep(KEY, null); return null; }
   // A renewal keeps who signed in, for the list's header; stored() is already this HA and this session's, or null.
   const user = was && was.viaPanel ? was.user : undefined;
@@ -165,6 +166,11 @@ async function ending(t) {
   say(listCard, 'Panels in Home Assistant', 'Signing out…');
   const ok = await end(t);
   if (mine !== generation) return;
+  if (ok === 'ended') {
+    return say(listCard, 'Panels in Home Assistant',
+      "Your sign-in to this Manage page has ended, so the panel can't confirm Home Assistant ended the sign-in. Sign in again, or remove it in Home Assistant: your profile, Security, Refresh tokens.",
+      h('button', { class: 'pill primary', type: 'button', onclick: () => location.assign('/') }, 'Sign in'));
+  }
   return ok ? start() : revokeFailed(t);
 }
 
@@ -214,7 +220,13 @@ async function open(p) {
   const name = 'gw-manage-' + random(9).replace(/[^A-Za-z0-9]/g, '');
   const tab = window.open('about:blank', name);
   const mine = generation;
-  const access = await token().catch(() => null);
+  let access = null;
+  let problem = null;
+  try {
+    access = await token();
+  } catch (e) {
+    problem = e;
+  }
   // Signed out meanwhile: nothing goes to the panel, and the page keeps what the sign-out drew.
   if (mine !== generation) {
     if (tab) tab.close();
@@ -222,7 +234,8 @@ async function open(p) {
   }
   if (!access) {
     if (tab) tab.close();
-    return start();
+    // The panel's own answer, as it gave it: no second request to it (CodeRabbit on #534).
+    return problem && problem.panel ? panelProblem(problem) : start();
   }
   const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: tab ? name : '_self' },
     h('input', { type: 'hidden', name: 'token', value: access }), h('input', { type: 'hidden', name: 'next', value: '/' }),
@@ -331,10 +344,16 @@ async function apply(fromP, toP, rows, asked) {
   applying = true;
   for (const e of copyCard.querySelectorAll('button, input, select')) e.disabled = true;
   try {
-    const access = await token().catch(() => null);
+    let access = null;
+    let problem = null;
+    try {
+      access = await token();
+    } catch (e) {
+      problem = e;
+    }
     // Signed out meanwhile: what the sign-out drew stays.
     if (stale()) return;
-    if (!access) return start();
+    if (!access) return problem && problem.panel ? panelProblem(problem) : start();
     const answers = asked ? new Map(rows.map((r) => [r.section + '\n' + r.key, asked.get(r.section + '\n' + r.key).ask.id])) : null;
     const fresh = await copyRows(toP, access, rows, answers, undefined, undefined, undefined, stale);
     // Change them too: the first run's other rows (a restart it asked for, what it copied) stay in the result (CodeRabbit on #488).
@@ -359,7 +378,9 @@ function panelProblem(e) {
   copyCard.hidden = true;
   return say(listCard, 'Panels in Home Assistant', e.message, e.manageEnded
     ? h('button', { class: 'pill primary', type: 'button', onclick: () => location.assign('/') }, 'Sign in')
-    : h('button', { class: 'pill', type: 'button', onclick: start }, 'Try again'));
+    : e.stale
+      ? h('button', { class: 'pill primary', type: 'button', onclick: () => location.reload() }, 'Reload')
+      : h('button', { class: 'pill', type: 'button', onclick: start }, 'Try again'));
 }
 
 async function start() {
@@ -367,6 +388,8 @@ async function start() {
   copyCard.hidden = true;
   if (!ha) return;
   dropOthers();
+  // This panel no longer keeps the sign-in (the app restarted, say): a token the tab has from it goes too, fresh or not.
+  if (!haSignIn && stored()?.viaPanel) keep(KEY, null);
   try {
     await finishSignIn();
   } catch (e) {

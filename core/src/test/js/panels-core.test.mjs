@@ -474,8 +474,10 @@ test("All panels takes its token from the panel's kept sign-in, same origin, wit
   assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
   assert.deepEqual(seen.at(-1), ['/manage/ha/forget', 'POST', 'csrf=CSRF', 'error'], 'this panel only, with the form token');
   assert.equal(await panelForget('CSRF', answer(500, null), 1_000), false);
-  // This Manage page's sign-in ended (CodeRabbit on #534): Sign in again, not an outage to retry; nothing left to end here.
+  // This Manage page's sign-in ended (CodeRabbit on #534): Sign in again, not an outage to retry.
   assert.deepEqual(await panelAccess('CSRF', answer(401, { problem: 'Your sign-in to this Manage page has ended. Sign in again.' }), 1_000),
     { manageEnded: true, problem: 'Your sign-in to this Manage page has ended. Sign in again.' });
-  assert.equal(await panelForget('CSRF', answer(401, { problem: 'ended' }), 1_000), true);
+  assert.equal(await panelForget('CSRF', answer(401, { problem: 'ended' }), 1_000), 'ended', "can't confirm: not a yes");
+  // Another tab signed in to Manage again: this page's form token is stale. Reload, not a second HA sign-in.
+  assert.equal((await panelAccess('CSRF', answer(403, { problem: 'expired' }), 1_000)).stale, true);
 });
