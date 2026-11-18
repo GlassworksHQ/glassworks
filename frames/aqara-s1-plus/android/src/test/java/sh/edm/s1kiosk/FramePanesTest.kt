@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -36,7 +37,6 @@ import sh.edm.s1kiosk.setup.SetupChannelServer
 import sh.edm.s1kiosk.setup.SetupFlow
 import sh.edm.s1kiosk.setup.SetupOverlay
 import java.util.concurrent.ScheduledExecutorService
-import sh.edm.s1kiosk.setup.s1SetupOverlay
 
 /**
  * What a frame's panes add to setup and settings, through the same runtime as the S1's: the real
@@ -124,7 +124,7 @@ class FramePanesTest {
         assertTrue(errors.toString(), errors[0].contains("'wifi'"))
 
         // The setup screen, as MainActivity.onCreate builds it, still starts.
-        s1SetupOverlay(app, r.setupPanes(app))
+        SetupOverlay(app, TestFrames.s1(), r.setupPanes(app))
 
         // Each setup channel connection, as SetupChannelServer makes it: the kept step answers, a
         // dropped step's requests don't exist.

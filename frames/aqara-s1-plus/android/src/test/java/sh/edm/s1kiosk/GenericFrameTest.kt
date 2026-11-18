@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.content.pm.PackageManager
 import dev.glassworks.frame.Capability
@@ -114,10 +115,7 @@ class GenericFrameTest {
 
     /** #454: its ROM says "MSM8916 for arm64"; lululemon's boot image says what it is. */
     @Test fun aMirrorAnnouncesItselfAsTheMirror() {
-        ShadowBuild.setManufacturer("Android")
-        ShadowBuild.setModel("MSM8916 for arm64")
-        val props = mapOf("ro.board.platform" to "msm8916", "ro.bootimage.build.fingerprint" to "mirror/mirror/msm8916_64:6.0.1/IFC-6309-2.0-MIR.S22Q401/2:user/test-keys")
-        val (id, _) = run(KioskApp.runtime(GenericAndroid(app, prop = { props[it].orEmpty() }), build = AppBuild("1.0.0", 10000, debug = false)))
+        val (id, _) = run(KioskApp.runtime(TestFrames.mirror(app), build = AppBuild("1.0.0", 10000, debug = false)))
         assertEquals("lululemon-mirror-a1b2c3", id.name)
         assertEquals("lululemon Studio Mirror", id.friendlyName)
         assertEquals("lululemon", id.manufacturer)

@@ -118,7 +118,7 @@ class SilentUpdatesStep(
         const val KILN = "https://kiln.glassworks.dev"
 
         fun ownerBody(android: String) =
-            "On Android $android, only a device owner skips it. Kiln can set that up on a reset tablet with no accounts, and undo it."
+            "On Android $android, only a device owner skips it. Kiln can set that up on a reset device with no accounts, and undo it."
 
         /** What the step offers for [s], or null when there's nothing to do on this device. */
         fun offer(s: SilentUpdates?): Offer? = when (s) {

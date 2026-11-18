@@ -43,7 +43,9 @@ import sh.edm.s1kiosk.ui.Glass.Companion.MU
 import sh.edm.s1kiosk.ui.Glass.Companion.ROSE
 import sh.edm.s1kiosk.ui.Glass.Companion.TX
 import sh.edm.s1kiosk.ui.Inter
+import dev.glassworks.frame.Frame
 import dev.glassworks.frame.Input
+import dev.glassworks.frame.friendlyName
 import sh.edm.s1kiosk.glassworks
 import sh.edm.s1kiosk.ui.QrCode
 import sh.edm.s1kiosk.ui.StackView
@@ -65,13 +67,18 @@ import sh.edm.s1kiosk.ui.StackView.Look
 class SetupOverlay(
     context: Context,
     /**
+     * The device the screen runs on. Its name ([friendlyName], what Home Assistant shows) goes on the HA step, and its
+     * [Frame.input] decides whether anything takes a tap. A test builds the screen for a device from that device's frame.
+     */
+    frame: Frame,
+    /**
      * The panes on the Panes step, each with its steps (GlassworksRuntime.setupPanes: only usable ones).
      * None: no Panes group.
      */
     private val setupPanes: List<SetupPane> = emptyList(),
-    /** What Home Assistant shows for the panel (`Frame.friendlyName()`), on the HA step. */
-    private val haName: String,
 ) : FrameLayout(context) {
+
+    private val haName = frame.friendlyName()
 
     private val choices = setupPanes.map { it.choice }
 
@@ -118,9 +125,8 @@ class SetupOverlay(
      * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step but Sign in shows where to
      * set the panel up from a computer (the setup page over the network, #34), and no card has a button. Once signed in,
      * the Home Assistant step waits for Home Assistant to add the panel instead (#484).
-     * The frame's, unless a mockup sets it.
      */
-    var input: Input = runCatching { context.glassworks.frame.input }.getOrDefault(Input.TOUCH)
+    val input: Input = frame.input
 
     /** The frame has its own presence sensor ([dev.glassworks.screen.PresenceRelay.ownSensor]). The frame's, unless a test sets it. */
     var presenceSensor: Boolean = runCatching { context.glassworks.presence.ownSensor(context) }.getOrDefault(true)

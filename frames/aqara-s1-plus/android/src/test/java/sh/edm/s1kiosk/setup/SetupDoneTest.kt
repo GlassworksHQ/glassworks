@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk.setup
 
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.os.Looper
 import android.view.ViewGroup
@@ -21,7 +22,7 @@ class SetupDoneTest {
 
     private fun overlay(preview: Boolean): SetupOverlay {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a)
+        val s = SetupOverlay(a, TestFrames.s1())
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.finish(SetupOverlay.Model(
             step = SetupFlow.SIGNIN, done = emptySet(), wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),

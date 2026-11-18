@@ -1,12 +1,14 @@
 package sh.edm.s1kiosk.setup
 
+import org.robolectric.RuntimeEnvironment
+import dev.glassworks.frame.Frame
+import sh.edm.s1kiosk.frame.TestFrames
 import android.app.Application
 import android.graphics.drawable.BitmapDrawable
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import dev.glassworks.frame.Input
 import dev.glassworks.platform.HotspotNetwork
 import dev.glassworks.setup.HotspotPermission
 import dev.glassworks.setup.HotspotStep
@@ -31,9 +33,11 @@ class SetupHotspotScreenTest {
     private val on = HotspotStep.card(SetupHotspot.View.On(net, 14 * 60_000L, asked = true), HotspotPermission.Step.Ready, "http://192.0.2.1:8099/setup")
     private val offer = HotspotStep.card(SetupHotspot.View.Off(null, null), HotspotPermission.Step.Ready, null)
 
-    private fun screen(card: HotspotStep.Card?, input: Input = Input.TOUCH, installer: InstallerWifi? = null): SetupOverlay {
+    private fun mirror() = TestFrames.mirror(RuntimeEnvironment.getApplication())
+
+    private fun screen(card: HotspotStep.Card?, frame: Frame = TestFrames.s1(), installer: InstallerWifi? = null): SetupOverlay {
         val a = Mockup.activity()
-        val s = s1SetupOverlay(a).also { it.input = input }
+        val s = SetupOverlay(a, frame)
         a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
         s.render(SetupOverlay.Model(step = SetupFlow.WIFI, done = emptySet(), wifi = offline, haUrl = null, haSource = "",
             panelIp = null, signedIn = false, hotspot = card, installer = installer))
@@ -81,7 +85,7 @@ class SetupHotspotScreenTest {
     }
 
     @Test fun withoutTouchStartingShowsTheSpinnerToo() {
-        val s = screen(starting, Input.NONE)
+        val s = screen(starting, mirror())
         assertTrue(texts(s).toString(), "Starting the setup Wi-Fi…" in texts(s) && starting.waiting!! in texts(s))
     }
 
@@ -124,7 +128,7 @@ class SetupHotspotScreenTest {
     }
 
     @Test fun wifiOffWithoutTouchSaysWhyAndTakesNoTap() {
-        val s = screen(wifiOff, Input.NONE)
+        val s = screen(wifiOff, mirror())
         assertTrue(texts(s).toString(), dev.glassworks.platform.HotspotFailure.WIFI_OFF.text in texts(s))
         assertTrue(views(s).none { it.isShown && it is TextView && it.text.toString() == "Turn on Wi-Fi" })
     }
@@ -148,7 +152,7 @@ class SetupHotspotScreenTest {
     }
 
     @Test fun withoutTouchItShowsTheQrCodeAndTakesNoTap() {
-        val s = screen(on, Input.NONE)
+        val s = screen(on, mirror())
         assertTrue(qrShown(s))
         assertTrue("Join the panel's Wi-Fi." in texts(s))
         assertTrue("nothing takes a tap", views(s).none { it.isShown && it.hasOnClickListeners() && it is TextView && it.text.toString() == "Close it" })
