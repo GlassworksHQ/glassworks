@@ -254,16 +254,19 @@ export class ChannelSetup {
     void (async () => {
       try {
         const st = url === this.channel?.state?.ha.url ? this.channel.state : await this.request((x) => x.setHa(url));
-        if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
         if (here) {
           // the person may have moved on while the address was saved: leaving the page then would cut that short
           const cur = this.d.phase();
           if (this.d.here() && cur.phase === 'ha' && cur.signingIn) here();
         }
         else {
-          const w = tab ?? window.open(kilnSignInUrl(st.ha.signinUrl), '_blank');
+          // The panel's own page (above) signs in on its own address and needs no `signinUrl`, which the panel leaves
+          // out when it has no Wi-Fi IPv4 address (the Mirror). Kiln's window needs it: it is Kiln's only way there.
+          if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
+          const to = kilnSignInUrl(st.ha.signinUrl);
+          const w = tab ?? window.open(to, '_blank');
           if (!w) throw new Error('The browser blocked the sign-in window. Allow pop-ups for this page, then sign in again.');
-          if (tab) tab.location.href = kilnSignInUrl(st.ha.signinUrl);
+          if (tab) tab.location.href = to;
           this.watchWindow(w);
         }
       } catch (e) {

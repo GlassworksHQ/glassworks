@@ -798,7 +798,12 @@ class Installer {
       if (left) return;
       left = true;
       signingIn = false;
-      void this.radioStep();
+      // the radio step reads the panel first: if that fails, this step is still on screen, so it works again
+      this.radioStep().catch((e) => {
+        left = false;
+        st.className = 'status err';
+        st.textContent = (e as Error).message;
+      });
     };
     this.phase('ha', 'Connect it to Home Assistant', 'Tell the panel where Home Assistant is, then sign in. You can also do this on the panel.', 'Home Assistant', leave);
     const input = $('#ha-url') as HTMLInputElement;

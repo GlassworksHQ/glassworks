@@ -394,6 +394,20 @@ describe('the panel\'s setup page', () => {
       expect(openTab).not.toHaveBeenCalled();
     });
 
+    it('a panel that gives no sign-in link (no Wi-Fi IPv4, as the Mirror) still signs in here, on this page\'s address', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      delete panel.st.ip;
+      panel.st.ha = { ...panel.st.ha, url: 'http://192.0.2.20:8123', signinUrl: undefined };
+      const went: string[] = [];
+      const lan = new LanSession({ ...panel, navigate: (p) => went.push(p) });
+      await lan.start();
+      lan.signIn('http://192.0.2.20:8123');
+      await vi.waitFor(() => expect(went).toEqual([SIGN_IN_HERE]));
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha', signingIn: true } });
+      expect((lan.state.view as { setup: { error?: string } }).setup.error).toBeUndefined();
+    });
+
     it('a slow save the person moved on from doesn\'t take the page away', async () => {
       const panel = fakePanel();
       panel.paired = true;

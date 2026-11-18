@@ -430,7 +430,7 @@ class SignInServerTest {
         val r = callback(server, state, jar)
         assertEquals(200, r.status)
         assertTrue(text(r), text(r).contains("""<meta http-equiv="refresh" content="0;url=/setup#signed-in">"""))
-        assertTrue("the binding cookie goes", jar.cookies.isEmpty())
+        assertNull("the binding is left to run out, not deleted", r.headers["Set-Cookie"])
         assertEquals("RT", signedIn!!.first.refreshToken)
         assertEquals(q["code_challenge"], OAuth.codeChallenge(tokenRequests.single()["code_verifier"]!!))
         assertEquals("single use", 400, callback(server, state, Jar().apply { cookies["${SignInServer.HANDOFF}0"] = "/callback" to state }).status)
@@ -460,10 +460,10 @@ class SignInServerTest {
         assertEquals(2, jar.names.size)
         issueCode("c0de", q1)
         assertEquals(200, callback(server, first, jar).status)
-        assertEquals("the first one's clear leaves the second's binding", 1, jar.names.size)
+        assertEquals("the first one's callback leaves the second's binding", 2, jar.names.size)
         issueCode("c1de", q2)
         assertEquals(200, callback(server, second, jar, code = "c1de").status)
-        assertTrue(jar.cookies.isEmpty())
+        assertEquals(2, jar.names.size) // left to run out
     }
 
     private fun serverWith(store: StateStore) = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()),
@@ -494,6 +494,23 @@ class SignInServerTest {
         assertEquals(state, victim.cookies["${SignInServer.HANDOFF}15"]!!.second)
         issueCode("c0de", q)
         assertEquals(200, callback(server, state, victim).status)
+    }
+
+    @Test
+    fun aFinishedSignInDoesNotTakeTheBindingOfANewerOneInItsSlot() {
+        // CodeRabbit on 32a226b1: A's callback frees slot 0; B starts in the same browser before A's answer arrives.
+        val jar = Jar()
+        val (qa, a) = start(server, jar)
+        issueCode("c0de", qa)
+        // A's callback is answered, but its answer hasn't reached the browser's cookies yet
+        val answerA = server.handle(SignInServer.Request("GET", "/callback", mapOf("code" to "c0de", "state" to a),
+            mapOf("host" to "192.0.2.10:8099", "cookie" to jar.header("/callback")!!)))
+        assertEquals(200, answerA.status)
+        val (qb, b) = start(server, jar)
+        assertEquals("B took A's slot", listOf("${SignInServer.HANDOFF}0"), jar.names)
+        jar.keep(answerA) // A's answer lands after B's binding
+        issueCode("c1de", qb)
+        assertEquals(200, callback(server, b, jar, code = "c1de").status)
     }
 
     @Test
@@ -532,7 +549,7 @@ class SignInServerTest {
     }
 
     @Test
-    fun everyWayOutOfASetupSignInLetsItsCookieGo() {
+    fun everyWayOutOfASetupSignInSaysSoAndUsesUpItsState() {
         val store = StateStore()
         val s = SignInServer(0, { "$haBase/" }, HaTokenClient(UrlConnectionPoster()), { auth, ok -> signedIn = auth to ok },
             states = store, bindAddress = loopback)
@@ -545,7 +562,7 @@ class SignInServerTest {
                 else -> { store.consume(state); callback(s, state, jar) }
             }
             assertTrue("$path: ${text(r)}", r.status >= 400 && setupWay(r) && text(r).contains("Go back to setup"))
-            assertTrue("$path: the cookie goes", jar.cookies.isEmpty())
+            assertNull("$path: the binding is left to run out", r.headers["Set-Cookie"])
             issueCode("c0de", q)
             assertEquals("$path: the state is used up", 400, callback(s, state, jar).status)
         }

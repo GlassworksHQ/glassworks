@@ -170,15 +170,16 @@ class SignInServer(
         )
     }
 
-    /** Every way out of a callback lets its binding cookie go: the sign-in it binds is over. */
+    /**
+     * A binding cookie is left to run out (30 minutes) rather than deleted: its slot is free again once the state is
+     * consumed, so a newer sign-in in the same browser may already hold that name, and a delete would take its binding.
+     * A leftover binds nothing: it counts only when its value is the callback's own state, which works once.
+     */
     private fun callback(req: Request): Response {
         val state = req.query["state"]?.takeIf { STATE.matches(it) }
-        val binding = state?.let { s -> bindings(req).firstOrNull { (_, v) -> MessageDigest.isEqual(v.toByteArray(), s.toByteArray()) }?.first }
+        val bound = state != null && bindings(req).any { (_, v) -> MessageDigest.isEqual(v.toByteArray(), state.toByteArray()) }
         val pending = states.consume(state, PendingSignIn.PURPOSE_SIGNIN)
-        val r = callback(req.query, pending, binding != null)
-        binding ?: return r
-        val clear = "$binding=; Path=/callback; HttpOnly; SameSite=Lax; Max-Age=0"
-        return Response(r.status, r.reason, r.headers + ("Set-Cookie" to clear), r.body)
+        return callback(req.query, pending, bound)
     }
 
     private fun callback(q: Map<String, String>, pending: PendingSignIn?, bound: Boolean): Response {
