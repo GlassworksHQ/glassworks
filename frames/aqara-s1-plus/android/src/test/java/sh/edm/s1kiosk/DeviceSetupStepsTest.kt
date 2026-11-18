@@ -1,6 +1,7 @@
 package sh.edm.s1kiosk
 
 import android.app.Application
+import dev.glassworks.KioskPrefs
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.update.SilentUpdatesStep
 import org.junit.Assert.assertEquals
