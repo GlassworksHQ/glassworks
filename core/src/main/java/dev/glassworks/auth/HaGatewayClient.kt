@@ -11,7 +11,7 @@ import org.json.JSONObject
 class HaGatewayClient(private val tokens: HaTokenClient, private val connect: (String) -> HaSocket) : HaGateway {
     override fun exchangeCode(haBase: String, clientId: String, code: String, codeVerifier: String): HaGateway.Tokens =
         when (val r = tokens.exchangeCode(haBase, clientId, code, codeVerifier)) {
-            is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, r.refreshToken)
+            is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, r.refreshToken, r.expiresIn)
             is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0)
         }
 
@@ -37,6 +37,12 @@ class HaGatewayClient(private val tokens: HaTokenClient, private val connect: (S
             runCatching { ws.close() }
         }
     }
+
+    override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens =
+        when (val r = tokens.refresh(StoredAuth(haBase, clientId, refreshToken))) {
+            is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, null, r.expiresIn)
+            is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0)
+        }
 
     override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean =
         tokens.revoke(StoredAuth(haBase, clientId, refreshToken))

@@ -41,6 +41,9 @@ class ManageFixture(
     var tokens: HaGateway.Tokens = HaGateway.Tokens.Ok("ACCESS", "REFRESH")
     val exchanged = Collections.synchronizedList(ArrayList<String>())
     val revoked = Collections.synchronizedList(ArrayList<String>())
+    /** Refresh tokens the panel renewed with, and what the fake HA answers. */
+    val refreshed = Collections.synchronizedList(ArrayList<String>())
+    var refreshAnswer: HaGateway.Tokens = HaGateway.Tokens.Ok("ACCESS-RENEWED", null, 1800)
     /** The HA address of each `auth/current_user` the panel asked. */
     val userChecks = Collections.synchronizedList(ArrayList<String>())
     /** When set, each `auth/current_user` waits for it: Home Assistant slow or down. */
@@ -58,6 +61,10 @@ class ManageFixture(
             return if (accessToken in refusedTokens) null else user
         }
         override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean { revoked += refreshToken; return revokeWorks }
+        override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens {
+            refreshed += refreshToken
+            return refreshAnswer
+        }
     }
     /** Every name the panel looked up to decide whether Home Assistant is local. */
     val resolved = Collections.synchronizedList(ArrayList<String>())

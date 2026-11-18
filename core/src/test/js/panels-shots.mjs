@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 const [pageFile, out] = process.argv.slice(2);
 const csp = readFileSync(pageFile.replace(/\.html$/, '.csp'), 'utf8').trim();
+const csrfOnPage = /data-csrf="([^"]*)"/.exec(readFileSync(pageFile, 'utf8'))?.[1] ?? '';
 if (!pageFile || !out) throw new Error('usage: panels-shots.mjs <13-all-panels.html> <out dir>');
 mkdirSync(out, { recursive: true });
 const assets = join(dirname(fileURLToPath(import.meta.url)), '../../main/assets/manage');
@@ -81,6 +82,8 @@ let haAddressSent = false;
 const handoffs = [];
 /** How long the fake Home Assistant takes to answer a token request. */
 let tokenDelayMs = 0;
+/** Whether this panel keeps the Manage sign-in's Home Assistant sign-in for All panels (#466 one sign-in). */
+let panelSignIn = false;
 /** Whether the fake Home Assistant takes a revoke. */
 let revokeOk = true;
 const initial = JSON.stringify(panels);
@@ -125,6 +128,11 @@ async function handle(req, res) {
     const f = await form(req);
     handoffs.push({ host: u.host, from: f.get('from'), token: !!f.get('token') });
     return send(res, 200, '<p>Signed in</p>', 'text/html');
+  }
+  if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/access' && req.method === 'POST' && panelSignIn) {
+    const f = await form(req);
+    if (f.get('csrf') !== csrfOnPage) return send(res, 403, { problem: 'This form has expired.' });
+    return send(res, 200, { access_token: 'fake-access-from-panel', expires_in: 1800 });
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
@@ -332,6 +340,16 @@ try {
   await sleep(300);
   assert.ok(refused.some((t) => t.includes('203.0.113.9')), 'the served CSP refuses what it should: ' + JSON.stringify(refused));
   assert.deepEqual([...tokenTo].sort(), ['bedroom-panel.local:8099', 'kitchen-panel.local:8099', 'porch-panel.local:8099'], 'the token went to the panels that answered as panels, no one else');
+  // One sign-in: signed in to this Manage page with Home Assistant, All panels lists the panels with no Continue.
+  panelSignIn = true;
+  admin = true;
+  await js('sessionStorage.clear()');
+  const since = requests.length;
+  await call('Page.navigate', { url: PAGE });
+  await until(listed, 'the panels, with no second sign-in');
+  assert.ok(!requests.slice(since).some((r) => r.includes('/auth/authorize')), "no trip to Home Assistant's login page");
+  assert.ok(requests.slice(since).includes('POST kitchen-panel.local:8099/manage/ha/access'), "the token came from this panel's kept sign-in");
+  await shot('11-one-sign-in');
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
   assert.ok(!haAddressSent, "no copy sent a panel's own Home Assistant address");
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');

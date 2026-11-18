@@ -10,6 +10,7 @@ import dev.glassworks.web.HttpRequest
 import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.PageShell
 import java.net.URI
+import org.json.JSONObject
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.text.SimpleDateFormat
@@ -86,8 +87,27 @@ class ManageServer(
         return token
     }
 
-    /** A signed-out session's questions go with it. */
-    private fun forget(session: String) { asked.entries.removeIf { it.value.session == session } }
+    /**
+     * Each Home Assistant sign-in kept for All panels (#466), by the Manage session it came with. In memory only: an
+     * app restart forgets them (they stay under the person's profile in HA until they expire or are removed there).
+     */
+    private val kept = java.util.concurrent.ConcurrentHashMap<String, HaSignIn.Kept>()
+
+    /** A signed-out session's questions go with it, and its kept Home Assistant sign-in is ended in HA. */
+    private fun forget(session: String) {
+        asked.entries.removeIf { it.value.session == session }
+        kept.remove(session)?.let { signIn.end(it) }
+    }
+
+    /** Ends the kept sign-ins of sessions that have ended (run out, signed out elsewhere, HA's address changed). */
+    private fun dropEnded() {
+        if (kept.isEmpty()) return
+        val live = sessions.list(haBase()).map { it.id }.toSet()
+        for (id in kept.keys.toList()) if (id !in live) forget(id)
+    }
+
+    /** Whether [session] has a Home Assistant sign-in kept for All panels (tests). */
+    fun keepsHaSignIn(session: String): Boolean = kept.containsKey(session)
 
     /** How many questions wait for [session]'s answer (tests). */
     fun questionsWaiting(session: String): Int = asked.values.count { it.session == session }
@@ -183,10 +203,13 @@ class ManageServer(
                 // again. Read once, so the session is bound to the address that was checked.
                 val ha = haBase()
                 if (r.haBase != ha?.trim()?.trimEnd('/')) {
+                    // No session to keep it for: end it in HA.
+                    r.kept?.let(signIn::end)
                     return html(409, PageShell.qrPage(name(), "Home Assistant's address changed", "Sign in again.", PageShell.Look.PROBLEM,
                         button = """<a class="btn" href="/">Back to sign in</a>"""))
                 }
                 val (token, s) = sessions.create(r.user.name, SignedInWith.HOME_ASSISTANT, SessionStore.browserName(req.headers["user-agent"]), r.remember, ha)
+                r.kept?.let { kept[s.id] = it }
                 event("${r.user.name} signed in with Home Assistant (${s.browser})")
                 // HA sent the browser here from another site: a redirect would still be cross-site, and the
                 // new Strict cookie wouldn't go with it. A page that reloads to the target is same-site.
@@ -235,7 +258,7 @@ class ManageServer(
      * All panels (#466). Its script talks to this panel's Home Assistant and to the other panels' Manage
      * pages (any host, on [PORT]), and posts the handoff to them: the CSP allows those and nothing else.
      */
-    private fun panels(status: PanelStatus, viewer: ManagePages.Viewer, session: String): HttpResponse {
+    private fun panels(status: PanelStatus, viewer: ManagePages.Viewer, session: String, haSignIn: Boolean): HttpResponse {
         val local = haBase()?.trim()?.trimEnd('/')?.takeIf { signIn.isLocal(it) }
         // A CSP host-source can't be an IPv6 literal (CSP's host grammar has none), so the page couldn't reach it: say so
         // instead of offering a page that can't work (CodeRabbit on #488).
@@ -244,7 +267,7 @@ class ManageServer(
         val haOrigin = ha?.let(::origin)?.let { o -> " $o " + o.replaceFirst("http", "ws") }.orEmpty()
         val csp = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; " +
             "connect-src 'self' http://*:$PORT$haOrigin; form-action 'self' http://*:$PORT"
-        return HttpResponse.html(200, pages.panels(status, viewer, ha, session, if (v6) IPV6_HA else null), PageShell.securityHeaders() + mapOf("Content-Security-Policy" to csp))
+        return HttpResponse.html(200, pages.panels(status, viewer, ha, session, if (v6) IPV6_HA else null, haSignIn), PageShell.securityHeaders() + mapOf("Content-Security-Policy" to csp))
     }
 
     /** [ManagePages.PANELS_SCRIPT] and what it imports: GET, no session (they hold nothing but code). */
@@ -252,6 +275,28 @@ class ManageServer(
         val bytes = name.takeIf { it in SCRIPT_FILES }?.let(scripts) ?: return HttpResponse.text(404, "Not found.")
         return HttpResponse(200, mapOf("Content-Type" to "text/javascript; charset=utf-8", "Cache-Control" to "no-cache", "X-Content-Type-Options" to "nosniff"), bytes)
     }
+
+    /**
+     * [HA_ACCESS], POST from All panels on this panel (same origin, CSRF): a fresh access token from the Home Assistant
+     * sign-in kept with this session, so All panels needs no second sign-in (#466 panel run). A session signed in with
+     * the panel's code has none: All panels asks for Continue with Home Assistant then. Never logged.
+     */
+    private fun haAccess(s: Session): HttpResponse {
+        val k = kept[s.id] ?: return json(404, JSONObject().put("problem", "No Home Assistant sign-in is kept for this browser."))
+        if (k.haBase != haBase()?.trim()?.trimEnd('/')) { forget(s.id); return json(404, JSONObject().put("problem", ManageApi.ADDRESS_CHANGED)) }
+        return when (val t = signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken)) {
+            is HaGateway.Tokens.Ok -> json(200, JSONObject().put("access_token", t.accessToken).put("expires_in", t.expiresIn))
+            is HaGateway.Tokens.Failed -> {
+                // HA no longer takes it (revoked there, or run out): drop it, and All panels asks for a sign-in.
+                if (!t.unreachable) kept.remove(s.id)
+                json(if (t.unreachable) 503 else 404, JSONObject().put("problem", if (t.unreachable) "Can't reach Home Assistant." else "Home Assistant no longer takes this sign-in."))
+            }
+        }
+    }
+
+    private fun json(status: Int, body: JSONObject) = HttpResponse(status,
+        mapOf("Content-Type" to "application/json; charset=utf-8", "Cache-Control" to "no-store", "X-Content-Type-Options" to "nosniff"),
+        body.toString().toByteArray(Charsets.UTF_8))
 
     /** `/manage/code`, POST: show a code on the panel, or check the one typed. */
     private fun codeSignIn(req: HttpRequest): HttpResponse {
@@ -310,6 +355,7 @@ class ManageServer(
     // ------------------------------------------------------------------ signed in
 
     private fun signedIn(req: HttpRequest, s: Session): HttpResponse {
+        dropEnded()
         val viewer = ManagePages.Viewer(who(s), s.csrf, homeAssistant = s.with == SignedInWith.HOME_ASSISTANT)
         if (req.method == "POST") {
             if (!csrfOk(req, s)) return HttpResponse.text(403, "This form has expired. Go back and try again.")
@@ -327,7 +373,7 @@ class ManageServer(
             path == "/log/diagnostics.txt" -> diagnostics()
             path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"])))
             path == "/about" -> html(200, pages.about(status, viewer))
-            path == ManagePages.PANELS -> panels(status, viewer, s.id)
+            path == ManagePages.PANELS -> panels(status, viewer, s.id, kept.containsKey(s.id))
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
             else -> {
                 val edit = req.query["edit"]?.let { ManagePages.Dialog.Edit(it) }
@@ -459,6 +505,8 @@ class ManageServer(
                 is PanelCode.Check.Locked -> html(429, rebootDialog(host.status(), viewer, lockedText()))
             }
             "/settings" -> changeSetting(req, s, viewer)
+            HA_ACCESS -> haAccess(s)
+            HA_FORGET -> { forget(s.id); event("${who(s)} ended the Home Assistant sign-in All panels used (${s.browser})"); json(200, JSONObject().put("ok", true)) }
             "/security/signout" -> {
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }
@@ -594,6 +642,10 @@ class ManageServer(
         /** All panels' scripts, served from the panel's assets (`manage/`). */
         const val SCRIPTS = "/manage/js/"
         val SCRIPT_FILES = setOf("panels.js", "panels-core.js")
+
+        /** All panels' fresh access token from this session's kept Home Assistant sign-in, and its end (#466). */
+        const val HA_ACCESS = "/manage/ha/access"
+        const val HA_FORGET = "/manage/ha/forget"
 
         /** Where a page on another panel signs this browser in with its Home Assistant token (#466). */
         const val HANDOFF = "/manage/ha/token"

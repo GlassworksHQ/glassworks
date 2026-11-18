@@ -13,7 +13,7 @@ below as the release notes.
   down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like
   another: it changes only what you tick, and greys out what the other panel's version doesn't have.
   Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
-  each other. Every panel needs this version for the page to reach it.
+  each other. Signed in to a panel's Manage page with Home Assistant, All panels needs no second sign-in. Every panel needs this version for the page to reach it.
 - **Voice says when it can't get ready.** When the wake word model doesn't download (no internet, a
   certificate the panel can't verify, an HTTP error), fails its check, can't be saved, or the microphone
   doesn't work or isn't allowed, the Assist page on the panel and on the Manage page says so in words, with

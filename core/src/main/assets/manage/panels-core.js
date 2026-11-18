@@ -406,3 +406,27 @@ export function storedFor(raw, ha, session) {
     return null;
   }
 }
+
+/**
+ * A fresh Home Assistant access token from this panel, out of the sign-in it keeps with this Manage session
+ * (`POST /manage/ha/access`, same origin, with the session's [csrf]): one sign-in for the page and All panels (#466
+ * panel run). `{ access_token, expires_in }`, or null when the panel keeps none (a code sign-in) or HA won't renew it.
+ */
+export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
+  try {
+    const r = await timed(fetchFn, '/manage/ha/access', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
+    return r.status === 200 && r.body && typeof r.body.access_token === 'string' ? r.body : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ends the sign-in this panel keeps for All panels (`POST /manage/ha/forget`): it revokes it in Home Assistant. */
+export async function panelForget(csrf, fetchFn = fetch, ms = REVOKE_MS) {
+  try {
+    const r = await timed(fetchFn, '/manage/ha/forget', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
+    return r.status === 200;
+  } catch {
+    return false;
+  }
+}

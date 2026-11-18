@@ -18,7 +18,7 @@ data class HaUser(val name: String, val isAdmin: Boolean)
 /** What the Manage page needs from Home Assistant. The frame's app implements it over its HA client. */
 interface HaGateway {
     sealed class Tokens {
-        class Ok(val accessToken: String, val refreshToken: String?) : Tokens() {
+        class Ok(val accessToken: String, val refreshToken: String?, val expiresIn: Long = 1800) : Tokens() {
             override fun toString() = "Ok(<redacted>)"
         }
         /** [invalidCode]: the code was used or is too old. [unreachable]: HA didn't answer. */
@@ -30,6 +30,9 @@ interface HaGateway {
 
     /** `auth/current_user` over HA's websocket, with [accessToken]. Null when HA didn't say. */
     fun currentUser(haBase: String, accessToken: String): HaUser?
+
+    /** `grant_type=refresh_token`: a new access token from [refreshToken]. Not every gateway can (tests' fakes). */
+    fun refresh(haBase: String, clientId: String, refreshToken: String): Tokens = Tokens.Failed("This panel can't renew a sign-in.")
 
     /** `POST <haBase>/auth/revoke` with the refresh token: HA drops it and every access token made from it. */
     fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean
@@ -63,9 +66,20 @@ class HaSignIn(
                   val redirectUri: String, val remember: Boolean, val next: String, val createdMs: Long)
 
     sealed class Result {
-        /** [haBase]: the HA address the person was checked against. */
-        class Ok(val user: HaUser, val remember: Boolean, val next: String, val haBase: String) : Result()
+        /**
+         * [haBase]: the HA address the person was checked against. [kept]: the administrator's Home Assistant sign-in,
+         * for All panels to use without a second sign-in (#466); null when HA gave no refresh token.
+         */
+        class Ok(val user: HaUser, val remember: Boolean, val next: String, val haBase: String, val kept: Kept? = null) : Result()
         class Failed(val title: String, val text: String) : Result()
+    }
+
+    /**
+     * An administrator's Home Assistant sign-in, kept in memory for their Manage session (#466): what All panels needs
+     * so the person signs in once. Never logged; [toString] leaves the token out.
+     */
+    class Kept(val haBase: String, val clientId: String, val refreshToken: String) {
+        override fun toString() = "Kept(haBase=$haBase, clientId=$clientId, refreshToken=<redacted>)"
     }
 
     private val random = SecureRandom()
@@ -105,21 +119,29 @@ class HaSignIn(
                 else -> Result.Failed("Can't sign in", "Home Assistant refused the sign-in (${f.reason}).")
             }
         }
-        val user = try {
-            gateway.currentUser(p.haBase, tokens.accessToken)
+        var user: HaUser? = null
+        try {
+            user = gateway.currentUser(p.haBase, tokens.accessToken)
         } finally {
-            // Revoked whatever happens next: the panel keeps no HA token from this sign-in. Once more if HA
-            // didn't take it; if it still didn't, the token stays in HA (the person's profile) until removed.
-            tokens.refreshToken?.let {
-                if (!gateway.revoke(p.haBase, p.clientId, it) && !gateway.revoke(p.haBase, p.clientId, it)) {
-                    warn("Home Assistant didn't take the revoke of the Manage sign-in's token; it stays under the user's profile until removed there")
-                }
-            }
+            // An administrator's sign-in is kept for their session, for All panels (#466); anyone else's is revoked
+            // whatever happens next. Once more if HA didn't take it; if it still didn't, the token stays in HA (the
+            // person's profile) until removed.
+            if (user?.isAdmin != true) tokens.refreshToken?.let { revokeTwice(p.haBase, p.clientId, it) }
         }
+        val kept = tokens.refreshToken?.let { Kept(p.haBase, p.clientId, it) }
         return when {
             user == null -> Result.Failed("Can't sign in", "Home Assistant didn't say who signed in.")
             !user.isAdmin -> Result.Failed("Administrators only", "${user.name} isn't a Home Assistant administrator. Sign in with an administrator's account.")
-            else -> Result.Ok(user, p.remember, p.next, p.haBase)
+            else -> Result.Ok(user, p.remember, p.next, p.haBase, kept)
+        }
+    }
+
+    /** Ends a kept sign-in in Home Assistant: its refresh token and every access token made from it. */
+    fun end(k: Kept) = revokeTwice(k.haBase, k.clientId, k.refreshToken)
+
+    private fun revokeTwice(haBase: String, clientId: String, refreshToken: String) {
+        if (!gateway.revoke(haBase, clientId, refreshToken) && !gateway.revoke(haBase, clientId, refreshToken)) {
+            warn("Home Assistant didn't take the revoke of the Manage sign-in's token; it stays under the user's profile until removed there")
         }
     }
 

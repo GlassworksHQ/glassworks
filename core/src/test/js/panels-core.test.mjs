@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -457,4 +457,18 @@ test("each panel's own Home Assistant address is never copied (2026-11-18 panel 
   // Either side's mark is enough: an older source that doesn't mark it still never sends it to a target that does.
   const old = panel('1', [sec('dashboard', 'Home Assistant & dashboard', [ha('http://192.0.2.10:8123', true)])]);
   assert.equal(plan(old, tab).rows[0].state, 'own');
+});
+
+test("All panels takes its token from the panel's kept sign-in, same origin, with the form token", async () => {
+  const seen = [];
+  const answer = (status, body) => async (url, init) => (seen.push([url, init.method, String(init.body), init.redirect]),
+    { status, headers: { get: () => null }, json: async () => body });
+  assert.deepEqual(await panelAccess('CSRF', answer(200, { access_token: 'A', expires_in: 1800 }), 1_000), { access_token: 'A', expires_in: 1800 });
+  assert.deepEqual(seen[0], ['/manage/ha/access', 'POST', 'csrf=CSRF', 'error'], 'a relative URL: this panel only');
+  assert.equal(await panelAccess('CSRF', answer(404, { problem: 'none kept' }), 1_000), null, 'a code sign-in: Continue instead');
+  assert.equal(await panelAccess('CSRF', answer(200, { nope: 1 }), 1_000), null);
+  assert.equal(await panelAccess('CSRF', async () => { throw new TypeError('Failed to fetch'); }, 1_000), null);
+  assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
+  assert.equal(seen.at(-1)[0], '/manage/ha/forget');
+  assert.equal(await panelForget('CSRF', answer(500, null), 1_000), false);
 });

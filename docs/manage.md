@@ -181,10 +181,14 @@ manage a panel. Whether other users get a say is open (#124).
 
 ## How it keeps you safe
 
-- The panel asks Home Assistant who you are, checks you're an administrator, and **revokes Home
-  Assistant's token straight away**. It keeps no Home Assistant token from your sign-in. If Home
-  Assistant doesn't take the revoke, the panel tries once more and then logs a warning; that token
-  then stays under your profile in Home Assistant (*Security → Refresh tokens*) until you delete it. Its own
+- The panel asks Home Assistant who you are and checks you're an administrator. Anyone else's token is
+  **revoked straight away**. An administrator's sign-in is kept in the panel's memory for that browser's Manage
+  session only, so All panels needs no second sign-in. It is never written to disk, a log or the
+  diagnostics, and the panel revokes it in Home Assistant when you sign out (here or from Security), when the
+  session runs out, or when the panel's Home Assistant address changes. If the app restarts, the panel
+  forgets it without revoking it; it then stays under your profile in Home Assistant (*Security → Refresh
+  tokens*) until it expires or you delete it. If Home Assistant doesn't take a revoke, the panel tries once
+  more and then logs a warning. Its own
   long-lived sign-in (the one the dashboard uses) is separate, and the Manage page never shows or
   sends it.
 - Your browser gets the panel's own sign-in cookie: `HttpOnly` (scripts can't read it) and
@@ -257,8 +261,11 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 
 **All panels**, after Overview in the menu, sets up every panel in the house from one page (#466).
 
-1. **Continue with Home Assistant.** This tab signs in to Home Assistant on its own (with PKCE), with an
-   administrator, and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home
+1. **Signing in.** Signed in to this Manage page with Home Assistant, All panels uses that sign-in: the panel
+   hands the page a fresh Home Assistant access token from it (same page, its form token), so there is no
+   second sign-in. Signed in with the code on the panel, the page asks for **Continue with Home Assistant**: the
+   tab signs in to Home Assistant on its own (with PKCE), with an administrator, and keeps the sign-in until you
+   close the tab. **Sign out** on the page ends it in Home
    Assistant too, when Home Assistant answers. If it doesn't, the page says the sign-in may stay active there, with
    **Try again**; you can also remove it in Home Assistant under your profile, Security, Refresh tokens.
 2. **The panels.** The page asks Home Assistant for its devices and lists each ESPHome device whose **Visit**

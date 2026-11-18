@@ -8,11 +8,14 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, copyRows, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, storedFor, tokenRequest, usable } from './panels-core.js';
+import { authorizeUrl, base64url, copyRows, panelAccess, panelForget, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, storedFor, tokenRequest, usable } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
 const session = root.dataset.session || '';
+/** The panel keeps this browser's Manage sign-in with Home Assistant: All panels uses it, with no second sign-in. */
+const haSignIn = root.dataset.haSignin === '1';
+const csrf = root.dataset.csrf || '';
 const listCard = document.getElementById('gw-list');
 const copyCard = document.getElementById('gw-copy');
 const clientId = location.origin + '/';
@@ -79,6 +82,7 @@ async function token() {
   const t = stored();
   if (!t) return null;
   if (Date.now() < t.until - 60_000) return t.access;
+  if (t.viaPanel) return fromPanel();
   const j = await tokenCall({ grant_type: 'refresh_token', refresh_token: t.refresh, client_id: clientId });
   keep(KEY, JSON.stringify({ ...t, access: j.access_token, until: Date.now() + j.expires_in * 1000 }));
   return j.access_token;
@@ -115,20 +119,31 @@ function signIn() {
 }
 
 /** Home Assistant drops the refresh token and every access token made from it: no panel can use them after. */
+/** An access token from the sign-in this panel keeps for the Manage session, kept in the tab; null when it keeps none. */
+async function fromPanel() {
+  const a = haSignIn ? await panelAccess(csrf) : null;
+  if (!a) { keep(KEY, null); return null; }
+  keep(KEY, JSON.stringify({ ha, session, viaPanel: true, access: a.access_token, until: Date.now() + a.expires_in * 1000 }));
+  return a.access_token;
+}
+
+/** Ends [t] where it lives: the panel's kept sign-in through the panel, the tab's own at Home Assistant. */
+const end = (t) => (t.viaPanel ? panelForget(csrf) : revokeAt(ha, t.refresh));
+
 async function signOut() {
   generation++;
   const t = stored();
   keep(KEY, null);
-  if (t && !(await revokeAt(ha, t.refresh))) return revokeFailed(t.refresh);
+  if (t && !(await end(t))) return revokeFailed(t);
   start();
 }
 
 /** Home Assistant didn't confirm the revoke: the sign-in may stay active there. Say so, with a way to try again. */
-function revokeFailed(refresh) {
+function revokeFailed(t) {
   copyCard.hidden = true;
   say(listCard, 'Panels in Home Assistant',
     "Signed out of this page, but Home Assistant didn't confirm it ended the sign-in, so it may stay active there. Try again, or remove it in Home Assistant: your profile, Security, Refresh tokens.",
-    h('button', { class: 'pill', type: 'button', onclick: async () => ((await revokeAt(ha, refresh)) ? start() : revokeFailed(refresh)) }, 'Try again'));
+    h('button', { class: 'pill', type: 'button', onclick: async () => ((await end(t)) ? start() : revokeFailed(t)) }, 'Try again'));
 }
 
 /** Home Assistant's websocket: [types] asked in turn, their results in that order. */
@@ -311,7 +326,10 @@ async function start() {
   } catch (e) {
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
+  // Signed in to this Manage page with Home Assistant: the panel's kept sign-in serves, no second one (#466 panel run).
   let access = await token().catch(() => null);
+  if (!access && haSignIn) access = await fromPanel().catch(() => null);
+  if (mine !== generation) return;
   if (!access) {
     return say(listCard, 'Panels in Home Assistant', 'Sign in with a Home Assistant administrator to find the panels. This tab keeps the sign-in until you close it.',
       h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
