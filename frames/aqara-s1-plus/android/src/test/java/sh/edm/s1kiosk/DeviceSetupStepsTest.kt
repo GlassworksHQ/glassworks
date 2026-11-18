@@ -53,15 +53,16 @@ class DeviceSetupStepsTest {
         assertFalse("still asked during this first setup", KioskPrefs(app).silentUpdatesAnswered)
     }
 
-    @Test fun thisTabletComesFirstOnATabletAndNeverOnTheS1() {
+    @Test fun thisDeviceComesFirstOnATabletAndNeverOnTheS1OrTheMirror() {
         assertTrue("the S1", runtime().deviceSetupSteps(app).none { it.id == ThisDeviceStep.ID })
-        val tablet = KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false))
-        assertEquals(listOf(ThisDeviceStep.ID, SilentUpdatesStep.ID), tablet.deviceSetupSteps(app).map { it.id })
+        // The Mirror before the tablet: a test's input devices are one list, and the tablet adds a touchscreen (TestFrames).
         val mirror = KioskApp.runtime(TestFrames.mirror(app), build = AppBuild("1.0.0", 10000, debug = false))
         assertTrue("no touch: nobody could tap its buttons", mirror.deviceSetupSteps(app).none { it.id == ThisDeviceStep.ID })
+        val tablet = KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false))
+        assertEquals(listOf(ThisDeviceStep.ID, SilentUpdatesStep.ID), tablet.deviceSetupSteps(app).map { it.id })
     }
 
-    @Test fun aTabletSetUpBeforeNeverSeesThisTablet() {
+    @Test fun aTabletSetUpBeforeNeverSeesThisDevice() {
         KioskPrefs(app).haSeen = true
         KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
         assertTrue(SetupPrefs(app).thisDeviceAnswered)
