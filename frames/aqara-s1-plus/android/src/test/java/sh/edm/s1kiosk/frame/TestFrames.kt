@@ -14,6 +14,10 @@ import org.robolectric.shadows.ShadowInputDevice
 /**
  * The devices tests and mockups stand for, each built as the app builds it there, so a screen shows that device's
  * name, input and orientation (#497). Never stand in for a device by overriding another frame's input.
+ *
+ * A frame reads the input devices listed when its input is read, and a test's devices are one list (Robolectric keeps
+ * them until it resets): build a device and read it before standing another up, as a test can't have the Mirror's keys
+ * and a tablet's touchscreen at once (#502).
  */
 object TestFrames {
     /** The Mirror's system properties: lululemon's boot image on the community `system` (DeviceFrame.LULULEMON_MIRROR). */

@@ -33,9 +33,14 @@ class DeviceNamesTest {
     /** Not a device: the app's product name (AppBuild.S1_KIOSK) and Material Design icon ids (`mdi:tablet-dashboard`). */
     private val notADevice = listOf(Regex("""S1 Kiosk"""), Regex("""mdi:[a-z0-9-]+"""))
 
-    /** A block comment in markup, and in CSS. Taken out before a file's lines are read, its newlines kept. */
+    /** A block comment in markup. Taken out before a file's lines are read, its newlines kept. */
     private val HTML_COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
-    private val CSS_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+
+    /** A shot's name as a test or mockup saves it: `Mockup.save("…")`, `shoot("…")`, `shot("…")`, `setupShot("…")`. */
+    private val shot = Regex("""(?:save|shoot|shot|setupShot)\(\s*"([^"]*)"""")
+
+    /** A function's line and the indent it starts at, so [functions] finds where one ends and the next begins. */
+    private val FUNCTION = Regex("""(?m)^(\s*)(?:(?:private|internal|public|override|suspend)\s+)*fun\s""")
 
     /**
      * Panes only one frame can run, by the capability only that frame provides (frame.json's `provides`). They may name
@@ -71,13 +76,41 @@ class DeviceNamesTest {
         "kt" -> Literals.of(f.readText(), Literals.Language.KOTLIN)
         "java" -> Literals.of(f.readText(), Literals.Language.JAVA)
         "js", "mjs" -> Literals.of(f.readText(), Literals.Language.JS)
-        "css" -> lines(f.readText(), CSS_COMMENT)
-        else -> lines(f.readText(), HTML_COMMENT) // JSON and markup: JSON has no comments to take out
+        "css" -> lines(cssWithoutComments(f.readText()))
+        "json" -> lines(f.readText()) // JSON has no comments: a "<!-- … -->" in a value is text a person reads
+        else -> lines(blanked(f.readText(), HTML_COMMENT))
     }
 
-    /** [text]'s lines, with each [comments] match blanked and its newlines kept, so the numbers stay the file's. */
-    private fun lines(text: String, comments: Regex): List<Pair<Int, String>> =
-        text.replace(comments) { m -> "\n".repeat(m.value.count { it == '\n' }) }.lines().mapIndexed { i, l -> i + 1 to l }
+    /** [text]'s lines, each with its number. */
+    private fun lines(text: String): List<Pair<Int, String>> = text.lines().mapIndexed { i, l -> i + 1 to l }
+
+    /** [text] with each [comments] match blanked and its newlines kept, so the line numbers stay the file's. */
+    private fun blanked(text: String, comments: Regex): String =
+        text.replace(comments) { m -> "\n".repeat(m.value.count { it == '\n' }) }
+
+    /**
+     * [text] without its CSS comments, and with the text a person sees inside a quoted string left alone: a rule's
+     * `content: "…"` may hold comment characters on the screen, which are not a comment.
+     */
+    private fun cssWithoutComments(text: String): String {
+        val out = StringBuilder(text.length)
+        var quote: Char? = null
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            when {
+                quote != null -> { out.append(c); if (c == quote) quote = null; i++ }
+                c == '"' || c == '\'' -> { quote = c; out.append(c); i++ }
+                text.startsWith("/*", i) -> {
+                    val end = text.indexOf("*/", i + 2).let { if (it < 0) text.length else it + 2 }
+                    out.append("\n".repeat(text.substring(i, end).count { it == '\n' }))
+                    i = end
+                }
+                else -> { out.append(c); i++ }
+            }
+        }
+        return out.toString()
+    }
 
     @Test
     fun `the shared app names no device`() {
@@ -108,33 +141,51 @@ class DeviceNamesTest {
         assertTrue("the setup page's literals, not one blob", Literals.of(RepoFiles.file("core/src/main/assets/setup/setup.js").readText(), Literals.Language.JS).size > 1000)
         val css = File.createTempFile("device-names", ".css").apply {
             deleteOnExit()
-            writeText("/* the Mirror, a Pixel Tablet */\n.a { color: red }\n")
+            writeText("/* the Mirror, a Pixel Tablet */\n.a::after { content: \"on an Echo Show\" }\n")
         }
-        assertEquals("a CSS comment names no device", emptyList<String>(), texts(css).flatMap { names(it.second) })
+        assertEquals("a CSS string's name is read, a comment's isn't", listOf("Echo Show"), texts(css).flatMap { names(it.second) })
+        val json = File.createTempFile("device-names", ".json").apply {
+            deleteOnExit()
+            writeText("""{"label":"<!-- Mirror -->","note":"the Aqara S1 Plus"}""")
+        }
+        assertEquals("a JSON value is read whole, even a markup-looking one", listOf("Mirror", "Aqara", "S1"), texts(json).flatMap { names(it.second) })
     }
 
     /**
      * A test or mockup that saves a shot named for the Mirror draws it from `TestFrames.mirror` (#502), never from
-     * `TestFrames.s1()`: `shoot("mirror")` would otherwise show the S1's name and touch. A file that builds no frame
-     * draws no device and is out of scope (the voice overlay, which stands a view group up instead).
+     * `TestFrames.s1()`: `shoot("mirror")` would otherwise show the S1's name and touch. The frame is the one the shot's
+     * own function builds, so a file may draw the S1 in one function and the Mirror in another. A file that builds no
+     * frame draws no device and is out of scope (the voice overlay, which stands a view group up instead).
      */
     @Test
     fun theMirrorShotsAreDrawnFromTheMirrorsFrame() {
         val tests = RepoFiles.sources(atLeast = 120, sourceSet = "test", inModules = listOf(RepoFiles.s1App)) { it.extension == "kt" }
         val frames = Regex("""TestFrames\.|AqaraS1Plus\(|GenericAndroid\(""")
         val theMirror = Regex("""TestFrames(\.|::)mirror""")
-        val shot = Regex("""(?:save|shoot|shot|setupShot)\(\s*"([^"]*)"""")
         val mirrorShot = Regex("""(^|-)(?i:mirror)(-|$)""")
-        val found = tests.filter { f ->
+        val found = tests.flatMap { f ->
             val code = f.readText()
-            frames.containsMatchIn(code) && !theMirror.containsMatchIn(code) &&
-                shot.findAll(code).any { mirrorShot.containsMatchIn(it.groupValues[1]) }
-        }.map { "${RepoFiles.rel(it)}: a Mirror shot, no TestFrames.mirror" }
+            if (!frames.containsMatchIn(code)) emptyList() else functions(code)
+                .map { body -> body to shot.findAll(body).map { it.groupValues[1] }.filter { mirrorShot.containsMatchIn(it) }.toList() }
+                .filter { (body, shots) -> shots.isNotEmpty() && !theMirror.containsMatchIn(body) }
+                .map { (_, shots) -> "${RepoFiles.rel(f)}: ${shots.distinct()} drawn without TestFrames.mirror" }
+        }
         assertTrue(
             "A shot named for the Mirror, drawn from another frame. Build it with TestFrames.mirror(context):\n" +
                 found.joinToString("\n"),
             found.isEmpty(),
         )
+    }
+
+    /**
+     * [code]'s functions, each with its own text: from a function's line to the next function at the same or a lower
+     * indent, so a shot is read against the frame the function that saves it builds.
+     */
+    private fun functions(code: String): List<String> {
+        val starts = FUNCTION.findAll(code).map { it.range.first to it.groupValues[1].length }.toList()
+        return starts.mapIndexed { i, (start, indent) ->
+            code.substring(start, starts.drop(i + 1).firstOrNull { it.second <= indent }?.first ?: code.length)
+        }
     }
 
     @Test

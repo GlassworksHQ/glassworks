@@ -27,7 +27,8 @@ class TestFramesTest {
     }
 
     @Test fun theTabletTakesTouchThoughTheMirrorWasBuiltFirst() {
+        // Read the Mirror first: its input is the devices listed when it's read, and one test has one device list.
         assertEquals("the Mirror's buttons, none a touchscreen", Input.NONE, TestFrames.mirror(app).input)
-        assertEquals("a touchscreen of its own", Input.TOUCH, TestFrames.tablet(app).input)
+        assertEquals("a touchscreen of its own, though the Mirror's keys stay listed", Input.TOUCH, TestFrames.tablet(app).input)
     }
 }
