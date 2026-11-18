@@ -1,6 +1,6 @@
 ---
 topic: android
-evidence: read
+evidence: verified
 ---
 
 # The Mirror's memory: why Glassworks "crashes" on the lululemon Mirror, and what was cut
@@ -57,8 +57,10 @@ the memory go, and what can the app or the image give back?
    | surfaceflinger, system_server, systemui | 28,135, 31,457, 16,765 |
 
    Glassworks is 417 MB of the 546 MB of PSS. Android 6 picked the lowmemorykiller's limits from the screen size
-   (1080p is "high-end-gfx"): it kills at adj 0 when free memory and file cache are both below 73,728 kB, at adj 58
-   below 92,160 kB, and at cached processes below 322,560 kB (read from the dmesg kill lines). Every process of ours
+   (1080p is "high-end-gfx"). It kills a process at adj 0 when free memory and the file cache are each below
+   73,728 kB, at adj 58 when each is below 92,160 kB, and a cached process when each is below 322,560 kB (read from
+   the dmesg kill lines). Its 153 kill lines report a file cache between 69,396 and 312,704 kB, every one below
+   the cached-process limit, and `dumpsys` reported 60 MB free. Every process of ours
    had `trm:15`, TRIM_MEMORY_RUNNING_CRITICAL.
 
 4. **Found why the GPU process dies** (2026-11-18, read from GeckoView 144, verified on the emulator).
@@ -66,8 +68,8 @@ the memory go, and what can the app or the image give back?
    background. Gecko then calls `GeckoProcessManager.onBackground` (the native step between is inferred; the
    emulator log below shows the result), which rebinds every non-content process, the GPU process included, at
    `ServiceAllocator.PriorityLevel.IDLE`, which is `BIND_WAIVE_PRIORITY` (`0x20`). With no other binding Android 6
-   treats it as a cached process, and on the Mirror the lowmemorykiller kills cached processes whenever free plus
-   cache is under 322,560 kB, which is all the time. The three deaths fit: 01:47:54 came 4 s after the app turned
+   treats it as a cached process. On the Mirror the lowmemorykiller may kill a cached process whenever free memory
+   and the file cache are each under 322,560 kB, and both were below it in every kill line (3). The three deaths fit: 01:47:54 came 4 s after the app turned
    the screen off (PowerManager: "Going to sleep due to device administration policy"), 01:58:30 1 s after the USB
    debugging dialog covered the app, 02:14:51 with the main process. On the emulator the log shows it at
    screen-off: `ServiceAllocator: …$gpu updateBindings: IDLE priority` (2026-11-17, 18:45:53). The emulator had
@@ -83,8 +85,10 @@ the memory go, and what can the app or the image give back?
 
 6. **Measured Gecko prefs on the emulator** (2026-11-17, verified). Android 6 arm64 emulator, 1 GB RAM, the legacy
    APK on Clarity's fake Home Assistant (`tools/perf/fakeha.py`, the real frontend, the `typical-nocam` view), 150 s
-   after a cold start. This emulator's kernel has no smaps, so PSS reads 0: the table gives each process's private
-   RSS from `/proc/<pid>/statm`, and the system's AnonPages. GL memory is on the host here, so it doesn't show.
+   after a cold start. This emulator's kernel has no smaps, so PSS reads 0. The table gives, for each process,
+   resident minus file-backed pages from `/proc/<pid>/statm` (in kB; mostly the process's anonymous memory, but
+   not exactly its private memory), and the system's AnonPages from `/proc/meminfo`, which doesn't depend on that
+   split. GL memory is on the host here, so it doesn't show.
 
    | Prefs (runs) | main | `:tab` | `:gpu` | `:crashhelper` | ours, total | AnonPages |
    |---|---|---|---|---|---|---|
@@ -94,8 +98,8 @@ the memory go, and what can the app or the image give back?
    | JS GC heap growth 150/120/120 (1) | 140,176 | 158,924 | 34,664 | 12,356 | 346,120 | 464,060 |
    | GPU process off and no crash helper, the PR (2) | 145,128–166,100 | 153,888–158,516 | gone | gone | **311,816** (303,644–319,988) | **434,596** (426,100–443,092) |
 
-   Bold is the mean. The PR's build uses about 40 MB less private memory than today's, and the system's anonymous
-   memory is about 28 MB lower. Main moves by up to 18 MB between runs of the same build, so single runs can't
+   Bold is the mean. With the PR's build our processes hold about 40 MB less (resident minus file-backed), and the
+   system's anonymous memory is about 28 MB lower, the firmer of the two numbers. Main moves by up to 18 MB between runs of the same build, so single runs can't
    resolve less than that. On every run a setup step covered the dashboard (the fake Home Assistant can't adopt the
    ESPHome device), but the page was loaded under it: with the dashboard visible the page process was 139,624 kB.
 
@@ -108,7 +112,7 @@ the memory go, and what can the app or the image give back?
 7. **The root hid 36 system apps on the unit** (2026-11-18 02:35Z, verified by the root): `pm hide` works from
    adb's shell, `pm disable-user` is refused. Free RAM went from about 60 MB to 205 MB (one sample, not a
    measurement). Kiln's flash now leaves the same apps out of `system`
-   ([image-patch.md](../../frames/lululemon-mirror/research/image-patch.md)).
+   ([image-patch.md](image-patch.md)).
 
 ## Result
 
@@ -129,13 +133,30 @@ A killed page reloads by itself: `MainActivity.onContentGone` restarts the sessi
 
 ## How to reproduce
 
-Read-only on a Mirror, through the root: `~/.t3/glassworks-m1/mirror-ram/run-hour.sh` (not in the repo; it holds
-the root's adb setup) records one hour: `am_proc_died` per process, lowmemorykiller kills, and `dumpsys meminfo`.
-The emulator numbers: an API 23 arm64 AVD with `hw.ramSize=1024M`, 1080×1920 at 240 dpi; the legacy APK; and
-`tools/perf/fakeha.py --port 8189 --no-harness` with `adb reverse tcp:8189 tcp:8189`, started with
-`am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --es url http://127.0.0.1:8189/clarity-ref/typical-nocam`.
-Read each process's `/proc/<pid>/statm` (resident minus shared, in pages) after 150 s. Nothing here writes a device
-beyond the emulator.
+**The Mirror's counts** (read-only). From a pull of `logcat -b events -d` and `dmesg`:
+
+```sh
+P=dev.glassworks.generic_android.legacy
+grep am_proc_died events.txt | grep -c "$P]"              # the main process
+grep am_proc_died events.txt | grep -c -F "$P:tab"        # the page
+grep am_proc_died events.txt | grep -c -F "$P:gpu"
+grep am_proc_died events.txt | grep -c -F "$P:crashhelper"
+grep -c am_low_memory events.txt
+grep 'lowmemorykiller: Killing' dmesg.txt | grep -o 'adj [0-9]*' | sort | uniq -c
+grep -o 'below limit [0-9]*kB for oom_score_adj [0-9]*' dmesg.txt | sort -u   # the limits
+```
+
+`tools/mirror/memory-hour.sh <out> [minutes]` records a run from now on: the same counts since its start, `dumpsys
+meminfo` before and after, and free RAM every 5 minutes. It only reads. Set `MIRROR_ADB` to the adb command that
+reaches the Mirror.
+
+**The emulator numbers.** An API 23 arm64 AVD with `hw.ramSize=1024M`, 1080×1920 at 240 dpi, and the legacy APK.
+Run `tools/perf/fakeha.py --port 8189 --no-harness` on the computer; the emulator reaches it at 10.0.2.2.
+Start the app with
+`am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --es url http://10.0.2.2:8189/clarity-ref/typical-nocam`
+(the runs above used `adb reverse` and 127.0.0.1). After 150 s read each process's `/proc/<pid>/statm` (resident
+minus shared, in 4 kB pages) and `/proc/meminfo`. Give the computer's adb server `ADB_USB=0`, so it never claims a
+real panel on USB. Nothing here writes to a device other than the emulator.
 
 ## Open questions
 
