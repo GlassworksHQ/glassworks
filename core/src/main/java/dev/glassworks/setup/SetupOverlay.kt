@@ -575,6 +575,7 @@ class SetupOverlay(
         viewing = null // opened again, it starts on its own step, not the one last looked at
         model = null // so the next render counts as a step change (Add it by hand folds), also when not shown
         manualShown = false
+        waysOpen = false // opened again, the Wi-Fi step's other ways start folded
         if (!isShowing) return
         isShowing = false
         hideKeyboard()
@@ -647,7 +648,9 @@ class SetupOverlay(
         // Also when the caller saw no change: a pane step's Continue clears `viewing` before the screen draws
         // the current step again, so that draw can't tell (the tablet run on 28c157d: the camera's
         // "Android allows the camera." stayed on Sign in).
-        if (stepChanged || shown != cardStep) { status.visibility = View.GONE; waysOpen = false }
+        if (stepChanged || shown != cardStep) status.visibility = View.GONE
+        // The other ways fold when the card shows another step, not when the rail opens the one already shown.
+        if (shown != cardStep) waysOpen = false
         cardStep = shown
         if (shown == null) return
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).

@@ -148,6 +148,23 @@ class WifiWaysScreenTest {
         assertEquals(listOf(WifiStep.Action.RETRY), asked)
     }
 
+    @Test fun tappingTheWifiRowItIsOnKeepsTheOtherWaysOpenAndReopeningFoldsThem() {
+        val s = screen(btOn, offer)
+        button(s, LINK).performClick()
+        relayout(s)
+        // The rail's Wi-Fi row: the first "Wi-Fi" on screen, tapped through its row.
+        var row: View = shown(s).first { it.text.toString() == "Wi-Fi" }
+        while (!row.isClickable) row = row.parent as View
+        row.performClick()
+        relayout(s)
+        assertTrue("still open: ${buttons(s)}", "Choose a network" in buttons(s) && LINK !in buttons(s))
+        val m = s.model!!
+        s.hide()
+        s.render(m)
+        relayout(s)
+        assertTrue("opened again, folded: ${buttons(s)}", LINK in buttons(s) && "Choose a network" !in buttons(s))
+    }
+
     @Test fun onceConnectedAnOlderFailedJoinLineGoes() {
         val s = screen(btOn, offer)
         s.render(s.model!!.copy(installer = InstallerWifi("Example-WiFi", InstallerWifi.Phase.FAILED, "wrong password")))
