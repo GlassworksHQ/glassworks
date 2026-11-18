@@ -608,7 +608,9 @@ session without a refresh token):
 - online, HA step done, the panes not chosen yet or a chosen pane's step not answered (so it comes back
   after a reboot);
 - online, HA step done, every pane's step answered, and the Silent updates step pending: something to offer, on a
-  screen that takes a tap, not answered yet (step 5 above).
+  screen that takes a tap, not answered yet (step 5 above). Until the app has read whether updates are silent (a
+  moment after it starts), the step shows *Checking updates* and setup waits for that first answer; with nothing to
+  offer it then moves on by itself.
 
 The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps → Silent updates). Once shown, the screen stays
 until all steps are done, so it doesn't flicker between steps. It is re-evaluated on connectivity,

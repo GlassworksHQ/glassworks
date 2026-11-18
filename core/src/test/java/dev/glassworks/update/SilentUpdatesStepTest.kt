@@ -96,6 +96,12 @@ class SilentUpdatesStepTest {
         assertTrue(r.answered)
     }
 
+    @Test fun aLowTargetSaysWhatElseANewerReleaseNeeds() {
+        val off = SilentUpdatesStep.targetBody(SilentUpdates.TargetTooLow("17", 35, 34, unknownApps = false))
+        assertTrue(off, "API 35 or higher" in off && "Install unknown apps" in off)
+        assertFalse(SilentUpdatesStep.targetBody(SilentUpdates.TargetTooLow("17", 35, 34, unknownApps = true)).contains("Install unknown apps"))
+    }
+
     @Test fun aDoneStepOpenedFromTheRailStaysDone() {
         val r = Rig(SilentUpdates.SelfUpdate)
         bound(r)

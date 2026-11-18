@@ -147,8 +147,9 @@ class SilentUpdatesStep(
         const val BOOT_IMAGE_BODY = "This panel's boot image has no update service. Kiln adds it from a computer, and keeps your settings."
 
         fun targetBody(s: SilentUpdates.TargetTooLow) =
-            "Android ${s.android} skips the tap only for apps that target API ${s.needed}, and this one targets ${s.has}. " +
-                "Until a release does, only a device owner skips it. Kiln can set that up."
+            "Android ${s.android} skips the tap only for apps that target API ${s.needed} or higher, and this one targets ${s.has}. " +
+                (if (s.unknownApps) "" else "Such a release also needs “Install unknown apps” allowed for Glassworks. ") +
+                "Until then, only a device owner skips it. Kiln can set that up."
 
         /** What the step offers for [s], or null when there's nothing to do on this device. */
         fun offer(s: SilentUpdates?): Offer? = when (s) {
