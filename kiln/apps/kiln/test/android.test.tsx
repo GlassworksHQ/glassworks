@@ -131,6 +131,20 @@ describe('the screens', () => {
     expect(rail().every((r) => r.endsWith(':done'))).toBe(true);
   });
 
+  it('5: Done says what Kiln did with silent updates, in its own block (issue 422)', async () => {
+    const block = () => document.querySelector('.su')?.textContent;
+    await show('done', 'Done.');
+    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install with nobody at the tablet. Kiln allowed “Install unknown apps” for Glassworks only. Undo takes it back.');
+    expect(document.querySelector('.grants')).toBeNull(); // the block replaces the grants list's row
+    cleanup();
+    await show('done-old', 'Done.');
+    expect(block()).toBe('Silent updatesA tap eachAndroid 9 asks for a tap on each update. Updates still come from Home Assistant; someone taps Install on the tablet. Only a device owner skips the tap.');
+    cleanup();
+    await show('done-refused', 'Done.');
+    expect(block()).toBe('Silent updatesThis tablet said noThis tablet\'s software keeps “Install unknown apps” off. Updates still come from Home Assistant, with a tap on the tablet.');
+    expect(document.querySelector('.warnbox')).toBeNull(); // said once, in the block
+  });
+
   it('5: an unknown device: "untested device" and a way to report it', async () => {
     await show('done-untested', 'Done.');
     expect(screen.getByText('Glassworks is installed on your Teclast P20HD.')).toBeTruthy();
