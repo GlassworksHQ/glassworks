@@ -50,6 +50,16 @@ class ManagePanelsPageTest {
         assertFalse(r.headers["Content-Security-Policy"]!!.contains("nabu.casa"))
     }
 
+    @Test fun anIpv6HomeAssistantAddressIsSaidPlainlyNotOfferedToACspThatCantNameIt() {
+        f.haBase = "http://[fd00::10]:8123"
+        val b = f.Browser()
+        b.cookies[ManageServer.SESSION] = f.sessions.create(null, SignedInWith.PANEL_CODE, "Safari on Mac", false, f.haBase).first
+        val r = b.get(ManagePages.PANELS)
+        assertTrue(r.text(), r.text().contains("can't use a Home Assistant address written as an IPv6 address"))
+        assertFalse(r.text().contains("<script"))
+        assertFalse(r.headers["Content-Security-Policy"]!!, r.headers["Content-Security-Policy"]!!.contains("fd00"))
+    }
+
     @Test fun signedOutItAsksForASignInFirst() {
         val r = f.Browser().get(ManagePages.PANELS)
         assertFalse(r.text().contains("<script"))

@@ -280,8 +280,9 @@ All panels is the one Manage page with a script, served by the panel itself. Its
 lets it connect to this panel's Home Assistant and to any HTTP host on port 8099, and post forms to any such
 host: the policy can't name the other panels, so it doesn't limit them to Manage pages or to your network. The
 script does that itself: it contacts only names and addresses that pass the filter below, and sends the token only
-after hello. The filter checks the name or address as Home Assistant lists it, not what a name resolves to. The
-other pages still have no scripts.
+after hello. The filter checks the name or address as Home Assistant lists it, not what a name resolves to. A
+policy can't name an IPv6 address, so with the panel's Home Assistant set as one (`http://[fd00::10]:8123`) All
+panels says to use a name or an IPv4 address instead. The other pages still have no scripts.
 
 Each panel lets a page on another panel read and change its settings. That page holds a Home
 Assistant access token, and each panel checks it with its own Home Assistant. No panel trusts another,

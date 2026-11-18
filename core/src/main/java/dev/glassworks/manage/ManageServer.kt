@@ -236,11 +236,15 @@ class ManageServer(
      * pages (any host, on [PORT]), and posts the handoff to them: the CSP allows those and nothing else.
      */
     private fun panels(status: PanelStatus, viewer: ManagePages.Viewer, session: String): HttpResponse {
-        val ha = haBase()?.trim()?.trimEnd('/')?.takeIf { signIn.isLocal(it) }
+        val local = haBase()?.trim()?.trimEnd('/')?.takeIf { signIn.isLocal(it) }
+        // A CSP host-source can't be an IPv6 literal (CSP's host grammar has none), so the page couldn't reach it: say so
+        // instead of offering a page that can't work (CodeRabbit on #488).
+        val v6 = local != null && (runCatching { URI(local).host }.getOrNull()?.startsWith("[") == true)
+        val ha = local?.takeIf { !v6 }
         val haOrigin = ha?.let(::origin)?.let { o -> " $o " + o.replaceFirst("http", "ws") }.orEmpty()
         val csp = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; " +
             "connect-src 'self' http://*:$PORT$haOrigin; form-action 'self' http://*:$PORT"
-        return HttpResponse.html(200, pages.panels(status, viewer, ha, session), PageShell.securityHeaders() + mapOf("Content-Security-Policy" to csp))
+        return HttpResponse.html(200, pages.panels(status, viewer, ha, session, if (v6) IPV6_HA else null), PageShell.securityHeaders() + mapOf("Content-Security-Policy" to csp))
     }
 
     /** [ManagePages.PANELS_SCRIPT] and what it imports: GET, no session (they hold nothing but code). */
@@ -579,6 +583,10 @@ class ManageServer(
 
         /** How long a settings change may take before the answer is "still applying"; All panels' writes wait longer (#466). */
         const val SAVE_WAIT_MS = 20_000L
+
+        /** All panels' line when the panel's Home Assistant address is an IPv6 literal, which its CSP can't name. */
+        const val IPV6_HA = "All panels can't use a Home Assistant address written as an IPv6 address: the page's security policy can't name one. " +
+            "Use Home Assistant's name or IPv4 address in this panel's settings (Home Assistant & dashboard)."
 
         /** Every panel's Manage page is on this port; All panels finds the others by it (#466). */
         const val PORT = 8099

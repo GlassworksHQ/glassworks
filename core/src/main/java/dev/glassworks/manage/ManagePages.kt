@@ -445,9 +445,12 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
      * address; null when it has none, and the page says so. [session]: this browser's Manage session's public id: the
      * tab keeps its Home Assistant sign-in for that session only, so a later sign-in here can't use it.
      */
-    fun panels(s: PanelStatus, v: Viewer, ha: String?, session: String): String {
-        val first = if (ha == null) "This panel has no Home Assistant on your network to find the others with."
-            else "This page needs JavaScript to ask Home Assistant and the other panels."
+    fun panels(s: PanelStatus, v: Viewer, ha: String?, session: String, noHa: String? = null): String {
+        val first = when {
+            ha != null -> "This page needs JavaScript to ask Home Assistant and the other panels."
+            noHa != null -> noHa
+            else -> "This panel has no Home Assistant on your network to find the others with."
+        }
         val main = """<h1 class="ph">All panels</h1><p class="sub">Every panel in Home Assistant. Open one, or copy settings from one to another.</p>
 <div id="gw-panels" data-ha="${esc(ha.orEmpty())}" data-session="${esc(session)}"><section class="card list" id="gw-list"><div class="lh"><b>Panels in Home Assistant</b></div>
 <div class="row static note"><span>${esc(first)}</span></div></section><section class="card list" id="gw-copy" hidden></section></div>
