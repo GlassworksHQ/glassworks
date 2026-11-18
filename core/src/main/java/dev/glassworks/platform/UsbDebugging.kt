@@ -68,13 +68,14 @@ object UsbDebugging {
     /** One system log line as [Heard], or null when it says neither. */
     fun heard(line: String): Heard? {
         if (ASKED in line) return Heard.Asked(line.substringAfter(ASKED).trim())
-        if (OWNER in line) return Heard.LetInByImage
+        if (OWNER.containsMatchIn(line)) return Heard.LetInByImage
         val r = REFUSED.find(line) ?: return null
         return Heard.Refused(r.groupValues[1], r.groupValues[2].takeIf { it != "null" })
     }
 
     private const val ASKED = "Received public key: "
-    private const val OWNER = "Authorizing the Mirror owner's ADB key"
+    /** The image's own line when it lets its owner in ("Authorizing the … owner's ADB key", image-patch.md), whatever device it names. */
+    private val OWNER = Regex("Authorizing the \\S+ owner's ADB key")
     private val REFUSED = Regex("Fingerprints do not match\\. Got ([0-9A-F:]+), expected (\\S+)")
 
     /**
