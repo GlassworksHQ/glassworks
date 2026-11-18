@@ -131,12 +131,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         addView(banner.view, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
         addView(rows, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(6f) })
     }
-    private val tall = resources.configuration.screenHeightDp >= 600
     private val page = FrameLayout(context).apply {
+        val tall = resources.configuration.screenHeightDp >= 600
         setPadding(px(if (tall) 36f else 28f), px(if (tall) 28f else 20f), px(if (tall) 36f else 28f), px(20f))
     }
-    /** The page's width for its items, in dp: the screen less the sidebar and the page's padding. */
-    private val pageWidthDp = resources.configuration.screenWidthDp - sideWidth - 2 * (if (tall) 36f else 28f)
     /** A page taller than the card fades at the edge it continues past, and shows its scroll bar (#63 D5). */
     private val scroll = ScrollView(context).apply {
         isVerticalScrollBarEnabled = true
@@ -680,33 +678,59 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
     }
 
-    /** Readings as tiles, [SettingsItem.Tiles.columns] to a row or as many as fit ([tileColumns]); values read again on [refresh]. */
+    /** Readings as tiles, [SettingsItem.Tiles.columns] to a row or as many as fit ([TileGrid]); values read again on [refresh]. */
     private fun tiles(i: SettingsItem.Tiles): View {
-        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val grid = TileGrid(context, i.columns, gap = px(if (i.columns >= 4) 10f else 12f), minWidth = px(TILE_MIN_DP))
         val views = ArrayList<TileView>()
-        val columns = tileColumns(i.columns, pageWidthDp)
-        val gap = px(if (columns >= 4) 10f else 12f)
         fun bind() {
             val list = i.tiles()
             if (list.size != views.size) {
                 views.clear()
-                box.removeAllViews()
+                grid.removeAllViews()
                 val graph = list.any { it.history != null || it.meter != null }
-                list.chunked(columns).forEachIndexed { r, row ->
-                    box.addView(LinearLayout(context).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        repeat(columns) { c ->
-                            val v = if (c < row.size) TileView(context, if (columns >= 4) 22f else 27f, graph).also { views += it } else View(context)
-                            addView(v, LinearLayout.LayoutParams(0, -1, 1f).apply { if (c > 0) marginStart = gap })
-                        }
-                    }, LinearLayout.LayoutParams(-1, -2).apply { if (r > 0) topMargin = gap })
-                }
+                repeat(list.size) { grid.addView(TileView(context, if (i.columns >= 4) 22f else 27f, graph).also { views += it }) }
             }
             list.forEachIndexed { n, t -> views[n].bind(t) }
         }
         bind()
         live += ::bind
-        return box
+        return grid
+    }
+
+    /**
+     * Tiles in rows of [asked], or of as many as fit the width it's given ([tileColumns]), each row as tall as its
+     * tallest tile. Worked out at each measure, so a turn of the screen that keeps the activity re-flows them.
+     */
+    private class TileGrid(context: Context, private val asked: Int, private val gap: Int, private val minWidth: Int) : ViewGroup(context) {
+        private var columns = 1
+        private var tileWidth = 0
+
+        override fun onMeasure(widthSpec: Int, heightSpec: Int) {
+            val width = MeasureSpec.getSize(widthSpec)
+            columns = tileColumns(asked, width, minWidth, gap)
+            tileWidth = (width - gap * (columns - 1)) / columns
+            var height = 0
+            for (row in (0 until childCount).chunked(columns)) {
+                val exact = MeasureSpec.makeMeasureSpec(tileWidth, MeasureSpec.EXACTLY)
+                row.forEach { getChildAt(it).measure(exact, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)) }
+                val rowHeight = row.maxOf { getChildAt(it).measuredHeight }
+                row.forEach { getChildAt(it).measure(exact, MeasureSpec.makeMeasureSpec(rowHeight, MeasureSpec.EXACTLY)) }
+                height += (if (height > 0) gap else 0) + rowHeight
+            }
+            setMeasuredDimension(width, height)
+        }
+
+        override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            var top = 0
+            for (row in (0 until childCount).chunked(columns)) {
+                row.forEachIndexed { c, n ->
+                    val v = getChildAt(n)
+                    val left = c * (tileWidth + gap)
+                    v.layout(left, top, left + v.measuredWidth, top + v.measuredHeight)
+                }
+                top += getChildAt(row.first()).measuredHeight + gap
+            }
+        }
     }
 
     private fun shownOf(i: SettingsItem.Text): String = SettingsChange.shown(i)
@@ -1173,7 +1197,11 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         /** The narrowest a tile gets before its value and unit wrap and clip: "654 MiB free" needs about 110 dp inside it. */
         const val TILE_MIN_DP = 150f
 
-        /** [asked] tiles to a row, or fewer where a page [widthDp] wide can't hold them (portrait, as the Mirror's 268 dp: one). */
-        fun tileColumns(asked: Int, widthDp: Float): Int = asked.coerceAtMost((widthDp / TILE_MIN_DP).toInt()).coerceAtLeast(1)
+        /**
+         * The most tiles, up to [asked], that fit a row [width] wide at [minWidth] each with [gap] between them; one
+         * at least. The Mirror's page in portrait, 268 dp: one.
+         */
+        fun tileColumns(asked: Int, width: Int, minWidth: Int, gap: Int): Int =
+            (asked downTo 1).firstOrNull { n -> n * minWidth + (n - 1) * gap <= width } ?: 1
     }
 }

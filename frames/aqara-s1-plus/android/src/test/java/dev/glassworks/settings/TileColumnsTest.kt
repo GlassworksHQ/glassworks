@@ -8,6 +8,7 @@ import dev.glassworks.pane.SettingsSection
 import dev.glassworks.ui.Mockup
 import dev.glassworks.ui.TileView
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -21,18 +22,28 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], application = Application::class)
 class TileColumnsTest {
 
-    /** How many tiles share the first row of a three-to-a-row page on a [w] by [h] px screen. */
-    private fun firstRow(w: Int, h: Int): Int {
+    /** A three-to-a-row page of five tiles, open. */
+    private fun page(): KioskSettingsOverlay {
         val tiles = SettingsItem.Tiles(3) { (1..5).map { SettingsItem.Tile("RAM", "654", "MiB free", "App 214 MiB", history = listOf(1f, 2f)) } }
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         o.show(KioskSettingsOverlay.Model(listOf(SettingsSection("diagnostics", "Diagnostics", listOf(tiles))), "1.0.0", setOf("diagnostics")))
         o.previewSection("diagnostics")
         Mockup.idle()
+        return o
+    }
+
+    /** How many tiles share the first row of [o] laid out at [w] by [h] px; every tile is at least [TILE_MIN_DP] wide. */
+    private fun firstRow(o: KioskSettingsOverlay, w: Int, h: Int): Int {
         Mockup.layout(o, w, h)
-        val top = views(o).filterIsInstance<TileView>().map { at(it) }.toList()
-        assertEquals(5, top.size)
+        val tiles = views(o).filterIsInstance<TileView>().toList()
+        assertEquals(5, tiles.size)
+        val min = KioskSettingsOverlay.TILE_MIN_DP * o.resources.displayMetrics.density
+        tiles.forEach { assertTrue("a tile ${it.width} px wide, under $min", it.width >= min) }
+        val top = tiles.map { at(it) }
         return top.count { it == top.first() }
     }
+
+    private fun firstRow(w: Int, h: Int): Int = firstRow(page(), w, h)
 
     private fun at(v: View): Int = IntArray(2).also(v::getLocationInWindow)[1]
 
@@ -52,4 +63,16 @@ class TileColumnsTest {
 
     @Test @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
     fun theMirrorInPortraitHasOne() = assertEquals(1, firstRow(1080, 1920))
+
+    /** A 450 dp page: three tiles of 150 dp fit, the two 12 dp gaps between them don't. */
+    @Test @Config(qualifiers = "w722dp-h1000dp-port-mdpi")
+    fun theGapsCountToo() = assertEquals(2, firstRow(722, 1000))
+
+    /** A turn of the screen that keeps the activity (the generic app handles orientation itself) re-flows the tiles. */
+    @Test @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    fun aTurnReflowsThem() {
+        val o = page()
+        assertEquals(1, firstRow(o, 1080, 1920))
+        assertEquals(3, firstRow(o, 1920, 1080))
+    }
 }
