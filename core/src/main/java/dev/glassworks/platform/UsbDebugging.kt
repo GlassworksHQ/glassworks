@@ -101,33 +101,69 @@ object UsbDebugging {
             if (running) return
             running = true
             val mine = ++generation
-            Thread({
+            Thread({ follow(mine) }, "glassworks-adb-requests").apply { isDaemon = true; start() }
+        }
+
+        /**
+         * The reader thread: no synchronized block and no return out of an inline lambda in here. Android 6's verifier
+         * rejected the whole class when this body held them ("expected to be within a catch-all for an instruction
+         * where a monitor is held", the Mirror, 2026-11-18). Each locked step is a small synchronized method instead.
+         */
+        private fun follow(mine: Int) {
+            while (current(mine)) {
                 try {
-                    while (synchronized(this) { running && generation == mine }) {
-                        try {
-                            val p = logcat()
-                            // Set in the same lock as the generation check: set after it, a stop() in between would leave it true.
-                            val keep = synchronized(this) { if (running && generation == mine) { process = p; following = true; true } else false }
-                            if (!keep) { p.destroy(); return@Thread }
-                            BufferedReader(InputStreamReader(p.inputStream)).useLines { lines ->
-                                for (l in lines) {
-                                    val h = heard(l) ?: continue
-                                    // Under the lock, so a line an old reader had buffered never reaches the app after stop().
-                                    val current = synchronized(this) {
-                                        if (running && generation == mine) { runCatching { onHeard(h) }.onFailure { onError("adb request: ${it.message}") }; true } else false
-                                    }
-                                    if (!current) return@Thread
-                                }
-                            }
-                        } catch (e: Exception) {
-                            onError("system log: ${e.message}")
-                        } finally {
-                            synchronized(this) { if (generation == mine) following = false }
-                        }
-                        Thread.sleep(retryMs)
+                    val p = logcat()
+                    if (!adopt(mine, p)) {
+                        p.destroy()
+                        return
                     }
-                } catch (_: InterruptedException) {}
-            }, "glassworks-adb-requests").apply { isDaemon = true; start() }
+                    val reader = BufferedReader(InputStreamReader(p.inputStream))
+                    var line = reader.readLine()
+                    while (line != null) {
+                        val h = heard(line)
+                        if (h != null && !dispatch(mine, h)) return
+                        line = reader.readLine()
+                    }
+                } catch (e: Exception) {
+                    onError("system log: ${e.message}")
+                } finally {
+                    ended(mine)
+                }
+                try {
+                    Thread.sleep(retryMs)
+                } catch (_: InterruptedException) {
+                    return
+                }
+            }
+        }
+
+        @Synchronized
+        private fun current(mine: Int) = running && generation == mine
+
+        /** Takes [p] as the reader's process. Set in the same lock as the generation check: set after it, a stop() in between would leave [following] true. */
+        @Synchronized
+        private fun adopt(mine: Int, p: Process): Boolean {
+            if (!current(mine)) return false
+            process = p
+            following = true
+            return true
+        }
+
+        /** Hands [h] to the app, under the lock, so a line an old reader had buffered never reaches the app after stop(). */
+        @Synchronized
+        private fun dispatch(mine: Int, h: Heard): Boolean {
+            if (!current(mine)) return false
+            try {
+                onHeard(h)
+            } catch (e: Exception) {
+                onError("adb request: ${e.message}")
+            }
+            return true
+        }
+
+        @Synchronized
+        private fun ended(mine: Int) {
+            if (generation == mine) following = false
         }
 
         @Synchronized

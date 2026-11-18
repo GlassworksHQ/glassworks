@@ -22,6 +22,7 @@ import dev.glassworks.manage.ManagePage
 import dev.glassworks.manage.ManagePages
 import dev.glassworks.manage.ManageServer
 import dev.glassworks.manage.ManageUsbDebugging
+import dev.glassworks.manage.orWithout
 import dev.glassworks.manage.PaneRow
 import dev.glassworks.manage.paneRow
 import dev.glassworks.pane.CantRun
@@ -93,21 +94,27 @@ open class AppManage(
 
     /**
      * The computers let in over USB adb (#435), where the app can answer "Allow USB debugging?" itself: a
-     * privileged app such as the Mirror's. Null elsewhere, and the Security page has no such card.
+     * privileged app such as the Mirror's. Null elsewhere, and the Security page has no such card. A part that can't
+     * load leaves the card out and the rest of the page up ([orWithout]).
      */
-    private val adb: AdbComputers? = if (UsbDebugging.available(app)) AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event,
-        // following is volatile and read without Requests' lock on purpose: the reader holds that lock while it calls
-        // onHeard, which takes AdbComputers' own, so locking here (inside Allow) would invert the order.
-        listening = { adbRequests?.following == true }) else null
+    private val adb: AdbComputers? = orWithout(ADB_CARD, ::partFailed) {
+        if (!UsbDebugging.available(app)) null
+        else AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event,
+            // following is volatile and read without Requests' lock on purpose: the reader holds that lock while it calls
+            // onHeard, which takes AdbComputers' own, so locking here (inside Allow) would invert the order.
+            listening = { adbRequests?.following == true })
+    }
 
     private val adbRequests: UsbDebugging.Requests? = adb?.let { c ->
-        UsbDebugging.Requests(onHeard = { h ->
-            when (h) {
-                is UsbDebugging.Heard.Asked -> AdbKey.parse(h.key)?.let(c::asked)
-                UsbDebugging.Heard.LetInByImage -> c.letInByImage()
-                is UsbDebugging.Heard.Refused -> c.refused(h.got, h.waiting)
-            }
-        }, onError = { Log.w(TAG, it) })
+        orWithout(ADB_CARD, ::partFailed) {
+            UsbDebugging.Requests(onHeard = { h ->
+                when (h) {
+                    is UsbDebugging.Heard.Asked -> AdbKey.parse(h.key)?.let(c::asked)
+                    UsbDebugging.Heard.LetInByImage -> c.letInByImage()
+                    is UsbDebugging.Heard.Refused -> c.refused(h.got, h.waiting)
+                }
+            }, onError = { Log.w(TAG, it) })
+        }
     }
 
     /** The panes' Blueprints cards; the Manage page links them in a new tab. */
@@ -125,8 +132,15 @@ open class AppManage(
         qr = { req -> qr(signIn, req) },
         ownHosts = ::ownHosts,
         event = ::event,
-        usb = adb?.let { ManageUsbDebugging(it, ManagePages()::time, ::event) },
+        // Without its log reader the card could see no computer asking, so it shows only with both.
+        usb = adb?.takeIf { adbRequests != null }?.let { ManageUsbDebugging(it, ManagePages()::time, ::event) },
     )
+
+    /** A part of the page that couldn't load: in the logcat and the page's Log, which is still up. */
+    private fun partFailed(msg: String) {
+        Log.e(TAG, msg)
+        event(msg)
+    }
 
     /** A line for the Manage page's Log. */
     private fun event(msg: String) {
@@ -363,6 +377,8 @@ open class AppManage(
 
     companion object {
         const val TAG = "S1Manage"
+
+        private const val ADB_CARD = "Allow a new computer"
 
         /** How long a restart or reboot waits, so the page that started it reaches the browser first. */
         const val ACTION_DELAY_MS = 1_000L
