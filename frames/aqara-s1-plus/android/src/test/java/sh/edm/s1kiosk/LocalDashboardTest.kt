@@ -64,7 +64,7 @@ class LocalDashboardTest {
     fun `below Android 12 the dashboard loads through the address found`() = harness().use { h ->
         assertEquals(listOf("s1.load http://192.0.2.10:8123/lovelace/0"), h.loads())
         assertEquals("the setting stays as entered", setting, KioskPrefs(h.app).urlSetting)
-        assertTrue(h.logs("S1Kiosk").toString(), "Dashboard through 192.0.2.10:8123: Android can't resolve homeassistant.local before 12" in h.logs("S1Kiosk"))
+        assertTrue(h.logs("Glassworks").toString(), "Dashboard through 192.0.2.10:8123: Android can't resolve homeassistant.local before 12" in h.logs("Glassworks"))
     }
 
     @Test fun `from Android 12 it loads as set`() = harness().use { h ->
@@ -75,23 +75,23 @@ class LocalDashboardTest {
     fun `a new address from discovery reaches the dashboard, a restart for the engine's hosts`() = harness().use { h ->
         KioskPrefs(h.app).setHaUrl("http://192.0.2.11:8123", HaDiscovery.SOURCE_MDNS)
         h.newIntent(Intent().putExtra("ha_discovered", "http://192.0.2.11:8123"))
-        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.startsWith("restart deferred") })
+        assertTrue(h.logs("Glassworks").toString(), h.logs("Glassworks").any { it.startsWith("restart deferred") })
     }
 
     @Test @Config(sdk = [29])
     fun `before discovery has an address it loads as set, then the first address restarts onto it`() = harness(at = null).use { h ->
         assertEquals(listOf("s1.load $setting"), h.loads())
-        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("and Home Assistant's address isn't known yet") })
+        assertTrue(h.logs("Glassworks").toString(), h.logs("Glassworks").any { it.endsWith("and Home Assistant's address isn't known yet") })
         KioskPrefs(h.app).setHaUrl(found, HaDiscovery.SOURCE_MDNS)
         h.newIntent(Intent().putExtra("ha_discovered", found))
-        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.startsWith("restart deferred") })
+        assertTrue(h.logs("Glassworks").toString(), h.logs("Glassworks").any { it.startsWith("restart deferred") })
     }
 
     @Test @Config(sdk = [29])
     fun `a user and password in the setting never reach the log`() = harness("http://user:secret@homeassistant.local:8123/").use { h ->
         assertEquals(listOf("s1.load http://user:secret@192.0.2.10:8123/"), h.loads())
         h.newIntent(Intent().putExtra("ha_discovered", found))
-        val logs = h.logs("S1Kiosk")
+        val logs = h.logs("Glassworks")
         assertTrue(logs.toString(), "Home Assistant at $found (dashboard setting: http://homeassistant.local:8123)" in logs)
         assertTrue(logs.filter { "secret" in it }.toString(), logs.none { "secret" in it })
     }
@@ -99,7 +99,7 @@ class LocalDashboardTest {
     @Test @Config(sdk = [29])
     fun `https keeps the name its certificate is for, and the log says so`() = harness("https://homeassistant.local:8123/").use { h ->
         assertEquals(listOf("s1.load https://homeassistant.local:8123/"), h.loads())
-        assertTrue(h.logs("S1Kiosk").toString(), h.logs("S1Kiosk").any { it.endsWith("https, and its certificate is for the name") })
+        assertTrue(h.logs("Glassworks").toString(), h.logs("Glassworks").any { it.endsWith("https, and its certificate is for the name") })
     }
 
     @Test @Config(sdk = [29])

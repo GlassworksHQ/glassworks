@@ -3,18 +3,18 @@
 import type { RadioPlan, RadioStep } from '../wizard/state';
 
 /**
- * The first S1 Kiosk that gets the Thread network from Home Assistant itself (#49: Get it from Home
+ * The first S1 app that gets the Thread network from Home Assistant itself (#49: Get it from Home
  * Assistant on the panel, Join Home Assistant's Thread network on its device page). #49 came after
  * v0.4.3 (versionCode 403), so the next release is the first to have it.
  */
 export const THREAD_FROM_HA = 404;
 
-/** S1 Kiosk on the panel, from `dumpsys package`: what the Thread step can ask of it. */
+/** The S1 app on the panel, from `dumpsys package`: what the Thread step can ask of it. */
 export interface PanelApp { version?: string; code?: number }
 
 /**
  * After the radio role is applied: what to do in Home Assistant to use it, per mode (frames/aqara-s1-plus/docs/radio.md).
- * Undefined when there is nothing to do (Off). `app`: the installed S1 Kiosk, which decides how the
+ * Undefined when there is nothing to do (Off). `app`: the installed S1 app, which decides how the
  * Thread router gets its network.
  */
 export function radioPlan(mode: string, ip: string, haUrl: string, allowed: string | undefined, app: PanelApp = {}): RadioPlan | undefined {
@@ -60,7 +60,7 @@ export function radioPlan(mode: string, ip: string, haUrl: string, allowed: stri
       ],
     } : {
       title: 'Join your Thread network.',
-      lead: `The panel is now a Thread router (repeater, experimental). S1 Kiosk ${app.version ?? 'on this panel'} can't get your Thread network from Home Assistant itself; newer versions can. Until it updates, More help shows how to give it the network by hand.`,
+      lead: `The panel is now a Thread router (repeater, experimental). Glassworks ${app.version ?? 'on this panel'} can't get your Thread network from Home Assistant itself; newer versions can. Until it updates, More help shows how to give it the network by hand.`,
       steps: [joining],
       more: [
         { title: 'Give it your Thread network\'s dataset', body: 'In ESPHome, open the panel\'s device → Configuration and paste the dataset into Thread dataset. Spaces or line breaks in the copy are fine. The dataset contains the network key: paste it only there. It is never shown again.',

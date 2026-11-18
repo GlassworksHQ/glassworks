@@ -22,7 +22,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "s1-kiosk"
+rootProject.name = "glassworks"
 include(":kiosk")
 project(":kiosk").projectDir = file("frames/aqara-s1-plus/android")
 // Glassworks for generic Android (#23): its own app, dev.glassworks.generic_android.

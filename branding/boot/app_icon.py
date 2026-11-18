@@ -1,10 +1,11 @@
-"""The generic app's icons (frames/generic-android), from the brand's own SVGs in site/public/brand/.
+"""The apps' icons (frames/generic-android and the S1's, frames/aqara-s1-plus), from the brand's own SVGs in site/public/brand/.
 
-Writes into frames/generic-android/android/src/main/res/:
+Writes into each app's src/main/res/ ([APPS]):
   mipmap-anydpi-v26/ic_launcher.xml   the adaptive icon (Android 8+): the layers below
   drawable-v26/ic_launcher_*.xml      its layers: app-icon.svg's night and glows, mark-on-dark.svg, mark-mono.svg
   drawable/ic_notification.xml        the service notification's small icon: mark-mono.svg in white, every API
-  mipmap-*dpi/ic_launcher.png         app-icon.svg itself, for Android 6-7 (only with --png: needs rsvg-convert)
+  mipmap-*dpi/ic_launcher.png         app-icon.svg itself, for Android 6-7 (only with --png: needs rsvg-convert); the
+                                      generic app only, since the S1's app needs Android 8
 
 The brand's app icon is the mark on night, "always on dark" (glassworks.dev/brand). Nothing here is drawn: the
 paths, colours and the mark's place in the icon are read from the SVGs, and only mapped onto Android's grids. The
@@ -23,6 +24,9 @@ import xml.etree.ElementTree as ET
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BRAND = os.path.join(REPO, "site/public/brand")
 RES = os.path.join(REPO, "frames/generic-android/android/src/main/res")
+S1_RES = os.path.join(REPO, "frames/aqara-s1-plus/android/src/main/res")
+# Each app's res/, and whether it runs on Android 6-7 and so needs the PNGs.
+APPS = {RES: True, S1_RES: False}
 SVG = "{http://www.w3.org/2000/svg}"
 
 ADAPTIVE, SHOWN = 108.0, 72.0
@@ -203,11 +207,12 @@ def write_pngs():
 
 
 def main(argv):
-    for rel, text in outputs().items():
-        path = os.path.join(RES, rel)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
+    for res in APPS:
+        for rel, text in outputs().items():
+            path = os.path.join(res, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
     if "--png" in argv:
         write_pngs()
 

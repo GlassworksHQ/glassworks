@@ -89,7 +89,7 @@ class ManageLog(
         private val LOGCAT = Regex("^\\s*(\\d+)\\.(\\d{3})\\s+\\d+\\s+\\d+\\s+([VDIWEF])\\s+([^:]+?)\\s*:\\s?(.*)$")
 
         /**
-         * One `logcat -v epoch` line (`1731456000.123  1234  1250 I S1Kiosk.Voice: text`) as an entry. [source]
+         * One `logcat -v epoch` line (`1731456000.123  1234  1250 I Glassworks.Voice: text`) as an entry. [source]
          * names the tag in words, or returns null for a tag the log leaves out. Verbose and debug lines are
          * left out.
          */

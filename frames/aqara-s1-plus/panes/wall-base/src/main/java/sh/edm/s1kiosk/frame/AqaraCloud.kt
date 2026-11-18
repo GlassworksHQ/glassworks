@@ -26,7 +26,7 @@ class AqaraCloud(
     private val run: (List<String>) -> String = ::shell,
 ) {
     private companion object {
-        const val TAG = "S1Kiosk.AqaraCloud"
+        const val TAG = "Glassworks.AqaraCloud"
         const val SERVICE = "ha_master"
 
         fun shell(cmd: List<String>): String = try {

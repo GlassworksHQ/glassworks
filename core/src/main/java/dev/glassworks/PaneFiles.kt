@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import dev.glassworks.secrets.SecretStore
 
 /**
- * Where the apps on the core keep each pane's settings: the file, by pane id ([FILES]). S1 Kiosk's PanePrefs
+ * Where the apps on the core keep each pane's settings: the file, by pane id ([FILES]). The S1 app's PanePrefs
  * and the generic app (#23) both open them here, so a pane's settings are in the same place in every app.
  */
 object PaneFiles {

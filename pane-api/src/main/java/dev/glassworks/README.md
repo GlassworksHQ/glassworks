@@ -41,8 +41,8 @@
 
 ---
 
-Glassworks is the device-neutral core being pulled out of
-[S1 Unleashed](../../../../../../README.md) one step at a time. A **frame** describes a device.
+Glassworks is the device-neutral core in
+[this repository](../../../../../../README.md), pulled out of the S1's app one step at a time. A **frame** describes a device.
 A **pane** is a feature: the Music Assistant player, voice, timers, the radio. This package
 (`dev.glassworks.pane`) is the contract between the two.
 
@@ -341,7 +341,7 @@ Assistant and answers at once, and the state's `radio.threadJoin` follows it to 
 reply or state carries a secret.
 
 **A step id is the step's own.** `GlassworksRuntime.setupSteps` gathers the steps through
-`SetupFlow.usable`. It leaves out, with an error in the `S1Kiosk` log, a step whose id is a core
+`SetupFlow.usable`. It leaves out, with an error in the `Glassworks` log, a step whose id is a core
 step (`wifi`, `ha`, `panes`, `signin`, `done`) or a setup-channel state key (`ip`, `ha`), or an earlier step's,
 and a step whose request names are already taken. A bad step costs only itself: the app still
 starts and the channel still answers. `FramePanesTest` checks a frame's step and section with a
@@ -676,7 +676,7 @@ sets the flag again at the end of its own shutdown.
 The files in `dev.glassworks` are licensed under the
 [Mozilla Public License 2.0](../../../../../../LICENSES/MPL-2.0.txt), except the libraries in
 [`libs/`](../../../../../../libs): `dev.glassworks.esphome` with its subpackages, and
-`dev.glassworks.improv`. Those are MIT, like the rest of S1 Unleashed.
+`dev.glassworks.improv`. Those are MIT, like the rest of the repository.
 
 The MPL works file by file. You can ship Glassworks inside a closed product, and your own frames
 and panes, in their own files, can use any licence. Changes to Glassworks' own files must be

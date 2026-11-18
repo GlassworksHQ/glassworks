@@ -271,7 +271,7 @@ open class MainActivity : Activity() {
         intent?.let { i -> handler.post { applySetupPreview(i) } }
         handler.post(setupTick)
         // The app's upkeep on each start (the S1's direct-boot splash).
-        Thread({ runtime.app.activityStarted(applicationContext) }, "s1-boot-splash").start()
+        Thread({ runtime.app.activityStarted(applicationContext) }, "glassworks-boot-splash").start()
         hideSystemUi()
     }
 
@@ -1251,7 +1251,7 @@ open class MainActivity : Activity() {
          */
         fun screenExtras(intent: Intent, trusted: (Intent) -> Boolean): Boolean {
             if (intent.extras == null || trusted(intent)) return false
-            Log.w("S1Kiosk", "ignored the extras of a start through ${intent.component?.shortClassName}: settings change only through adb")
+            Log.w("Glassworks", "ignored the extras of a start through ${intent.component?.shortClassName}: settings change only through adb")
             intent.replaceExtras(null as Bundle?)
             return true
         }
@@ -1265,7 +1265,7 @@ open class MainActivity : Activity() {
 
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()
-        private const val TAG = "S1Kiosk"
+        private const val TAG = "Glassworks"
         private const val REQ_STARTUP = 1
         private const val REQ_GECKO = 2
         private const val REQ_HOTSPOT = 3

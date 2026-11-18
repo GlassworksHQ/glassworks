@@ -61,7 +61,7 @@ object Inter {
                 .setStyle(FontStyle(weight, FontStyle.FONT_SLANT_UPRIGHT))
                 .build()
         } catch (t: Throwable) {
-            Log.w("S1Kiosk", "Inter unavailable, using sans-serif", t)
+            Log.w("Glassworks", "Inter unavailable, using sans-serif", t)
             failed = true
             null
         }
