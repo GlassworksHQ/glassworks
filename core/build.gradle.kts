@@ -1,4 +1,7 @@
 // The Glassworks core: the shell's free parts, the UI kit, setup and settings pieces, the web and Manage servers, the screen policy and the Engine API (#21). The parts that still reach the S1 app stay in it until their seams land.
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     id("com.android.library")
     id("glassworks.android")
@@ -11,6 +14,13 @@ android {
         // API 26, 29 and 34 (core-emulators.yml, #23).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+}
+
+// DeviceNamesTest reads a frame app's own tests and mockups and the shots they save (#502), which no compile task takes
+// in: a new Mirror shot, or one drawn from another frame, re-runs this module's tests instead of leaving them up to date.
+val frameMockups = fileTree(rootProject.file("frames")) { include("*/android/src/test/**/*.kt") }
+tasks.withType<Test>().configureEach {
+    inputs.files(frameMockups).withPropertyName("frameMockups").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 dependencies {

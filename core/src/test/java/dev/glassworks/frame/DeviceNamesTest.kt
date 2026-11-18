@@ -36,17 +36,28 @@ class DeviceNamesTest {
     /** A block comment in markup. Taken out before a file's lines are read, its newlines kept. */
     private val HTML_COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
 
-    /** A shot's name as a test or mockup saves it: `Mockup.save("…")`, `shoot("""…""")`, `shot("…")`, `setupShot("…")`. */
-    private val shot = Regex("""(?:save|shoot|shot|setupShot)\(\s*"{1,3}([^"]*)""")
+    /** A shot's name as a test or mockup saves it: `Mockup.save("…")`, `shoot("""…""")`, `shot ("…")`, `setupShot("…")`. */
+    private val shot = Regex("""(?:save|shoot|shot|setupShot)\s*\(\s*"{1,3}([^"]*)""")
 
-    /** A function's line, the name it gives when that is an identifier, and the indent it starts at (see [functions]). */
-    private val FUNCTION = Regex("""(?m)^([ \t]*)(?:(?:private|internal|public|override|suspend|inline|operator)\s+)*fun\s+([A-Za-z_][A-Za-z0-9_]*)?""")
+    /**
+     * A function's line, the name it gives when that is an identifier, and the indent it starts at (see [functions]).
+     * `@Test` and the like may sit on the same line.
+     */
+    private val FUNCTION = Regex(
+        """(?m)^([ \t]*)(?:(?:private|internal|public|override|suspend|inline|operator)\s+|@[A-Za-z_][\w.]*(?:\([^)]*\))?\s+)*fun\s+([A-Za-z_][A-Za-z0-9_]*)?""",
+    )
 
     /** A name something is called with: `helper(`, `helper<…>(`. */
     private val CALL = Regex("""\b([A-Za-z_][A-Za-z0-9_]*)\s*[<(]""")
 
     /** `TestFrames.mirror(…)` or `TestFrames::mirror`: the Mirror's own frame. */
     private val theMirror = Regex("""TestFrames(\.|::)mirror""")
+
+    /** Anything that builds a frame in a test: `TestFrames.…`, `TestFrames::s1`, `AqaraS1Plus(…)`, `GenericAndroid(…)`. */
+    private val FRAME = Regex("""TestFrames[.:]|AqaraS1Plus\(|GenericAndroid\(""")
+
+    /** A shot's name that says the Mirror: `mirror`, `mirror-settings`, `ways-no-touch-mirror`. */
+    private val MIRROR_SHOT = Regex("""(^|-)(?i:mirror)(-|$)""")
 
     /**
      * Panes only one frame can run, by the capability only that frame provides (frame.json's `provides`). They may name
@@ -83,7 +94,9 @@ class DeviceNamesTest {
         "java" -> Literals.of(f.readText(), Literals.Language.JAVA)
         "js", "mjs" -> Literals.of(f.readText(), Literals.Language.JS)
         "css" -> lines(cssWithoutComments(f.readText()))
-        "json" -> lines(unescapedJson(f.readText())) // no comments: "<!-- … -->" in a value is text a person reads
+        // JSON has no comments ("<!-- … -->" in a value is text a person reads), and its escapes are read per line,
+        // so an escape that stands for a line break doesn't move the numbers the file has.
+        "json" -> f.readText().lines().mapIndexed { i, l -> i + 1 to unescapedJson(l) }
         else -> lines(blanked(f.readText(), HTML_COMMENT))
     }
 
@@ -94,9 +107,28 @@ class DeviceNamesTest {
     private fun blanked(text: String, comments: Regex): String =
         text.replace(comments) { m -> "\n".repeat(m.value.count { it == '\n' }) }
 
-    /** [text] with JSON's `\uXXXX` escapes read as the characters a person sees: `\u004dirror` is `Mirror`. */
-    private fun unescapedJson(text: String): String =
-        text.replace(Regex("""\\u([0-9a-fA-F]{4})""")) { m -> m.groupValues[1].toInt(16).toChar().toString() }
+    /**
+     * [text] with JSON's escapes read as a person sees them: `\u004dirror` is `Mirror`, `\n` a space, and `\\` stays one
+     * backslash, so a value that spells an escape is the text it shows.
+     */
+    private fun unescapedJson(text: String): String {
+        val out = StringBuilder(text.length)
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            val escape = text.getOrNull(i + 1)
+            if (c != '\\' || escape == null) { out.append(c); i++; continue }
+            val hex = text.substring((i + 2).coerceAtMost(text.length), (i + 6).coerceAtMost(text.length))
+            when {
+                escape == 'u' && hex.length == 4 && hex.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' } -> {
+                    out.append(hex.toInt(16).toChar()); i += 6
+                }
+                escape in "nrt" -> { out.append(' '); i += 2 }
+                else -> { out.append(escape); i += 2 } // \\ is one backslash, \" one quote
+            }
+        }
+        return out.toString()
+    }
 
     /**
      * [text] without its CSS comments, and with the text a person sees inside a quoted string left alone: a rule's
@@ -165,6 +197,15 @@ class DeviceNamesTest {
             writeText("""{"label":"<!-- Mirror -->","note":"the Aqara S1 Plus"}""")
         }
         assertEquals("a JSON value is read whole, even a markup-looking one", listOf("Mirror", "Aqara", "S1"), texts(json).flatMap { names(it.second) })
+        val jsonEscapes = File.createTempFile("device-names", ".json").apply {
+            deleteOnExit()
+            writeText("""{"a":"\u004dirror","b":"\\u004dirror","c":"\u000aMirror"}""")
+        }
+        assertEquals(
+            "a JSON escape names what it shows, one that spells an escape shows nothing, and the line stays the file's",
+            listOf(1 to listOf("Mirror", "Mirror")),
+            texts(jsonEscapes).map { (line, text) -> line to names(text) },
+        )
         val escaped = File.createTempFile("device-names", ".css").apply {
             deleteOnExit()
             writeText(""".a::after { content: "a\"b" }
@@ -186,23 +227,53 @@ class DeviceNamesTest {
     @Test
     fun theMirrorShotsAreDrawnFromTheMirrorsFrame() {
         val tests = RepoFiles.sources(atLeast = 120, sourceSet = "test", inModules = listOf(RepoFiles.s1App)) { it.extension == "kt" }
-        val frames = Regex("""TestFrames\.|AqaraS1Plus\(|GenericAndroid\(""")
-        val mirrorShot = Regex("""(^|-)(?i:mirror)(-|$)""")
         val found = tests.flatMap { f ->
-            val code = f.readText()
-            if (!frames.containsMatchIn(code)) emptyList() else {
-                val functions = functions(code)
-                val bodies = functions.mapNotNull { (name, body) -> name?.let { it to body } }.toMap()
-                functions
-                    .map { (_, body) -> body to shotsIn(body).filter { mirrorShot.containsMatchIn(it) } }
-                    .filter { (body, shots) -> shots.isNotEmpty() && !drawsTheMirror(body, bodies) }
-                    .map { (_, shots) -> "${RepoFiles.rel(f)}: ${shots.distinct()} drawn without TestFrames.mirror" }
-            }
+            mirrorShotsWithoutTheFrame(f.readText()).map { "${RepoFiles.rel(f)}: $it drawn without TestFrames.mirror" }
         }
         assertTrue(
             "A shot named for the Mirror, drawn from another frame. Build it with TestFrames.mirror(context):\n" +
                 found.joinToString("\n"),
             found.isEmpty(),
+        )
+    }
+
+    /** [code]'s Mirror shots that its own function doesn't draw from `TestFrames.mirror`; a file without a frame has none. */
+    private fun mirrorShotsWithoutTheFrame(code: String): List<String> {
+        if (!FRAME.containsMatchIn(code)) return emptyList()
+        val functions = functions(code)
+        val bodies = functions.mapNotNull { (name, body) -> name?.let { it to body } }.toMap()
+        return functions
+            .map { (_, body) -> body to shotsIn(body).filter { MIRROR_SHOT.containsMatchIn(it) } }
+            .filter { (body, shots) -> shots.isNotEmpty() && !drawsTheMirror(body, bodies) }
+            .flatMap { it.second }.distinct()
+    }
+
+    @Test
+    fun `a shot named for the Mirror is read however it is spelled and however its test is written`() {
+        val raw = "\"\"\""
+        val snippets = listOf(
+            """fun capture(context: Context) = shoot("mirror-settings", TestFrames.s1(context))""",
+            """fun capture(context: Context) = shoot(${raw}mirror-settings${raw}, TestFrames.s1(context))""",
+            """@Test fun capture(context: Context) = shoot ("mirror-settings", TestFrames.s1(context))""",
+        )
+        assertEquals(listOf("mirror-settings", "mirror-settings", "mirror-settings"), snippets.flatMap(::mirrorShotsWithoutTheFrame))
+        assertEquals(
+            "the Mirror's own frame, in its function or a helper it calls",
+            emptyList<String>(),
+            listOf(
+                """fun capture(context: Context) = shoot("mirror-settings", TestFrames.mirror(context))""",
+                """fun makeMirror(context: Context) = TestFrames.mirror(context)
+                    |fun capture(context: Context) = shoot("mirror-settings", makeMirror(context))""".trimMargin(),
+            ).flatMap(::mirrorShotsWithoutTheFrame),
+        )
+        assertEquals(
+            "a new Mirror mockup can't be built from TestFrames.s1()",
+            listOf("mirror-settings"),
+            mirrorShotsWithoutTheFrame(
+                """fun makeMirror(context: Context) = TestFrames.mirror(context)
+                    |fun capture(context: Context) = shoot("mirror-settings", TestFrames.s1(context))
+                    |fun other(context: Context) = makeMirror(context)""".trimMargin(),
+            ),
         )
     }
 
