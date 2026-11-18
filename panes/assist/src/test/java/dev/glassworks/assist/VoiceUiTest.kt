@@ -79,6 +79,15 @@ class VoiceUiTest {
         assertEquals(listOf(36f), asked) // stops at the first size that fits
     }
 
+    @Test
+    fun aNarrowColumnAllowsMoreLinesAtTheSmallestSize() {
+        assertEquals(3, MainTextFit.lastLines(1230, 1230)) // the S1's 820 dp column
+        assertEquals(5, MainTextFit.lastLines(952, 1640)) // the Mirror: 476 of 820 dp
+        assertEquals(6, MainTextFit.lastLines(300, 1640))
+        assertEquals(MainTextFit.Fit(26f, 5), MainTextFit.choose(lastLines = 5) { 9 })
+        assertEquals(MainTextFit.Fit(30f, 2), MainTextFit.choose(lastLines = 5) { sp -> if (sp >= 36f) 3 else 2 })
+    }
+
     // ---------------------------------------------------------------- §4 motion
 
     @Test
