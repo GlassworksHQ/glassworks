@@ -60,4 +60,30 @@ class HttpClientTest {
     @Test fun `a port out of range is an IOException`() {
         try { http.request("GET", "http://127.0.0.1:65536/auth/token"); fail() } catch (_: IOException) {}
     }
+
+    @Test fun `a head without end is an IOException, not a heap full of headers`() {
+        answer("HTTP/1.1 200 OK\r\n" + (0 until 20).joinToString("") { "X-Filler-$it: ${"a".repeat(8 * 1024)}\r\n" } + "\r\n")
+        try { http.request("GET", url); fail() } catch (_: IOException) {}
+    }
+
+    @Test fun `it asks for no compression, unless the caller does`() {
+        assertEquals("identity", requested { http.request("GET", url) }["accept-encoding"])
+        assertEquals("gzip", requested { http.request("GET", url, mapOf("Accept-Encoding" to "gzip")) }["accept-encoding"])
+    }
+
+    /** The request's headers, lowercase, as the server read them. */
+    private fun requested(call: () -> Unit): Map<String, String> {
+        val seen = java.util.concurrent.ArrayBlockingQueue<Map<String, String>>(1)
+        Thread {
+            server.accept().use { s ->
+                val input = s.getInputStream().bufferedReader(Charsets.ISO_8859_1)
+                val headers = generateSequence { input.readLine() }.drop(1).takeWhile { it.isNotEmpty() }
+                    .associate { it.substringBefore(':').trim().lowercase() to it.substringAfter(':').trim() }
+                s.getOutputStream().apply { write("HTTP/1.1 204 No Content\r\n\r\n".toByteArray()); flush() }
+                seen.put(headers)
+            }
+        }.apply { isDaemon = true; start() }
+        call()
+        return seen.poll(2, java.util.concurrent.TimeUnit.SECONDS)!!
+    }
 }

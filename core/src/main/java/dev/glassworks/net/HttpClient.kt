@@ -67,6 +67,7 @@ class HttpClient(
             val hostHeader = (if (host.contains(':')) "[$host]" else host) + (if (uri.port > 0) ":${uri.port}" else "")
             val target = (uri.rawPath?.ifEmpty { "/" } ?: "/") + (uri.rawQuery?.let { "?$it" } ?: "")
             val head = StringBuilder("$method $target HTTP/1.1\r\nHost: $hostHeader\r\nConnection: close\r\n")
+            if (lines.none { it.first.equals("Accept-Encoding", ignoreCase = true) }) head.append("Accept-Encoding: identity\r\n")
             for ((k, v) in lines) head.append(k).append(": ").append(v).append("\r\n")
             head.append("\r\n")
             socket.getOutputStream().apply {
@@ -92,14 +93,22 @@ class HttpClient(
     }
 
     private companion object {
+        /** All of an answer's heads together, 1xx ones included; HA's are well under 2 KiB. */
+        const val MAX_HEAD = 64 * 1024
+
         fun read(input: InputStream, method: String, maxBytes: Int, bodyIf: (Int) -> Boolean): Response {
             var status: Int
+            var headBytes = 0
+            fun next(): String = line(input).also {
+                headBytes += it.length + 2
+                if (headBytes > MAX_HEAD) throw IOException("the answer's head is too long")
+            }
             val headers = HashMap<String, String>()
             do {
-                status = line(input).split(' ').getOrNull(1)?.toIntOrNull() ?: throw IOException("not an HTTP answer")
+                status = next().split(' ').getOrNull(1)?.toIntOrNull() ?: throw IOException("not an HTTP answer")
                 headers.clear()
                 while (true) {
-                    val l = line(input)
+                    val l = next()
                     if (l.isEmpty()) break
                     val i = l.indexOf(':')
                     if (i > 0) headers[l.substring(0, i).trim().lowercase()] = l.substring(i + 1).trim()
