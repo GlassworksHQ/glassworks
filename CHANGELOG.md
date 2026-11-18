@@ -3,7 +3,8 @@
 What changed in each S1 Kiosk release, for people running a panel. The first line of each version is
 what Home Assistant shows on the update card. Releases are built from tags by
 [`.github/workflows/release.yml`](.github/workflows/release.yml), which publishes the matching section
-below as the release notes.
+below as the release notes. Glassworks for generic Android and its legacy build have their own:
+[frames/generic-android/CHANGELOG.md](frames/generic-android/CHANGELOG.md).
 
 ## [Unreleased]
 
@@ -15,6 +16,11 @@ below as the release notes.
   with a QR code to Kiln. On an S1 whose boot image has no update service, it says Kiln adds one. It's
   never required: Continue or Not now moves on. Panels that are already set up don't see it, and updates
   that already install by themselves skip it.
+- **Glassworks for generic Android gets the Diagnostics pane.** The app on tablets and the lululemon Mirror, in
+  both of its builds, now sends its CPU, RAM, storage, Wi-Fi and uptime to Home Assistant, as S1 Kiosk does, and
+  shows them on its Diagnostics page on the panel and on the Manage page. These devices have no CPU temperature
+  sensor the app knows, so there is no temperature entity. On a narrow screen, such as the Mirror's in portrait, a
+  pane's reading tiles now stack one to a row instead of cutting off their values.
 - **Voice says when it can't get ready.** When the wake word model doesn't download (no internet, a
   certificate the panel can't verify, an HTTP error), fails its check, can't be saved, or the microphone
   doesn't work or isn't allowed, the Assist page on the panel and on the Manage page says so in words, with
@@ -378,6 +384,10 @@ below as the release notes.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.
+- **The Manage page can pick what the camera may do.** Its camera page showed the use as "On the panel",
+  which a panel without touch, such as the Mirror, can't offer: turning on the ONVIF stream ended at
+  "Needs Presence + camera." It now has the panel's two cards, *Presence only* and *Presence + camera*,
+  on every panel, and the Log says who changed it. "Needs Presence + camera." links to them.
 - **A screen without touch waits for Home Assistant after phone setup.** On the Mirror, the setup screen
   kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
   Assistant to add the panel, and where: Settings → Devices & services, or the old entry's

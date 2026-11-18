@@ -174,9 +174,10 @@ all apps and libraries together, and takes the newest of its own among them. So 
 other parts come out after this app's newest one, the app sees no update until its next release: every app
 should release at least once in any 100 of the repo's releases. A full page is about 1 MB (7 kB a release on
 2026-11-16); the check reads up to 4 MB. One page keeps each check (after the app starts, then every 24 hours) to one request
-against GitHub's limit of 60 an hour without a token. The release workflow doesn't build the generic app
-yet, and there has been no release of it. Its first release needs its key ([Signing](#signing)) and
-`release.yml` steps for the names above.
+against GitHub's limit of 60 an hour without a token. [`generic-release.yml`](../../.github/workflows/generic-release.yml)
+publishes both builds on the tags above, with notes from [CHANGELOG.md](CHANGELOG.md) (how to cut one:
+[docs/releasing.md](../../docs/releasing.md#glassworks-for-generic-android-and-its-legacy-build)). There has been
+no release of either yet.
 
 The commands below use the generic app's id, `dev.glassworks.generic_android`. For S1 Kiosk on a
 tablet, use `sh.edm.s1kiosk`.
@@ -284,9 +285,11 @@ The keystore is PKCS12, which has one password: `GENERIC_KEYSTORE_PASSWORD` and 
 same value, or signing fails with "keystore password was incorrect". The certificate's SHA-256 is
 `564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`.
 
-Test builds sign with it too ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), so each one
-updates the last in place, settings kept. CI checks every APK's certificate SHA-256 against the one above, so a new
-key, even with the same name, fails the build. Builds from before 2026-11-17 were signed with a key made for their
+Releases ([generic-release.yml](../../.github/workflows/generic-release.yml)) and test builds
+([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)) sign with it, so each one updates the last
+in place, settings kept. CI checks every APK's certificate SHA-256 against the one above
+([`tools/release/generic-release-cert.sha256`](../../tools/release/generic-release-cert.sha256), through
+`check-update-compat.sh --app`), so a new key, even with the same name, fails the build. Builds from before 2026-11-17 were signed with a key made for their
 own run: uninstall one before installing a newer build (once; that wipes the app's settings).
 
 ## Panes
@@ -298,7 +301,7 @@ own run: uninstall one before installing a newer build (once; that wipes the app
 | Sendspin | Depends on the device | Needs a speaker. |
 | Zigbee and Thread radio | No | No supported radio. |
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Planned | Worked out: needs no special hardware. |
+| Diagnostics | Alpha | Worked out: needs no special hardware. Both builds have it. No CPU temperature: no frame here names a thermal zone. Not yet checked on a device. |
 | Bluetooth proxy | Depends on the device | Worked out: needs Bluetooth LE. |
 | Notifications | Planned | Worked out: needs no special hardware. |
 | Camera | Depends on the device | Worked out: needs a camera. |

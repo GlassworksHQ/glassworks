@@ -107,8 +107,8 @@ androidComponents {
 }
 
 dependencies {
-    // The core, the Gecko engine, and the panes: Assist (with its timers), Sendspin, and the camera (#117), which
-    // runs only on a device with a camera. Nothing S1: no radio, wall base, time zone or root side. The engine is GeckoView 159, but
+    // The core, the Gecko engine, and the panes: Assist (with its timers), Sendspin, the camera (#117), which
+    // runs only on a device with a camera, and diagnostics. Nothing S1: no radio, wall base, time zone or root side. The engine is GeckoView 159, but
     // GeckoView 144 for the legacy build (#198): both have the same classes, so each build has one.
     implementation(project(":glassworks-pane-api"))
     implementation(project(":glassworks-core"))
@@ -119,6 +119,7 @@ dependencies {
     implementation(project(":pane-timers"))
     implementation(project(":pane-sendspin"))
     implementation(project(":pane-camera"))
+    implementation(project(":pane-diagnostics"))
     implementation(project(":esphome-api-android"))
     implementation(project(":improv"))
 

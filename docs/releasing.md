@@ -75,8 +75,9 @@ means changing that file in the same PR as the secrets.
 Secrets of the **`release-signing` environment**, not repository secrets. A repository secret can be
 read by any workflow that anyone with write access pushes, on any branch; an environment secret only
 by jobs that run on what the environment allows. Here that's `main`, `test-build/**` branches and the
-`v*` and `aqara-s1-plus-v*` tags, and a ruleset lets only admins create those branches and tags
-(see *Who can sign*, below).
+`v*` and `aqara-s1-plus-v*` tags (and the generic app's `generic-android-v*` and `generic-android-legacy-v*`,
+[below](#glassworks-for-generic-android-and-its-legacy-build)), and a ruleset lets only admins create those
+branches and tags (see *Who can sign*, below).
 
 Create the environment once (Settings → Environments → New environment → `release-signing`;
 Deployment branches and tags → Selected: `main`, `test-build/**`, tags `v*`, `aqara-s1-plus-v*`),
@@ -98,7 +99,7 @@ gh secret list --env release-signing --repo GlassworksHQ/glassworks
 The workflow uses only these four secrets, the radio bundle key below, the optional `VERCEL_DEPLOY_HOOK`
 (a Vercel deploy hook URL for the web installer), and the job's own `GITHUB_TOKEN`. The same `release-signing`
 environment also holds Glassworks' own key for the generic app and its legacy build (`GENERIC_*`, since
-2026-11-17), which only `generic-test-build.yml` uses so far: see
+2026-11-17), which `generic-test-build.yml` and `generic-release.yml` use: see
 [frames/generic-android/README.md](../frames/generic-android/README.md#signing).
 
 ### Who can sign
@@ -106,7 +107,8 @@ environment also holds Glassworks' own key for the generic app and its legacy bu
 Anyone who can run a job in `release-signing` or `radio-signing` can sign code every panel accepts.
 Rulesets (Settings → Rules) keep that to admins:
 
-- **Release tags** (`v*`, `aqara-s1-plus-v*`): only admins can create, move or delete them.
+- **Release tags** (`v*`, `aqara-s1-plus-v*`, and from the generic app's first release `generic-android-v*`
+  and `generic-android-legacy-v*`): only admins can create, move or delete them.
 - **Test builds** (`test-build/**`): only admins can create, push to or delete these branches.
 - **main**: changes go through a pull request with the `app`, `web`, `scripts` and `root` checks
   green; no force pushes or deletion. Admins can bypass, for emergencies.
@@ -278,6 +280,112 @@ Vercel preview. Production builds come only from that deploy hook, called by `re
 [`installer-deploy.yml`](../.github/workflows/installer-deploy.yml). The second runs on a push to
 `main` that changes an installer input (`kiln/`, `branding/`, or a repo file the installer stages), or
 by hand from the Actions tab.
+
+## Glassworks for generic Android and its legacy build
+
+Two more apps release from this repo, each on its own tag and asset names, which are the ones its update check
+reads (`ReleaseLine` in `core/.../update/Releases.kt`). So no app ever offers itself another app's APK:
+
+| App | applicationId | Tag | Assets, one pair per ABI in `frames/generic-android/design/frame.json` |
+|---|---|---|---|
+| Glassworks for generic Android (Android 8+) | `dev.glassworks.generic_android` | `generic-android-v1.2.3` | `glassworks-generic-android-<abi>-1.2.3.apk` and its `.sha256` |
+| Its legacy build (Android 6-7, the Mirror) | `dev.glassworks.generic_android.legacy` | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-<abi>-1.2.3.apk` and its `.sha256` |
+
+[`generic-release.yml`](../.github/workflows/generic-release.yml) builds them. Both are signed with Glassworks'
+own key, never S1 Kiosk's ([frames/generic-android/README.md](../frames/generic-android/README.md#signing)),
+whose certificate is in [`tools/release/generic-release-cert.sha256`](../tools/release/generic-release-cert.sha256).
+S1 Kiosk's `release.yml` never sees these tags, and these releases are published with `--latest=false`, so
+`releases/latest` stays S1 Kiosk's.
+
+**Release notes.** Both builds share [`frames/generic-android/CHANGELOG.md`](../frames/generic-android/CHANGELOG.md)
+and one version sequence: the section `## [1.2.3] - <date>` is the notes of `generic-android-v1.2.3` and of
+`generic-android-legacy-v1.2.3`, whichever of the two you tag. The repo's `CHANGELOG.md` stays S1 Kiosk's. A change
+that people running both apps would notice, a core change for example, gets a line in each file. Its first line is
+the update card's text in Home Assistant, as for S1 Kiosk.
+
+**Versions.** `MAJOR.MINOR.PATCH`, versionCode `major*10000 + minor*100 + patch`, as for S1 Kiosk. The workflow
+refuses a version that isn't higher than the line's last release. Start at **0.2.0**: test builds are 0.1.0 and
+0.1.1, and a device on test build 0.1.1 is offered only a higher version (and `adb install -r` refuses a lower
+versionCode).
+
+### Before the first generic tag (once, admin)
+
+The tags need the same protection as S1 Kiosk's: only admins create them (the ruleset), and only they reach the key
+(the environment). Ruleset first, so the environment never lets in a tag that anyone with write access could push. The
+block stops at the first error, and adds the environment's tags only after it has read both back from the ruleset:
+
+```sh
+(
+  set -euo pipefail
+  repo=repos/GlassworksHQ/glassworks
+  tags=('generic-android-v*' 'generic-android-legacy-v*')
+  # The whole ruleset as it is, with the two tags added to its include list.
+  gh api "$repo/rulesets/27082980" --jq '{name, target, enforcement, bypass_actors, rules,
+      conditions: (.conditions | .ref_name.include += ["refs/tags/generic-android-v*", "refs/tags/generic-android-legacy-v*"]
+        | .ref_name.include |= unique)}' |
+    gh api -X PUT "$repo/rulesets/27082980" --input - > /dev/null
+  for t in "${tags[@]}"; do
+    gh api "$repo/rulesets/27082980" --jq '.conditions.ref_name.include[]' | grep -Fqx "refs/tags/$t" ||
+      { echo "the ruleset doesn't cover $t: stopping before the environment" >&2; exit 1; }
+  done
+  for t in "${tags[@]}"; do
+    gh api -X POST "$repo/environments/release-signing/deployment-branch-policies" -f name="$t" -f type=tag
+  done
+)
+```
+
+Both patterns are needed: `generic-android-v*` doesn't match `generic-android-legacy-v1.2.3`.
+
+### Dry run
+
+A manual run builds, signs and checks exactly what the tag would publish, keeps the APKs as an artifact for 3 days,
+and creates no release. Run it on `main` (or a `test-build/` branch: the environment refuses any other):
+
+```sh
+gh workflow run generic-release.yml --repo GlassworksHQ/glassworks --ref main -f tag=generic-android-legacy-v0.2.0
+gh run download <run-id> --repo GlassworksHQ/glassworks -n generic-android-legacy-v0.2.0
+```
+
+Before the version has its section in the CHANGELOG, the dry run warns and shows *Unreleased* as the notes (or a
+placeholder while *Unreleased* is empty); the tag would fail there.
+
+### Release
+
+1. In `frames/generic-android/CHANGELOG.md`, rename *Unreleased* to `## [0.2.0] - <date>` (one-sentence first
+   line), add a new empty `## [Unreleased]` above it for the next changes, and merge that. If the version already
+   has its section, because the other app was released at it first, don't rename *Unreleased* again: tag the second
+   app on that section (add a line to it if the second app changed), so the file never has two `[0.2.0]` headings.
+2. Tag the merged commit, one tag per app you release:
+
+```sh
+git switch main && git pull
+git tag -a generic-android-v0.2.0 -m "Glassworks for generic Android 0.2.0"
+git tag -a generic-android-legacy-v0.2.0 -m "Glassworks for generic Android 0.2.0, legacy build"
+git push origin generic-android-v0.2.0 generic-android-legacy-v0.2.0
+gh run list --repo GlassworksHQ/glassworks --workflow generic-release.yml --limit 2
+```
+
+Each tag runs the workflow once. Its `build` job (environment `release-signing`, read-only token):
+
+1. reads the app and version from the tag, and refuses a version that isn't higher than the line's last release
+   (`tools/release/check-newer-than-released.sh`);
+2. takes the notes from the CHANGELOG, before the slow build;
+3. builds `:generic-android:assembleRelease` (or `assembleLegacy`) with `-PgenericVersion` once per ABI of the
+   frame, with `GENERIC_REQUIRE_RELEASE_SIGNING=true`;
+4. checks each APK: `apksigner verify`, `tools/release/check-update-compat.sh --app <line> --signed` (Glassworks'
+   certificate, the applicationId, no `sharedUserId`, the components named from outside the APK), the package,
+   versionName and versionCode, the minSdk (26, or 23 for legacy), its ABI's GeckoView, and the system
+   permissions the Mirror needs;
+5. writes a `.sha256` for each.
+
+Then `publish` (tag pushes only, write token, no key, one run per line at a time) checks the version again against
+the releases that exist by then, so two tags of one line pushed together can't publish out of order. It creates the release with every APK and `.sha256` in one
+`gh release create`, so a release never has half its ABIs. Installed copies see it within 24 hours, or at once
+through `homeassistant.update_entity` on the app's update entity.
+
+Not part of it yet: Kiln still installs the generic app and the Mirror's build from a test build's APK
+(`?apk=local`), and its release route serves S1 Kiosk only (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`),
+so the workflow doesn't rebuild the installer.
 
 ## Raising targetSdk
 

@@ -162,12 +162,13 @@ ${foot(viewer)}"""
      * A settings page, drawn as the panel's menu draws it (#242): the heading with "Panes ›" for a pane,
      * its on/off at top right, why it can't run, then its items, each changeable here as on the panel.
      * A pane's [state] puts its chip after the heading on a phone, where the nav is folded away.
-     * [dialog]: an item's edit or a question over the page. [problem]: what went wrong with the last change.
+     * [dialog]: an item's edit or a question over the page. [problem]: what went wrong with the last change, a
+     * link to the item at [problemSee] when it says where to fix it ([SettingsItem.Switch.see]).
      * [restart]: a change waits for the app to start again.
      */
     fun section(s: PanelStatus, v: Viewer, path: String, title: String, state: PaneState?, sec: SettingsSection?,
                 links: List<Pair<String, String>> = emptyList(), dialog: Dialog? = null, problem: String? = null, restart: Boolean = false,
-                notice: String? = null): String {
+                notice: String? = null, problemSee: String? = null): String {
         val heading = sec?.heading ?: title
         val why = sec?.let { runCatching { it.unavailable() }.getOrNull() }
         val master = sec?.master?.takeIf { why == null }?.let { m -> toggle(v, sec.id, SettingsChange.MASTER, m, heading) }.orEmpty()
@@ -175,7 +176,7 @@ ${foot(viewer)}"""
             """${state?.let { """<span class="pchip">${chip(it)}</span>""" }.orEmpty()}$master</div>"""
         val lines = listOfNotNull(
             why?.let { """<p class="sub">${esc("This pane can't run on this panel: $it.")}</p>""" },
-            problem?.let { """<p class="err" role="alert">${esc(it)}</p>""" },
+            problem?.let { """<p class="err" role="alert">${see(it, problemSee)}</p>""" },
             if (restart) """<div class="banner"><i class="dot work"></i><span>${esc(SettingsChange.RESTART_TEXT)}</span>${action(v, "/action/restart", "Restart now", "pill primary")}</div>""" else null,
         ).joinToString("")
         val card = if (sec == null) """<section class="card list pg"><div class="row static note"><span>${esc(NOT_RUNNING)}</span></div></section>"""
@@ -216,11 +217,11 @@ ${foot(viewer)}"""
     private fun items(v: Viewer, path: String, section: String, items: List<SettingsItem>, prefix: String = ""): String = items.joinToString("") { item ->
         val key = prefix + SettingsChange.titleOf(item)
         fun edit(title: String, value: String) =
-            """<a class="row" href="${esc(path)}?edit=${esc(enc(key))}"><div><b>${esc(title)}</b><span>${esc(value)}</span></div><i class="chev" aria-hidden="true">›</i></a>"""
+            """<a class="row" id="${anchor(key)}" href="${esc(path)}?edit=${esc(enc(key))}"><div><b>${esc(title)}</b><span>${esc(value)}</span></div><i class="chev" aria-hidden="true">›</i></a>"""
         when (item) {
             is SettingsItem.Text -> if (SettingsChange.canChange(item)) edit(item.title, safe { SettingsChange.shown(item) })
                 else row(item.title, safe { SettingsChange.shown(item) }, dim = true)
-            is SettingsItem.Switch -> """<div class="row"><div><b>${esc(item.title)}</b>${if (item.detail.isNotEmpty()) "<span>${esc(item.detail)}</span>" else ""}</div>${toggle(v, section, key, item, item.title)}</div>"""
+            is SettingsItem.Switch -> """<div class="row" id="${anchor(key)}"><div><b>${esc(item.title)}</b>${if (item.detail.isNotEmpty()) "<span>${see(item.detail, item.see)}</span>" else ""}</div>${toggle(v, section, key, item, item.title)}</div>"""
             is SettingsItem.Slider -> {
                 val now = runCatching { item.value() }.getOrDefault(item.min)
                 """<form class="row sl" method="post" action="/settings">${fields(v, section, key)}<div class="slh"><b>${esc(item.title)}</b><em>${esc(safe { item.shown(now) })}</em></div>""" +
@@ -228,7 +229,7 @@ ${foot(viewer)}"""
             }
             is SettingsItem.Duration -> edit(item.title, safe { item.shown(item.value()) })
             is SettingsItem.TimeRange -> edit(item.title, safe { item.shown(item.value()) })
-            is SettingsItem.Choice -> edit(item.title, safe { SettingsChange.shown(item) })
+            is SettingsItem.Choice -> item.cards?.let { lines -> cards(v, section, key, item, lines) } ?: edit(item.title, safe { SettingsChange.shown(item) })
             is SettingsItem.SignIn -> edit(item.title, safe { item.shown(item.isSet()) })
             // As the panel: a line that says what's missing and can be set is amber (fixable).
             is SettingsItem.Info -> row(safe { item.title() }, safe { item.detail() }, fix = runCatching { item.fixable() }.getOrDefault(false))
@@ -271,6 +272,25 @@ ${foot(viewer)}"""
             is SettingsItem.Blueprints -> blueprints(v, item)
         }
     }
+
+    /** A choice drawn as cards (#117's approved look): each card a button that posts its option, the picked one lit. */
+    private fun cards(v: Viewer, section: String, key: String, item: SettingsItem.Choice, lines: (String) -> String): String {
+        val now = safe { item.value() }
+        val buttons = runCatching { item.options() }.getOrDefault(emptyList()).joinToString("") { (id, name) ->
+            val on = id == now
+            """<button class="uc${if (on) " on" else ""}" type="submit" name="value" value="${esc(id)}" aria-pressed="$on">""" +
+                """<b>${esc(name)}</b><span>${esc(safe { lines(id) })}</span></button>"""
+        }
+        return """<form class="ucs" id="${anchor(key)}" method="post" action="/settings">${fields(v, section, key)}<div class="gl">${esc(item.title)}</div>""" +
+            """<div class="ucg">$buttons</div></form>"""
+    }
+
+    /** [text], as a link to the item at [key] on the same page when there is one. */
+    private fun see(text: String, key: String?): String =
+        key?.let { """<a class="see" href="#${anchor(it)}">${esc(text)}</a>""" } ?: esc(text)
+
+    /** An item's place on its page, from its key ([SettingsChange.titleOf], a group's title first). */
+    private fun anchor(key: String) = "i-" + key.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
 
     /**
      * A pane's blueprints, as the panel's card: each button is a link to Home Assistant's own page in a new
@@ -552,6 +572,13 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 .sp{display:block;width:100%;height:24px;margin-top:8px}.sp polyline{fill:none;stroke:var(--sky);stroke-width:1.5;vector-effect:non-scaling-stroke}
 .banner{display:flex;align-items:center;gap:13px;padding:10px 10px 10px 18px;border-radius:20px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);margin:14px 0}.banner span{flex:1}.banner form{margin:0}
 .main>.err{color:var(--rose);margin:10px 0}
+a.see{color:inherit;text-decoration:underline;text-underline-offset:3px}[id^="i-"]{scroll-margin-top:24px}
+.ucs{margin:0;padding:6px 0 18px;border-bottom:1px solid var(--edge)}.ucs .gl{margin-top:16px}
+.ucg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.uc{display:flex;flex-direction:column;gap:4px;text-align:left;padding:16px 18px;border-radius:22px;border:1px solid var(--edge);background:var(--glass);color:var(--muted);font:inherit;cursor:pointer}
+.uc b{font-weight:400;font-size:19px}.uc span{font-size:14px;line-height:1.35;color:var(--muted)}.uc:hover{background:var(--hover)}
+.uc.on{color:var(--fg);border:1.6px solid transparent;background:linear-gradient(var(--bg-2),var(--bg-2)) padding-box,linear-gradient(135deg,var(--sky),var(--violet)) border-box}
+.uc:focus-visible{outline:2px solid var(--sky);outline-offset:3px}
 .chev{font-style:normal;color:var(--faint);font-size:22px;line-height:1}
 .ph{font-size:48px;font-weight:300;letter-spacing:-.02em;margin:0 0 6px}.sub{color:var(--muted);font-size:18px;margin:0 0 26px}
 .foot{color:var(--faint);font-size:14px;margin-top:6px}
@@ -577,7 +604,7 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 .tile:last-child{border-bottom:0}.tile small{color:var(--fg);font-size:16px}.tile b{font-size:14px;color:var(--muted);gap:8px}.tile span{display:none}
 .crumb{font-size:20px}.pchip{display:inline-flex}.ptl{grid-template-columns:repeat(2,minmax(0,1fr))}.banner{flex-wrap:wrap}
 .row.bp{flex-wrap:wrap;row-gap:10px}.row.bp>div:first-child{flex-basis:100%}
-.list{padding:4px 20px}.row{min-height:56px}.row.static{flex-wrap:wrap;row-gap:4px}.row em{flex-basis:100%;max-width:none;text-align:left}.row b{font-size:16px}.row span{font-size:14px}.chev{display:none}
+.ucg{grid-template-columns:1fr}.list{padding:4px 20px}.row{min-height:56px}.row.static{flex-wrap:wrap;row-gap:4px}.row em{flex-basis:100%;max-width:none;text-align:left}.row b{font-size:16px}.row span{font-size:14px}.chev{display:none}
 .ph{font-size:32px}.sub{font-size:15px;margin-bottom:18px}.lt{flex-direction:column;gap:0}.dl{text-align:left;margin:0 0 14px}.search{flex-basis:100%}
 .logs{padding:12px 14px;font-size:12.5px}.lr{grid-template-columns:auto 1fr;gap:4px 12px}.lr span{grid-column:1/-1;padding-bottom:6px}}"""
 

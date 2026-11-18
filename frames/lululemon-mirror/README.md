@@ -121,7 +121,7 @@ The boot logo before Android starts stays lululemon's: it lives in the signed bo
 | Sendspin | Planned | It has stereo speakers. |
 | Zigbee and Thread radio | No | No Zigbee or Thread radio. |
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Planned | Worked out: needs no special hardware. |
+| Diagnostics | Planned | Worked out: needs no special hardware. The legacy build has the pane, with no CPU temperature. Not yet run on a Mirror. |
 | Bluetooth proxy | Planned | Worked out: has Bluetooth LE (its WCN3660B, read from a teardown). |
 | Notifications | Planned | Worked out: needs no special hardware. |
 | Camera | Planned | Worked out: has a camera (5 MP, front). The legacy build has the pane: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on (`camera_pane` in Home Assistant); Kiln grants the camera. Not yet run on a Mirror. |
