@@ -12,7 +12,7 @@ import {
   BackupRefused, InstallFlow, backupZip, checkRestorable, fmtSize, readBackupZip, restoreFromBackup,
   type BackupFile, type BackupMeta, type BackupStore, type Devices, type Recipe,
 } from '@glassworks/kiln-core';
-import { SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
+import { openSignInWindow, SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
 import type { FrameUi } from '../frames/aqara-s1-plus';
 import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
 import { explain } from './explain';
@@ -122,7 +122,7 @@ export class Session implements SetupSteps {
         const v = await kioskVersion(this.panel!, this.lid());
         return { version: v?.name, code: v?.code };
       },
-      openTab: (url) => (this.d.openTab ?? ((u) => window.open(u, '_blank')))(url),
+      openTab: (url) => (this.d.openTab ? this.d.openTab(url) : openSignInWindow()),
     });
   }
 
@@ -454,6 +454,7 @@ export class Session implements SetupSteps {
   homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
+  skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
   radio(): Promise<void> { return this.steps.radio(); }
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
 

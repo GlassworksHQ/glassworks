@@ -230,7 +230,7 @@ Kiln runs entirely in your browser and uploads nothing. It walks you through fiv
 </tr>
 <tr>
 <td width="50%"><img src="../../docs/img/kiln/wifi-new.webp" alt="Kiln's Wi-Fi step: Which Wi-Fi? A list of networks in range of the panel and a password field."></td>
-<td width="50%"><img src="../../docs/img/kiln/home-assistant.webp" alt="Kiln's Home Assistant step: Sign in to Home Assistant. The address found on the network, and a Sign in button."></td>
+<td width="50%"><img src="../../docs/img/kiln/home-assistant.webp" alt="Kiln's Home Assistant step: Sign in to Home Assistant. The address found on the network, a Sign in button, and a link to sign in on the panel instead."></td>
 </tr>
 </table>
 

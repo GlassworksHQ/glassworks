@@ -173,6 +173,24 @@ export class SetupChannel {
   close(): Promise<void> { return this.io.close(); }
 }
 
+/**
+ * Kiln's sign-in (issue 453): the panel's own sign-in, started for a window Kiln opened, whose last page closes that
+ * window (`then=kiln`). On the address the state's `signinUrl` gives, so it reaches the panel as the QR code does.
+ */
+export function kilnSignInUrl(signinUrl: string): string {
+  return new URL('/signin/continue?then=kiln', signinUrl).href;
+}
+
+type Open = (url: string, target: string, features?: string) => Window | null;
+
+/**
+ * The window for Kiln's sign-in, opened inside the click (pop-up blockers): a pop-up, or a tab where the browser
+ * won't open one. Null when it opens neither.
+ */
+export function openSignInWindow(open: Open = (u, t, f) => window.open(u, t, f)): Window | null {
+  return open('about:blank', 'glassworks-signin', 'popup,width=520,height=720') ?? open('about:blank', '_blank');
+}
+
 /** http(s)://host[:port][/path], no spaces or quotes. */
 export function validHaUrl(u: string): boolean {
   try {
