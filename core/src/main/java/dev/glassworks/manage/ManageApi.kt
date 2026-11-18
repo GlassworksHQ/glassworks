@@ -91,6 +91,8 @@ class ManageApi(
         "Access-Control-Allow-Methods" to "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers" to "Authorization, Content-Type",
         "Access-Control-Max-Age" to "600",
+        // A page on another panel reads the busy answer's wait; a cross-origin script sees no other header (CodeRabbit on #488).
+        "Access-Control-Expose-Headers" to "Retry-After",
     ) + if (req.headers["access-control-request-private-network"] == "true" && localOrigin(req.headers["origin"])) mapOf("Access-Control-Allow-Private-Network" to "true") else emptyMap()
 
     companion object {

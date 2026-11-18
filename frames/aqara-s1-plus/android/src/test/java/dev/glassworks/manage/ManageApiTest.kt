@@ -203,6 +203,7 @@ class ManageApiTest {
                 .getOrElse { throw AssertionError("a third check waited on Home Assistant instead of being turned away", it) }
             assertEquals(503, third.status)
             assertEquals("2", third.headers["Retry-After"])
+            assertEquals("a page on another panel may read the wait", "Retry-After", third.headers["Access-Control-Expose-Headers"])
             assertEquals(2, f.userChecks.size)
         } finally {
             gate.countDown()
