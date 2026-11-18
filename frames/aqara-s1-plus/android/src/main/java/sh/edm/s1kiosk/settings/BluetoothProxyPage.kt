@@ -24,14 +24,14 @@ import dev.glassworks.bluetoothproxy.ProxyPhase.RETRYING
 import dev.glassworks.bluetoothproxy.ProxyPage
 import dev.glassworks.pane.IN_HOME_ASSISTANT
 import dev.glassworks.pane.SettingsItem
-import sh.edm.s1kiosk.ui.Glass
-import sh.edm.s1kiosk.ui.Glass.Companion.BD
-import sh.edm.s1kiosk.ui.Glass.Companion.FA
-import sh.edm.s1kiosk.ui.Glass.Companion.MU
-import sh.edm.s1kiosk.ui.Glass.Companion.ROSE
-import sh.edm.s1kiosk.ui.Glass.Companion.SKY
-import sh.edm.s1kiosk.ui.Glass.Companion.TX
-import sh.edm.s1kiosk.ui.Glass.Companion.VIOLET
+import dev.glassworks.ui.Glass
+import dev.glassworks.ui.Glass.Companion.BD
+import dev.glassworks.ui.Glass.Companion.FA
+import dev.glassworks.ui.Glass.Companion.MU
+import dev.glassworks.ui.Glass.Companion.ROSE
+import dev.glassworks.ui.Glass.Companion.SKY
+import dev.glassworks.ui.Glass.Companion.TX
+import dev.glassworks.ui.Glass.Companion.VIOLET
 
 /**
  * The Bluetooth proxy's settings page, as approved on #121 (2026-11-13): a status line with no dot,

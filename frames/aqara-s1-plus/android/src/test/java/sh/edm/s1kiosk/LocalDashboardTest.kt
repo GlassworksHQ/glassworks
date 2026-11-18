@@ -18,16 +18,17 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.dashboard.Dashboard
-import sh.edm.s1kiosk.dashboard.DashboardOptions
-import sh.edm.s1kiosk.discovery.HaDiscovery
-import sh.edm.s1kiosk.esphome.ManualExecutor
-import sh.edm.s1kiosk.esphome.PanelDevice
-import sh.edm.s1kiosk.esphome.RecordingMdns
+import dev.glassworks.dashboard.Dashboard
+import dev.glassworks.dashboard.DashboardOptions
+import dev.glassworks.discovery.HaDiscovery
+import dev.glassworks.device.ManualExecutor
+import dev.glassworks.device.PanelDevice
+import dev.glassworks.device.RecordingMdns
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.net.InetAddress
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.KioskPrefs
 
 /**
  * #449: a dashboard set as `http://homeassistant.local:8123` on an Android that can't resolve `.local` (the S1's

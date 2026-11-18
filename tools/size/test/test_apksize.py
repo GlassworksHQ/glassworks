@@ -27,9 +27,9 @@ PARTS = A.read_json(os.path.join(os.path.dirname(HERE), "parts.json"))
 CLASSES = """P d 10	10	10000	<TOTAL>
 C d 1	1	4000	org.mozilla.geckoview.GeckoView
 C d 1	1	1000	sh.edm.s1kiosk.MainActivity
-C d 1	1	1000	sh.edm.s1kiosk.voice.AssistPane
-C d 1	1	500	sh.edm.s1kiosk.VoiceOverlay$Ring
-C d 1	1	500	sh.edm.s1kiosk.sendspin.SendspinPane
+C d 1	1	1000	dev.glassworks.assist.AssistPane
+C d 1	1	500	dev.glassworks.VoiceOverlay$Ring
+C d 1	1	500	dev.glassworks.speaker.SendspinPane
 C d 1	1	1000	org.bouncycastle.crypto.Digest
 C d 1	1	1000	org.tensorflow.lite.Interpreter
 C d 1	1	500	sh.edm.s1kiosk.frame.TimeZonePane
@@ -94,20 +94,20 @@ class Owners(unittest.TestCase):
 
     def test_a_panes_classes_outside_its_package(self):
         """The verifier's note 6: classes only a pane uses, outside its package, are that pane's."""
-        for name in ("sh.edm.s1kiosk.VoiceOverlay", "sh.edm.s1kiosk.VoiceOverlay$show$1",
+        for name in ("dev.glassworks.VoiceOverlay", "dev.glassworks.VoiceOverlay$show$1",
                      "dev.glassworks.voice.VoiceAssistantController", "dev.glassworks.voice.WakeWordCatalog"):
             self.assertEqual(A.owner_of_class(name, PARTS), ("pane", "assist"), name)
         self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.frame.TimeZoneKeeper", PARTS), ("pane", "time-zone"))
-        self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.esphome.PanelDevice", PARTS), ("core", None))
+        self.assertEqual(A.owner_of_class("dev.glassworks.device.PanelDevice", PARTS), ("core", None))
 
     def test_the_voice_package_is_split_between_the_assist_pane_and_the_core(self):
-        """#352: sh.edm.s1kiosk.voice has classes in panes/assist and in core. Each counts for its module, so a
+        """#352: dev.glassworks.assist has classes in panes/assist and in core. Each counts for its module, so a
         class added to the pane must be listed in parts.json, and the core's players stay the core's."""
         decl = re.compile(r"^(?:(?:public|internal|data|sealed|enum|abstract|open|fun|annotation)\s+)*(?:class|object|interface)\s+(\w+)", re.M)
         top_level = re.compile(r"^(?:(?:private|internal|public)\s+)?(?:fun|val|var|const val)\s", re.M)
 
         def classes(module):
-            d = os.path.join(ROOT, module, "src/main/java/sh/edm/s1kiosk/voice")
+            d = os.path.join(ROOT, module, "src/main/java/dev/glassworks/assist")
             out = set()
             for f in sorted(os.listdir(d)):
                 if f.endswith(".kt"):
@@ -121,11 +121,11 @@ class Owners(unittest.TestCase):
         self.assertGreaterEqual(len(pane), 10, pane)
         self.assertGreaterEqual(len(core), 5, core)
         for name in sorted(pane):
-            self.assertEqual(A.owner_of_class(f"sh.edm.s1kiosk.voice.{name}", PARTS), ("pane", "assist"), name)
-            self.assertEqual(A.owner_of_class(f"sh.edm.s1kiosk.voice.{name}$1", PARTS), ("pane", "assist"), name)
+            self.assertEqual(A.owner_of_class(f"dev.glassworks.assist.{name}", PARTS), ("pane", "assist"), name)
+            self.assertEqual(A.owner_of_class(f"dev.glassworks.assist.{name}$1", PARTS), ("pane", "assist"), name)
         for name in sorted(core):
-            self.assertEqual(A.owner_of_class(f"sh.edm.s1kiosk.voice.{name}", PARTS), ("core", None), name)
-        self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.esphome.UrlPlayer", PARTS), ("core", None))
+            self.assertEqual(A.owner_of_class(f"dev.glassworks.assist.{name}", PARTS), ("core", None), name)
+        self.assertEqual(A.owner_of_class("dev.glassworks.device.UrlPlayer", PARTS), ("core", None))
         self.assertEqual(PARTS["libraries"]["media3"]["used_by"], ["core", "engine"])
 
     def test_a_pane_with_no_code_is_noted(self):

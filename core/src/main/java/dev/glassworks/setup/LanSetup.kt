@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicReference
  * [DONE] end such a channel at once ([WebSocketStreams.abort]); an unpaired one has its own single slot.
  */
 class LanSetup(
-    /** The setup channel's loop over a connection ([sh.edm.s1kiosk.setup.SetupChannel.serve]); `mayChange` gates every op but `state`. */
+    /** The setup channel's loop over a connection ([dev.glassworks.setup.SetupChannel.serve]); `mayChange` gates every op but `state`. */
     private val serve: (input: InputStream, output: OutputStream, mayChange: () -> Boolean) -> Unit,
     private val code: PanelCode,
     private val ownHosts: () -> Set<String>,

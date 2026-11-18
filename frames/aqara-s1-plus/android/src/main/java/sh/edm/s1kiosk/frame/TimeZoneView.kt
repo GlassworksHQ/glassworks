@@ -10,8 +10,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import dev.glassworks.pane.SettingsItem
-import sh.edm.s1kiosk.ui.Glass
-import sh.edm.s1kiosk.ui.Inter
+import dev.glassworks.ui.Glass
+import dev.glassworks.ui.Inter
 import java.time.Instant
 import java.util.TimeZone
 

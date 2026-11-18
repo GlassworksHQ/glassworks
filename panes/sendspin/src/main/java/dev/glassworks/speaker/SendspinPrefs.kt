@@ -1,0 +1,41 @@
+package dev.glassworks.speaker
+
+import android.content.SharedPreferences
+import dev.glassworks.sendspin.SendspinPlayer
+
+/**
+ * The Sendspin pane's settings, in the file `PaneContext.prefs("sendspin")` gives it (`kiosk.xml` on
+ * the S1, where they were before panes). Its secrets live in `sendspin.xml` ([PrefsSsStore]). The player
+ * reads the three it needs ([SendspinPlayer.Settings]) at each connection.
+ */
+class SendspinPrefs(private val sp: SharedPreferences) : SendspinPlayer.Settings {
+
+    /** Run the native Sendspin player ([SendspinDefinition.switch] writes it). */
+    val enabled: Boolean get() = sp.getBoolean(KEY_ENABLED, true)
+
+    /** `auto` (mDNS `_sendspin-server._tcp`, else `ws://<HA host>:8927/sendspin`) or a host[:port][/path] / ws:// URL. */
+    override var server: String
+        get() = sp.getString(KEY_SERVER, AUTO)?.takeIf { it.isNotBlank() } ?: AUTO
+        set(v) = sp.edit().putString(KEY_SERVER, v.trim().ifEmpty { AUTO }).apply()
+
+    /**
+     * Sendspin "unpaired access" (guest mode): a server may play without pairing. Off by default:
+     * Home Assistant hands Music Assistant the pairing token over the ESPHome API instead.
+     */
+    override var unpairedAccess: Boolean
+        get() = sp.getBoolean(KEY_UNPAIRED, false)
+        set(v) = sp.edit().putBoolean(KEY_UNPAIRED, v).apply()
+
+    /** Offer FLAC (decoded with MediaCodec) before PCM to the Sendspin server. PCM only when off. */
+    override var flac: Boolean
+        get() = sp.getBoolean(KEY_FLAC, true)
+        set(v) = sp.edit().putBoolean(KEY_FLAC, v).apply()
+
+    companion object {
+        const val AUTO = SendspinPlayer.AUTO
+        const val KEY_ENABLED = "sendspin_enabled"
+        const val KEY_SERVER = "sendspin_server"
+        const val KEY_UNPAIRED = "sendspin_unpaired_access"
+        const val KEY_FLAC = "sendspin_flac"
+    }
+}

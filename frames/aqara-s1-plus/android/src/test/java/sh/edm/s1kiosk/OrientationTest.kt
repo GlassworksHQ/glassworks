@@ -15,8 +15,9 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.glassworksRuntime
 
 /**
  * MainActivity takes its orientation from the frame when it starts. The S1 stays exactly as it was: landscape either way

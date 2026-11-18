@@ -1,0 +1,120 @@
+package dev.glassworks.settings
+
+import android.app.Application
+import android.content.pm.PackageManager
+import dev.glassworks.manage.ManageFixture
+import dev.glassworks.frame.Frame
+import dev.glassworks.frame.GenericAndroid
+import dev.glassworks.pane.SettingsItem
+import dev.glassworks.pane.paneSections
+import dev.glassworks.pane.settingsOrder
+import dev.glassworks.platform.AppBuild
+import dev.glassworks.screen.ScreenHardware
+import org.junit.Assume.assumeTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowBuild
+import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.KioskPrefs
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.HttpPoster
+import dev.glassworks.auth.SignInServer
+import sh.edm.s1kiosk.frame.AqaraS1Plus
+import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.setup.SetupFlow
+import dev.glassworks.setup.SetupOverlay
+import dev.glassworks.setup.WifiSetupStatus
+import dev.glassworks.ui.Mockup
+import java.io.File
+
+/**
+ * Mock-ups of what differs on the generic Android frame (#23): the menu's device-settings link, the rail's
+ * panes (no radio: a pane the frame can't run is hidden), setup's Panes and Home Assistant steps, and the
+ * Manage page's Overview, from the real runtime's pane definitions.
+ * The S1's same screens come with them (`-s1`), to show they stay as they were. A made-up Pixel Tablet
+ * with a microphone, a speaker, Bluetooth LE and a camera. Skipped unless asked:
+ *   ./gradlew :kiosk:testDebugUnitTest --tests '*GenericFrameMockups*' -Ps1MockupDir=<dir>
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "w960dp-h480dp-land-hdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class GenericFrameMockups {
+    private val app = RuntimeEnvironment.getApplication()
+
+    @Before fun aPixelTablet() {
+        Mockup.interFromSources()
+        ShadowBuild.setManufacturer("Google")
+        ShadowBuild.setModel("Pixel Tablet")
+        for (f in listOf(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_BLUETOOTH_LE, PackageManager.FEATURE_CAMERA_ANY)) {
+            shadowOf(app.packageManager).setSystemFeature(f, true)
+        }
+        KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel"; zoom = 1.25f }
+    }
+
+    private fun menu(frame: Frame, section: String): KioskSettingsOverlay {
+        val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
+        val definitions = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+        val core = CoreSettings(
+            KioskPrefs(app), "0.4.3", status = { "screen on" },
+            deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.DEVICE_SETTINGS_DETAIL) {},
+            licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
+            hardware = ScreenHardware.of(frame, definitions, app),
+        )
+        val sections = paneSections(definitions)
+        o.show(KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), "0.4.3", sections.map { it.id }.toSet()))
+        o.previewSection(section)
+        Mockup.idle()
+        Mockup.layout(o)
+        return o
+    }
+
+    /** The Manage page on [frame]'s real status, signed in with Home Assistant. */
+    private fun manage(frame: Frame): ManageFixture.Browser {
+        val tokens = HaTokenClient(object : HttpPoster {
+            override fun postForm(url: String, body: String) = 0 to ""
+            override fun get(url: String, maxBytes: Int) = 0 to ""
+        })
+        val runtime = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false))
+        val m = S1Manage(app, runtime, SignInServer(0, { null }, tokens, { _, _ -> }), tokens, KioskPrefs(app))
+        val f = ManageFixture().apply { statusFn = { m.status() } }
+        return f.Browser().also { it.signInWithHa() }
+    }
+
+    /** The device-settings link is the Screen page's last row. */
+    private fun scrollDown(v: android.view.View) {
+        if (v is android.widget.ScrollView) v.fullScroll(android.view.View.FOCUS_DOWN)
+        if (v is android.view.ViewGroup) for (i in 0 until v.childCount) scrollDown(v.getChildAt(i))
+    }
+
+    private fun setup(frame: Frame, step: String): SetupOverlay {
+        val a = Mockup.activity()
+        val s = SetupOverlay(a, frame, KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).setupPanes(app))
+        a.setContentView(s, android.view.ViewGroup.LayoutParams(-1, -1))
+        s.render(SetupOverlay.Model(
+            step = step, done = setOf(SetupFlow.WIFI), wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi"),
+            haUrl = "http://homeassistant.local:8123", haSource = "mdns", panelIp = "192.0.2.10", signedIn = false,
+        ))
+        Mockup.idle()
+        return s
+    }
+
+    @Test
+    fun mockups() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        for ((suffix, frame) in listOf("generic" to GenericAndroid(app), "s1" to AqaraS1Plus())) {
+            Mockup.save("frame-01-screen-$suffix", menu(frame, "screen").also { o -> scrollDown(o); Mockup.idle() })
+            // The rail's Panes, open: only the panes this frame can run (#23, maintainer 2026-11-15).
+            Mockup.save("frame-02-panes-$suffix", menu(frame, "diagnostics"))
+            Mockup.save("frame-03-setup-panes-$suffix", setup(frame, SetupFlow.PANES))
+            Mockup.save("frame-04-setup-ha-$suffix", setup(frame, SetupFlow.HA))
+            File(Mockup.dir!!, "manage").mkdirs()
+            File(Mockup.dir!!, "manage/frame-05-overview-$suffix.html").writeBytes(manage(frame).get("/").body)
+        }
+    }
+}

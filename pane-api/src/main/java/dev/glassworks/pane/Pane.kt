@@ -92,7 +92,7 @@ class PaneContext(
 /**
  * A feature the panel can have or leave out: its entities, its lifecycle and what it does when the
  * panel changes. The app builds the panes for the panel's device, from what the device gives them; the
- * device ([sh.edm.s1kiosk.esphome.PanelDevice]) calls [start] and [stop] and fans [PanelEvent]s out to them.
+ * device ([dev.glassworks.device.PanelDevice]) calls [start] and [stop] and fans [PanelEvent]s out to them.
  *
  * Calls come from several threads: [start] on esphome-main, [stop] from the service, [onEvent] from
  * wherever the event happens. A pane guards its own state.

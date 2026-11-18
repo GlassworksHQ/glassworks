@@ -32,9 +32,10 @@ import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowWifiInfo
 import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
 import java.time.Duration
+import dev.glassworks.KioskForeground
 
 /**
  * #93 on Android 14: the service's real startForeground calls, MainActivity's permission result,

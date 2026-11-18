@@ -1,0 +1,133 @@
+package dev.glassworks.radio.ui
+
+import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.RadioMode
+
+/**
+ * The setup screen's radio step (frames/aqara-s1-plus/docs/radio.md, "App side"): which modes are offered, their one-line
+ * explanations, and how RadioController's answer is read back. Pure Kotlin (RadioStepTest).
+ *
+ * Offered, as verified on the reference panel (frames/aqara-s1-plus/docs/radio.md):
+ *  - Off (default) and Zigbee coordinator (ZHA over TCP): verified end to end with bellows.
+ *  - Thread border router: verified with real Matter devices, as the only border router and next to
+ *    an existing one (must be on Home Assistant's network).
+ *  - Zigbee router (repeater) and Thread router (repeater) ([Option.repeater]), experimental: both
+ *    joined a real home network. Both need the v2 root helper.
+ * [COMING_SOON] is empty now; it stays for roles that are shown but not selectable.
+ * Skipping the step means Off. Everything can be changed later with the panel's `Radio mode` select
+ * in Home Assistant, which is the same RadioController path.
+ */
+object RadioStep {
+
+    data class Option(
+        val mode: RadioMode,
+        val title: String,
+        val line: String,
+        val experimental: Boolean = false,
+        /** A repeater role in someone else's network: shown in the second, compact row. */
+        val repeater: Boolean = false,
+    )
+
+    /** A mode as the picker names it, technology then role: "Thread repeater", "Zigbee coordinator". */
+    fun shortName(m: RadioMode): String = when (m) {
+        RadioMode.ZIGBEE_TCP -> "Zigbee coordinator"
+        RadioMode.ZIGBEE_ROUTER -> "Zigbee repeater"
+        RadioMode.THREAD -> "Thread border router"
+        RadioMode.THREAD_ROUTER -> "Thread repeater"
+        else -> OPTIONS.firstOrNull { it.mode == m }?.title ?: m.label
+    }
+
+    val OPTIONS: List<Option> = listOf(
+        Option(RadioMode.OFF, "Off", "The radio stays idle. Choose this if unsure."),
+        Option(
+            RadioMode.ZIGBEE_TCP, "Zigbee coordinator",
+            "For ZHA or Zigbee2MQTT, as a network radio.",
+        ),
+        Option(
+            RadioMode.THREAD, "Thread border router",
+            "Runs a Thread network for Home Assistant (OTBR).",
+        ),
+        Option(
+            RadioMode.ZIGBEE_ROUTER, "Zigbee router (repeater)",
+            "Joins the Zigbee network you already have.",
+            experimental = true, repeater = true,
+        ),
+        Option(
+            RadioMode.THREAD_ROUTER, "Thread router (repeater)",
+            "Joins the Thread network you already have.",
+            experimental = true, repeater = true,
+        ),
+    )
+
+    /** A role that isn't ready yet: shown, tagged "Coming soon", not selectable. */
+    data class Soon(val mode: RadioMode, val title: String, val line: String)
+
+    /** None right now (the web installer's COMING_SOON should match: kiln/src/app/ui.ts). */
+    val COMING_SOON: List<Soon> = emptyList()
+
+    const val LATER = "You can change this later in Home Assistant: the panel's “Radio mode” select."
+
+    /** The serial path ZHA (bellows, radio type EZSP) uses for the coordinator mode. */
+    fun zhaPath(panelIp: String?): String = dev.glassworks.radio.zhaPath(panelIp)
+
+    /** Home Assistant's base URL without trailing slashes; null unless it is http(s). */
+    fun haRoot(haBase: String?): String? =
+        haBase?.trim()?.trimEnd('/')?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+
+    /**
+     * ZHA's "Add devices" page (permit-join on ZHA's network), for the coordinator step's QR code:
+     * once ZHA uses the panel as its radio, a phone scans this to pair devices. Null without HA's address.
+     */
+    fun zhaAddUrl(haBase: String?): String? = haRoot(haBase)?.let { "$it/config/zha/add" }
+
+    /**
+     * Home Assistant's "add integration" flow for OpenThread Border Router. Frontend 20261028.5 (HA
+     * 2026.11): ha-config-integrations-dashboard.ts `_handleRouteChanged` handles `/add?domain=…` under
+     * `/config/integrations/dashboard` and starts the integration's config flow. Null without HA's address.
+     */
+    fun otbrAddUrl(haBase: String?): String? = haRoot(haBase)?.let { "$it/config/integrations/dashboard/add?domain=otbr" }
+
+    /** The border router's REST URL, what OTBR's config flow asks for. */
+    fun otbrUrl(panelIp: String?): String = "http://${panelIp ?: "<panel IP>"}:${RadioHelper.OTBR_REST_PORT}"
+
+    /** Zigbee2MQTT's `port` for the coordinator with Silicon Labs' stack (adapter `ember`). */
+    fun z2mPort(panelIp: String?): String = "tcp://${panelIp ?: "<panel IP>"}:${RadioHelper.ZIGBEE_TCP_PORT}"
+
+    /** What to do in Home Assistant after a mode was applied (shown under the options), or null. */
+    fun nextStep(mode: RadioMode, panelIp: String?): String? = when (mode) {
+        RadioMode.ZIGBEE_TCP -> "Then in ZHA: radio type EZSP, serial path ${zhaPath(panelIp)}"
+        RadioMode.THREAD -> "Runs its own Thread network. Then add “OpenThread Border Router” in Home Assistant: ${otbrUrl(panelIp)}"
+        RadioMode.ZIGBEE_ROUTER -> "Then open joining in ZHA and press “Join Zigbee network”."
+        RadioMode.THREAD_ROUTER -> "Joins your Thread network. Then give the panel the network's active dataset."
+        RadioMode.OFF -> null
+    }
+
+    enum class Result { APPLYING, OK, REFUSED, ERROR }
+
+    /** What happened after "Apply": [status] is RadioController.statusText() once the request ran. */
+    data class Applied(val mode: RadioMode, val accepted: Boolean, val status: String) {
+        val result: Result get() = classify(mode, accepted, status)
+    }
+
+    /**
+     * Reads RadioController's status text. Only an explicit success counts as [Result.OK]:
+     *  - not accepted (the select would snap back), or "... needs the root helper ..." → [Result.REFUSED];
+     *  - "error ..." (helper or local) → [Result.ERROR];
+     *  - "Off: Aqara's radio services stopped ..." (no helper) or "ok <mode>" from the helper without a
+     *    "(wanted ...)" mismatch → [Result.OK];
+     *  - anything else ("applying ...", "helper: ...", "Root helper running, no status yet") → [Result.APPLYING].
+     */
+    fun classify(mode: RadioMode, accepted: Boolean, status: String): Result {
+        val s = status.trim()
+        return when {
+            !accepted || s.contains("needs the root helper") -> Result.REFUSED
+            s.startsWith("error") -> Result.ERROR
+            mode == RadioMode.OFF && s.startsWith("Off:") -> Result.OK
+            s.startsWith("ok ") && s.contains(mode.label) && !s.contains("(wanted") -> Result.OK
+            else -> Result.APPLYING
+        }
+    }
+
+    /** True when the step may be left with "Continue" (anything accepted; errors offer Skip instead). */
+    fun canContinue(a: Applied?): Boolean = a != null && (a.result == Result.OK || a.result == Result.APPLYING)
+}

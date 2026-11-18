@@ -125,7 +125,7 @@ camera's stream. It never uses it to control HA, or to watch entities in place o
 
 When a read needs an administrator and the panel's user isn't one, ask an admin to sign in once,
 use the token for that read and revoke it straight away, as
-[`ThreadJoin.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/auth/ThreadJoin.kt) does. The panel keeps no admin
+[`ThreadJoin.kt`](../../../../../../core/src/main/java/dev/glassworks/auth/ThreadJoin.kt) does. The panel keeps no admin
 credentials.
 
 A *person* signed in on the Manage page is different: they act with their own HA rights, like the
@@ -192,7 +192,7 @@ Every S1 entity, with its category, default and reason:
 
 A pane takes its `PaneContext` in the constructor and overrides only what it needs. This is the
 shape of the Sendspin pane, the first one moved out of the S1 app
-([`SendspinPane.kt`](../../../../../../panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPane.kt)):
+([`SendspinPane.kt`](../../../../../../panes/sendspin/src/main/java/dev/glassworks/speaker/SendspinPane.kt)):
 
 ```kotlin
 class MusicPane(ctx: PaneContext) : Pane {
@@ -216,9 +216,9 @@ class MusicPane(ctx: PaneContext) : Pane {
 `PanelEvent` is an open interface. A pane handles the events it cares about and ignores the rest:
 a `when` statement (not an expression) may simply leave out the events it does not use, as
 `SendspinPane` does. A new event does not touch the panes that do not use it. A pane does not have
-to add entities: [`TimersPane.kt`](../../../../../../panes/timers/src/main/java/sh/edm/s1kiosk/timers/TimersPane.kt) has none and only
+to add entities: [`TimersPane.kt`](../../../../../../panes/timers/src/main/java/dev/glassworks/timers/TimersPane.kt) has none and only
 reacts to `TimersChanged` and `TimerFinished`. The voice assistant
-([`AssistPane.kt`](../../../../../../panes/assist/src/main/java/sh/edm/s1kiosk/voice/AssistPane.kt)) is the pane that raises those: it calls
+([`AssistPane.kt`](../../../../../../panes/assist/src/main/java/dev/glassworks/assist/AssistPane.kt)) is the pane that raises those: it calls
 `ctx.emit(PanelEvent.TimerFinished(name))`, and `SpeakerClaimed` while it listens and talks.
 
 **Who builds the pane.** The app does, once per device run. The panel's device (`PanelDevice`) hands the
@@ -237,9 +237,9 @@ must never be covered above its menus, and tells each about screen changes, Back
 its own end.
 
 These types live in the core (`:glassworks-core`):
-[`DeviceHost.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/esphome/DeviceHost.kt),
-[`PaneOverlay.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/PaneOverlay.kt) (with
-`OverlayHost`) and [`AppParts.kt`](../../../../../../core/src/main/java/sh/edm/s1kiosk/AppParts.kt).
+[`DeviceHost.kt`](../../../../../../core/src/main/java/dev/glassworks/device/DeviceHost.kt),
+[`PaneOverlay.kt`](../../../../../../core/src/main/java/dev/glassworks/PaneOverlay.kt) (with
+`OverlayHost`) and [`AppParts.kt`](../../../../../../core/src/main/java/dev/glassworks/AppParts.kt).
 
 Every pane also has a **`pane.json` and an `icon.svg`** in its folder, next to its `PaneDefinition` (or its
 `Pane`, for a pane without a definition of its own, like timers). They describe it to Kiln and glassworks.dev:
@@ -260,7 +260,7 @@ buttons open Home Assistant's own import dialog; the panel never writes to Home 
 The core raises `HomeAssistantSubscribed(address, authenticated)` each time Home Assistant subscribes
 to the states. `authenticated` is true when the connection uses the key Home Assistant provisioned.
 Only then is the address proven to be Home Assistant's, so a pane that trusts the address checks it.
-The radio ([`RadioPane.kt`](../../../../../../panes/zigbee-thread/src/main/java/sh/edm/s1kiosk/radio/RadioPane.kt)) does: it lets only that
+The radio ([`RadioPane.kt`](../../../../../../panes/zigbee-thread/src/main/java/dev/glassworks/radio/RadioPane.kt)) does: it lets only that
 address reach its TCP services.
 
 On an authenticated connection the core also asks Home Assistant for the time, and raises
@@ -290,7 +290,7 @@ home that already has the panel.
 
 A pane gets its settings file with `ctx.prefs(id)`, where the namespace is the pane's own id. It
 wraps the file in its own typed class and reads and writes only its own keys there, as the Sendspin
-pane does with [`SendspinPrefs`](../../../../../../panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin/SendspinPrefs.kt):
+pane does with [`SendspinPrefs`](../../../../../../panes/sendspin/src/main/java/dev/glassworks/speaker/SendspinPrefs.kt):
 
 ```kotlin
 private val prefs = SendspinPrefs(ctx.prefs(id))
@@ -331,7 +331,7 @@ is its part of the setup channel's state, under the step's id; `ops` are the req
 it, on the wire as `<step id>.<op>`. That way the installer can finish every step without the
 screen, and the setup screen is one more client. `SetupChannelStepsTest` fails if a step has no
 requests that finish it. The radio's step is
-[`RadioDefinition`](../../../../../../panes/zigbee-thread/src/main/java/sh/edm/s1kiosk/radio/RadioDefinition.kt). Its `radio.set_mode` accepts
+[`RadioDefinition`](../../../../../../panes/zigbee-thread/src/main/java/dev/glassworks/radio/RadioDefinition.kt). Its `radio.set_mode` accepts
 only the ids the step offers (`RadioStep.OPTIONS`, the state's `radio.options`). Any other mode is
 refused, so a mode only appears to the installer once the step offers it. Asking for the mode in
 effect, running or on its way, answers the step and leaves the radio alone, and the state's

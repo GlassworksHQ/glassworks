@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import dev.glassworks.KioskPrefs
 
 /**
  * A new dashboard address restarts the engine when the engine depends on it (#198 part 2). The legacy engine

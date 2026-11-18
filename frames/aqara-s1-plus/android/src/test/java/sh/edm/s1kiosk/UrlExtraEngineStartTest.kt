@@ -8,8 +8,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.KioskPrefs
 
 /**
  * #198 Phase B: the `url` extra restarts the process when what the engine starts with changes

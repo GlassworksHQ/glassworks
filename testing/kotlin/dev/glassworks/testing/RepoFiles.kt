@@ -103,7 +103,7 @@ open class RepoTree(findRoot: () -> File) {
     fun packageDirs(pkg: String, sourceSet: String = "main"): List<File> =
         modules.flatMap { m -> listOf("java", "kotlin").map { File(m, "src/$sourceSet/$it/$pkg") } }.filter { it.isDirectory }
 
-    /** The one source file at package path [path] (`sh/edm/s1kiosk/esphome/PanelDevice.kt`), in whichever module holds it. */
+    /** The one source file at package path [path] (`dev/glassworks/device/PanelDevice.kt`), in whichever module holds it. */
     fun source(path: String, sourceSet: String = "main"): File =
         one(path, modules.flatMap { m -> listOf("java", "kotlin").map { File(m, "src/$sourceSet/$it/$path") } })
 

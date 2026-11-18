@@ -37,18 +37,19 @@ import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.base.WallBase
 import sh.edm.s1kiosk.base.WallBasePane
 import sh.edm.s1kiosk.base.WallBasePrefs
-import sh.edm.s1kiosk.esphome.UrlPlayer
+import dev.glassworks.device.UrlPlayer
 import sh.edm.s1kiosk.frame.AqaraCloud
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import sh.edm.s1kiosk.frame.TimeZonePrefs
-import sh.edm.s1kiosk.radio.RadioPane
-import sh.edm.s1kiosk.radio.RadioPrefs
-import sh.edm.s1kiosk.sendspin.SendspinPane
-import sh.edm.s1kiosk.sendspin.SendspinPrefs
-import sh.edm.s1kiosk.timers.TimersPane
-import sh.edm.s1kiosk.voice.AssistPane
-import sh.edm.s1kiosk.voice.SpeakerMedia
-import sh.edm.s1kiosk.voice.VoicePrefs
+import dev.glassworks.radio.RadioPane
+import dev.glassworks.radio.RadioPrefs
+import dev.glassworks.speaker.SendspinPane
+import dev.glassworks.speaker.SendspinPrefs
+import dev.glassworks.timers.TimersPane
+import dev.glassworks.assist.AssistPane
+import dev.glassworks.assist.SpeakerMedia
+import dev.glassworks.assist.VoicePrefs
+import dev.glassworks.glassworks
 
 /**
  * Each pane reaches its settings only through `PaneContext.prefs(its id)` and its own prefs class,
@@ -126,7 +127,7 @@ class PanePrefsTest {
         yield(drive(SendspinPane(ctx, haBase = { null }), SendspinPrefs.KEY_FLAC))
         yield(drive(assist(), VoicePrefs.KEY_MIC_GAIN, start = false))
         yield(drive(WallBasePane(ctx, WallBase.Config(BaseBackend.LOCALSERVICE), device, AqaraCloud()), start = false))
-        yield(drive(RadioPane(ctx, sh.edm.s1kiosk.radio.RunningRadio(), panelIp = { null }), start = false))
+        yield(drive(RadioPane(ctx, dev.glassworks.radio.RunningRadio(), panelIp = { null }), start = false))
         yield(drive(TimersPane(ctx, KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).screen, schedule = { _, _ -> device.submit {} }, play = {}, silence = {})))
         yield(drive(BluetoothProxyPane(ctx, NoRadio, device)))
     }
@@ -210,7 +211,7 @@ class PanePrefsTest {
     /** The packages of the panes: none of them may reach the core's settings. */
     @Test fun panePackagesDoNotUseTheCoreFacade() {
         // in whichever module each package sits (RepoFiles); a package the scan stops finding fails, not passes
-        val packages = listOf("sendspin", "voice", "base", "radio", "timers").map { "sh/edm/s1kiosk/$it" }
+        val packages = listOf("dev/glassworks/speaker", "dev/glassworks/assist", "sh/edm/s1kiosk/base", "dev/glassworks/radio", "dev/glassworks/timers")
         val sources = RepoFiles.sources(atLeast = 40, inModules = RepoFiles.appModules) { f -> f.extension == "kt" && packages.any { RepoFiles.inPackage(f, it) } }
         val missing = packages.filter { p -> sources.none { RepoFiles.inPackage(it, p) } }
         assertTrue("the scan found no sources in $missing", missing.isEmpty())

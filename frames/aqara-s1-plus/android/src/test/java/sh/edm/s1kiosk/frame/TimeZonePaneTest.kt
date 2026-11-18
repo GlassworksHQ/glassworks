@@ -13,8 +13,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.radio.RadioHelper
-import sh.edm.s1kiosk.radio.SysProps
+import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.SysProps
 
 /**
  * #67: the time zone pane turned off stops the root helper keeping the zone, and keeps the zone itself

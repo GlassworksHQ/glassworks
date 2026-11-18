@@ -19,11 +19,11 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowInputDevice
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
-import sh.edm.s1kiosk.setup.OfflineText
-import sh.edm.s1kiosk.setup.SetupFlow
-import sh.edm.s1kiosk.setup.SetupOverlay
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.setup.OfflineText
+import dev.glassworks.setup.SetupFlow
+import dev.glassworks.setup.SetupOverlay
 
 /**
  * #448: the Mirror (no touchscreen, Android 6) with Home Assistant set by Kiln and no network saved. The real

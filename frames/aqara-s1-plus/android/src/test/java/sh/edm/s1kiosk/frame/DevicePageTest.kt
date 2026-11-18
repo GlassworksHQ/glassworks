@@ -25,14 +25,14 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.auth.HaTokenClient
-import sh.edm.s1kiosk.auth.HttpPoster
-import sh.edm.s1kiosk.auth.SignInServer
+import dev.glassworks.KioskPrefs
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.HttpPoster
+import dev.glassworks.auth.SignInServer
 import sh.edm.s1kiosk.base.WallBasePrefs
 import sh.edm.s1kiosk.manage.S1Manage
-import sh.edm.s1kiosk.radio.SysProps
-import sh.edm.s1kiosk.settings.S1Settings
+import dev.glassworks.radio.SysProps
+import dev.glassworks.settings.S1Settings
 
 /**
  * The frame's Device page (maintainer, 2026-11-15): exactly these rows on each frame, under Panel after

@@ -18,8 +18,8 @@ import android.view.View
 import android.view.WindowManager
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.setup.Backdrop
-import sh.edm.s1kiosk.setup.LoadingOverlay
+import dev.glassworks.setup.Backdrop
+import dev.glassworks.setup.LoadingOverlay
 
 /**
  * Our look from the boot animation to the kiosk. Until the user is unlocked after a boot (no PIN, so

@@ -7,10 +7,10 @@
     <!-- What MainActivity asks for at start. The test grants them, as a frame's setup does. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <application android:name="sh.edm.s1kiosk.conformance.ConformanceApp">
+    <application android:name="dev.glassworks.conformance.ConformanceApp">
         <!-- The core's MainActivity on the fake frame and a blank engine (CoreConformanceTest, #198). -->
         <activity
-            android:name="sh.edm.s1kiosk.MainActivity"
+            android:name="dev.glassworks.MainActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|navigation" />

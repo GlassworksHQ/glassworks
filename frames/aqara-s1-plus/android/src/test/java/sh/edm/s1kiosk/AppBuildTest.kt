@@ -15,22 +15,25 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.TextSensorEntity
-import sh.edm.s1kiosk.auth.HaTokenClient
-import sh.edm.s1kiosk.auth.HttpPoster
-import sh.edm.s1kiosk.auth.SignInServer
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.HttpPoster
+import dev.glassworks.auth.SignInServer
 import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.esphome.ManualExecutor
-import sh.edm.s1kiosk.esphome.PanelDevice
-import sh.edm.s1kiosk.esphome.RecordingMdns
+import dev.glassworks.device.ManualExecutor
+import dev.glassworks.device.PanelDevice
+import dev.glassworks.device.RecordingMdns
 import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.improv.ImprovIdentity
+import dev.glassworks.provisioning.ImprovIdentity
 import sh.edm.s1kiosk.manage.S1Manage
-import sh.edm.s1kiosk.sendspin.SendspinPane
-import sh.edm.s1kiosk.settings.S1Settings
-import sh.edm.s1kiosk.update.UpdateManager
-import sh.edm.s1kiosk.voice.VoicePrefs
+import dev.glassworks.speaker.SendspinPane
+import dev.glassworks.settings.S1Settings
+import dev.glassworks.update.UpdateManager
+import dev.glassworks.assist.VoicePrefs
 import java.net.HttpURLConnection
 import java.net.InetAddress
+import dev.glassworks.GlassworksRuntime
+import dev.glassworks.KioskPrefs
+import dev.glassworks.glassworks
 
 /**
  * The APK reads its BuildConfig once ([KioskApp.build]), and every part that reports or compares the

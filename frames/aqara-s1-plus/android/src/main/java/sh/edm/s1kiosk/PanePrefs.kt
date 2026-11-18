@@ -9,9 +9,10 @@ import dev.glassworks.notifications.NotificationsPrefs
 import dev.glassworks.secrets.SecretStore
 import sh.edm.s1kiosk.base.WallBasePrefs
 import sh.edm.s1kiosk.frame.TimeZonePrefs
-import sh.edm.s1kiosk.radio.RadioPrefs
-import sh.edm.s1kiosk.sendspin.SendspinPrefs
-import sh.edm.s1kiosk.voice.VoicePrefs
+import dev.glassworks.radio.RadioPrefs
+import dev.glassworks.speaker.SendspinPrefs
+import dev.glassworks.assist.VoicePrefs
+import dev.glassworks.PaneFiles
 
 /**
  * Where this app keeps each pane's settings ([PANE_FILES]), and each pane's typed settings, for the code

@@ -17,10 +17,10 @@ import dev.glassworks.generic_android.R
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.screen.AmbientLight
 import dev.glassworks.screen.ProximityPresence
-import sh.edm.s1kiosk.GlassworksApp
-import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.update.ReleaseLine
+import dev.glassworks.GlassworksApp
+import dev.glassworks.GlassworksRuntime
+import dev.glassworks.KioskPrefs
+import dev.glassworks.update.ReleaseLine
 
 /** Glassworks for generic Android (#23): the core on any Android 8+ device, as its own app. */
 class GenericApp : Application(), GlassworksApp {

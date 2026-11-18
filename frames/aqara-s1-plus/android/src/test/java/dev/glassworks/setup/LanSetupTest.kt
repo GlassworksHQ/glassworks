@@ -16,8 +16,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import sh.edm.s1kiosk.setup.ChannelState
-import sh.edm.s1kiosk.setup.SetupChannel
+import dev.glassworks.setup.ChannelState
+import dev.glassworks.setup.SetupChannel
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.InputStream

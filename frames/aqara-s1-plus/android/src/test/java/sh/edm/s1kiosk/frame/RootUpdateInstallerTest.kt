@@ -9,7 +9,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.radio.SysProps
+import dev.glassworks.radio.SysProps
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)

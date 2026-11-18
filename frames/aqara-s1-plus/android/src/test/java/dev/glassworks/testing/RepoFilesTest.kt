@@ -50,7 +50,7 @@ class RepoFilesTest {
             "core/src/main/java/dev/glassworks/pane/PaneHost.kt", "core/src/main/res/font/inter.ttf",
             "engines/engine-gecko/src/main/java/dev/glassworks/engine/gecko/GeckoEngine.kt",
             "panes/assist/src/main/java/dev/glassworks/assist/pane.json",
-            "frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/MainActivity.kt",
+            "frames/aqara-s1-plus/android/src/main/java/dev/glassworks/MainActivity.kt",
             "frames/aqara-s1-plus/android/src/test/resources/prefs.golden.txt",
             "frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt",
             "frames/aqara-s1-plus/installer/src/index.ts", "frames/aqara-s1-plus/design/frame.json",
