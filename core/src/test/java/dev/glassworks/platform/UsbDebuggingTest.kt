@@ -54,7 +54,7 @@ class UsbDebuggingHeardTest {
         override fun destroy() {}
     }
 
-    /** Only what stop() clears; the race the lock in start() closes has no test. */
+    /** Only what stop() clears. adopt() sets following under the same lock as the generation check; the next test covers a stop() before it. */
     @Test fun `following is true while a reader reads, and stop clears it`() {
         val out = java.io.PipedOutputStream()
         val input = java.io.PipedInputStream(out)
@@ -72,6 +72,28 @@ class UsbDebuggingHeardTest {
         while (!r.following && System.nanoTime() < until) Thread.sleep(5)
         assertTrue(r.following)
         r.stop()
+        assertFalse(r.following)
+    }
+
+    @Test fun `a stop before the reader adopts its process leaves following false`() {
+        lateinit var r: UsbDebugging.Requests
+        val stopped = CountDownLatch(1)
+        val done = CountDownLatch(1)
+        r = UsbDebugging.Requests(onHeard = {}, onError = {}, retryMs = 10, logcat = {
+            r.stop()
+            stopped.countDown()
+            object : Process() {
+                override fun getInputStream(): InputStream = ByteArrayInputStream(ByteArray(0))
+                override fun getOutputStream(): OutputStream = OutputStream.nullOutputStream()
+                override fun getErrorStream(): InputStream = InputStream.nullInputStream()
+                override fun waitFor() = 0
+                override fun exitValue() = 0
+                override fun destroy() { done.countDown() }
+            }
+        })
+        r.start()
+        assertTrue(stopped.await(5, TimeUnit.SECONDS))
+        assertTrue("the reader drops the process it didn't adopt", done.await(5, TimeUnit.SECONDS))
         assertFalse(r.following)
     }
 

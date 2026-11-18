@@ -120,8 +120,16 @@ object HaAuth {
         val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, thread = threadJoin)
         // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
         val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
-            context.glassworks.managePage(context, signIn, tokens, prefs).also { manage = it; it.startLog() }
-        }
+            val page = context.glassworks.managePage(context, signIn, tokens, prefs)
+            try {
+                page.startLog()
+            } catch (e: Throwable) {
+                // What did start stops, and a later start builds the page again rather than reuse this one.
+                runCatching { page.stopLog() }
+                throw e
+            }
+            page
+        }?.also { manage = it }
         val s = m?.http(OAuth.SIGNIN_PORT) ?: qrOnly(signIn)
         // Setup over the LAN (#34) shares the port: the setup channel's own loop, gated by pairing with the panel's code.
         val frame = context.glassworks.frame
