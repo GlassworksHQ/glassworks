@@ -124,6 +124,19 @@ class ThisDeviceStepTest {
     @Test fun whenAndroidHasNothingToOpenTheRowSaysWhereToGoByHand() {
         val r = Rig(ThisDeviceStep.Grants(home = false, admin = false), opens = false)
         bound(r).primary!!()
-        assertEquals(ThisDeviceStep.NO_HOME, details(bound(r))[0].substringAfter(" | "))
+        assertEquals(ThisDeviceStep.noHome(), details(bound(r))[0].substringAfter(" | "))
+    }
+
+    @Test fun aButtonReadsTheGrantsAgainOnItsTap() {
+        val r = Rig(ThisDeviceStep.Grants(home = true, admin = false))
+        val card = bound(r)
+        r.grants = ThisDeviceStep.Grants(home = false, admin = false) // the Home app changed since this draw
+        card.primary!!()
+        assertEquals("redrawn, no device admin dialog", 0, r.admin)
+    }
+
+    @Test fun android6sHomeSettingsPath() {
+        assertEquals("Settings, Home", dev.glassworks.frame.GenericAndroid.homeSettingsPath(dev.glassworks.platform.PlatformApi(23)))
+        assertEquals("Settings, Apps, Default apps, Home app", dev.glassworks.frame.GenericAndroid.homeSettingsPath(dev.glassworks.platform.PlatformApi(24)))
     }
 }

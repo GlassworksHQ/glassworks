@@ -7,6 +7,7 @@ package dev.glassworks.setup
 import android.content.Context
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.SetupCard
 import dev.glassworks.pane.SetupHost
 import dev.glassworks.pane.SetupOp
@@ -93,17 +94,21 @@ class ThisDeviceStep(
             card.title(TITLE_TEXT)
             card.body(null)
             homeTile.tone(when { home -> Glass.GREEN; noHome -> Glass.ROSE; else -> Glass.AMBER })
-            homeTile.detail.text = when { home -> HOME_ON; noHome -> NO_HOME; else -> HOME_OFF }
+            homeTile.detail.text = when { home -> HOME_ON; noHome -> noHome(); else -> HOME_OFF }
             adminTile.tone(when { admin -> Glass.GREEN; noAdmin -> Glass.ROSE; else -> Glass.AMBER })
             adminTile.detail.text = when { admin -> SCREEN_ON; noAdmin -> NO_ADMIN; else -> SCREEN_OFF }
             card.content(rows)
             when {
                 !home -> {
-                    card.primary(MAKE_HOME) { ask { noHome = !askHome(context) } }
+                    // Each button reads the grants again on its tap: what it would open is still the next missing one (#524).
+                    card.primary(MAKE_HOME) { if (grants()?.home == true) host.redraw() else ask { noHome = !askHome(context) } }
                     card.secondary("Not now") { done() }
                 }
                 !admin -> {
-                    card.primary(ALLOW_SCREEN_OFF) { ask { noAdmin = !askAdmin(context) } }
+                    card.primary(ALLOW_SCREEN_OFF) {
+                        val now = grants()
+                        if (now?.home != true || now.admin) host.redraw() else ask { noAdmin = !askAdmin(context) }
+                    }
                     card.secondary("Not now") { done() }
                 }
                 // Read again on Continue: a grant Android took back since this draw asks again (#524). Not now still skips.
@@ -134,7 +139,7 @@ class ThisDeviceStep(
         const val HOME = "Home screen"
         const val HOME_ON = "On: Glassworks is the default Home app"
         const val HOME_OFF = "Off: Glassworks isn't the default Home app"
-        const val NO_HOME = "Android didn't open it: Settings, Apps, Default apps, Home app"
+        fun noHome() = "Android didn't open it: ${GenericAndroid.homeSettingsPath()}"
         const val SCREEN = "Turn the screen off"
         const val SCREEN_ON = "On: Glassworks can turn the screen off when idle. Turn this off before you uninstall it."
         const val SCREEN_OFF = "Android asks to make Glassworks a device admin, so it can turn the screen off when idle. " +

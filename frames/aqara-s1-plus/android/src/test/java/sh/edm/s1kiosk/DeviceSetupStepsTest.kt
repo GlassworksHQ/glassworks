@@ -62,6 +62,14 @@ class DeviceSetupStepsTest {
         assertEquals(listOf(ThisDeviceStep.ID, SilentUpdatesStep.ID), tablet.deviceSetupSteps(app).map { it.id })
     }
 
+    @Test fun aRecognisedMirrorThatReportsTouchStillNeverGetsThisDevice() {
+        // The tablet first: its touchscreen stays in the test's one list of input devices, so the Mirror reports touch.
+        KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false)).deviceSetupSteps(app)
+        val mirror = KioskApp.runtime(TestFrames.mirror(app), build = AppBuild("1.0.0", 10000, debug = false))
+        assertEquals(dev.glassworks.frame.Input.TOUCH, mirror.frame.input)
+        assertTrue(mirror.deviceSetupSteps(app).none { it.id == ThisDeviceStep.ID })
+    }
+
     @Test fun aTabletSetUpBeforeNeverSeesThisDevice() {
         KioskPrefs(app).haSeen = true
         KioskApp.runtime(TestFrames.tablet(app), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)

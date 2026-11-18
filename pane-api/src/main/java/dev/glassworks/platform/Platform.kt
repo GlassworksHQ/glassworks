@@ -268,6 +268,9 @@ open class PlatformApi(
     /** The home screen is a role from Android 10 (`RoleManager.ROLE_HOME`), which an app asks for with Android's own dialog. */
     val hasHomeRole: Boolean get() = apiLevel >= 29
 
+    /** Android's settings have Apps, Default apps, Home app from Android 7; Android 6 has its Home page at the top level. */
+    val hasDefaultAppsSettings: Boolean get() = apiLevel >= 24
+
     /** This app is the home screen: it holds the home role (Android 10+), or Android's HOME intent goes to it (older). */
     fun isHomeApp(context: Context): Boolean = runCatching {
         // The role where Android has it, as askHome asks for it; else the HOME intent, as askHome's settings page sets it.

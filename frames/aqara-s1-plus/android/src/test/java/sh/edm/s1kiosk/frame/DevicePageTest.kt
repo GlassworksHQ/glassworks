@@ -170,7 +170,7 @@ class DevicePageTest {
         assertEquals("Google Pixel Tablet", info["Model"])
         assertEquals("No", info["Device owner"])
         // setup's This device step (#403): neither is set on a fresh install, and each says where to set it
-        assertEquals(GenericAndroid.HOME_NO, info["Home screen"])
+        assertEquals(GenericAndroid.homeNo(), info["Home screen"])
         assertEquals(GenericAndroid.SCREEN_OFF_NO, info["Turn the screen off"])
         assertEquals(
             "Robolectric's SDK 34, Install unknown apps not allowed",

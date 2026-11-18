@@ -10,6 +10,7 @@ import dev.glassworks.engine.Engine
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.frame.Input
+import dev.glassworks.frame.NamedBy
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.manage.PanelCode
 import dev.glassworks.pane.CantRun
@@ -111,7 +112,8 @@ class GlassworksRuntime(
             val prefs = KioskPrefs(ctx)
             val silent = SilentUpdates.Fresh { updates?.rootService?.let { SilentUpdates.read(ctx, it) } }
             listOfNotNull(
-                thisDevice(ctx).takeIf { frame is GenericAndroid && touch },
+                // Not on a device a frame recognises (the Mirror): its recipe sets both, whatever input it reports.
+                thisDevice(ctx).takeIf { frame is GenericAndroid && frame.namedBy != NamedBy.FRAME && touch },
                 SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }, { touch }),
             )
         }.also { deviceSteps = it }

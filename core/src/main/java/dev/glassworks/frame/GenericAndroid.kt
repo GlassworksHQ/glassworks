@@ -15,6 +15,7 @@ import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.platform.Platform
+import dev.glassworks.platform.PlatformApi
 import dev.glassworks.screen.LightSource
 import dev.glassworks.screen.PresenceSource
 import dev.glassworks.GlassworksApp
@@ -78,7 +79,7 @@ class GenericAndroid(
     override fun deviceSection(context: Context, running: (String) -> Pane?): SettingsSection =
         SettingsSection(DEVICE, friendlyName().ifBlank { "Device" }, listOfNotNull(
             silentUpdatesItem { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
-            SettingsItem.Info({ HOME_TITLE }, { if (Platform.isHomeApp(context)) HOME_YES else HOME_NO }, fixable = { !Platform.isHomeApp(context) }),
+            SettingsItem.Info({ HOME_TITLE }, { if (Platform.isHomeApp(context)) HOME_YES else homeNo() }, fixable = { !Platform.isHomeApp(context) }),
             SettingsItem.Info({ SCREEN_OFF_TITLE }, { if (adminActive(context)) SCREEN_OFF_YES else SCREEN_OFF_NO }, fixable = { !adminActive(context) }),
             SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
@@ -104,7 +105,11 @@ class GenericAndroid(
         const val SILENT_UPDATES_TITLE = "Silent updates"
         const val HOME_TITLE = "Home screen"
         const val HOME_YES = "Yes: Glassworks is the default Home app"
-        const val HOME_NO = "No: Glassworks isn't the default Home app. To change it: Android's Settings, Apps, Default apps, Home app"
+        fun homeNo(platform: PlatformApi = Platform) = "No: Glassworks isn't the default Home app. To change it: Android's ${homeSettingsPath(platform)}"
+
+        /** Where Android sets the default Home app: Settings, Apps, Default apps, Home app from Android 7; Settings, Home on 6. */
+        fun homeSettingsPath(platform: PlatformApi = Platform) =
+            if (platform.hasDefaultAppsSettings) "Settings, Apps, Default apps, Home app" else "Settings, Home"
         const val SCREEN_OFF_TITLE = "Turn the screen off"
         const val SCREEN_OFF_YES = "Yes: Glassworks is a device admin, so it can turn the screen off when idle. " +
             "Turn that off in Android's Settings, Security, Device admin apps before you uninstall it"
