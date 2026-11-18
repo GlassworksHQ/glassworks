@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk.setup
+package dev.glassworks.setup
 
 import android.app.Application
 import android.content.Context
@@ -14,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import sh.edm.s1kiosk.frame.TestFrames
-import sh.edm.s1kiosk.ui.Mockup
+import dev.glassworks.ui.Mockup
 
 /**
  * Setup's Silent updates step (#422) on the real setup screen, a rail row of its own after Panes, with Sign in at the
