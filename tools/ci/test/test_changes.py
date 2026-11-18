@@ -135,6 +135,12 @@ class PrYmlFollowsTheTable(unittest.TestCase):
         for key in changes.RULES:
             self.assertIn(f"needs.changes.result != 'success' || needs.changes.outputs.{key} != 'false'", self.yml, key)
 
+    def test_every_use_of_an_output_runs_when_changes_did_not_succeed(self):
+        uses = re.findall(r"^ *(?:if: )?(.*needs\.changes\.outputs\.[a-z0-9_]+.*)$", self.yml, re.M)
+        self.assertGreater(len(uses), len(changes.RULES))
+        for line in uses:
+            self.assertRegex(line, r"needs\.changes\.result != 'success' \|\| needs\.changes\.outputs\.[a-z0-9_]+ != 'false'", line)
+
     def test_a_job_with_a_rule_is_gated_on_it_at_job_level(self):
         for job, body in self.jobs.items():
             key = job.replace('-', '_')
