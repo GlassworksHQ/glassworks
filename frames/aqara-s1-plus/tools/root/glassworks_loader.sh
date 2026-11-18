@@ -186,8 +186,12 @@ walk() {
 # The version floor: the highest version ever loaded ($BDIR/version), and at least the current one.
 floor() {
   f_=$(cat "$BDIR/version" 2>/dev/null); num "$f_" || f_=0
-  c_=$(sed -n 's/^version \([0-9][0-9]*\)$/\1/p' "$BDIR/current/manifest" 2>/dev/null | head -1)
-  num "$c_" && [ "$c_" -gt "$f_" ] && f_=$c_
+  # The loaded bundle's version counts only from a manifest that is ours: signed, and for this frame.
+  if [ -f "$BDIR/current/manifest" ] && sig_ok "$BDIR/current" &&
+     [ "$(sed -n 's/^frame \([^ ]*\) [^ ]*$/\1/p' "$BDIR/current/manifest" | head -1)" = "$FRAME_ID" ]; then
+    c_=$(sed -n 's/^version \([0-9][0-9]*\)$/\1/p' "$BDIR/current/manifest" 2>/dev/null | head -1)
+    num "$c_" && [ "$c_" -gt "$f_" ] && f_=$c_
+  fi
   echo "$f_"
 }
 
@@ -280,16 +284,24 @@ boot)
       if [ -e "$BDIR/old" ] && ! mv "$BDIR/old" "$BDIR/current"; then stuck=1; fi
       say "cannot move the staged bundle in; $c_ stays staged"; continue
     fi
-    # The floor only once the new bundle is in place, so a failed promotion leaves the loaded one
-    # usable. floor() also counts the loaded bundle's version, so the floor holds if this write is lost.
+    # The floor once the new bundle is in place, so a failed promotion leaves the loaded one usable; and
+    # the new bundle stays only with its floor recorded: otherwise both renames are undone.
     fl=$(floor); [ "$nv" -gt "$fl" ] && fl=$nv
     rm -f "$BDIR/version.tmp"
-    { echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; } ||
-      say "cannot record the floor $fl (the loaded bundle's version still counts)"
+    if ! { echo "$fl" > "$BDIR/version.tmp" && chmod 600 "$BDIR/version.tmp" && mv -f "$BDIR/version.tmp" "$BDIR/version"; }; then
+      if mv "$BDIR/current" "$BDIR/$c_" && { [ ! -e "$BDIR/old" ] || mv "$BDIR/old" "$BDIR/current"; }; then
+        say "cannot record the floor $fl; $c_ stays staged"
+      else
+        stuck=1; say "cannot record the floor $fl, nor undo the promotion; the boot copies run this boot"
+      fi
+      continue
+    fi
     rm -rf "$BDIR/old"; say "frame bundle $nf loaded"
     state=ok; fv=$nf
   done
   if [ $state = ok ]; then :     # just promoted: checked in full above
+  elif [ -n "$stuck" ]; then     # a promotion half done: nothing in the bundle store runs this boot
+    state=bad; why="a promotion could not be finished or undone"
   elif [ -e "$BDIR/current" ]; then
     if check_dir "$BDIR/current"; then
       state=ok; fv=$FVER
@@ -393,7 +405,13 @@ install)
   [ "$v" -ge "$fl" ] || fail "refused: bundle version $v is below the floor $fl (no downgrades)"
   set -- "$BDIR"/bad-*
   if [ ! -e "$BDIR/next" ] && [ ! -e "$1" ] && root_dir "$BDIR/current" && cmp -s "$STAGE/manifest" "$BDIR/current/manifest" && check_dir "$BDIR/current"; then
-    rm -rf "$STAGE"; status "ok: frame bundle $FVER is already loaded"; exit 0
+    rm -rf "$STAGE"
+    if root_file "$RUN/active" && [ "$(cat "$RUN/active")" = "$BDIR/current $FVER" ]; then
+      status "ok: frame bundle $FVER is already loaded"
+    else
+      status "ok: frame bundle $FVER is in place, but not running this boot; it runs after a restart"
+    fi
+    exit 0
   fi
   # The same bundle is staged already (its state file may not have been written): publish, don't copy.
   if root_dir "$BDIR/next" && cmp -s "$STAGE/manifest" "$BDIR/next/manifest" && check_dir "$BDIR/next"; then
@@ -406,6 +424,7 @@ install)
   [ "$VERSION" = "$v" ] || fail "manifest: version lines disagree"
   # The bundle staged before stays until this one is in place.
   rm -rf "$BDIR/next.old"
+  [ -e "$BDIR/next.old" ] && fail "cannot clear next.old; the staged bundle is left as it is"
   [ -e "$BDIR/next" ] && { mv "$BDIR/next" "$BDIR/next.old" || fail "cannot move the staged bundle aside"; }
   if ! mv "$STAGE" "$BDIR/next"; then
     [ -e "$BDIR/next.old" ] && mv "$BDIR/next.old" "$BDIR/next"

@@ -414,6 +414,8 @@ check "...and the bundle still loads" test "$(prop ro.glassworks.frame.version)"
 check "no active record can be written: the boot copies run, and it says why" test "$(prop ro.glassworks.frame.version)/$(prop sys.glassworks.bundle.state)" = "1.0.0/bad: cannot record the active bundle"
 rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 GW_RUN="$T/runblock/run" /system/bin/sh "$TBL/glassworks_loader.sh" run radio
 check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
+GW_RUN="$T/runblock/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" install >/dev/null 2>&1
+check "...installing that same bundle says it runs only after a restart" has "$(prop sys.glassworks.bundle.status)" "in place, but not running this boot"
 rm -f "$T/runblock"; L boot
 
 mkframe "$T/f5" 2.0.3 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
@@ -421,6 +423,8 @@ mkframe "$T/f6" 2.0.4 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:070
 stage_frame "$T/f5/frame-bundle"; install_frame >/dev/null; mv /data/glassworks/bundle/next "$T/keep5"
 stage_frame "$T/f6/frame-bundle"; install_frame >/dev/null; mv "$T/keep5" /data/glassworks/bundle/next.old
 echo junk >> /data/glassworks/bundle/next/services/radio.sh
+check "(setup: next.old is a valid 2.0.3)" test "$(L check /data/glassworks/bundle/next.old)" = "2.0.3 2000003"
+check "(setup: next is there and fails its check)" has "$(L check /data/glassworks/bundle/next)" "does not match the manifest"
 L boot
 check "next fails its check but next.old passes: next.old loads" test "$(prop ro.glassworks.frame.version)" = 2.0.3 -a ! -e /data/glassworks/bundle/next -a ! -e /data/glassworks/bundle/next.old
 
@@ -430,9 +434,10 @@ check "staged, but the state file can't be written: an error, not ok" has "$(pro
 check "...exit 1" test $rc = 1
 check "...the bundle stays staged" test -d /data/glassworks/bundle/next
 rm -rf "$APP/files/frame/bundle-in/services"   # the payload: a retry that copies again would fail now
+rm -f /data/glassworks-pub/frame-bundle           # and the public record: the retry rebuilds it from this boot's own
 L install >/dev/null 2>&1; rc=$?; s=$(prop sys.glassworks.bundle.status); rm -f "$T/pubblock"
 check "...the same install again only writes the state file" test "$s" = "ok: frame bundle 2.0.4 staged; it loads at the next restart" -a $rc = 0
-check "...from this boot's own record, not the old file" test "$(cut -d' ' -f1,2 /data/glassworks-pub/frame-bundle)" = "ok 2.0.3"
+check "...from this boot's own record" test "$(cat /data/glassworks-pub/frame-bundle)" = "ok 2.0.3 2000003 2.0.4"
 check "...which now names it" test "$(cat /data/glassworks-pub/frame-bundle | cut -d' ' -f4)" = 2.0.4
 L boot; check "...and it loads" test "$(prop ro.glassworks.frame.version)" = 2.0.4
 rm -f "$T/run/state"; before=$(cat /data/glassworks-pub/frame-bundle)
@@ -464,9 +469,24 @@ rm -f "$T/mv-fail"; L boot
 check "...the next boot restores and promotes" test "$(prop ro.glassworks.frame.version)" = 2.0.7 -a ! -e "$B/old" -a ! -e "$B/next"
 
 mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
-GW_LOADER_ONCE=1 L run radio; check "a developer script without the marker is ignored" test "$(prop test.radio)" != "dev|dev|1"
+rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
+check "a developer script without the marker is ignored: the bundle's runs" test "$(prop test.radio)" = "bundle-script|bundle 2.0.7|/data/glassworks/bundle/current"
 touch /data/glassworks/dev/override
 GW_LOADER_ONCE=1 L run radio; check "...with the root-made marker it runs" test "$(prop test.radio)" = "dev|dev|1"
+rm -f /data/glassworks/dev/override
+
+sed -i 's/^version 2000007$/version 2000097/' "$B/current/manifest"
+mkframe "$T/f10" 2.0.8 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+stage_frame "$T/f10/frame-bundle"; s=$(install_frame)
+check "a loaded manifest whose signature fails can't raise the floor" has "$s" "ok: frame bundle 2.0.8 staged"
+L boot; check "...and the update loads" test "$(prop ro.glassworks.frame.version)" = 2.0.8 -a "$(cat "$B/version")" = 2000008
+mkframe "$T/f11" 2.0.9 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+stage_frame "$T/f11/frame-bundle"; install_frame >/dev/null; echo "$B/version.tmp" > "$T/mv-fail"
+L boot
+check "the floor can't be recorded: the promotion is undone" test "$(prop ro.glassworks.frame.version)" = 2.0.8 -a "$(cat "$B/version")" = 2000008
+check "...2.0.9 stays staged" test "$(L check "$B/next")" = "2.0.9 2000009" -a ! -e "$B/old"
+rm -f "$T/mv-fail"; L boot
+check "...and loads once it can" test "$(prop ro.glassworks.frame.version)" = 2.0.9 -a "$(cat "$B/version")" = 2000009
 reset_frame
 
 # --------------------------------------------------------------------- radio helper v5 (frame loader)
