@@ -282,8 +282,9 @@ for p in boot misc; do
 done
 [ "$(wc -c < "$B/boot.img")" -eq 33554432 ] || ok=0
 [ "$(wc -c < "$B/misc.img")" -eq 16777216 ] || ok=0
-if [ "$ok" = 1 ]; then (cd "$B" && shasum -a 256 boot.img misc.img | tee SHA256SUMS)
-else echo "BACKUP FAILED: stop here, write nothing"; fi
+[ "$ok" = 1 ] && (cd "$B" && shasum -a 256 boot.img misc.img > SHA256SUMS) || ok=0
+[ "$(wc -l < "$B/SHA256SUMS" 2>/dev/null)" -eq 2 ] || ok=0
+if [ "$ok" = 1 ]; then cat "$B/SHA256SUMS"; else rm -f "$B/SHA256SUMS"; echo "BACKUP FAILED: stop here, write nothing"; fi
 ```
 The size checks matter: `adb exec-out` can succeed with an empty or short read when `su` fails.
 Then make `boot-ram.img`: the same image with ` androidboot.gw139=ram` appended to the header's
