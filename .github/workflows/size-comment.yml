@@ -19,6 +19,12 @@ permissions:
   actions: read
   pull-requests: write
 
+# One comment job at a time per PR branch, so an older run can't write after a newer one; each checks the
+# PR's live head just before it writes.
+concurrency:
+  group: size-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
 jobs:
   comment:
     if: github.event.workflow_run.event == 'pull_request'
@@ -52,8 +58,10 @@ jobs:
           size=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" --paginate -q '.jobs[] | select(.name == "size") | .conclusion')
           [ "$size" = skipped ] || { echo "size: ${size:-no job}; nothing to change."; exit 0; }
           [ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" -q .head.sha)" = "$HEAD_SHA" ] || { echo "PR #$PR moved on; a newer run will comment."; exit 0; }
-          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            -q '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- glassworks-apk-size -->"))) | .id' | head -n 1)
+          # Two steps, so a failed lookup fails the step instead of reading as "no comment".
+          ids=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            -q '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- glassworks-apk-size -->"))) | .id')
+          id=$(printf '%s\n' "$ids" | head -n 1)
           [ -n "$id" ] || { echo "No size comment on PR #$PR."; exit 0; }
           printf '<!-- glassworks-apk-size -->\n**APK size:** not measured at %s. This PR no longer changes anything that goes into the APKs ([docs/ci.md](https://github.com/%s/blob/main/docs/ci.md)).\n' \
             "$HEAD_SHA" "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/body.md"
