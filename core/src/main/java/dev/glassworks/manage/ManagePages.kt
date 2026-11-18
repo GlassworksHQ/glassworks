@@ -241,15 +241,15 @@ ${foot(viewer)}"""
             // As the panel: a line that says what's missing and can be set is amber (fixable).
             is SettingsItem.Info -> row(safe { item.title() }, safe { item.detail() }, fix = runCatching { item.fixable() }.getOrDefault(false))
             is SettingsItem.Note -> """<div class="row static note"><span>${esc(safe { item.text() })}</span></div>"""
-            // Opens something on the panel itself (another app, the licences): say so, rather than drop the row.
-            // Another section's page opens here as on the panel.
+            // Another section's page opens here as on the panel; what the link opens, its twin under its title (#518).
+            // Only another app (Android's settings, the licences) is on the panel alone: say so, rather than drop the row.
             is SettingsItem.Link -> item.section?.let { id ->
                 """<a class="row" href="/${esc(id)}"><div><b>${esc(item.title)}</b>${if (item.detail.isNotEmpty()) "<span>${esc(item.detail)}</span>" else ""}</div><i class="chev" aria-hidden="true">›</i></a>"""
-            } ?: row(item.title, item.detail, right = ON_THE_PANEL, dim = item.detail.isEmpty())
-            is SettingsItem.Group -> """<div class="grp"><div class="gl">${esc(item.title)}</div>${items(v, path, section, item.items, "$prefix${item.title}/")}</div>"""
-            // A view only the panel draws: its typed twin's rows here (#269), or a row that says so, rather than drop it.
-            is SettingsItem.Native -> SettingsChange.twinOf(item).takeIf { it.isNotEmpty() }?.let { items(v, path, section, it, prefix) }
-                ?: row(item.title.ifEmpty { nativeTitle(section) }, "Shown on the panel's own settings", right = ON_THE_PANEL)
+            } ?: SettingsChange.twinOf(item).takeIf { it.isNotEmpty() }?.let { group(v, path, section, item.title, it, prefix) }
+                ?: row(item.title, item.detail, right = ON_THE_PANEL, dim = item.detail.isEmpty())
+            is SettingsItem.Group -> group(v, path, section, item.title, item.items, prefix)
+            // A view only the panel draws: its typed twin's rows here (#269).
+            is SettingsItem.Native -> items(v, path, section, SettingsChange.twinOf(item), prefix)
             // A button on its row; one that asks first on the panel asks here too (ManageServer).
             is SettingsItem.Action -> {
                 val detail = safe { item.detail() }
@@ -279,6 +279,10 @@ ${foot(viewer)}"""
             is SettingsItem.Blueprints -> blueprints(v, item)
         }
     }
+
+    /** [list] under [title], their keys under it too ([SettingsChange.changeable]). */
+    private fun group(v: Viewer, path: String, section: String, title: String, list: List<SettingsItem>, prefix: String) =
+        """<div class="grp"><div class="gl">${esc(title)}</div>${items(v, path, section, list, "$prefix$title/")}</div>"""
 
     /** A choice drawn as cards (#117's approved look): each card a button that posts its option, the picked one lit. */
     private fun cards(v: Viewer, section: String, key: String, item: SettingsItem.Choice, lines: (String) -> String): String {
@@ -412,8 +416,6 @@ ${foot(viewer)}"""
         } + "</select>"
     }
 
-    private fun nativeTitle(section: String) = section.split('-', '_', '.').joinToString(" ").replaceFirstChar { it.uppercase() }
-
     private fun safe(f: () -> Any?): String = try { f()?.toString().orEmpty() } catch (_: Throwable) { "" }
 
     private fun num(f: Float): String = SettingsChange.plain(f)
@@ -509,7 +511,7 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
 
         /** A sign-in's Show on the page of a browser signed in with the panel's code. */
 
-        /** A row that opens something only the panel has. */
+        /** A row that opens another app on the panel (its settings, the licences). */
         const val ON_THE_PANEL = "On the panel"
         /** A long choice's first line while nothing in it is picked. */
         const val PICK_ONE = "Pick one"
