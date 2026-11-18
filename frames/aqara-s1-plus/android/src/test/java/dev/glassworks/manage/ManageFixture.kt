@@ -96,7 +96,7 @@ class ManageFixture(
                 SettingsItem.Native("radio-mode") { throw UnsupportedOperationException() },
             )),
         ),
-        about = listOf("Glassworks Panel" to "S1 Kiosk 0.9.2", "Frame" to "Aqara Panel Hub S1 Plus", "Android" to "10"),
+        about = listOf("Glassworks Panel" to "Glassworks 0.9.2", "Frame" to "Aqara Panel Hub S1 Plus", "Android" to "10"),
     )
 
     /** When set, the status the server reads, page by page (a model that changes with each save). */

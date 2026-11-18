@@ -192,7 +192,7 @@ class UpdateModel(val currentVersion: String, val title: String = TITLE) {
     }
 
     companion object {
-        const val TITLE = dev.glassworks.platform.AppBuild.S1_KIOSK
+        const val TITLE = dev.glassworks.platform.AppBuild.PRODUCT
         const val DOWNLOAD_TIMEOUT_MS = 30 * 60_000L
         const val INSTALL_TIMEOUT_MS = 10 * 60_000L
         /** HA keeps text sensor states to 255 characters. */

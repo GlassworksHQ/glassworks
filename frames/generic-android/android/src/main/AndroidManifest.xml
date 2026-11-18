@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Glassworks for generic Android (#23). The shell's components are the core's (package sh.edm.s1kiosk, kept
-     for the S1); this app names them in full. S1 Kiosk's manifest (frames/aqara-s1-plus/android) has the
+     for the S1); this app names them in full. The S1 app's manifest (frames/aqara-s1-plus/android) has the
      reasons for each permission. Left out here: Aqara's packages and the S1's direct-boot splash. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">

@@ -66,8 +66,8 @@ class ImprovProtocolTest {
         assertEquals("011a19687474703a2f2f3139322e3136382e332e33393a383039392f33",
             Improv.encode(Improv.CMD_WIFI_SETTINGS, listOf("http://192.168.3.39:8099/")).hex())
         assertEquals(
-            "033c085331204b696f736b05302e312e302341716172612050616e656c2048756220533120506c75732f61726d656162692d7637610853312050616e656c75",
-            Improv.encode(Improv.CMD_DEVICE_INFO, listOf("S1 Kiosk", "0.1.0", "Aqara Panel Hub S1 Plus/armeabi-v7a", "S1 Panel")).hex())
+            "033e0a476c617373776f726b7305302e312e302341716172612050616e656c2048756220533120506c75732f61726d656162692d7637610853312050616e656c04",
+            Improv.encode(Improv.CMD_DEVICE_INFO, listOf("Glassworks", "0.1.0", "Aqara Panel Hub S1 Plus/armeabi-v7a", "S1 Panel")).hex())
         // Wi-Fi settings result without a URL: no strings.
         assertEquals("010001", Improv.encode(Improv.CMD_WIFI_SETTINGS, emptyList()).hex())
     }

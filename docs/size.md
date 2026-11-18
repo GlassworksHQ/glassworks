@@ -123,7 +123,11 @@ comments only on the pull request whose head is the commit that run built. That 
 `workflow_run` pattern, so it works for pull requests from forks, whose own runs get no write token.
 `pull_request_target` would give the pull request's code a write token, and a job summary alone isn't
 on the pull request's page. A workflow that runs on `workflow_run` takes effect from the default
-branch, so the comment starts once this is merged; until then the job summary has it.
+branch, so the comment starts once this is merged; until then the job summary has it. The `size` job
+skips when a pull request changes nothing that goes into the APKs ([ci.md](ci.md)). Then the `changes` job
+uploads `apk-size` with the pull request's number alone, marked skipped, and an earlier size comment
+is replaced with a note that the size wasn't measured (only while the pull request's head is still that
+commit; a comment is never added for it). Forks included.
 
 **What `render` accepts.** The report comes from the pull request's own code, so the renderer treats
 it as untrusted. It refuses a report whose ABIs, row names, frame or `base_missing` aren't the known

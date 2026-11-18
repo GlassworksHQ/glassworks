@@ -50,8 +50,8 @@ class SendspinServerTest {
     }
 
     private val hello = SsHelloInfo(
-        name = "S1 Panel", productName = "Panel Hub S1 Plus (S1 Kiosk)", manufacturer = "Aqara",
-        softwareVersion = "S1 Kiosk test", macAddress = "02:11:22:33:44:55",
+        name = "S1 Panel", productName = "Panel Hub S1 Plus (Glassworks)", manufacturer = "Aqara",
+        softwareVersion = "Glassworks test", macAddress = "02:11:22:33:44:55",
         formats = listOf(SsFormat.PCM_48K_STEREO_16), bufferCapacity = 1_500_000,
     )
 

@@ -245,7 +245,7 @@ class SetupChannel(
         val lines = LinkedBlockingQueue<Any>()
         val reader = Thread({
             try { splitLines(input) { lines.put(it) } } catch (_: Exception) {} finally { lines.put(EOF) }
-        }, "s1-setup-reader").apply { isDaemon = true; start() }
+        }, "glassworks-setup-reader").apply { isDaemon = true; start() }
         fun write(s: String) { output.write((s + "\n").toByteArray(Charsets.UTF_8)); output.flush() }
         try {
             while (true) {

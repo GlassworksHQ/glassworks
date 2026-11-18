@@ -57,7 +57,7 @@ class GlassworksRuntime(
 
     override val screen = ScreenPolicy(
         presence, frame.light, app.components.admin, settings = ::KioskPrefs,
-        logTag = "S1Kiosk.Screen", wakeLockTag = "s1kiosk:wake",
+        logTag = "Glassworks.Screen", wakeLockTag = "glassworks:wake",
     )
 
     private var definitions: List<PaneDefinition>? = null
@@ -141,7 +141,7 @@ class GlassworksRuntime(
     fun devicePanes(host: DeviceHost): List<Pane> = app.devicePanes(this, host)
 
     private companion object {
-        const val TAG = "S1Kiosk"
+        const val TAG = "Glassworks"
     }
 }
 

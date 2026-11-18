@@ -172,19 +172,19 @@ def shell(cmd):
         s = state("settings.json", {})
         voice = s.get("voice_enabled", "true") == "true"
         t = now()
-        out = [f"{t - 5:10.3f}  31236  31237 I S1ESPHome: ESPHome device 'aqara-s1-plus-000000' mac 00:00:00:00:00:00, voice={'true' if voice else 'false'}"]
+        out = [f"{t - 5:10.3f}  31236  31237 I Glassworks.ESPHome: ESPHome device 'aqara-s1-plus-000000' mac 00:00:00:00:00:00, voice={'true' if voice else 'false'}"]
         if s.get("sendspin_enabled", "true") == "true":
-            out.append(f"{t - 4.9:10.3f}  31236  31237 I S1Sendspin: Sendspin player starting (client id test)")
+            out.append(f"{t - 4.9:10.3f}  31236  31237 I Glassworks.Sendspin: Sendspin player starting (client id test)")
         for pane in ("wall-base", "time-zone", "diagnostics"):   # #67: the kiosk says what each switch is
             on = s.get(pane.replace("-", "_") + "_enabled", "true") == "true"
-            out.append(f"{t - 4.8:10.3f}  31236  31237 I S1ESPHome: Pane {pane} {'on' if on else 'off'}")
+            out.append(f"{t - 4.8:10.3f}  31236  31237 I Glassworks.ESPHome: Pane {pane} {'on' if on else 'off'}")
         if voice and s.get("mic_muted", "false") != "true":
-            out.append(f"{t - 3:10.3f}  31236  31237 I S1Voice: Microphone open: source=6 buffer=20480")
+            out.append(f"{t - 3:10.3f}  31236  31237 I Glassworks.Voice: Microphone open: source=6 buffer=20480")
         if os.environ.get("FAKE_IDLE_SCREEN_OFF") and " -t 1" not in cmd:
             # One before the sample's window (an earlier night, not this sample's) and one in it.
             out.insert(0, f"{t - 600:10.3f}   1919   1920 I PowerManagerService: Going to sleep due to timeout (uid 1000)...")
             out.append(f"{t - 0.5:10.3f}   1919   1920 I PowerManagerService: Going to sleep due to device_admin (uid 1000)...")
-        out += [f"{at:10.3f}  31236  31236 I S1Kiosk.Screen: {said}" for at, said in state("hold_log.json", [])]
+        out += [f"{at:10.3f}  31236  31236 I Glassworks.Screen: {said}" for at, said in state("hold_log.json", [])]
         if " -t 1" in cmd:
             out = [f"{t - 2:10.3f}      1      1 I old: the last line"]
         return "\n".join(out) + "\n"

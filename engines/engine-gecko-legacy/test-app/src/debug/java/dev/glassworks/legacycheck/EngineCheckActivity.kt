@@ -119,7 +119,7 @@ class EngineCheckActivity : Activity() {
                     val host = url?.let { android.net.Uri.parse(it).host }
                     EngineSettings(secureHosts = listOfNotNull(host), zoom = 0f, remoteDebugging = true, dashboard = url)
                 },
-                extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "s1kiosk"),
+                extension = GeckoEngine.Extension("resource://android/assets/extension/", "helper@s1kiosk.edm.sh", nativeApp = "glassworks"),
                 logTag = TAG,
                 generatedBy = "Legacy engine check",
             )

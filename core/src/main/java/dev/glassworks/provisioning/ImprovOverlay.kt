@@ -280,7 +280,7 @@ class ImprovOverlay(private val ctx: Context) {
     }
 
     companion object {
-        private const val TAG = "S1Kiosk.Improv"
+        private const val TAG = "Glassworks.Improv"
         val BG = Color.rgb(0x0a, 0x0b, 0x0f)
         val TEXT = Color.rgb(0xf4, 0xf4, 0xf5)
         val MUTED = Color.rgb(0xa1, 0xa1, 0xaa)

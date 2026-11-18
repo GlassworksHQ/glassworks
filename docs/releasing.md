@@ -387,6 +387,42 @@ Not part of it yet: Kiln still installs the generic app and the Mirror's build f
 (`?apk=local`), and its release route serves S1 Kiosk only (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`),
 so the workflow doesn't rebuild the installer.
 
+## Frame releases
+
+A frame version is the version of the parts of a device that Glassworks owns (#139): the S1's boot-side services,
+scripts and boot animation, or the Mirror's patched image. It is separate from the app's version, and uses semantic
+versioning from 1.0.0. The S1 frame 1.0.0 and the Mirror frame 1.0.0 come out with Glassworks 1.0.0. Each device
+carries its frame version in `ro.glassworks.frame.id` and `ro.glassworks.frame.version`, and the app's update check
+compares it with the frame's newest release ([esphome.md](esphome.md#frame-updates)).
+
+| Frame | Tag | Who sets the version on the device |
+|---|---|---|
+| Aqara S1 Plus | `frames/aqara-s1-plus/v1.2.3` | The loader in its boot image, at boot |
+| lululemon Mirror | `frames/lululemon-mirror/v1.2.3` | Kiln, in `build.prop`, when it flashes the Mirror |
+
+The tag is `frames/<frame id>/v<version>`, the frame's folder in this repo, like a library's `libs/<name>/v<version>`.
+Nothing else matches it: S1 Kiosk's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
+release route and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
+
+- **Publish it with `--latest=false`**, like every release that isn't S1 Kiosk's: panels on 0.4.3 read only
+  `releases/latest`.
+- **No pre-releases.** The check skips drafts, GitHub pre-releases and SemVer pre-release tags (`v1.1.0-rc.1`).
+- **The notes are the update card.** Home Assistant shows how to install it first, then the notes' first
+  paragraph, headings and bullets, up to 255 characters (`Releases.summary`). Start them with a one-line summary.
+- **No assets are needed** for the notice. The S1's signed bundles will be the S1's assets (#139, the loader).
+
+Until a workflow cuts them, an admin tags the commit whose frame parts are released and creates the release:
+
+```sh
+git tag -a frames/lululemon-mirror/v1.0.0 -m "lululemon Mirror frame 1.0.0" <commit>
+git push origin frames/lululemon-mirror/v1.0.0
+gh release create frames/lululemon-mirror/v1.0.0 --repo GlassworksHQ/glassworks --verify-tag --latest=false \
+  --title "lululemon Mirror frame 1.0.0" --notes-file notes.md
+```
+
+Panels see it within 24 hours, or at once through `homeassistant.update_entity` on the Frame update entity. No
+frame release exists before 1.0.0, so until then every device shows its frame version and no update.
+
 ## Raising targetSdk
 
 `targetSdk` is in `frames/aqara-s1-plus/android/build.gradle.kts`, and only there. It opts the app

@@ -48,10 +48,10 @@ import java.lang.ref.WeakReference
  */
 @SuppressLint("StaticFieldLeak")
 object ImprovController {
-    // Keep the library's BLE logs under the tag the docs use (`adb logcat -s S1Kiosk.Improv`).
-    init { ImprovBleServer.logTag = "S1Kiosk.Improv"; WifiProvisioner.logTag = "S1Kiosk.Improv" }
+    // Keep the library's BLE logs under the tag the docs use (`adb logcat -s Glassworks.Improv`).
+    init { ImprovBleServer.logTag = "Glassworks.Improv"; WifiProvisioner.logTag = "Glassworks.Improv" }
 
-    private const val TAG = "S1Kiosk.Improv"
+    private const val TAG = "Glassworks.Improv"
     /** How long after a join's result a process restart still waits (the result must get out first). */
     private const val SETTLE_MS = 8_000L
     const val WINDOW_MS = 10 * 60_000L

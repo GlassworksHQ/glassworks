@@ -47,6 +47,8 @@ class ScreenPinHarness {
     init {
         shadowOf(sensors).addSensor(proximity)
         shadowOf(sensors).addSensor(light)
+        // The pins are presence's: a panel that never picked a screen mode stays always on (#522).
+        prefs.screenMode = "presence"
     }
 
     /** Starts the policy with the screen on, as the activity does at launch. */

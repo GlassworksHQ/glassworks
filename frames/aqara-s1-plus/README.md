@@ -151,6 +151,7 @@ the next one. "Verified" means tested on a real panel in a real home.
 | Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
 | Bluetooth proxy for Home Assistant: listen, or listen and connect ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14), the pane on 2026-11-16, and GATT connections with two real devices, one at a time, on 2026-11-17; more than one link at once untested |
 | App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |
+| Frame version on the panel and the Manage page, and a *Frame update* entity in HA ([details](../../docs/esphome.md#frame-updates)) | 🧪 New · unit tests only. A panel without the loader shows *Before 1.0.0*; frame updates over the air come with the loader (#139) |
 | Time zone kept across reboots | ✅ Works (needs the boot software from v0.4.0) |
 | Radio: Zigbee coordinator for **ZHA** | ✅ Verified · keep the radio's network settings ([known issue](#known-issues)) |
 | Radio: Zigbee coordinator for **Zigbee2MQTT** | 🧪 Experimental · `ember` adapter: forming a network, resuming it and opening joining verified; not yet used for long with real devices |
@@ -230,7 +231,7 @@ Kiln runs entirely in your browser and uploads nothing. It walks you through fiv
 </tr>
 <tr>
 <td width="50%"><img src="../../docs/img/kiln/wifi-new.webp" alt="Kiln's Wi-Fi step: Which Wi-Fi? A list of networks in range of the panel and a password field."></td>
-<td width="50%"><img src="../../docs/img/kiln/home-assistant.webp" alt="Kiln's Home Assistant step: Sign in to Home Assistant. The address found on the network, and a Sign in button."></td>
+<td width="50%"><img src="../../docs/img/kiln/home-assistant.webp" alt="Kiln's Home Assistant step: Sign in to Home Assistant. The address found on the network, a Sign in button, and a link to sign in on the panel instead."></td>
 </tr>
 </table>
 
@@ -448,6 +449,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [bluetooth.md](research/bluetooth.md): The panel's Bluetooth (RTL8821CS, shared with Wi-Fi), Android 10's scan rules from AOSP, what HA needs from an ESPHome Bluetooth proxy (#121), and GATT connections on Android 10 (#246)
 - [view-open.md](research/view-open.md): Where typical's 4.7 s view open goes: HA's JavaScript on one Gecko thread at 1.5 GHz; the app candidates tried on the panel (none helped), and what's left upstream (#244)
 - [install-crash-loop.md](research/install-crash-loop.md): Why the kiosk crash-looped after installs: Android 10's ActivityManager LRU bug (one step per kiosk force-stop), not dex2oat; the netwatch check that restarts the framework (#248)
+- [frame-loader.md](research/frame-loader.md): Frame updates (#139, #528): `/data` at `post-fs-data`, fixed service slots, the frame bundle and its names, and a Kiln update without opening the panel (read, panel tests pending)
 
 ## Files
 

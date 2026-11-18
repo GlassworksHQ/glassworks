@@ -257,6 +257,7 @@ This page is the index of every note. Notes about one device live with its frame
 | [bluetooth.md](../../frames/aqara-s1-plus/research/bluetooth.md) | The panel's Bluetooth (RTL8821CS, shared with Wi-Fi), Android 10's scan rules from AOSP, and what HA needs from an ESPHome Bluetooth proxy (#121) |
 | [view-open.md](../../frames/aqara-s1-plus/research/view-open.md) | Where typical's 4.7 s view open goes: HA's JavaScript on one Gecko thread at 1.5 GHz; the app candidates tried on the panel (none helped), and what's left upstream (#244) |
 | [install-crash-loop.md](../../frames/aqara-s1-plus/research/install-crash-loop.md) | Why the kiosk crash-looped after installs: Android 10's ActivityManager LRU bug (one step per kiosk force-stop), not dex2oat; the netwatch check that restarts the framework (#248) |
+| [frame-loader.md](../../frames/aqara-s1-plus/research/frame-loader.md) | Frame updates on the S1 (#139, #528): `/data` at `post-fs-data`, fixed service slots, the frame bundle and its names, and a Kiln update without opening the panel through the stock U-Boot's fastboot (read, panel tests pending) |
 
 ### lululemon Studio Mirror ([`frames/lululemon-mirror/`](../../frames/lululemon-mirror/README.md#research-notes))
 
@@ -272,12 +273,14 @@ This page is the index of every note. Notes about one device live with its frame
 | [mirror-root.md](../../frames/lululemon-mirror/research/mirror-root.md) | Can we root the Mirror dev unit cheaply and safely? The AOSP `su` route is a dead end (user boot image, enforcing, no `su` domain); a platform test-key app gives uid system / `system_app` with no flash; three `system`-only leads stay open (a custom `.ko`, re-enabling `flash_recovery`, hooking `post_boot.sh`). Nothing flashed (#40) |
 | [privileged-app.md](../../frames/lululemon-mirror/research/privileged-app.md) | Does an app in `/system/priv-app` get Android 6's privileged permissions (`INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`) whatever its key, and keep them after it updates itself? Yes: read from AOSP 6.0.1's `PackageManagerService`, verified on the unit with a probe app (`tools/mirror/probe-app`, 2026-11-16). Whether it can approve a computer's adb key (`MANAGE_USB`, `allowUsbDebugging`): read; `MANAGE_USB` and the `usb` service verified on the unit (read-only); a one-time approval verified on the unit (2026-11-16), and approval on each connection with a shell loop (2026-11-17, #435). The app's own approval (#435) is untested on the unit |
 | [adbd-keys.md](../../frames/lululemon-mirror/research/adbd-keys.md) | Why doesn't adbd accept a key from `/data/misc/adb/adb_keys`? The stock lululemon boot's adbd most likely doesn't verify a connection against that file (it defers to the framework, which the Glass Panes image rebuilt to auto-approve one fingerprint). The AOSP 6.0.1 key-loading timing is ruled out and SELinux is ruled out by the policy (every path component is allowed); a malformed key file is narrowed, not ruled out, since the file's bytes weren't read. So the `services.jar` rewrite (#426) is the only lever Kiln has without the boot partition, which it never writes (read/inferred from AOSP source and the pulled policy and log, 2026-11-16, #29) |
+| [mirror-memory.md](../../frames/lululemon-mirror/research/mirror-memory.md) | Why Glassworks "crashes" on the Mirror: the lowmemorykiller at memory status critical, not a crash. The memory budget from the Mirror's own logs, why GeckoView 144's GPU process dies when the app leaves the front, and what the app and the image cut, measured on an Android 6 emulator (2026-11-18) |
 
 ### Generic Android ([`frames/generic-android/`](../../frames/generic-android/README.md))
 
 | Note | Question |
 |---|---|
 | [kiln-install.md](../../frames/generic-android/research/kiln-install.md) | Which adb commands install Glassworks, grant it what it needs and set the home screen on Android 6, 7 and 8+, and what tells Kiln a device's brand before USB debugging is on (read, untested on a device, #403) |
+| [screen-lock.md](../../frames/generic-android/research/screen-lock.md) | Which adb command tells Kiln, without root, that a device has a PIN, pattern or password: `dumpsys lock_settings` (verified on Android 8.0, 11 and 15 emulators, 2026-11-18, #522) |
 
 User-facing guides stay one level up, in [docs/](../README.md).
 

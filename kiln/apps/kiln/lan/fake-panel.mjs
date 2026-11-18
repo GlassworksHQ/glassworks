@@ -2,13 +2,15 @@
 // app's Inter, and plays the panel's /setup/pair, /setup/done and /setup/channel with made-up state. For
 // screenshots and trying the page without a panel; it touches no device and only listens on localhost.
 //
-//   node kiln/apps/kiln/lan/fake-panel.mjs [--port 8099] [--closed] [--offline]
+//   node kiln/apps/kiln/lan/fake-panel.mjs [--port 8099] [--closed] [--offline] [--no-radio]
 //   then open http://localhost:8099/setup; the code the "panel" shows is printed here (482913).
 //
-// --closed: Home Assistant has adopted the panel, so pairing is off. Sign in on the Home Assistant step
-// opens this fake's /signin, which signs the "panel" in at once.
+// Sign in on the Home Assistant step goes to this fake's /signin/continue?then=setup in the same tab, which signs
+// the "panel" in at once and sends the browser back to /setup#signed-in, as the panel does after HA (#453).
+// --closed: Home Assistant has adopted the panel, so pairing is off.
 // --offline: the panel is on no network, as on its setup hotspot (#197): the page starts with Wi-Fi, the scan
 // finds made-up networks, and a join drops the connection, as the hotspot closing does.
+// --no-radio: a frame without a radio (the Mirror): the state has no `radio`, so setup has no radio step.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -18,6 +20,7 @@ const args = process.argv.slice(2);
 const port = Number(args[args.indexOf('--port') + 1]) || 8099;
 const closed = args.includes('--closed');
 const offline = args.includes('--offline');
+const noRadio = args.includes('--no-radio');
 const NETWORKS = [
   { ssid: 'Example-Home', rssi: -48, secure: true },
   { ssid: 'Example-Upstairs', rssi: -63, secure: true },
@@ -46,6 +49,7 @@ const state = {
     ],
   },
 };
+if (noRadio) delete state.radio;
 let shown = false;
 const sessions = new Set();
 
@@ -76,6 +80,11 @@ const server = createServer((req, res) => {
       const token = `session-${sessions.size + 1}`;
       sessions.add(token);
       return json(res, 200, { ok: true, paired: true }, token);
+    }
+    if (path === '/signin/continue' && new URLSearchParams(req.url.split('?')[1]).get('then') === 'setup') {
+      state.ha.signedIn = true;
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end('<!doctype html><meta http-equiv="refresh" content="0;url=/setup#signed-in"><title>Signed in</title>');
     }
     if (path === '/signin') {
       state.ha.signedIn = true;

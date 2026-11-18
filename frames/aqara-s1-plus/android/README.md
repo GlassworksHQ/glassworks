@@ -1,7 +1,7 @@
-<h1 align="center">S1 Kiosk</h1>
+<h1 align="center">Glassworks for the Aqara S1 Plus</h1>
 
 <p align="center">
-  <b>The Home Assistant kiosk app for the Aqara Panel Hub S1 Plus.</b><br>
+  <b>The Home Assistant kiosk app for the Aqara Panel Hub S1 Plus. It shows as Glassworks; it was S1 Kiosk up to 0.4.3.</b><br>
   A GeckoView browser, the first-boot setup, and the panel's entities in HA.
 </p>
 
@@ -169,7 +169,7 @@ $A --ez remote_debug true  # Gecko remote debugging. Restarts the app.
 $A --ez reload true
 $A --ez settings true      # open the settings dialog
 $A --ez hide_header false  # show HA header/sidebar
-$A --es screen_mode always # or presence (default)
+$A --es screen_mode presence # or always (default)
 $A --ei idle_off_sec 120    # screen off after 120 s idle (0 = never)
 $A --ef presence_range_m 1.0   # VI5300 range (needs WRITE_SECURE_SETTINGS)
 $A --es screen off         # or on
@@ -206,25 +206,25 @@ $I --ez improv true        # start provisioning mode (10 min); false = stop
 $I --ez improv_auto false  # don't auto-start when there's no network after boot (default true)
 $I --ez improv_proximity_auth true   # also authorize by approaching the panel (default false)
 $I --ez release_device_owner true    # escape hatch: clearDeviceOwnerApp()
-adb logcat -s S1Kiosk.Improv          # BLE support report at startup, states, RPCs
+adb logcat -s Glassworks.Improv          # BLE support report at startup, states, RPCs
 ```
 
-The camera pane (#117, devices with a camera) logs under `S1Kiosk.Camera`: the camera opening and
+The camera pane (#117, devices with a camera) logs under `Glassworks.Camera`: the camera opening and
 closing, its plan, frames leaving the panel, and the stream's clients. Never the stream's password.
 
 ```sh
-adb logcat -s S1Kiosk.Camera
+adb logcat -s Glassworks.Camera
 adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true \
     --es camera_stream_sign_in 'viewer:a-long-password'   # adb only: camera settings and the stream's sign-in
 ```
 
 A notification's half-screen view (#230) takes a still picture of the dashboard first. What that costs is
-logged only when asked, under `S1Kiosk.ViewCapture`: the time to the picture, its size, and the app's PSS
+logged only when asked, under `Glassworks.ViewCapture`: the time to the picture, its size, and the app's PSS
 before and after, plus where the page was put.
 
 ```sh
-adb shell setprop log.tag.S1Kiosk.ViewCapture DEBUG   # off again: setprop log.tag.S1Kiosk.ViewCapture INFO
-adb logcat -s S1Kiosk.ViewCapture
+adb shell setprop log.tag.Glassworks.ViewCapture DEBUG   # off again: setprop log.tag.Glassworks.ViewCapture INFO
+adb logcat -s Glassworks.ViewCapture
 ```
 
 `ImprovActivity` only accepts callers holding `WRITE_SECURE_SETTINGS` (i.e. `adb shell`).
@@ -250,15 +250,15 @@ python3 tools/gecko-eval/gecko_eval.py 'JSON.stringify({w: innerWidth, h: innerH
 ```
 
 Gecko's prefs are written to `files/geckoview-config.yaml` at startup and logged under the
-`S1Kiosk` tag. Sign-in and HA discovery log under `S1Auth` / `S1Discovery`, the Manage page under `S1Manage` ([docs/manage.md](../../../docs/manage.md); its own log keeps the `S1…` lines for 7 days in `files/manage/log/`), the Music Assistant
-player under `S1Sendspin` (with a `sync:` line every 10 s while playing). The Wi-Fi scans the app
-starts while the screen is off log under `S1Kiosk.Wifi`, the setup hotspot (#197) under `S1Kiosk.Hotspot`
-(never its name or key). The secret store logs under `S1Kiosk.Secrets`
+`Glassworks` tag. Sign-in and HA discovery log under `Glassworks.Auth` / `Glassworks.Discovery`, the Manage page under `Glassworks.Manage` ([docs/manage.md](../../../docs/manage.md); its own log keeps the `Glassworks…` lines for 7 days in `files/manage/log/`), the Music Assistant
+player under `Glassworks.Sendspin` (with a `sync:` line every 10 s while playing). The Wi-Fi scans the app
+starts while the screen is off log under `Glassworks.Wifi`, the setup hotspot (#197) under `Glassworks.Hotspot`
+(never its name or key). The secret store logs under `Glassworks.Secrets`
 when the Keystore isn't there or a secret no longer opens ([docs/secrets.md](../../../docs/secrets.md)).
 None of them log tokens or keys. Page
 console output goes to logcat (`Isolated Web Content` / `GeckoConsole`).
 
-The connecting screen stays up until the page says it has drawn. `S1Kiosk` logs one line when it
+The connecting screen stays up until the page says it has drawn. `Glassworks` logs one line when it
 goes, with the reason: `Connecting screen hidden: ready, frontend/loaded` (Home Assistant's frontend
 removed its launch screen and a frame was painted after it), `ready, removed` (the same, for a
 frontend that doesn't send frontend/loaded), `ready, page` (a page without a launch screen), or the

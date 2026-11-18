@@ -1239,7 +1239,7 @@ class SetupOverlay(
             redraw()
             val results = arrayOfNulls<String>(choices.size)
             val workers = choices.mapIndexed { i, c ->
-                Thread({ results[i] = runCatching { c.apply(wanted[i]) }.getOrElse { it.message ?: "failed" } }, "s1-setup-pane-$i").apply { isDaemon = true; start() }
+                Thread({ results[i] = runCatching { c.apply(wanted[i]) }.getOrElse { it.message ?: "failed" } }, "glassworks-setup-pane-$i").apply { isDaemon = true; start() }
             }
             val started = System.currentTimeMillis()
             fun check() {
